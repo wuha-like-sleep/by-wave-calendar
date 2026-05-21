@@ -92,6 +92,7 @@
       hourEnd: 23,
       startDayOfWeek: 1,
       dayNames: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
+      showNowIndicator: true,
     },
     month: {
       startDayOfWeek: 1,
@@ -153,6 +154,8 @@
           };
         });
       cal.createEvents(events);
+      // Force a render so the red now-line redraws after we just cleared.
+      try { cal.render(); } catch (_e) {}
     } catch (err) {
       console.error(err);
       window.bwc && window.bwc.toast("加载事件失败", "error");
@@ -179,12 +182,44 @@
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       stopPolling();
+      stopNowTick();
     } else {
       loadEvents().catch(() => {});
       startPolling();
+      startNowTick();
+      // Snap the indicator back to "now" the moment we regain focus.
+      try { cal.render(); } catch (_e) {}
     }
   });
   startPolling();
+
+  // ---------- Now-indicator tick ----------
+  // Toast UI's red "now line" auto-updates every minute internally — but our
+  // cal.clear()/createEvents pair from loadEvents() can reset that internal
+  // timer. Force a re-render at the top of each minute (and exactly once at
+  // every minute boundary, not 60s after page-load) so the line actually
+  // crawls down as time passes.
+  let nowTickHandle = null;
+  let nowAlignHandle = null;
+  function tickNow() {
+    if (document.hidden) return;
+    try { cal.render(); } catch (_e) {}
+  }
+  function startNowTick() {
+    if (nowTickHandle || nowAlignHandle) return;
+    const msToNextMinute = 60_000 - (Date.now() % 60_000);
+    // First tick aligned to the next wall-clock minute, then every 60s.
+    nowAlignHandle = setTimeout(() => {
+      nowAlignHandle = null;
+      tickNow();
+      nowTickHandle = setInterval(tickNow, 60_000);
+    }, Math.max(1000, msToNextMinute));
+  }
+  function stopNowTick() {
+    if (nowAlignHandle) { clearTimeout(nowAlignHandle); nowAlignHandle = null; }
+    if (nowTickHandle) { clearInterval(nowTickHandle); nowTickHandle = null; }
+  }
+  startNowTick();
 
   // ---------- Toolbar ----------
   $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); });
