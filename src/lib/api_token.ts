@@ -3,6 +3,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { getSettings } from "./site_settings.js";
+import { userIsActive } from "./user_state.js";
 
 // Token format: bwc_<8-char-prefix>_<24-char-secret>
 // The prefix lets us index lookups; the secret is bcrypt-hashed at rest.
@@ -111,6 +112,14 @@ export async function verifyApiToken(token: string): Promise<VerifiedToken | nul
   if (!row) return null;
   if (row.expiresAt && row.expiresAt < new Date()) return null;
   if (!(await verifyPassword(token, row.tokenHash))) return null;
+  // Disabled-account gate: token outlives the user's UI session. An admin
+  // who disables a user must also stop their integrations (n8n, Zapier).
+  const [owner] = await db
+    .select({ disabledAt: schema.users.disabledAt })
+    .from(schema.users)
+    .where(eq(schema.users.id, row.userId))
+    .limit(1);
+  if (!userIsActive(owner)) return null;
   const scope = row.scope === "read" ? "read" : "write";
   return { userId: row.userId, scope, tokenId: row.id };
 }

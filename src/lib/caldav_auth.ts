@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { verifyPassword } from "./password.js";
 import { looksLikeAppPassword, verifyAppPassword } from "./app_password.js";
+import { userIsActive } from "./user_state.js";
 
 const REALM = "ByWave Calendar CalDAV";
 
@@ -45,6 +46,14 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   if (!ok) {
     reply.header("WWW-Authenticate", `Basic realm="${REALM}", charset="UTF-8"`);
     reply.code(401).type("text/plain").send("Unauthorized");
+    return null;
+  }
+  // Disabled-account gate: an admin may have disabled this user after the
+  // CalDAV client cached the password. Reject so Apple Calendar / Thunderbird
+  // stop syncing immediately.
+  if (!userIsActive(user)) {
+    reply.header("WWW-Authenticate", `Basic realm="${REALM}", charset="UTF-8"`);
+    reply.code(401).type("text/plain").send("Account disabled");
     return null;
   }
   return user;

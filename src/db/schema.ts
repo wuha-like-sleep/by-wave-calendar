@@ -107,7 +107,10 @@ export const loginAlerts = pgTable("login_alerts", {
 // /admin/audit so multiple admins can see who did what when.
 export const adminAuditLog = pgTable("admin_audit_log", {
   id: uuid("id").primaryKey().defaultRandom(),
-  actorUserId: uuid("actor_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // SET NULL (not CASCADE) so a self-deleting admin doesn't take their
+  // own audit trail with them — we still want to know what actions they
+  // took, even after the account is gone.
+  actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
   action: text("action").notNull(),  // e.g. "api_token.create", "backup.restore"
   targetType: text("target_type"),   // "api_token", "sso_provider", "user", etc.
   targetId: text("target_id"),
@@ -283,9 +286,15 @@ export const calendarMembers = pgTable("calendar_members", {
 export const remindersSent = pgTable("reminders_sent", {
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
   trigger: text("trigger").notNull(),           // e.g. "-PT15M"
+  // For recurring events we need per-occurrence idempotency. Otherwise the
+  // first occurrence of a weekly meeting fires a reminder, inserts a row
+  // keyed by (event_id, trigger), and every subsequent week is silently
+  // skipped because the row already exists. instance_start is the UTC
+  // start of THIS occurrence (== events.startsAt for non-recurring).
+  instanceStart: timestamp("instance_start", { withTimezone: true }).notNull(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
-  pk: uniqueIndex("reminders_sent_event_trigger_unique").on(t.eventId, t.trigger),
+  pk: uniqueIndex("reminders_sent_event_trigger_instance_unique").on(t.eventId, t.trigger, t.instanceStart),
 }));
 
 export const eventInviteTokens = pgTable("event_invite_tokens", {
@@ -309,7 +318,10 @@ export const calendarInvitations = pgTable("calendar_invitations", {
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
   role: text("role").notNull().default("viewer"),
-  invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // SET NULL (not CASCADE) so deleting the inviter doesn't yank back
+  // every pending invitation they sent — invitees can still accept and
+  // get access, the invitedBy just becomes anonymous.
+  invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
   message: text("message"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),

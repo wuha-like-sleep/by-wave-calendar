@@ -1345,7 +1345,11 @@ export async function webRoutes(app: FastifyInstance) {
       });
     }
     const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, inv.calendarId)).limit(1);
-    const [inviter] = await db.select().from(schema.users).where(eq(schema.users.id, inv.invitedBy)).limit(1);
+    // inv.invitedBy is now nullable (SET NULL FK) — if the inviter has been
+    // deleted, skip the lookup and the template falls back to "未知".
+    const inviter = inv.invitedBy
+      ? (await db.select().from(schema.users).where(eq(schema.users.id, inv.invitedBy)).limit(1))[0]
+      : null;
     const currentUser = await loadUserFromRequest(req);
     return reply.view("invite/accept", {
       title: "接受日历邀请",
@@ -1656,8 +1660,14 @@ export async function webRoutes(app: FastifyInstance) {
     if (!link || !link.enabled) {
       return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在或已停用", message: "请联系发布方获取新链接。" });
     }
-    const [owner] = await db.select({ email: schema.users.email, displayName: schema.users.displayName }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+    const [owner] = await db.select({ email: schema.users.email, displayName: schema.users.displayName, disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
     if (!owner) return reply.code(404).type("text/plain").send("Not Found");
+    // Disabled-account gate: don't accept bookings for a user the admin
+    // has disabled — to the public the link should look exactly like
+    // "not found" / "disabled link" so we don't leak account status.
+    if (owner.disabledAt) {
+      return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在或已停用", message: "请联系发布方获取新链接。" });
+    }
     const slots = await availableSlots(link, new Date(), link.maxDaysAhead);
     // Group slots by date string for the picker.
     const byDate = new Map<string, { startsAt: Date; endsAt: Date }[]>();
@@ -1685,6 +1695,10 @@ export async function webRoutes(app: FastifyInstance) {
     if (!userId.success) return reply.redirect("/");
     const link = await findLinkBySlug(userId.data, req.params.slug);
     if (!link || !link.enabled) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "链接已停用" });
+    // Disabled-account gate: stop the booking before we INSERT an event
+    // into the disabled user's calendar.
+    const [ownerCheck] = await db.select({ disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+    if (!ownerCheck || ownerCheck.disabledAt) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "链接已停用" });
     const body = z.object({
       startsAt: z.string().datetime({ offset: true }),
       guestEmail: z.string().email().max(254),

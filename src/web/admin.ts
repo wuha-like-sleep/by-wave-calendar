@@ -23,6 +23,7 @@ import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/ap
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
+import { revokeAllUserCredentials } from "../lib/user_state.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -415,8 +416,12 @@ export async function adminRoutes(app: FastifyInstance) {
     await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     // Also kill any live sessions so logout is immediate.
     await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data));
+    // And revoke every long-lived credential — API tokens (n8n / Zapier)
+    // and app passwords (CalDAV in Apple Calendar) outlive sessions and
+    // would otherwise keep working after the disable.
+    await revokeAllUserCredentials(id.data);
     await audit(req, me.id, "user.disable", { targetType: "user", targetId: id.data, details: { email: target.email } });
-    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线）`));
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线，API Token 和应用密码已撤销）`));
   });
 
   app.post("/admin/users/:id/revoke-sessions", async (req, reply) => {
@@ -428,8 +433,11 @@ export async function adminRoutes(app: FastifyInstance) {
     const [target] = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     const deleted = await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data)).returning({ id: schema.sessions.id });
+    // Kick = nuclear option: also revoke API tokens + app passwords so the
+    // user's mobile CalDAV client and n8n workflows stop syncing too.
+    await revokeAllUserCredentials(id.data);
     await audit(req, me.id, "user.revoke_sessions", { targetType: "user", targetId: id.data, details: { email: target.email, sessionsKilled: deleted.length } });
-    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话`));
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话，并撤销了 API Token / 应用密码`));
   });
 
   // ---------- Admin audit log ----------
@@ -449,7 +457,10 @@ export async function adminRoutes(app: FastifyInstance) {
         actorEmail: schema.users.email,
       })
       .from(schema.adminAuditLog)
-      .innerJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      // LEFT JOIN (was INNER) — actorUserId is SET NULL on user delete, and
+      // we still want to show those rows ("[已删除用户]" instead of dropping
+      // the entry entirely).
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
       .orderBy(desc(schema.adminAuditLog.createdAt))
       .limit(200);
     return reply.view("admin/audit", {

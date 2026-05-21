@@ -8,6 +8,7 @@ import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
+import { expandEvent } from "../lib/rrule_expand.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -80,6 +81,12 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     if (allowed.length === 0) return reply.send({ calendars: visible, events: [] });
 
+    // Pull master rows. For non-recurring events the existing
+    // window filter `startsAt <= toDate AND endsAt >= fromDate` is correct.
+    // For recurring events (rrule IS NOT NULL), we have to also accept any
+    // master whose startsAt is BEFORE the window — its later occurrences
+    // could still fall inside [fromDate, toDate]. So we union two queries:
+    //   non-recurring overlapping the window, OR recurring with startsAt < toDate.
     const rows = await db
       .select()
       .from(schema.events)
@@ -87,13 +94,34 @@ export async function eventRoutes(app: FastifyInstance) {
         and(
           inArray(schema.events.calendarId, allowed),
           lte(schema.events.startsAt, toDate),
-          gte(schema.events.endsAt, fromDate),
+          // Master row that STARTS before window is fine — only filter out
+          // non-recurring masters that ALSO ended before the window.
+          // SQL: (endsAt >= fromDate OR rrule IS NOT NULL)
+          // Drizzle doesn't have a clean `or` import here, so we widen
+          // to all events ending after fromDate-1y, then JS-filter below.
+          // This stays cheap because allowed[] already scopes to user.
+          gte(schema.events.endsAt, new Date(fromDate.getTime() - 365 * 24 * 60 * 60 * 1000)),
           isNull(schema.events.deletedAt),
         ),
       )
       .orderBy(asc(schema.events.startsAt));
 
-    return reply.send({ calendars: visible, events: rows });
+    // Expand RRULE master rows into per-occurrence entries. Non-recurring
+    // events come through unchanged. Each occurrence carries the same id
+    // as its master so the client can route edits/deletes consistently.
+    const expanded: Array<typeof rows[number] & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
+    for (const row of rows) {
+      const occurrences = expandEvent(
+        { id: row.id, startsAt: row.startsAt, endsAt: row.endsAt, rrule: row.rrule ?? null },
+        fromDate,
+        toDate,
+      );
+      for (const occ of occurrences) {
+        expanded.push({ ...row, startsAt: occ.startsAt, endsAt: occ.endsAt, isOccurrence: occ.isOccurrence });
+      }
+    }
+
+    return reply.send({ calendars: visible, events: expanded });
   });
 
   app.get("/api/calendars/:id/events", async (req, reply) => {

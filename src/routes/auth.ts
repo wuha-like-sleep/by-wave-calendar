@@ -2,18 +2,26 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { hashPassword, verifyPassword } from "../lib/password.js";
+import { hashPassword, passwordPolicyError, verifyPassword } from "../lib/password.js";
 import { createSession, destroySession, requireUser } from "../lib/session.js";
+import { userIsActive } from "../lib/user_state.js";
 
+// Tightened schema — same length range as the web flow; the web routes
+// additionally enforce passwordPolicyError on the way in. Without this
+// the JSON API was the cheat code for creating "12345678" accounts.
 const credsSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8).max(200),
+  password: z.string().min(10).max(200),
   displayName: z.string().min(1).max(100).optional(),
 });
 
 export async function authRoutes(app: FastifyInstance) {
   app.post("/api/auth/register", async (req, reply) => {
     const body = credsSchema.parse(req.body);
+    // Match the web flow's policy (≥10 chars, ≥1 letter, ≥1 digit) so the
+    // API can't be used as a back door to create weak-password accounts.
+    const policyErr = passwordPolicyError(body.password);
+    if (policyErr) return reply.code(400).send({ error: "weak_password", message: policyErr });
     const existing = await db.select().from(schema.users).where(eq(schema.users.email, body.email)).limit(1);
     if (existing.length > 0) {
       return reply.code(409).send({ error: "email_already_registered" });
@@ -34,6 +42,10 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user) return reply.code(401).send({ error: "invalid_credentials" });
     const ok = await verifyPassword(body.password, user.passwordHash);
     if (!ok) return reply.code(401).send({ error: "invalid_credentials" });
+    // Disabled-account gate: API login route was bypassing the check that
+    // the web login form does. Return the same 401 so we don't leak the
+    // disabled-vs-doesn't-exist distinction.
+    if (!userIsActive(user)) return reply.code(401).send({ error: "invalid_credentials" });
     await createSession(reply, user.id);
     return reply.send({ id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
   });

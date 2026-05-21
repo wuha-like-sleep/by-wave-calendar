@@ -18,6 +18,7 @@ import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
+import { userIsActive } from "../lib/user_state.js";
 
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
@@ -170,6 +171,14 @@ export async function webauthnRoutes(app: FastifyInstance) {
     }
     if (!verification.verified) return reply.code(401).send({ error: "verification_failed" });
 
+    // Disabled-account gate: pull the user FIRST so we don't write the
+    // counter bump, login event, or success alert if their account was
+    // disabled since they last used this passkey.
+    const [usr] = await db.select().from(schema.users).where(eq(schema.users.id, credRow.userId)).limit(1);
+    if (!userIsActive(usr)) {
+      return reply.code(401).send({ error: "account_disabled" });
+    }
+
     await db
       .update(schema.webauthnCredentials)
       .set({ counter: verification.authenticationInfo.newCounter, lastUsedAt: new Date() })
@@ -177,7 +186,6 @@ export async function webauthnRoutes(app: FastifyInstance) {
 
     // Passkey login = both factors satisfied (something-you-have + verification)
     await createSession(reply, credRow.userId, { mfaSatisfied: true });
-    const [usr] = await db.select().from(schema.users).where(eq(schema.users.id, credRow.userId)).limit(1);
     if (usr) {
       void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);

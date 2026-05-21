@@ -15,6 +15,7 @@ import {
 import { recordLoginEvent } from "../lib/login_history.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { setThemeCookies } from "../lib/user_theme.js";
+import { userIsActive } from "../lib/user_state.js";
 
 const STATE_COOKIE = "bwc_sso_state";
 
@@ -126,6 +127,12 @@ export async function ssoRoutes(app: FastifyInstance) {
             ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
           });
         } else {
+          // Disabled-account gate: stop the SSO flow BEFORE writing any login
+          // event row or sending a success email, otherwise a disabled user
+          // can keep triggering "you just signed in" alerts indefinitely.
+          if (!userIsActive(user)) {
+            return reply.redirect("/login?error=" + encodeURIComponent("账号已被管理员停用"));
+          }
           // Existing user signing in via SSO — flip verified flag if it wasn't
           // already and record which provider this account uses for login.
           const patch: Partial<schema.User> = {};

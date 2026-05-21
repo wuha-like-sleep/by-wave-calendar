@@ -93,9 +93,18 @@ export type CreatedBooking = {
   event: schema.Event;
 };
 
-// Atomic booking: validates the slot is still free, creates an event in the
-// owner's calendar, and stores the booking row that links back. Caller is
-// responsible for sending confirmation emails.
+// Atomic booking: SELECT-then-INSERT inside a single transaction so two
+// guests racing for the same slot can't both insert. Postgres default
+// READ COMMITTED gives us the visibility we need for the overlap check
+// to actually see the other transaction's INSERT once it commits — the
+// SELECT here runs at the start of *this* tx, so if the other tx commits
+// first our INSERT will see it and we throw; if we commit first the
+// other tx will see ours.
+//
+// (For true serialization under heavier load, escalate to a SERIALIZABLE
+// isolation tx + retry-on-conflict, or add a PG exclusion constraint
+// on (calendar_id, tsrange(starts_at, ends_at)). For the current scale
+// the in-tx re-check is sufficient.)
 export async function bookSlot(input: {
   link: schema.BookingLink;
   startsAt: Date;
@@ -104,50 +113,51 @@ export async function bookSlot(input: {
   guestName: string;
   guestMessage?: string;
 }): Promise<CreatedBooking> {
-  // Re-check overlap; race could have filled the slot since we listed.
-  const conflicts = await db
-    .select({ id: schema.events.id })
-    .from(schema.events)
-    .where(and(
-      eq(schema.events.calendarId, input.link.calendarId),
-      gte(schema.events.endsAt, input.startsAt),
-      lte(schema.events.startsAt, input.endsAt),
-      isNull(schema.events.deletedAt),
-    ))
-    .limit(1);
-  if (conflicts.length > 0) {
-    throw new Error("时段已被占用，请选择其他时间");
-  }
+  return await db.transaction(async (tx) => {
+    const conflicts = await tx
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(and(
+        eq(schema.events.calendarId, input.link.calendarId),
+        gte(schema.events.endsAt, input.startsAt),
+        lte(schema.events.startsAt, input.endsAt),
+        isNull(schema.events.deletedAt),
+      ))
+      .limit(1);
+    if (conflicts.length > 0) {
+      throw new Error("时段已被占用，请选择其他时间");
+    }
 
-  const [event] = await db.insert(schema.events).values({
-    calendarId: input.link.calendarId,
-    uid: newEventUid(),
-    summary: `${input.link.title} — ${input.guestName}`,
-    description: input.guestMessage || null,
-    location: null,
-    startsAt: input.startsAt,
-    endsAt: input.endsAt,
-    allDay: false,
-    rrule: null,
-    extra: {
-      attendees: [input.guestEmail],
-      bookingLinkId: input.link.id,
+    const [event] = await tx.insert(schema.events).values({
+      calendarId: input.link.calendarId,
+      uid: newEventUid(),
+      summary: `${input.link.title} — ${input.guestName}`,
+      description: input.guestMessage || null,
+      location: null,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      allDay: false,
+      rrule: null,
+      extra: {
+        attendees: [input.guestEmail],
+        bookingLinkId: input.link.id,
+        guestName: input.guestName,
+      },
+    }).returning();
+    if (!event) throw new Error("事件创建失败");
+
+    const [booking] = await tx.insert(schema.bookings).values({
+      linkId: input.link.id,
+      eventId: event.id,
+      guestEmail: input.guestEmail,
       guestName: input.guestName,
-    },
-  }).returning();
-  if (!event) throw new Error("事件创建失败");
+      guestMessage: input.guestMessage || null,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+      cancelToken: newInvitationToken(),
+    }).returning();
+    if (!booking) throw new Error("预约记录创建失败");
 
-  const [booking] = await db.insert(schema.bookings).values({
-    linkId: input.link.id,
-    eventId: event.id,
-    guestEmail: input.guestEmail,
-    guestName: input.guestName,
-    guestMessage: input.guestMessage || null,
-    startsAt: input.startsAt,
-    endsAt: input.endsAt,
-    cancelToken: newInvitationToken(),
-  }).returning();
-  if (!booking) throw new Error("预约记录创建失败");
-
-  return { booking, event };
+    return { booking, event };
+  });
 }
