@@ -573,6 +573,156 @@
     $("#modal-event-title").textContent = payload.id ? "编辑事件" : "新建事件";
     $("#btn-delete-event").classList.toggle("hidden", !payload.id);
     openModal("#modal-event");
+    // Clear the natural-language input every time the modal opens —
+    // stale text from a previous session is more confusing than helpful.
+    const nl = $("#nl-input");
+    const nlHint = $("#nl-hint");
+    if (nl) nl.value = "";
+    if (nlHint) { nlHint.classList.add("hidden"); nlHint.textContent = ""; }
+  }
+
+  // ---------- Natural-language event parser ----------
+  // Parses inputs like "明天下午3点 牙医" or "周五10点 1小时 团建" into
+  // { summary, startsAt, endsAt }. Returns null if it can't pull out at
+  // least one date+time. Pure regex — no LLM, no API call, runs entirely
+  // in the user's browser, works offline.
+  function parseNaturalLanguageEvent(text) {
+    if (!text || typeof text !== "string") return null;
+    let remaining = " " + text.trim() + " ";  // pad so word boundaries are easy
+
+    // Step 1: pull out the date.
+    const now = new Date();
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let dateOffset = null;
+    const dateRules = [
+      [/\s今天\s/, 0], [/\s明天\s/, 1], [/\s后天\s/, 2], [/\s大后天\s/, 3],
+      [/\s昨天\s/, -1], [/\s前天\s/, -2],
+    ];
+    for (const [re, off] of dateRules) {
+      if (re.test(remaining)) {
+        dateOffset = off;
+        remaining = remaining.replace(re, " ");
+        break;
+      }
+    }
+    // 周一..周日 / 周天 — relative to current week, snap to NEXT occurrence
+    // (excluding today). "本周X" / "下周X" / "周X" — same with "下" forcing +7.
+    const weekdayMap = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 0, "天": 0 };
+    const wkRe = /\s(本周|下周|周)([一二三四五六日天])\s/;
+    const wkMatch = remaining.match(wkRe);
+    if (wkMatch && dateOffset === null) {
+      const target = weekdayMap[wkMatch[2]];
+      let diff = (target - now.getDay() + 7) % 7;
+      if (diff === 0) diff = 7;   // 周X always means upcoming, not today
+      if (wkMatch[1] === "下周") diff += 7;
+      dateOffset = diff;
+      remaining = remaining.replace(wkRe, " ");
+    }
+    // X月X日 / X月X号
+    const mdRe = /\s(\d{1,2})月(\d{1,2})[日号]?\s/;
+    const mdMatch = remaining.match(mdRe);
+    if (mdMatch && dateOffset === null) {
+      const m = Number(mdMatch[1]) - 1;
+      const d = Number(mdMatch[2]);
+      const tgt = new Date(now.getFullYear(), m, d);
+      if (tgt < day) tgt.setFullYear(tgt.getFullYear() + 1);
+      dateOffset = Math.round((tgt - day) / 86400000);
+      remaining = remaining.replace(mdRe, " ");
+    }
+
+    // Step 2: pull out the time.
+    let hours = null, mins = 0;
+    // X点 / X点X分 / X时X分
+    const tRe = /\s(早上|上午|中午|下午|晚上|凌晨)?(\d{1,2})(?:[点时:：](\d{1,2})?分?)?\s/;
+    const tMatch = remaining.match(tRe);
+    if (tMatch) {
+      const period = tMatch[1];
+      let h = Number(tMatch[2]);
+      const m = tMatch[3] ? Number(tMatch[3]) : 0;
+      // Period normalization. "下午1点" = 13:00; "晚上11点" = 23:00.
+      // No period: keep h as-is (24-hour).
+      if (period === "下午" || period === "晚上") { if (h < 12) h += 12; }
+      else if (period === "凌晨") { if (h === 12) h = 0; }
+      else if (period === "中午") { h = 12; }
+      // "早上/上午" + 12 — Chinese ambiguity, leave 12 as noon.
+      if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+        hours = h; mins = m;
+        remaining = remaining.replace(tRe, " ");
+      }
+    }
+    // "半点" e.g. "下午3点半"
+    const halfRe = /\s半\s/;
+    if (halfRe.test(remaining) && hours !== null && mins === 0) {
+      mins = 30;
+      remaining = remaining.replace(halfRe, " ");
+    }
+
+    // Need at least a date OR time to count this as a successful parse.
+    if (dateOffset === null && hours === null) return null;
+
+    // Step 3: duration.
+    let durationMin = 60;  // default
+    const durRe = /\s(\d+(?:\.\d+)?)\s?(小时|h|hours?|分钟|min|minutes?)\s/i;
+    const durMatch = remaining.match(durRe);
+    if (durMatch) {
+      const n = Number(durMatch[1]);
+      const unit = durMatch[2].toLowerCase();
+      durationMin = (unit.startsWith("小时") || unit === "h" || unit.startsWith("hour"))
+        ? Math.round(n * 60)
+        : Math.round(n);
+      remaining = remaining.replace(durRe, " ");
+    }
+    const halfHourRe = /\s半小时\s/;
+    if (halfHourRe.test(remaining)) { durationMin = 30; remaining = remaining.replace(halfHourRe, " "); }
+
+    // Step 4: build the date.
+    const startsAt = new Date(day);
+    if (dateOffset !== null) startsAt.setDate(startsAt.getDate() + dateOffset);
+    if (hours === null) {
+      // Date but no time → default 09:00 of that day, 1-hour event.
+      startsAt.setHours(9, 0, 0, 0);
+    } else {
+      startsAt.setHours(hours, mins, 0, 0);
+      // If no date given AND the time has already passed today, push to tomorrow.
+      if (dateOffset === null && startsAt < now) startsAt.setDate(startsAt.getDate() + 1);
+    }
+    const endsAt = new Date(startsAt.getTime() + durationMin * 60000);
+
+    // Step 5: the remaining text is the summary.
+    const summary = remaining.replace(/[，。、；：,;:]+/g, " ").trim();
+    return { summary, startsAt, endsAt };
+  }
+
+  // Wire the natural-language input. Pressing Enter (or blur after change)
+  // populates the form fields with the parsed values. Shows a short hint
+  // so the user sees we understood them.
+  {
+    const nlInput = $("#nl-input");
+    const nlHint = $("#nl-hint");
+    function applyNl() {
+      if (!nlInput || !nlHint) return;
+      const parsed = parseNaturalLanguageEvent(nlInput.value);
+      if (!parsed) {
+        nlHint.classList.remove("hidden");
+        nlHint.style.color = "rgb(100 116 139)";
+        nlHint.textContent = "没看懂时间，试试「明天下午3点 牙医」";
+        return;
+      }
+      const form = $("#form-event");
+      if (parsed.summary) form.querySelector('[name="summary"]').value = parsed.summary;
+      form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(parsed.startsAt);
+      form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(parsed.endsAt);
+      const fmt = (d) => `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      nlHint.classList.remove("hidden");
+      nlHint.style.color = "rgb(67 56 202)"; // brand-700
+      nlHint.textContent = `✓ ${fmt(parsed.startsAt)} 开始 · ${parsed.summary || "无标题"}`;
+    }
+    if (nlInput) {
+      nlInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); applyNl(); }
+      });
+      nlInput.addEventListener("blur", () => { if (nlInput.value.trim()) applyNl(); });
+    }
   }
 
   $("#btn-new-event").addEventListener("click", () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) }));
