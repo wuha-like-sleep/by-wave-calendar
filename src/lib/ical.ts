@@ -3,6 +3,9 @@
 // DESCRIPTION, LOCATION, DTSTART/DTEND (date + datetime, UTC + floating),
 // CREATED, LAST-MODIFIED, DTSTAMP, RRULE.
 
+export type IcalAttendee = { email: string; cn?: string | null; role?: string | null; partstat?: string | null };
+export type IcalAlarm = { trigger: string; action?: string | null; description?: string | null };
+
 export type IcalEvent = {
   uid: string;
   summary: string;
@@ -14,7 +17,31 @@ export type IcalEvent = {
   rrule?: string | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  transp?: string | null;
+  status?: string | null;
+  categories?: string[] | null;
+  organizer?: string | null;
+  attendees?: IcalAttendee[] | null;
+  alarms?: IcalAlarm[] | null;
 };
+
+// Extract the raw "BEGIN:VEVENT…END:VEVENT" block (incl. nested VALARMs) from an
+// inbound iCalendar body. Returns the canonical text we'll round-trip back to
+// clients so non-parsed properties (ATTENDEE, VALARM, TRANSP, CATEGORIES, X-*)
+// survive a server-side round-trip.
+export function extractVeventBlock(ics: string): string | null {
+  const unfolded = ics.replace(/\r?\n[\t ]/g, "");
+  const lines = unfolded.split(/\r?\n/);
+  const start = lines.findIndex((l) => l.toUpperCase() === "BEGIN:VEVENT");
+  if (start < 0) return null;
+  // Find the matching END:VEVENT — VALARM may be nested but uses END:VALARM (not VEVENT).
+  let end = -1;
+  for (let i = start + 1; i < lines.length; i++) {
+    if ((lines[i] ?? "").toUpperCase() === "END:VEVENT") { end = i; break; }
+  }
+  if (end < 0) return null;
+  return lines.slice(start, end + 1).join(CRLF);
+}
 
 const CRLF = "\r\n";
 
@@ -107,6 +134,24 @@ export function wrapSingleEvent(event: IcalEvent, calendarName: string = ""): st
 
 // ---------- Parser ----------
 
+type ParsedLine = { params: Record<string, string>; value: string };
+
+function parsePropLine(line: string): { name: string; line: ParsedLine } | null {
+  const colonIdx = line.indexOf(":");
+  if (colonIdx < 0) return null;
+  const head = line.slice(0, colonIdx);
+  const value = line.slice(colonIdx + 1);
+  const segments = head.split(";");
+  const name = (segments[0] ?? "").toUpperCase();
+  if (!name) return null;
+  const params: Record<string, string> = {};
+  for (const p of segments.slice(1)) {
+    const eq = p.indexOf("=");
+    if (eq > 0) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1);
+  }
+  return { name, line: { params, value } };
+}
+
 export function parseEvent(ics: string): IcalEvent | null {
   // Unfold continuation lines (CRLF + space or tab).
   const unfolded = ics.replace(/\r?\n[\t ]/g, "");
@@ -115,30 +160,61 @@ export function parseEvent(ics: string): IcalEvent | null {
   const end = lines.findIndex((l) => l.toUpperCase() === "END:VEVENT");
   if (start < 0 || end < 0 || end <= start) return null;
 
-  const props: Record<string, { params: Record<string, string>; value: string }> = {};
-  for (let i = start + 1; i < end; i++) {
-    const line = lines[i];
-    if (!line) continue;
-    const colonIdx = line.indexOf(":");
-    if (colonIdx < 0) continue;
-    const head = line.slice(0, colonIdx);
-    const value = line.slice(colonIdx + 1);
-    const segments = head.split(";");
-    const name = segments[0] ?? "";
-    if (!name) continue;
-    const paramParts = segments.slice(1);
-    const params: Record<string, string> = {};
-    for (const p of paramParts) {
-      const eq = p.indexOf("=");
-      if (eq > 0) params[p.slice(0, eq).toUpperCase()] = p.slice(eq + 1);
+  const singleProps: Record<string, ParsedLine> = {};
+  const attendees: IcalAttendee[] = [];
+  const alarms: IcalAlarm[] = [];
+  let organizer: string | null = null;
+  let categories: string[] | null = null;
+
+  let i = start + 1;
+  while (i < end) {
+    const line = lines[i] ?? "";
+    const upper = line.toUpperCase();
+    if (upper === "BEGIN:VALARM") {
+      const alarmEnd = lines.findIndex((l, idx) => idx > i && l.toUpperCase() === "END:VALARM");
+      const blockEnd = alarmEnd > 0 ? alarmEnd : end;
+      const alarmProps: Record<string, ParsedLine> = {};
+      for (let j = i + 1; j < blockEnd; j++) {
+        const parsed = parsePropLine(lines[j] ?? "");
+        if (parsed) alarmProps[parsed.name] = parsed.line;
+      }
+      const trigger = alarmProps["TRIGGER"]?.value;
+      if (trigger) {
+        alarms.push({
+          trigger,
+          action: alarmProps["ACTION"]?.value ?? null,
+          description: alarmProps["DESCRIPTION"] ? unescapeText(alarmProps["DESCRIPTION"].value) : null,
+        });
+      }
+      i = blockEnd + 1;
+      continue;
     }
-    props[name.toUpperCase()] = { params, value };
+    const parsed = parsePropLine(line);
+    if (!parsed) { i++; continue; }
+    if (parsed.name === "ATTENDEE") {
+      const v = parsed.line.value || "";
+      const email = v.toLowerCase().startsWith("mailto:") ? v.slice(7) : v;
+      attendees.push({
+        email,
+        cn: parsed.line.params["CN"] ?? null,
+        role: parsed.line.params["ROLE"] ?? null,
+        partstat: parsed.line.params["PARTSTAT"] ?? null,
+      });
+    } else if (parsed.name === "ORGANIZER") {
+      const v = parsed.line.value || "";
+      organizer = v.toLowerCase().startsWith("mailto:") ? v.slice(7) : v;
+    } else if (parsed.name === "CATEGORIES") {
+      categories = parsed.line.value.split(",").map((s) => unescapeText(s.trim())).filter(Boolean);
+    } else {
+      singleProps[parsed.name] = parsed.line;
+    }
+    i++;
   }
 
-  const uid = props["UID"]?.value;
-  const summary = props["SUMMARY"]?.value;
-  const dtstart = props["DTSTART"];
-  const dtend = props["DTEND"];
+  const uid = singleProps["UID"]?.value;
+  const summary = singleProps["SUMMARY"]?.value;
+  const dtstart = singleProps["DTSTART"];
+  const dtend = singleProps["DTEND"];
   if (!uid || !summary || !dtstart || !dtend) return null;
 
   const allDay = dtstart.params["VALUE"] === "DATE";
@@ -146,14 +222,20 @@ export function parseEvent(ics: string): IcalEvent | null {
   return {
     uid: uid.trim(),
     summary: unescapeText(summary),
-    description: props["DESCRIPTION"] ? unescapeText(props["DESCRIPTION"].value) : null,
-    location: props["LOCATION"] ? unescapeText(props["LOCATION"].value) : null,
+    description: singleProps["DESCRIPTION"] ? unescapeText(singleProps["DESCRIPTION"].value) : null,
+    location: singleProps["LOCATION"] ? unescapeText(singleProps["LOCATION"].value) : null,
     startsAt: parseICalDateValue(dtstart.value, allDay),
     endsAt: parseICalDateValue(dtend.value, allDay),
     allDay,
-    rrule: props["RRULE"]?.value ?? null,
-    createdAt: props["CREATED"] ? parseICalDateValue(props["CREATED"].value, false) : null,
-    updatedAt: props["LAST-MODIFIED"] ? parseICalDateValue(props["LAST-MODIFIED"].value, false) : null,
+    rrule: singleProps["RRULE"]?.value ?? null,
+    createdAt: singleProps["CREATED"] ? parseICalDateValue(singleProps["CREATED"].value, false) : null,
+    updatedAt: singleProps["LAST-MODIFIED"] ? parseICalDateValue(singleProps["LAST-MODIFIED"].value, false) : null,
+    transp: singleProps["TRANSP"]?.value?.toUpperCase() ?? null,
+    status: singleProps["STATUS"]?.value?.toUpperCase() ?? null,
+    categories: categories && categories.length ? categories : null,
+    organizer,
+    attendees: attendees.length ? attendees : null,
+    alarms: alarms.length ? alarms : null,
   };
 }
 

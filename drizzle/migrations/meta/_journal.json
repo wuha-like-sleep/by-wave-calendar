@@ -85,6 +85,13 @@
       "when": 1779364344666,
       "tag": "0011_user_theme",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1779365649841,
+      "tag": "0012_event_raw_ics",
+      "breakpoints": true
     }
   ]
 }

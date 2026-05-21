@@ -162,6 +162,7 @@ export const events = pgTable("events", {
   allDay: boolean("all_day").notNull().default(false),
   rrule: text("rrule"),
   extra: jsonb("extra"),
+  rawIcs: text("raw_ics"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

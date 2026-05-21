@@ -1,0 +1,1 @@
+ALTER TABLE "events" ADD COLUMN "raw_ics" text;

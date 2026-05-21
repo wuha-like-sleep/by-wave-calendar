@@ -137,6 +137,11 @@ export async function eventRoutes(app: FastifyInstance) {
         allDay: body.allDay ?? undefined,
         rrule: body.rrule ?? undefined,
         extra: body.extra !== undefined ? (body.extra as unknown as object | null) : undefined,
+        // The web UI doesn't (yet) edit ATTENDEE / VALARM / TRANSP, so discard the
+        // raw VEVENT after a manual edit — CalDAV clients will pick up the synthesized
+        // version on next REPORT instead of seeing stale ATTENDEE/VALARM that no
+        // longer match the new summary/time.
+        rawIcs: null,
         updatedAt: new Date(),
       })
       .where(eq(schema.events.id, id))

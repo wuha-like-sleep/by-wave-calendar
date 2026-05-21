@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
-import { parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { extractVeventBlock, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 
 // ---------- XML helpers ----------
 
@@ -160,6 +160,26 @@ function rowToIcal(row: schema.Event): IcalEvent {
   };
 }
 
+// Wrap an event's iCalendar body for outbound delivery. Prefers the raw VEVENT
+// the client originally sent (preserves ATTENDEE / VALARM / TRANSP / CATEGORIES /
+// X-*); falls back to synthesizing one from the parsed columns for events created
+// via the web UI (or imported) where no raw body was ever stored.
+function rowToVCalendar(row: schema.Event, calName: string): string {
+  if (row.rawIcs && row.rawIcs.includes("BEGIN:VEVENT")) {
+    const CRLF = "\r\n";
+    return [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//ByWave-Calendar//CalDAV//EN",
+      "CALSCALE:GREGORIAN",
+      `X-WR-CALNAME:${calName.replace(/[\r\n]/g, " ")}`,
+      row.rawIcs,
+      "END:VCALENDAR",
+    ].join(CRLF) + CRLF;
+  }
+  return wrapSingleEvent(rowToIcal(row), calName);
+}
+
 // ---------- Route handlers ----------
 
 async function handleOptions(_req: FastifyRequest, reply: FastifyReply) {
@@ -306,7 +326,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
 
     const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
       etag: etagOf(e.updatedAt),
-      calendarData: wrapSingleEvent(rowToIcal(e), cal.name),
+      calendarData: rowToVCalendar(e, cal.name),
     }));
     sendXml(reply, multistatus(entries));
     return;
@@ -335,7 +355,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
 
   const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
     etag: etagOf(e.updatedAt),
-    calendarData: wrapSingleEvent(rowToIcal(e), cal.name),
+    calendarData: rowToVCalendar(e, cal.name),
   }));
   sendXml(reply, multistatus(entries));
 }
@@ -366,7 +386,7 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   reply
     .header("Content-Type", "text/calendar; charset=utf-8")
     .header("ETag", etagOf(event.updatedAt));
-  return reply.send(wrapSingleEvent(rowToIcal(event), cal.name));
+  return reply.send(rowToVCalendar(event, cal.name));
 }
 
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
@@ -381,6 +401,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const bodyStr = typeof req.body === "string" ? req.body : "";
   const parsed = parseEvent(bodyStr);
   if (!parsed) return reply.code(400).send("Invalid iCalendar");
+  const rawVevent = extractVeventBlock(bodyStr);
 
   // The UID in the URL might differ from the UID in the body — use body UID as authoritative,
   // but match against URL for existing lookup.
@@ -391,6 +412,18 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     .from(schema.events)
     .where(and(eq(schema.events.calendarId, cal.id), eq(schema.events.uid, urlUid)))
     .limit(1);
+
+  // Anything the client sent that we can't fold into structured columns (TRANSP,
+  // ATTENDEE list, VALARM reminders, CATEGORIES, ORGANIZER, custom X-*) is preserved
+  // by storing the raw VEVENT block; GET/REPORT prefers raw_ics so the round-trip
+  // is lossless and the phone doesn't see "the server stripped my event" and delete.
+  const extraPatch: Record<string, unknown> = { ...((existing?.extra as Record<string, unknown> | null) ?? {}) };
+  if (parsed.transp) extraPatch.transp = parsed.transp;
+  if (parsed.status) extraPatch.status = parsed.status;
+  if (parsed.attendees) extraPatch.attendees = parsed.attendees;
+  if (parsed.alarms) extraPatch.alarms = parsed.alarms;
+  if (parsed.organizer) extraPatch.organizer = parsed.organizer;
+  if (parsed.categories) extraPatch.categories = parsed.categories;
 
   let stored: schema.Event;
   if (existing) {
@@ -408,6 +441,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         endsAt: parsed.endsAt,
         allDay: parsed.allDay,
         rrule: parsed.rrule ?? null,
+        extra: Object.keys(extraPatch).length ? extraPatch : null,
+        rawIcs: rawVevent,
         updatedAt: new Date(),
       })
       .where(eq(schema.events.id, existing.id))
@@ -430,6 +465,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         endsAt: parsed.endsAt,
         allDay: parsed.allDay,
         rrule: parsed.rrule ?? null,
+        extra: Object.keys(extraPatch).length ? extraPatch : null,
+        rawIcs: rawVevent,
       })
       .returning();
     stored = inserted!;
