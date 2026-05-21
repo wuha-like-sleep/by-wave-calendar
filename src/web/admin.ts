@@ -9,6 +9,7 @@ import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { getSettings, updateSettings } from "../lib/site_settings.js";
+import { applyUpdate, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -274,6 +275,58 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
+  });
+
+  // ---------- Self-update (admin only) ----------
+  app.get("/admin/update", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    return reply.view("admin/update", {
+      title: "系统更新",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/update",
+      remote: pickRemote(),
+      branch: pickBranch(),
+      pm2Name: process.env.PM2_PROCESS_NAME || "by-wave-calendar",
+    });
+  });
+
+  app.post("/admin/update/check", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    try {
+      const status = await checkForUpdates();
+      return reply.send({ ok: true, status });
+    } catch (err) {
+      return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
+    }
+  });
+
+  app.post("/admin/update/apply", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    try {
+      const result = await applyUpdate();
+      return reply.send(result);
+    } catch (err) {
+      return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
+    }
+  });
+
+  app.post("/admin/update/restart", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    // Reply first; queue the restart so the response can flush.
+    reply.send({ ok: true, scheduled: true });
+    setTimeout(() => {
+      void restartProcess().catch(() => undefined);
+    }, 800);
+    return reply;
   });
 
   void asc;

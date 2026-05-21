@@ -15,7 +15,7 @@
     const m = e.target.closest("[id^=modal-]");
     if (m) closeModal("#" + m.id);
   }));
-  ["#modal-event", "#modal-calendar", "#modal-cal-menu"].forEach((id) => {
+  ["#modal-event", "#modal-calendar", "#modal-cal-menu", "#modal-import"].forEach((id) => {
     const m = $(id);
     if (m) m.addEventListener("click", (e) => { if (e.target === m) closeModal(id); });
   });
@@ -326,12 +326,94 @@
     }
   });
 
-  // ---------- Calendar create ----------
-  $("#btn-new-calendar").addEventListener("click", () => {
-    $("#form-calendar").reset();
-    $("#form-calendar [name=\"color\"]").value = "#6366f1";
+  // ---------- Calendar create / import (Synology-style add menu) ----------
+  const COLOR_PALETTE = [
+    "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+    "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
+    "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+    "#ec4899", "#64748b",
+  ];
+
+  function buildColorPicker(container, hiddenInputName, initial) {
+    container.innerHTML = "";
+    COLOR_PALETTE.forEach((c) => {
+      const sw = document.createElement("button");
+      sw.type = "button";
+      sw.dataset.color = c;
+      sw.className = "color-swatch relative h-7 w-7 rounded-md border border-slate-200 hover:scale-110 transition-transform";
+      sw.style.background = `linear-gradient(135deg, ${c} 50%, #f8fafc 50%)`;
+      sw.setAttribute("aria-label", `颜色 ${c}`);
+      container.appendChild(sw);
+    });
+    const setSelected = (val) => {
+      container.querySelectorAll(".color-swatch").forEach((s) => {
+        s.classList.toggle("ring-2", s.dataset.color === val);
+        s.classList.toggle("ring-offset-1", s.dataset.color === val);
+        s.classList.toggle("ring-slate-700", s.dataset.color === val);
+      });
+      const form = container.closest("form");
+      const input = form ? form.querySelector(`[name="${hiddenInputName}"]`) : null;
+      if (input) input.value = val;
+    };
+    container.addEventListener("click", (e) => {
+      const t = e.target.closest(".color-swatch");
+      if (!t) return;
+      setSelected(t.dataset.color);
+    });
+    setSelected(initial);
+  }
+
+  // Add-menu popover (创建 / 导入)
+  const addTrigger = $("#btn-cal-menu-trigger");
+  const addPopover = $("#cal-add-popover");
+  if (addTrigger && addPopover) {
+    addTrigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      addPopover.classList.toggle("hidden");
+    });
+    document.addEventListener("click", (e) => {
+      if (!addPopover.contains(e.target) && e.target !== addTrigger) addPopover.classList.add("hidden");
+    });
+    addPopover.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        addPopover.classList.add("hidden");
+        if (btn.dataset.action === "create") openCreateCalendar();
+        else openImportCalendar();
+      });
+    });
+  }
+
+  function openCreateCalendar() {
+    const form = $("#form-calendar");
+    form.reset();
+    buildColorPicker(form.querySelector('[data-color-picker="form-calendar"]'), "color", "#6366f1");
+    // Reset to General tab
+    form.querySelectorAll(".cal-tab").forEach((t) => {
+      const active = t.dataset.calTab === "general";
+      t.classList.toggle("border-brand-600", active);
+      t.classList.toggle("text-brand-700", active);
+      t.classList.toggle("border-transparent", !active);
+      t.classList.toggle("text-slate-500", !active);
+    });
+    form.querySelectorAll("[data-cal-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.calPane !== "general"));
     openModal("#modal-calendar");
+  }
+
+  // Tab switch in create modal
+  $("#modal-calendar").addEventListener("click", (e) => {
+    const t = e.target.closest(".cal-tab");
+    if (!t) return;
+    const form = $("#form-calendar");
+    form.querySelectorAll(".cal-tab").forEach((x) => {
+      const active = x.dataset.calTab === t.dataset.calTab;
+      x.classList.toggle("border-brand-600", active);
+      x.classList.toggle("text-brand-700", active);
+      x.classList.toggle("border-transparent", !active);
+      x.classList.toggle("text-slate-500", !active);
+    });
+    form.querySelectorAll("[data-cal-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.calPane !== t.dataset.calTab));
   });
+
   $("#form-calendar").addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
@@ -345,6 +427,115 @@
       window.bwc && window.bwc.toast("创建失败", "error");
     }
   });
+
+  // ---------- Import calendar ----------
+  function openImportCalendar() {
+    const form = $("#form-import");
+    form.reset();
+    buildColorPicker(form.querySelector('[data-color-picker="form-import"]'), "newColor", "#6366f1");
+    // Reset source pane to file
+    form.querySelectorAll("[data-source-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.sourcePane !== "file"));
+    // Reset destination panes
+    form.querySelector('[data-dest-pane="new"]').classList.remove("hidden");
+    form.querySelector('[data-dest-pane="existing"]').classList.add("hidden");
+    openModal("#modal-import");
+  }
+
+  const importForm = $("#form-import");
+  if (importForm) {
+    const sourceHint = $("#import-source-hint");
+    const hints = {
+      file: "从本地选择一个 .ics 文件上传（最大 5MB）。支持 Google / Apple / Outlook / 群晖 等任意标准 iCalendar 文件。",
+      "url-once": "服务器一次性从远程 URL 拉取并导入。适合公开节假日 / 课表的快照。",
+      sub: "服务器按周期自动同步远程 URL，事件按 UID 增量更新。",
+      paste: "如果你只能复制内容，直接粘贴 ICS 文本即可。",
+    };
+    importForm.querySelectorAll('input[name="source"]').forEach((r) => r.addEventListener("change", () => {
+      const v = importForm.querySelector('input[name="source"]:checked').value;
+      importForm.querySelectorAll("[data-source-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.sourcePane !== v));
+      if (sourceHint) sourceHint.textContent = hints[v] || "";
+    }));
+
+    importForm.querySelectorAll('input[name="destination"]').forEach((r) => r.addEventListener("change", () => {
+      const v = importForm.querySelector('input[name="destination"]:checked').value;
+      importForm.querySelector('[data-dest-pane="new"]').classList.toggle("hidden", v !== "new");
+      importForm.querySelector('[data-dest-pane="existing"]').classList.toggle("hidden", v !== "existing");
+    }));
+
+    importForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const source = importForm.querySelector('input[name="source"]:checked').value;
+      const destination = importForm.querySelector('input[name="destination"]:checked').value;
+      const submitBtn = importForm.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = "导入中…";
+      try {
+        // Step 1: resolve target calendarId
+        let calendarId;
+        if (destination === "existing") {
+          const sel = importForm.querySelector('[data-dest-pane="existing"]');
+          calendarId = sel.value;
+          if (!calendarId) throw new Error("请选择一个现有日历");
+        } else {
+          const name = importForm.querySelector('input[name="newName"]').value.trim() || "导入的日历";
+          const color = importForm.querySelector('input[name="newColor"]').value || "#6366f1";
+          const created = await fetch("/api/calendars", fetchOpts({
+            method: "POST",
+            body: JSON.stringify({ name, color, timezone: "Asia/Shanghai" }),
+          }));
+          if (!created.ok) throw new Error("创建日历失败");
+          const calRow = await created.json();
+          calendarId = calRow.id;
+        }
+
+        // Step 2: send the import to that calendar
+        if (source === "file") {
+          const fileInput = importForm.querySelector('[data-source-pane="file"] input[type="file"]');
+          if (!fileInput.files || !fileInput.files[0]) throw new Error("请选择 .ics 文件");
+          const fd = new FormData();
+          fd.append("file", fileInput.files[0]);
+          const resp = await fetch(`/app/calendars/${calendarId}/import/file`, { method: "POST", credentials: "same-origin", body: fd });
+          if (!resp.ok && resp.status !== 302) throw new Error("上传失败");
+        } else if (source === "url-once") {
+          const url = importForm.querySelector('[data-source-pane="url-once"] input[name="url"]').value.trim();
+          if (!url) throw new Error("请输入 URL");
+          await postForm(`/app/calendars/${calendarId}/import/url-once`, { url });
+        } else if (source === "sub") {
+          const url = importForm.querySelector('[data-source-pane="sub"] input[name="url"]').value.trim();
+          const label = importForm.querySelector('[data-source-pane="sub"] input[name="label"]').value.trim();
+          const refreshMinutes = importForm.querySelector('[data-source-pane="sub"] select[name="refreshMinutes"]').value;
+          if (!url) throw new Error("请输入 URL");
+          await postForm(`/app/calendars/${calendarId}/subscriptions`, { url, label, refreshMinutes });
+        } else if (source === "paste") {
+          const text = importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]').value;
+          if (!text || text.length < 20) throw new Error("请粘贴 ICS 文本");
+          await postForm(`/app/calendars/${calendarId}/import/text`, { text });
+        }
+        window.bwc && window.bwc.toast("导入完成", "success");
+        setTimeout(() => window.location.reload(), 500);
+      } catch (err) {
+        console.error(err);
+        window.bwc && window.bwc.toast("导入失败：" + (err.message || err), "error");
+        submitBtn.disabled = false;
+        submitBtn.textContent = "导入";
+      }
+    });
+  }
+
+  async function postForm(url, data) {
+    const fd = new URLSearchParams();
+    fd.set("_csrf", ctx.csrfToken);
+    Object.entries(data).forEach(([k, v]) => fd.set(k, v));
+    const resp = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: fd.toString(),
+      redirect: "manual",
+    });
+    if (resp.type === "opaqueredirect" || resp.status === 302 || resp.ok) return;
+    throw new Error(`HTTP ${resp.status}`);
+  }
 
   // ---------- Calendar context menu ----------
   let currentMenuCalId = null;

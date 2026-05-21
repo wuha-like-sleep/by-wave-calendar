@@ -45,11 +45,15 @@
       </div>
 
       <div class="p-3 border-b border-slate-100">
-        <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center justify-between mb-2 relative">
           <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">我的日历</h3>
-          <button type="button" id="btn-new-calendar" class="text-brand-600 hover:text-brand-700 p-1" aria-label="新建日历">
+          <button type="button" id="btn-cal-menu-trigger" class="text-brand-600 hover:text-brand-700 p-1" aria-label="新建或导入日历">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
+          <div id="cal-add-popover" class="hidden absolute right-0 top-7 z-30 w-44 rounded-lg border border-slate-200 bg-white shadow-lg py-1">
+            <button type="button" data-action="create" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">📅 创建日历</button>
+            <button type="button" data-action="import" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">📥 导入日历</button>
+          </div>
         </div>
         <ul id="cal-list" class="space-y-1">
           <% calendars.forEach(function(cal){ %>
@@ -203,28 +207,38 @@
   </div>
 </div>
 
-<!-- Modal: New Calendar -->
+<!-- Modal: New Calendar (Synology-style with tabs + triangle color swatches) -->
 <div id="modal-calendar" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-slate-900">新建日历</h3>
+      <h3 class="text-lg font-semibold text-slate-900">创建日历</h3>
       <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
+    <div class="px-5 pt-3 border-b border-slate-100 flex gap-4">
+      <button type="button" data-cal-tab="general" class="cal-tab pb-2 border-b-2 border-brand-600 text-sm font-medium text-brand-700">一般</button>
+      <button type="button" data-cal-tab="share" class="cal-tab pb-2 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700">共享</button>
+    </div>
     <form id="form-calendar" class="p-5 space-y-4">
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">名称</label>
-        <input type="text" name="name" required maxlength="200" placeholder="如：工作 / 家庭"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div class="grid grid-cols-2 gap-3">
+      <div data-cal-pane="general" class="space-y-4">
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">颜色</label>
-          <input type="color" name="color" value="#6366f1" class="w-full h-9 rounded-lg border border-slate-300" />
+          <label class="block text-sm font-medium text-slate-700 mb-1">名称<span class="text-red-500 ml-0.5">*</span></label>
+          <input type="text" name="name" required maxlength="200"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">时区</label>
+          <label class="block text-sm font-medium text-slate-700 mb-1">描述</label>
+          <textarea name="description" maxlength="2000" rows="2" placeholder="添加描述"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">颜色</label>
+          <div class="flex flex-wrap gap-1.5" data-color-picker="form-calendar"></div>
+          <input type="hidden" name="color" value="#6366f1" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">时区</label>
           <select name="timezone" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
             <% timezones.forEach(function(tz){ %>
               <option value="<%= tz.id %>" <%= tz.id === 'Asia/Shanghai' ? 'selected' : '' %>><%= tz.label %> · <%= tz.offset %></option>
@@ -232,14 +246,128 @@
           </select>
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">描述（可选）</label>
-        <textarea name="description" maxlength="2000" rows="2"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      <div data-cal-pane="share" class="hidden space-y-3">
+        <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500 leading-relaxed">
+          创建完成后可在日历右键菜单的「订阅链接」中生成订阅地址，分享给 Apple / Google / Outlook 客户端只读订阅。<br/>
+          邮箱邀请协作（指定成员可读 / 可编辑）将在下一版本上线。
+        </div>
       </div>
-      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
         <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
-        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">创建</button>
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Import calendar (file / URL / subscription / paste, into new or existing) -->
+<div id="modal-import" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+      <h3 class="text-lg font-semibold text-slate-900">导入日历</h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="form-import" class="p-5 space-y-4">
+      <!-- Source type -->
+      <div>
+        <label class="block text-sm font-medium text-slate-700 mb-2">导入来源</label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="source" value="file" checked class="accent-brand-600" />
+            <span class="text-sm">📁 文件</span>
+          </label>
+          <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="source" value="url-once" class="accent-brand-600" />
+            <span class="text-sm">🔗 URL</span>
+          </label>
+          <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="source" value="sub" class="accent-brand-600" />
+            <span class="text-sm">🔁 订阅</span>
+          </label>
+          <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
+            <input type="radio" name="source" value="paste" class="accent-brand-600" />
+            <span class="text-sm">📝 粘贴</span>
+          </label>
+        </div>
+        <p class="mt-2 text-xs text-slate-400" id="import-source-hint">从本地选择一个 .ics 文件上传（最大 5MB）。支持 Google / Apple / Outlook / 群晖 等任意标准 iCalendar 文件。</p>
+      </div>
+
+      <!-- Source body: shown one at a time -->
+      <div data-source-pane="file">
+        <label class="block text-sm font-medium text-slate-700 mb-1">文件<span class="text-red-500 ml-0.5">*</span></label>
+        <input type="file" name="file" accept=".ics,text/calendar"
+               class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
+      </div>
+      <div data-source-pane="url-once" class="hidden">
+        <label class="block text-sm font-medium text-slate-700 mb-1">远程 URL<span class="text-red-500 ml-0.5">*</span></label>
+        <input type="url" name="url" placeholder="https:// 或 webcal://"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <p class="mt-1 text-xs text-slate-400">一次性拉取，不自动同步。</p>
+      </div>
+      <div data-source-pane="sub" class="hidden space-y-2">
+        <label class="block text-sm font-medium text-slate-700 mb-1">订阅 URL<span class="text-red-500 ml-0.5">*</span></label>
+        <input type="url" name="url" placeholder="https:// 或 webcal://"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" name="label" maxlength="60" placeholder="备注（如：公司日历）"
+                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <select name="refreshMinutes"
+                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+            <option value="60">每小时同步</option>
+            <option value="360" selected>每 6 小时</option>
+            <option value="720">每 12 小时</option>
+            <option value="1440">每天</option>
+            <option value="10080">每周</option>
+          </select>
+        </div>
+      </div>
+      <div data-source-pane="paste" class="hidden">
+        <label class="block text-sm font-medium text-slate-700 mb-1">ICS 文本<span class="text-red-500 ml-0.5">*</span></label>
+        <textarea name="text" rows="5" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;…"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      </div>
+
+      <!-- Destination -->
+      <div class="pt-2 border-t border-slate-100">
+        <label class="block text-sm font-medium text-slate-700 mb-2">导入到</label>
+        <div class="space-y-2">
+          <label class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-200">
+            <input type="radio" name="destination" value="new" checked class="mt-0.5 accent-brand-600" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-slate-900">导入到全新日历</div>
+              <div data-dest-pane="new" class="mt-2 space-y-2">
+                <input type="text" name="newName" maxlength="200" placeholder="日历名称（默认沿用文件中的名称）"
+                       class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                <div>
+                  <span class="block text-xs text-slate-500 mb-1">颜色</span>
+                  <div class="flex flex-wrap gap-1.5" data-color-picker="form-import"></div>
+                  <input type="hidden" name="newColor" value="#6366f1" />
+                </div>
+              </div>
+            </div>
+          </label>
+          <label class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-200">
+            <input type="radio" name="destination" value="existing" class="mt-0.5 accent-brand-600" />
+            <div class="flex-1">
+              <div class="text-sm font-medium text-slate-900">导入到现有日历</div>
+              <select name="existingCalendarId" data-dest-pane="existing" class="hidden mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                <% calendars.forEach(function(cal){ %>
+                  <option value="<%= cal.id %>"><%= cal.name %></option>
+                <% }) %>
+              </select>
+            </div>
+          </label>
+        </div>
+        <% if (calendars.length === 0) { %>
+          <p class="mt-2 text-xs text-slate-400">（你还没有任何日历，将自动创建一个）</p>
+        <% } %>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">导入</button>
       </div>
     </form>
   </div>
