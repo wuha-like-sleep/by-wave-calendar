@@ -40,11 +40,12 @@ await app.register(helmet, {
     useDefaults: true,
     directives: {
       "default-src": ["'self'"],
-      // Tailwind Play CDN + HTMX from unpkg; inline tailwind config requires 'unsafe-inline'
-      "script-src": ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com", "https://uicdn.toast.com"],
+      // All third-party libs are self-hosted (国内 CDN 不稳定).
+      // 'unsafe-inline' kept for the small inline scripts (CSRF/Toast/SW reg + JSON ctx).
+      // Future hardening: move all inline scripts out and switch to nonce-based.
+      "script-src": ["'self'", "'unsafe-inline'"],
       "script-src-attr": ["'unsafe-inline'"],
-      // Tailwind Play CDN injects styles dynamically
-      "style-src": ["'self'", "'unsafe-inline'", "https://uicdn.toast.com"],
+      "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:"],
       "connect-src": ["'self'"],
       "font-src": ["'self'", "data:"],
@@ -95,7 +96,13 @@ await app.register(fastifyStatic, {
 await app.register(view, {
   engine: { ejs },
   root: path.join(projectRoot, "src", "views"),
-  defaultContext: { env: env.NODE_ENV },
+  defaultContext: {
+    env: env.NODE_ENV,
+    icpNumber: env.ICP_NUMBER,
+    icpUrl: env.ICP_URL,
+    siteName: env.SITE_NAME,
+    siteLogoUrl: null,
+  },
   layout: "layout.ejs",
   propertyName: "view",
   options: { async: false },

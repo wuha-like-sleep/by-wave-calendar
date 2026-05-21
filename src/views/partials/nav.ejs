@@ -2,15 +2,22 @@
   <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
     <div class="flex h-14 items-center justify-between gap-4">
       <a href="<%= user ? '/app' : '/' %>" class="flex items-center gap-2 font-semibold text-slate-900">
-        <span class="inline-block h-7 w-7 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm"></span>
-        <span class="hidden sm:inline">by-wave 日历</span>
-        <span class="sm:hidden">by-wave</span>
+        <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
+          <img src="<%= siteLogoUrl %>" alt="logo" class="h-7 w-7 rounded-lg object-cover" />
+        <% } else { %>
+          <span class="inline-block h-7 w-7 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm"></span>
+        <% } %>
+        <span class="hidden sm:inline"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
+        <span class="sm:hidden"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>
       </a>
 
       <% if (user) { %>
         <nav class="hidden md:flex items-center gap-1 text-sm text-slate-600">
           <a href="/app" class="px-3 py-1.5 rounded-md hover:bg-slate-100">日历</a>
           <a href="/app/settings" class="px-3 py-1.5 rounded-md hover:bg-slate-100">设置</a>
+          <% if (user.isAdmin) { %>
+            <a href="/admin" class="px-3 py-1.5 rounded-md text-amber-700 hover:bg-amber-50">管理后台</a>
+          <% } %>
         </nav>
         <div class="flex items-center gap-2">
           <span class="hidden sm:inline text-sm text-slate-500"><%= user.displayName || user.email %></span>
@@ -36,6 +43,9 @@
       <nav id="mobile-menu" class="md:hidden hidden pb-3 flex-col gap-1 text-sm text-slate-700">
         <a href="/app" class="px-3 py-2 rounded-md hover:bg-slate-100">日历</a>
         <a href="/app/settings" class="px-3 py-2 rounded-md hover:bg-slate-100">设置</a>
+        <% if (user.isAdmin) { %>
+          <a href="/admin" class="px-3 py-2 rounded-md text-amber-700 hover:bg-amber-50">管理后台</a>
+        <% } %>
       </nav>
     <% } %>
   </div>

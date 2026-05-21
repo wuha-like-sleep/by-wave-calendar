@@ -35,6 +35,13 @@ const schema = z.object({
   SMTP_PASS: z.string().optional(),
   MAIL_FROM_ADDRESS: z.string().email().optional(),
   MAIL_FROM_NAME: z.string().default("ByWave-Calendar"),
+
+  // 中国大陆 ICP 备案号 —— 空就不显示，本项目部署到 lz-ss.com 时填写。
+  ICP_NUMBER: z.string().optional(),
+  ICP_URL: z.string().default("https://beian.miit.gov.cn/"),
+
+  // 站点名 + 默认 logo URL（管理员上传后会被覆盖）
+  SITE_NAME: z.string().default("ByWave-Calendar"),
 });
 
 const parsed = schema.safeParse(process.env);
