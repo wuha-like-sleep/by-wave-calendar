@@ -255,6 +255,10 @@ export const eventInviteTokens = pgTable("event_invite_tokens", {
   recipientEmail: text("recipient_email").notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  // RSVP — independent of acceptedAt (which means "added to my ByWave calendar").
+  // Values: "pending" (default), "accepted", "declined", "tentative".
+  responseStatus: text("response_status").notNull().default("pending"),
+  respondedAt: timestamp("responded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   evIdx: index("event_invite_tokens_event_idx").on(t.sourceEventId),

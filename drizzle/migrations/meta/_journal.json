@@ -134,6 +134,13 @@
       "when": 1779373275946,
       "tag": "0018_api_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779374049180,
+      "tag": "0019_event_invite_rsvp",
+      "breakpoints": true
     }
   ]
 }

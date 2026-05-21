@@ -81,6 +81,11 @@ async function loadAuthedUser(req: FastifyRequest, reply: FastifyReply) {
   return s.user;
 }
 
+async function ownerOfCalendar(calendarId: string): Promise<string> {
+  const [row] = await db.select({ ownerId: schema.calendars.ownerId }).from(schema.calendars).where(eq(schema.calendars.id, calendarId)).limit(1);
+  return row?.ownerId ?? "";
+}
+
 async function ownsCalendar(calendarId: string, userId: string) {
   const rows = await db
     .select({ id: schema.calendars.id })
@@ -1152,6 +1157,46 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // ---------- Event-invite deep link ("添加到我的日历" from the email) ----------
+  // Returns the .ics for an invite token; Google/Apple/Outlook auto-import.
+  // No login required — the token IS the credential.
+  app.get<{ Params: { token: string } }>("/event-invite/:token.ics", async (req, reply) => {
+    const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok || tok.expiresAt < new Date()) return reply.code(410).type("text/plain").send("Invitation expired");
+    const [event] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (!event) return reply.code(404).type("text/plain").send("Event not found");
+    const [organizer] = await db.select().from(schema.users).where(eq(schema.users.id, await ownerOfCalendar(event.calendarId))).limit(1);
+    const ics = invitationIcs({
+      event: {
+        uid: event.uid, summary: event.summary, description: event.description,
+        location: event.location, startsAt: event.startsAt, endsAt: event.endsAt,
+        allDay: event.allDay, updatedAt: event.updatedAt,
+      },
+      organizerEmail: organizer?.email ?? "noreply@bywave.example",
+      organizerName: organizer?.displayName || organizer?.email || "ByWave Calendar",
+      attendees: [{ email: tok.recipientEmail }],
+      method: "REQUEST",
+    });
+    reply.header("Content-Type", 'text/calendar; charset=utf-8; method=REQUEST');
+    reply.header("Content-Disposition", `attachment; filename="${event.summary.replace(/[^\w-]/g, "_").slice(0, 40)}.ics"`);
+    return reply.send(ics);
+  });
+
+  // RSVP — independent of "did you add to your own calendar"
+  app.post<{ Params: { token: string } }>("/event-invite/:token/respond", async (req, reply) => {
+    const body = z.object({ status: z.enum(["accepted", "declined", "tentative"]) }).safeParse(req.body);
+    if (!body.success) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=bad-status`);
+    const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok || tok.expiresAt < new Date()) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=expired`);
+    await db
+      .update(schema.eventInviteTokens)
+      .set({ responseStatus: body.data.status, respondedAt: new Date() })
+      .where(eq(schema.eventInviteTokens.token, tok.token));
+    const msg = body.data.status === "accepted" ? "已回复：参加"
+              : body.data.status === "declined" ? "已回复：不参加"
+              :                                   "已回复：可能参加";
+    return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?success=${encodeURIComponent(msg)}`);
+  });
+
   app.get<{ Params: { token: string } }>("/event-invite/:token", async (req, reply) => {
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
     if (!tok) {
@@ -1161,19 +1206,27 @@ export async function webRoutes(app: FastifyInstance) {
       return reply.code(410).view("error", { title: "已过期", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 410, heading: "邀请链接已过期", message: "请联系邀请人重新发送邀请。" });
     }
     const currentUser = await loadUserFromRequest(req);
-    if (!currentUser) {
-      return redirectWith(reply, "/login", { error: `请先用 ${tok.recipientEmail} 登录后再接受邀请` });
-    }
     const [sourceEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
     if (!sourceEvent) {
       return reply.code(404).view("error", { title: "事件不存在", user: currentUser, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "原事件已被删除", message: "邀请人撤销了这次活动。" });
     }
-    // List the recipient's own calendars to pick which one to add the event into.
-    const myCals = await db
+    // Build Google Calendar pre-filled event URL (no login needed on Google's side).
+    const fmtGcal = (d: Date) => sourceEvent.allDay
+      ? d.toISOString().slice(0, 10).replace(/-/g, "")
+      : d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const gcalParams = new URLSearchParams({
+      action: "TEMPLATE",
+      text: sourceEvent.summary,
+      dates: `${fmtGcal(sourceEvent.startsAt)}/${fmtGcal(sourceEvent.endsAt)}`,
+    });
+    if (sourceEvent.description) gcalParams.set("details", sourceEvent.description);
+    if (sourceEvent.location) gcalParams.set("location", sourceEvent.location);
+    const myCals = currentUser ? await db
       .select()
       .from(schema.calendars)
       .where(eq(schema.calendars.ownerId, currentUser.id))
-      .orderBy(asc(schema.calendars.name));
+      .orderBy(asc(schema.calendars.name)) : [];
     return reply.view("invite/event-accept", {
       title: "添加到日历",
       user: currentUser,
@@ -1181,6 +1234,7 @@ export async function webRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       token: tok.token,
       recipientEmail: tok.recipientEmail,
+      responseStatus: tok.responseStatus,
       sourceEvent: {
         ...sourceEvent,
         startsAtLocal: localTime(sourceEvent.startsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
@@ -1188,6 +1242,8 @@ export async function webRoutes(app: FastifyInstance) {
       },
       calendars: myCals,
       alreadyAccepted: !!tok.acceptedAt,
+      googleCalendarUrl: `https://www.google.com/calendar/render?${gcalParams.toString()}`,
+      icsDownloadUrl: `${baseUrl}/event-invite/${encodeURIComponent(tok.token)}.ics`,
     });
   });
 

@@ -1,0 +1,2 @@
+ALTER TABLE "event_invite_tokens" ADD COLUMN "response_status" text DEFAULT 'pending' NOT NULL;--> statement-breakpoint
+ALTER TABLE "event_invite_tokens" ADD COLUMN "responded_at" timestamp with time zone;
