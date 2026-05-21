@@ -62,16 +62,34 @@ set -a; . ./.env; set +a
 [ -n "${DATABASE_URL:-}" ] || fail ".env 里没有 DATABASE_URL"
 [ -n "${PUBLIC_BASE_URL:-}" ] || fail ".env 里没有 PUBLIC_BASE_URL"
 
-# ---------- 3. 依赖 ----------
-if [ "${SKIP_DEPS:-0}" = "1" ]; then
-  log "SKIP_DEPS=1，跳过依赖安装。"
+# ---------- 3. 依赖 + 编译 ----------
+# 两种模式：
+#   tarball 模式：dist/src/server.js 已存在 -> npm ci --omit=dev
+#   git/源码模式：dist 不存在 -> npm ci (含 devDeps) + npm run build, 然后 prune
+if [ -f dist/src/server.js ]; then
+  log "检测到 dist/，使用 tarball 模式..."
+  if [ "${SKIP_DEPS:-0}" = "1" ]; then
+    log "SKIP_DEPS=1，跳过依赖安装。"
+  else
+    log "安装生产依赖（npm ci --omit=dev）..."
+    npm ci --omit=dev
+  fi
 else
-  log "安装生产依赖（npm ci --omit=dev）..."
-  npm ci --omit=dev
+  log "未检测到 dist/，使用源码模式（git clone）..."
+  if [ "${SKIP_DEPS:-0}" = "1" ]; then
+    log "SKIP_DEPS=1，跳过依赖安装（但 build 还会跑）。"
+  else
+    log "安装全部依赖（含 devDeps，用于 build）..."
+    npm ci
+  fi
+  log "编译 TypeScript..."
+  npm run build
+  log "Prune devDeps..."
+  npm prune --omit=dev
 fi
 
 # ---------- 4. dist 检查 ----------
-[ -f dist/src/server.js ] || fail "dist/src/server.js 不存在。请在本地 'npm run release' 后上传 tarball。"
+[ -f dist/src/server.js ] || fail "dist/src/server.js 仍不存在，编译失败？"
 
 # ---------- 5. 数据库迁移 ----------
 if [ "${SKIP_MIGRATE:-0}" = "1" ]; then
