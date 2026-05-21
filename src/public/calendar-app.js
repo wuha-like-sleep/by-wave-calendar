@@ -418,4 +418,11 @@
   }
 
   refresh();
+
+  // Force a render after layout settles so the time-grid measures itself correctly.
+  setTimeout(() => { try { cal.render(); } catch (e) {} }, 100);
+  window.addEventListener("resize", () => {
+    clearTimeout(window.__bwcResize);
+    window.__bwcResize = setTimeout(() => { try { cal.render(); } catch (e) {} }, 150);
+  });
 })();

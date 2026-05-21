@@ -12,6 +12,13 @@ export type SettingsView = {
   ssoKeycloakIssuerUrl: string | null;
   ssoKeycloakClientId: string | null;
   ssoKeycloakLabel: string;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string | null;
+  smtpPass: string | null;
+  mailFromAddress: string | null;
+  mailFromName: string;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -47,6 +54,13 @@ function toView(r: schema.SiteSettings): SettingsView {
     ssoKeycloakIssuerUrl: r.ssoKeycloakIssuerUrl,
     ssoKeycloakClientId: r.ssoKeycloakClientId,
     ssoKeycloakLabel: r.ssoKeycloakLabel || "使用 SSO 登录",
+    smtpHost: r.smtpHost || env.SMTP_HOST || null,
+    smtpPort: r.smtpPort ?? env.SMTP_PORT,
+    smtpSecure: r.smtpSecure,
+    smtpUser: r.smtpUser || env.SMTP_USER || null,
+    smtpPass: r.smtpPass || env.SMTP_PASS || null,
+    mailFromAddress: r.mailFromAddress || env.MAIL_FROM_ADDRESS || null,
+    mailFromName: r.mailFromName || env.MAIL_FROM_NAME,
   };
 }
 
@@ -68,6 +82,13 @@ export async function updateSettings(patch: Partial<{
   ssoKeycloakClientId: string | null;
   ssoKeycloakClientSecret: string | null;
   ssoKeycloakLabel: string;
+  smtpHost: string | null;
+  smtpPort: number;
+  smtpSecure: boolean;
+  smtpUser: string | null;
+  smtpPass: string | null;
+  mailFromAddress: string | null;
+  mailFromName: string;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

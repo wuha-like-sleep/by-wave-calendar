@@ -86,6 +86,34 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin?success=" + encodeURIComponent("站点设置已保存"));
   });
 
+  app.post("/admin/smtp", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      host: z.string().optional().transform((v) => v?.trim() || null),
+      port: z.coerce.number().int().positive().default(465),
+      secure: z.string().optional().transform((v) => v === "on" || v === "true"),
+      smtpUser: z.string().optional().transform((v) => v?.trim() || null),
+      smtpPass: z.string().optional().transform((v) => v?.trim() || null),
+      fromAddress: z.string().email().optional().or(z.literal("")).transform((v) => v?.trim() || null),
+      fromName: z.string().max(100).optional().transform((v) => v?.trim() || "ByWave-Calendar"),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin?error=" + encodeURIComponent("SMTP 参数无效"));
+    const patch: Parameters<typeof updateSettings>[0] = {
+      smtpHost: body.data.host,
+      smtpPort: body.data.port,
+      smtpSecure: body.data.secure,
+      smtpUser: body.data.smtpUser,
+      mailFromAddress: body.data.fromAddress,
+      mailFromName: body.data.fromName,
+    };
+    // Only update password when submitted
+    if (body.data.smtpPass) patch.smtpPass = body.data.smtpPass;
+    await updateSettings(patch);
+    return reply.redirect("/admin?success=" + encodeURIComponent("SMTP 配置已保存"));
+  });
+
   app.post("/admin/sso/keycloak", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;

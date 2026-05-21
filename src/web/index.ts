@@ -222,7 +222,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       email,
-      mailerEnabled: isMailerEnabled(),
+      mailerEnabled: await isMailerEnabled(),
     });
   });
 

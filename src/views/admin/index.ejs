@@ -80,6 +80,59 @@
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-2">SMTP 邮件配置</h2>
+  <p class="text-sm text-slate-500 mb-4">注册验证码、登录提醒、日历邀请的邮件发件人 —— 请填入<strong>你自己的</strong> SMTP 服务器（如腾讯企业邮、阿里云邮、SendGrid、自建 postfix 等）。空 → 邮件功能停用。</p>
+  <form method="post" action="/admin/smtp" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-medium text-slate-700">SMTP 主机</label>
+        <input type="text" name="host" maxlength="200" value="<%= settings.smtpHost || '' %>"
+               placeholder="smtp.example.com"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">端口</label>
+        <input type="number" name="port" value="<%= settings.smtpPort %>" min="1" max="65535"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="secure" <%= settings.smtpSecure ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm text-slate-700">使用 SSL/TLS（端口 465 通常勾选；587 通常不勾，靠 STARTTLS）</span>
+    </label>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">SMTP 用户名</label>
+        <input type="text" name="smtpUser" maxlength="200" value="<%= settings.smtpUser || '' %>"
+               autocomplete="off"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">SMTP 密码 <span class="text-xs text-slate-400">(留空不修改)</span></label>
+        <input type="password" name="smtpPass" placeholder="•••••••" autocomplete="new-password" maxlength="400"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">发件人邮箱</label>
+        <input type="email" name="fromAddress" maxlength="254" value="<%= settings.mailFromAddress || '' %>"
+               placeholder="noreply@your-domain.com"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">发件人显示名</label>
+        <input type="text" name="fromName" maxlength="100" value="<%= settings.mailFromName %>"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SMTP 配置</button>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-2">SSO · Keycloak / OIDC</h2>
   <p class="text-sm text-slate-500 mb-4">支持任何 OpenID Connect 兼容的身份提供者（Keycloak、Authelia、Authentik、Auth0、阿里云 IDaaS 等）</p>
   <form method="post" action="/admin/sso/keycloak" class="space-y-4 max-w-xl">

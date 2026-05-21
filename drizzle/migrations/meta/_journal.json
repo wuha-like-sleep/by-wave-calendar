@@ -29,6 +29,20 @@
       "when": 1779353544795,
       "tag": "0003_site_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779357812697,
+      "tag": "0004_invitations",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779357987529,
+      "tag": "0005_smtp_in_settings",
+      "breakpoints": true
     }
   ]
 }

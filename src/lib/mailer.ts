@@ -1,26 +1,37 @@
 import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "../env.js";
+import { getSettings } from "./site_settings.js";
 
-let cached: Transporter | null = null;
+let cached: { transport: Transporter; key: string } | null = null;
 
-export function isMailerEnabled(): boolean {
-  return Boolean(env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASS && env.MAIL_FROM_ADDRESS);
+function settingsKey(s: { smtpHost: string | null; smtpPort: number; smtpSecure: boolean; smtpUser: string | null; smtpPass: string | null }): string {
+  return [s.smtpHost, s.smtpPort, s.smtpSecure, s.smtpUser, s.smtpPass].join("|");
 }
 
-function getTransport(): Transporter | null {
-  if (!isMailerEnabled()) return null;
-  if (cached) return cached;
-  cached = nodemailer.createTransport({
-    host: env.SMTP_HOST,
-    port: env.SMTP_PORT,
-    secure: env.SMTP_SECURE,
-    auth: { user: env.SMTP_USER!, pass: env.SMTP_PASS! },
+async function getTransport(): Promise<Transporter | null> {
+  const s = await getSettings();
+  if (!s.smtpHost || !s.smtpUser || !s.smtpPass || !s.mailFromAddress) return null;
+  const key = settingsKey(s);
+  if (cached && cached.key === key) return cached.transport;
+  // Settings changed — rebuild
+  if (cached) cached.transport.close();
+  const transport = nodemailer.createTransport({
+    host: s.smtpHost,
+    port: s.smtpPort,
+    secure: s.smtpSecure,
+    auth: { user: s.smtpUser, pass: s.smtpPass },
     tls: { minVersion: "TLSv1.2" },
     pool: true,
     maxConnections: 3,
     maxMessages: 100,
   });
-  return cached;
+  cached = { transport, key };
+  return transport;
+}
+
+export async function isMailerEnabled(): Promise<boolean> {
+  const s = await getSettings();
+  return Boolean(s.smtpHost && s.smtpUser && s.smtpPass && s.mailFromAddress);
 }
 
 export type SendArgs = {
@@ -31,17 +42,17 @@ export type SendArgs = {
 };
 
 export async function sendMail(args: SendArgs): Promise<{ ok: boolean; reason?: string }> {
-  const transport = getTransport();
-  if (!transport) {
-    // Mailer disabled — fall through silently in prod, log loudly in dev.
+  const transport = await getTransport();
+  const s = await getSettings();
+  if (!transport || !s.mailFromAddress) {
     if (env.NODE_ENV === "development") {
-      console.warn(`[mailer] disabled (no SMTP_HOST/USER/PASS). Would have sent to ${args.to}: ${args.subject}\n${args.text}`);
+      console.warn(`[mailer] disabled (no SMTP in DB/env). Would have sent to ${args.to}: ${args.subject}\n${args.text}`);
     }
     return { ok: false, reason: "mailer_disabled" };
   }
   try {
     await transport.sendMail({
-      from: { address: env.MAIL_FROM_ADDRESS!, name: env.MAIL_FROM_NAME },
+      from: { address: s.mailFromAddress, name: s.mailFromName },
       to: args.to,
       subject: args.subject,
       html: args.html,

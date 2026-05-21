@@ -77,9 +77,9 @@
       </div>
     </aside>
 
-    <!-- Main grid -->
-    <section class="flex-1 min-h-0 min-w-0 relative bg-white">
-      <div id="calendar" class="absolute inset-0"></div>
+    <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
+    <section class="flex-1 min-h-0 min-w-0 bg-white">
+      <div id="calendar" style="height: 100%; min-height: calc(100vh - 14rem);"></div>
     </section>
   </div>
 </div>

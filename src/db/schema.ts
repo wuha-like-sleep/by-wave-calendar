@@ -48,6 +48,13 @@ export const siteSettings = pgTable("site_settings", {
   ssoKeycloakClientId: text("sso_keycloak_client_id"),
   ssoKeycloakClientSecret: text("sso_keycloak_client_secret"),
   ssoKeycloakLabel: text("sso_keycloak_label").default("使用 SSO 登录"),
+  smtpHost: text("smtp_host"),
+  smtpPort: integer("smtp_port").default(465),
+  smtpSecure: boolean("smtp_secure").notNull().default(true),
+  smtpUser: text("smtp_user"),
+  smtpPass: text("smtp_pass"),
+  mailFromAddress: text("mail_from_address"),
+  mailFromName: text("mail_from_name").default("ByWave-Calendar"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -120,6 +127,34 @@ export const events = pgTable("events", {
   startsIdx: index("events_starts_idx").on(t.startsAt),
 }));
 
+export const calendarMembers = pgTable("calendar_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("viewer"),
+  invitedBy: uuid("invited_by").references(() => users.id, { onDelete: "set null" }),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  calIdx: index("calendar_members_cal_idx").on(t.calendarId),
+  userIdx: index("calendar_members_user_idx").on(t.userId),
+  uniq: uniqueIndex("calendar_members_cal_user_unique").on(t.calendarId, t.userId),
+}));
+
+export const calendarInvitations = pgTable("calendar_invitations", {
+  token: text("token").primaryKey(),
+  calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("viewer"),
+  invitedBy: uuid("invited_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  message: text("message"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  calIdx: index("calendar_invitations_cal_idx").on(t.calendarId),
+  emailIdx: index("calendar_invitations_email_idx").on(t.email),
+}));
+
 export const shareTokens = pgTable("share_tokens", {
   token: text("token").primaryKey(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
@@ -144,3 +179,5 @@ export type Session = typeof sessions.$inferSelect;
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type LoginAlert = typeof loginAlerts.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
+export type CalendarMember = typeof calendarMembers.$inferSelect;
+export type CalendarInvitation = typeof calendarInvitations.$inferSelect;
