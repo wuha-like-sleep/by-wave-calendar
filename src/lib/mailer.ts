@@ -34,11 +34,22 @@ export async function isMailerEnabled(): Promise<boolean> {
   return Boolean(s.smtpHost && s.smtpUser && s.smtpPass && s.mailFromAddress);
 }
 
+export type MailAttachment = {
+  filename: string;
+  content: string | Buffer;
+  contentType?: string;
+};
+
 export type SendArgs = {
   to: string;
   subject: string;
   html: string;
   text: string;
+  attachments?: MailAttachment[];
+  // For iCalendar invitation emails: nodemailer's `icalEvent` produces both an
+  // attachment and a text/calendar alternate body so Gmail/Outlook show the
+  // "Add to calendar" prompt natively.
+  icalEvent?: { method: "REQUEST" | "CANCEL" | "PUBLISH"; content: string };
 };
 
 export async function sendMail(args: SendArgs): Promise<{ ok: boolean; reason?: string }> {
@@ -57,6 +68,14 @@ export async function sendMail(args: SendArgs): Promise<{ ok: boolean; reason?: 
       subject: args.subject,
       html: args.html,
       text: args.text,
+      ...(args.attachments ? { attachments: args.attachments } : {}),
+      ...(args.icalEvent ? {
+        icalEvent: {
+          method: args.icalEvent.method,
+          filename: "invite.ics",
+          content: args.icalEvent.content,
+        },
+      } : {}),
     });
     return { ok: true };
   } catch (err) {

@@ -65,6 +65,39 @@
     return resp.json();
   }
 
+  async function autoRestartAndReload() {
+    const finalEl = document.getElementById('apply-final');
+    const oldVersion = document.documentElement.getAttribute('data-app-version') || '0';
+    try {
+      // Tell the server to restart; the response flushes ~800ms before pm2 kills us.
+      await postJson('/admin/update/restart');
+    } catch (_e) { /* server may close mid-request; that's fine */ }
+
+    // Wait a beat, then poll until /api/version returns a DIFFERENT version
+    // (or just any 200 if we can't read version). 60s timeout.
+    const startedAt = Date.now();
+    const TIMEOUT_MS = 60_000;
+    let attempts = 0;
+    while (Date.now() - startedAt < TIMEOUT_MS) {
+      attempts++;
+      finalEl.innerHTML = '<span class="text-slate-600">⏳ 等服务回来…（' + attempts + ' 次）</span>';
+      await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const resp = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
+        if (!resp.ok) continue;
+        const data = await resp.json();
+        const newV = String(data.version || '');
+        if (newV && newV !== oldVersion) {
+          finalEl.innerHTML = '<span class="text-emerald-700">✓ 服务已重新上线，正在刷新…</span>';
+          await new Promise((r) => setTimeout(r, 700));
+          window.location.reload();
+          return;
+        }
+      } catch (_e) { /* still down, keep polling */ }
+    }
+    finalEl.innerHTML = '<span class="text-amber-700">⚠️ 60 秒内没等到服务恢复，可能 pm2 没在前台 —— 请手动检查后再点「仅重启服务」。</span>';
+  }
+
   checkBtn.addEventListener('click', async () => {
     checkBtn.disabled = true;
     checkBtn.textContent = '检查中…';
@@ -134,8 +167,11 @@
         progressBar.style.width = '100%';
         progressCurrent.textContent = '';
         if (ev.ok) {
-          finalEl.innerHTML = '<span class="text-emerald-700">✓ 更新成功 —— 点击「仅重启服务」让新代码生效。</span>';
-          applyBtn.textContent = '已更新';
+          finalEl.innerHTML = '<span class="text-emerald-700">✓ 更新成功 —— 正在自动重启服务，页面会在重启完成后自动刷新…</span>';
+          applyBtn.textContent = '重启中…';
+          // Fire the restart, then poll /api/version until the server comes
+          // back, then reload so the user lands on the new build.
+          autoRestartAndReload();
         } else {
           finalEl.innerHTML = '<span class="text-red-700">✗ 有步骤失败，详见上方日志。已停在失败前一步。</span>';
           applyBtn.disabled = false;

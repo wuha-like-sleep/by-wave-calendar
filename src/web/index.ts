@@ -12,7 +12,7 @@ import {
   loadUserFromRequest,
 } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
-import { newEventUid, newShareToken } from "../lib/ids.js";
+import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
@@ -419,7 +419,7 @@ export async function webRoutes(app: FastifyInstance) {
   app.get("/app", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
-    const calendars = await db
+    const owned = await db
       .select({
         id: schema.calendars.id,
         name: schema.calendars.name,
@@ -429,6 +429,21 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.calendars)
       .where(eq(schema.calendars.ownerId, user.id))
       .orderBy(asc(schema.calendars.name));
+    const shared = await db
+      .select({
+        id: schema.calendars.id,
+        name: schema.calendars.name,
+        color: schema.calendars.color,
+        timezone: schema.calendars.timezone,
+        role: schema.calendarMembers.role,
+      })
+      .from(schema.calendars)
+      .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
+      .where(eq(schema.calendarMembers.userId, user.id))
+      .orderBy(asc(schema.calendars.name));
+    // Deduplicate (owner can't also be member, but be defensive)
+    const seen = new Set(owned.map((c) => c.id));
+    const calendars = [...owned, ...shared.filter((c) => !seen.has(c.id))];
 
     return reply.view("app/calendar-app", {
       title: "日历",
@@ -534,6 +549,12 @@ export async function webRoutes(app: FastifyInstance) {
       subscriptions: subs.map((s) => ({
         ...s,
         lastFetchedAtLocal: s.lastFetchedAt ? localTime(s.lastFetchedAt) : null,
+      })),
+      members: await listMembers(calendar.id),
+      pendingInvitations: (await listPendingInvitations(calendar.id)).map((i) => ({
+        ...i,
+        createdAtLocal: localTime(i.createdAt),
+        expiresAtLocal: localTime(i.expiresAt),
       })),
     });
   });
@@ -792,6 +813,176 @@ export async function webRoutes(app: FastifyInstance) {
       .set({ revokedAt: new Date() })
       .where(and(eq(schema.shareTokens.token, params.data.token), eq(schema.shareTokens.calendarId, params.data.id)));
     return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: "订阅链接已撤销" });
+  });
+
+  // ---------- Calendar invitations ----------
+  const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/invitations", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+
+    const body = z
+      .object({
+        email: z.string().email().max(254),
+        role: z.enum(["viewer", "editor"]).default("viewer"),
+        message: z.string().max(500).optional().transform((v) => (v?.trim() ? v.trim() : undefined)),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的邮箱（最长 254 字符）" });
+    }
+    const inviteeEmail = body.data.email.toLowerCase().trim();
+
+    const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, calId.data)).limit(1);
+    if (!cal) return reply.redirect("/app");
+
+    // If the invitee already exists and is already a member, short-circuit.
+    const [invitee] = await db.select().from(schema.users).where(eq(schema.users.email, inviteeEmail)).limit(1);
+    if (invitee) {
+      const [existing] = await db
+        .select({ id: schema.calendarMembers.id })
+        .from(schema.calendarMembers)
+        .where(and(eq(schema.calendarMembers.calendarId, calId.data), eq(schema.calendarMembers.userId, invitee.id)))
+        .limit(1);
+      if (existing) {
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: `${inviteeEmail} 已是协作者` });
+      }
+    }
+
+    const token = newInvitationToken();
+    await db.insert(schema.calendarInvitations).values({
+      token,
+      calendarId: calId.data,
+      email: inviteeEmail,
+      role: body.data.role,
+      invitedBy: user.id,
+      message: body.data.message ?? null,
+      expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+    });
+
+    try {
+      await sendMail(calendarInviteMail(inviteeEmail, {
+        calendarName: cal.name,
+        inviterName: user.displayName || user.email,
+        role: body.data.role,
+        message: body.data.message ?? null,
+        token,
+      }));
+    } catch (err) {
+      req.log.warn({ err }, "invite_send_failed");
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "邀请已创建，但邮件发送失败" });
+    }
+
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: `已邀请 ${inviteeEmail}（7 天内有效）` });
+  });
+
+  app.post<{ Params: { id: string; token: string } }>("/app/calendars/:id/invitations/:token/revoke", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+    await db
+      .delete(schema.calendarInvitations)
+      .where(and(
+        eq(schema.calendarInvitations.calendarId, calId.data),
+        eq(schema.calendarInvitations.token, req.params.token),
+      ));
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "邀请已撤销" });
+  });
+
+  app.post<{ Params: { id: string; memberId: string } }>("/app/calendars/:id/members/:memberId/remove", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    const memberId = z.string().uuid().safeParse(req.params.memberId);
+    if (!calId.success || !memberId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+    await db
+      .delete(schema.calendarMembers)
+      .where(and(
+        eq(schema.calendarMembers.id, memberId.data),
+        eq(schema.calendarMembers.calendarId, calId.data),
+      ));
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "已移除成员" });
+  });
+
+  app.get<{ Params: { token: string } }>("/invite/:token", async (req, reply) => {
+    const [inv] = await db
+      .select()
+      .from(schema.calendarInvitations)
+      .where(eq(schema.calendarInvitations.token, req.params.token))
+      .limit(1);
+    if (!inv) {
+      return reply.code(404).view("error", {
+        title: "邀请无效", user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 404, heading: "邀请链接无效或已撤销", message: "请联系邀请你的人重新发送。",
+      });
+    }
+    if (inv.acceptedAt) {
+      return reply.view("error", {
+        title: "已接受", user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 200, heading: "这条邀请已被接受", message: "可以直接到日历中查看共享的内容。",
+      });
+    }
+    if (inv.expiresAt < new Date()) {
+      return reply.code(410).view("error", {
+        title: "已过期", user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 410, heading: "邀请链接已过期", message: "邀请仅 7 天内有效。请联系邀请人重发。",
+      });
+    }
+    const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, inv.calendarId)).limit(1);
+    const [inviter] = await db.select().from(schema.users).where(eq(schema.users.id, inv.invitedBy)).limit(1);
+    const currentUser = await loadUserFromRequest(req);
+    return reply.view("invite/accept", {
+      title: "接受日历邀请",
+      user: currentUser,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      invitation: { token: inv.token, email: inv.email, role: inv.role, message: inv.message },
+      calendar: cal,
+      inviterName: inviter ? (inviter.displayName || inviter.email) : "未知",
+      emailMatches: currentUser ? currentUser.email === inv.email : false,
+    });
+  });
+
+  app.post<{ Params: { token: string } }>("/invite/:token/accept", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const [inv] = await db
+      .select()
+      .from(schema.calendarInvitations)
+      .where(eq(schema.calendarInvitations.token, req.params.token))
+      .limit(1);
+    if (!inv || inv.acceptedAt || inv.expiresAt < new Date()) {
+      return redirectWith(reply, `/invite/${req.params.token}`, { error: "邀请已失效" });
+    }
+    const user = await loadUserFromRequest(req);
+    if (!user) {
+      return redirectWith(reply, "/login", { error: `请先用 ${inv.email} 登录或注册以接受邀请` });
+    }
+    if (user.email !== inv.email) {
+      return redirectWith(reply, `/invite/${req.params.token}`, {
+        error: `这封邀请发给 ${inv.email}，请切换到该账号后再接受`,
+      });
+    }
+    await db.insert(schema.calendarMembers).values({
+      calendarId: inv.calendarId,
+      userId: user.id,
+      role: inv.role,
+      invitedBy: inv.invitedBy,
+    }).onConflictDoNothing();
+    await db
+      .update(schema.calendarInvitations)
+      .set({ acceptedAt: new Date() })
+      .where(eq(schema.calendarInvitations.token, inv.token));
+    return redirectWith(reply, "/app", { success: "已加入日历，刷新后会出现在你的日历列表" });
   });
 
   app.get("/app/settings", async (req, reply) => {

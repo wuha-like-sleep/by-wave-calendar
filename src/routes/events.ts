@@ -4,6 +4,9 @@ import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 import { newEventUid } from "../lib/ids.js";
+import { invitationIcs } from "../lib/ical.js";
+import { sendMail } from "../lib/mailer.js";
+import { eventInviteMail } from "../lib/email_templates.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -55,14 +58,26 @@ export async function eventRoutes(app: FastifyInstance) {
       })
       .from(schema.calendars)
       .where(eq(schema.calendars.ownerId, user.id));
+    const shared = await db
+      .select({
+        id: schema.calendars.id,
+        name: schema.calendars.name,
+        color: schema.calendars.color,
+        timezone: schema.calendars.timezone,
+      })
+      .from(schema.calendars)
+      .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
+      .where(eq(schema.calendarMembers.userId, user.id));
 
     const ownedIds = new Set(owned.map((c) => c.id));
-    let allowed = Array.from(ownedIds);
+    const visibleIds = new Set([...ownedIds, ...shared.map((c) => c.id)]);
+    const visible = [...owned, ...shared.filter((c) => !ownedIds.has(c.id))];
+    let allowed = Array.from(visibleIds);
     if (q.data.calendarIds) {
       const requested = q.data.calendarIds.split(",").filter(Boolean);
-      allowed = requested.filter((id) => ownedIds.has(id));
+      allowed = requested.filter((id) => visibleIds.has(id));
     }
-    if (allowed.length === 0) return reply.send({ calendars: owned, events: [] });
+    if (allowed.length === 0) return reply.send({ calendars: visible, events: [] });
 
     const rows = await db
       .select()
@@ -76,7 +91,7 @@ export async function eventRoutes(app: FastifyInstance) {
       )
       .orderBy(asc(schema.events.startsAt));
 
-    return reply.send({ calendars: owned, events: rows });
+    return reply.send({ calendars: visible, events: rows });
   });
 
   app.get("/api/calendars/:id/events", async (req, reply) => {
@@ -117,6 +132,46 @@ export async function eventRoutes(app: FastifyInstance) {
         extra: body.extra as unknown as object | null,
       })
       .returning();
+
+    // Fire-and-forget RSVP emails to attendees listed in extra.attendees.
+    // The email carries a METHOD:REQUEST .ics so Gmail / Outlook / Apple Mail
+    // render the "Add to calendar" / "Yes / Maybe / No" buttons natively.
+    const extra = (body.extra as { attendees?: string[] } | null) ?? null;
+    if (row && extra && Array.isArray(extra.attendees) && extra.attendees.length > 0) {
+      const organizerName = user.displayName || user.email;
+      const ics = invitationIcs({
+        event: {
+          uid: row.uid,
+          summary: row.summary,
+          description: row.description,
+          location: row.location,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+          allDay: row.allDay,
+          updatedAt: row.updatedAt,
+        },
+        organizerEmail: user.email,
+        organizerName,
+        attendees: extra.attendees.map((email) => ({ email })),
+        method: "REQUEST",
+      });
+      for (const to of extra.attendees) {
+        const trimmed = to.trim();
+        if (!trimmed || !trimmed.includes("@")) continue;
+        sendMail(eventInviteMail(trimmed, {
+          organizerEmail: user.email,
+          organizerName,
+          summary: row.summary,
+          description: row.description,
+          location: row.location,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+          allDay: row.allDay,
+          uid: row.uid,
+          icsBody: ics,
+        })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));
+      }
+    }
     return reply.code(201).send(row);
   });
 

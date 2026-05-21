@@ -162,6 +162,58 @@ export function passwordResetMail(to: string, token: string): SendArgs {
   return { to, subject: `【${brand}】重置密码`, html, text };
 }
 
+// ---------- Event invitation (with ICS attachment) ----------
+export type EventInviteCtx = {
+  organizerEmail: string;
+  organizerName: string;
+  summary: string;
+  description?: string | null;
+  location?: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  allDay: boolean;
+  uid: string;
+  icsBody: string; // full VCALENDAR text with METHOD:REQUEST
+};
+
+export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
+  const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: ctx.allDay ? undefined : "2-digit", minute: ctx.allDay ? undefined : "2-digit", hour12: false,
+  }).format(d);
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}\n${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入即可加进你的日历。`;
+  const html = baseLayout({
+    title: ctx.summary,
+    preheader: `${ctx.organizerName} 邀请你参加 ${ctx.summary}`,
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">📅 事件邀请</h1>
+      <p style="margin:0 0 6px;color:#0f172a;font-size:16px;font-weight:600;">${escape(ctx.summary)}</p>
+      <p style="margin:0 0 14px;color:#475569;font-size:14px;">
+        ${escape(ctx.organizerName)} 邀请你参加这场${ctx.allDay ? "全天活动" : "活动"}。
+      </p>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 14px;">
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">开始</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))}</td></tr>
+        ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">地点</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
+      </table>
+      ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
+      <p style="margin:18px 0 10px;color:#475569;font-size:13px;line-height:1.6;">
+        附件中的 <strong>invite.ics</strong> 可以直接被 Apple / Google / Outlook 日历识别 ——
+        点开即可"添加到日历"。如果客户端没自动弹窗，直接双击附件即可导入。
+      </p>
+      <p style="margin:10px 0 0;color:#94a3b8;font-size:12px;">
+        来自 <a href="${baseUrl}" style="color:#6366f1;text-decoration:none;">${baseUrl.replace(/^https?:\/\//, "")}</a>
+      </p>`,
+  });
+  return {
+    to, subject: `【邀请】${ctx.summary}`,
+    html, text,
+    icalEvent: { method: "REQUEST", content: ctx.icsBody },
+    attachments: [{ filename: "invite.ics", content: ctx.icsBody, contentType: "text/calendar; charset=utf-8; method=REQUEST" }],
+  };
+}
+
 // ---------- Calendar invitation ----------
 export function calendarInviteMail(
   to: string,

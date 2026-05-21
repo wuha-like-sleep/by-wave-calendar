@@ -120,6 +120,51 @@ export function serializeCalendar(events: IcalEvent[], calendarName: string): st
   ].join(CRLF) + CRLF;
 }
 
+export function invitationIcs(opts: {
+  event: IcalEvent;
+  organizerEmail: string;
+  organizerName?: string;
+  attendees: { email: string; cn?: string }[];
+  calendarName?: string;
+  sequence?: number;
+  method?: "REQUEST" | "CANCEL" | "PUBLISH";
+}): string {
+  const lines: string[] = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ByWave-Calendar//Invite//EN",
+    "CALSCALE:GREGORIAN",
+    `METHOD:${opts.method ?? "REQUEST"}`,
+    ...(opts.calendarName ? [`X-WR-CALNAME:${escapeText(opts.calendarName)}`] : []),
+    "BEGIN:VEVENT",
+    `UID:${opts.event.uid}`,
+    `DTSTAMP:${formatDateTime(opts.event.updatedAt ?? new Date())}`,
+  ];
+  if (opts.event.allDay) {
+    lines.push(`DTSTART;VALUE=DATE:${formatDate(opts.event.startsAt)}`);
+    lines.push(`DTEND;VALUE=DATE:${formatDate(opts.event.endsAt)}`);
+  } else {
+    lines.push(`DTSTART:${formatDateTime(opts.event.startsAt)}`);
+    lines.push(`DTEND:${formatDateTime(opts.event.endsAt)}`);
+  }
+  lines.push(`SUMMARY:${escapeText(opts.event.summary)}`);
+  if (opts.event.location) lines.push(`LOCATION:${escapeText(opts.event.location)}`);
+  if (opts.event.description) lines.push(`DESCRIPTION:${escapeText(opts.event.description)}`);
+  if (opts.event.rrule) lines.push(`RRULE:${opts.event.rrule}`);
+  const orgCn = opts.organizerName ? `;CN=${escapeText(opts.organizerName)}` : "";
+  lines.push(`ORGANIZER${orgCn}:mailto:${opts.organizerEmail}`);
+  for (const a of opts.attendees) {
+    const cn = a.cn ? `;CN=${escapeText(a.cn)}` : "";
+    lines.push(`ATTENDEE${cn};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:${a.email}`);
+  }
+  lines.push(`SEQUENCE:${opts.sequence ?? 0}`);
+  lines.push("STATUS:CONFIRMED");
+  lines.push("TRANSP:OPAQUE");
+  lines.push("END:VEVENT");
+  lines.push("END:VCALENDAR");
+  return lines.map(foldLine).join(CRLF) + CRLF;
+}
+
 export function wrapSingleEvent(event: IcalEvent, calendarName: string = ""): string {
   return [
     "BEGIN:VCALENDAR",
