@@ -19,6 +19,7 @@ import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
 import { mfaRoutes } from "./web/mfa.js";
 import { adminRoutes } from "./web/admin.js";
+import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
@@ -32,9 +33,22 @@ const app = Fastify({
     ? { transport: { target: "pino-pretty", options: { translateTime: "HH:MM:ss.l", ignore: "pid,hostname" } } }
     : true,
   trustProxy: true,
-  bodyLimit: 1024 * 1024, // 1 MB
+  bodyLimit: 2 * 1024 * 1024, // 2 MB (CalDAV PUTs can be larger than typical APIs)
   ...(httpsOptions ? { https: httpsOptions } : {}),
 });
+
+// Custom HTTP methods used by WebDAV / CalDAV
+app.addHttpMethod("PROPFIND", { hasBody: true });
+app.addHttpMethod("REPORT", { hasBody: true });
+app.addHttpMethod("MKCALENDAR", { hasBody: true });
+app.addHttpMethod("PROPPATCH", { hasBody: true });
+
+// CalDAV bodies are XML or iCalendar text — pass through as strings.
+app.addContentTypeParser(
+  ["application/xml", "text/xml", "text/calendar", "text/calendar; charset=utf-8"],
+  { parseAs: "string" },
+  (_req, body, done) => done(null, body),
+);
 
 // ---- Security headers ----
 await app.register(helmet, {
@@ -84,6 +98,11 @@ await app.register(formbody);
 await app.register(cors, {
   origin: env.NODE_ENV === "development" ? true : env.PUBLIC_BASE_URL,
   credentials: true,
+  // Disable browser CORS preflight handling so plain OPTIONS (CalDAV)
+  // reaches our handler with proper DAV: headers. Our app is same-origin,
+  // so we never actually need preflight from a browser.
+  preflight: false,
+  strictPreflight: false,
 });
 
 // ---- Static assets ----
@@ -151,6 +170,7 @@ await app.register(webRoutes);
 await app.register(webauthnRoutes);
 await app.register(mfaRoutes);
 await app.register(adminRoutes);
+await app.register(caldavRoutes);
 
 // ---- Error handler ----
 app.setErrorHandler(async (err: FastifyError, req, reply) => {
