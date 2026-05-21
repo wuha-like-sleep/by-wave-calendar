@@ -3,7 +3,10 @@ import crypto from "node:crypto";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
-import { extractVeventBlock, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { extractVeventBlock, invitationIcs, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { newInvitationToken } from "../lib/ids.js";
+import { sendMail } from "../lib/mailer.js";
+import { eventInviteMail } from "../lib/email_templates.js";
 
 // ---------- XML helpers ----------
 
@@ -491,6 +494,64 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
       })
       .returning();
     stored = inserted!;
+  }
+
+  // If this is a brand-new event that has ATTENDEEs other than the organizer
+  // themselves, mirror what /api/events does — send each attendee an "Add to
+  // your calendar" email with a METHOD:REQUEST .ics attachment. iOS / Apple
+  // Calendar PUTs go through this path too, so an event you add on the phone
+  // also gets the invite emails fired.
+  if (!existing && parsed.attendees && parsed.attendees.length > 0) {
+    const recipientList = parsed.attendees
+      .map((a) => (a.email || "").toLowerCase().trim())
+      .filter((e) => e && e.includes("@") && e !== user.email.toLowerCase());
+    if (recipientList.length > 0) {
+      const organizerName = user.displayName || user.email;
+      const ics = invitationIcs({
+        event: {
+          uid: stored.uid,
+          summary: stored.summary,
+          description: stored.description,
+          location: stored.location,
+          startsAt: stored.startsAt,
+          endsAt: stored.endsAt,
+          allDay: stored.allDay,
+          updatedAt: stored.updatedAt,
+        },
+        organizerEmail: user.email,
+        organizerName,
+        attendees: recipientList.map((email) => ({ email })),
+        method: "REQUEST",
+      });
+      const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+      for (const to of recipientList) {
+        const inviteToken = newInvitationToken();
+        try {
+          await db.insert(schema.eventInviteTokens).values({
+            token: inviteToken,
+            sourceEventId: stored.id,
+            recipientEmail: to,
+            expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          });
+        } catch (err) {
+          req.log.warn({ err, to }, "caldav_invite_token_failed");
+        }
+        sendMail(eventInviteMail(to, {
+          organizerEmail: user.email,
+          organizerName,
+          summary: stored.summary,
+          description: stored.description,
+          location: stored.location,
+          startsAt: stored.startsAt,
+          endsAt: stored.endsAt,
+          allDay: stored.allDay,
+          uid: stored.uid,
+          icsBody: ics,
+          inviteToken,
+        })).catch((err) => req.log.warn({ err, to }, "caldav_invite_mail_failed"));
+      }
+      req.log.info({ caldav: "put_invites_sent", count: recipientList.length, eventId: stored.id }, "caldav_put_invites");
+    }
   }
 
   reply.header("ETag", etagOf(stored.updatedAt));

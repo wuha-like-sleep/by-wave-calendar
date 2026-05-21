@@ -285,6 +285,45 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
   });
 
+  // ---------- Security knobs (risk-login + lockout) ----------
+  app.get("/admin/security", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/security", {
+      title: "安全设置",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/security",
+      settings,
+    });
+  });
+
+  app.post("/admin/security", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z
+      .object({
+        riskLoginEnabled: z.string().optional(),
+        lockoutEnabled: z.string().optional(),
+        lockoutThreshold: z.coerce.number().int().min(1).max(100),
+        lockoutMinutes: z.coerce.number().int().min(1).max(10080),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/security?error=" + encodeURIComponent("无效的数值（次数 1-100；时长 1-10080 分钟）"));
+    }
+    await updateSettings({
+      riskLoginEnabled: body.data.riskLoginEnabled === "on",
+      lockoutEnabled: body.data.lockoutEnabled === "on",
+      lockoutThreshold: body.data.lockoutThreshold,
+      lockoutMinutes: body.data.lockoutMinutes,
+    });
+    return reply.redirect("/admin/security?success=" + encodeURIComponent("安全设置已保存"));
+  });
+
   // ---------- Email template preview (admin only) ----------
   app.post("/admin/smtp/preview", async (req, reply) => {
     const user = await requireAdmin(req, reply);

@@ -1,0 +1,56 @@
+<%- include('_nav') %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">安全设置</h1>
+<p class="text-sm text-slate-500 mb-6">登录风控的两个关键开关 —— 都可以独立关掉。如果你这个站点只在内网用、或不想给用户增加摩擦，可以全关。</p>
+
+<form method="post" action="/admin/security" class="space-y-6">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="flex items-start justify-between gap-4 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">陌生设备验证（密码登录）</h2>
+        <p class="mt-1 text-sm text-slate-500">密码登录时，如果 IP / 浏览器之前没成功登录过，会先发一封 6 位验证码到注册邮箱，输完才放行。MFA / Passkey 登录跳过这步。</p>
+      </div>
+    </div>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="riskLoginEnabled" <%= settings.riskLoginEnabled ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm font-medium text-slate-700">启用 —— 陌生设备需要邮件验证码</span>
+    </label>
+    <p class="mt-2 text-xs text-slate-400">关闭后所有密码登录直接放行；登录提醒邮件仍然会发。</p>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="flex items-start justify-between gap-4 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">账号锁定（密码错误次数）</h2>
+        <p class="mt-1 text-sm text-slate-500">连续输错密码达到阈值后，账号被临时锁定。用户可以用「忘记密码」自助解锁（重设密码会清零计数器并解锁）。</p>
+      </div>
+    </div>
+    <label class="inline-flex items-center gap-2 cursor-pointer mb-4">
+      <input type="checkbox" name="lockoutEnabled" <%= settings.lockoutEnabled ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm font-medium text-slate-700">启用 —— 错误超限自动锁定</span>
+    </label>
+    <div class="grid grid-cols-2 gap-3 max-w-md">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">阈值（连续错误次数）</label>
+        <input type="number" name="lockoutThreshold" required min="1" max="100"
+               value="<%= settings.lockoutThreshold %>"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">锁定时长（分钟）</label>
+        <input type="number" name="lockoutMinutes" required min="1" max="10080"
+               value="<%= settings.lockoutMinutes %>"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <p class="mt-2 text-xs text-slate-400">默认 5 次 / 15 分钟。设过低会被弱密码扫描器锁到怀疑人生，设过高就失去防护意义。</p>
+  </section>
+
+  <div class="flex justify-end">
+    <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存安全设置</button>
+  </div>
+</form>

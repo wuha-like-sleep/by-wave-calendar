@@ -155,8 +155,12 @@ export async function webRoutes(app: FastifyInstance) {
     // behind an email-delivered 6-digit code. MFA users skip — TOTP already
     // covers the "new device" case. Passkey users skip too (they took a
     // different code path entirely; this branch is only for password login).
+    // Admin can disable the whole thing via /admin/security → riskLoginEnabled.
+    const settings = await getSettings();
     const ua = String(req.headers["user-agent"] ?? "unknown");
-    const familiar = await isLoginFamiliar(user.id, req.ip, ua);
+    const familiar = settings.riskLoginEnabled
+      ? await isLoginFamiliar(user.id, req.ip, ua)
+      : true;
     if (!familiar && !user.mfaEnabled) {
       const issued = await createLoginChallenge(user.id, req.ip, ua);
       try {

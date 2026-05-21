@@ -71,6 +71,11 @@ export const siteSettings = pgTable("site_settings", {
   mailFromName: text("mail_from_name").default("ByWave-Calendar"),
   themePalette: text("theme_palette").notNull().default("indigo"),
   themeDensity: text("theme_density").notNull().default("comfortable"),
+  // Security knobs surfaced on /admin/security
+  riskLoginEnabled: boolean("risk_login_enabled").notNull().default(true),
+  lockoutEnabled: boolean("lockout_enabled").notNull().default(true),
+  lockoutThreshold: integer("lockout_threshold").notNull().default(5),
+  lockoutMinutes: integer("lockout_minutes").notNull().default(15),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

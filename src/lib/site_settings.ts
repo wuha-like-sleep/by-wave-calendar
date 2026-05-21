@@ -21,6 +21,10 @@ export type SettingsView = {
   mailFromName: string;
   themePalette: string;
   themeDensity: string;
+  riskLoginEnabled: boolean;
+  lockoutEnabled: boolean;
+  lockoutThreshold: number;
+  lockoutMinutes: number;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -65,6 +69,10 @@ function toView(r: schema.SiteSettings): SettingsView {
     mailFromName: r.mailFromName || env.MAIL_FROM_NAME,
     themePalette: r.themePalette || "indigo",
     themeDensity: r.themeDensity || "comfortable",
+    riskLoginEnabled: r.riskLoginEnabled,
+    lockoutEnabled: r.lockoutEnabled,
+    lockoutThreshold: r.lockoutThreshold || 5,
+    lockoutMinutes: r.lockoutMinutes || 15,
   };
 }
 
@@ -113,6 +121,10 @@ export async function updateSettings(patch: Partial<{
   mailFromName: string;
   themePalette: string;
   themeDensity: string;
+  riskLoginEnabled: boolean;
+  lockoutEnabled: boolean;
+  lockoutThreshold: number;
+  lockoutMinutes: number;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)
