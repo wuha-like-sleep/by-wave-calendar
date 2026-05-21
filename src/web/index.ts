@@ -518,6 +518,15 @@ export async function webRoutes(app: FastifyInstance) {
     clearThemeCookies(reply);
     return reply.redirect("/");
   });
+  // GET /logout for "type it in the URL bar" flow. Idempotent (just destroys
+  // the session and clears cookies), so no CSRF protection — the worst a
+  // hostile site can do via image/link tag is log you out, which is the
+  // same outcome you wanted anyway.
+  app.get("/logout", async (req, reply) => {
+    await destroySession(req, reply);
+    clearThemeCookies(reply);
+    return reply.redirect("/");
+  });
 
   // -------- Authed app --------
   // Main calendar view (Google/Synology-style grid + sidebar).
