@@ -15,6 +15,7 @@ import { env } from "./env.js";
 import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
+import { searchRoutes } from "./routes/search.js";
 import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
@@ -219,6 +220,7 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
 await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
+await app.register(searchRoutes);
 await app.register(icsRoutes);
 
 // Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;
