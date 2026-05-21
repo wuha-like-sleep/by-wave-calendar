@@ -8,10 +8,11 @@
     <title><%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></title>
     <link rel="icon" type="image/svg+xml" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/favicon.svg' %>" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="stylesheet" href="/static/css/styles.css" />
-    <link rel="stylesheet" href="/static/app.css" />
+    <% const v = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
+    <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
+    <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
     <script defer src="/static/lib/htmx.min.js"></script>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=<%= v %>" defer></script>
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>

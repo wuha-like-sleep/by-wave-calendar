@@ -159,6 +159,9 @@ await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(icsRoutes);
+// Asset version — used to bust browser cache for /static JS+CSS on every deploy.
+const ASSET_VERSION = String(Date.now());
+
 // Inject DB-backed site settings into every reply.view call.
 app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();
@@ -166,6 +169,7 @@ app.addHook("onRequest", async (req, reply) => {
   const original = reply.view.bind(reply);
   (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
     original(name, {
+      assetVersion: ASSET_VERSION,
       siteName: settings.siteName,
       siteLogoUrl: settings.logoUrl,
       icpNumber: settings.icpNumber,

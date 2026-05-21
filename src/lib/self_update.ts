@@ -21,7 +21,7 @@ async function run(cmd: string, args: string[], timeoutMs = STEP_TIMEOUT_MS): Pr
 }
 
 export function pickRemote(): string {
-  return process.env.UPDATE_REMOTE || "gitee";
+  return process.env.UPDATE_REMOTE || "origin";
 }
 
 export function pickBranch(): string {

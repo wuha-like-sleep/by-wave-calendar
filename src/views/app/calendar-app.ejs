@@ -412,5 +412,6 @@
     csrfToken: csrfToken,
   }) %>;
 </script>
+<% const calV = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
 <script src="/static/lib/toastui-calendar.min.js"></script>
-<script src="/static/calendar-app.js" defer></script>
+<script src="/static/calendar-app.js?v=<%= calV %>" defer></script>
