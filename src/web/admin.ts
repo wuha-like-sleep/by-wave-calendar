@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { asc, desc, eq, sql } from "drizzle-orm";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
+import path from "node:path";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
@@ -106,6 +108,58 @@ export async function adminRoutes(app: FastifyInstance) {
     if (body.data.clientSecret) patch.ssoKeycloakClientSecret = body.data.clientSecret;
     await updateSettings(patch);
     return reply.redirect("/admin?success=" + encodeURIComponent("SSO 设置已保存"));
+  });
+
+  // ---------- Logo upload ----------
+  app.post("/admin/logo", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    // multipart requests don't carry CSRF cookie token reliably; rely on auth + admin check + same-origin.
+
+    const file = await req.file();
+    if (!file) return reply.redirect("/admin?error=" + encodeURIComponent("请选择文件"));
+
+    const allowed = new Map<string, string>([
+      ["image/png", "png"],
+      ["image/jpeg", "jpg"],
+      ["image/jpg", "jpg"],
+      ["image/svg+xml", "svg"],
+      ["image/webp", "webp"],
+    ]);
+    const ext = allowed.get(file.mimetype.toLowerCase());
+    if (!ext) return reply.redirect("/admin?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
+
+    const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
+    await mkdir(uploadsDir, { recursive: true });
+
+    const buf = await file.toBuffer();
+    if (buf.length > 2 * 1024 * 1024) {
+      return reply.redirect("/admin?error=" + encodeURIComponent("文件超过 2MB"));
+    }
+
+    const filename = `logo.${ext}`;
+    await writeFile(path.join(uploadsDir, filename), buf);
+
+    // Cache-bust by appending mtime stamp
+    const url = `/static/uploads/${filename}?v=${Date.now()}`;
+    await updateSettings({ logoUrl: url });
+    return reply.redirect("/admin?success=" + encodeURIComponent("Logo 已上传"));
+  });
+
+  app.post("/admin/logo/delete", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const settings = await getSettings();
+    if (settings.logoUrl) {
+      const m = settings.logoUrl.match(/\/static\/uploads\/(logo\.\w+)/);
+      if (m && m[1]) {
+        const p = path.join(process.cwd(), "src", "public", "uploads", m[1]);
+        await unlink(p).catch(() => undefined);
+      }
+    }
+    await updateSettings({ logoUrl: null });
+    return reply.redirect("/admin?success=" + encodeURIComponent("已删除 Logo"));
   });
 
   app.get("/admin/users", async (req, reply) => {

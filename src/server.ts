@@ -4,6 +4,7 @@ import Fastify, { type FastifyError } from "fastify";
 import { httpsOptionsFromEnv, startHttpRedirectServer, watchCertReload } from "./lib/tls.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import view from "@fastify/view";
@@ -95,6 +96,13 @@ await app.register(rateLimit, {
 // ---- Cookies / forms / CORS ----
 await app.register(cookie, { secret: env.SESSION_SECRET });
 await app.register(formbody);
+await app.register(multipart, {
+  limits: {
+    fileSize: 2 * 1024 * 1024,
+    files: 1,
+    fields: 5,
+  },
+});
 await app.register(cors, {
   origin: env.NODE_ENV === "development" ? true : env.PUBLIC_BASE_URL,
   credentials: true,

@@ -23,6 +23,28 @@
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">平台 Logo</h2>
+  <div class="flex items-center gap-4 mb-4">
+    <% if (settings.logoUrl) { %>
+      <img src="<%= settings.logoUrl %>" alt="logo" class="h-16 w-16 rounded-xl object-cover border border-slate-200 bg-slate-50" />
+      <form method="post" action="/admin/logo/delete" class="m-0" onsubmit="return confirm('删除当前 Logo？');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除当前</button>
+      </form>
+    <% } else { %>
+      <div class="h-16 w-16 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700"></div>
+      <span class="text-sm text-slate-500">当前用默认渐变方块</span>
+    <% } %>
+  </div>
+  <form method="post" action="/admin/logo" enctype="multipart/form-data" class="space-y-3 max-w-md">
+    <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required
+           class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white file:hover:bg-brand-700" />
+    <p class="text-xs text-slate-500">支持 PNG / JPG / SVG / WEBP，最大 2MB。建议正方形 ≥ 256×256，svg 最佳。</p>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">上传</button>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-4">站点设置</h2>
   <form method="post" action="/admin/settings" class="space-y-4 max-w-xl">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
