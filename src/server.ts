@@ -25,6 +25,7 @@ import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
+import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
 
@@ -196,6 +197,7 @@ app.addHook("onRequest", async (req, reply) => {
   // Pre-resolve current user so the synchronous view override can read it
   // without re-querying or going async per template render.
   const currentUser = await loadUserFromRequest(req).catch(() => null);
+  const ssoProviders = await listEnabledProvidersPublic().catch(() => []);
   const original = reply.view.bind(reply);
   (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
     original(name, {
@@ -206,8 +208,9 @@ app.addHook("onRequest", async (req, reply) => {
       icpUrl: settings.icpUrl,
       registrationOpen: settings.registrationMode !== "closed",
       registrationMode: settings.registrationMode,
-      ssoEnabled: settings.ssoKeycloakEnabled,
+      ssoEnabled: ssoProviders.length > 0,
       ssoLabel: settings.ssoKeycloakLabel,
+      ssoProviders,
       sitePalette: settings.themePalette,
       siteDensity: settings.themeDensity,
       themePalette: userTheme.palette ?? settings.themePalette,

@@ -9,7 +9,7 @@
         <th class="px-4 py-3">邮箱</th>
         <th class="px-4 py-3">昵称</th>
         <th class="px-4 py-3">验证</th>
-        <th class="px-4 py-3">MFA</th>
+        <th class="px-4 py-3">登录方式</th>
         <th class="px-4 py-3">注册</th>
         <th class="px-4 py-3">角色</th>
         <th class="px-4 py-3">操作</th>
@@ -27,7 +27,23 @@
               <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">未验证</span>
             <% } %>
           </td>
-          <td class="px-4 py-3 text-slate-500"><%= u.mfaEnabled ? '✓ 启用' : '—' %></td>
+          <td class="px-4 py-3">
+            <div class="flex flex-wrap gap-1 max-w-[220px]">
+              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="所有账号都支持密码登录（SSO 账号的密码是随机生成且不可登录，除非自助走「忘记密码」重设）">密码</span>
+              <% if (u.passkeyCount > 0) { %>
+                <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>
+              <% } %>
+              <% if (u.mfaEnabled) { %>
+                <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">MFA</span>
+              <% } %>
+              <% if (u.ssoProviderSlug) { %>
+                <span class="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">SSO · <%= u.ssoProviderSlug %></span>
+              <% } %>
+            </div>
+            <% if (u.lastLoginMethod) { %>
+              <div class="mt-0.5 text-[10px] text-slate-400">上次：<%= u.lastLoginMethod %></div>
+            <% } %>
+          </td>
           <td class="px-4 py-3 text-xs text-slate-500">
             <%= new Intl.DateTimeFormat('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }).format(u.createdAt) %>
           </td>

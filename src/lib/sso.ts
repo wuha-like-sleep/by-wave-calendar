@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { getSsoConfig } from "./site_settings.js";
+import { getProviderBySlug } from "./sso_providers.js";
 
 export type OidcConfig = {
   issuer: string;
@@ -10,22 +10,27 @@ export type OidcConfig = {
 };
 
 const TTL_MS = 60 * 60 * 1000; // 1 hour
-let cached: { url: string; conf: OidcConfig; ts: number } | null = null;
+// Keyed by provider slug so multiple IdPs don't fight over a single cache slot.
+const discoveryCache = new Map<string, { url: string; conf: OidcConfig; ts: number }>();
 
-export async function discoverOidc(): Promise<OidcConfig> {
-  const sso = await getSsoConfig();
-  if (!sso.enabled || !sso.issuerUrl) throw new Error("SSO 未启用");
-  const issuer = sso.issuerUrl.replace(/\/$/, "");
-  if (cached && cached.url === issuer && Date.now() - cached.ts < TTL_MS) return cached.conf;
+export async function discoverOidc(providerSlug: string): Promise<OidcConfig> {
+  const prov = await getProviderBySlug(providerSlug);
+  if (!prov || !prov.enabled || !prov.issuerUrl) throw new Error(`SSO 提供方 "${providerSlug}" 未启用`);
+  const issuer = prov.issuerUrl.replace(/\/$/, "");
+  const hit = discoveryCache.get(providerSlug);
+  if (hit && hit.url === issuer && Date.now() - hit.ts < TTL_MS) return hit.conf;
   const url = `${issuer}/.well-known/openid-configuration`;
   const resp = await fetch(url, { headers: { Accept: "application/json" } });
   if (!resp.ok) throw new Error(`OIDC 发现失败：HTTP ${resp.status}`);
   const conf = (await resp.json()) as OidcConfig;
-  cached = { url: issuer, conf, ts: Date.now() };
+  discoveryCache.set(providerSlug, { url: issuer, conf, ts: Date.now() });
   return conf;
 }
 
-export function resetOidcCache(): void { cached = null; }
+export function resetOidcCache(providerSlug?: string): void {
+  if (providerSlug) discoveryCache.delete(providerSlug);
+  else discoveryCache.clear();
+}
 
 function base64UrlEncode(buf: Buffer): string {
   return buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
@@ -42,17 +47,18 @@ export function randomState(): string {
 }
 
 export async function buildAuthorizeUrl(opts: {
+  providerSlug: string;
   redirectUri: string;
   state: string;
   nonce: string;
   codeChallenge: string;
 }): Promise<string> {
-  const sso = await getSsoConfig();
-  const conf = await discoverOidc();
-  if (!sso.clientId) throw new Error("SSO clientId 未设置");
+  const prov = await getProviderBySlug(opts.providerSlug);
+  if (!prov) throw new Error(`SSO 提供方 "${opts.providerSlug}" 不存在`);
+  const conf = await discoverOidc(opts.providerSlug);
   const params = new URLSearchParams({
     response_type: "code",
-    client_id: sso.clientId,
+    client_id: prov.clientId,
     redirect_uri: opts.redirectUri,
     scope: "openid profile email",
     state: opts.state,
@@ -72,19 +78,20 @@ export type TokenResult = {
 };
 
 export async function exchangeCode(opts: {
+  providerSlug: string;
   code: string;
   redirectUri: string;
   codeVerifier: string;
 }): Promise<TokenResult> {
-  const sso = await getSsoConfig();
-  const conf = await discoverOidc();
-  if (!sso.clientId || !sso.clientSecret) throw new Error("SSO 凭据未完整");
+  const prov = await getProviderBySlug(opts.providerSlug);
+  if (!prov || !prov.clientId || !prov.clientSecret) throw new Error("SSO 凭据未完整");
+  const conf = await discoverOidc(opts.providerSlug);
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: opts.code,
     redirect_uri: opts.redirectUri,
-    client_id: sso.clientId,
-    client_secret: sso.clientSecret,
+    client_id: prov.clientId,
+    client_secret: prov.clientSecret,
     code_verifier: opts.codeVerifier,
   });
   const resp = await fetch(conf.token_endpoint, {
@@ -107,8 +114,8 @@ export type UserInfo = {
   preferred_username?: string;
 };
 
-export async function fetchUserinfo(accessToken: string): Promise<UserInfo> {
-  const conf = await discoverOidc();
+export async function fetchUserinfo(providerSlug: string, accessToken: string): Promise<UserInfo> {
+  const conf = await discoverOidc(providerSlug);
   const resp = await fetch(conf.userinfo_endpoint, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
   });

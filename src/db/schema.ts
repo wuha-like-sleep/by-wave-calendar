@@ -24,6 +24,9 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   themePalette: text("theme_palette"),
   themeDensity: text("theme_density"),
+  // Set on first SSO sign-in (and any subsequent SSO login if previously null).
+  // Lets the user-management page show "通过 X 登录"; doesn't restrict other paths.
+  ssoProviderSlug: text("sso_provider_slug"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -113,6 +116,24 @@ export const loginEvents = pgTable("login_events", {
 }, (t) => ({
   userIdx: index("login_events_user_idx").on(t.userId),
   createdIdx: index("login_events_created_idx").on(t.createdAt),
+}));
+
+export const ssoProviders = pgTable("sso_providers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  enabled: boolean("enabled").notNull().default(true),
+  // Reserved for future kinds: "oidc" today; could add "saml", "ldap" later.
+  providerKind: text("provider_kind").notNull().default("oidc"),
+  // Used as a stable URL slug too — e.g. /auth/sso/<slug>/login. Lowercase, unique.
+  slug: text("slug").notNull(),
+  issuerUrl: text("issuer_url").notNull(),
+  clientId: text("client_id").notNull(),
+  clientSecret: text("client_secret").notNull(),
+  label: text("label").notNull().default("SSO 登录"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  slugUnique: uniqueIndex("sso_providers_slug_unique").on(t.slug),
 }));
 
 export const sessions = pgTable("sessions", {
@@ -276,3 +297,5 @@ export type CalendarSubscription = typeof calendarSubscriptions.$inferSelect;
 export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;
 export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
+export type SsoProvider = typeof ssoProviders.$inferSelect;
+export type NewSsoProvider = typeof ssoProviders.$inferInsert;

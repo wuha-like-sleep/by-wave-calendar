@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -18,6 +18,7 @@ import {
   welcomeMail,
 } from "../lib/email_templates.js";
 import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
+import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -110,11 +111,78 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/admin/sso", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
-    const settings = await getSettings();
+    const providers = await listAllProviders();
     return reply.view("admin/sso", {
       title: "SSO · 管理后台",
-      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/sso",
+      providers,
+      callbackUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/sso/callback`,
     });
+  });
+
+  app.post("/admin/sso/providers", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug 只能包含 a-z 0-9 和 -"),
+      issuerUrl: z.string().url(),
+      clientId: z.string().min(1).max(200),
+      clientSecret: z.string().min(1).max(400),
+      label: z.string().min(1).max(100),
+      enabled: z.string().optional().transform((v) => v === "on"),
+      sortOrder: z.coerce.number().int().default(0),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/sso?error=" + encodeURIComponent("参数无效：" + body.error.errors[0]?.message));
+    }
+    try {
+      await createProvider(body.data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      return reply.redirect("/admin/sso?error=" + encodeURIComponent(`新增失败：${msg.includes("duplicate") ? "slug 已存在" : msg}`));
+    }
+    return reply.redirect("/admin/sso?success=" + encodeURIComponent(`已添加「${body.data.label}」`));
+  });
+
+  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/admin/sso");
+    const prov = await getProviderById(id.data);
+    if (!prov) return reply.redirect("/admin/sso?error=" + encodeURIComponent("提供方不存在"));
+    const body = z.object({
+      issuerUrl: z.string().url(),
+      clientId: z.string().min(1).max(200),
+      clientSecret: z.string().max(400).optional(), // empty → keep existing
+      label: z.string().min(1).max(100),
+      enabled: z.string().optional().transform((v) => v === "on"),
+      sortOrder: z.coerce.number().int().default(0),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/sso?error=" + encodeURIComponent("参数无效"));
+    const patch: Parameters<typeof updateProvider>[1] = {
+      issuerUrl: body.data.issuerUrl,
+      clientId: body.data.clientId,
+      label: body.data.label,
+      enabled: body.data.enabled,
+      sortOrder: body.data.sortOrder,
+    };
+    if (body.data.clientSecret && body.data.clientSecret.trim()) patch.clientSecret = body.data.clientSecret.trim();
+    await updateProvider(id.data, patch);
+    return reply.redirect("/admin/sso?success=" + encodeURIComponent(`已更新「${body.data.label}」`));
+  });
+
+  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id/delete", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/admin/sso");
+    await deleteProvider(id.data);
+    return reply.redirect("/admin/sso?success=" + encodeURIComponent("已删除"));
   });
 
   app.post("/admin/settings", async (req, reply) => {
@@ -257,16 +325,46 @@ export async function adminRoutes(app: FastifyInstance) {
         isAdmin: schema.users.isAdmin,
         emailVerified: schema.users.emailVerified,
         mfaEnabled: schema.users.mfaEnabled,
+        ssoProviderSlug: schema.users.ssoProviderSlug,
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
       .orderBy(desc(schema.users.createdAt));
+    // Aggregate auxiliary methods: passkey count per user + most-recent login method.
+    const userIds = rows.map((r) => r.id);
+    const passkeyCounts = userIds.length === 0 ? [] : await db
+      .select({ userId: schema.webauthnCredentials.userId, count: sql<number>`count(*)::int` })
+      .from(schema.webauthnCredentials)
+      .where(inArray(schema.webauthnCredentials.userId, userIds))
+      .groupBy(schema.webauthnCredentials.userId);
+    const passkeyMap = new Map(passkeyCounts.map((r) => [r.userId, Number(r.count)]));
+    const methodMap = new Map<string, string>();
+    if (userIds.length > 0) {
+      const recent = await db
+        .select({
+          userId: schema.loginEvents.userId,
+          method: schema.loginEvents.method,
+          createdAt: schema.loginEvents.createdAt,
+        })
+        .from(schema.loginEvents)
+        .where(inArray(schema.loginEvents.userId, userIds))
+        .orderBy(desc(schema.loginEvents.createdAt))
+        .limit(500);
+      // Walk newest-first and keep the first method seen per user.
+      for (const r of recent) {
+        if (!methodMap.has(r.userId)) methodMap.set(r.userId, r.method);
+      }
+    }
     return reply.view("admin/users", {
       title: "用户管理",
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
-      users: rows,
+      users: rows.map((r) => ({
+        ...r,
+        passkeyCount: passkeyMap.get(r.id) ?? 0,
+        lastLoginMethod: methodMap.get(r.id) ?? null,
+      })),
     });
   });
 

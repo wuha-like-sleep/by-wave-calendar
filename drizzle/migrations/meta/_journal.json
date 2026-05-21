@@ -120,6 +120,13 @@
       "when": 1779369943763,
       "tag": "0016_admin_security_knobs",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779371018378,
+      "tag": "0017_sso_providers",
+      "breakpoints": true
     }
   ]
 }
