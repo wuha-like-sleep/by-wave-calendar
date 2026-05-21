@@ -80,7 +80,9 @@ else
     log "SKIP_DEPS=1，跳过依赖安装（但 build 还会跑）。"
   else
     log "安装全部依赖（含 devDeps，用于 build）..."
-    npm ci
+    # 显式 --include=dev：当 .env 里有 NODE_ENV=production 时
+    # npm 默认会 omit dev，会缺 typescript / tsx，build 失败。
+    npm ci --include=dev
   fi
   log "编译 TypeScript..."
   npm run build

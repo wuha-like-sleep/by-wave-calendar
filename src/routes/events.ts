@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 import { newEventUid } from "../lib/ids.js";
@@ -23,6 +23,55 @@ const updateSchema = createSchema.omit({ calendarId: true }).partial();
 const idParam = z.object({ id: z.string().uuid() });
 
 export async function eventRoutes(app: FastifyInstance) {
+  // Fetch events across all (or a subset of) user's calendars in a date range.
+  // Used by the calendar app view to populate the grid.
+  app.get("/api/events", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const q = z
+      .object({
+        from: z.string().datetime({ offset: true }),
+        to: z.string().datetime({ offset: true }),
+        calendarIds: z.string().optional(),
+      })
+      .safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: "bad_query" });
+
+    const fromDate = new Date(q.data.from);
+    const toDate = new Date(q.data.to);
+
+    const owned = await db
+      .select({
+        id: schema.calendars.id,
+        name: schema.calendars.name,
+        color: schema.calendars.color,
+        timezone: schema.calendars.timezone,
+      })
+      .from(schema.calendars)
+      .where(eq(schema.calendars.ownerId, user.id));
+
+    const ownedIds = new Set(owned.map((c) => c.id));
+    let allowed = Array.from(ownedIds);
+    if (q.data.calendarIds) {
+      const requested = q.data.calendarIds.split(",").filter(Boolean);
+      allowed = requested.filter((id) => ownedIds.has(id));
+    }
+    if (allowed.length === 0) return reply.send({ calendars: owned, events: [] });
+
+    const rows = await db
+      .select()
+      .from(schema.events)
+      .where(
+        and(
+          inArray(schema.events.calendarId, allowed),
+          lte(schema.events.startsAt, toDate),
+          gte(schema.events.endsAt, fromDate),
+        ),
+      )
+      .orderBy(asc(schema.events.startsAt));
+
+    return reply.send({ calendars: owned, events: rows });
+  });
+
   app.get("/api/calendars/:id/events", async (req, reply) => {
     const user = await requireUser(req, reply);
     const { id } = idParam.parse(req.params);

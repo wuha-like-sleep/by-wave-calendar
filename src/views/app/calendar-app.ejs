@@ -1,0 +1,216 @@
+<!-- Inline styles for Toast UI Calendar host + sidebar -->
+<link rel="stylesheet" href="https://uicdn.toast.com/calendar/2.1.3/toastui-calendar.min.css" />
+
+<div id="calendar-app" class="flex-1 min-h-0 flex flex-col">
+  <!-- Top toolbar -->
+  <header class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-3 border-b border-slate-200 bg-white sticky top-14 z-30">
+    <button type="button" id="btn-toggle-sidebar" class="md:hidden p-2 rounded-md hover:bg-slate-100" aria-label="侧栏">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+    <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">今天</button>
+    <div class="inline-flex items-center">
+      <button type="button" id="btn-prev" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="上一段">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <button type="button" id="btn-next" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="下一段">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <h2 id="period-label" class="text-base sm:text-lg font-semibold text-slate-900 flex-1 min-w-0 truncate">…</h2>
+    <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+      <button type="button" data-view="month" class="view-btn px-3 py-1.5 text-sm rounded-md text-slate-600">月</button>
+      <button type="button" data-view="week"  class="view-btn px-3 py-1.5 text-sm rounded-md text-slate-600">周</button>
+      <button type="button" data-view="day"   class="view-btn px-3 py-1.5 text-sm rounded-md text-slate-600">日</button>
+    </div>
+    <button type="button" id="btn-new-event" class="hidden sm:inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      新建事件
+    </button>
+  </header>
+
+  <div class="flex-1 min-h-0 flex">
+    <!-- Sidebar -->
+    <aside id="cal-sidebar" class="hidden md:flex w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
+      <div class="p-3 border-b border-slate-100">
+        <button type="button" id="btn-new-event-mobile" class="w-full sm:hidden inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700 mb-2">
+          新建事件
+        </button>
+      </div>
+
+      <div class="p-3 border-b border-slate-100">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">我的日历</h3>
+          <button type="button" id="btn-new-calendar" class="text-brand-600 hover:text-brand-700" aria-label="新建日历">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <ul id="cal-list" class="space-y-1">
+          <% calendars.forEach(function(cal){ %>
+            <li class="flex items-center gap-2 group" data-cal-id="<%= cal.id %>">
+              <input type="checkbox" class="cal-toggle h-4 w-4 rounded border-slate-300" checked
+                     style="accent-color: <%= cal.color %>"
+                     data-cal-id="<%= cal.id %>" />
+              <span class="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background: <%= cal.color %>"></span>
+              <span class="text-sm text-slate-700 flex-1 truncate"><%= cal.name %></span>
+              <button type="button" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700 p-1"
+                      data-cal-menu="<%= cal.id %>" aria-label="日历选项">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </li>
+          <% }) %>
+        </ul>
+        <% if (calendars.length === 0) { %>
+          <p class="text-xs text-slate-400 text-center py-3">还没有日历</p>
+        <% } %>
+      </div>
+
+      <div class="p-3 mt-auto text-xs text-slate-400 space-y-1">
+        <a href="/app/calendars" class="block py-1 hover:text-slate-700">📁 日历卡片视图</a>
+        <a href="/app/settings" class="block py-1 hover:text-slate-700">⚙️ 账号设置</a>
+      </div>
+    </aside>
+
+    <!-- Main grid -->
+    <section class="flex-1 min-h-0 min-w-0 relative bg-white">
+      <div id="calendar" class="absolute inset-0"></div>
+    </section>
+  </div>
+</div>
+
+<!-- Modal: New / Edit Event -->
+<div id="modal-event" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900">新建事件</h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="form-event" class="p-5 space-y-4">
+      <input type="hidden" name="id" />
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">日历</label>
+        <select name="calendarId" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+          <% calendars.forEach(function(cal){ %>
+            <option value="<%= cal.id %>" data-color="<%= cal.color %>"><%= cal.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">标题</label>
+        <input type="text" name="summary" required maxlength="500"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">开始</label>
+          <input type="datetime-local" name="startsAt" required
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">结束</label>
+          <input type="datetime-local" name="endsAt" required
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">地点（可选）</label>
+        <input type="text" name="location" maxlength="500"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">描述（可选）</label>
+        <textarea name="description" maxlength="5000" rows="3"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      </div>
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-slate-100">
+        <button type="button" id="btn-delete-event" class="hidden text-sm text-red-600 hover:text-red-700">删除</button>
+        <div class="flex gap-2 sm:ml-auto">
+          <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
+          <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New Calendar -->
+<div id="modal-calendar" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-slate-900">新建日历</h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="form-calendar" class="p-5 space-y-4">
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">名称</label>
+        <input type="text" name="name" required maxlength="200" placeholder="如：工作 / 家庭"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">颜色</label>
+          <input type="color" name="color" value="#6366f1" class="w-full h-9 rounded-lg border border-slate-300" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">时区</label>
+          <input type="text" name="timezone" value="Asia/Shanghai" maxlength="100"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">描述（可选）</label>
+        <textarea name="description" maxlength="2000" rows="2"
+                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">创建</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Calendar context menu (share, edit, delete) -->
+<div id="modal-cal-menu" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="cal-menu-color" class="inline-block h-4 w-4 rounded-full flex-shrink-0"></span>
+        <h3 id="cal-menu-name" class="text-lg font-semibold text-slate-900 truncate"></h3>
+      </div>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-5 space-y-5">
+      <section>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3">订阅链接</h4>
+        <form id="form-new-share-token" class="flex gap-2 mb-3">
+          <input type="text" name="label" maxlength="100" placeholder="备注（如：给家人）"
+                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">生成</button>
+        </form>
+        <ul id="share-tokens-list" class="space-y-2 text-sm"></ul>
+      </section>
+      <section>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3">操作</h4>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="btn-delete-calendar" class="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50">删除整个日历</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.__bwc = <%- JSON.stringify({
+    calendars: calendars.map(c => ({ id: c.id, name: c.name, color: c.color, timezone: c.timezone })),
+    publicBaseUrl: publicBaseUrl,
+    csrfToken: csrfToken,
+  }) %>;
+</script>
+<script src="https://uicdn.toast.com/calendar/2.1.3/toastui-calendar.min.js"></script>
+<script src="/static/calendar-app.js" defer></script>

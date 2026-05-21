@@ -41,10 +41,10 @@ await app.register(helmet, {
     directives: {
       "default-src": ["'self'"],
       // Tailwind Play CDN + HTMX from unpkg; inline tailwind config requires 'unsafe-inline'
-      "script-src": ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com"],
+      "script-src": ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com", "https://unpkg.com", "https://uicdn.toast.com"],
       "script-src-attr": ["'unsafe-inline'"],
       // Tailwind Play CDN injects styles dynamically
-      "style-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'", "https://uicdn.toast.com"],
       "img-src": ["'self'", "data:"],
       "connect-src": ["'self'"],
       "font-src": ["'self'", "data:"],

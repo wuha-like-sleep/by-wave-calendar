@@ -285,7 +285,35 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // -------- Authed app --------
+  // Main calendar view (Google/Synology-style grid + sidebar).
   app.get("/app", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const calendars = await db
+      .select({
+        id: schema.calendars.id,
+        name: schema.calendars.name,
+        color: schema.calendars.color,
+        timezone: schema.calendars.timezone,
+      })
+      .from(schema.calendars)
+      .where(eq(schema.calendars.ownerId, user.id))
+      .orderBy(asc(schema.calendars.name));
+
+    return reply.view("app/calendar-app", {
+      title: "日历",
+      user,
+      registrationOpen: env.REGISTRATION_OPEN,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      calendars,
+      publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+      appShell: true,
+    });
+  });
+
+  // Legacy card-grid dashboard, kept as an alt view.
+  app.get("/app/calendars", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
     const rows = await db
