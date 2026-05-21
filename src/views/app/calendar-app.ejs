@@ -44,6 +44,26 @@
         </button>
       </div>
 
+      <!-- Mini date picker (month / year) -->
+      <div id="mini-cal" class="p-3 border-b border-slate-100">
+        <div class="flex items-center justify-between mb-2">
+          <button type="button" id="mini-prev" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="上一个">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" id="mini-period" class="text-sm font-semibold text-slate-700 hover:text-brand-700 px-2 py-1 rounded-md hover:bg-slate-50" aria-label="切换月/年视图">2026 五月</button>
+          <button type="button" id="mini-next" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="下一个">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+        <div id="mini-month-view" class="text-center text-[11px]">
+          <div class="grid grid-cols-7 gap-0.5 mb-1 text-slate-400">
+            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+          </div>
+          <div id="mini-month-grid" class="grid grid-cols-7 gap-0.5"></div>
+        </div>
+        <div id="mini-year-view" class="hidden grid grid-cols-3 gap-1 text-[11px]"></div>
+      </div>
+
       <div class="p-3 border-b border-slate-100">
         <div class="flex items-center justify-between mb-2 relative">
           <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">我的日历</h3>

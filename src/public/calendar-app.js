@@ -255,6 +255,156 @@
   // Initial position: scroll the week grid to the current hour on first paint.
   scrollGridToNow();
 
+  // ---------- Mini calendar (sidebar) ----------
+  // A small month/year picker above the calendar list. Click a date → main
+  // calendar jumps there in current view; click the month/year title →
+  // toggles into a 12-month grid; click a month in that grid → back to
+  // month view at that month.
+  (function setupMiniCal() {
+    const root = $("#mini-cal");
+    if (!root) return;
+    const monthGrid = $("#mini-month-grid");
+    const yearGrid = $("#mini-year-view");
+    const monthView = $("#mini-month-view");
+    const periodBtn = $("#mini-period");
+    const prevBtn = $("#mini-prev");
+    const nextBtn = $("#mini-next");
+    if (!monthGrid || !yearGrid || !monthView || !periodBtn || !prevBtn || !nextBtn) return;
+
+    const ZH_MONTHS = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
+    let viewKind = "month"; // "month" | "year"
+    // Tracks which month/year the mini-cal is *showing*, not the main calendar.
+    let cursor = new Date();
+    cursor.setDate(1);
+
+    function fmtPeriod() {
+      if (viewKind === "month") return `${cursor.getFullYear()} ${ZH_MONTHS[cursor.getMonth()]}`;
+      return `${cursor.getFullYear()} 年`;
+    }
+    function isSameYMD(a, b) {
+      return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    function isSameYM(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth(); }
+
+    function renderMonth() {
+      monthView.classList.remove("hidden");
+      yearGrid.classList.add("hidden");
+      yearGrid.classList.remove("grid");
+      periodBtn.textContent = fmtPeriod();
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth();
+      // Week starts Monday (matches main grid)
+      const first = new Date(year, month, 1);
+      const startDow = (first.getDay() + 6) % 7; // 0 = Mon
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const prevMonthDays = new Date(year, month, 0).getDate();
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      let mainSelected;
+      try { mainSelected = cal.getDate().toDate(); } catch (_e) { mainSelected = today; }
+
+      const cells = [];
+      // Leading days from previous month
+      for (let i = startDow - 1; i >= 0; i--) {
+        const d = new Date(year, month - 1, prevMonthDays - i);
+        cells.push({ d, outside: true });
+      }
+      // Current month
+      for (let i = 1; i <= daysInMonth; i++) {
+        cells.push({ d: new Date(year, month, i), outside: false });
+      }
+      // Pad to 6 rows = 42 cells
+      while (cells.length < 42) {
+        const last = cells[cells.length - 1].d;
+        const next = new Date(last); next.setDate(next.getDate() + 1);
+        cells.push({ d: next, outside: true });
+      }
+
+      monthGrid.innerHTML = "";
+      cells.forEach(({ d, outside }) => {
+        const cell = document.createElement("button");
+        cell.type = "button";
+        cell.dataset.iso = d.toISOString();
+        const isToday = isSameYMD(d, today);
+        const isSelected = isSameYMD(d, mainSelected);
+        cell.className = [
+          "aspect-square inline-flex items-center justify-center rounded",
+          "hover:bg-brand-50 hover:text-brand-700 transition-colors",
+          outside ? "text-slate-300" : "text-slate-700",
+          isToday && !isSelected ? "ring-1 ring-brand-300" : "",
+          isSelected ? "bg-brand-600 text-white hover:bg-brand-700 hover:text-white font-semibold" : "",
+        ].filter(Boolean).join(" ");
+        cell.textContent = String(d.getDate());
+        monthGrid.appendChild(cell);
+      });
+    }
+
+    function renderYear() {
+      monthView.classList.add("hidden");
+      yearGrid.classList.add("grid");
+      yearGrid.classList.remove("hidden");
+      periodBtn.textContent = fmtPeriod();
+      const today = new Date();
+      let mainSelected;
+      try { mainSelected = cal.getDate().toDate(); } catch (_e) { mainSelected = today; }
+
+      yearGrid.innerHTML = "";
+      for (let m = 0; m < 12; m++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.month = String(m);
+        const isCurrent = mainSelected.getFullYear() === cursor.getFullYear() && mainSelected.getMonth() === m;
+        const isThisMonth = today.getFullYear() === cursor.getFullYear() && today.getMonth() === m;
+        btn.className = [
+          "py-2 rounded-md text-center font-medium",
+          "hover:bg-brand-50 hover:text-brand-700",
+          isCurrent ? "bg-brand-600 text-white hover:bg-brand-700 hover:text-white" : "text-slate-700",
+          isThisMonth && !isCurrent ? "ring-1 ring-brand-300" : "",
+        ].filter(Boolean).join(" ");
+        btn.textContent = ZH_MONTHS[m];
+        yearGrid.appendChild(btn);
+      }
+    }
+
+    function render() { viewKind === "month" ? renderMonth() : renderYear(); }
+
+    periodBtn.addEventListener("click", () => {
+      viewKind = viewKind === "month" ? "year" : "month";
+      render();
+    });
+    prevBtn.addEventListener("click", () => {
+      if (viewKind === "month") cursor.setMonth(cursor.getMonth() - 1);
+      else cursor.setFullYear(cursor.getFullYear() - 1);
+      render();
+    });
+    nextBtn.addEventListener("click", () => {
+      if (viewKind === "month") cursor.setMonth(cursor.getMonth() + 1);
+      else cursor.setFullYear(cursor.getFullYear() + 1);
+      render();
+    });
+    monthGrid.addEventListener("click", (e) => {
+      const t = e.target.closest("button[data-iso]");
+      if (!t) return;
+      const d = new Date(t.dataset.iso);
+      cal.setDate(d);
+      refresh();
+      if (currentView !== "month") scrollGridToNow();
+      render(); // re-highlight the newly selected cell
+    });
+    yearGrid.addEventListener("click", (e) => {
+      const t = e.target.closest("button[data-month]");
+      if (!t) return;
+      cursor.setMonth(Number(t.dataset.month));
+      viewKind = "month";
+      render();
+    });
+
+    render();
+    // Keep mini-cal in sync when main view changes via toolbar / today buttons.
+    const origRefresh = refresh;
+    // eslint-disable-next-line no-global-assign
+    refresh = function () { origRefresh(); try { render(); } catch (_e) {} };
+  })();
+
   // ---------- Sidebar calendar visibility toggle ----------
   $$(".cal-toggle").forEach((cb) => cb.addEventListener("change", () => {
     const id = cb.dataset.calId;
