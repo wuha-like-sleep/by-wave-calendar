@@ -127,6 +127,72 @@
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">外观 <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">仅你自己可见</span></h2>
+      <p class="mt-1 text-sm text-slate-500">为你自己选个色系和密度，覆盖站点默认。不填则跟随管理员的站点设置。</p>
+    </div>
+    <% if (userPalette || userDensity) { %>
+      <form method="post" action="/app/settings/theme" class="m-0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="reset" value="1" />
+        <button type="submit" class="text-xs text-slate-500 hover:text-slate-700 underline">恢复站点默认</button>
+      </form>
+    <% } %>
+  </div>
+
+  <form method="post" action="/app/settings/theme" class="space-y-4">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-2">主题色（站点默认：<span class="font-mono"><%= sitePalette %></span>）</label>
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+        <% const palettes = [
+          { id: 'indigo',  name: '靛蓝',   c1: '#a5b4fc', c2: '#6366f1', c3: '#4338ca' },
+          { id: 'emerald', name: '翠绿',   c1: '#6ee7b7', c2: '#10b981', c3: '#047857' },
+          { id: 'rose',    name: '玫瑰',   c1: '#fda4af', c2: '#f43f5e', c3: '#be123c' },
+          { id: 'sky',     name: '天蓝',   c1: '#7dd3fc', c2: '#0ea5e9', c3: '#0369a1' },
+          { id: 'amber',   name: '琥珀',   c1: '#fcd34d', c2: '#f59e0b', c3: '#b45309' },
+          { id: 'violet',  name: '紫罗兰', c1: '#c4b5fd', c2: '#8b5cf6', c3: '#6d28d9' },
+          { id: 'slate',   name: '石板灰', c1: '#cbd5e1', c2: '#64748b', c3: '#334155' },
+        ]; palettes.forEach(function(p){ %>
+          <label class="user-palette-card cursor-pointer rounded-xl border-2 p-2 transition <%= userPalette === p.id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+            <input type="radio" name="palette" value="<%= p.id %>" <%= userPalette === p.id ? 'checked' : '' %> class="sr-only" />
+            <div class="flex items-center gap-1 mb-1.5">
+              <span class="block h-4 w-4 rounded" style="background: <%= p.c1 %>"></span>
+              <span class="block h-4 w-4 rounded" style="background: <%= p.c2 %>"></span>
+              <span class="block h-4 w-4 rounded" style="background: <%= p.c3 %>"></span>
+            </div>
+            <div class="text-xs font-medium text-slate-900"><%= p.name %></div>
+          </label>
+        <% }) %>
+      </div>
+      <p class="mt-1 text-xs text-slate-400">不选 = 跟随站点设置</p>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-2">密度（站点默认：<span class="font-mono"><%= siteDensity %></span>）</label>
+      <div class="grid grid-cols-2 gap-2 max-w-md">
+        <label class="cursor-pointer rounded-xl border-2 p-3 transition <%= userDensity === 'comfortable' ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+          <input type="radio" name="density" value="comfortable" <%= userDensity === 'comfortable' ? 'checked' : '' %> class="sr-only" />
+          <div class="text-sm font-medium text-slate-900">舒适</div>
+          <div class="text-xs text-slate-500 mt-0.5">默认间距</div>
+        </label>
+        <label class="cursor-pointer rounded-xl border-2 p-3 transition <%= userDensity === 'compact' ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+          <input type="radio" name="density" value="compact" <%= userDensity === 'compact' ? 'checked' : '' %> class="sr-only" />
+          <div class="text-sm font-medium text-slate-900">紧凑</div>
+          <div class="text-xs text-slate-500 mt-0.5">一屏多塞内容</div>
+        </label>
+      </div>
+    </div>
+
+    <div class="pt-2 border-t border-slate-100">
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存外观</button>
+    </div>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-4">修改密码</h2>
   <p class="text-xs text-slate-500 mb-3">修改后所有设备的登录会话都会失效，需要重新登录</p>
   <form method="post" action="/app/settings/password" class="space-y-3 max-w-md">

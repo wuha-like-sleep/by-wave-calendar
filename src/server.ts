@@ -24,6 +24,7 @@ import { ssoRoutes } from "./web/sso.js";
 import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
+import { readThemeFromRequest } from "./lib/user_theme.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
 
@@ -159,8 +160,9 @@ await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(icsRoutes);
 // Inject DB-backed site settings into every reply.view call.
-app.addHook("onRequest", async (_req, reply) => {
+app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();
+  const userTheme = readThemeFromRequest(req);
   const original = reply.view.bind(reply);
   (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
     original(name, {
@@ -172,8 +174,10 @@ app.addHook("onRequest", async (_req, reply) => {
       registrationMode: settings.registrationMode,
       ssoEnabled: settings.ssoKeycloakEnabled,
       ssoLabel: settings.ssoKeycloakLabel,
-      themePalette: settings.themePalette,
-      themeDensity: settings.themeDensity,
+      sitePalette: settings.themePalette,
+      siteDensity: settings.themeDensity,
+      themePalette: userTheme.palette ?? settings.themePalette,
+      themeDensity: userTheme.density ?? settings.themeDensity,
       ...locals,
     });
 });

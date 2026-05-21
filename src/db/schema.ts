@@ -22,6 +22,8 @@ export const users = pgTable("users", {
   mfaBackupCodes: jsonb("mfa_backup_codes"),
   failedLoginCount: integer("failed_login_count").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  themePalette: text("theme_palette"),
+  themeDensity: text("theme_density"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

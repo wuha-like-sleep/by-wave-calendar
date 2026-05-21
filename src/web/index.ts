@@ -26,6 +26,7 @@ import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_impo
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
+import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES, setThemeCookies } from "../lib/user_theme.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -146,6 +147,7 @@ export async function webRoutes(app: FastifyInstance) {
     }
     await resetFailedLogin(user.id);
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
+    setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
@@ -398,6 +400,7 @@ export async function webRoutes(app: FastifyInstance) {
   app.post("/logout", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     await destroySession(req, reply);
+    clearThemeCookies(reply);
     return reply.redirect("/");
   });
 
@@ -807,6 +810,8 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       createdAtLocal: localTime(user.createdAt),
+      userPalette: user.themePalette,
+      userDensity: user.themeDensity,
       passkeys: passkeys.map((p) => ({
         ...p,
         createdAtLocal: localTime(p.createdAt),
@@ -853,6 +858,32 @@ export async function webRoutes(app: FastifyInstance) {
     if (!id.success) return reply.redirect("/app/settings");
     await revokeAppPassword(user.id, id.data);
     return redirectWith(reply, "/app/settings", { success: "应用密码已撤销" });
+  });
+
+  app.post("/app/settings/theme", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z
+      .object({
+        palette: z.string().optional(),
+        density: z.string().optional(),
+        reset: z.string().optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings", { error: "无效的外观选项" });
+    }
+    if (body.data.reset) {
+      await db.update(schema.users).set({ themePalette: null, themeDensity: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+      clearThemeCookies(reply);
+      return redirectWith(reply, "/app/settings", { success: "已恢复为站点默认外观" });
+    }
+    const palette = isValidPalette(body.data.palette) ? body.data.palette : null;
+    const density = isValidDensity(body.data.density) ? body.data.density : null;
+    await db.update(schema.users).set({ themePalette: palette, themeDensity: density, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    setThemeCookies(reply, palette, density);
+    return redirectWith(reply, "/app/settings", { success: "外观已更新" });
   });
 
   app.post("/app/settings/password", async (req, reply) => {
