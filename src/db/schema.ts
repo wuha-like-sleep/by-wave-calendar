@@ -27,6 +27,9 @@ export const users = pgTable("users", {
   // Set on first SSO sign-in (and any subsequent SSO login if previously null).
   // Lets the user-management page show "通过 X 登录"; doesn't restrict other paths.
   ssoProviderSlug: text("sso_provider_slug"),
+  // Admin can flip this to suspend an account without deleting it (login is
+  // rejected with a friendly "账号已停用" message until the admin re-enables).
+  disabledAt: timestamp("disabled_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -82,6 +85,9 @@ export const siteSettings = pgTable("site_settings", {
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),
+  // When true, admin accounts MUST have MFA enabled — login is gated on the
+  // /app/settings/mfa/setup flow until they do.
+  forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -269,6 +275,17 @@ export const calendarMembers = pgTable("calendar_members", {
   calIdx: index("calendar_members_cal_idx").on(t.calendarId),
   userIdx: index("calendar_members_user_idx").on(t.userId),
   uniq: uniqueIndex("calendar_members_cal_user_unique").on(t.calendarId, t.userId),
+}));
+
+// Append-only log of which alarms we've already dispatched (one row per
+// (event, trigger) pair). The reminder scheduler queries this to skip
+// already-sent reminders even after a server restart.
+export const remindersSent = pgTable("reminders_sent", {
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  trigger: text("trigger").notNull(),           // e.g. "-PT15M"
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: uniqueIndex("reminders_sent_event_trigger_unique").on(t.eventId, t.trigger),
 }));
 
 export const eventInviteTokens = pgTable("event_invite_tokens", {

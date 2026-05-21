@@ -50,6 +50,21 @@
     <p class="mt-2 text-xs text-slate-400">默认 5 次 / 15 分钟。设过低会被弱密码扫描器锁到怀疑人生，设过高就失去防护意义。</p>
   </section>
 
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="flex items-start justify-between gap-4 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">管理员强制启用 MFA</h2>
+        <p class="mt-1 text-sm text-slate-500">勾上之后任何管理员账号必须先在 <code class="bg-slate-100 px-1 rounded">/app/settings/mfa/setup</code> 启用 TOTP 才能进入后台。Passkey 登录也算（Passkey 等同二要素）。</p>
+      </div>
+    </div>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="forceAdminMfa" <%= settings.forceAdminMfa ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm font-medium text-slate-700">管理员必须启用 MFA</span>
+    </label>
+    <p class="mt-2 text-xs text-amber-700">⚠️ 开启前确认所有管理员（包括你自己）已经启用 MFA；否则会被自己锁在门外，需要数据库手工恢复。</p>
+  </section>
+
   <div class="flex justify-end">
     <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存安全设置</button>
   </div>

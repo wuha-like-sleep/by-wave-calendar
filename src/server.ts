@@ -24,6 +24,7 @@ import { ssoRoutes } from "./web/sso.js";
 import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
+import { startReminderScheduler } from "./lib/reminders.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
@@ -296,6 +297,11 @@ app.setNotFoundHandler(async (req, reply) => {
 });
 
 startSubscriptionScheduler({
+  info: (m) => app.log.info(m),
+  warn: (m) => app.log.warn(m),
+});
+
+startReminderScheduler({
   info: (m) => app.log.info(m),
   warn: (m) => app.log.warn(m),
 });

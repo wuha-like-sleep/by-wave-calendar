@@ -184,6 +184,33 @@
         </div>
       </div>
 
+      <!-- Repeat + Reminder -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-500">重复</span>
+          <select name="rrule" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+            <option value="">不重复</option>
+            <option value="FREQ=DAILY">每天</option>
+            <option value="FREQ=WEEKLY">每周</option>
+            <option value="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR">每个工作日</option>
+            <option value="FREQ=MONTHLY">每月</option>
+            <option value="FREQ=YEARLY">每年</option>
+          </select>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-slate-500">提醒</span>
+          <select name="reminder" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+            <option value="">无</option>
+            <option value="-PT5M">开始前 5 分钟</option>
+            <option value="-PT15M" selected>开始前 15 分钟</option>
+            <option value="-PT30M">开始前 30 分钟</option>
+            <option value="-PT1H">开始前 1 小时</option>
+            <option value="-PT2H">开始前 2 小时</option>
+            <option value="-P1D">开始前 1 天</option>
+          </select>
+        </div>
+      </div>
+
       <!-- Time -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="time-row">
         <div>

@@ -18,7 +18,10 @@
     <tbody class="divide-y divide-slate-100">
       <% users.forEach(function(u){ %>
         <tr>
-          <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]"><%= u.email %></td>
+          <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]">
+            <%= u.email %>
+            <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]">已停用</span><% } %>
+          </td>
           <td class="px-4 py-3 text-slate-700"><%= u.displayName || '—' %></td>
           <td class="px-4 py-3">
             <% if (u.emailVerified) { %>
@@ -56,13 +59,27 @@
           </td>
           <td class="px-4 py-3">
             <% if (u.id !== user.id) { %>
-              <form method="post" action="/admin/users/<%= u.id %>/toggle-admin" class="inline-block m-0"
-                    onsubmit="return confirm('<%= u.isAdmin ? '撤销该用户的管理员身份？' : '将该用户提升为管理员？' %>');">
-                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <button type="submit" class="text-xs <%= u.isAdmin ? 'text-red-600 hover:text-red-700' : 'text-brand-600 hover:text-brand-700' %>">
-                  <%= u.isAdmin ? '取消管理员' : '设为管理员' %>
-                </button>
-              </form>
+              <div class="flex flex-wrap gap-x-3 gap-y-1 items-center text-xs">
+                <form method="post" action="/admin/users/<%= u.id %>/toggle-admin" class="m-0 inline"
+                      onsubmit="return confirm('<%= u.isAdmin ? '撤销该用户的管理员身份？' : '将该用户提升为管理员？' %>');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <button type="submit" class="<%= u.isAdmin ? 'text-red-600 hover:text-red-700' : 'text-brand-600 hover:text-brand-700' %>">
+                    <%= u.isAdmin ? '撤销管理员' : '设为管理员' %>
+                  </button>
+                </form>
+                <form method="post" action="/admin/users/<%= u.id %>/toggle-disabled" class="m-0 inline"
+                      onsubmit="return confirm('<%= u.disabledAt ? '重新启用此账号？' : '停用此账号？该用户所有设备会被踢下线，登录会被拒绝。' %>');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <button type="submit" class="<%= u.disabledAt ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700' %>">
+                    <%= u.disabledAt ? '重新启用' : '停用账号' %>
+                  </button>
+                </form>
+                <form method="post" action="/admin/users/<%= u.id %>/revoke-sessions" class="m-0 inline"
+                      onsubmit="return confirm('踢出该用户的所有登录会话？需要重新登录。');">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <button type="submit" class="text-slate-600 hover:text-slate-900">踢出登录</button>
+                </form>
+              </div>
             <% } else { %>
               <span class="text-xs text-slate-300">你自己</span>
             <% } %>

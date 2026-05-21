@@ -110,6 +110,40 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send(rows);
   });
 
+  // Cheap overlap check for the client — POST so we can keep tomorrow's
+  // "exclude editing self" form clean without putting an event UUID in the URL.
+  app.post("/api/events/conflicts", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const body = z.object({
+      calendarId: z.string().uuid(),
+      startsAt: isoDate,
+      endsAt: isoDate,
+      excludeId: z.string().uuid().optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.send({ conflicts: [] });
+    const starts = new Date(body.data.startsAt);
+    const ends = new Date(body.data.endsAt);
+    // Find overlapping events across all calendars the user can see.
+    const visible = await db
+      .select({ id: schema.calendars.id })
+      .from(schema.calendars)
+      .where(eq(schema.calendars.ownerId, user.id));
+    const ids = visible.map((v) => v.id);
+    if (ids.length === 0) return reply.send({ conflicts: [] });
+    const rows = await db
+      .select({ id: schema.events.id, summary: schema.events.summary, startsAt: schema.events.startsAt, endsAt: schema.events.endsAt })
+      .from(schema.events)
+      .where(and(
+        inArray(schema.events.calendarId, ids),
+        lte(schema.events.startsAt, ends),
+        gte(schema.events.endsAt, starts),
+        isNull(schema.events.deletedAt),
+      ))
+      .limit(20);
+    const conflicts = rows.filter((r) => !body.data.excludeId || r.id !== body.data.excludeId);
+    return reply.send({ conflicts });
+  });
+
   app.post("/api/events", async (req, reply) => {
     const user = await requireUser(req, reply);
     const body = createSchema.parse(req.body);

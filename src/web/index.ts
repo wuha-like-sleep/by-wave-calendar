@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { hashPassword, verifyPassword } from "../lib/password.js";
+import { hashPassword, passwordPolicyError, verifyPassword } from "../lib/password.js";
 import {
   createSession,
   destroyAllUserSessions,
@@ -145,6 +145,10 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) {
       req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
       return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
+    }
+    if (user.disabledAt) {
+      req.log.warn({ userId: user.id, email: user.email, ip: req.ip }, "login_blocked_disabled");
+      return redirectWith(reply, "/login", { error: "账号已停用，请联系管理员" });
     }
     if (isLocked(user)) {
       const mins = lockedRemainingMinutes(user);
@@ -314,6 +318,10 @@ export async function webRoutes(app: FastifyInstance) {
     if (body.data.password !== body.data.confirm) {
       return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: "两次输入的密码不一致" });
     }
+    const policyErr = passwordPolicyError(body.data.password);
+    if (policyErr) {
+      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: policyErr });
+    }
     const passwordHash = await hashPassword(body.data.password);
     await db
       .update(schema.users)
@@ -377,7 +385,11 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确（密码至少 8 位）" });
+      return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确" });
+    }
+    const policyErr = passwordPolicyError(body.data.password);
+    if (policyErr) {
+      return redirectWith(reply, "/register", { error: policyErr });
     }
     const email = body.data.email.toLowerCase().trim();
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
@@ -1495,6 +1507,30 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/app/settings", { success: "外观已更新" });
   });
 
+  app.post("/app/settings/delete-account", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      password: z.string().min(1),
+      confirm: z.literal("删除我的账号"),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings", { error: "请输入密码并精确输入「删除我的账号」以确认" });
+    }
+    // Verify password (SSO-only accounts can't self-delete this way; they
+    // need to clear MFA / set a password first or contact admin).
+    const ok = await verifyPassword(body.data.password, user.passwordHash);
+    if (!ok) {
+      return redirectWith(reply, "/app/settings", { error: "密码错误，账号未删除" });
+    }
+    // Hard delete — FK cascades clean up calendars/events/sessions/etc.
+    await destroyAllUserSessions(user.id);
+    await db.delete(schema.users).where(eq(schema.users.id, user.id));
+    await destroySession(req, reply);
+    return redirectWith(reply, "/", { success: "账号已永久删除。感谢你曾经使用 ByWave Calendar。" });
+  });
+
   app.post("/app/settings/password", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
@@ -1503,7 +1539,11 @@ export async function webRoutes(app: FastifyInstance) {
       .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(200) })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "新密码至少 8 位" });
+      return redirectWith(reply, "/app/settings", { error: "新密码格式不正确" });
+    }
+    const policyErr = passwordPolicyError(body.data.newPassword);
+    if (policyErr) {
+      return redirectWith(reply, "/app/settings", { error: policyErr });
     }
     const ok = await verifyPassword(body.data.currentPassword, user.passwordHash);
     if (!ok) {

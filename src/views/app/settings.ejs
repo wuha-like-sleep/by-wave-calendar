@@ -274,11 +274,36 @@
 </section>
 
 <% if (user.isAdmin) { %>
-  <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
+  <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6 mb-6">
     <h2 class="text-lg font-semibold text-amber-900 mb-2">管理员区</h2>
-    <p class="text-sm text-amber-800">当前注册：<%= registrationOpen ? '开放中' : '已关闭' %>。要切换请修改服务器 <code>.env</code> 里的 <code>REGISTRATION_OPEN</code> 并重启服务。</p>
+    <p class="text-sm text-amber-800">注册策略 / SMTP / 站点名等都在 <a href="/admin" class="underline">管理后台</a>。</p>
   </section>
 <% } %>
+
+<section id="danger" class="rounded-2xl border-2 border-red-200 bg-red-50/40 p-5 sm:p-6 mb-6 scroll-mt-32">
+  <h2 class="text-lg font-semibold text-red-900 mb-2">⚠️ 删除账号</h2>
+  <p class="text-sm text-red-800 mb-4">永久删除你的账号 —— 所有日历、事件、订阅、Passkey、API token、登录历史<strong>立即</strong>从数据库消失，无法恢复。其他人参加过你建的活动的邀请记录也会一起删除。</p>
+  <details>
+    <summary class="cursor-pointer text-sm font-medium text-red-700 hover:text-red-800">我了解风险，继续删除</summary>
+    <form method="post" action="/app/settings/delete-account" class="mt-3 space-y-3 max-w-md">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div>
+        <label class="block text-xs font-medium text-red-900 mb-1">当前密码</label>
+        <input type="password" name="password" required autocomplete="current-password"
+               class="block w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100" />
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-red-900 mb-1">输入「删除我的账号」以确认</label>
+        <input type="text" name="confirm" required placeholder="删除我的账号"
+               class="block w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-mono focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100" />
+      </div>
+      <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              onclick="return confirm('最终确认：账号永久删除，不可恢复。继续？');">
+        永久删除我的账号
+      </button>
+    </form>
+  </details>
+</section>
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>
 <script>

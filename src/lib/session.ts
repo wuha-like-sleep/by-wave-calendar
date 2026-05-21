@@ -87,6 +87,12 @@ export async function loadSession(req: FastifyRequest): Promise<LoadedSession | 
     await db.delete(schema.sessions).where(eq(schema.sessions.id, unsigned.value));
     return null;
   }
+  // Suspended account: drop the session entirely so the admin's "stop this
+  // user" intent is immediate even for already-logged-in tabs.
+  if (row.user.disabledAt) {
+    await db.delete(schema.sessions).where(eq(schema.sessions.id, unsigned.value));
+    return null;
+  }
   return { user: row.user, sessionId: unsigned.value, mfaSatisfied: row.mfaSatisfied };
 }
 

@@ -546,6 +546,20 @@
     // Link field (separate from notes — stored at extra.url).
     const urlInput = form.querySelector('[name="url"]');
     if (urlInput) urlInput.value = payload.url || "";
+    // Recurrence (RRULE) — preserve the stored rule if it's one of our presets.
+    const rruleSelect = form.querySelector('[name="rrule"]');
+    if (rruleSelect) {
+      const r = (payload.rrule || "").trim();
+      const opt = Array.from(rruleSelect.options).find((o) => o.value === r);
+      rruleSelect.value = opt ? r : "";
+    }
+    // Reminder — read first VALARM's trigger if any.
+    const reminderSelect = form.querySelector('[name="reminder"]');
+    if (reminderSelect) {
+      const t = (payload.alarms && payload.alarms[0] && payload.alarms[0].trigger) || "";
+      const opt = Array.from(reminderSelect.options).find((o) => o.value === t);
+      reminderSelect.value = opt ? t : (payload.id ? "" : "-PT15M");
+    }
     if (payload.timezone) {
       const tzSel = form.querySelector('[name="timezone"]');
       if (Array.from(tzSel.options).some((o) => o.value === payload.timezone)) {
@@ -582,9 +596,11 @@
       startsAt: fresh.startsAt,
       endsAt: fresh.endsAt,
       allDay: fresh.allDay,
+      rrule: fresh.rrule || "",
       category: extra.category,
       timezone: extra.timezone,
       attendees: Array.isArray(extra.attendees) ? extra.attendees : [],
+      alarms: Array.isArray(extra.alarms) ? extra.alarms : [],
     });
   });
 
@@ -621,13 +637,30 @@
       allDay: isAllDay,
       startsAt: startsIso,
       endsAt: endsIso,
+      rrule: (data.rrule || "").trim() || undefined,
       extra: {
         category: data.category || undefined,
         timezone: data.timezone || undefined,
         attendees: attendees.length ? attendees : undefined,
         url: (data.url || "").trim() || undefined,
+        alarms: data.reminder ? [{ trigger: data.reminder, action: "DISPLAY", description: data.summary }] : undefined,
       },
     };
+    // Conflict check (soft) — let user confirm overlap before saving.
+    try {
+      const cResp = await fetch("/api/events/conflicts", fetchOpts({
+        method: "POST",
+        body: JSON.stringify({ calendarId: body.calendarId, startsAt: body.startsAt, endsAt: body.endsAt, excludeId: id || undefined }),
+      }));
+      if (cResp.ok) {
+        const { conflicts } = await cResp.json();
+        if (Array.isArray(conflicts) && conflicts.length > 0) {
+          const names = conflicts.slice(0, 3).map((c) => "• " + c.summary).join("\n");
+          const more = conflicts.length > 3 ? `\n• …还有 ${conflicts.length - 3} 个` : "";
+          if (!confirm(`和现有事件时间冲突：\n${names}${more}\n\n仍要保存？`)) return;
+        }
+      }
+    } catch (_e) { /* soft check — never block save on a network glitch */ }
     try {
       const url = id ? `/api/events/${id}` : "/api/events";
       const method = id ? "PATCH" : "POST";

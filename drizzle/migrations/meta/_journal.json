@@ -155,6 +155,13 @@
       "when": 1779376987437,
       "tag": "0021_admin_audit_log",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1779402701410,
+      "tag": "0022_security_and_reminders",
+      "breakpoints": true
     }
   ]
 }

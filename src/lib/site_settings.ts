@@ -27,6 +27,7 @@ export type SettingsView = {
   lockoutThreshold: number;
   lockoutMinutes: number;
   apiEnabled: boolean;
+  forceAdminMfa: boolean;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -76,6 +77,7 @@ function toView(r: schema.SiteSettings): SettingsView {
     lockoutThreshold: r.lockoutThreshold || 5,
     lockoutMinutes: r.lockoutMinutes || 15,
     apiEnabled: r.apiEnabled,
+    forceAdminMfa: r.forceAdminMfa,
   };
 }
 
@@ -132,6 +134,7 @@ export async function updateSettings(patch: Partial<{
   lockoutThreshold: number;
   lockoutMinutes: number;
   apiEnabled: boolean;
+  forceAdminMfa: boolean;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

@@ -46,6 +46,13 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
     });
     return null;
   }
+  // Force-MFA gate: when site_settings.forceAdminMfa is true, admin accounts
+  // can read but must enable MFA before they can touch anything.
+  const settings = await getSettings();
+  if (settings.forceAdminMfa && !s.user.mfaEnabled) {
+    reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent("管理员账号必须启用 MFA 才能进入后台"));
+    return null;
+  }
   return s.user;
 }
 
@@ -330,6 +337,7 @@ export async function adminRoutes(app: FastifyInstance) {
         emailVerified: schema.users.emailVerified,
         mfaEnabled: schema.users.mfaEnabled,
         ssoProviderSlug: schema.users.ssoProviderSlug,
+        disabledAt: schema.users.disabledAt,
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
@@ -384,7 +392,44 @@ export async function adminRoutes(app: FastifyInstance) {
     const [target] = await db.select({ isAdmin: schema.users.isAdmin }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
+    await audit(req, me.id, target.isAdmin ? "user.demote_admin" : "user.promote_admin", { targetType: "user", targetId: id.data });
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
+  });
+
+  app.post("/admin/users/:id/toggle-disabled", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/users");
+    if (id.data === me.id) {
+      return reply.redirect("/admin/users?error=" + encodeURIComponent("不能停用自己的账号"));
+    }
+    const [target] = await db.select({ disabledAt: schema.users.disabledAt, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
+    if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
+    if (target.disabledAt) {
+      await db.update(schema.users).set({ disabledAt: null, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
+      await audit(req, me.id, "user.enable", { targetType: "user", targetId: id.data, details: { email: target.email } });
+      return reply.redirect("/admin/users?success=" + encodeURIComponent(`已重新启用 ${target.email}`));
+    }
+    await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, id.data));
+    // Also kill any live sessions so logout is immediate.
+    await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data));
+    await audit(req, me.id, "user.disable", { targetType: "user", targetId: id.data, details: { email: target.email } });
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线）`));
+  });
+
+  app.post("/admin/users/:id/revoke-sessions", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/users");
+    const [target] = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
+    if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
+    const deleted = await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data)).returning({ id: schema.sessions.id });
+    await audit(req, me.id, "user.revoke_sessions", { targetType: "user", targetId: id.data, details: { email: target.email, sessionsKilled: deleted.length } });
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话`));
   });
 
   // ---------- Admin audit log ----------
@@ -588,6 +633,7 @@ export async function adminRoutes(app: FastifyInstance) {
         lockoutEnabled: z.string().optional(),
         lockoutThreshold: z.coerce.number().int().min(1).max(100),
         lockoutMinutes: z.coerce.number().int().min(1).max(10080),
+        forceAdminMfa: z.string().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -598,6 +644,7 @@ export async function adminRoutes(app: FastifyInstance) {
       lockoutEnabled: body.data.lockoutEnabled === "on",
       lockoutThreshold: body.data.lockoutThreshold,
       lockoutMinutes: body.data.lockoutMinutes,
+      forceAdminMfa: body.data.forceAdminMfa === "on",
     });
     return reply.redirect("/admin/security?success=" + encodeURIComponent("安全设置已保存"));
   });
