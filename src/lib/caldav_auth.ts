@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { verifyPassword } from "./password.js";
+import { looksLikeAppPassword, verifyAppPassword } from "./app_password.js";
 
 const REALM = "ByWave Calendar CalDAV";
 
@@ -34,7 +35,13 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
     reply.code(401).type("text/plain").send("Unauthorized");
     return null;
   }
-  const ok = await verifyPassword(password, user.passwordHash);
+  let ok = false;
+  if (looksLikeAppPassword(password)) {
+    ok = await verifyAppPassword(user.id, password);
+  }
+  if (!ok) {
+    ok = await verifyPassword(password, user.passwordHash);
+  }
   if (!ok) {
     reply.header("WWW-Authenticate", `Basic realm="${REALM}", charset="UTF-8"`);
     reply.code(401).type("text/plain").send("Unauthorized");

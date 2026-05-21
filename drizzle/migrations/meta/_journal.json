@@ -50,6 +50,13 @@
       "when": 1779360522599,
       "tag": "0006_security_lockout_resets",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779361327036,
+      "tag": "0007_app_passwords",
+      "breakpoints": true
     }
   ]
 }

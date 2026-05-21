@@ -106,6 +106,21 @@ export const webauthnCredentials = pgTable("webauthn_credentials", {
   userIdx: index("webauthn_credentials_user_idx").on(t.userId),
 }));
 
+export const appPasswords = pgTable("app_passwords", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  scope: text("scope").notNull().default("caldav"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("app_passwords_user_idx").on(t.userId),
+  prefixIdx: index("app_passwords_prefix_idx").on(t.prefix),
+}));
+
 export const calendars = pgTable("calendars", {
   id: uuid("id").primaryKey().defaultRandom(),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -193,3 +208,5 @@ export type LoginAlert = typeof loginAlerts.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type CalendarMember = typeof calendarMembers.$inferSelect;
 export type CalendarInvitation = typeof calendarInvitations.$inferSelect;
+export type AppPassword = typeof appPasswords.$inferSelect;
+export type NewAppPassword = typeof appPasswords.$inferInsert;

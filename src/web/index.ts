@@ -21,6 +21,7 @@ import { getSettings } from "../lib/site_settings.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
+import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -623,6 +624,11 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.webauthnCredentials.userId, user.id))
       .orderBy(desc(schema.webauthnCredentials.createdAt));
 
+    const apps = await listAppPasswords(user.id);
+    const q = (req.query ?? {}) as Record<string, unknown>;
+    const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
+    const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
+
     return reply.view("app/settings", {
       title: "设置",
       user,
@@ -634,7 +640,43 @@ export async function webRoutes(app: FastifyInstance) {
         createdAtLocal: localTime(p.createdAt),
         lastUsedAtLocal: p.lastUsedAt ? localTime(p.lastUsedAt) : null,
       })),
+      appPasswords: apps.map((a) => ({
+        ...a,
+        createdAtLocal: localTime(a.createdAt),
+        lastUsedAtLocal: a.lastUsedAt ? localTime(a.lastUsedAt) : null,
+      })),
+      newAppPassword: newPlain,
+      newAppLabel: newLabel,
     });
+  });
+
+  app.post("/app/settings/app-passwords", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z
+      .object({ label: z.string().min(1).max(60) })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings", { error: "请填写设备标签（最长 60 字）" });
+    }
+    const issued = await createAppPassword(user.id, body.data.label);
+    const params = new URLSearchParams({
+      success: "已生成新的 CalDAV 应用密码，仅显示一次，请立即保存到客户端。",
+      newAppPassword: issued.plain,
+      newAppLabel: body.data.label,
+    });
+    return reply.redirect(`/app/settings?${params.toString()}#app-passwords`);
+  });
+
+  app.post<{ Params: { id: string } }>("/app/settings/app-passwords/:id/revoke", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/settings");
+    await revokeAppPassword(user.id, id.data);
+    return redirectWith(reply, "/app/settings", { success: "应用密码已撤销" });
   });
 
   app.post("/app/settings/password", async (req, reply) => {
