@@ -161,6 +161,31 @@
 
   function refresh() { formatPeriodLabel(); loadEvents(); }
 
+  // ---------- Live sync: pick up events added from phone / other tab ----------
+  // Polls /api/events every 30 seconds while the tab is visible. Also fires
+  // immediately on visibilitychange (when the user comes back to the tab).
+  const POLL_INTERVAL_MS = 30_000;
+  let pollHandle = null;
+  function startPolling() {
+    if (pollHandle) return;
+    pollHandle = setInterval(() => {
+      if (document.hidden) return;
+      loadEvents().catch(() => {});
+    }, POLL_INTERVAL_MS);
+  }
+  function stopPolling() {
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      stopPolling();
+    } else {
+      loadEvents().catch(() => {});
+      startPolling();
+    }
+  });
+  startPolling();
+
   // ---------- Toolbar ----------
   $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); });
   $("#btn-prev").addEventListener("click", () => { cal.prev(); refresh(); });

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
-import { newEventUid } from "../lib/ids.js";
+import { newEventUid, newInvitationToken } from "../lib/ids.js";
 import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
@@ -155,9 +155,23 @@ export async function eventRoutes(app: FastifyInstance) {
         attendees: extra.attendees.map((email) => ({ email })),
         method: "REQUEST",
       });
+      const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
       for (const to of extra.attendees) {
         const trimmed = to.trim();
         if (!trimmed || !trimmed.includes("@")) continue;
+        // Generate a per-recipient token so the "添加到我的日历" button in the
+        // email can jump back to the app and add the event with one click.
+        const inviteToken = newInvitationToken();
+        try {
+          await db.insert(schema.eventInviteTokens).values({
+            token: inviteToken,
+            sourceEventId: row.id,
+            recipientEmail: trimmed.toLowerCase(),
+            expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+          });
+        } catch (err) {
+          req.log.warn({ err, to: trimmed }, "event_invite_token_failed");
+        }
         sendMail(eventInviteMail(trimmed, {
           organizerEmail: user.email,
           organizerName,
@@ -169,6 +183,7 @@ export async function eventRoutes(app: FastifyInstance) {
           allDay: row.allDay,
           uid: row.uid,
           icsBody: ics,
+          inviteToken,
         })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));
       }
     }

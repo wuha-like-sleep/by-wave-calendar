@@ -14,11 +14,12 @@
     <% const v = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
     <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
+    <% const js = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
     <script defer src="/static/lib/htmx.min.js"></script>
-    <script src="/static/app.js?v=<%= v %>" defer></script>
-    <script src="/static/local-time.js?v=<%= v %>" defer></script>
-    <script src="/static/version-check.js?v=<%= v %>" defer></script>
-    <script src="/static/banners.js?v=<%= v %>" defer></script>
+    <script src="<%= js %>/app.js?v=<%= v %>" defer></script>
+    <script src="<%= js %>/local-time.js?v=<%= v %>" defer></script>
+    <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>
+    <script src="<%= js %>/banners.js?v=<%= v %>" defer></script>
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>

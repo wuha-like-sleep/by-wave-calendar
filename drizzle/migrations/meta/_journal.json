@@ -99,6 +99,20 @@
       "when": 1779367339889,
       "tag": "0013_calendar_tz_default",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1779368963879,
+      "tag": "0014_login_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1779369094659,
+      "tag": "0015_event_invite_tokens",
+      "breakpoints": true
     }
   ]
 }

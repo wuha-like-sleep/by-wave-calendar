@@ -14,13 +14,14 @@ import {
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
-import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail } from "../lib/email_templates.js";
+import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
+import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
@@ -148,6 +149,72 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
     }
     await resetFailedLogin(user.id);
+
+    // Risk check: if the user has prior successful logins but this IP/UA is
+    // unfamiliar AND they don't have MFA already in the loop, gate this login
+    // behind an email-delivered 6-digit code. MFA users skip — TOTP already
+    // covers the "new device" case. Passkey users skip too (they took a
+    // different code path entirely; this branch is only for password login).
+    const ua = String(req.headers["user-agent"] ?? "unknown");
+    const familiar = await isLoginFamiliar(user.id, req.ip, ua);
+    if (!familiar && !user.mfaEnabled) {
+      const issued = await createLoginChallenge(user.id, req.ip, ua);
+      try {
+        await sendMail(loginChallengeMail(user.email, issued.code, { ip: req.ip, userAgent: ua }));
+      } catch (err) {
+        req.log.warn({ err }, "login_challenge_mail_failed");
+        return redirectWith(reply, "/login", { error: "需要邮件验证，但邮件发送失败 —— 请联系管理员" });
+      }
+      reply.setCookie("bwc_login_chall", issued.token, {
+        httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 10 * 60,
+      });
+      return reply.redirect("/login/challenge");
+    }
+
+    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
+    setThemeCookies(reply, user.themePalette, user.themeDensity);
+    if (user.mfaEnabled) return reply.redirect("/login/mfa");
+    void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
+    void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
+    return reply.redirect("/app");
+  });
+
+  // -------- Login challenge (new-device email code) --------
+  app.get("/login/challenge", async (req, reply) => {
+    const token = req.cookies["bwc_login_chall"];
+    if (!token) return reply.redirect("/login");
+    return reply.view("auth/login-challenge", {
+      title: "安全验证",
+      user: null,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+    });
+  });
+
+  app.post("/login/challenge", {
+    config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const token = req.cookies["bwc_login_chall"];
+    if (!token) return reply.redirect("/login");
+    const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, "/login/challenge", { error: "请输入 6 位数字验证码" });
+    const result = await verifyLoginChallenge(token, body.data.code);
+    if (!result.ok) {
+      const msg: Record<string, string> = {
+        no_challenge: "验证已过期，请重新登录",
+        expired: "验证码已过期，请重新登录",
+        too_many_attempts: "尝试次数过多，请重新登录",
+        wrong: "验证码错误",
+      };
+      if (result.reason !== "wrong") reply.clearCookie("bwc_login_chall", { path: "/" });
+      return redirectWith(reply, result.reason === "wrong" ? "/login/challenge" : "/login", {
+        error: msg[result.reason] ?? "验证失败",
+      });
+    }
+    reply.clearCookie("bwc_login_chall", { path: "/" });
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, result.userId)).limit(1);
+    if (!user) return redirectWith(reply, "/login", { error: "用户不存在" });
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
@@ -926,6 +993,84 @@ export async function webRoutes(app: FastifyInstance) {
         eq(schema.calendarMembers.calendarId, calId.data),
       ));
     return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "已移除成员" });
+  });
+
+  // ---------- Event-invite deep link ("添加到我的日历" from the email) ----------
+  app.get<{ Params: { token: string } }>("/event-invite/:token", async (req, reply) => {
+    const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok) {
+      return reply.code(404).view("error", { title: "邀请无效", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "邀请链接无效", message: "请检查邮件里的链接是否完整。" });
+    }
+    if (tok.expiresAt < new Date()) {
+      return reply.code(410).view("error", { title: "已过期", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 410, heading: "邀请链接已过期", message: "请联系邀请人重新发送邀请。" });
+    }
+    const currentUser = await loadUserFromRequest(req);
+    if (!currentUser) {
+      return redirectWith(reply, "/login", { error: `请先用 ${tok.recipientEmail} 登录后再接受邀请` });
+    }
+    const [sourceEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (!sourceEvent) {
+      return reply.code(404).view("error", { title: "事件不存在", user: currentUser, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "原事件已被删除", message: "邀请人撤销了这次活动。" });
+    }
+    // List the recipient's own calendars to pick which one to add the event into.
+    const myCals = await db
+      .select()
+      .from(schema.calendars)
+      .where(eq(schema.calendars.ownerId, currentUser.id))
+      .orderBy(asc(schema.calendars.name));
+    return reply.view("invite/event-accept", {
+      title: "添加到日历",
+      user: currentUser,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      token: tok.token,
+      recipientEmail: tok.recipientEmail,
+      sourceEvent: {
+        ...sourceEvent,
+        startsAtLocal: localTime(sourceEvent.startsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(sourceEvent.endsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
+      },
+      calendars: myCals,
+      alreadyAccepted: !!tok.acceptedAt,
+    });
+  });
+
+  app.post<{ Params: { token: string } }>("/event-invite/:token/accept", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok || tok.expiresAt < new Date()) {
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "邀请已失效" });
+    }
+    const body = z.object({ calendarId: z.string().uuid() }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "请选择要加入的日历" });
+    }
+    if (!(await ownsCalendar(body.data.calendarId, user.id))) {
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "不能写入这本日历" });
+    }
+    const [sourceEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (!sourceEvent) {
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "原事件已不存在" });
+    }
+    // Copy the event into the recipient's chosen calendar with a fresh UID so
+    // it shows up as their own row. Owner edits to the source won't propagate;
+    // for two-way sync the recipient should accept the calendar invitation.
+    await db.insert(schema.events).values({
+      calendarId: body.data.calendarId,
+      uid: newEventUid(),
+      summary: sourceEvent.summary,
+      description: sourceEvent.description,
+      location: sourceEvent.location,
+      startsAt: sourceEvent.startsAt,
+      endsAt: sourceEvent.endsAt,
+      allDay: sourceEvent.allDay,
+      rrule: sourceEvent.rrule,
+      extra: { ...((sourceEvent.extra as Record<string, unknown> | null) ?? {}), importedFromInvite: tok.token },
+    });
+    await db.update(schema.eventInviteTokens).set({ acceptedAt: new Date() }).where(eq(schema.eventInviteTokens.token, tok.token));
+    return redirectWith(reply, "/app", { success: `已添加 ${sourceEvent.summary} 到你的日历` });
   });
 
   app.get<{ Params: { token: string } }>("/invite/:token", async (req, reply) => {

@@ -85,6 +85,19 @@ export const loginAlerts = pgTable("login_alerts", {
   uniq: uniqueIndex("login_alerts_user_ip_ua_unique").on(t.userId, t.ipHash, t.uaHash),
 }));
 
+export const loginChallenges = pgTable("login_challenges", {
+  token: text("token").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  codeHash: text("code_hash").notNull(),
+  ipHash: text("ip_hash").notNull(),
+  uaHash: text("ua_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("login_challenges_user_idx").on(t.userId),
+}));
+
 export const loginEvents = pgTable("login_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -182,6 +195,18 @@ export const calendarMembers = pgTable("calendar_members", {
   calIdx: index("calendar_members_cal_idx").on(t.calendarId),
   userIdx: index("calendar_members_user_idx").on(t.userId),
   uniq: uniqueIndex("calendar_members_cal_user_unique").on(t.calendarId, t.userId),
+}));
+
+export const eventInviteTokens = pgTable("event_invite_tokens", {
+  token: text("token").primaryKey(),
+  sourceEventId: uuid("source_event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  recipientEmail: text("recipient_email").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  evIdx: index("event_invite_tokens_event_idx").on(t.sourceEventId),
+  emailIdx: index("event_invite_tokens_email_idx").on(t.recipientEmail),
 }));
 
 export const calendarInvitations = pgTable("calendar_invitations", {

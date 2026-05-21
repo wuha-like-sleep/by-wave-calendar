@@ -413,5 +413,6 @@
   }) %>;
 </script>
 <% const calV = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
+<% const calJs = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
 <script src="/static/lib/toastui-calendar.min.js"></script>
-<script src="/static/calendar-app.js?v=<%= calV %>" defer></script>
+<script src="<%= calJs %>/calendar-app.js?v=<%= calV %>" defer></script>

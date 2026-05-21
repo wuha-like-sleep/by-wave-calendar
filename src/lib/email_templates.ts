@@ -81,6 +81,29 @@ export function verificationCodeMail(to: string, code: string): SendArgs {
   return { to, subject: `【${brand}】邮箱验证码 ${code}`, html, text };
 }
 
+// ---------- Login challenge code (new device / unfamiliar IP) ----------
+export function loginChallengeMail(to: string, code: string, ctx: { ip: string; userAgent: string }): SendArgs {
+  const text = `${brand} 安全验证码\n\n检测到陌生设备 / IP 登录，请用下方验证码完成登录：\n${code}\n\n10 分钟内有效。IP: ${ctx.ip}\n\n如果不是你本人操作，立即修改密码。`;
+  const html = baseLayout({
+    title: `${brand} 安全验证`,
+    preheader: `登录验证码 ${code}（10 分钟内有效）`,
+    body: `
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;font-weight:600;">🛡 陌生设备登录</h1>
+      <p style="margin:0 0 20px;color:#475569;line-height:1.6;font-size:14px;">
+        我们检测到这次登录来自不熟悉的 IP 或浏览器 —— 输入下方验证码完成本次登录。如果<strong>不是你本人</strong>，立即修改密码。
+      </p>
+      <div style="margin:24px 0;padding:28px 16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:16px;text-align:center;">
+        <div style="font-size:11px;color:#92400e;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">LOGIN CODE</div>
+        <span style="font-size:42px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#78350f;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
+        <div style="font-size:11px;color:#92400e;margin-top:8px;">10 分钟内有效</div>
+      </div>
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+        IP <code style="font-family:'SF Mono',monospace;">${escape(ctx.ip)}</code> · ${escape(ctx.userAgent.slice(0, 80))}
+      </p>`,
+  });
+  return { to, subject: `【${brand}】登录验证码 ${code}`, html, text };
+}
+
 // ---------- Login alert ----------
 export type LoginAlertCtx = {
   email: string;
@@ -174,6 +197,7 @@ export type EventInviteCtx = {
   allDay: boolean;
   uid: string;
   icsBody: string; // full VCALENDAR text with METHOD:REQUEST
+  inviteToken?: string; // opaque token → /event-invite/:token page that imports into the recipient's chosen calendar
 };
 
 export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
@@ -198,10 +222,19 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
         ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">地点</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
       </table>
       ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
+      ${ctx.inviteToken ? `
+      <p style="margin:18px 0 10px;">
+        <a href="${baseUrl}/event-invite/${encodeURIComponent(ctx.inviteToken)}"
+           style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
+          添加到我的日历
+        </a>
+      </p>
+      <p style="margin:8px 0 14px;color:#94a3b8;font-size:12px;">点上面按钮跳转 ${escape(brand)} 网页，可选择加入哪个日历；或者用附件 .ics 加到任何外部客户端。</p>
+      ` : `
       <p style="margin:18px 0 10px;color:#475569;font-size:13px;line-height:1.6;">
         附件中的 <strong>invite.ics</strong> 可以直接被 Apple / Google / Outlook 日历识别 ——
         点开即可"添加到日历"。如果客户端没自动弹窗，直接双击附件即可导入。
-      </p>
+      </p>`}
       <p style="margin:10px 0 0;color:#94a3b8;font-size:12px;">
         来自 <a href="${baseUrl}" style="color:#6366f1;text-decoration:none;">${baseUrl.replace(/^https?:\/\//, "")}</a>
       </p>`,
