@@ -3,7 +3,7 @@
 <div id="calendar-app" class="flex-1 min-h-0 flex flex-col">
   <!-- Top toolbar -->
   <header class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-3 border-b border-slate-200 bg-white sticky top-14 z-30">
-    <button type="button" id="btn-toggle-sidebar" class="md:hidden p-2 rounded-md hover:bg-slate-100" aria-label="侧栏">
+    <button type="button" id="btn-toggle-sidebar" class="p-2 rounded-md hover:bg-slate-100" aria-label="侧栏">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">今天</button>
@@ -29,11 +29,14 @@
 
   <div class="flex-1 min-h-0 flex relative">
     <!-- Sidebar backdrop (mobile only when open) -->
-    <div id="cal-sidebar-backdrop" class="hidden fixed inset-0 z-40 bg-slate-900/40 md:hidden"></div>
+    <div id="cal-sidebar-backdrop" class="hidden md:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
 
-    <!-- Sidebar -->
+    <!-- Sidebar.
+         Default state: on md+, in-flow flex item (w-64 lg:w-72); on mobile, hidden.
+         When opened on mobile: becomes a fixed drawer via the .sidebar-open class added by JS.
+         When collapsed on desktop: hidden via .sidebar-collapsed (also added by JS). -->
     <aside id="cal-sidebar"
-           class="fixed inset-y-0 left-0 z-50 w-72 transform -translate-x-full transition-transform md:static md:translate-x-0 md:z-auto md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+           class="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
       <div class="md:hidden flex items-center justify-between p-3 border-b border-slate-100">
         <span class="text-sm font-semibold text-slate-700">日历</span>
         <button type="button" id="btn-close-sidebar" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">

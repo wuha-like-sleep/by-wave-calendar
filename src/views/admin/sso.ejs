@@ -1,0 +1,41 @@
+<%- include('_nav', { activeNav: '/admin/sso' }) %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">SSO · Keycloak / OIDC</h1>
+<p class="text-sm text-slate-500 mb-6">任何 OpenID Connect 兼容的身份提供者（Keycloak、Authelia、Authentik、Auth0、阿里云 IDaaS 等）。</p>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <form method="post" action="/admin/sso/keycloak" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="flex items-center gap-2">
+      <input type="checkbox" name="enabled" <%= settings.ssoKeycloakEnabled ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm text-slate-700">启用 SSO 登录按钮</span>
+    </label>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">Issuer URL</label>
+      <input type="url" name="issuerUrl" value="<%= settings.ssoKeycloakIssuerUrl || '' %>"
+             placeholder="https://idp.example.com/realms/myrealm"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">Client ID</label>
+        <input type="text" name="clientId" value="<%= settings.ssoKeycloakClientId || '' %>" maxlength="200"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">Client Secret <span class="text-xs text-slate-400">(留空不修改)</span></label>
+        <input type="password" name="clientSecret" placeholder="•••••••" autocomplete="new-password" maxlength="400"
+               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">登录按钮文字</label>
+      <input type="text" name="label" value="<%= settings.ssoKeycloakLabel %>" maxlength="100"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <p class="text-xs text-slate-500">回调地址：<code class="bg-slate-100 rounded px-1.5 py-0.5">/auth/sso/callback</code>（设置时复制到 IDP 端）</p>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SSO 配置</button>
+  </form>
+  <p class="mt-4 text-xs text-amber-700">⚠️ SSO 登录路由还在开发中，配置保存后下个版本生效</p>
+</section>

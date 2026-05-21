@@ -66,6 +66,47 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
+  // Section pages
+  app.get("/admin/site", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/site", {
+      title: "站点设置 · 管理后台",
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+    });
+  });
+
+  app.get("/admin/logo", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/logo", {
+      title: "Logo · 管理后台",
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+    });
+  });
+
+  app.get("/admin/smtp", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/smtp", {
+      title: "SMTP 邮件 · 管理后台",
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+    });
+  });
+
+  app.get("/admin/sso", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/sso", {
+      title: "SSO · 管理后台",
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+    });
+  });
+
   app.post("/admin/settings", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
@@ -76,14 +117,14 @@ export async function adminRoutes(app: FastifyInstance) {
       icpNumber: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : null)),
       icpUrl: z.string().url().optional().transform((v) => (v?.trim() ? v.trim() : "https://beian.miit.gov.cn/")),
     }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/admin?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return reply.redirect("/admin/site?error=" + encodeURIComponent("参数无效"));
     await updateSettings({
       siteName: body.data.siteName,
       registrationMode: body.data.registrationMode,
       icpNumber: body.data.icpNumber,
       icpUrl: body.data.icpUrl,
     });
-    return reply.redirect("/admin?success=" + encodeURIComponent("站点设置已保存"));
+    return reply.redirect("/admin/site?success=" + encodeURIComponent("站点设置已保存"));
   });
 
   app.post("/admin/smtp", async (req, reply) => {
@@ -99,7 +140,7 @@ export async function adminRoutes(app: FastifyInstance) {
       fromAddress: z.string().email().optional().or(z.literal("")).transform((v) => v?.trim() || null),
       fromName: z.string().max(100).optional().transform((v) => v?.trim() || "ByWave-Calendar"),
     }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/admin?error=" + encodeURIComponent("SMTP 参数无效"));
+    if (!body.success) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("SMTP 参数无效"));
     const patch: Parameters<typeof updateSettings>[0] = {
       smtpHost: body.data.host,
       smtpPort: body.data.port,
@@ -111,7 +152,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Only update password when submitted
     if (body.data.smtpPass) patch.smtpPass = body.data.smtpPass;
     await updateSettings(patch);
-    return reply.redirect("/admin?success=" + encodeURIComponent("SMTP 配置已保存"));
+    return reply.redirect("/admin/smtp?success=" + encodeURIComponent("SMTP 配置已保存"));
   });
 
   app.post("/admin/sso/keycloak", async (req, reply) => {
@@ -125,7 +166,7 @@ export async function adminRoutes(app: FastifyInstance) {
       clientSecret: z.string().max(400).optional().transform((v) => v?.trim() || null),
       label: z.string().max(100).optional().transform((v) => v?.trim() || "使用 SSO 登录"),
     }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/admin?error=" + encodeURIComponent("SSO 参数无效"));
+    if (!body.success) return reply.redirect("/admin/sso?error=" + encodeURIComponent("SSO 参数无效"));
     const patch: Parameters<typeof updateSettings>[0] = {
       ssoKeycloakEnabled: body.data.enabled,
       ssoKeycloakIssuerUrl: body.data.issuerUrl,
@@ -135,7 +176,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Only update secret if a non-empty value was submitted, so unchanged secrets aren't wiped.
     if (body.data.clientSecret) patch.ssoKeycloakClientSecret = body.data.clientSecret;
     await updateSettings(patch);
-    return reply.redirect("/admin?success=" + encodeURIComponent("SSO 设置已保存"));
+    return reply.redirect("/admin/sso?success=" + encodeURIComponent("SSO 设置已保存"));
   });
 
   // ---------- Logo upload ----------
@@ -145,7 +186,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // multipart requests don't carry CSRF cookie token reliably; rely on auth + admin check + same-origin.
 
     const file = await req.file();
-    if (!file) return reply.redirect("/admin?error=" + encodeURIComponent("请选择文件"));
+    if (!file) return reply.redirect("/admin/logo?error=" + encodeURIComponent("请选择文件"));
 
     const allowed = new Map<string, string>([
       ["image/png", "png"],
@@ -155,14 +196,14 @@ export async function adminRoutes(app: FastifyInstance) {
       ["image/webp", "webp"],
     ]);
     const ext = allowed.get(file.mimetype.toLowerCase());
-    if (!ext) return reply.redirect("/admin?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
+    if (!ext) return reply.redirect("/admin/logo?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
 
     const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
 
     const buf = await file.toBuffer();
     if (buf.length > 2 * 1024 * 1024) {
-      return reply.redirect("/admin?error=" + encodeURIComponent("文件超过 2MB"));
+      return reply.redirect("/admin/logo?error=" + encodeURIComponent("文件超过 2MB"));
     }
 
     const filename = `logo.${ext}`;
@@ -171,7 +212,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Cache-bust by appending mtime stamp
     const url = `/static/uploads/${filename}?v=${Date.now()}`;
     await updateSettings({ logoUrl: url });
-    return reply.redirect("/admin?success=" + encodeURIComponent("Logo 已上传"));
+    return reply.redirect("/admin/logo?success=" + encodeURIComponent("Logo 已上传"));
   });
 
   app.post("/admin/logo/delete", async (req, reply) => {
@@ -187,7 +228,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     }
     await updateSettings({ logoUrl: null });
-    return reply.redirect("/admin?success=" + encodeURIComponent("已删除 Logo"));
+    return reply.redirect("/admin/logo?success=" + encodeURIComponent("已删除 Logo"));
   });
 
   app.get("/admin/users", async (req, reply) => {

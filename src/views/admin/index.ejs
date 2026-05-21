@@ -1,9 +1,4 @@
-<nav class="text-sm text-slate-500 mb-4">
-  <a href="/app" class="hover:text-slate-700">日历</a>
-  <span class="px-2">/</span>
-  <span class="text-slate-900">管理后台</span>
-  <a href="/admin/users" class="ml-4 text-brand-600 hover:text-brand-700">用户管理 →</a>
-</nav>
+<%- include('_nav', { activeNav: '/admin' }) %>
 
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6">管理后台</h1>
 
@@ -22,162 +17,51 @@
   </div>
 </section>
 
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">平台 Logo</h2>
-  <div class="flex items-center gap-4 mb-4">
-    <% if (settings.logoUrl) { %>
-      <img src="<%= settings.logoUrl %>" alt="logo" class="h-16 w-16 rounded-xl object-cover border border-slate-200 bg-slate-50" />
-      <form method="post" action="/admin/logo/delete" class="m-0" onsubmit="return confirm('删除当前 Logo？');">
-        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除当前</button>
-      </form>
-    <% } else { %>
-      <div class="h-16 w-16 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700"></div>
-      <span class="text-sm text-slate-500">当前用默认渐变方块</span>
-    <% } %>
-  </div>
-  <form method="post" action="/admin/logo" enctype="multipart/form-data" class="space-y-3 max-w-md">
-    <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required
-           class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white file:hover:bg-brand-700" />
-    <p class="text-xs text-slate-500">支持 PNG / JPG / SVG / WEBP，最大 2MB。建议正方形 ≥ 256×256，svg 最佳。</p>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">上传</button>
-  </form>
-</section>
-
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">站点设置</h2>
-  <form method="post" action="/admin/settings" class="space-y-4 max-w-xl">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <div>
-      <label class="block text-sm font-medium text-slate-700">站点名</label>
-      <input type="text" name="siteName" required maxlength="200" value="<%= settings.siteName %>"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      <p class="mt-1 text-xs text-slate-500">显示在浏览器标题栏、导航栏和邮件里</p>
+<section class="grid sm:grid-cols-2 gap-3 sm:gap-4">
+  <a href="/admin/site" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
+    <div class="text-sm font-semibold text-slate-900">站点设置</div>
+    <div class="text-xs text-slate-500 mt-1">站点名、注册策略、ICP 备案</div>
+    <div class="mt-3 text-xs text-slate-600 truncate"><%= settings.siteName %> · <%= settings.registrationMode %></div>
+  </a>
+  <a href="/admin/logo" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
+    <div class="text-sm font-semibold text-slate-900">平台 Logo</div>
+    <div class="text-xs text-slate-500 mt-1">上传 / 删除自定义 logo</div>
+    <div class="mt-3 flex items-center gap-2">
+      <% if (settings.logoUrl) { %>
+        <img src="<%= settings.logoUrl %>" alt="logo" class="h-8 w-8 rounded-md object-cover border border-slate-200" />
+        <span class="text-xs text-emerald-700">已上传</span>
+      <% } else { %>
+        <div class="h-8 w-8 rounded-md bg-gradient-to-br from-brand-500 to-brand-700"></div>
+        <span class="text-xs text-slate-500">默认渐变</span>
+      <% } %>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-slate-700">注册策略</label>
-      <select name="registrationMode" required
-              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
-        <option value="public" <%= settings.registrationMode === "public" ? "selected" : "" %>>公开注册（任何人可注册）</option>
-        <option value="invite" <%= settings.registrationMode === "invite" ? "selected" : "" %>>仅邀请（需要管理员发邀请链接）</option>
-        <option value="closed" <%= settings.registrationMode === "closed" ? "selected" : "" %>>关闭（只剩管理员账号）</option>
-      </select>
+  </a>
+  <a href="/admin/smtp" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
+    <div class="text-sm font-semibold text-slate-900">SMTP 邮件</div>
+    <div class="text-xs text-slate-500 mt-1">注册验证码、登录提醒、邀请的发件配置</div>
+    <div class="mt-3 text-xs">
+      <% if (settings.smtpHost) { %>
+        <span class="text-emerald-700">✓ 已配置</span>
+        <span class="text-slate-500 ml-1">· <%= settings.smtpHost %></span>
+      <% } else { %>
+        <span class="text-amber-700">⚠ 未配置 — 邮件功能停用</span>
+      <% } %>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-slate-700">ICP 备案号（中国大陆部署填，否则留空）</label>
-      <input type="text" name="icpNumber" maxlength="100" value="<%= settings.icpNumber || '' %>"
-             placeholder="如：沪ICP备2021023412号-2"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      <p class="mt-1 text-xs text-slate-500">留空时 footer 不显示</p>
+  </a>
+  <a href="/admin/sso" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
+    <div class="text-sm font-semibold text-slate-900">SSO · OIDC</div>
+    <div class="text-xs text-slate-500 mt-1">Keycloak / Authelia / 任何 OIDC 兼容 IDP</div>
+    <div class="mt-3 text-xs">
+      <% if (settings.ssoKeycloakEnabled) { %>
+        <span class="text-emerald-700">✓ 已启用</span>
+      <% } else { %>
+        <span class="text-slate-400">已关闭</span>
+      <% } %>
     </div>
-    <div>
-      <label class="block text-sm font-medium text-slate-700">ICP 链接</label>
-      <input type="url" name="icpUrl" value="<%= settings.icpUrl %>"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    </div>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
-  </form>
-</section>
-
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-2">SMTP 邮件配置</h2>
-  <p class="text-sm text-slate-500 mb-4">注册验证码、登录提醒、日历邀请的邮件发件人 —— 请填入<strong>你自己的</strong> SMTP 服务器（如腾讯企业邮、阿里云邮、SendGrid、自建 postfix 等）。空 → 邮件功能停用。</p>
-  <form method="post" action="/admin/smtp" class="space-y-4 max-w-2xl">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      <div class="sm:col-span-2">
-        <label class="block text-sm font-medium text-slate-700">SMTP 主机</label>
-        <input type="text" name="host" maxlength="200" value="<%= settings.smtpHost || '' %>"
-               placeholder="smtp.example.com"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700">端口</label>
-        <input type="number" name="port" value="<%= settings.smtpPort %>" min="1" max="65535"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-    </div>
-    <label class="flex items-center gap-2">
-      <input type="checkbox" name="secure" <%= settings.smtpSecure ? "checked" : "" %>
-             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">使用 SSL/TLS（端口 465 通常勾选；587 通常不勾，靠 STARTTLS）</span>
-    </label>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="block text-sm font-medium text-slate-700">SMTP 用户名</label>
-        <input type="text" name="smtpUser" maxlength="200" value="<%= settings.smtpUser || '' %>"
-               autocomplete="off"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700">SMTP 密码 <span class="text-xs text-slate-400">(留空不修改)</span></label>
-        <input type="password" name="smtpPass" placeholder="•••••••" autocomplete="new-password" maxlength="400"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-    </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      <div>
-        <label class="block text-sm font-medium text-slate-700">发件人邮箱</label>
-        <input type="email" name="fromAddress" maxlength="254" value="<%= settings.mailFromAddress || '' %>"
-               placeholder="noreply@your-domain.com"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700">发件人显示名</label>
-        <input type="text" name="fromName" maxlength="100" value="<%= settings.mailFromName %>"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-    </div>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SMTP 配置</button>
-  </form>
-</section>
-
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-2">SSO · Keycloak / OIDC</h2>
-  <p class="text-sm text-slate-500 mb-4">支持任何 OpenID Connect 兼容的身份提供者（Keycloak、Authelia、Authentik、Auth0、阿里云 IDaaS 等）</p>
-  <form method="post" action="/admin/sso/keycloak" class="space-y-4 max-w-xl">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <label class="flex items-center gap-2">
-      <input type="checkbox" name="enabled" <%= settings.ssoKeycloakEnabled ? "checked" : "" %>
-             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">启用 SSO 登录按钮</span>
-    </label>
-    <div>
-      <label class="block text-sm font-medium text-slate-700">Issuer URL</label>
-      <input type="url" name="issuerUrl" value="<%= settings.ssoKeycloakIssuerUrl || '' %>"
-             placeholder="https://idp.example.com/realms/myrealm"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div>
-        <label class="block text-sm font-medium text-slate-700">Client ID</label>
-        <input type="text" name="clientId" value="<%= settings.ssoKeycloakClientId || '' %>" maxlength="200"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-slate-700">Client Secret <span class="text-xs text-slate-400">(留空不修改)</span></label>
-        <input type="password" name="clientSecret" placeholder="•••••••" autocomplete="new-password" maxlength="400"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-    </div>
-    <div>
-      <label class="block text-sm font-medium text-slate-700">登录按钮文字</label>
-      <input type="text" name="label" value="<%= settings.ssoKeycloakLabel %>" maxlength="100"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    </div>
-    <p class="text-xs text-slate-500">回调地址：<code class="bg-slate-100 rounded px-1.5 py-0.5">/auth/sso/callback</code>（设置时复制到 IDP 端）</p>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SSO 配置</button>
-  </form>
-  <p class="mt-4 text-xs text-slate-400">⚠️ SSO 登录路由还在开发中，配置保存后下个版本生效</p>
-</section>
-
-<section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-amber-900 mb-2">下一版即将上线</h2>
-  <ul class="text-sm text-amber-900 space-y-1 list-disc pl-5">
-    <li>平台 Logo 上传</li>
-    <li>日历邀请协作（邮件邀请他人加入日历）</li>
-    <li>CalDAV 双向同步（手机端事件回传）</li>
-    <li>i18n 中英文切换</li>
-    <li>PWA 应用安装</li>
-  </ul>
+  </a>
+  <a href="/admin/users" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition sm:col-span-2">
+    <div class="text-sm font-semibold text-slate-900">用户管理</div>
+    <div class="text-xs text-slate-500 mt-1">查看 / 设管理员</div>
+    <div class="mt-3 text-xs text-slate-600">共 <%= stats.users %> 个用户</div>
+  </a>
 </section>

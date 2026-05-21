@@ -1,0 +1,26 @@
+<nav class="mb-6">
+  <div class="text-sm text-slate-500 mb-3">
+    <a href="/app" class="hover:text-slate-700">日历</a>
+    <span class="px-2">/</span>
+    <span class="text-slate-900">管理后台</span>
+  </div>
+  <div class="-mx-4 sm:mx-0 overflow-x-auto">
+    <ul class="flex gap-1 px-4 sm:px-0 sm:flex-wrap border-b border-slate-200 min-w-max sm:min-w-0">
+      <% [
+        { href: '/admin',       label: '概览' },
+        { href: '/admin/site',  label: '站点' },
+        { href: '/admin/logo',  label: 'Logo' },
+        { href: '/admin/smtp',  label: '邮件 SMTP' },
+        { href: '/admin/sso',   label: 'SSO' },
+        { href: '/admin/users', label: '用户' },
+      ].forEach(function(item){ %>
+        <li>
+          <a href="<%= item.href %>"
+             class="inline-block px-3 sm:px-4 py-2 text-sm <%= activeNav === item.href ? 'text-brand-700 border-b-2 border-brand-600 font-medium' : 'text-slate-600 hover:text-slate-900' %>">
+            <%= item.label %>
+          </a>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+</nav>

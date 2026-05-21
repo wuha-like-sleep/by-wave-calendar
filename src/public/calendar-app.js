@@ -20,20 +20,54 @@
     if (m) m.addEventListener("click", (e) => { if (e.target === m) closeModal(id); });
   });
 
-  // ---------- Sidebar drawer (mobile) ----------
+  // ---------- Sidebar (mobile drawer + desktop collapse) ----------
   const sidebar = $("#cal-sidebar");
   const backdrop = $("#cal-sidebar-backdrop");
-  function openSidebar() {
-    sidebar.classList.remove("-translate-x-full");
+  const SIDEBAR_DESKTOP_KEY = "bwc.sidebar.desktop";
+  const MOBILE_OPEN = ["flex", "fixed", "inset-y-0", "left-0", "z-50", "w-72"];
+  const HIDDEN = ["hidden"];
+
+  function isMobile() { return window.matchMedia("(max-width: 767px)").matches; }
+
+  function showOnMobile() {
+    MOBILE_OPEN.forEach(c => sidebar.classList.add(c));
+    HIDDEN.forEach(c => sidebar.classList.remove(c));
     backdrop.classList.remove("hidden");
   }
-  function closeSidebar() {
-    sidebar.classList.add("-translate-x-full");
+  function hideOnMobile() {
+    MOBILE_OPEN.forEach(c => sidebar.classList.remove(c));
+    sidebar.classList.add("hidden");
     backdrop.classList.add("hidden");
   }
-  $("#btn-toggle-sidebar").addEventListener("click", openSidebar);
-  $("#btn-close-sidebar")?.addEventListener("click", closeSidebar);
-  backdrop.addEventListener("click", closeSidebar);
+  function showOnDesktop() {
+    sidebar.classList.remove("hidden");
+    sidebar.classList.add("md:flex");
+    localStorage.setItem(SIDEBAR_DESKTOP_KEY, "1");
+    requestAnimationFrame(() => { try { cal.render(); } catch (e) {} });
+  }
+  function hideOnDesktop() {
+    sidebar.classList.remove("md:flex");
+    sidebar.classList.add("hidden");
+    localStorage.setItem(SIDEBAR_DESKTOP_KEY, "0");
+    requestAnimationFrame(() => { try { cal.render(); } catch (e) {} });
+  }
+  function toggleSidebar() {
+    if (isMobile()) {
+      if (sidebar.classList.contains("hidden")) showOnMobile(); else hideOnMobile();
+    } else {
+      if (sidebar.classList.contains("hidden")) showOnDesktop(); else hideOnDesktop();
+    }
+  }
+
+  // Restore desktop preference
+  if (!isMobile() && localStorage.getItem(SIDEBAR_DESKTOP_KEY) === "0") {
+    sidebar.classList.add("hidden");
+    sidebar.classList.remove("md:flex");
+  }
+
+  $("#btn-toggle-sidebar").addEventListener("click", toggleSidebar);
+  $("#btn-close-sidebar")?.addEventListener("click", hideOnMobile);
+  backdrop.addEventListener("click", hideOnMobile);
 
   // ---------- Toast UI Calendar setup ----------
   const tuiCalendars = ctx.calendars.map((c) => ({

@@ -1,0 +1,37 @@
+<%- include('_nav', { activeNav: '/admin/site' }) %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6">站点设置</h1>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <form method="post" action="/admin/settings" class="space-y-4 max-w-xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div>
+      <label class="block text-sm font-medium text-slate-700">站点名</label>
+      <input type="text" name="siteName" required maxlength="200" value="<%= settings.siteName %>"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <p class="mt-1 text-xs text-slate-500">显示在浏览器标题栏、导航栏和邮件里</p>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">注册策略</label>
+      <select name="registrationMode" required
+              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+        <option value="public" <%= settings.registrationMode === "public" ? "selected" : "" %>>公开注册（任何人可注册）</option>
+        <option value="invite" <%= settings.registrationMode === "invite" ? "selected" : "" %>>仅邀请（需要管理员发邀请链接）</option>
+        <option value="closed" <%= settings.registrationMode === "closed" ? "selected" : "" %>>关闭（只剩管理员账号）</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">ICP 备案号（中国大陆部署填，否则留空）</label>
+      <input type="text" name="icpNumber" maxlength="100" value="<%= settings.icpNumber || '' %>"
+             placeholder="如：沪ICP备2021023412号-2"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <p class="mt-1 text-xs text-slate-500">留空时 footer 不显示</p>
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">ICP 链接</label>
+      <input type="url" name="icpUrl" value="<%= settings.icpUrl %>"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+  </form>
+</section>
