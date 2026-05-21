@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 import { newEventUid, newInvitationToken } from "../lib/ids.js";
 import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
+import { cancelEvent } from "../lib/event_cancel.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -87,6 +88,7 @@ export async function eventRoutes(app: FastifyInstance) {
           inArray(schema.events.calendarId, allowed),
           lte(schema.events.startsAt, toDate),
           gte(schema.events.endsAt, fromDate),
+          isNull(schema.events.deletedAt),
         ),
       )
       .orderBy(asc(schema.events.startsAt));
@@ -103,7 +105,7 @@ export async function eventRoutes(app: FastifyInstance) {
     const rows = await db
       .select()
       .from(schema.events)
-      .where(eq(schema.events.calendarId, id))
+      .where(and(eq(schema.events.calendarId, id), isNull(schema.events.deletedAt)))
       .orderBy(asc(schema.events.startsAt));
     return reply.send(rows);
   });
@@ -234,7 +236,9 @@ export async function eventRoutes(app: FastifyInstance) {
     if (!target) {
       return reply.code(204).send();
     }
-    await db.delete(schema.events).where(eq(schema.events.id, parsed.data.id));
+    // Soft-delete the event and fire CANCEL emails to anyone we ever invited.
+    // The row stays so /event-invite/:token can render a "已取消" notice.
+    await cancelEvent(parsed.data.id, { id: user.id, email: user.email, displayName: user.displayName });
     return reply.code(204).send();
   });
 }
@@ -253,7 +257,7 @@ async function loadOwnedEvent(eventId: string, userId: string) {
     .select({ event: schema.events })
     .from(schema.events)
     .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
-    .where(and(eq(schema.events.id, eventId), eq(schema.calendars.ownerId, userId)))
+    .where(and(eq(schema.events.id, eventId), eq(schema.calendars.ownerId, userId), isNull(schema.events.deletedAt)))
     .limit(1);
   return rows[0]?.event ?? null;
 }

@@ -228,6 +228,10 @@ export const events = pgTable("events", {
   rrule: text("rrule"),
   extra: jsonb("extra"),
   rawIcs: text("raw_ics"),
+  // Soft-delete column. Set instead of removing the row so invitation tokens
+  // can still resolve the event and render a "已取消" notice to recipients,
+  // and so we can fire CANCEL .ics emails after the user removes the event.
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

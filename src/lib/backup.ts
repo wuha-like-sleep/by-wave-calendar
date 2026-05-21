@@ -41,7 +41,12 @@ export async function exportData(): Promise<BackupBundle> {
   for (const t of EXPORT_TABLES) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rows = await db.select().from(t.table as any);
-    tables[t.name] = rows;
+    // Drop soft-deleted events from backup; we treat them as already gone.
+    if (t.name === "events") {
+      tables[t.name] = (rows as { deletedAt?: Date | null }[]).filter((r) => !r.deletedAt);
+    } else {
+      tables[t.name] = rows;
+    }
   }
   return {
     bundleVersion: BACKUP_VERSION,

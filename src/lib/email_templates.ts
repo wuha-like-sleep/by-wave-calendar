@@ -256,6 +256,50 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
   };
 }
 
+// ---------- Event cancellation (organizer deleted) ----------
+export function eventCancelMail(to: string, ctx: {
+  organizerEmail: string;
+  organizerName: string;
+  summary: string;
+  startsAt: Date;
+  endsAt: Date;
+  allDay: boolean;
+  icsBody: string; // VCALENDAR with METHOD:CANCEL
+}): SendArgs {
+  const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: ctx.allDay ? undefined : "2-digit", minute: ctx.allDay ? undefined : "2-digit", hour12: false,
+  }).format(d);
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const text = `${ctx.organizerName} 取消了活动：${ctx.summary}\n原定时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}\n\n附件 .ics 是取消通知（METHOD:CANCEL），客户端会自动从你的日历移除这场活动。`;
+  const html = baseLayout({
+    title: `已取消：${ctx.summary}`,
+    preheader: `${ctx.organizerName} 取消了 ${ctx.summary}`,
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">❌ 活动已取消</h1>
+      <p style="margin:0 0 6px;color:#0f172a;font-size:16px;font-weight:600;text-decoration:line-through;text-decoration-color:#cbd5e1;">${escape(ctx.summary)}</p>
+      <p style="margin:0 0 14px;color:#475569;font-size:14px;">
+        <strong>${escape(ctx.organizerName)}</strong> 取消了这场活动。
+      </p>
+      <div style="margin:14px 0;padding:12px 14px;background:#fff1f2;border:1px solid #fecaca;border-radius:10px;color:#9f1239;font-size:13px;line-height:1.6;">
+        原定时间：${escape(fmt(ctx.startsAt))} — ${escape(fmt(ctx.endsAt))}
+      </div>
+      <p style="margin:14px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
+        附件 <strong>invite.ics</strong> 是 METHOD:CANCEL 的标准取消通知 —— Apple / Google /
+        Outlook 日历看到这条会自动把对应事件从你的日历里移除（如果你之前接受过）。
+      </p>
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;">
+        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
+      </p>`,
+  });
+  return {
+    to, subject: `【已取消】${ctx.summary}`,
+    html, text,
+    icalEvent: { method: "CANCEL", content: ctx.icsBody },
+    attachments: [{ filename: "invite.ics", content: ctx.icsBody, contentType: "text/calendar; charset=utf-8; method=CANCEL" }],
+  };
+}
+
 // ---------- Calendar invitation ----------
 export function calendarInviteMail(
   to: string,

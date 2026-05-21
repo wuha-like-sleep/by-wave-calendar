@@ -1,12 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
+import { cancelEvent } from "../lib/event_cancel.js";
 
 // ---------- XML helpers ----------
 
@@ -151,7 +152,7 @@ async function loadCalendarOwned(userId: string, calId: string) {
 }
 
 async function loadAllEventsOf(calId: string) {
-  return db.select().from(schema.events).where(eq(schema.events.calendarId, calId)).orderBy(asc(schema.events.startsAt));
+  return db.select().from(schema.events).where(and(eq(schema.events.calendarId, calId), isNull(schema.events.deletedAt))).orderBy(asc(schema.events.startsAt));
 }
 
 function rowToIcal(row: schema.Event): IcalEvent {
@@ -465,6 +466,10 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         endsAt: parsed.endsAt,
         allDay: parsed.allDay,
         rrule: parsed.rrule ?? null,
+        // Un-soft-delete on resurrect (iOS PUTting an event whose UID matches
+        // a previously soft-deleted row should bring it back rather than
+        // tripping the UNIQUE (calendar_id, uid) constraint on insert).
+        deletedAt: null,
         extra: Object.keys(extraPatch).length ? extraPatch : null,
         rawIcs: rawVevent,
         updatedAt: new Date(),
@@ -581,7 +586,10 @@ async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
     return reply.code(412).send("Precondition Failed");
   }
 
-  await db.delete(schema.events).where(eq(schema.events.id, event.id));
+  // Already soft-deleted? Idempotent 204, don't re-fire emails.
+  if (event.deletedAt) return reply.code(204).send();
+  // Soft-delete + send CANCEL emails to anyone we ever invited.
+  await cancelEvent(event.id, { id: user.id, email: user.email, displayName: user.displayName });
   return reply.code(204).send();
 }
 

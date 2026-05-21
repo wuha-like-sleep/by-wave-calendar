@@ -16,6 +16,7 @@ import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
 import { invitationIcs } from "../lib/ical.js";
+import { cancelEvent } from "../lib/event_cancel.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -608,7 +609,7 @@ export async function webRoutes(app: FastifyInstance) {
     const eventRows = await db
       .select()
       .from(schema.events)
-      .where(eq(schema.events.calendarId, calendar.id))
+      .where(and(eq(schema.events.calendarId, calendar.id), isNull(schema.events.deletedAt)))
       .orderBy(asc(schema.events.startsAt));
 
     const tokenRows = await db
@@ -875,6 +876,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (!ev) return reply.redirect("/app");
     const event = ev.events;
     const calendar = ev.calendars;
+    if (event.deletedAt) {
+      // Allow viewing the audit trail; just slap a "cancelled" badge on top.
+    }
     const extra = (event.extra as { attendees?: string[]; url?: string } | null) ?? {};
     const attendees = Array.isArray(extra.attendees) ? extra.attendees : [];
     const tokens = await db
@@ -1026,8 +1030,11 @@ export async function webRoutes(app: FastifyInstance) {
       .limit(1);
     const target = rows[0];
     if (!target) return reply.redirect("/app");
-    await db.delete(schema.events).where(eq(schema.events.id, target.id));
-    return redirectWith(reply, `/app/calendars/${target.calendarId}`, { success: "事件已删除" });
+    const result = await cancelEvent(target.id, { id: user.id, email: user.email, displayName: user.displayName });
+    const msg = result.cancelledNotices > 0
+      ? `事件已取消，已给 ${result.cancelledNotices} 位参与者发送取消通知`
+      : "事件已删除";
+    return redirectWith(reply, `/app/calendars/${target.calendarId}`, { success: msg });
   });
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/share-tokens", async (req, reply) => {
@@ -1164,6 +1171,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!tok || tok.expiresAt < new Date()) return reply.code(410).type("text/plain").send("Invitation expired");
     const [event] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
     if (!event) return reply.code(404).type("text/plain").send("Event not found");
+    if (event.deletedAt) return reply.code(410).type("text/plain").send("Event was cancelled by the organizer");
     const [organizer] = await db.select().from(schema.users).where(eq(schema.users.id, await ownerOfCalendar(event.calendarId))).limit(1);
     const ics = invitationIcs({
       event: {
@@ -1187,6 +1195,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (!body.success) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=bad-status`);
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
     if (!tok || tok.expiresAt < new Date()) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=expired`);
+    // Block RSVP when event is cancelled — the response would be meaningless.
+    const [ev] = await db.select({ deletedAt: schema.events.deletedAt }).from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (ev?.deletedAt) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=event-cancelled`);
     await db
       .update(schema.eventInviteTokens)
       .set({ responseStatus: body.data.status, respondedAt: new Date() })
@@ -1239,6 +1250,8 @@ export async function webRoutes(app: FastifyInstance) {
         ...sourceEvent,
         startsAtLocal: localTime(sourceEvent.startsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
         endsAtLocal: localTime(sourceEvent.endsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
+        // The view checks this to render the "已取消" notice + hide RSVP/add-to-calendar.
+        deletedAt: sourceEvent.deletedAt,
       },
       calendars: myCals,
       alreadyAccepted: !!tok.acceptedAt,

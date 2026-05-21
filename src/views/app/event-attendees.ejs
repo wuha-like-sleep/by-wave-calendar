@@ -6,10 +6,17 @@
   <span class="text-slate-900">参与者 · <%= event.summary %></span>
 </nav>
 
-<header class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+<% if (event.deletedAt) { %>
+  <div class="rounded-lg border-2 border-red-200 bg-red-50 p-4 mb-4">
+    <div class="text-sm font-semibold text-red-900">❌ 此事件已取消</div>
+    <div class="text-xs text-red-700 mt-1">已经向所有参与者发送了 METHOD:CANCEL 邮件，他们的日历客户端会自动移除这场活动。下方仅展示历史邀请记录。</div>
+  </div>
+<% } %>
+
+<header class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 <%= event.deletedAt ? 'opacity-70' : '' %>">
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <div class="min-w-0">
-      <h1 class="text-xl sm:text-2xl font-semibold text-slate-900 truncate"><%= event.summary %></h1>
+      <h1 class="text-xl sm:text-2xl font-semibold text-slate-900 truncate <%= event.deletedAt ? 'line-through' : '' %>"><%= event.summary %></h1>
       <div class="mt-1 text-sm text-slate-500">
         <%- event.startsAtLocal %> → <%- event.endsAtLocal %>
       </div>

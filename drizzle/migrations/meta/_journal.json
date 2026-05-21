@@ -141,6 +141,13 @@
       "when": 1779374049180,
       "tag": "0019_event_invite_rsvp",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779375228257,
+      "tag": "0020_event_soft_delete",
+      "breakpoints": true
     }
   ]
 }
