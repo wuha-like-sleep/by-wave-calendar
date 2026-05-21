@@ -1,0 +1,133 @@
+<nav class="mb-4 text-sm text-slate-500">
+  <a href="/app" class="hover:text-slate-700">我的日历</a>
+  <span class="px-2">/</span>
+  <span class="text-slate-900"><%= calendar.name %></span>
+</nav>
+
+<header class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+    <div class="flex items-start gap-3 min-w-0">
+      <span class="inline-block h-10 w-10 rounded-lg flex-shrink-0" style="background:<%= calendar.color %>"></span>
+      <div class="min-w-0">
+        <h1 class="text-xl sm:text-2xl font-semibold text-slate-900 truncate"><%= calendar.name %></h1>
+        <% if (calendar.description) { %>
+          <p class="mt-1 text-sm text-slate-500"><%= calendar.description %></p>
+        <% } %>
+        <p class="mt-1 text-xs text-slate-400">时区 <%= calendar.timezone %></p>
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <form method="post" action="/app/calendars/<%= calendar.id %>/delete" onsubmit="return confirm('确定删除整个日历？此操作不可恢复');" class="m-0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">删除日历</button>
+      </form>
+    </div>
+  </div>
+</header>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">订阅链接</h2>
+  <p class="text-sm text-slate-500 mb-4">生成后把链接粘贴到 Google / Apple / Outlook 日历的「添加订阅日历」即可。</p>
+
+  <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens" class="flex flex-col sm:flex-row gap-2 mb-4">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="text" name="label" maxlength="100" placeholder="备注（如：给家人）"
+           class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">生成订阅链接</button>
+  </form>
+
+  <% if (shareTokens.length === 0) { %>
+    <p class="text-sm text-slate-400 text-center py-4">还没有订阅链接</p>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      <% shareTokens.forEach(function(t){ %>
+        <li class="py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-slate-700"><%= t.label || '未命名' %></div>
+            <div class="mt-1 flex items-center gap-2">
+              <code class="text-xs text-slate-500 truncate flex-1 bg-slate-50 px-2 py-1 rounded"><%= t.url %></code>
+            </div>
+          </div>
+          <div class="flex gap-2 flex-shrink-0">
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                    onclick="window.bwc.copy('<%= t.url %>')">复制</button>
+            <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens/<%= t.token %>/revoke" class="m-0" onsubmit="return confirm('确定撤销该订阅链接？已订阅的客户端会失效');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">撤销</button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold text-slate-900">事件</h2>
+    <button type="button" onclick="document.getElementById('new-event-form').classList.toggle('hidden')"
+            class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      新建事件
+    </button>
+  </div>
+
+  <form id="new-event-form" method="post" action="/app/calendars/<%= calendar.id %>/events" class="hidden mb-4 grid sm:grid-cols-2 gap-3 rounded-lg bg-slate-50 p-4">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div class="sm:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">标题</label>
+      <input type="text" name="summary" required maxlength="500"
+             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">开始时间</label>
+      <input type="datetime-local" name="startsAt" required
+             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">结束时间</label>
+      <input type="datetime-local" name="endsAt" required
+             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div class="sm:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">地点（可选）</label>
+      <input type="text" name="location" maxlength="500"
+             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div class="sm:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">描述（可选）</label>
+      <textarea name="description" maxlength="5000" rows="2"
+                class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+    </div>
+    <div class="sm:col-span-2 flex justify-end gap-2">
+      <button type="button" onclick="document.getElementById('new-event-form').classList.add('hidden')"
+              class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">添加</button>
+    </div>
+  </form>
+
+  <% if (events.length === 0) { %>
+    <p class="text-sm text-slate-400 text-center py-8">还没有事件</p>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100">
+      <% events.forEach(function(ev){ %>
+        <li class="py-3 flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-slate-900"><%= ev.summary %></div>
+            <div class="mt-0.5 text-xs text-slate-500">
+              <%= ev.startsAtLocal %> → <%= ev.endsAtLocal %>
+              <% if (ev.location) { %> · <%= ev.location %><% } %>
+            </div>
+            <% if (ev.description) { %>
+              <p class="mt-1 text-xs text-slate-500 whitespace-pre-wrap"><%= ev.description %></p>
+            <% } %>
+          </div>
+          <form method="post" action="/app/events/<%= ev.id %>/delete" class="m-0 flex-shrink-0" onsubmit="return confirm('删除该事件？');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">删除</button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>

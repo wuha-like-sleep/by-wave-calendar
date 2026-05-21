@@ -1,0 +1,42 @@
+<section class="text-center py-10 sm:py-16">
+  <span class="inline-flex items-center rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
+    Phase 1 · ICS 订阅已就绪
+  </span>
+  <h1 class="mt-6 text-3xl sm:text-5xl font-bold tracking-tight text-slate-900">
+    把日程<span class="text-brand-600">分享</span>给任何人
+  </h1>
+  <p class="mt-4 max-w-2xl mx-auto text-base sm:text-lg text-slate-600">
+    创建日历、添加事件、生成一条订阅链接 ——
+    在 Apple Calendar、Google Calendar、Outlook 直接订阅。
+  </p>
+  <div class="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+    <% if (registrationOpen) { %>
+      <a href="/register" class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">立即开始</a>
+    <% } %>
+    <a href="/login" class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">已有账号登录</a>
+  </div>
+</section>
+
+<section class="grid gap-4 sm:grid-cols-3 mt-8">
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="h-10 w-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+    </div>
+    <h3 class="font-semibold text-slate-900">多日历组织</h3>
+    <p class="mt-1 text-sm text-slate-600">工作 / 家庭 / 兴趣分开放，颜色区分</p>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="h-10 w-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
+    </div>
+    <h3 class="font-semibold text-slate-900">一链多端订阅</h3>
+    <p class="mt-1 text-sm text-slate-600">标准 iCalendar 格式，所有日历客户端兼容</p>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-5">
+    <div class="h-10 w-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center mb-3">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+    </div>
+    <h3 class="font-semibold text-slate-900">权限可控</h3>
+    <p class="mt-1 text-sm text-slate-600">分享链接随时撤销，可生成多份独立 token</p>
+  </div>
+</section>

@@ -1,0 +1,40 @@
+<nav class="mb-4 text-sm text-slate-500">
+  <a href="/app/settings" class="hover:text-slate-700">设置</a>
+  <span class="px-2">/</span>
+  <span class="text-slate-900">设置二次验证</span>
+</nav>
+
+<div class="mx-auto max-w-2xl">
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+    <h1 class="text-2xl font-semibold text-slate-900">启用 TOTP 二次验证</h1>
+    <p class="mt-2 text-sm text-slate-500">
+      用 <strong>Google Authenticator</strong>、<strong>1Password</strong>、<strong>Authy</strong>
+      或任何 TOTP 兼容应用扫描下方二维码，然后输入显示的 6 位数字。
+    </p>
+
+    <div class="mt-6 grid sm:grid-cols-2 gap-6 items-start">
+      <div>
+        <div class="rounded-xl border border-slate-200 bg-white p-4 inline-block">
+          <img src="<%= qr %>" alt="TOTP QR Code" width="240" height="240" class="block" />
+        </div>
+        <details class="mt-3 text-sm text-slate-500">
+          <summary class="cursor-pointer hover:text-slate-700">无法扫描？手动输入密钥</summary>
+          <code class="mt-2 block bg-slate-50 rounded px-3 py-2 text-xs break-all"><%= secret %></code>
+        </details>
+      </div>
+
+      <form method="post" action="/app/settings/mfa/enable" class="space-y-4">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="secret" value="<%= secret %>" />
+        <div>
+          <label class="block text-sm font-medium text-slate-700">应用显示的验证码</label>
+          <input type="text" name="code" required autocomplete="one-time-code" inputmode="numeric"
+                 pattern="[0-9]{6}" maxlength="6" autofocus placeholder="000000"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-lg font-mono tracking-widest shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+        <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">确认启用</button>
+        <a href="/app/settings" class="block text-center text-sm text-slate-500 hover:text-slate-700">取消</a>
+      </form>
+    </div>
+  </div>
+</div>

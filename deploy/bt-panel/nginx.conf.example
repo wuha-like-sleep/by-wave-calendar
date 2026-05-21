@@ -1,0 +1,26 @@
+# 宝塔面板里 "网站 → 设置 → 配置文件"，把 location / 段替换为下面这块即可。
+# 也可以走 "反向代理" 功能并把目标地址填 http://127.0.0.1:3000
+
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade           $http_upgrade;
+    proxy_set_header Connection        "upgrade";
+
+    proxy_read_timeout  90s;
+    proxy_send_timeout  90s;
+    proxy_buffering     off;
+}
+
+# 给 ICS 订阅设置一个友好的 CORS / 缓存头（可选）
+location ~ ^/ics/ {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header Access-Control-Allow-Origin * always;
+}

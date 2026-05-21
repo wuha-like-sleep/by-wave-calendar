@@ -1,0 +1,54 @@
+<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900">我的日历</h1>
+    <p class="mt-1 text-sm text-slate-500">共 <%= calendars.length %> 个日历</p>
+  </div>
+  <button type="button"
+          onclick="document.getElementById('new-cal-form').classList.toggle('hidden')"
+          class="inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+    新建日历
+  </button>
+</div>
+
+<div id="new-cal-form" class="hidden mb-6 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+  <form method="post" action="/app/calendars" class="grid sm:grid-cols-4 gap-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="text" name="name" required maxlength="200" placeholder="日历名称（如：工作）"
+           class="sm:col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <input type="text" name="timezone" maxlength="100" value="Asia/Shanghai"
+           class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <input type="color" name="color" value="#6366f1" class="rounded-lg border border-slate-300 h-9 w-full" />
+    <textarea name="description" maxlength="2000" rows="2" placeholder="描述（可选）"
+              class="sm:col-span-3 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">创建</button>
+  </form>
+</div>
+
+<% if (calendars.length === 0) { %>
+  <div class="rounded-xl border-2 border-dashed border-slate-200 bg-white p-10 text-center">
+    <p class="text-slate-500">还没有日历，点击右上角「新建日历」开始</p>
+  </div>
+<% } else { %>
+  <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <% calendars.forEach(function(cal){ %>
+      <a href="/app/calendars/<%= cal.id %>" class="group rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="inline-block h-3 w-3 rounded-full flex-shrink-0" style="background:<%= cal.color %>"></span>
+            <h3 class="font-semibold text-slate-900 truncate"><%= cal.name %></h3>
+          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-slate-400 group-hover:text-brand-600 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <% if (cal.description) { %>
+          <p class="mt-2 text-sm text-slate-500 line-clamp-2"><%= cal.description %></p>
+        <% } %>
+        <div class="mt-3 flex items-center gap-3 text-xs text-slate-400">
+          <span><%= cal.timezone %></span>
+          <span>·</span>
+          <span><%= cal.eventCount %> 个事件</span>
+        </div>
+      </a>
+    <% }) %>
+  </div>
+<% } %>

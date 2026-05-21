@@ -1,0 +1,58 @@
+{
+  "name": "by-wave-calendar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate:prod": "node dist/scripts/migrate.js",
+    "db:studio": "drizzle-kit studio",
+    "create-admin": "tsx scripts/create-admin.ts",
+    "create-admin:prod": "node dist/scripts/create-admin.js",
+    "release": "bash scripts/release.sh",
+    "clean:icloud": "find . -name '* 2*' -not -path '*/node_modules/.cache/*' -print -delete 2>/dev/null; find . -name '.DS_Store' -delete 2>/dev/null; echo done",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.1",
+    "@fastify/cors": "^10.0.1",
+    "@fastify/csrf-protection": "^7.1.0",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/static": "^9.1.3",
+    "@fastify/view": "^11.1.1",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "drizzle-orm": "^0.36.4",
+    "ejs": "^5.0.2",
+    "fastify": "^5.1.0",
+    "ical-generator": "^7.2.0",
+    "nanoid": "^5.0.9",
+    "otplib": "^13.4.0",
+    "pino-pretty": "^11.3.0",
+    "postgres": "^3.4.5",
+    "qrcode": "^1.5.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/ejs": "^3.1.5",
+    "@types/node": "^22.10.1",
+    "@types/qrcode": "^1.5.6",
+    "drizzle-kit": "^0.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

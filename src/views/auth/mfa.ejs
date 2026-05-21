@@ -1,0 +1,24 @@
+<div class="mx-auto max-w-md">
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+    <h1 class="text-2xl font-semibold text-slate-900">二次验证</h1>
+    <p class="mt-1 text-sm text-slate-500">请打开你的认证器（Google Authenticator / 1Password 等）输入 6 位验证码。</p>
+
+    <form method="post" action="/login/mfa" class="mt-6 space-y-4">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div>
+        <label class="block text-sm font-medium text-slate-700">验证码</label>
+        <input type="text" name="code" required autocomplete="one-time-code" inputmode="numeric"
+               pattern="[0-9A-Za-z\-]{6,20}" maxlength="20" autofocus
+               placeholder="123 456"
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-lg font-mono tracking-widest shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <p class="mt-1 text-xs text-slate-500">或使用备用码（如 ABCDE-12345）</p>
+      </div>
+      <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">验证</button>
+    </form>
+
+    <form method="post" action="/logout" class="mt-6 text-center">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <button type="submit" class="text-sm text-slate-500 hover:text-slate-700">取消并登出</button>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,31 @@
+<div class="mx-auto max-w-2xl">
+  <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 sm:p-8">
+    <div class="flex items-start gap-3">
+      <div class="h-10 w-10 rounded-full bg-emerald-500 text-white flex items-center justify-center flex-shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L20 7"/></svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-semibold text-emerald-900">MFA 已启用</h1>
+        <p class="mt-1 text-sm text-emerald-800">把下面这 10 个备用码保存到密码管理器或离线写下来 —— 丢手机时它们是你登录的唯一办法。每个备用码只能用一次。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-6 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
+    <h2 class="text-lg font-semibold text-slate-900">备用码</h2>
+    <div class="mt-4 grid grid-cols-2 gap-2 font-mono text-sm">
+      <% backupCodes.forEach(function(code){ %>
+        <div class="bg-slate-50 rounded px-3 py-2 select-all"><%= code %></div>
+      <% }) %>
+    </div>
+    <div class="mt-4 flex flex-col sm:flex-row gap-2">
+      <button type="button" onclick="window.bwc.copy('<%= backupCodes.join("\\n") %>')"
+              class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+        复制全部
+      </button>
+      <a href="/app/settings" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white text-center hover:bg-brand-700">
+        我已保存，返回设置
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,149 @@
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6">账号设置</h1>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">资料</h2>
+  <dl class="space-y-3 text-sm">
+    <div class="flex justify-between"><dt class="text-slate-500">邮箱</dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500">昵称</dt><dd class="font-medium text-slate-900"><%= user.displayName || '—' %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500">角色</dt><dd class="font-medium text-slate-900"><%= user.isAdmin ? '管理员' : '普通用户' %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900"><%= createdAtLocal %></dd></div>
+  </dl>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">Passkey</h2>
+      <p class="text-sm text-slate-500">用指纹 / Face ID / 硬件密钥免密码登录，比密码 + MFA 更安全更快</p>
+    </div>
+    <button type="button" id="add-passkey"
+            class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      添加 Passkey
+    </button>
+  </div>
+
+  <% if (passkeys.length === 0) { %>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没有 Passkey</div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      <% passkeys.forEach(function(pk){ %>
+        <li class="py-3 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-slate-900"><%= pk.deviceName || 'Passkey' %></div>
+            <div class="text-xs text-slate-500">
+              添加于 <%= pk.createdAtLocal %>
+              <% if (pk.lastUsedAtLocal) { %> · 最近使用 <%= pk.lastUsedAtLocal %><% } %>
+            </div>
+          </div>
+          <button type="button" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"
+                  data-delete-passkey="<%= pk.id %>">删除</button>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-2">二次验证 (TOTP)</h2>
+  <% if (user.mfaEnabled) { %>
+    <p class="text-sm text-emerald-700 mb-4">✓ 二次验证已启用 —— 登录时需要输入认证器中的 6 位验证码</p>
+    <details class="mb-4">
+      <summary class="cursor-pointer text-sm text-slate-700 hover:text-slate-900">重新生成备用码</summary>
+      <form method="post" action="/app/settings/mfa/regenerate-codes" class="mt-3" onsubmit="return confirm('生成新备用码会让旧的失效，确定？');">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">生成新备用码</button>
+      </form>
+    </details>
+    <details>
+      <summary class="cursor-pointer text-sm text-red-700 hover:text-red-900">关闭二次验证</summary>
+      <form method="post" action="/app/settings/mfa/disable" class="mt-3 flex gap-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" placeholder="输入当前 6 位验证码"
+               inputmode="numeric"
+               class="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">关闭 MFA</button>
+      </form>
+    </details>
+  <% } else { %>
+    <p class="text-sm text-slate-500 mb-4">没启用 —— 启用后登录需要密码 + 认证器 6 位码（除非用 Passkey）</p>
+    <a href="/app/settings/mfa/setup" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">启用 TOTP</a>
+  <% } %>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">修改密码</h2>
+  <p class="text-xs text-slate-500 mb-3">修改后所有设备的登录会话都会失效，需要重新登录</p>
+  <form method="post" action="/app/settings/password" class="space-y-3 max-w-md">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div>
+      <label class="block text-sm font-medium text-slate-700">当前密码</label>
+      <input type="password" name="currentPassword" required autocomplete="current-password"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <div>
+      <label class="block text-sm font-medium text-slate-700">新密码</label>
+      <input type="password" name="newPassword" required minlength="8" autocomplete="new-password"
+             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">更新密码</button>
+  </form>
+</section>
+
+<% if (user.isAdmin) { %>
+  <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6">
+    <h2 class="text-lg font-semibold text-amber-900 mb-2">管理员区</h2>
+    <p class="text-sm text-amber-800">当前注册：<%= registrationOpen ? '开放中' : '已关闭' %>。要切换请修改服务器 <code>.env</code> 里的 <code>REGISTRATION_OPEN</code> 并重启服务。</p>
+  </section>
+<% } %>
+
+<script src="https://unpkg.com/@simplewebauthn/browser@13/dist/bundle/index.umd.min.js"></script>
+<script>
+(function(){
+  const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+  document.getElementById("add-passkey")?.addEventListener("click", async () => {
+    try {
+      const name = prompt("给这把 Passkey 起个名字（比如 Mac TouchID / iPhone）", "");
+      const opts = await (await fetch("/webauthn/register/options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        credentials: "same-origin",
+        body: JSON.stringify({})
+      })).json();
+      if (opts.error) throw new Error(opts.error);
+      const att = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+      const verify = await (await fetch("/webauthn/register/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        credentials: "same-origin",
+        body: JSON.stringify({ response: att, deviceName: name || undefined })
+      })).json();
+      if (!verify.ok) throw new Error(verify.error || "verify_failed");
+      window.bwc.toast("Passkey 添加成功", "success");
+      setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+      console.error(err);
+      window.bwc.toast("添加失败：" + (err.message || err), "error");
+    }
+  });
+
+  document.querySelectorAll("[data-delete-passkey]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("确定删除这把 Passkey？")) return;
+      const id = btn.getAttribute("data-delete-passkey");
+      const resp = await fetch("/webauthn/credentials/" + id + "/delete", {
+        method: "POST",
+        headers: { "X-CSRF-Token": csrf },
+        credentials: "same-origin"
+      });
+      if (resp.ok) {
+        window.bwc.toast("已删除", "success");
+        setTimeout(() => window.location.reload(), 400);
+      } else {
+        window.bwc.toast("删除失败", "error");
+      }
+    });
+  });
+})();
+</script>

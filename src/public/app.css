@@ -1,0 +1,23 @@
+/* Custom styles on top of Tailwind. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+
+/* HTMX swap fade */
+.htmx-swapping { opacity: 0; transition: opacity 150ms ease-out; }
+.htmx-settling { opacity: 1; transition: opacity 200ms ease-in; }
+
+/* line clamp fallback */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Toast animation */
+@keyframes bwc-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bwc-toast { animation: bwc-toast-in 200ms ease-out; pointer-events: auto; }
