@@ -88,8 +88,8 @@
     week: {
       taskView: false,
       eventView: ["time", "allday"],
-      hourStart: 7,
-      hourEnd: 23,
+      hourStart: 0,
+      hourEnd: 24,
       startDayOfWeek: 1,
       dayNames: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
       showNowIndicator: true,
@@ -107,6 +107,24 @@
   });
 
   let currentView = "week";
+
+  // Scroll the time grid so "now" is roughly in the middle on first load
+  // (24-hour view means a lot of empty hours otherwise). Toast UI doesn't
+  // expose a scrollToNow() API — we set the scrollTop of the time-grid pane
+  // directly. Defer to next tick so the grid is in the DOM.
+  function scrollGridToNow() {
+    setTimeout(() => {
+      const pane = document.querySelector(".toastui-calendar-time .toastui-calendar-columns")
+                || document.querySelector(".toastui-calendar-time")
+                || document.querySelector("[class*='toastui-calendar-time']");
+      if (!pane) return;
+      const hour = new Date().getHours();
+      // Each hour ~ pane.scrollHeight / 24. Aim for the current hour minus 2
+      // so a couple of past hours stay visible for context.
+      const target = Math.max(0, (hour - 2)) / 24 * pane.scrollHeight;
+      pane.scrollTop = target;
+    }, 150);
+  }
 
   function formatPeriodLabel() {
     const start = cal.getDateRangeStart().toDate();
@@ -222,7 +240,7 @@
   startNowTick();
 
   // ---------- Toolbar ----------
-  $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); });
+  $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); scrollGridToNow(); });
   $("#btn-prev").addEventListener("click", () => { cal.prev(); refresh(); });
   $("#btn-next").addEventListener("click", () => { cal.next(); refresh(); });
   $$(".view-btn").forEach((b) => b.addEventListener("click", () => {
@@ -231,8 +249,11 @@
     $$(".view-btn").forEach((x) => x.classList.remove("bg-brand-50", "text-brand-700", "font-semibold"));
     b.classList.add("bg-brand-50", "text-brand-700", "font-semibold");
     refresh();
+    if (currentView !== "month") scrollGridToNow();
   }));
   $('.view-btn[data-view="week"]').classList.add("bg-brand-50", "text-brand-700", "font-semibold");
+  // Initial position: scroll the week grid to the current hour on first paint.
+  scrollGridToNow();
 
   // ---------- Sidebar calendar visibility toggle ----------
   $$(".cal-toggle").forEach((cb) => cb.addEventListener("change", () => {
