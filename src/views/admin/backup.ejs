@@ -1,0 +1,76 @@
+<%- include('_nav') %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">数据备份 / 恢复</h1>
+<p class="text-sm text-slate-500 mb-6">全站数据导出成一个 JSON 文件；恢复时把文件传回来，整库被替换为文件里的内容（事务里跑，失败自动回滚）。建议在搬迁服务器、升级前留个底、或例行冷备时使用。</p>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <h2 class="text-lg font-semibold text-slate-900 mb-1">📤 导出</h2>
+    <p class="text-sm text-slate-500 mb-4">下载一个 JSON 备份文件，包含站点设置、用户、日历、事件、SSO / API 配置等 15 张业务表。临时数据（会话、待验证邮箱、登录挑战）不包含。</p>
+    <a href="/admin/backup/export" class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      下载 bywave-backup-…json
+    </a>
+    <div class="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 leading-relaxed">
+      <strong>⚠️ 文件含敏感数据：</strong>
+      用户邮箱、bcrypt 密码哈希、SSO Client Secret、API Token 哈希、Passkey 公钥。<br/>
+      请把它当作密码本对待 —— 加密存储、限制下载次数、用完即删。
+    </div>
+  </section>
+
+  <section class="rounded-2xl border border-red-200 bg-red-50/40 p-5 sm:p-6">
+    <h2 class="text-lg font-semibold text-red-900 mb-1">📥 恢复（覆盖全部数据）</h2>
+    <p class="text-sm text-red-800 mb-4"><strong>⚠️ 危险操作。</strong>上传的备份会<strong>整库替换</strong>当前数据，所有现存的用户、日历、事件都会被这份文件里的内容覆盖。无法撤回。</p>
+
+    <form method="post" action="/admin/backup/import" enctype="multipart/form-data" class="space-y-3"
+          onsubmit="return confirmRestore();">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="file" name="file" accept=".json,application/json" required
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
+      <label class="flex items-start gap-2 text-xs text-red-900">
+        <input type="checkbox" id="confirm-restore" required class="mt-0.5 h-3.5 w-3.5 rounded border-red-300 accent-red-600" />
+        <span>我确认理解会清空当前所有数据，并已经在恢复前导出过当前数据。</span>
+      </label>
+      <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        上传并恢复
+      </button>
+    </form>
+  </section>
+
+</div>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-base font-semibold text-slate-900 mb-3">备份文件结构</h2>
+  <div class="text-sm text-slate-600 space-y-2 mb-3">
+    <p>顶层 JSON 形如：</p>
+    <pre class="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs font-mono overflow-x-auto">{
+  "bundleVersion": <%= bundleVersion %>,
+  "exportedAt": "2026-05-21T12:34:56.000Z",
+  "productId": "by-wave-calendar",
+  "tables": {
+    "site_settings": [ { ... } ],
+    "users": [ { "id": "...", "email": "...", "passwordHash": "$2b$...", ... }, ... ],
+    "calendars": [ ... ],
+    "events": [ ... ],
+    "sso_providers": [ ... ],
+    "api_tokens": [ ... ],
+    ...
+  }
+}</pre>
+    <p>恢复时 <code>productId</code> 和 <code>bundleVersion</code> 会校验 —— 不是 ByWave Calendar 的备份、或者 bundleVersion 更高（说明从更新版本导出），都会被拒绝。</p>
+  </div>
+  <ul class="text-xs text-slate-500 list-disc pl-5 space-y-1">
+    <li><strong>包含的表：</strong>site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens</li>
+    <li><strong>不包含的表：</strong>sessions / password_resets / email_verifications / login_challenges（临时数据，备份完了过期就没意义，恢复后会重新积累）</li>
+    <li><strong>恢复是事务化的：</strong>中途任何表 INSERT 失败都会回滚到导入前的状态，<em>不会</em>出现部分恢复成功 + 部分失败的脏状态</li>
+  </ul>
+</section>
+
+<script>
+function confirmRestore() {
+  if (!document.getElementById("confirm-restore").checked) return false;
+  return confirm("最后确认：当前所有日历 / 事件 / 用户都会被清空并替换为文件里的内容。继续？");
+}
+</script>

@@ -20,6 +20,7 @@ import {
 import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/api_token.js";
+import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -383,6 +384,62 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
+  });
+
+  // ---------- Backup / restore ----------
+  app.get("/admin/backup", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    return reply.view("admin/backup", {
+      title: "数据备份 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/backup",
+      bundleVersion: BACKUP_VERSION,
+    });
+  });
+
+  app.get("/admin/backup/export", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const bundle = await exportData();
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    reply.header("Content-Type", "application/json; charset=utf-8");
+    reply.header("Content-Disposition", `attachment; filename="bywave-backup-${stamp}.json"`);
+    return reply.send(JSON.stringify(bundle, null, 2));
+  });
+
+  app.post("/admin/backup/import", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    // multipart: no CSRF cookie reliably — gate on admin status.
+    const file = await req.file();
+    if (!file) return reply.redirect("/admin/backup?error=" + encodeURIComponent("请选择备份文件"));
+    if (file.mimetype && !file.mimetype.toLowerCase().includes("json") && file.mimetype !== "application/octet-stream") {
+      return reply.redirect("/admin/backup?error=" + encodeURIComponent("文件类型应为 JSON"));
+    }
+    const buf = await file.toBuffer();
+    if (buf.length === 0) return reply.redirect("/admin/backup?error=" + encodeURIComponent("空文件"));
+    if (buf.length > 100 * 1024 * 1024) return reply.redirect("/admin/backup?error=" + encodeURIComponent("文件过大（>100MB）"));
+
+    let bundle: BackupBundle;
+    try {
+      bundle = JSON.parse(buf.toString("utf8")) as BackupBundle;
+    } catch (err) {
+      return reply.redirect("/admin/backup?error=" + encodeURIComponent("JSON 解析失败：" + (err instanceof Error ? err.message : "")));
+    }
+    try {
+      const result = await importData(bundle);
+      const summary = result.perTable
+        .filter((r) => r.inserted > 0 || r.error)
+        .map((r) => `${r.table}: ${r.inserted}${r.error ? ` (✗ ${r.error.slice(0, 50)})` : ""}`)
+        .join("; ");
+      return reply.redirect("/admin/backup?success=" + encodeURIComponent(
+        `恢复完成 —— 共 ${result.totalInserted} 行（${summary}）。建议立即重启服务。`
+      ));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.redirect("/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));
+    }
   });
 
   // ---------- Third-party API ----------
