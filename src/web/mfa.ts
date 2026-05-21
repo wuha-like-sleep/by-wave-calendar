@@ -37,7 +37,6 @@ export async function mfaRoutes(app: FastifyInstance) {
     return reply.view("auth/mfa", {
       title: "二次验证",
       user: null,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
     });
@@ -93,7 +92,6 @@ export async function mfaRoutes(app: FastifyInstance) {
     return reply.view("app/mfa-setup", {
       title: "设置二次验证",
       user: s.user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       secret,
@@ -130,7 +128,6 @@ export async function mfaRoutes(app: FastifyInstance) {
     return reply.view("app/mfa-enabled", {
       title: "MFA 已启用",
       user: { ...s.user, mfaEnabled: true },
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: { success: "MFA 已启用，请保存下面的备用码" },
       backupCodes: plain,
@@ -171,7 +168,6 @@ export async function mfaRoutes(app: FastifyInstance) {
     return reply.view("app/mfa-enabled", {
       title: "新的备用码",
       user: s.user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: { success: "已生成新的备用码，旧的已失效" },
       backupCodes: plain,

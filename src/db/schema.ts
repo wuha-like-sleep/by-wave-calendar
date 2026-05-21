@@ -35,6 +35,22 @@ export const emailVerifications = pgTable("email_verifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const siteSettings = pgTable("site_settings", {
+  // Singleton row pinned to id = 1.
+  id: integer("id").primaryKey().default(1),
+  siteName: text("site_name").notNull().default("ByWave-Calendar"),
+  logoUrl: text("logo_url"),
+  registrationMode: text("registration_mode").notNull().default("public"),
+  icpNumber: text("icp_number"),
+  icpUrl: text("icp_url").default("https://beian.miit.gov.cn/"),
+  ssoKeycloakEnabled: boolean("sso_keycloak_enabled").notNull().default(false),
+  ssoKeycloakIssuerUrl: text("sso_keycloak_issuer_url"),
+  ssoKeycloakClientId: text("sso_keycloak_client_id"),
+  ssoKeycloakClientSecret: text("sso_keycloak_client_secret"),
+  ssoKeycloakLabel: text("sso_keycloak_label").default("使用 SSO 登录"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const loginAlerts = pgTable("login_alerts", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -127,3 +143,4 @@ export type NewWebauthnCredential = typeof webauthnCredentials.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type LoginAlert = typeof loginAlerts.$inferSelect;
+export type SiteSettings = typeof siteSettings.$inferSelect;

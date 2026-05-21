@@ -17,6 +17,7 @@ import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
+import { getSettings } from "../lib/site_settings.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -84,7 +85,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("landing", {
       title: "首页",
       user: null,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
     });
@@ -94,7 +94,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("landing", {
       title: "关于",
       user: await loadUserFromRequest(req),
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
     });
@@ -107,7 +106,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("auth/login", {
       title: "登录",
       user: null,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       form: {},
@@ -136,11 +134,11 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   app.get("/register", async (req, reply) => {
-    if (!env.REGISTRATION_OPEN) {
+    const settings = await getSettings();
+    if (settings.registrationMode === "closed") {
       return reply.code(403).view("error", {
         title: "注册关闭",
         user: null,
-        registrationOpen: env.REGISTRATION_OPEN,
         csrfToken: csrfTokenFor(req),
         flash: {},
         statusCode: 403,
@@ -148,12 +146,22 @@ export async function webRoutes(app: FastifyInstance) {
         message: "管理员暂时关闭了开放注册。",
       });
     }
+    if (settings.registrationMode === "invite") {
+      return reply.code(403).view("error", {
+        title: "仅邀请注册",
+        user: null,
+        csrfToken: csrfTokenFor(req),
+        flash: {},
+        statusCode: 403,
+        heading: "仅邀请注册",
+        message: "本站当前仅接受邀请注册，请联系管理员获取邀请链接。",
+      });
+    }
     const user = await loadUserFromRequest(req);
     if (user) return reply.redirect("/app");
     return reply.view("auth/register", {
       title: "注册",
       user: null,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       form: {},
@@ -164,8 +172,9 @@ export async function webRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
-    if (!env.REGISTRATION_OPEN) {
-      return redirectWith(reply, "/login", { error: "注册已关闭" });
+    const settings = await getSettings();
+    if (settings.registrationMode !== "public") {
+      return redirectWith(reply, "/login", { error: "公开注册已关闭" });
     }
     const body = z
       .object({
@@ -209,7 +218,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("auth/verify-email", {
       title: "验证邮箱",
       user: null,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       email,
@@ -303,7 +311,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("app/calendar-app", {
       title: "日历",
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       calendars,
@@ -334,7 +341,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("app/dashboard", {
       title: "我的日历",
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       calendars: rows,
@@ -387,7 +393,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("app/calendar", {
       title: calendar.name,
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       calendar,
@@ -517,7 +522,6 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.view("app/settings", {
       title: "设置",
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       createdAtLocal: localTime(user.createdAt),

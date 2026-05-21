@@ -18,6 +18,8 @@ import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
 import { mfaRoutes } from "./web/mfa.js";
+import { adminRoutes } from "./web/admin.js";
+import { getSettings } from "./lib/site_settings.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
 
@@ -111,14 +113,44 @@ await app.register(view, {
 // ---- Health ----
 app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.1.0" }));
 
+// ---- PWA: serve manifest & sw at root ----
+app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.header("Content-Type", "application/manifest+json");
+  return reply.sendFile("manifest.webmanifest");
+});
+app.get("/sw.js", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.header("Service-Worker-Allowed", "/");
+  reply.header("Content-Type", "application/javascript");
+  return reply.sendFile("sw.js");
+});
+
 // ---- Routes ----
 await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(icsRoutes);
+// Inject DB-backed site settings into every reply.view call.
+app.addHook("onRequest", async (_req, reply) => {
+  const settings = await getSettings();
+  const original = reply.view.bind(reply);
+  (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
+    original(name, {
+      siteName: settings.siteName,
+      siteLogoUrl: settings.logoUrl,
+      icpNumber: settings.icpNumber,
+      icpUrl: settings.icpUrl,
+      registrationOpen: settings.registrationMode !== "closed",
+      registrationMode: settings.registrationMode,
+      ssoEnabled: settings.ssoKeycloakEnabled,
+      ssoLabel: settings.ssoKeycloakLabel,
+      ...locals,
+    });
+});
+
 await app.register(webRoutes);
 await app.register(webauthnRoutes);
 await app.register(mfaRoutes);
+await app.register(adminRoutes);
 
 // ---- Error handler ----
 app.setErrorHandler(async (err: FastifyError, req, reply) => {
@@ -134,7 +166,6 @@ app.setErrorHandler(async (err: FastifyError, req, reply) => {
     return reply.code(err.statusCode ?? 500).view("error", {
       title: "出错了",
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: {},
       statusCode: err.statusCode ?? 500,
@@ -153,7 +184,6 @@ app.setNotFoundHandler(async (req, reply) => {
     return reply.code(404).view("error", {
       title: "未找到",
       user,
-      registrationOpen: env.REGISTRATION_OPEN,
       csrfToken: csrfTokenFor(req),
       flash: {},
       statusCode: 404,

@@ -1,0 +1,15 @@
+{
+  "name": "ByWave-Calendar",
+  "short_name": "ByWave",
+  "description": "日历共享平台 — 订阅链接、Passkey、多日历协作",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "lang": "zh-CN",
+  "icons": [
+    { "src": "/static/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

@@ -271,16 +271,25 @@
         list.innerHTML = '<li class="text-slate-400 text-center py-2">还没有订阅链接</li>';
         return;
       }
-      list.innerHTML = tokens.map((t) => `
-        <li class="flex items-center gap-2 py-2 border-b border-slate-100 last:border-0">
-          <div class="flex-1 min-w-0">
-            <div class="text-slate-700">${escapeHtml(t.label || "未命名")}</div>
-            <code class="text-xs text-slate-400 truncate block">${escapeHtml(t.url)}</code>
+      list.innerHTML = tokens.map((t) => {
+        const webcalUrl = t.url.replace(/^https?:/i, "webcal:");
+        const gcalUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(t.url)}`;
+        return `
+        <li class="py-3 border-b border-slate-100 last:border-0 space-y-2">
+          <div class="flex items-start gap-2">
+            <div class="flex-1 min-w-0">
+              <div class="text-slate-700 text-sm">${escapeHtml(t.label || "未命名")}</div>
+              <code class="text-xs text-slate-400 truncate block mt-0.5">${escapeHtml(t.url)}</code>
+            </div>
+            <button type="button" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 flex-shrink-0" data-revoke="${escapeHtml(t.token)}">撤销</button>
           </div>
-          <button type="button" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-copy="${escapeHtml(t.url)}">复制</button>
-          <button type="button" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50" data-revoke="${escapeHtml(t.token)}">撤销</button>
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-copy="${escapeHtml(t.url)}">复制 URL</button>
+            <a href="${escapeHtml(webcalUrl)}" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">📱 添加到手机日历</a>
+            <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">📅 添加到 Google 日历</a>
+          </div>
         </li>
-      `).join("");
+      `;}).join("");
       list.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => window.bwc.copy(b.dataset.copy)));
       list.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
         if (!confirm("撤销该订阅链接？")) return;
