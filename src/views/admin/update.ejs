@@ -21,7 +21,14 @@
   </div>
 
   <div id="apply-box" class="mt-5 hidden rounded-lg border border-slate-200 bg-slate-50 p-4">
-    <div class="text-sm font-medium text-slate-700 mb-2">执行日志</div>
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm font-medium text-slate-700">执行进度</div>
+      <div id="progress-label" class="text-xs text-slate-500">0 / 0</div>
+    </div>
+    <div class="w-full h-2 rounded-full bg-slate-200 overflow-hidden mb-3">
+      <div id="progress-bar" class="h-full bg-brand-600 transition-all duration-300 ease-out" style="width: 0%"></div>
+    </div>
+    <div id="progress-current" class="text-xs text-slate-500 mb-3"></div>
     <ul id="apply-logs" class="space-y-3 text-xs"></ul>
     <div id="apply-final" class="mt-3 text-sm font-medium"></div>
   </div>
@@ -101,28 +108,74 @@
     applyBox.classList.remove('hidden');
     const logsEl = document.getElementById('apply-logs');
     const finalEl = document.getElementById('apply-final');
-    logsEl.innerHTML = '<li class="text-slate-500">⏳ 正在执行，请耐心等待（可能需要几分钟）…</li>';
+    const progressBar = document.getElementById('progress-bar');
+    const progressLabel = document.getElementById('progress-label');
+    const progressCurrent = document.getElementById('progress-current');
+    logsEl.innerHTML = '';
     finalEl.textContent = '';
-    try {
-      const data = await postJson('/admin/update/apply');
-      logsEl.innerHTML = '';
-      (data.logs || []).forEach((l) => {
+    progressBar.style.width = '0%';
+    progressLabel.textContent = '0 / 0';
+    progressCurrent.textContent = '准备开始…';
+
+    function handleEvent(ev) {
+      if (ev.type === 'start') {
+        progressLabel.textContent = (ev.index + 1) + ' / ' + ev.total;
+        progressCurrent.textContent = '⏳ ' + ev.step;
+        // Half-step progress (so the bar moves immediately on start)
+        progressBar.style.width = ((ev.index + 0.4) / ev.total * 100) + '%';
+      } else if (ev.type === 'done') {
+        progressBar.style.width = ((ev.index + 1) / ev.total * 100) + '%';
         const li = document.createElement('li');
-        li.className = 'rounded-md border ' + (l.ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50') + ' p-2';
-        li.innerHTML = '<div class="font-medium ' + (l.ok ? 'text-emerald-800' : 'text-red-800') + '">' + (l.ok ? '✓ ' : '✗ ') + escapeHtml(l.step) + '</div>' +
-                       '<pre class="mt-1 whitespace-pre-wrap break-all text-slate-700">' + escapeHtml(l.output || '(no output)') + '</pre>';
+        li.className = 'rounded-md border ' + (ev.ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50') + ' p-2';
+        li.innerHTML = '<div class="font-medium ' + (ev.ok ? 'text-emerald-800' : 'text-red-800') + '">' + (ev.ok ? '✓ ' : '✗ ') + escapeHtml(ev.step) + '</div>' +
+                       '<pre class="mt-1 whitespace-pre-wrap break-all text-slate-700 max-h-40 overflow-y-auto">' + escapeHtml(ev.output || '(no output)') + '</pre>';
         logsEl.appendChild(li);
+      } else if (ev.type === 'final') {
+        progressBar.style.width = '100%';
+        progressCurrent.textContent = '';
+        if (ev.ok) {
+          finalEl.innerHTML = '<span class="text-emerald-700">✓ 更新成功 —— 点击「仅重启服务」让新代码生效。</span>';
+          applyBtn.textContent = '已更新';
+        } else {
+          finalEl.innerHTML = '<span class="text-red-700">✗ 有步骤失败，详见上方日志。已停在失败前一步。</span>';
+          applyBtn.disabled = false;
+          applyBtn.textContent = '重试';
+          progressBar.classList.remove('bg-brand-600');
+          progressBar.classList.add('bg-red-600');
+        }
+      }
+    }
+
+    try {
+      const fd = new URLSearchParams();
+      fd.set('_csrf', csrf);
+      const resp = await fetch('/admin/update/apply-stream', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: fd.toString(),
       });
-      if (data.ok) {
-        finalEl.innerHTML = '<span class="text-emerald-700">✓ 更新成功 —— 点击「仅重启服务」让新代码生效。</span>';
-        applyBtn.textContent = '已更新';
-      } else {
-        finalEl.innerHTML = '<span class="text-red-700">✗ 有步骤失败，详见上方日志。已停在失败前一步。</span>';
-        applyBtn.disabled = false;
-        applyBtn.textContent = '重试';
+      if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        // SSE events are separated by blank lines; each line within an event
+        // starts with "data: ".
+        let idx;
+        while ((idx = buf.indexOf('\n\n')) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const line = chunk.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('');
+          if (!line) continue;
+          try { handleEvent(JSON.parse(line)); } catch (_e) { /* ignore parse errors */ }
+        }
       }
     } catch (err) {
-      logsEl.innerHTML = '<li class="text-red-700">请求失败：' + escapeHtml(err.message) + '</li>';
+      finalEl.innerHTML = '<span class="text-red-700">连接失败：' + escapeHtml(err.message) + '</span>';
       applyBtn.disabled = false;
       applyBtn.textContent = '重试';
     }

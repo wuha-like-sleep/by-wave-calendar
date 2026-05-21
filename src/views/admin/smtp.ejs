@@ -53,3 +53,14 @@
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SMTP 配置</button>
   </form>
 </section>
+
+<section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">邮件样式预览</h2>
+  <p class="text-sm text-slate-500 mb-4">用当前 SMTP 配置一次性发送 5 封样式邮件到指定邮箱 —— 验证码、密码重置、新登录提醒、日历邀请、欢迎邮件，方便对照查看真实长相。</p>
+  <form method="post" action="/admin/smtp/preview" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="email" name="to" required value="<%= user.email %>"
+           class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">发送 5 封样式邮件</button>
+  </form>
+</section>

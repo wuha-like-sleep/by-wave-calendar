@@ -42,6 +42,9 @@ type PropDict = {
   supportedReportSet?: boolean;
   ctag?: string;
   etag?: string;
+  contentType?: string;             // getcontenttype — required by iOS for resources
+  contentLength?: number;
+  lastModified?: Date;
   calendarData?: string;            // iCalendar text
   ownerHref?: string;
   calendarColor?: string;
@@ -69,6 +72,9 @@ function buildPropXml(props: PropDict): string {
   }
   if (props.ctag !== undefined) parts.push(`<CS:getctag>${xmlEscape(props.ctag)}</CS:getctag>`);
   if (props.etag !== undefined) parts.push(`<getetag>${xmlEscape(props.etag)}</getetag>`);
+  if (props.contentType !== undefined) parts.push(`<getcontenttype>${xmlEscape(props.contentType)}</getcontenttype>`);
+  if (props.contentLength !== undefined) parts.push(`<getcontentlength>${props.contentLength}</getcontentlength>`);
+  if (props.lastModified !== undefined) parts.push(`<getlastmodified>${xmlEscape(props.lastModified.toUTCString())}</getlastmodified>`);
   if (props.calendarData !== undefined) parts.push(`<C:calendar-data>${xmlEscape(props.calendarData)}</C:calendar-data>`);
   if (props.ownerHref !== undefined) parts.push(`<owner><href>${xmlEscape(props.ownerHref)}</href></owner>`);
   if (props.calendarColor !== undefined) parts.push(`<IC:calendar-color>${xmlEscape(props.calendarColor)}</IC:calendar-color>`);
@@ -289,6 +295,8 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
       entries.push(responseEntry(eventHref(user.id, cal.id, e.uid), {
         resourcetype: "",
         etag: etagOf(e.updatedAt),
+        contentType: "text/calendar; charset=utf-8; component=VEVENT",
+        lastModified: e.updatedAt,
       }));
     }
   }
@@ -326,6 +334,8 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
 
     const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
       etag: etagOf(e.updatedAt),
+      contentType: "text/calendar; charset=utf-8; component=VEVENT",
+      lastModified: e.updatedAt,
       calendarData: rowToVCalendar(e, cal.name),
     }));
     sendXml(reply, multistatus(entries));
@@ -399,8 +409,19 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   if (!cal) return reply.code(404).send("Not Found");
 
   const bodyStr = typeof req.body === "string" ? req.body : "";
+  req.log.info({
+    caldav: "put",
+    userId: user.id, calId: params.calId, uid: params.uid,
+    contentType: req.headers["content-type"],
+    bodyBytes: bodyStr.length,
+    bodyHead: bodyStr.slice(0, 200),
+    ifMatch: req.headers["if-match"], ifNoneMatch: req.headers["if-none-match"],
+  }, "caldav_put");
   const parsed = parseEvent(bodyStr);
-  if (!parsed) return reply.code(400).send("Invalid iCalendar");
+  if (!parsed) {
+    req.log.warn({ caldav: "put", bodyHead: bodyStr.slice(0, 400) }, "caldav_put_parse_failed");
+    return reply.code(400).send("Invalid iCalendar");
+  }
   const rawVevent = extractVeventBlock(bodyStr);
 
   // The UID in the URL might differ from the UID in the body — use body UID as authoritative,
@@ -473,6 +494,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   }
 
   reply.header("ETag", etagOf(stored.updatedAt));
+  if (!existing) reply.header("Location", eventHref(user.id, cal.id, stored.uid));
   return reply.code(existing ? 204 : 201).send();
 }
 
@@ -481,6 +503,7 @@ async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
   if (!user) return;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
+  req.log.info({ caldav: "delete", userId: user.id, calId: params.calId, uid: params.uid, ifMatch: req.headers["if-match"] }, "caldav_delete");
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
   const cal = await loadCalendarOwned(user.id, params.calId ?? "");
   if (!cal) return reply.code(404).send("Not Found");

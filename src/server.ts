@@ -48,8 +48,12 @@ app.addHttpMethod("MKCALENDAR", { hasBody: true });
 app.addHttpMethod("PROPPATCH", { hasBody: true });
 
 // CalDAV bodies are XML or iCalendar text — pass through as strings.
+// Use regex so we catch iOS variants like:
+//   "text/calendar; charset=utf-8"
+//   'text/calendar; charset="utf-8"; component=VEVENT'
+//   "application/xml; charset=utf-8"
 app.addContentTypeParser(
-  ["application/xml", "text/xml", "text/calendar", "text/calendar; charset=utf-8"],
+  /^(application\/xml|text\/xml|text\/calendar)\b/i,
   { parseAs: "string" },
   (_req, body, done) => done(null, body),
 );

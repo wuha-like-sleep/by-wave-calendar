@@ -82,34 +82,51 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
 }
 
 export type UpdateLog = { step: string; ok: boolean; output: string };
+export type UpdateProgressEvent =
+  | { type: "start"; step: string; index: number; total: number }
+  | { type: "done"; step: string; index: number; total: number; ok: boolean; output: string }
+  | { type: "final"; ok: boolean };
 
-export async function applyUpdate(): Promise<{ logs: UpdateLog[]; ok: boolean }> {
-  const remote = pickRemote();
-  const branch = pickBranch();
-  const logs: UpdateLog[] = [];
+const STEPS = (npmBin: string, remote: string, branch: string): { name: string; cmd: string; args: string[] }[] => [
+  { name: "git fetch", cmd: "git", args: ["fetch", remote, branch] },
+  { name: "git reset --hard", cmd: "git", args: ["reset", "--hard", `${remote}/${branch}`] },
+  { name: "npm ci", cmd: npmBin, args: ["ci", "--include=dev"] },
+  { name: "npm run build", cmd: npmBin, args: ["run", "build"] },
+  { name: "db migrate", cmd: npmBin, args: ["run", "db:migrate"] },
+];
 
-  const step = async (name: string, cmd: string, args: string[]): Promise<boolean> => {
+export async function* applyUpdateStream(): AsyncGenerator<UpdateProgressEvent> {
+  const npmBin = process.env.NPM_BIN || "npm";
+  const steps = STEPS(npmBin, pickRemote(), pickBranch());
+  const total = steps.length;
+  let ok = true;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i]!;
+    yield { type: "start", step: s.name, index: i, total };
     try {
-      const { stdout, stderr } = await run(cmd, args);
-      logs.push({ step: name, ok: true, output: (stdout + (stderr ? "\n[stderr]\n" + stderr : "")).slice(0, 8000) });
-      return true;
+      const { stdout, stderr } = await run(s.cmd, s.args);
+      yield {
+        type: "done", step: s.name, index: i, total, ok: true,
+        output: (stdout + (stderr ? "\n[stderr]\n" + stderr : "")).slice(0, 8000),
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logs.push({ step: name, ok: false, output: msg.slice(0, 8000) });
-      return false;
+      yield { type: "done", step: s.name, index: i, total, ok: false, output: msg.slice(0, 8000) };
+      ok = false;
+      break;
     }
-  };
+  }
+  yield { type: "final", ok };
+}
 
-  if (!(await step("git fetch", "git", ["fetch", remote, branch]))) return { logs, ok: false };
-  if (!(await step("git reset --hard", "git", ["reset", "--hard", `${remote}/${branch}`]))) return { logs, ok: false };
-
-  // npm ci with devDeps so tsc + tailwind are available
-  const npmBin = process.env.NPM_BIN || "npm";
-  if (!(await step("npm ci", npmBin, ["ci", "--include=dev"]))) return { logs, ok: false };
-  if (!(await step("npm run build", npmBin, ["run", "build"]))) return { logs, ok: false };
-  if (!(await step("db migrate", npmBin, ["run", "db:migrate"]))) return { logs, ok: false };
-
-  return { logs, ok: true };
+export async function applyUpdate(): Promise<{ logs: UpdateLog[]; ok: boolean }> {
+  const logs: UpdateLog[] = [];
+  let finalOk = true;
+  for await (const ev of applyUpdateStream()) {
+    if (ev.type === "done") logs.push({ step: ev.step, ok: ev.ok, output: ev.output });
+    if (ev.type === "final") finalOk = ev.ok;
+  }
+  return { logs, ok: finalOk };
 }
 
 export async function restartProcess(): Promise<{ ok: boolean; output: string }> {

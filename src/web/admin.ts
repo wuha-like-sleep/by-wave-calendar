@@ -9,7 +9,15 @@ import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { getSettings, updateSettings } from "../lib/site_settings.js";
-import { applyUpdate, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
+import { sendMail } from "../lib/mailer.js";
+import {
+  calendarInviteMail,
+  loginAlertMail,
+  passwordResetMail,
+  verificationCodeMail,
+  welcomeMail,
+} from "../lib/email_templates.js";
+import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -277,6 +285,47 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
   });
 
+  // ---------- Email template preview (admin only) ----------
+  app.post("/admin/smtp/preview", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ to: z.string().email() }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/smtp?error=" + encodeURIComponent("请输入合法的邮箱地址"));
+    }
+    const to = body.data.to;
+    const sent: string[] = [];
+    const failed: string[] = [];
+    const tasks: { label: string; build: () => ReturnType<typeof verificationCodeMail> }[] = [
+      { label: "1. 邮箱验证码（注册）", build: () => verificationCodeMail(to, "123456") },
+      { label: "2. 密码重置", build: () => passwordResetMail(to, "demo-token-not-real-zG7yQpKxL3mN9vBdE2hRsT4uW6f") },
+      { label: "3. 新登录提醒", build: () => loginAlertMail(to, {
+        email: to, displayName: "示例用户", loginAt: new Date(), ip: "203.0.113.42",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15",
+        method: "password", location: "上海",
+      }) },
+      { label: "4. 日历邀请协作", build: () => calendarInviteMail(to, {
+        calendarName: "工作日历", inviterName: "示例管理员", role: "editor",
+        message: "把这个加进你的日历，每周一会议都在这里。", token: "demo-invitation-token",
+      }) },
+      { label: "5. 欢迎邮件", build: () => welcomeMail(to, "示例用户") },
+    ];
+    for (const t of tasks) {
+      try {
+        await sendMail(t.build());
+        sent.push(t.label);
+      } catch (err) {
+        req.log.warn({ err, label: t.label }, "preview_email_send_failed");
+        failed.push(t.label);
+      }
+    }
+    const msg = failed.length
+      ? `已发 ${sent.length} 封，失败 ${failed.length} 封（${failed.join(", ")}）—— 检查 SMTP 设置`
+      : `已发送 5 封样式邮件到 ${to}，请查收`;
+    return reply.redirect("/admin/smtp?success=" + encodeURIComponent(msg));
+  });
+
   // ---------- Theme / appearance ----------
   app.get("/admin/theme", async (req, reply) => {
     const user = await requireAdmin(req, reply);
@@ -338,6 +387,7 @@ export async function adminRoutes(app: FastifyInstance) {
     }
   });
 
+  // Non-streaming fallback (kept for clients that don't support SSE)
   app.post("/admin/update/apply", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
@@ -347,6 +397,27 @@ export async function adminRoutes(app: FastifyInstance) {
       return reply.send(result);
     } catch (err) {
       return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
+    }
+  });
+
+  // Streaming variant with per-step progress (Server-Sent Events).
+  app.post("/admin/update/apply-stream", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    const write = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+    try {
+      for await (const ev of applyUpdateStream()) write(ev);
+    } catch (err) {
+      write({ type: "final", ok: false, error: err instanceof Error ? err.message : "未知错误" });
+    } finally {
+      reply.raw.end();
     }
   });
 
