@@ -134,17 +134,24 @@
       cal.clear();
       const events = data.events
         .filter((e) => visibleCalIds.has(e.calendarId))
-        .map((e) => ({
-          id: e.id,
-          calendarId: e.calendarId,
-          title: e.summary,
-          location: e.location || undefined,
-          body: e.description || undefined,
-          start: e.startsAt,
-          end: e.endsAt,
-          isAllday: !!e.allDay,
-          category: e.allDay ? "allday" : "time",
-        }));
+        .map((e) => {
+          // For all-day events the server stores UTC midnight (≈ pure date);
+          // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
+          // the user's local timezone boundary.
+          const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
+          const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
+          return {
+            id: e.id,
+            calendarId: e.calendarId,
+            title: e.summary,
+            location: e.location || undefined,
+            body: e.description || undefined,
+            start,
+            end,
+            isAllday: !!e.allDay,
+            category: e.allDay ? "allday" : "time",
+          };
+        });
       cal.createEvents(events);
     } catch (err) {
       console.error(err);
@@ -274,13 +281,17 @@
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id;
     const isAllDay = !!data.allDay;
-    let startsLocal, endsLocal;
+    let startsIso, endsIso;
     if (isAllDay) {
-      startsLocal = data.startsAtDate + "T00:00";
-      endsLocal = data.endsAtDate + "T23:59";
+      // Date-only inputs — store the calendar date as UTC midnight directly so
+      // it never crosses a day boundary under a TZ shift.
+      startsIso = data.startsAtDate + "T00:00:00.000Z";
+      endsIso = data.endsAtDate + "T23:59:59.999Z";
     } else {
-      startsLocal = data.startsAt;
-      endsLocal = data.endsAt;
+      // datetime-local gives "YYYY-MM-DDTHH:MM" interpreted as the user's
+      // browser-local time; toISOString converts to UTC.
+      startsIso = new Date(data.startsAt).toISOString();
+      endsIso = new Date(data.endsAt).toISOString();
     }
     const attendees = parseEmails(data.attendees);
     const body = {
@@ -289,8 +300,8 @@
       location: data.location || undefined,
       description: data.description || undefined,
       allDay: isAllDay,
-      startsAt: new Date(startsLocal).toISOString(),
-      endsAt: new Date(endsLocal).toISOString(),
+      startsAt: startsIso,
+      endsAt: endsIso,
       extra: {
         category: data.category || undefined,
         timezone: data.timezone || undefined,
@@ -314,16 +325,25 @@
   $("#btn-delete-event").addEventListener("click", async () => {
     const id = $('#form-event [name="id"]').value;
     if (!id || !confirm("删除该事件？")) return;
+    let resp;
     try {
-      const resp = await fetch(`/api/events/${id}`, fetchOpts({ method: "DELETE" }));
-      if (!resp.ok) throw new Error("delete_failed");
+      resp = await fetch(`/api/events/${id}`, fetchOpts({ method: "DELETE" }));
+    } catch (err) {
+      console.error("delete_event_network", err);
+      window.bwc && window.bwc.toast("删除失败：网络错误", "error");
+      return;
+    }
+    // 204 / 200 → deleted; 404 → already gone (treat as success and just refresh)
+    if (resp.ok || resp.status === 404) {
       closeModal("#modal-event");
       await loadEvents();
-      window.bwc && window.bwc.toast("事件已删除", "success");
-    } catch (err) {
-      console.error(err);
-      window.bwc && window.bwc.toast("删除失败", "error");
+      window.bwc && window.bwc.toast(resp.status === 404 ? "事件已不存在，已刷新" : "事件已删除", "success");
+      return;
     }
+    let errBody = "";
+    try { errBody = (await resp.json()).error || ""; } catch (_e) { errBody = ""; }
+    console.error("delete_event_failed", resp.status, errBody);
+    window.bwc && window.bwc.toast(`删除失败 (HTTP ${resp.status})${errBody ? ": " + errBody : ""}`, "error");
   });
 
   // ---------- Calendar create / import (Synology-style add menu) ----------

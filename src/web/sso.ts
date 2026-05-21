@@ -106,6 +106,13 @@ export async function ssoRoutes(app: FastifyInstance) {
             .returning();
           if (!created) return reply.redirect("/login?error=" + encodeURIComponent("创建账号失败"));
           user = created;
+          // Seed a default calendar for first-time SSO sign-in (matches register flow).
+          await db.insert(schema.calendars).values({
+            ownerId: user.id,
+            name: "My Calendar",
+            color: "#6366f1",
+            timezone: "Asia/Shanghai",
+          });
         }
 
         await createSession(reply, user.id, { mfaSatisfied: true });

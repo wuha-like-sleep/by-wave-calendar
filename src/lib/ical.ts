@@ -218,14 +218,16 @@ export function parseEvent(ics: string): IcalEvent | null {
   if (!uid || !summary || !dtstart || !dtend) return null;
 
   const allDay = dtstart.params["VALUE"] === "DATE";
+  const startTzid = dtstart.params["TZID"];
+  const endTzid = dtend.params["TZID"];
 
   return {
     uid: uid.trim(),
     summary: unescapeText(summary),
     description: singleProps["DESCRIPTION"] ? unescapeText(singleProps["DESCRIPTION"].value) : null,
     location: singleProps["LOCATION"] ? unescapeText(singleProps["LOCATION"].value) : null,
-    startsAt: parseICalDateValue(dtstart.value, allDay),
-    endsAt: parseICalDateValue(dtend.value, allDay),
+    startsAt: parseICalDateValue(dtstart.value, allDay, startTzid),
+    endsAt: parseICalDateValue(dtend.value, allDay, endTzid),
     allDay,
     rrule: singleProps["RRULE"]?.value ?? null,
     createdAt: singleProps["CREATED"] ? parseICalDateValue(singleProps["CREATED"].value, false) : null,
@@ -261,7 +263,7 @@ export function parseEvents(ics: string): IcalEvent[] {
   return events;
 }
 
-function parseICalDateValue(val: string, allDay: boolean): Date {
+function parseICalDateValue(val: string, allDay: boolean, tzid?: string): Date {
   if (allDay) {
     const y = Number(val.slice(0, 4));
     const m = Number(val.slice(4, 6)) - 1;
@@ -274,6 +276,37 @@ function parseICalDateValue(val: string, allDay: boolean): Date {
   const h = Number(val.slice(9, 11));
   const mi = Number(val.slice(11, 13));
   const s = Number(val.slice(13, 15) || "0");
-  // Z = UTC, missing Z = floating (treated as UTC for MVP — TODO: TZID support).
-  return new Date(Date.UTC(y, mo, d, h, mi, s));
+  // Trailing Z → UTC. TZID parameter → IANA-zone wall clock. Otherwise floating
+  // (best-effort: treat as UTC; matches what most clients want for sync).
+  const isUtc = val.endsWith("Z");
+  if (isUtc || !tzid) {
+    return new Date(Date.UTC(y, mo, d, h, mi, s));
+  }
+  return wallClockInZoneToUtc(y, mo, d, h, mi, s, tzid);
+}
+
+// Treat (y, mo, d, h, mi, s) as a wall-clock reading in `tzid` and return the UTC
+// instant that produces that reading. Uses Intl.DateTimeFormat to determine the
+// zone offset at the target time (handles DST automatically).
+function wallClockInZoneToUtc(y: number, mo: number, d: number, h: number, mi: number, s: number, tzid: string): Date {
+  // First guess: assume the components are UTC. Find what that instant reads as
+  // in tzid, compute the delta, then correct.
+  const utcGuess = Date.UTC(y, mo, d, h, mi, s);
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tzid,
+      year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", second: "numeric",
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(new Date(utcGuess));
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+    // Intl uses "24" for midnight in some locales; normalize to 0.
+    let hh = get("hour"); if (hh === 24) hh = 0;
+    const tzReading = Date.UTC(get("year"), get("month") - 1, get("day"), hh, get("minute"), get("second"));
+    const offsetMs = tzReading - utcGuess;
+    return new Date(utcGuess - offsetMs);
+  } catch {
+    return new Date(utcGuess); // unknown zone → fall back to UTC interpretation
+  }
 }

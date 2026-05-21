@@ -370,6 +370,14 @@ export async function webRoutes(app: FastifyInstance) {
       .returning();
     if (!user) return redirectWith(reply, "/verify-email", { error: "创建账号失败" });
 
+    // Seed a default calendar so the new user lands on /app with something to look at.
+    await db.insert(schema.calendars).values({
+      ownerId: user.id,
+      name: "My Calendar",
+      color: "#6366f1",
+      timezone: "Asia/Shanghai",
+    });
+
     reply.clearCookie(PENDING_EMAIL_COOKIE, { path: "/" });
     await createSession(reply, user.id);
     void sendMail(welcomeMail(user.email, user.displayName)).catch((err) => req.log.warn({ err }, "welcome_mail_failed"));

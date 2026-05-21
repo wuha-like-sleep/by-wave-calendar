@@ -151,11 +151,18 @@ export async function eventRoutes(app: FastifyInstance) {
 
   app.delete("/api/events/:id", async (req, reply) => {
     const user = await requireUser(req, reply);
-    const { id } = idParam.parse(req.params);
-    const target = await loadOwnedEvent(id, user.id);
-    if (!target) return reply.code(404).send({ error: "not_found" });
-    await db.delete(schema.events).where(eq(schema.events.id, id));
-    return reply.send({ ok: true });
+    const parsed = idParam.safeParse(req.params);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "bad_id" });
+    }
+    const target = await loadOwnedEvent(parsed.data.id, user.id);
+    if (!target) {
+      // Idempotent: if it's already gone (or never visible to this user),
+      // return 204 so a re-clicked delete from a stale modal doesn't error.
+      return reply.code(204).send();
+    }
+    await db.delete(schema.events).where(eq(schema.events.id, parsed.data.id));
+    return reply.code(204).send();
   });
 }
 
