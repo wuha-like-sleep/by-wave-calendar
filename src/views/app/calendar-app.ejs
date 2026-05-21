@@ -181,19 +181,27 @@
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
-      <!-- Attendees -->
+      <!-- Attendees (managed on a separate page for richer invite/revoke flow) -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">参与者 <span class="text-slate-400">(逗号分隔的邮箱)</span></label>
-        <input type="text" name="attendees" placeholder="alice@example.com, bob@example.com"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        <p class="mt-1 text-xs text-slate-400">📨 保存后会向每位参与者发邀请邮件，附带 .ics 附件，可直接添加到对方日历</p>
+        <label class="block text-xs font-medium text-slate-600 mb-1">参与者</label>
+        <input type="hidden" name="attendees" />
+        <div id="attendee-summary" class="flex items-center gap-2 text-sm text-slate-600">
+          <span id="attendee-summary-text">尚未邀请任何人</span>
+          <a id="attendee-manage-link" href="#" class="hidden ml-auto text-xs text-brand-600 hover:text-brand-700 font-medium">管理参与者 →</a>
+        </div>
+        <p class="mt-1 text-xs text-slate-400">保存事件后会出现「管理参与者」入口；进入独立页面单独邀请和撤销，每个邀请会发一封 .ics 邮件给对方。</p>
       </div>
 
-      <!-- Description -->
+      <!-- Notes + Link split into two -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">描述</label>
-        <textarea name="description" maxlength="5000" rows="3" placeholder="备注、议程、链接……"
+        <label class="block text-xs font-medium text-slate-600 mb-1">备注</label>
+        <textarea name="description" maxlength="5000" rows="3" placeholder="议程、要点、注意事项……"
                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">链接 <span class="text-slate-400">(会议链接 / 文档地址等)</span></label>
+        <input type="url" name="url" maxlength="2000" placeholder="https://…"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
       <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-slate-100">

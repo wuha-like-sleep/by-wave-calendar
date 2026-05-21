@@ -252,7 +252,22 @@
     form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(payload.endsAt || new Date());
     form.querySelector('[name="allDay"]').checked = !!payload.allDay;
     form.querySelector('[name="category"]').value = payload.category || "";
-    form.querySelector('[name="attendees"]').value = (payload.attendees || []).join(", ");
+    // Attendees: hidden field holds the comma-joined list (preserved across
+    // saves); summary text + manage link surface in the modal.
+    const attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
+    form.querySelector('[name="attendees"]').value = attendees.join(",");
+    const summary = $("#attendee-summary-text");
+    const manage = $("#attendee-manage-link");
+    if (summary) summary.textContent = attendees.length > 0
+      ? `${attendees.length} 位：${attendees.slice(0, 3).join(", ")}${attendees.length > 3 ? " …" : ""}`
+      : "尚未邀请任何人";
+    if (manage) {
+      manage.classList.toggle("hidden", !payload.id);
+      if (payload.id) manage.href = `/app/events/${encodeURIComponent(payload.id)}/attendees`;
+    }
+    // Link field (separate from notes — stored at extra.url).
+    const urlInput = form.querySelector('[name="url"]');
+    if (urlInput) urlInput.value = payload.url || "";
     if (payload.timezone) {
       const tzSel = form.querySelector('[name="timezone"]');
       if (Array.from(tzSel.options).some((o) => o.value === payload.timezone)) {
@@ -285,6 +300,7 @@
       summary: fresh.summary,
       location: fresh.location,
       description: fresh.description,
+      url: extra.url || "",
       startsAt: fresh.startsAt,
       endsAt: fresh.endsAt,
       allDay: fresh.allDay,
@@ -331,6 +347,7 @@
         category: data.category || undefined,
         timezone: data.timezone || undefined,
         attendees: attendees.length ? attendees : undefined,
+        url: (data.url || "").trim() || undefined,
       },
     };
     try {

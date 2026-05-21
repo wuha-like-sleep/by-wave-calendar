@@ -222,13 +222,16 @@ export async function eventRoutes(app: FastifyInstance) {
   app.delete("/api/events/:id", async (req, reply) => {
     const user = await requireUser(req, reply);
     const parsed = idParam.safeParse(req.params);
+    // Fully idempotent: a malformed ID (e.g. iOS sometimes hands us its
+    // internal token rather than our UUID, or the modal lost state during
+    // a sync) just resolves as "already gone" so the user-facing UI doesn't
+    // surface 400/404 noise when re-clicking a stale row.
     if (!parsed.success) {
-      return reply.code(400).send({ error: "bad_id" });
+      req.log.info({ raw: (req.params as { id?: string }).id, userId: user.id }, "event_delete_bad_id");
+      return reply.code(204).send();
     }
     const target = await loadOwnedEvent(parsed.data.id, user.id);
     if (!target) {
-      // Idempotent: if it's already gone (or never visible to this user),
-      // return 204 so a re-clicked delete from a stale modal doesn't error.
       return reply.code(204).send();
     }
     await db.delete(schema.events).where(eq(schema.events.id, parsed.data.id));

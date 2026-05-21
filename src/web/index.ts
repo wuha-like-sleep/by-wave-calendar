@@ -14,7 +14,8 @@ import {
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
-import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail } from "../lib/email_templates.js";
+import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
+import { invitationIcs } from "../lib/ical.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -852,6 +853,157 @@ export async function webRoutes(app: FastifyInstance) {
       endsAt: ends,
     });
     return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "事件已添加" });
+  });
+
+  // ---------- Event attendees (dedicated invite/revoke page) ----------
+  app.get<{ Params: { id: string } }>("/app/events/:id/attendees", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const evId = z.string().uuid().safeParse(req.params.id);
+    if (!evId.success) return reply.redirect("/app");
+    const [ev] = await db
+      .select()
+      .from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+      .where(and(eq(schema.events.id, evId.data), eq(schema.calendars.ownerId, user.id)))
+      .limit(1);
+    if (!ev) return reply.redirect("/app");
+    const event = ev.events;
+    const calendar = ev.calendars;
+    const extra = (event.extra as { attendees?: string[]; url?: string } | null) ?? {};
+    const attendees = Array.isArray(extra.attendees) ? extra.attendees : [];
+    const tokens = await db
+      .select()
+      .from(schema.eventInviteTokens)
+      .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
+      .orderBy(desc(schema.eventInviteTokens.createdAt));
+    return reply.view("app/event-attendees", {
+      title: "管理参与者 · " + event.summary,
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      event: {
+        ...event,
+        startsAtLocal: localTime(event.startsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(event.endsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+      },
+      calendar,
+      attendees,
+      tokens: tokens.map((t) => ({
+        ...t,
+        createdAtLocal: localTime(t.createdAt),
+        expiresAtLocal: localTime(t.expiresAt),
+        acceptedAtLocal: t.acceptedAt ? localTime(t.acceptedAt) : null,
+      })),
+    });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/events/:id/attendees/invite", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const evId = z.string().uuid().safeParse(req.params.id);
+    if (!evId.success) return reply.redirect("/app");
+    const body = z.object({ email: z.string().email().max(254) }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: "请输入合法邮箱" });
+    }
+    const inviteeEmail = body.data.email.toLowerCase().trim();
+
+    const [ev] = await db
+      .select()
+      .from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+      .where(and(eq(schema.events.id, evId.data), eq(schema.calendars.ownerId, user.id)))
+      .limit(1);
+    if (!ev) return reply.redirect("/app");
+    const event = ev.events;
+    const extra = (event.extra as Record<string, unknown> | null) ?? {};
+    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    if (current.includes(inviteeEmail)) {
+      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: `${inviteeEmail} 已是参与者` });
+    }
+    const next = [...current, inviteeEmail];
+    await db.update(schema.events).set({ extra: { ...extra, attendees: next }, updatedAt: new Date() }).where(eq(schema.events.id, event.id));
+
+    // Fire the invite mail with .ics attachment + deep-link token (mirror /api/events).
+    const inviteToken = newInvitationToken();
+    try {
+      await db.insert(schema.eventInviteTokens).values({
+        token: inviteToken,
+        sourceEventId: event.id,
+        recipientEmail: inviteeEmail,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+      const ics = invitationIcs({
+        event: {
+          uid: event.uid,
+          summary: event.summary,
+          description: event.description,
+          location: event.location,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          allDay: event.allDay,
+          updatedAt: new Date(),
+        },
+        organizerEmail: user.email,
+        organizerName: user.displayName || user.email,
+        attendees: [{ email: inviteeEmail }],
+        method: "REQUEST",
+      });
+      await sendMail(eventInviteMail(inviteeEmail, {
+        organizerEmail: user.email,
+        organizerName: user.displayName || user.email,
+        summary: event.summary,
+        description: event.description,
+        location: event.location,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        allDay: event.allDay,
+        uid: event.uid,
+        icsBody: ics,
+        inviteToken,
+      }));
+    } catch (err) {
+      req.log.warn({ err, to: inviteeEmail }, "event_invite_send_failed");
+      return redirectWith(reply, `/app/events/${evId.data}/attendees`, {
+        error: `${inviteeEmail} 已添加为参与者，但邀请邮件发送失败`,
+      });
+    }
+    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: `已邀请 ${inviteeEmail}` });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/events/:id/attendees/revoke", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const evId = z.string().uuid().safeParse(req.params.id);
+    if (!evId.success) return reply.redirect("/app");
+    const body = z.object({ email: z.string().email() }).safeParse(req.body);
+    if (!body.success) return reply.redirect(`/app/events/${evId.data}/attendees`);
+    const target = body.data.email.toLowerCase().trim();
+
+    const [ev] = await db
+      .select()
+      .from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+      .where(and(eq(schema.events.id, evId.data), eq(schema.calendars.ownerId, user.id)))
+      .limit(1);
+    if (!ev) return reply.redirect("/app");
+    const event = ev.events;
+    const extra = (event.extra as Record<string, unknown> | null) ?? {};
+    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    const next = current.filter((e) => e !== target);
+    await db.update(schema.events).set({ extra: { ...extra, attendees: next }, updatedAt: new Date() }).where(eq(schema.events.id, event.id));
+    // Invalidate pending tokens for this recipient (accepted ones stay for audit)
+    await db
+      .delete(schema.eventInviteTokens)
+      .where(and(
+        eq(schema.eventInviteTokens.sourceEventId, event.id),
+        eq(schema.eventInviteTokens.recipientEmail, target),
+        isNull(schema.eventInviteTokens.acceptedAt),
+      ));
+    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: `已撤销 ${target}` });
   });
 
   app.post<{ Params: { id: string } }>("/app/events/:id/delete", async (req, reply) => {

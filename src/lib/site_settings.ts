@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
+import { updateBrandForEmails } from "./email_templates.js";
 
 export type SettingsView = {
   siteName: string;
@@ -77,7 +78,10 @@ function toView(r: schema.SiteSettings): SettingsView {
 }
 
 export async function getSettings(): Promise<SettingsView> {
-  if (!cached) cached = await loadFromDb();
+  if (!cached) {
+    cached = await loadFromDb();
+    updateBrandForEmails(cached.siteName);
+  }
   return cached;
 }
 

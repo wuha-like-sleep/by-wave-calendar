@@ -1,0 +1,91 @@
+<nav class="mb-4 text-sm text-slate-500">
+  <a href="/app" class="hover:text-slate-700">日历</a>
+  <span class="px-2">/</span>
+  <a href="/app/calendars/<%= calendar.id %>" class="hover:text-slate-700"><%= calendar.name %></a>
+  <span class="px-2">/</span>
+  <span class="text-slate-900">参与者 · <%= event.summary %></span>
+</nav>
+
+<header class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div class="min-w-0">
+      <h1 class="text-xl sm:text-2xl font-semibold text-slate-900 truncate"><%= event.summary %></h1>
+      <div class="mt-1 text-sm text-slate-500">
+        <%- event.startsAtLocal %> → <%- event.endsAtLocal %>
+      </div>
+      <% if (event.location) { %>
+        <div class="mt-1 text-sm text-slate-500">📍 <%= event.location %></div>
+      <% } %>
+    </div>
+    <a href="/app" class="text-sm text-slate-500 hover:text-slate-700">← 回到日历</a>
+  </div>
+</header>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">邀请新参与者</h2>
+  <p class="text-sm text-slate-500 mb-4">每次提交一个邮箱。对方会收到一封带 .ics 附件的邀请邮件，可以直接在邮件客户端添加到自己日历，也可以点「添加到我的日历」走我们的网页加入。</p>
+  <form method="post" action="/app/events/<%= event.id %>/attendees/invite" class="flex flex-col sm:flex-row gap-2">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="email" name="email" required maxlength="254" placeholder="参与者邮箱"
+           class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">发送邀请</button>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">当前参与者 <span class="text-slate-400 text-sm font-normal">(<%= attendees.length %>)</span></h2>
+  <% if (attendees.length === 0) { %>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没有参与者</div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      <% attendees.forEach(function(email){
+           const tok = tokens.find(function(t){ return t.recipientEmail === email; }); %>
+        <li class="py-3 flex items-center justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-slate-900"><%= email %></div>
+            <% if (tok) { %>
+              <div class="text-xs mt-0.5">
+                <% if (tok.acceptedAtLocal) { %>
+                  <span class="text-emerald-600">✓ 已接受 · <%- tok.acceptedAtLocal %></span>
+                <% } else { %>
+                  <span class="text-slate-500">⏳ 等待接受 · 邀请于 <%- tok.createdAtLocal %>，到期 <%- tok.expiresAtLocal %></span>
+                <% } %>
+              </div>
+            <% } else { %>
+              <div class="text-xs text-slate-400 mt-0.5">手动添加（未通过邀请流程加入）</div>
+            <% } %>
+          </div>
+          <form method="post" action="/app/events/<%= event.id %>/attendees/revoke" class="m-0"
+                onsubmit="return confirm('撤销 <%= email %>？该参与者将从事件移除，待接受的邀请也会被作废。');">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <input type="hidden" name="email" value="<%= email %>" />
+            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">撤销</button>
+          </form>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<% if (tokens.length > 0) { %>
+  <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
+    <details>
+      <summary class="cursor-pointer text-sm font-medium text-slate-700">所有邀请记录 (<%= tokens.length %>)</summary>
+      <table class="mt-3 min-w-full text-xs">
+        <thead class="text-slate-400 uppercase">
+          <tr><th class="text-left py-1.5 pr-3">邮箱</th><th class="text-left py-1.5 pr-3">发出</th><th class="text-left py-1.5 pr-3">到期</th><th class="text-left py-1.5">状态</th></tr>
+        </thead>
+        <tbody>
+          <% tokens.forEach(function(t){ %>
+            <tr class="border-t border-slate-200">
+              <td class="py-1.5 pr-3 text-slate-700"><%= t.recipientEmail %></td>
+              <td class="py-1.5 pr-3 text-slate-500"><%- t.createdAtLocal %></td>
+              <td class="py-1.5 pr-3 text-slate-500"><%- t.expiresAtLocal %></td>
+              <td class="py-1.5 text-slate-500"><%= t.acceptedAt ? "已接受" : (t.expiresAt < new Date() ? "已过期" : "待接受") %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </details>
+  </section>
+<% } %>

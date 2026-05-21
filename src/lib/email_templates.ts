@@ -1,7 +1,13 @@
 import { env } from "../env.js";
 import type { SendArgs } from "./mailer.js";
 
-const brand = env.MAIL_FROM_NAME;
+// Brand name shown in email headers/footers. Updated from site_settings on
+// each settings load via updateBrandForEmails() so a site name change in
+// /admin/site takes effect for the next email without restart.
+let brand: string = env.MAIL_FROM_NAME;
+export function updateBrandForEmails(siteName: string | null | undefined): void {
+  brand = siteName?.trim() || env.MAIL_FROM_NAME;
+}
 
 function baseLayout(opts: { title: string; preheader?: string; body: string }): string {
   return `<!doctype html>
@@ -66,16 +72,16 @@ export function verificationCodeMail(to: string, code: string): SendArgs {
       <p style="margin:0 0 20px;color:#475569;line-height:1.6;font-size:14px;">
         请在 ${escape(brand)} 注册页面输入下方验证码完成邮箱验证。
       </p>
-      <div style="margin:24px 0;padding:28px 16px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:16px;text-align:center;">
-        <div style="font-size:11px;color:#6366f1;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">VERIFICATION CODE</div>
-        <span style="font-size:42px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#1e1b4b;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
-        <div style="font-size:11px;color:#6366f1;margin-top:8px;">10 分钟内有效</div>
+      <div style="margin:24px 0;padding:28px 16px;background:#0f172a;border-radius:16px;text-align:center;">
+        <div style="font-size:11px;color:#a5b4fc;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:10px;">VERIFICATION CODE</div>
+        <span style="font-size:44px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#ffffff;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
+        <div style="font-size:11px;color:#a5b4fc;margin-top:10px;">10 分钟内有效</div>
       </div>
-      <p style="margin:20px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+      <p style="margin:20px 0 0;color:#475569;font-size:12px;line-height:1.6;">
         ⚠️ 请勿告诉任何人此验证码。如果不是你本人在注册，请忽略此邮件 —— 你的邮箱不会被注册。
       </p>
-      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">
-        来自：<a href="${baseUrl}" style="color:#6366f1;text-decoration:none;">${baseUrl.replace(/^https?:\/\//, "")}</a>
+      <p style="margin:16px 0 0;color:#64748b;font-size:12px;">
+        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return { to, subject: `【${brand}】邮箱验证码 ${code}`, html, text };
@@ -92,13 +98,16 @@ export function loginChallengeMail(to: string, code: string, ctx: { ip: string; 
       <p style="margin:0 0 20px;color:#475569;line-height:1.6;font-size:14px;">
         我们检测到这次登录来自不熟悉的 IP 或浏览器 —— 输入下方验证码完成本次登录。如果<strong>不是你本人</strong>，立即修改密码。
       </p>
-      <div style="margin:24px 0;padding:28px 16px;background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:16px;text-align:center;">
-        <div style="font-size:11px;color:#92400e;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">LOGIN CODE</div>
-        <span style="font-size:42px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#78350f;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
-        <div style="font-size:11px;color:#92400e;margin-top:8px;">10 分钟内有效</div>
+      <div style="margin:24px 0;padding:28px 16px;background:#78350f;border-radius:16px;text-align:center;">
+        <div style="font-size:11px;color:#fed7aa;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:10px;">LOGIN CODE</div>
+        <span style="font-size:44px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#ffffff;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
+        <div style="font-size:11px;color:#fed7aa;margin-top:10px;">10 分钟内有效</div>
       </div>
-      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+      <p style="margin:14px 0 0;color:#64748b;font-size:12px;line-height:1.6;">
         IP <code style="font-family:'SF Mono',monospace;">${escape(ctx.ip)}</code> · ${escape(ctx.userAgent.slice(0, 80))}
+      </p>
+      <p style="margin:16px 0 0;color:#64748b;font-size:12px;">
+        来自：<a href="${env.PUBLIC_BASE_URL.replace(/\/$/, "")}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return { to, subject: `【${brand}】登录验证码 ${code}`, html, text };
@@ -235,8 +244,8 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
         附件中的 <strong>invite.ics</strong> 可以直接被 Apple / Google / Outlook 日历识别 ——
         点开即可"添加到日历"。如果客户端没自动弹窗，直接双击附件即可导入。
       </p>`}
-      <p style="margin:10px 0 0;color:#94a3b8;font-size:12px;">
-        来自 <a href="${baseUrl}" style="color:#6366f1;text-decoration:none;">${baseUrl.replace(/^https?:\/\//, "")}</a>
+      <p style="margin:10px 0 0;color:#64748b;font-size:12px;">
+        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return {
