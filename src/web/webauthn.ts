@@ -14,6 +14,7 @@ import {
 import { verifyCsrf } from "../lib/csrf.js";
 import { createSession, loadSession } from "../lib/session.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
+import { recordLoginEvent } from "../lib/login_history.js";
 
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
@@ -174,6 +175,7 @@ export async function webauthnRoutes(app: FastifyInstance) {
     if (usr) {
       void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     }
+    void recordLoginEvent(req, credRow.userId, "passkey").catch((err) => req.log.warn({ err }, "login_event_failed"));
     return reply.send({ ok: true, redirect: "/app" });
   });
 }

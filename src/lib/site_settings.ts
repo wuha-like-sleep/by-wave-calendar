@@ -71,6 +71,24 @@ export async function getSettings(): Promise<SettingsView> {
 
 export function reloadSettings(): void { cached = null; }
 
+export type SsoSecret = {
+  enabled: boolean;
+  issuerUrl: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
+};
+
+export async function getSsoConfig(): Promise<SsoSecret> {
+  const [row] = await db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)).limit(1);
+  if (!row) return { enabled: false, issuerUrl: null, clientId: null, clientSecret: null };
+  return {
+    enabled: row.ssoKeycloakEnabled,
+    issuerUrl: row.ssoKeycloakIssuerUrl,
+    clientId: row.ssoKeycloakClientId,
+    clientSecret: row.ssoKeycloakClientSecret,
+  };
+}
+
 export async function updateSettings(patch: Partial<{
   siteName: string;
   logoUrl: string | null;

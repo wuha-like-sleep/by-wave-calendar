@@ -81,6 +81,18 @@ export const loginAlerts = pgTable("login_alerts", {
   uniq: uniqueIndex("login_alerts_user_ip_ua_unique").on(t.userId, t.ipHash, t.uaHash),
 }));
 
+export const loginEvents = pgTable("login_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  method: text("method").notNull(),
+  ip: text("ip").notNull(),
+  userAgent: text("user_agent").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("login_events_user_idx").on(t.userId),
+  createdIdx: index("login_events_created_idx").on(t.createdAt),
+}));
+
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -227,3 +239,5 @@ export type AppPassword = typeof appPasswords.$inferSelect;
 export type NewAppPassword = typeof appPasswords.$inferInsert;
 export type CalendarSubscription = typeof calendarSubscriptions.$inferSelect;
 export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;
+export type LoginEvent = typeof loginEvents.$inferSelect;
+export type NewLoginEvent = typeof loginEvents.$inferInsert;

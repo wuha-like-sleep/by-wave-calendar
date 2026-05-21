@@ -20,6 +20,7 @@ import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
 import { mfaRoutes } from "./web/mfa.js";
 import { adminRoutes } from "./web/admin.js";
+import { ssoRoutes } from "./web/sso.js";
 import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
@@ -179,6 +180,7 @@ await app.register(webRoutes);
 await app.register(webauthnRoutes);
 await app.register(mfaRoutes);
 await app.register(adminRoutes);
+await app.register(ssoRoutes);
 await app.register(caldavRoutes);
 
 // ---- Error handler ----

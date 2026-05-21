@@ -64,6 +64,13 @@
       "when": 1779361702293,
       "tag": "0008_calendar_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779362064725,
+      "tag": "0009_login_events",
+      "breakpoints": true
     }
   ]
 }

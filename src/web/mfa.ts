@@ -19,6 +19,7 @@ import {
   type BackupCode,
 } from "../lib/mfa.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
+import { recordLoginEvent } from "../lib/login_history.js";
 
 function flashFromQuery(req: any) {
   const q = (req.query ?? {}) as Record<string, unknown>;
@@ -60,6 +61,7 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (verifyTotpCode(secret, code)) {
       await markSessionMfaSatisfied(req);
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
+      void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       return reply.redirect("/app");
     }
 
@@ -73,6 +75,7 @@ export async function mfaRoutes(app: FastifyInstance) {
         .where(eq(schema.users.id, s.user.id));
       await markSessionMfaSatisfied(req);
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
+      void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       return reply.redirect("/app?success=" + encodeURIComponent("已使用备用码登录，请重新生成"));
     }
 

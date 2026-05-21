@@ -88,7 +88,7 @@ export type LoginAlertCtx = {
   loginAt: Date;
   ip: string;
   userAgent: string;
-  method: "password" | "passkey" | "mfa";
+  method: "password" | "passkey" | "mfa" | "sso";
   location?: string;
 };
 
@@ -98,7 +98,7 @@ export function loginAlertMail(to: string, ctx: LoginAlertCtx): SendArgs {
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }).format(ctx.loginAt);
-  const methodLabel = ctx.method === "passkey" ? "Passkey" : ctx.method === "mfa" ? "密码 + MFA" : "密码";
+  const methodLabel = ctx.method === "passkey" ? "Passkey" : ctx.method === "mfa" ? "密码 + MFA" : ctx.method === "sso" ? "SSO" : "密码";
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
 
   const text = `${brand} 登录提醒
@@ -160,6 +160,38 @@ export function passwordResetMail(to: string, token: string): SendArgs {
       </p>`,
   });
   return { to, subject: `【${brand}】重置密码`, html, text };
+}
+
+// ---------- Calendar invitation ----------
+export function calendarInviteMail(
+  to: string,
+  ctx: { calendarName: string; inviterName: string; role: string; message: string | null; token: string },
+): SendArgs {
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const acceptUrl = `${baseUrl}/invite/${encodeURIComponent(ctx.token)}`;
+  const roleLabel = ctx.role === "editor" ? "可编辑" : "只读查看";
+  const text = `${ctx.inviterName} 邀请你加入日历「${ctx.calendarName}」（${roleLabel}）。\n${ctx.message ? `\n留言：${ctx.message}\n` : ""}\n接受邀请：${acceptUrl}\n7 天内有效。`;
+  const html = baseLayout({
+    title: `邀请加入「${ctx.calendarName}」`,
+    preheader: `${ctx.inviterName} 邀请你加入日历`,
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">📅 日历协作邀请</h1>
+      <p style="margin:0 0 14px;color:#475569;line-height:1.6;font-size:14px;">
+        <strong>${escape(ctx.inviterName)}</strong> 邀请你加入日历 <strong>「${escape(ctx.calendarName)}」</strong>，权限：<strong>${escape(roleLabel)}</strong>。
+      </p>
+      ${ctx.message ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.message)}</div>` : ""}
+      <p style="margin:20px 0 14px;">
+        <a href="${acceptUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请</a>
+      </p>
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
+        按钮没反应？复制下面链接到浏览器：<br/>
+        <a href="${acceptUrl}" style="color:#6366f1;text-decoration:underline;">${acceptUrl}</a>
+      </p>
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">
+        邀请 7 天内有效。如果还没注册，按下「接受邀请」会引导你注册同邮箱账号后自动加入。
+      </p>`,
+  });
+  return { to, subject: `【${brand}】邀请你加入日历「${ctx.calendarName}」`, html, text };
 }
 
 // ---------- Welcome email after register ----------

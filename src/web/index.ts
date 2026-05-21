@@ -14,7 +14,7 @@ import {
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
-import { welcomeMail, passwordResetMail } from "../lib/email_templates.js";
+import { welcomeMail, passwordResetMail, calendarInviteMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -23,6 +23,9 @@ import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin }
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
+import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
+import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
+import { randomBytes } from "node:crypto";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -145,6 +148,7 @@ export async function webRoutes(app: FastifyInstance) {
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
+    void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
     return reply.redirect("/app");
   });
 
@@ -792,6 +796,7 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webauthnCredentials.createdAt));
 
     const apps = await listAppPasswords(user.id);
+    const recentLogins = await listRecentLogins(user.id, 30);
     const q = (req.query ?? {}) as Record<string, unknown>;
     const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
     const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
@@ -814,6 +819,10 @@ export async function webRoutes(app: FastifyInstance) {
       })),
       newAppPassword: newPlain,
       newAppLabel: newLabel,
+      recentLogins: recentLogins.map((e) => ({
+        ...e,
+        createdAtLocal: localTime(e.createdAt),
+      })),
     });
   });
 
