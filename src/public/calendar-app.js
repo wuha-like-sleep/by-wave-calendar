@@ -369,7 +369,14 @@
     if (!id || !confirm("删除该事件？")) return;
     let resp;
     try {
-      resp = await fetch(`/api/events/${id}`, fetchOpts({ method: "DELETE" }));
+      // DELETE has no body — sending Content-Type: application/json without a
+      // body makes Fastify's JSON parser reject with 400. Send only the CSRF
+      // header, no content-type.
+      resp = await fetch(`/api/events/${id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": ctx.csrfToken },
+      });
     } catch (err) {
       console.error("delete_event_network", err);
       window.bwc && window.bwc.toast("删除失败：网络错误", "error");

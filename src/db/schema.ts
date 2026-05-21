@@ -79,6 +79,9 @@ export const siteSettings = pgTable("site_settings", {
   lockoutEnabled: boolean("lockout_enabled").notNull().default(true),
   lockoutThreshold: integer("lockout_threshold").notNull().default(5),
   lockoutMinutes: integer("lockout_minutes").notNull().default(15),
+  // Master switch for the third-party API: when off, /api/* rejects Bearer
+  // tokens (session-cookie calls from the in-app JS still work fine).
+  apiEnabled: boolean("api_enabled").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -174,6 +177,29 @@ export const appPasswords = pgTable("app_passwords", {
 }, (t) => ({
   userIdx: index("app_passwords_user_idx").on(t.userId),
   prefixIdx: index("app_passwords_prefix_idx").on(t.prefix),
+}));
+
+// Long-lived bearer tokens for third-party integrations (n8n / Zapier / Zoom /
+// Notion / cron / internal services). Each token acts on behalf of `userId` —
+// same authority as that user logging in via the browser, scoped to their own
+// calendars. Users create + manage their own from /app/settings; admin can
+// kill switch the whole feature via site_settings.apiEnabled.
+export const apiTokens = pgTable("api_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  // "read" → GET only, "write" → all methods. Default write = ergonomic for n8n.
+  scope: text("scope").notNull().default("write"),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  lastUsedIp: text("last_used_ip"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("api_tokens_user_idx").on(t.userId),
+  prefixIdx: index("api_tokens_prefix_idx").on(t.prefix),
 }));
 
 export const calendars = pgTable("calendars", {

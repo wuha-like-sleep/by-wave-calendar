@@ -59,6 +59,20 @@ app.addContentTypeParser(
   (_req, body, done) => done(null, body),
 );
 
+// Fastify's default JSON parser throws 400 on empty bodies even for DELETE /
+// PATCH requests where Content-Type is technically set but no body is sent.
+// Override to treat empty string as null so DELETE /api/events/:id never
+// regresses to the "删除失败 (HTTP 400)" failure mode.
+app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+  const s = String(body || "").trim();
+  if (s.length === 0) return done(null, null);
+  try {
+    done(null, JSON.parse(s));
+  } catch (err) {
+    done(err instanceof Error ? err : new Error(String(err)));
+  }
+});
+
 // ---- Security headers ----
 await app.register(helmet, {
   contentSecurityPolicy: {
@@ -190,6 +204,17 @@ await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(icsRoutes);
+
+// Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;
+// session-cookie callers are unaffected because they have no `authVia` tag.
+app.addHook("preHandler", async (req, reply) => {
+  if (!req.url.startsWith("/api/")) return;
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  const tag = (req as unknown as { authVia?: string }).authVia;
+  if (tag === "api_token:read") {
+    reply.code(403).send({ error: "token_is_read_only" });
+  }
+});
 // Inject DB-backed site settings into every reply.view call.
 app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();

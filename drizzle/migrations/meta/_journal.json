@@ -127,6 +127,13 @@
       "when": 1779371018378,
       "tag": "0017_sso_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779373275946,
+      "tag": "0018_api_tokens",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,8 @@ import {
 } from "../lib/email_templates.js";
 import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
+import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/api_token.js";
+import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -381,6 +383,81 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
+  });
+
+  // ---------- Third-party API ----------
+  // Lightweight <time data-tz> wrapper; the client-side local-time.js reformats
+  // to the visitor's browser TZ on load.
+  const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" data-style="datetime">${d.toISOString()}</time>`;
+
+  app.get("/admin/api", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const settings = await getSettings();
+    const tokens = await listAllApiTokens();
+    const allUsers = await db.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName }).from(schema.users).orderBy(asc(schema.users.email));
+    const providers = await listEnabledProvidersPublic();
+    const issuedToken = typeof (req.query as { issued?: string }).issued === "string" ? (req.query as { issued: string }).issued : null;
+    const issuedLabel = typeof (req.query as { issuedLabel?: string }).issuedLabel === "string" ? (req.query as { issuedLabel: string }).issuedLabel : null;
+    return reply.view("admin/api", {
+      title: "API · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/api",
+      apiEnabled: settings.apiEnabled,
+      ssoEnabled: providers.length > 0,
+      tokens: tokens.map((t) => ({
+        ...t,
+        createdAtLocal: localTimeIso(t.createdAt),
+        lastUsedAtLocal: t.lastUsedAt ? localTimeIso(t.lastUsedAt) : null,
+        expiresAtLocal: t.expiresAt ? localTimeIso(t.expiresAt) : null,
+      })),
+      allUsers,
+      issuedToken,
+      issuedLabel,
+      baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+    });
+  });
+
+  app.post("/admin/api/toggle", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
+    await updateSettings({ apiEnabled: enabled });
+    return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "API 已启用" : "API 已关闭（现存 token 暂停工作）"));
+  });
+
+  app.post("/admin/api/tokens", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      label: z.string().min(1).max(80),
+      userId: z.string().uuid(),
+      scope: z.enum(["read", "write"]).default("write"),
+      expiresInDays: z.coerce.number().int().min(0).max(3650).default(0),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/api?error=" + encodeURIComponent("参数无效"));
+    const targetExists = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, body.data.userId)).limit(1);
+    if (targetExists.length === 0) return reply.redirect("/admin/api?error=" + encodeURIComponent("目标用户不存在"));
+    const issued = await createApiToken({
+      userId: body.data.userId,
+      label: body.data.label,
+      scope: body.data.scope,
+      expiresInDays: body.data.expiresInDays > 0 ? body.data.expiresInDays : null,
+    });
+    const params = new URLSearchParams({ issued: issued.plain, issuedLabel: body.data.label, success: "Token 已生成，仅显示一次，请立即复制" });
+    return reply.redirect("/admin/api?" + params.toString());
+  });
+
+  app.post<{ Params: { id: string } }>("/admin/api/tokens/:id/revoke", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/admin/api");
+    await revokeApiTokenAdmin(id.data);
+    return reply.redirect("/admin/api?success=" + encodeURIComponent("Token 已撤销"));
   });
 
   // ---------- Security knobs (risk-login + lockout) ----------

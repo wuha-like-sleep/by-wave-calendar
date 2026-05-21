@@ -104,7 +104,36 @@ declare module "fastify" {
 }
 
 export async function requireUser(req: FastifyRequest, reply: FastifyReply): Promise<schema.User> {
-  const user = req.user ?? (await loadUserFromRequest(req));
+  if (req.user) return req.user;
+
+  // 1) Bearer token (third-party API integration). Only honored when admin
+  //    has enabled the API feature in /admin/api. Successful auth bypasses
+  //    CSRF since the caller isn't a browser running with our cookies.
+  const auth = String(req.headers.authorization || "");
+  if (auth.toLowerCase().startsWith("bearer ")) {
+    const token = auth.slice(7).trim();
+    const { looksLikeApiToken, verifyApiToken, touchApiToken } = await import("./api_token.js");
+    if (looksLikeApiToken(token)) {
+      const verified = await verifyApiToken(token);
+      if (verified) {
+        const { db, schema: s } = await import("../db/client.js");
+        const { eq } = await import("drizzle-orm");
+        const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
+        if (u) {
+          req.user = u;
+          void touchApiToken(verified.tokenId, req.ip).catch(() => undefined);
+          // Tag the request so downstream handlers can tell session vs API.
+          (req as unknown as { authVia: string }).authVia = "api_token:" + verified.scope;
+          return u;
+        }
+      }
+      reply.code(401).send({ error: "invalid_token" });
+      throw new Error("invalid_token");
+    }
+  }
+
+  // 2) Session cookie (normal browser flow).
+  const user = await loadUserFromRequest(req);
   if (!user) {
     reply.code(401).send({ error: "unauthorized" });
     throw new Error("unauthorized");
