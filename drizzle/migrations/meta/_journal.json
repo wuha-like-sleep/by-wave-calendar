@@ -183,6 +183,13 @@
       "when": 1779489700000,
       "tag": "0025_reminders_per_instance",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1779490000000,
+      "tag": "0026_webhooks",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,7 @@ import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
+import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -251,6 +252,11 @@ export async function eventRoutes(app: FastifyInstance) {
         })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));
       }
     }
+    // Fire-and-forget webhook dispatch. Failures are logged in the
+    // webhook_deliveries table; never blocks the API response.
+    if (row) {
+      void dispatchWebhook("event.created", eventToWebhookPayload(row)).catch(() => undefined);
+    }
     return reply.code(201).send(row);
   });
 
@@ -280,6 +286,9 @@ export async function eventRoutes(app: FastifyInstance) {
       })
       .where(eq(schema.events.id, id))
       .returning();
+    if (row) {
+      void dispatchWebhook("event.updated", eventToWebhookPayload(row)).catch(() => undefined);
+    }
     return reply.send(row);
   });
 
@@ -301,6 +310,7 @@ export async function eventRoutes(app: FastifyInstance) {
     // Soft-delete the event and fire CANCEL emails to anyone we ever invited.
     // The row stays so /event-invite/:token can render a "已取消" notice.
     await cancelEvent(parsed.data.id, { id: user.id, email: user.email, displayName: user.displayName });
+    void dispatchWebhook("event.deleted", eventToWebhookPayload(target)).catch(() => undefined);
     return reply.code(204).send();
   });
 }

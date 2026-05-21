@@ -400,6 +400,49 @@ export const shareTokens = pgTable("share_tokens", {
   calIdx: index("share_tokens_calendar_idx").on(t.calendarId),
 }));
 
+// Admin-configured outbound webhooks. On event create/update/delete we
+// POST a small JSON payload to every enabled webhook URL. Useful for
+// piping into Zapier / n8n / internal services without having to
+// poll our API.
+export const webhooks = pgTable("webhooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Free-text label for the admin UI ("Notion duty roster", "Slack #ops").
+  label: text("label").notNull(),
+  url: text("url").notNull(),
+  // Bitmask of subscribed events: event.created / event.updated /
+  // event.deleted / booking.created / booking.cancelled. Stored as a
+  // JSON array of strings so adding more in the future doesn't need
+  // a migration.
+  events: jsonb("events").notNull().default(["event.created", "event.updated", "event.deleted"]),
+  // Optional HMAC-SHA256 shared secret. If set, the outbound request
+  // carries an X-Bywave-Signature header so the receiver can verify
+  // it came from us.
+  secret: text("secret"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Append-only delivery log. Lets the admin see "did Notion receive that
+// last event create?" without grepping pm2 logs.
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  webhookId: uuid("webhook_id").notNull().references(() => webhooks.id, { onDelete: "cascade" }),
+  eventName: text("event_name").notNull(),
+  // We snapshot the payload so the admin can resend or debug.
+  payload: jsonb("payload"),
+  // HTTP response. statusCode = null when the request failed before
+  // even getting a response (DNS / TCP / TLS).
+  statusCode: integer("status_code"),
+  responseBody: text("response_body"),  // truncated to 1KB
+  attemptCount: integer("attempt_count").notNull().default(1),
+  ok: boolean("ok").notNull().default(false),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  webhookIdx: index("webhook_deliveries_webhook_idx").on(t.webhookId),
+  createdIdx: index("webhook_deliveries_created_idx").on(t.createdAt),
+}));
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Calendar = typeof calendars.$inferSelect;
@@ -420,6 +463,9 @@ export type AppPassword = typeof appPasswords.$inferSelect;
 export type NewAppPassword = typeof appPasswords.$inferInsert;
 export type CalendarSubscription = typeof calendarSubscriptions.$inferSelect;
 export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;
+export type Webhook = typeof webhooks.$inferSelect;
+export type NewWebhook = typeof webhooks.$inferInsert;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
 export type SsoProvider = typeof ssoProviders.$inferSelect;

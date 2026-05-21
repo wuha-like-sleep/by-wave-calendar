@@ -838,5 +838,107 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply;
   });
 
+  // ---------- Outbound webhooks ----------
+  // Admin manages a list of "when something happens, POST to this URL"
+  // destinations. Delivery is best-effort; failures are logged so the
+  // admin can debug from the same page.
+  app.get("/admin/webhooks", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const hooks = await db.select().from(schema.webhooks).orderBy(asc(schema.webhooks.createdAt));
+    // Latest 50 deliveries across all hooks, joined with the hook label.
+    const recent = await db
+      .select({
+        id: schema.webhookDeliveries.id,
+        eventName: schema.webhookDeliveries.eventName,
+        statusCode: schema.webhookDeliveries.statusCode,
+        ok: schema.webhookDeliveries.ok,
+        attemptCount: schema.webhookDeliveries.attemptCount,
+        errorMessage: schema.webhookDeliveries.errorMessage,
+        createdAt: schema.webhookDeliveries.createdAt,
+        hookLabel: schema.webhooks.label,
+      })
+      .from(schema.webhookDeliveries)
+      .leftJoin(schema.webhooks, eq(schema.webhooks.id, schema.webhookDeliveries.webhookId))
+      .orderBy(desc(schema.webhookDeliveries.createdAt))
+      .limit(50);
+    return reply.view("admin/webhooks", {
+      title: "Webhooks · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/webhooks",
+      hooks: hooks.map((h) => ({ ...h, eventsList: Array.isArray(h.events) ? h.events : [] })),
+      deliveries: recent.map((d) => ({
+        ...d,
+        createdAtLocal: localTimeIso(d.createdAt),
+      })),
+    });
+  });
+
+  app.post("/admin/webhooks", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      label: z.string().min(1).max(120),
+      url: z.string().url().max(500),
+      // Comma-separated list of event names from the form checkboxes.
+      events: z.union([z.string(), z.array(z.string())]).optional(),
+      secret: z.string().max(200).optional().transform((v) => v?.trim() || null),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/webhooks?error=" + encodeURIComponent("参数无效"));
+    const events = Array.isArray(body.data.events)
+      ? body.data.events
+      : (body.data.events ? [body.data.events] : ["event.created", "event.updated", "event.deleted"]);
+    await db.insert(schema.webhooks).values({
+      label: body.data.label,
+      url: body.data.url,
+      events,
+      secret: body.data.secret,
+    });
+    await audit(req, me.id, "webhook.create", { targetType: "webhook", details: { label: body.data.label, url: body.data.url } });
+    return reply.redirect("/admin/webhooks?success=" + encodeURIComponent("已添加 Webhook"));
+  });
+
+  app.post("/admin/webhooks/:id/toggle", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/webhooks");
+    const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
+    if (!hook) return reply.redirect("/admin/webhooks");
+    await db.update(schema.webhooks).set({ enabled: !hook.enabled }).where(eq(schema.webhooks.id, id.data));
+    return reply.redirect("/admin/webhooks?success=" + encodeURIComponent(hook.enabled ? "已暂停" : "已启用"));
+  });
+
+  app.post("/admin/webhooks/:id/delete", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/webhooks");
+    const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
+    if (!hook) return reply.redirect("/admin/webhooks");
+    await db.delete(schema.webhooks).where(eq(schema.webhooks.id, id.data));
+    await audit(req, me.id, "webhook.delete", { targetType: "webhook", details: { label: hook.label } });
+    return reply.redirect("/admin/webhooks?success=" + encodeURIComponent("已删除"));
+  });
+
+  app.post("/admin/webhooks/:id/test", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/webhooks");
+    const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
+    if (!hook) return reply.redirect("/admin/webhooks");
+    // Mark not-enabled hooks as still test-able — admins want to verify
+    // before turning them on. dispatchWebhook only fires on enabled hooks
+    // so we directly enqueue a one-off delivery here instead.
+    const { dispatchTestWebhook } = await import("../lib/webhooks.js");
+    await dispatchTestWebhook(hook).catch(() => undefined);
+    return reply.redirect("/admin/webhooks?success=" + encodeURIComponent("测试请求已发送，下方记录里看结果"));
+  });
+
   void asc;
 }
