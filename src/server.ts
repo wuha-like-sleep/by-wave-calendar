@@ -77,11 +77,13 @@ app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body,
 // ---- CSP nonce ----
 // Per-request random nonce attached to every inline <script>. Lets us drop
 // 'unsafe-inline' from script-src while still serving the bootstrap scripts
-// we render with EJS. Stored on `req.cspNonce` so the view-locals injector
-// can pass it down to templates.
+// we render with EJS. Stored on `req.raw.cspNonce` (the raw Node request)
+// because @fastify/helmet's CSP directive functions receive `req.raw`, not
+// the Fastify request object — and we want both helmet and the view-locals
+// injector to read the same value.
 import { randomBytes } from "node:crypto";
 app.addHook("onRequest", async (req) => {
-  (req as unknown as { cspNonce: string }).cspNonce = randomBytes(16).toString("base64");
+  (req.raw as unknown as { cspNonce: string }).cspNonce = randomBytes(16).toString("base64");
 });
 
 // ---- Security headers ----
@@ -256,7 +258,7 @@ app.addHook("onRequest", async (req, reply) => {
       themeDensity: userTheme.density ?? settings.themeDensity,
       currentUser,
       jsBasePath: JS_BASE_PATH,
-      cspNonce: (req as unknown as { cspNonce: string }).cspNonce,
+      cspNonce: (req.raw as unknown as { cspNonce: string }).cspNonce,
       ...locals,
     });
 });
