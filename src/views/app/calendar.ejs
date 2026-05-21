@@ -62,6 +62,125 @@
   <% } %>
 </section>
 
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex items-center justify-between mb-2">
+    <h2 class="text-lg font-semibold text-slate-900">从其他平台导入</h2>
+    <span class="text-xs text-slate-400">支持 Google / Apple / Outlook / 任意 ICS</span>
+  </div>
+  <p class="text-sm text-slate-500 mb-4">四种方式：上传 .ics 文件、粘贴 ICS 文本、一次性从 URL 拉取、添加订阅（服务器按周期自动同步）。</p>
+
+  <div class="mb-3 flex flex-wrap gap-2 border-b border-slate-200" id="import-tabs">
+    <button type="button" data-tab="file"  class="import-tab px-3 py-2 text-sm font-medium border-b-2 border-brand-600 text-brand-700">📁 文件</button>
+    <button type="button" data-tab="url"   class="import-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">🔗 URL 一次性</button>
+    <button type="button" data-tab="sub"   class="import-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">🔁 订阅自动同步</button>
+    <button type="button" data-tab="paste" class="import-tab px-3 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">📝 粘贴文本</button>
+  </div>
+
+  <div data-pane="file" class="import-pane">
+    <form method="post" action="/app/calendars/<%= calendar.id %>/import/file" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-2">
+      <input type="file" name="file" accept=".ics,text/calendar" required
+             class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">上传并导入</button>
+    </form>
+    <p class="mt-2 text-xs text-slate-400">从 Google Calendar 设置 → 导出，或 Apple 日历 → 文件 → 导出，得到 .ics 文件。</p>
+  </div>
+
+  <div data-pane="url" class="import-pane hidden">
+    <form method="post" action="/app/calendars/<%= calendar.id %>/import/url-once" class="flex flex-col sm:flex-row gap-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="url" name="url" required placeholder="https://… 或 webcal://…"
+             class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">立即导入</button>
+    </form>
+    <p class="mt-2 text-xs text-slate-400">一次性从远程 URL 拉取并导入，之后不再自动同步。适合公开节假日 / 课表的快照。</p>
+  </div>
+
+  <div data-pane="sub" class="import-pane hidden">
+    <form method="post" action="/app/calendars/<%= calendar.id %>/subscriptions" class="space-y-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input type="url" name="url" required placeholder="远程 ICS URL（https:// 或 webcal://）"
+               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">添加订阅</button>
+      </div>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <input type="text" name="label" maxlength="60" placeholder="备注（例如：公司日历 / 团队课表）"
+               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <select name="refreshMinutes"
+                class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+          <option value="60">每小时同步</option>
+          <option value="360" selected>每 6 小时同步</option>
+          <option value="720">每 12 小时同步</option>
+          <option value="1440">每天同步</option>
+          <option value="10080">每周同步</option>
+        </select>
+      </div>
+    </form>
+    <p class="mt-2 text-xs text-slate-400">服务器按周期拉取并增量更新事件（同 UID 即更新，新 UID 即新增）。删除订阅不会删除已导入的事件。</p>
+
+    <% if (subscriptions && subscriptions.length > 0) { %>
+      <ul class="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+        <% subscriptions.forEach(function(s){ %>
+          <li class="py-3 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-900 truncate"><%= s.label || s.url %></div>
+              <div class="text-xs text-slate-500 break-all"><%= s.url %></div>
+              <div class="text-xs mt-1">
+                <% if (s.lastStatus === 'ok') { %>
+                  <span class="text-emerald-600">✓ 上次同步 <%= s.lastFetchedAtLocal %> · <%= s.lastEventCount %> 个事件</span>
+                <% } else if (s.lastStatus === 'error') { %>
+                  <span class="text-red-600">✗ <%= s.lastFetchedAtLocal %> 失败：<%= s.lastError %></span>
+                <% } else { %>
+                  <span class="text-slate-400">尚未同步</span>
+                <% } %>
+                · 每 <%= s.refreshMinutes %> 分钟
+              </div>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <form method="post" action="/app/calendars/<%= calendar.id %>/subscriptions/<%= s.id %>/refresh" class="m-0">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 px-2 py-1">立即同步</button>
+              </form>
+              <form method="post" action="/app/calendars/<%= calendar.id %>/subscriptions/<%= s.id %>/delete" class="m-0" onsubmit="return confirm('删除这个订阅？已导入的事件会保留，但不再自动同步。');">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">删除</button>
+              </form>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+
+  <div data-pane="paste" class="import-pane hidden">
+    <form method="post" action="/app/calendars/<%= calendar.id %>/import/text" class="space-y-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <textarea name="text" required rows="6" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;…"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">导入文本</button>
+    </form>
+    <p class="mt-2 text-xs text-slate-400">如果你只能复制内容（比如管理员给的一段 ICS 文本），粘到这里就能导入。</p>
+  </div>
+</section>
+
+<script>
+(function(){
+  const tabs = document.querySelectorAll(".import-tab");
+  const panes = document.querySelectorAll(".import-pane");
+  tabs.forEach(t => t.addEventListener("click", () => {
+    const name = t.getAttribute("data-tab");
+    tabs.forEach(x => {
+      const active = x.getAttribute("data-tab") === name;
+      x.classList.toggle("border-brand-600", active);
+      x.classList.toggle("text-brand-700", active);
+      x.classList.toggle("border-transparent", !active);
+      x.classList.toggle("text-slate-500", !active);
+    });
+    panes.forEach(p => p.classList.toggle("hidden", p.getAttribute("data-pane") !== name));
+  }));
+})();
+</script>
+
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-lg font-semibold text-slate-900">事件</h2>

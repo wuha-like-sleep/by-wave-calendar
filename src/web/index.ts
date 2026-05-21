@@ -22,6 +22,7 @@ import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
+import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -493,6 +494,12 @@ export async function webRoutes(app: FastifyInstance) {
       .where(and(eq(schema.shareTokens.calendarId, calendar.id), isNull(schema.shareTokens.revokedAt)))
       .orderBy(desc(schema.shareTokens.createdAt));
 
+    const subs = await db
+      .select()
+      .from(schema.calendarSubscriptions)
+      .where(eq(schema.calendarSubscriptions.calendarId, calendar.id))
+      .orderBy(desc(schema.calendarSubscriptions.createdAt));
+
     const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
 
     return reply.view("app/calendar", {
@@ -507,7 +514,167 @@ export async function webRoutes(app: FastifyInstance) {
         endsAtLocal: localTime(e.endsAt, calendar.timezone),
       })),
       shareTokens: tokenRows.map((t) => ({ ...t, url: `${baseUrl}/ics/${t.token}.ics` })),
+      subscriptions: subs.map((s) => ({
+        ...s,
+        lastFetchedAtLocal: s.lastFetchedAt ? localTime(s.lastFetchedAt) : null,
+      })),
     });
+  });
+
+  // ---------- ICS import ----------
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/file", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+
+    const file = await req.file();
+    if (!file) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请选择 .ics 文件" });
+    }
+    const buf = await file.toBuffer();
+    if (buf.length > 5 * 1024 * 1024) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "文件过大（>5MB）" });
+    }
+    const text = buf.toString("utf8");
+    if (!text.toUpperCase().includes("BEGIN:VCALENDAR")) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "不是有效的 iCalendar 文件" });
+    }
+    try {
+      const result = await importIcsText(calId.data, text, { sourceTag: `file:${file.filename ?? "upload"}` });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, {
+        success: `导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+      });
+    } catch (err) {
+      req.log.warn({ err }, "ics_file_import_failed");
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "导入失败：" + (err instanceof Error ? err.message : "未知错误") });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/text", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+
+    const body = z.object({ text: z.string().min(20).max(5 * 1024 * 1024) }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请粘贴 .ics 文本内容" });
+    }
+    if (!body.data.text.toUpperCase().includes("BEGIN:VCALENDAR")) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "粘贴的内容不是 iCalendar 格式" });
+    }
+    try {
+      const result = await importIcsText(calId.data, body.data.text, { sourceTag: "paste" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, {
+        success: `导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+      });
+    } catch (err) {
+      req.log.warn({ err }, "ics_text_import_failed");
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "导入失败：" + (err instanceof Error ? err.message : "未知错误") });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/url-once", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+
+    const body = z.object({ url: z.string().min(1).max(2000) }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的 URL" });
+    }
+    try {
+      const text = await fetchIcsUrl(body.data.url);
+      const result = await importIcsText(calId.data, text, { sourceTag: `url-once` });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, {
+        success: `从 URL 导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+      });
+    } catch (err) {
+      req.log.warn({ err }, "ics_url_import_failed");
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "拉取失败：" + (err instanceof Error ? err.message : "未知错误") });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/subscriptions", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
+
+    const body = z
+      .object({
+        url: z.string().min(1).max(2000),
+        label: z.string().max(60).optional().transform((v) => (v?.trim() ? v.trim() : undefined)),
+        refreshMinutes: z.coerce.number().int().min(15).max(10080).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的订阅 URL" });
+    }
+
+    const [sub] = await db
+      .insert(schema.calendarSubscriptions)
+      .values({
+        calendarId: calId.data,
+        url: body.data.url.trim(),
+        label: body.data.label ?? null,
+        refreshMinutes: body.data.refreshMinutes ?? 360,
+      })
+      .returning({ id: schema.calendarSubscriptions.id });
+    if (!sub) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "保存订阅失败" });
+    }
+
+    const refresh = await refreshSubscription(sub.id);
+    if (!refresh.ok) {
+      return redirectWith(reply, `/app/calendars/${calId.data}`, {
+        error: `订阅已保存但首次拉取失败：${refresh.error}（将按周期重试）`,
+      });
+    }
+    return redirectWith(reply, `/app/calendars/${calId.data}`, {
+      success: `订阅创建并同步成功：新增 ${refresh.result.inserted} · 更新 ${refresh.result.updated}`,
+    });
+  });
+
+  app.post<{ Params: { id: string; subId: string } }>("/app/calendars/:id/subscriptions/:subId/refresh", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const params = z.object({ id: z.string().uuid(), subId: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(params.data.id, user.id))) return reply.redirect("/app");
+    const refresh = await refreshSubscription(params.data.subId);
+    if (!refresh.ok) {
+      return redirectWith(reply, `/app/calendars/${params.data.id}`, { error: "同步失败：" + refresh.error });
+    }
+    return redirectWith(reply, `/app/calendars/${params.data.id}`, {
+      success: `同步完成：新增 ${refresh.result.inserted} · 更新 ${refresh.result.updated}`,
+    });
+  });
+
+  app.post<{ Params: { id: string; subId: string } }>("/app/calendars/:id/subscriptions/:subId/delete", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const params = z.object({ id: z.string().uuid(), subId: z.string().uuid() }).safeParse(req.params);
+    if (!params.success) return reply.redirect("/app");
+    if (!(await ownsCalendar(params.data.id, user.id))) return reply.redirect("/app");
+    await db
+      .delete(schema.calendarSubscriptions)
+      .where(and(
+        eq(schema.calendarSubscriptions.id, params.data.subId),
+        eq(schema.calendarSubscriptions.calendarId, params.data.id),
+      ));
+    return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: "订阅已删除（已导入事件保留）" });
   });
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/delete", async (req, reply) => {

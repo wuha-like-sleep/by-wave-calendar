@@ -157,6 +157,28 @@ export function parseEvent(ics: string): IcalEvent | null {
   };
 }
 
+export function parseEvents(ics: string): IcalEvent[] {
+  // Unfold once, then walk the lines collecting every VEVENT block.
+  const unfolded = ics.replace(/\r?\n[\t ]/g, "");
+  const lines = unfolded.split(/\r?\n/);
+  const events: IcalEvent[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if ((lines[i] ?? "").toUpperCase() === "BEGIN:VEVENT") {
+      let j = i + 1;
+      while (j < lines.length && (lines[j] ?? "").toUpperCase() !== "END:VEVENT") j++;
+      if (j >= lines.length) break;
+      const block = lines.slice(i, j + 1).join(CRLF);
+      const ev = parseEvent(block);
+      if (ev) events.push(ev);
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return events;
+}
+
 function parseICalDateValue(val: string, allDay: boolean): Date {
   if (allDay) {
     const y = Number(val.slice(0, 4));

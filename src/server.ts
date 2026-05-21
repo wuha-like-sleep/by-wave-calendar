@@ -22,6 +22,7 @@ import { mfaRoutes } from "./web/mfa.js";
 import { adminRoutes } from "./web/admin.js";
 import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
+import { startSubscriptionScheduler } from "./lib/ics_import.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
 
@@ -220,6 +221,11 @@ app.setNotFoundHandler(async (req, reply) => {
     });
   }
   return reply.code(404).send({ error: "not_found" });
+});
+
+startSubscriptionScheduler({
+  info: (m) => app.log.info(m),
+  warn: (m) => app.log.warn(m),
 });
 
 try {

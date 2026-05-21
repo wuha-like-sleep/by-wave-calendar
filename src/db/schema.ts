@@ -182,6 +182,21 @@ export const calendarInvitations = pgTable("calendar_invitations", {
   emailIdx: index("calendar_invitations_email_idx").on(t.email),
 }));
 
+export const calendarSubscriptions = pgTable("calendar_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  label: text("label"),
+  refreshMinutes: integer("refresh_minutes").notNull().default(360),
+  lastFetchedAt: timestamp("last_fetched_at", { withTimezone: true }),
+  lastStatus: text("last_status"),
+  lastError: text("last_error"),
+  lastEventCount: integer("last_event_count"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  calIdx: index("calendar_subscriptions_cal_idx").on(t.calendarId),
+}));
+
 export const shareTokens = pgTable("share_tokens", {
   token: text("token").primaryKey(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
@@ -210,3 +225,5 @@ export type CalendarMember = typeof calendarMembers.$inferSelect;
 export type CalendarInvitation = typeof calendarInvitations.$inferSelect;
 export type AppPassword = typeof appPasswords.$inferSelect;
 export type NewAppPassword = typeof appPasswords.$inferInsert;
+export type CalendarSubscription = typeof calendarSubscriptions.$inferSelect;
+export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;
