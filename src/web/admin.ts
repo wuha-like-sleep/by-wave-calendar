@@ -3,6 +3,7 @@ import { z } from "zod";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
+import sharp from "sharp";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
@@ -188,15 +189,12 @@ export async function adminRoutes(app: FastifyInstance) {
     const file = await req.file();
     if (!file) return reply.redirect("/admin/logo?error=" + encodeURIComponent("请选择文件"));
 
-    const allowed = new Map<string, string>([
-      ["image/png", "png"],
-      ["image/jpeg", "jpg"],
-      ["image/jpg", "jpg"],
-      ["image/svg+xml", "svg"],
-      ["image/webp", "webp"],
+    const allowed = new Set([
+      "image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp",
     ]);
-    const ext = allowed.get(file.mimetype.toLowerCase());
-    if (!ext) return reply.redirect("/admin/logo?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
+    if (!allowed.has(file.mimetype.toLowerCase())) {
+      return reply.redirect("/admin/logo?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
+    }
 
     const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
@@ -206,11 +204,19 @@ export async function adminRoutes(app: FastifyInstance) {
       return reply.redirect("/admin/logo?error=" + encodeURIComponent("文件超过 2MB"));
     }
 
-    const filename = `logo.${ext}`;
-    await writeFile(path.join(uploadsDir, filename), buf);
+    // Normalize: center-crop square + resize to 512×512 PNG for consistent display.
+    try {
+      const processed = await sharp(buf, { failOn: "none" })
+        .rotate()
+        .resize({ width: 512, height: 512, fit: "cover", position: "center" })
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+      await writeFile(path.join(uploadsDir, "logo.png"), processed);
+    } catch (err) {
+      return reply.redirect("/admin/logo?error=" + encodeURIComponent("图片无法解析，请换一张"));
+    }
 
-    // Cache-bust by appending mtime stamp
-    const url = `/static/uploads/${filename}?v=${Date.now()}`;
+    const url = `/static/uploads/logo.png?v=${Date.now()}`;
     await updateSettings({ logoUrl: url });
     return reply.redirect("/admin/logo?success=" + encodeURIComponent("Logo 已上传"));
   });

@@ -56,20 +56,26 @@ function escape(s: string): string {
 
 // ---------- Verification code (register) ----------
 export function verificationCodeMail(to: string, code: string): SendArgs {
-  const text = `${brand} 邮箱验证码\n\n你的验证码是：${code}\n该验证码 10 分钟内有效，请勿告诉任何人。\n如果不是你本人操作，可以忽略这封邮件。`;
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const text = `${brand} 邮箱验证码\n\n你的验证码是：${code}\n该验证码 10 分钟内有效，请勿告诉任何人。\n\n如果不是你本人操作，可以忽略这封邮件。\n\n${baseUrl}`;
   const html = baseLayout({
     title: `${brand} 邮箱验证码`,
     preheader: `验证码 ${code}，10 分钟内有效`,
     body: `
-      <h1 style="margin:0 0 12px;font-size:18px;color:#0f172a;">邮箱验证</h1>
-      <p style="margin:0 0 16px;color:#475569;line-height:1.6;font-size:14px;">
-        请在 ${brand} 注册页面输入下方验证码完成邮箱验证。验证码 10 分钟内有效。
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;font-weight:600;">📧 邮箱验证</h1>
+      <p style="margin:0 0 20px;color:#475569;line-height:1.6;font-size:14px;">
+        请在 ${escape(brand)} 注册页面输入下方验证码完成邮箱验证。
       </p>
-      <div style="margin:16px 0;padding:18px 0;background:#f1f5f9;border-radius:12px;text-align:center;">
-        <span style="font-size:32px;letter-spacing:8px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#1e293b;">${escape(code)}</span>
+      <div style="margin:24px 0;padding:28px 16px;background:linear-gradient(135deg,#eef2ff,#e0e7ff);border-radius:16px;text-align:center;">
+        <div style="font-size:11px;color:#6366f1;letter-spacing:2px;text-transform:uppercase;font-weight:600;margin-bottom:8px;">VERIFICATION CODE</div>
+        <span style="font-size:42px;letter-spacing:14px;font-family:'SF Mono',Menlo,Consolas,monospace;color:#1e1b4b;font-weight:700;display:inline-block;padding-left:14px;">${escape(code)}</span>
+        <div style="font-size:11px;color:#6366f1;margin-top:8px;">10 分钟内有效</div>
       </div>
-      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
-        如果不是你本人在注册，请忽略此邮件 —— 你的邮箱不会被注册。
+      <p style="margin:20px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+        ⚠️ 请勿告诉任何人此验证码。如果不是你本人在注册，请忽略此邮件 —— 你的邮箱不会被注册。
+      </p>
+      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">
+        来自：<a href="${baseUrl}" style="color:#6366f1;text-decoration:none;">${baseUrl.replace(/^https?:\/\//, "")}</a>
       </p>`,
   });
   return { to, subject: `【${brand}】邮箱验证码 ${code}`, html, text };

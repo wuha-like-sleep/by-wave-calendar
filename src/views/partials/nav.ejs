@@ -1,14 +1,14 @@
 <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
   <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
     <div class="flex h-14 items-center justify-between gap-4">
-      <a href="<%= user ? '/app' : '/' %>" class="flex items-center gap-2 font-semibold text-slate-900">
+      <a href="<%= user ? '/app' : '/' %>" class="flex items-center gap-2.5 font-semibold text-slate-900">
         <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
-          <img src="<%= siteLogoUrl %>" alt="logo" class="h-7 w-7 rounded-lg object-cover" />
+          <img src="<%= siteLogoUrl %>" alt="logo" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
         <% } else { %>
-          <span class="inline-block h-7 w-7 rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm"></span>
+          <span class="inline-block h-9 w-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm"></span>
         <% } %>
-        <span class="hidden sm:inline"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
-        <span class="sm:hidden"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>
+        <span class="hidden sm:inline text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
+        <span class="sm:hidden text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>
       </a>
 
       <% if (user) { %>
