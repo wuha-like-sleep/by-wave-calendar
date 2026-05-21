@@ -13,6 +13,7 @@ import {
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull(),
+  emailVerified: boolean("email_verified").notNull().default(false),
   passwordHash: text("password_hash").notNull(),
   displayName: text("display_name"),
   isAdmin: boolean("is_admin").notNull().default(false),
@@ -23,6 +24,26 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUnique: uniqueIndex("users_email_unique").on(t.email),
+}));
+
+export const emailVerifications = pgTable("email_verifications", {
+  email: text("email").primaryKey(),
+  codeHash: text("code_hash").notNull(),
+  payload: jsonb("payload").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const loginAlerts = pgTable("login_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  ipHash: text("ip_hash").notNull(),
+  uaHash: text("ua_hash").notNull(),
+  lastSentAt: timestamp("last_sent_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("login_alerts_user_idx").on(t.userId),
+  uniq: uniqueIndex("login_alerts_user_ip_ua_unique").on(t.userId, t.ipHash, t.uaHash),
 }));
 
 export const sessions = pgTable("sessions", {
@@ -104,3 +125,5 @@ export type NewShareToken = typeof shareTokens.$inferInsert;
 export type WebauthnCredential = typeof webauthnCredentials.$inferSelect;
 export type NewWebauthnCredential = typeof webauthnCredentials.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
+export type EmailVerification = typeof emailVerifications.$inferSelect;
+export type LoginAlert = typeof loginAlerts.$inferSelect;

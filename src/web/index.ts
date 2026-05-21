@@ -13,6 +13,12 @@ import {
 } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newShareToken } from "../lib/ids.js";
+import { isMailerEnabled, sendMail } from "../lib/mailer.js";
+import { welcomeMail } from "../lib/email_templates.js";
+import { issueCode, verifyCode } from "../lib/email_verification.js";
+import { notifyLoginSuccess } from "../lib/login_alert.js";
+
+const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
 type Flash = { error?: string; success?: string };
 
@@ -125,6 +131,7 @@ export async function webRoutes(app: FastifyInstance) {
     }
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
+    void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     return reply.redirect("/app");
   });
 
@@ -165,23 +172,110 @@ export async function webRoutes(app: FastifyInstance) {
         email: z.string().email().max(254),
         password: z.string().min(8).max(200),
         displayName: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : undefined)),
+        // honeypot field — must be empty
+        company: z.string().max(0).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确（密码至少 8 位）" });
     }
-    const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
+    const email = body.data.email.toLowerCase().trim();
+    const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
     if (existing.length > 0) {
       return redirectWith(reply, "/register", { error: "该邮箱已注册" });
     }
     const passwordHash = await hashPassword(body.data.password);
+
+    const result = await issueCode(email, { passwordHash, displayName: body.data.displayName ?? null });
+    if (!result.ok) {
+      return redirectWith(reply, "/register", { error: "验证码发送失败，请稍后重试或联系管理员" });
+    }
+
+    reply.setCookie(PENDING_EMAIL_COOKIE, email, {
+      httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 15 * 60,
+    });
+
+    // If mailer is disabled in dev, the code was returned so we can log it.
+    if (result.code && env.NODE_ENV === "development") {
+      req.log.info(`[dev] verification code for ${email} = ${result.code}`);
+    }
+
+    return redirectWith(reply, "/verify-email", { success: "验证码已发送至你的邮箱，10 分钟内有效" });
+  });
+
+  app.get("/verify-email", async (req, reply) => {
+    const email = req.cookies[PENDING_EMAIL_COOKIE];
+    if (!email) return reply.redirect("/register");
+    return reply.view("auth/verify-email", {
+      title: "验证邮箱",
+      user: null,
+      registrationOpen: env.REGISTRATION_OPEN,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      email,
+      mailerEnabled: isMailerEnabled(),
+    });
+  });
+
+  app.post("/verify-email", {
+    config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const email = req.cookies[PENDING_EMAIL_COOKIE];
+    if (!email) return reply.redirect("/register");
+
+    const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, "/verify-email", { error: "请输入 6 位数字验证码" });
+
+    const result = await verifyCode(email, body.data.code);
+    if (!result.ok) {
+      const reasonMap: Record<string, string> = {
+        no_pending: "未发现待验证的注册请求，请重新注册",
+        expired: "验证码已过期，请重新获取",
+        too_many_attempts: "尝试次数过多，请稍后再试",
+        wrong: "验证码错误",
+      };
+      const msg = reasonMap[result.reason ?? "wrong"] ?? "验证失败";
+      return redirectWith(reply, "/verify-email", { error: msg });
+    }
+
+    // Create the user
     const [user] = await db
       .insert(schema.users)
-      .values({ email: body.data.email, passwordHash, displayName: body.data.displayName })
+      .values({
+        email,
+        emailVerified: true,
+        passwordHash: result.payload!.passwordHash,
+        displayName: result.payload!.displayName,
+      })
       .returning();
-    if (!user) return redirectWith(reply, "/register", { error: "注册失败，请重试" });
+    if (!user) return redirectWith(reply, "/verify-email", { error: "创建账号失败" });
+
+    reply.clearCookie(PENDING_EMAIL_COOKIE, { path: "/" });
     await createSession(reply, user.id);
+    void sendMail(welcomeMail(user.email, user.displayName)).catch((err) => req.log.warn({ err }, "welcome_mail_failed"));
     return reply.redirect("/app");
+  });
+
+  app.post("/verify-email/resend", {
+    config: { rateLimit: { max: 3, timeWindow: "5 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const email = req.cookies[PENDING_EMAIL_COOKIE];
+    if (!email) return reply.redirect("/register");
+
+    // We need the original pending payload to re-issue. Read from DB.
+    const [pending] = await db
+      .select()
+      .from(schema.emailVerifications)
+      .where(eq(schema.emailVerifications.email, email))
+      .limit(1);
+    if (!pending) return redirectWith(reply, "/register", { error: "请重新发起注册" });
+
+    const payload = pending.payload as unknown as { passwordHash: string; displayName: string | null };
+    const result = await issueCode(email, payload);
+    if (!result.ok) return redirectWith(reply, "/verify-email", { error: "发送失败，请稍后重试" });
+    return redirectWith(reply, "/verify-email", { success: "新的验证码已发送" });
   });
 
   app.post("/logout", async (req, reply) => {

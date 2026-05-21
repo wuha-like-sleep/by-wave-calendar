@@ -1,0 +1,33 @@
+<div class="mx-auto max-w-md">
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+    <h1 class="text-2xl font-semibold text-slate-900">验证邮箱</h1>
+    <p class="mt-1 text-sm text-slate-500">
+      已向 <strong class="text-slate-800"><%= email %></strong> 发送了 6 位验证码，10 分钟内有效。
+    </p>
+
+    <form method="post" action="/verify-email" class="mt-6 space-y-4">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <div>
+        <label class="block text-sm font-medium text-slate-700">验证码</label>
+        <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" inputmode="numeric"
+               autocomplete="one-time-code" autofocus placeholder="000000"
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-2xl font-mono tracking-[0.6em] shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+      <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">完成注册</button>
+    </form>
+
+    <div class="mt-6 flex items-center justify-between text-sm">
+      <form method="post" action="/verify-email/resend" class="m-0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="text-brand-600 hover:text-brand-700 font-medium">重新发送</button>
+      </form>
+      <a href="/register" class="text-slate-500 hover:text-slate-700">换个邮箱</a>
+    </div>
+
+    <% if (!mailerEnabled) { %>
+      <div class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+        ⚠️ 邮件服务未配置，验证码已打印到服务器日志（仅开发环境）。
+      </div>
+    <% } %>
+  </div>
+</div>

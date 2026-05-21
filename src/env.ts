@@ -24,6 +24,17 @@ const schema = z.object({
   HTTP_REDIRECT_PORT: z.coerce.number().int().positive().default(80),
   HTTPS_CERT_PATH: z.string().optional(),
   HTTPS_KEY_PATH: z.string().optional(),
+
+  // SMTP / mailer. Required for register email verification + login alerts.
+  // If SMTP_HOST is blank, mailer is disabled and email-dependent features fall back
+  // to printing the verification code to the server logs (dev only).
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(465),
+  SMTP_SECURE: boolFlag.default(true),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM_ADDRESS: z.string().email().optional(),
+  MAIL_FROM_NAME: z.string().default("ByWave-Calendar"),
 });
 
 const parsed = schema.safeParse(process.env);

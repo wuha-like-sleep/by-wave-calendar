@@ -5,6 +5,9 @@
 
     <form method="post" action="/register" class="mt-6 space-y-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <!-- honeypot for bots -->
+      <input type="text" name="company" tabindex="-1" autocomplete="off"
+             class="absolute -left-[9999px] w-px h-px opacity-0" aria-hidden="true" />
       <div>
         <label class="block text-sm font-medium text-slate-700">邮箱</label>
         <input type="email" name="email" required autocomplete="email"

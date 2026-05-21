@@ -13,6 +13,7 @@ import {
 } from "../lib/webauthn.js";
 import { verifyCsrf } from "../lib/csrf.js";
 import { createSession, loadSession } from "../lib/session.js";
+import { notifyLoginSuccess } from "../lib/login_alert.js";
 
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
@@ -169,6 +170,10 @@ export async function webauthnRoutes(app: FastifyInstance) {
 
     // Passkey login = both factors satisfied (something-you-have + verification)
     await createSession(reply, credRow.userId, { mfaSatisfied: true });
+    const [usr] = await db.select().from(schema.users).where(eq(schema.users.id, credRow.userId)).limit(1);
+    if (usr) {
+      void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
+    }
     return reply.send({ ok: true, redirect: "/app" });
   });
 }

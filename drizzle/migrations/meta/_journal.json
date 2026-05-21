@@ -15,6 +15,13 @@
       "when": 1779337139467,
       "tag": "0001_passkey_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779341839831,
+      "tag": "0002_email_verification_login_alerts",
+      "breakpoints": true
     }
   ]
 }
