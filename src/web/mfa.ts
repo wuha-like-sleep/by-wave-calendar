@@ -19,6 +19,8 @@ import {
   type BackupCode,
 } from "../lib/mfa.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
+import { sendMail } from "../lib/mailer.js";
+import { securityChangeMail } from "../lib/email_templates.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 
@@ -131,6 +133,9 @@ export async function mfaRoutes(app: FastifyInstance) {
       })
       .where(eq(schema.users.id, s.user.id));
 
+    void sendMail(securityChangeMail(s.user.email, { kind: "mfa_enabled" }))
+      .catch((err) => req.log.warn({ err }, "mfa_enable_mail_failed"));
+
     return reply.view("app/mfa-enabled", {
       title: "MFA 已启用",
       user: { ...s.user, mfaEnabled: true },
@@ -158,6 +163,8 @@ export async function mfaRoutes(app: FastifyInstance) {
       .update(schema.users)
       .set({ mfaEnabled: false, mfaTotpSecret: null, mfaBackupCodes: null, updatedAt: new Date() })
       .where(eq(schema.users.id, s.user.id));
+    void sendMail(securityChangeMail(s.user.email, { kind: "mfa_disabled" }))
+      .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
     return reply.redirect("/app/settings?success=" + encodeURIComponent("已关闭 MFA"));
   });
 

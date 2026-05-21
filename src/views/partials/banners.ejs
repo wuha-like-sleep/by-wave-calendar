@@ -1,0 +1,24 @@
+<% if (typeof currentUser !== 'undefined' && currentUser && !currentUser.emailVerified) { %>
+  <div id="bwc-verify-banner" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+    <div class="flex-1 text-sm text-amber-900">
+      📧 你的邮箱 <strong><%= currentUser.email %></strong> 还没验证。验证后才能收到日历邀请、密码重置、登录提醒等邮件。
+    </div>
+    <div class="flex gap-2">
+      <form method="post" action="/app/verify-email/send" class="m-0">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700">发送验证邮件</button>
+      </form>
+      <button type="button" data-dismiss="bwc-verify-banner" class="rounded-md border border-amber-300 bg-white px-2 py-1.5 text-xs text-amber-700 hover:bg-amber-100">稍后</button>
+    </div>
+  </div>
+<% } %>
+
+<div id="bwc-pwa-banner" class="hidden rounded-lg border border-brand-200 bg-brand-50 px-4 py-3 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+  <div class="flex-1 text-sm text-brand-900">
+    📲 把 <strong><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></strong> 装到桌面，下次一打开就到日历，不用走浏览器书签。
+  </div>
+  <div class="flex gap-2">
+    <button type="button" id="bwc-pwa-install" class="rounded-md bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700">安装到桌面</button>
+    <button type="button" data-dismiss="bwc-pwa-banner" class="rounded-md border border-brand-300 bg-white px-2 py-1.5 text-xs text-brand-700 hover:bg-brand-100">稍后</button>
+  </div>
+</div>

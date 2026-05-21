@@ -18,6 +18,7 @@
     <script src="/static/app.js?v=<%= v %>" defer></script>
     <script src="/static/local-time.js?v=<%= v %>" defer></script>
     <script src="/static/version-check.js?v=<%= v %>" defer></script>
+    <script src="/static/banners.js?v=<%= v %>" defer></script>
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>
@@ -28,6 +29,7 @@
     <% } else { %>
       <main class="flex-1 mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <%- include('partials/flash', { flash: flash }) %>
+        <%- include('partials/banners') %>
         <%- body %>
       </main>
       <footer class="mt-16 border-t border-slate-200 bg-white">

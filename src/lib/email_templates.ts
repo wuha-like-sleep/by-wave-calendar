@@ -246,6 +246,43 @@ export function calendarInviteMail(
   return { to, subject: `【${brand}】邀请你加入日历「${ctx.calendarName}」`, html, text };
 }
 
+// ---------- Security alert: 2FA / Passkey enabled ----------
+export function securityChangeMail(to: string, ctx: { kind: "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"; deviceName?: string | null }): SendArgs {
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const label = ctx.kind === "passkey_added" ? "Passkey 已添加"
+              : ctx.kind === "mfa_enabled"   ? "二次验证 (TOTP) 已启用"
+              : ctx.kind === "mfa_disabled"  ? "二次验证 (TOTP) 已关闭"
+              :                                "密码已修改";
+  const emoji = ctx.kind === "passkey_added" ? "🔐"
+              : ctx.kind === "mfa_enabled"   ? "🛡️"
+              : ctx.kind === "mfa_disabled"  ? "⚠️"
+              :                                "🔑";
+  const description = ctx.kind === "passkey_added" ? `你刚刚为账号添加了一把新的 Passkey${ctx.deviceName ? `「${ctx.deviceName}」` : ""}。今后登录时即可用指纹 / Face ID / 设备锁直接通过。`
+              : ctx.kind === "mfa_enabled"   ? "你刚刚启用了 TOTP 二次验证。今后登录需要密码 + 认证器 6 位验证码（除非使用 Passkey）。请把备用码妥善保存到密码管理器。"
+              : ctx.kind === "mfa_disabled"  ? "你刚刚关闭了 TOTP 二次验证 —— 登录从此只需密码（或 Passkey）。如果不是你本人操作，立即修改密码！"
+              :                                "你刚刚修改了账号密码 —— 所有已登录设备都已被强制下线，需要使用新密码重新登录。";
+  const isWarning = ctx.kind === "mfa_disabled";
+  const text = `${label}\n\n${description}\n\n如果不是你本人操作，立即前往 ${baseUrl}/app/settings 检查账号安全。`;
+  const html = baseLayout({
+    title: label,
+    preheader: description.slice(0, 100),
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${emoji} ${escape(label)}</h1>
+      <p style="margin:0 0 14px;color:#475569;line-height:1.6;font-size:14px;">${escape(description)}</p>
+      ${isWarning ? `
+      <div style="margin:14px 0;padding:12px 14px;background:#fff1f2;border:1px solid #fecaca;border-radius:10px;color:#9f1239;font-size:13px;line-height:1.6;">
+        <strong>不是你？</strong> 立即<a href="${baseUrl}/forgot-password" style="color:#9f1239;text-decoration:underline;">重置密码</a>，所有设备会被踢出登录。
+      </div>` : `
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+        如果不是你本人操作，立即<a href="${baseUrl}/forgot-password" style="color:#6366f1;text-decoration:underline;">重置密码</a>。
+      </p>`}
+      <p style="margin:14px 0 0;">
+        <a href="${baseUrl}/app/settings" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:500;">查看账号设置</a>
+      </p>`,
+  });
+  return { to, subject: `【${brand}】${label}`, html, text };
+}
+
 // ---------- Welcome email after register ----------
 export function welcomeMail(to: string, displayName: string | null): SendArgs {
   const name = displayName || to.split("@")[0] || to;

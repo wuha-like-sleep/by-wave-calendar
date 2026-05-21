@@ -182,6 +182,9 @@ await app.register(icsRoutes);
 app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();
   const userTheme = readThemeFromRequest(req);
+  // Pre-resolve current user so the synchronous view override can read it
+  // without re-querying or going async per template render.
+  const currentUser = await loadUserFromRequest(req).catch(() => null);
   const original = reply.view.bind(reply);
   (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
     original(name, {
@@ -198,6 +201,7 @@ app.addHook("onRequest", async (req, reply) => {
       siteDensity: settings.themeDensity,
       themePalette: userTheme.palette ?? settings.themePalette,
       themeDensity: userTheme.density ?? settings.themeDensity,
+      currentUser,
       ...locals,
     });
 });

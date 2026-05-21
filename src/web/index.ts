@@ -14,7 +14,7 @@ import {
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
-import { welcomeMail, passwordResetMail, calendarInviteMail } from "../lib/email_templates.js";
+import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -360,29 +360,43 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/verify-email", { error: msg });
     }
 
-    // Create the user
-    const [user] = await db
-      .insert(schema.users)
-      .values({
-        email,
-        emailVerified: true,
-        passwordHash: result.payload!.passwordHash,
-        displayName: result.payload!.displayName,
-      })
-      .returning();
-    if (!user) return redirectWith(reply, "/verify-email", { error: "创建账号失败" });
-
-    // Seed a default calendar so the new user lands on /app with something to look at.
-    await db.insert(schema.calendars).values({
-      ownerId: user.id,
-      name: "My Calendar",
-      color: "#6366f1",
-      timezone: "Asia/Shanghai",
-    });
+    // If the user already exists (re-verification path for old unverified accounts),
+    // just flip emailVerified=true. Otherwise create the user + seed default calendar.
+    const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+    let user: schema.User | undefined;
+    if (existing) {
+      const [updated] = await db
+        .update(schema.users)
+        .set({ emailVerified: true, updatedAt: new Date() })
+        .where(eq(schema.users.id, existing.id))
+        .returning();
+      user = updated;
+    } else {
+      const [created] = await db
+        .insert(schema.users)
+        .values({
+          email,
+          emailVerified: true,
+          passwordHash: result.payload!.passwordHash,
+          displayName: result.payload!.displayName,
+        })
+        .returning();
+      user = created;
+      if (user) {
+        await db.insert(schema.calendars).values({
+          ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
+        });
+      }
+    }
+    if (!user) return redirectWith(reply, "/verify-email", { error: "完成验证失败" });
 
     reply.clearCookie(PENDING_EMAIL_COOKIE, { path: "/" });
-    await createSession(reply, user.id);
-    void sendMail(welcomeMail(user.email, user.displayName)).catch((err) => req.log.warn({ err }, "welcome_mail_failed"));
+    // Don't overwrite an existing session if the user was already logged in.
+    const existingSession = await loadSession(req);
+    if (!existingSession) await createSession(reply, user.id);
+    if (!existing) {
+      void sendMail(welcomeMail(user.email, user.displayName)).catch((err) => req.log.warn({ err }, "welcome_mail_failed"));
+    }
     return reply.redirect("/app");
   });
 
@@ -985,6 +999,30 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/app", { success: "已加入日历，刷新后会出现在你的日历列表" });
   });
 
+  // Re-issue a verification code for already-logged-in users who never
+  // verified (created before email verification was enforced).
+  app.post("/app/verify-email/send", {
+    config: { rateLimit: { max: 3, timeWindow: "5 minute" } },
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    if (user.emailVerified) {
+      return redirectWith(reply, "/app", { success: "邮箱已经是验证过的状态" });
+    }
+    // The verify-email flow expects a pending payload (passwordHash etc.) since
+    // it was built for the register path; for already-existing users we just
+    // mark verified after they enter the code, no user-creation step.
+    const result = await issueCode(user.email, { passwordHash: user.passwordHash, displayName: user.displayName });
+    if (!result.ok) {
+      return redirectWith(reply, "/app", { error: "验证码发送失败，请稍后重试" });
+    }
+    reply.setCookie(PENDING_EMAIL_COOKIE, user.email, {
+      httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 15 * 60,
+    });
+    return redirectWith(reply, "/verify-email", { success: "验证码已发送到你的邮箱，输入后即可完成验证" });
+  });
+
   app.get("/app/settings", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
@@ -1103,6 +1141,8 @@ export async function webRoutes(app: FastifyInstance) {
     }
     const passwordHash = await hashPassword(body.data.newPassword);
     await db.update(schema.users).set({ passwordHash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
+      .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
     // Invalidate all sessions including current; user must re-login
     await destroyAllUserSessions(user.id);
     await destroySession(req, reply);

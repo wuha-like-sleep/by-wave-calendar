@@ -16,6 +16,8 @@ import { createSession, loadSession } from "../lib/session.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
+import { sendMail } from "../lib/mailer.js";
+import { securityChangeMail } from "../lib/email_templates.js";
 
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
@@ -69,14 +71,17 @@ export async function webauthnRoutes(app: FastifyInstance) {
     const transportsRaw = parsed.data.response?.response?.transports;
     const transports = Array.isArray(transportsRaw) ? transportsRaw.filter((t) => typeof t === "string") : null;
 
+    const deviceName = (parsed.data.deviceName?.trim() || newDeviceName()).slice(0, 100);
     await db.insert(schema.webauthnCredentials).values({
       userId: s.user.id,
       credentialId: credential.id,
       publicKey: Buffer.from(credential.publicKey).toString("base64url"),
       counter: credential.counter ?? 0,
       transports,
-      deviceName: (parsed.data.deviceName?.trim() || newDeviceName()).slice(0, 100),
+      deviceName,
     });
+    void sendMail(securityChangeMail(s.user.email, { kind: "passkey_added", deviceName }))
+      .catch((err) => req.log.warn({ err }, "passkey_add_mail_failed"));
 
     return reply.send({ ok: true });
   });
