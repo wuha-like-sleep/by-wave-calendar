@@ -334,6 +334,50 @@ export const calendarSubscriptions = pgTable("calendar_subscriptions", {
   calIdx: index("calendar_subscriptions_cal_idx").on(t.calendarId),
 }));
 
+// Calendly-style booking pages. Each user can create N booking links;
+// visitors at /book/<userId>/<slug> see available slots and submit a name
+// + email + optional message → event created in the owner's chosen calendar.
+export const bookingLinks = pgTable("booking_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  slug: text("slug").notNull(),
+  calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  durationMinutes: integer("duration_minutes").notNull().default(30),
+  // weeklyAvailability: { "1": [["09:00","12:00"],["13:00","18:00"]], "2": [...], "0": null }
+  // Keys are weekday numbers (0=Sun ~ 6=Sat), values are HH:MM time ranges
+  // or null for fully-unavailable days.
+  weeklyAvailability: jsonb("weekly_availability").notNull(),
+  minNoticeHours: integer("min_notice_hours").notNull().default(2),
+  maxDaysAhead: integer("max_days_ahead").notNull().default(14),
+  bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
+  bufferAfterMin: integer("buffer_after_min").notNull().default(0),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userSlugUnique: uniqueIndex("booking_links_user_slug_unique").on(t.userId, t.slug),
+  userIdx: index("booking_links_user_idx").on(t.userId),
+}));
+
+export const bookings = pgTable("bookings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  linkId: uuid("link_id").notNull().references(() => bookingLinks.id, { onDelete: "cascade" }),
+  eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+  guestEmail: text("guest_email").notNull(),
+  guestName: text("guest_name").notNull(),
+  guestMessage: text("guest_message"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+  cancelToken: text("cancel_token").notNull(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  linkIdx: index("bookings_link_idx").on(t.linkId),
+  cancelTokenUnique: uniqueIndex("bookings_cancel_token_unique").on(t.cancelToken),
+}));
+
 export const shareTokens = pgTable("share_tokens", {
   token: text("token").primaryKey(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
@@ -368,3 +412,7 @@ export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
 export type SsoProvider = typeof ssoProviders.$inferSelect;
 export type NewSsoProvider = typeof ssoProviders.$inferInsert;
+export type BookingLink = typeof bookingLinks.$inferSelect;
+export type NewBookingLink = typeof bookingLinks.$inferInsert;
+export type Booking = typeof bookings.$inferSelect;
+export type NewBooking = typeof bookings.$inferInsert;

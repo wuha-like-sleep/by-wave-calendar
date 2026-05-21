@@ -126,6 +126,7 @@
 
       <div class="p-3 mt-auto text-xs text-slate-400 space-y-1 border-t border-slate-100">
         <a href="/app/calendars" class="block py-1.5 hover:text-slate-700">📁 日历卡片视图</a>
+        <a href="/app/booking-links" class="block py-1.5 hover:text-slate-700">📅 预约链接</a>
         <a href="/app/settings" class="block py-1.5 hover:text-slate-700">⚙️ 账号设置</a>
         <% if (user.isAdmin) { %>
           <a href="/admin" class="block py-1.5 text-amber-700 hover:text-amber-900">🛠️ 管理后台</a>
@@ -489,7 +490,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   window.__bwc = <%- JSON.stringify({
     calendars: calendars.map(c => ({ id: c.id, name: c.name, color: c.color, timezone: c.timezone })),
     publicBaseUrl: publicBaseUrl,

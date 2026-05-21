@@ -40,7 +40,7 @@
     </div>
     <p class="text-xs text-emerald-800">立即粘贴到第三方平台的 API 配置里。关闭这个页面后再也看不到原文，只能撤销重发。</p>
   </section>
-  <script>
+  <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
     document.querySelector("[data-copy-token]")?.addEventListener("click", async () => {
       const t = document.getElementById("new-token");
       try { await navigator.clipboard.writeText(t.textContent.trim()); window.bwc && window.bwc.toast("已复制", "success"); }

@@ -237,7 +237,7 @@
   </details>
 </section>
 
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
   const tabs = document.querySelectorAll(".import-tab");
   const panes = document.querySelectorAll(".import-pane");
@@ -336,7 +336,7 @@
   <% } %>
 </section>
 
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
   // Default filter: today onwards, past events hidden. User can change the
   // "from" date or tick "显示过去事件" to widen the window.

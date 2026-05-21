@@ -74,6 +74,16 @@ app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body,
   }
 });
 
+// ---- CSP nonce ----
+// Per-request random nonce attached to every inline <script>. Lets us drop
+// 'unsafe-inline' from script-src while still serving the bootstrap scripts
+// we render with EJS. Stored on `req.cspNonce` so the view-locals injector
+// can pass it down to templates.
+import { randomBytes } from "node:crypto";
+app.addHook("onRequest", async (req) => {
+  (req as unknown as { cspNonce: string }).cspNonce = randomBytes(16).toString("base64");
+});
+
 // ---- Security headers ----
 await app.register(helmet, {
   contentSecurityPolicy: {
@@ -81,10 +91,13 @@ await app.register(helmet, {
     directives: {
       "default-src": ["'self'"],
       // All third-party libs are self-hosted (国内 CDN 不稳定).
-      // 'unsafe-inline' kept for the small inline scripts (CSRF/Toast/SW reg + JSON ctx).
-      // Future hardening: move all inline scripts out and switch to nonce-based.
-      "script-src": ["'self'", "'unsafe-inline'"],
+      // No 'unsafe-inline' in script-src — inline <script> tags must carry the
+      // per-request nonce that the EJS layout templates inject as nonce="…".
+      "script-src": ["'self'", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
+      // Inline event handlers (onclick / onsubmit) on existing templates;
+      // refactoring 27 of them is its own batch.
       "script-src-attr": ["'unsafe-inline'"],
+      // Tailwind utilities + style="background: ..." color swatches need this.
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:"],
       "connect-src": ["'self'"],
@@ -243,6 +256,7 @@ app.addHook("onRequest", async (req, reply) => {
       themeDensity: userTheme.density ?? settings.themeDensity,
       currentUser,
       jsBasePath: JS_BASE_PATH,
+      cspNonce: (req as unknown as { cspNonce: string }).cspNonce,
       ...locals,
     });
 });

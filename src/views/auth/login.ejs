@@ -53,7 +53,7 @@
 </div>
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
   const btn = document.getElementById("passkey-login");
   if (!btn || !window.SimpleWebAuthnBrowser) return;

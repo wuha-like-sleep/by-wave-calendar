@@ -17,6 +17,7 @@ import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
 import { invitationIcs } from "../lib/ical.js";
 import { cancelEvent } from "../lib/event_cancel.js";
+import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -1557,5 +1558,191 @@ export async function webRoutes(app: FastifyInstance) {
     await destroyAllUserSessions(user.id);
     await destroySession(req, reply);
     return redirectWith(reply, "/login", { success: "密码已更新，请重新登录" });
+  });
+
+  // -------- Booking links (Calendly-style) — management --------
+  app.get("/app/booking-links", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const links = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, user.id)).orderBy(asc(schema.bookingLinks.title));
+    const cals = await db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color }).from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
+    return reply.view("app/booking-links", {
+      title: "预约链接",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      links: links.map((l) => ({ ...l, publicUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${l.slug}` })),
+      calendars: cals,
+      defaultAvailability: DEFAULT_AVAILABILITY,
+    });
+  });
+
+  app.post("/app/booking-links", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "URL 标识只能 a-z 0-9 和 -"),
+      title: z.string().min(1).max(120),
+      description: z.string().max(2000).optional().transform((v) => v?.trim() || undefined),
+      calendarId: z.string().uuid(),
+      durationMinutes: z.coerce.number().int().min(5).max(480),
+      minNoticeHours: z.coerce.number().int().min(0).max(720),
+      maxDaysAhead: z.coerce.number().int().min(1).max(90),
+      bufferBeforeMin: z.coerce.number().int().min(0).max(240).default(0),
+      bufferAfterMin: z.coerce.number().int().min(0).max(240).default(0),
+    }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, "/app/booking-links", { error: "参数无效：" + (body.error.errors[0]?.message ?? "") });
+    if (!(await ownsCalendar(body.data.calendarId, user.id))) {
+      return redirectWith(reply, "/app/booking-links", { error: "目标日历不存在或不属于你" });
+    }
+    try {
+      await db.insert(schema.bookingLinks).values({
+        userId: user.id,
+        slug: body.data.slug,
+        calendarId: body.data.calendarId,
+        title: body.data.title,
+        description: body.data.description ?? null,
+        durationMinutes: body.data.durationMinutes,
+        weeklyAvailability: DEFAULT_AVAILABILITY,
+        minNoticeHours: body.data.minNoticeHours,
+        maxDaysAhead: body.data.maxDaysAhead,
+        bufferBeforeMin: body.data.bufferBeforeMin,
+        bufferAfterMin: body.data.bufferAfterMin,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "未知错误";
+      return redirectWith(reply, "/app/booking-links", { error: msg.includes("duplicate") ? "slug 已存在" : msg });
+    }
+    return redirectWith(reply, "/app/booking-links", { success: "预约链接已创建" });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/booking-links");
+    const [link] = await db.select().from(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id))).limit(1);
+    if (!link) return reply.redirect("/app/booking-links");
+    await db.update(schema.bookingLinks).set({ enabled: !link.enabled, updatedAt: new Date() }).where(eq(schema.bookingLinks.id, id.data));
+    return redirectWith(reply, "/app/booking-links", { success: link.enabled ? "已暂停" : "已启用" });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/booking-links/:id/delete", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/booking-links");
+    await db.delete(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id)));
+    return redirectWith(reply, "/app/booking-links", { success: "已删除" });
+  });
+
+  // -------- Public booking pages --------
+  app.get<{ Params: { userId: string; slug: string } }>("/book/:userId/:slug", async (req, reply) => {
+    const userId = z.string().uuid().safeParse(req.params.userId);
+    if (!userId.success) return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在", message: "请检查链接是否正确。" });
+    const link = await findLinkBySlug(userId.data, req.params.slug);
+    if (!link || !link.enabled) {
+      return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在或已停用", message: "请联系发布方获取新链接。" });
+    }
+    const [owner] = await db.select({ email: schema.users.email, displayName: schema.users.displayName }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+    if (!owner) return reply.code(404).type("text/plain").send("Not Found");
+    const slots = await availableSlots(link, new Date(), link.maxDaysAhead);
+    // Group slots by date string for the picker.
+    const byDate = new Map<string, { startsAt: Date; endsAt: Date }[]>();
+    for (const s of slots) {
+      const key = s.startsAt.toISOString().slice(0, 10);
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push(s);
+    }
+    return reply.view("booking/public", {
+      title: link.title,
+      user: null,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      link,
+      owner,
+      slotsByDate: Array.from(byDate.entries()).map(([date, slots]) => ({ date, slots })),
+    });
+  });
+
+  app.post<{ Params: { userId: string; slug: string } }>("/book/:userId/:slug", {
+    config: { rateLimit: { max: 10, timeWindow: "10 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const userId = z.string().uuid().safeParse(req.params.userId);
+    if (!userId.success) return reply.redirect("/");
+    const link = await findLinkBySlug(userId.data, req.params.slug);
+    if (!link || !link.enabled) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "链接已停用" });
+    const body = z.object({
+      startsAt: z.string().datetime({ offset: true }),
+      guestEmail: z.string().email().max(254),
+      guestName: z.string().min(1).max(100),
+      guestMessage: z.string().max(2000).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "请填写邮箱和姓名" });
+    const startsAt = new Date(body.data.startsAt);
+    const endsAt = new Date(startsAt.getTime() + link.durationMinutes * 60_000);
+    try {
+      const { booking } = await bookSlot({ link, startsAt, endsAt, guestEmail: body.data.guestEmail, guestName: body.data.guestName, guestMessage: body.data.guestMessage });
+      // Confirmation emails (don't fail the booking if mail breaks).
+      const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+      const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+      const cancelUrl = `${baseUrl}/book-cancel/${encodeURIComponent(booking.cancelToken)}`;
+      const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
+      const lines = `${link.title}\n时间：${fmt(startsAt)} — ${fmt(endsAt)}\n${body.data.guestMessage ? "\n留言：" + body.data.guestMessage + "\n" : ""}\n取消链接：${cancelUrl}`;
+      sendMail({
+        to: body.data.guestEmail,
+        subject: `✓ 预约确认：${link.title}`,
+        text: `你的预约已确认。\n\n${lines}`,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">✓ 预约已确认</h1><p style="font-size:15px;color:#0f172a;font-weight:600;margin:0 0 6px;">${link.title}</p><p style="font-size:14px;color:#475569;margin:0 0 14px;">与 ${(owner?.displayName || owner?.email || "").replace(/[<>&]/g, "")} 的预约</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}<p style="margin:16px 0 6px;font-size:13px;color:#64748b;">需要取消？<a href="${cancelUrl}" style="color:#dc2626;">点这里</a>。</p></div></div>`,
+      }).catch(() => undefined);
+      if (owner) {
+        sendMail({
+          to: owner.email,
+          subject: `📅 新预约：${body.data.guestName} — ${link.title}`,
+          text: `新预约：${body.data.guestName} <${body.data.guestEmail}>\n${lines}`,
+          html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">📅 新预约</h1><p style="font-size:14px;color:#475569;margin:0 0 14px;"><strong>${body.data.guestName.replace(/[<>&]/g, "")}</strong> &lt;${body.data.guestEmail.replace(/[<>&]/g, "")}&gt; 通过<strong>${link.title}</strong>预约了你的时间</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;white-space:pre-wrap;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}</div></div>`,
+        }).catch(() => undefined);
+      }
+      return reply.redirect(`/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent("预约成功！确认邮件已发到你的邮箱。")}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "预约失败";
+      return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: msg });
+    }
+  });
+
+  app.get<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
+    const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
+    if (!b) return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "取消链接无效", message: "请检查邮件里的链接。" });
+    return reply.view("booking/cancel", {
+      title: "取消预约",
+      user: null, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      booking: b,
+    });
+  });
+
+  app.post<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
+    if (!b) return reply.redirect("/");
+    if (b.cancelledAt) return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: "这个预约已经取消过了" });
+    // Mark booking + soft-delete the underlying event.
+    await db.update(schema.bookings).set({ cancelledAt: new Date() }).where(eq(schema.bookings.id, b.id));
+    if (b.eventId) {
+      const [ev] = await db.select().from(schema.events).where(eq(schema.events.id, b.eventId)).limit(1);
+      if (ev && !ev.deletedAt) {
+        const [link] = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.id, b.linkId)).limit(1);
+        if (link) {
+          const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+          if (owner) {
+            await cancelEvent(ev.id, { id: owner.id, email: owner.email, displayName: owner.displayName });
+          }
+        }
+      }
+    }
+    return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: "预约已取消" });
   });
 }

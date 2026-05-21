@@ -306,7 +306,7 @@
 </section>
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
   // Highlight the visible section in the sticky tab bar as the user scrolls.
   const tabLinks = Array.from(document.querySelectorAll("#settings-tabs [data-settings-tab]"));

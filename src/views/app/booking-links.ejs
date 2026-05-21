@@ -1,0 +1,111 @@
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">预约链接</h1>
+<p class="text-sm text-slate-500 mb-6">生成一个公开 URL，外部访问者按你设的可用时段在你日历里预约一个会议时段 —— 类似 Calendly。访问者不需要 ByWave 账号。</p>
+
+<% if (calendars.length === 0) { %>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    需要至少有一本日历才能创建预约链接。<a href="/app" class="underline">先去主日历建一本</a>。
+  </div>
+<% } else { %>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">已有的预约链接</h2>
+  <% if (links.length === 0) { %>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没创建任何预约链接</div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      <% links.forEach(function(l){ %>
+        <li class="py-3 flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="inline-block h-2 w-2 rounded-full <%= l.enabled ? 'bg-emerald-500' : 'bg-slate-300' %>"></span>
+              <span class="text-sm font-medium text-slate-900"><%= l.title %></span>
+              <span class="text-xs text-slate-400">· <%= l.durationMinutes %> 分钟</span>
+            </div>
+            <div class="mt-1 flex items-center gap-2">
+              <code class="text-xs text-slate-500 truncate flex-1 bg-slate-50 px-2 py-1 rounded"><%= l.publicUrl %></code>
+              <button type="button" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                      onclick="window.bwc && window.bwc.copy('<%= l.publicUrl %>')">复制</button>
+            </div>
+            <% if (l.description) { %><div class="mt-1 text-xs text-slate-500"><%= l.description %></div><% } %>
+          </div>
+          <div class="flex gap-2 flex-shrink-0">
+            <form method="post" action="/app/booking-links/<%= l.id %>/toggle" class="m-0">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="text-xs <%= l.enabled ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700' %>"><%= l.enabled ? '暂停' : '启用' %></button>
+            </form>
+            <form method="post" action="/app/booking-links/<%= l.id %>/delete" class="m-0" onsubmit="return confirm('确定删除？现有预约不受影响。');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="text-xs text-red-600 hover:text-red-700">删除</button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">创建新的预约链接</h2>
+  <p class="text-sm text-slate-500 mb-4">默认可用时段：工作日 9:00 ~ 18:00（创建后可以再细调）。</p>
+  <form method="post" action="/app/booking-links" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">URL 标识 (slug)</span>
+      <input type="text" name="slug" required pattern="[a-z0-9][a-z0-9-]{0,30}" maxlength="31" placeholder="30min"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <span class="text-xs text-slate-400 mt-1 block">将出现在 URL：/book/&lt;user-id&gt;/<strong>slug</strong></span>
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">标题</span>
+      <input type="text" name="title" required maxlength="120" placeholder="30 分钟 1 对 1 会议"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm sm:col-span-2">
+      <span class="block font-medium text-slate-700 mb-1">描述（可选）</span>
+      <textarea name="description" maxlength="2000" rows="2" placeholder="对方在预约页会看到的说明"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">日程加到哪本日历</span>
+      <select name="calendarId" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+        <% calendars.forEach(function(c){ %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+      </select>
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">每场时长</span>
+      <select name="durationMinutes" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+        <option value="15">15 分钟</option>
+        <option value="30" selected>30 分钟</option>
+        <option value="45">45 分钟</option>
+        <option value="60">60 分钟</option>
+        <option value="90">90 分钟</option>
+        <option value="120">120 分钟</option>
+      </select>
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">最早可预约（小时后）</span>
+      <input type="number" name="minNoticeHours" value="2" min="0" max="720"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">最远可预约（多少天）</span>
+      <input type="number" name="maxDaysAhead" value="14" min="1" max="90"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">前缓冲（分钟）</span>
+      <input type="number" name="bufferBeforeMin" value="0" min="0" max="240"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">后缓冲（分钟）</span>
+      <input type="number" name="bufferAfterMin" value="0" min="0" max="240"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <div class="sm:col-span-2 flex justify-end">
+      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">创建链接</button>
+    </div>
+  </form>
+</section>
+
+<% } %>

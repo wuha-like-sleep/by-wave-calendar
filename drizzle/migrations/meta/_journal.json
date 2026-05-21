@@ -162,6 +162,13 @@
       "when": 1779402701410,
       "tag": "0022_security_and_reminders",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779403525180,
+      "tag": "0023_booking_links",
+      "breakpoints": true
     }
   ]
 }

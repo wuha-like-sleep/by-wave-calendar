@@ -68,7 +68,7 @@
   </ul>
 </section>
 
-<script>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 function confirmRestore() {
   if (!document.getElementById("confirm-restore").checked) return false;
   return confirm("最后确认：当前所有日历 / 事件 / 用户都会被清空并替换为文件里的内容。继续？");
