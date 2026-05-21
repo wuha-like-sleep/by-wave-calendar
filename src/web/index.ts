@@ -3,7 +3,7 @@ import { z } from "zod";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { hashPassword, passwordPolicyError, verifyPassword } from "../lib/password.js";
+import { hashPassword, passwordPolicyError, verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
 import {
   createSession,
   destroyAllUserSessions,
@@ -137,13 +137,27 @@ export async function webRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     const body = z
-      .object({ email: z.string().email(), password: z.string().min(1).max(200) })
+      .object({
+        // Normalize email here so /login agrees with /register, /forgot-password,
+        // SSO, and CalDAV — they all lowercase+trim, but web /login used to
+        // pass the raw value through. That meant a user who typed "ME@x.com"
+        // saw "邮箱或密码错误" even though they were correctly registered as
+        // "me@x.com". Worse, the JSON API could create shadow rows in
+        // mixed case that bypassed disabled-account checks keyed on lowercase.
+        email: z.string().email().transform((s) => s.toLowerCase().trim()),
+        password: z.string().min(1).max(200),
+      })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/login", { error: "邮箱或密码格式不正确" });
     }
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
     if (!user) {
+      // Burn the same ~250ms of CPU as a real bcrypt verify so the
+      // no-such-user path is time-indistinguishable from the wrong-
+      // password path. Without this, an attacker can enumerate
+      // registered emails by measuring response time.
+      await verifyPasswordTimingSafe(body.data.password);
       req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
       return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
     }

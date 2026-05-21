@@ -197,7 +197,25 @@ async function handleOptions(_req: FastifyRequest, reply: FastifyReply) {
   reply.code(200).send();
 }
 
-// PROPFIND / (root) — return current-user-principal pointing to user's principal
+// PROPFIND / (the actual HTTP root, not /caldav/) — Apple Calendar's
+// discovery flow hits this AFTER .well-known/caldav. Without it, the
+// add-account flow on macOS dies with "Account information cannot be
+// verified". The only purpose is to advertise where the real principal
+// is — we just point at /caldav/ and let the client follow.
+async function propfindDiscoveryRoot(req: FastifyRequest, reply: FastifyReply) {
+  const user = await basicAuth(req, reply);
+  if (!user) return;
+  const body = multistatus([
+    responseEntry("/", {
+      resourcetype: "<collection/>",
+      currentUserPrincipal: principalHref(user.id),
+      displayname: "ByWave",
+    }),
+  ]);
+  sendXml(reply, body);
+}
+
+// PROPFIND /caldav/ — return current-user-principal pointing to user's principal
 async function propfindRoot(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
   if (!user) return;
@@ -596,86 +614,81 @@ async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
 // ---------- Plugin ----------
 
 export async function caldavRoutes(app: FastifyInstance) {
-  // .well-known/caldav → redirect to /caldav/
+  // ---------- RFC 6764 service discovery ----------
+  // Apple Calendar's add-account flow probes BOTH .well-known/caldav AND
+  // .well-known/carddav, then OPTIONS / and PROPFIND /. Without these,
+  // it gives up with the unhelpful "the account could not be added".
+  // We answer .well-known/caldav with a 302 (was 301 — 301 is cached
+  // permanently and breaks future path migrations) and stub carddav with
+  // a 404 that still carries DAV headers so the client knows we're a
+  // DAV server, just not a CardDAV one.
   app.all("/.well-known/caldav", { config: { rateLimit: false } }, async (_req, reply) => {
-    reply.code(301).header("Location", "/caldav/").send();
+    reply.code(302).header("Location", "/caldav/").send();
+  });
+  app.all("/.well-known/carddav", { config: { rateLimit: false } }, async (_req, reply) => {
+    reply
+      .header("DAV", "1, 2, 3, calendar-access")
+      .code(404)
+      .type("text/plain")
+      .send("CardDAV not supported; CalDAV at /caldav/");
+  });
+
+  // OPTIONS / — Apple Calendar's second probe (after .well-known). Must
+  // be unauthenticated so the client can discover the DAV capabilities
+  // before it knows whose credentials to send. We can't route OPTIONS
+  // to "/" with a normal Fastify handler without colliding with the
+  // landing page; use a hook instead.
+  app.addHook("onRequest", async (req, reply) => {
+    if (req.method === "OPTIONS" && (req.url === "/" || req.url === "")) {
+      reply
+        .header("DAV", "1, 2, 3, calendar-access")
+        .header("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH")
+        .header("Accept-Ranges", "bytes")
+        .code(200)
+        .send();
+    }
+  });
+
+  // PROPFIND / — after OPTIONS, Apple does PROPFIND on the discovery
+  // root looking for current-user-principal. Without it, Apple aborts
+  // with "Account information cannot be verified."
+  app.route({
+    method: "PROPFIND" as never,
+    url: "/",
+    config: { rateLimit: false },
+    handler: propfindDiscoveryRoot,
   });
 
   const allowedMethods = ["OPTIONS", "PROPFIND"] as const;
 
-  // Root
-  app.route({
-    method: "OPTIONS",
-    url: "/caldav",
-    config: { rateLimit: false },
-    handler: handleOptions,
-  });
-  app.route({
-    method: "OPTIONS",
-    url: "/caldav/",
-    config: { rateLimit: false },
-    handler: handleOptions,
-  });
-  app.route({
-    method: "PROPFIND" as never,
-    url: "/caldav/",
-    config: { rateLimit: false },
-    handler: propfindRoot,
-  });
-  app.route({
-    method: "PROPFIND" as never,
-    url: "/caldav",
-    config: { rateLimit: false },
-    handler: propfindRoot,
-  });
+  // ---------- /caldav root ----------
+  // We dual-register every CalDAV path with AND without the trailing
+  // slash. Thunderbird and some DAVx⁵ versions strip trailing slashes
+  // when normalizing href values, so a follow-up PROPFIND lands on the
+  // no-slash form and 404s if we only registered with-slash.
+  for (const url of ["/caldav", "/caldav/"]) {
+    app.route({ method: "OPTIONS", url, config: { rateLimit: false }, handler: handleOptions });
+    app.route({ method: "PROPFIND" as never, url, config: { rateLimit: false }, handler: propfindRoot });
+  }
 
-  // Principal
-  app.route({
-    method: "OPTIONS",
-    url: "/caldav/principals/:userId/",
-    config: { rateLimit: false },
-    handler: handleOptions,
-  });
-  app.route({
-    method: "PROPFIND" as never,
-    url: "/caldav/principals/:userId/",
-    config: { rateLimit: false },
-    handler: propfindPrincipal,
-  });
+  // ---------- Principal ----------
+  for (const url of ["/caldav/principals/:userId", "/caldav/principals/:userId/"]) {
+    app.route({ method: "OPTIONS", url, config: { rateLimit: false }, handler: handleOptions });
+    app.route({ method: "PROPFIND" as never, url, config: { rateLimit: false }, handler: propfindPrincipal });
+  }
 
-  // Calendar home
-  app.route({
-    method: "OPTIONS",
-    url: "/caldav/:userId/",
-    config: { rateLimit: false },
-    handler: handleOptions,
-  });
-  app.route({
-    method: "PROPFIND" as never,
-    url: "/caldav/:userId/",
-    config: { rateLimit: false },
-    handler: propfindHome,
-  });
+  // ---------- Calendar home ----------
+  for (const url of ["/caldav/:userId", "/caldav/:userId/"]) {
+    app.route({ method: "OPTIONS", url, config: { rateLimit: false }, handler: handleOptions });
+    app.route({ method: "PROPFIND" as never, url, config: { rateLimit: false }, handler: propfindHome });
+  }
 
-  // Single calendar
-  app.route({
-    method: "OPTIONS",
-    url: "/caldav/:userId/:calId/",
-    config: { rateLimit: false },
-    handler: handleOptions,
-  });
-  app.route({
-    method: "PROPFIND" as never,
-    url: "/caldav/:userId/:calId/",
-    config: { rateLimit: false },
-    handler: propfindCalendar,
-  });
-  app.route({
-    method: "REPORT" as never,
-    url: "/caldav/:userId/:calId/",
-    config: { rateLimit: false },
-    handler: reportCalendar,
-  });
+  // ---------- Single calendar ----------
+  for (const url of ["/caldav/:userId/:calId", "/caldav/:userId/:calId/"]) {
+    app.route({ method: "OPTIONS", url, config: { rateLimit: false }, handler: handleOptions });
+    app.route({ method: "PROPFIND" as never, url, config: { rateLimit: false }, handler: propfindCalendar });
+    app.route({ method: "REPORT" as never, url, config: { rateLimit: false }, handler: reportCalendar });
+  }
 
   // Event resource
   app.route({

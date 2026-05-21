@@ -16,6 +16,7 @@ import { recordLoginEvent } from "../lib/login_history.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 import { userIsActive } from "../lib/user_state.js";
+import { hashPassword } from "../lib/password.js";
 
 const STATE_COOKIE = "bwc_sso_state";
 
@@ -109,7 +110,16 @@ export async function ssoRoutes(app: FastifyInstance) {
         // Find or create the user.
         let [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
         if (!user) {
-          const stubPassword = randomBytes(32).toString("base64");
+          // SSO users have no local password — the IdP is the source of truth.
+          // But the password_hash column is notNull, so we store a real bcrypt
+          // hash of a random ~256-bit value. The hash IS valid bcrypt, just
+          // unguessable, so any future "compare against passwordHash" code
+          // path can't accidentally succeed against an SSO-only account.
+          // (Earlier this was a raw base64 string — bcrypt.compare would
+          // safely return false against that, but it violated the column's
+          // contract and would have been catastrophic if a future bug ever
+          // bypassed the bcrypt check.)
+          const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
           const [created] = await db
             .insert(schema.users)
             .values({
