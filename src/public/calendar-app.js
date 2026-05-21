@@ -255,6 +255,78 @@
   // Initial position: scroll the week grid to the current hour on first paint.
   scrollGridToNow();
 
+  // ---------- Sidebar: search box filters calendar list by name ----------
+  const calSearchEl = document.getElementById("cal-search");
+  if (calSearchEl) {
+    calSearchEl.addEventListener("input", () => {
+      const q = calSearchEl.value.trim().toLowerCase();
+      $$("#cal-list li").forEach((li) => {
+        const name = (li.querySelector("span.text-sm")?.textContent || "").toLowerCase();
+        li.classList.toggle("hidden", q !== "" && !name.includes(q));
+      });
+    });
+  }
+
+  // ---------- Empty-state CTA: "create first calendar" jumps to the same
+  // flow as the sidebar "+" button.
+  const emptyCreateBtn = document.getElementById("empty-create-cal");
+  if (emptyCreateBtn) {
+    emptyCreateBtn.addEventListener("click", () => {
+      try { openCreateCalendar(); } catch (_e) { /* function defined below */ }
+    });
+  }
+
+  // ---------- Shortcuts panel toggle ----------
+  const shortcutsBtn = $("#btn-shortcuts");
+  const shortcutsPanel = $("#shortcuts-panel");
+  if (shortcutsBtn && shortcutsPanel) {
+    shortcutsBtn.addEventListener("click", () => {
+      shortcutsPanel.classList.toggle("hidden");
+    });
+    document.addEventListener("click", (e) => {
+      if (!shortcutsPanel.contains(e.target) && e.target !== shortcutsBtn) {
+        shortcutsPanel.classList.add("hidden");
+      }
+    });
+  }
+
+  // ---------- Keyboard shortcuts ----------
+  // Mirror Google Calendar: T = today, M / W / D = month/week/day,
+  // ← / → = prev/next, N = new event. Skipped when the user is typing in
+  // an input / textarea / contenteditable.
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target instanceof HTMLElement) ? e.target.tagName : "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)) return;
+    // Don't fire when a modal is open — let Escape close it instead.
+    const openModalEl = document.querySelector("[id^='modal-']:not(.hidden)");
+    if (openModalEl && e.key === "Escape") {
+      openModalEl.classList.add("hidden");
+      openModalEl.classList.remove("flex");
+      return;
+    }
+    if (openModalEl) return;
+    if (e.key === "?") {
+      shortcutsPanel?.classList.toggle("hidden");
+      return;
+    }
+    switch (e.key.toLowerCase()) {
+      case "t": cal.today(); refresh(); scrollGridToNow(); break;
+      case "m": $('.view-btn[data-view="month"]')?.click(); break;
+      case "w": $('.view-btn[data-view="week"]')?.click(); break;
+      case "d": $('.view-btn[data-view="day"]')?.click(); break;
+      case "n":
+        e.preventDefault();
+        $("#btn-new-event")?.click();
+        break;
+      case "arrowleft": cal.prev(); refresh(); break;
+      case "arrowright": cal.next(); refresh(); break;
+      case "escape": shortcutsPanel?.classList.add("hidden"); break;
+      default: return;
+    }
+  });
+
   // ---------- Mini calendar (sidebar) ----------
   // A small month/year picker above the calendar list. Click a date → main
   // calendar jumps there in current view; click the month/year title →

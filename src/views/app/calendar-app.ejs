@@ -27,6 +27,25 @@
     </button>
   </header>
 
+  <!-- Floating shortcuts hint -->
+  <button type="button" id="btn-shortcuts" class="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-brand-600" aria-label="键盘快捷键" title="键盘快捷键 (按 ?)">
+    <span class="text-base font-bold">?</span>
+  </button>
+  <div id="shortcuts-panel" class="hidden fixed bottom-16 right-4 z-30 w-72 rounded-2xl border border-slate-200 bg-white shadow-lg p-4">
+    <h3 class="text-sm font-semibold text-slate-900 mb-3">键盘快捷键</h3>
+    <ul class="space-y-2 text-xs text-slate-600">
+      <li class="flex justify-between"><span>切换到月视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">M</kbd></li>
+      <li class="flex justify-between"><span>切换到周视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">W</kbd></li>
+      <li class="flex justify-between"><span>切换到日视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">D</kbd></li>
+      <li class="flex justify-between"><span>跳到今天</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">T</kbd></li>
+      <li class="flex justify-between"><span>上一段</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">←</kbd></li>
+      <li class="flex justify-between"><span>下一段</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">→</kbd></li>
+      <li class="flex justify-between"><span>新建事件</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">N</kbd></li>
+      <li class="flex justify-between"><span>关闭弹窗</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">Esc</kbd></li>
+    </ul>
+    <p class="mt-3 text-[10px] text-slate-400">在输入框里输字时快捷键暂停。</p>
+  </div>
+
   <div class="flex-1 min-h-0 flex relative">
     <!-- Sidebar backdrop (mobile only when open) -->
     <div id="cal-sidebar-backdrop" class="hidden md:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
@@ -75,6 +94,10 @@
             <button type="button" data-action="import" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">📥 导入日历</button>
           </div>
         </div>
+        <% if (calendars.length > 5) { %>
+          <input type="search" id="cal-search" placeholder="搜索日历…"
+                 class="mb-2 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:bg-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200" />
+        <% } %>
         <ul id="cal-list" class="space-y-1">
           <% calendars.forEach(function(cal){ %>
             <li class="flex items-center gap-2 group py-1" data-cal-id="<%= cal.id %>">
@@ -91,7 +114,13 @@
           <% }) %>
         </ul>
         <% if (calendars.length === 0) { %>
-          <p class="text-xs text-slate-400 text-center py-3">还没有日历</p>
+          <div class="text-center py-4 text-xs">
+            <p class="text-slate-400 mb-2">还没有日历</p>
+            <button type="button" id="empty-create-cal" class="inline-flex items-center gap-1 rounded-md bg-brand-50 text-brand-700 px-2 py-1 hover:bg-brand-100 font-medium">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              创建第一个
+            </button>
+          </div>
         <% } %>
       </div>
 

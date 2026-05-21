@@ -21,6 +21,7 @@ import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/api_token.js";
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
+import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -386,6 +387,38 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
   });
 
+  // ---------- Admin audit log ----------
+  app.get("/admin/audit", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const rows = await db
+      .select({
+        id: schema.adminAuditLog.id,
+        action: schema.adminAuditLog.action,
+        targetType: schema.adminAuditLog.targetType,
+        targetId: schema.adminAuditLog.targetId,
+        details: schema.adminAuditLog.details,
+        ip: schema.adminAuditLog.ip,
+        userAgent: schema.adminAuditLog.userAgent,
+        createdAt: schema.adminAuditLog.createdAt,
+        actorEmail: schema.users.email,
+      })
+      .from(schema.adminAuditLog)
+      .innerJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      .orderBy(desc(schema.adminAuditLog.createdAt))
+      .limit(200);
+    return reply.view("admin/audit", {
+      title: "审计日志 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/audit",
+      entries: rows.map((r) => ({
+        ...r,
+        createdAtIso: `<time data-tz datetime="${r.createdAt.toISOString()}" data-style="datetime">${r.createdAt.toISOString()}</time>`,
+        detailsJson: r.details ? JSON.stringify(r.details, null, 2) : null,
+      })),
+    });
+  });
+
   // ---------- Backup / restore ----------
   app.get("/admin/backup", async (req, reply) => {
     const u = await requireAdmin(req, reply);
@@ -408,7 +441,9 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.send(JSON.stringify(bundle, null, 2));
   });
 
-  app.post("/admin/backup/import", async (req, reply) => {
+  app.post("/admin/backup/import", {
+    config: { rateLimit: { max: 3, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return;
     // multipart: no CSRF cookie reliably — gate on admin status.
@@ -433,11 +468,15 @@ export async function adminRoutes(app: FastifyInstance) {
         .filter((r) => r.inserted > 0 || r.error)
         .map((r) => `${r.table}: ${r.inserted}${r.error ? ` (✗ ${r.error.slice(0, 50)})` : ""}`)
         .join("; ");
+      await audit(req, u.id, "backup.restore", {
+        details: { totalInserted: result.totalInserted, exportedAt: bundle.exportedAt, sizeBytes: buf.length },
+      });
       return reply.redirect("/admin/backup?success=" + encodeURIComponent(
         `恢复完成 —— 共 ${result.totalInserted} 行（${summary}）。建议立即重启服务。`
       ));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      await audit(req, u.id, "backup.restore_failed", { details: { error: msg.slice(0, 500) } });
       return reply.redirect("/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));
     }
   });
@@ -484,7 +523,9 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "API 已启用" : "API 已关闭（现存 token 暂停工作）"));
   });
 
-  app.post("/admin/api/tokens", async (req, reply) => {
+  app.post("/admin/api/tokens", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return;
     if (!verifyCsrf(req, reply)) return;
@@ -503,6 +544,10 @@ export async function adminRoutes(app: FastifyInstance) {
       scope: body.data.scope,
       expiresInDays: body.data.expiresInDays > 0 ? body.data.expiresInDays : null,
     });
+    await audit(req, u.id, "api_token.create", {
+      targetType: "api_token", targetId: issued.id,
+      details: { label: body.data.label, scope: body.data.scope, actsAsUserId: body.data.userId, expiresInDays: body.data.expiresInDays },
+    });
     const params = new URLSearchParams({ issued: issued.plain, issuedLabel: body.data.label, success: "Token 已生成，仅显示一次，请立即复制" });
     return reply.redirect("/admin/api?" + params.toString());
   });
@@ -514,6 +559,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/api");
     await revokeApiTokenAdmin(id.data);
+    await audit(req, u.id, "api_token.revoke", { targetType: "api_token", targetId: id.data });
     return reply.redirect("/admin/api?success=" + encodeURIComponent("Token 已撤销"));
   });
 
@@ -658,16 +704,34 @@ export async function adminRoutes(app: FastifyInstance) {
     }
   });
 
+  // In-memory lock: prevents two admin clicks from running concurrent
+  // npm ci / build steps and corrupting the working tree. Released in the
+  // finally block — survives crashes only on full process restart, which
+  // is fine because pm2 will restart after a real failure.
+  let updateInFlight: { startedAt: Date; actorEmail: string } | null = null;
+
   // Non-streaming fallback (kept for clients that don't support SSE)
-  app.post("/admin/update/apply", async (req, reply) => {
+  app.post("/admin/update/apply", {
+    config: { rateLimit: { max: 5, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
+    if (updateInFlight) {
+      return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 于 ${updateInFlight.startedAt.toISOString()} 启动）` });
+    }
+    updateInFlight = { startedAt: new Date(), actorEmail: user.email };
+    await audit(req, user.id, "update.apply_start");
     try {
       const result = await applyUpdate();
+      await audit(req, user.id, "update.apply_done", { details: { ok: result.ok, steps: result.logs.length } });
       return reply.send(result);
     } catch (err) {
-      return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
+      const msg = err instanceof Error ? err.message : String(err);
+      await audit(req, user.id, "update.apply_failed", { details: { error: msg.slice(0, 500) } });
+      return reply.code(500).send({ ok: false, error: msg });
+    } finally {
+      updateInFlight = null;
     }
   });
 
@@ -676,6 +740,12 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
+    if (updateInFlight) {
+      reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 启动）` });
+      return;
+    }
+    updateInFlight = { startedAt: new Date(), actorEmail: user.email };
+    await audit(req, user.id, "update.apply_start_stream");
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -683,12 +753,18 @@ export async function adminRoutes(app: FastifyInstance) {
       "X-Accel-Buffering": "no",
     });
     const write = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+    let finalOk = false;
     try {
-      for await (const ev of applyUpdateStream()) write(ev);
+      for await (const ev of applyUpdateStream()) {
+        write(ev);
+        if (ev.type === "final") finalOk = ev.ok;
+      }
     } catch (err) {
       write({ type: "final", ok: false, error: err instanceof Error ? err.message : "未知错误" });
     } finally {
+      await audit(req, user.id, finalOk ? "update.apply_done" : "update.apply_failed");
       reply.raw.end();
+      updateInFlight = null;
     }
   });
 

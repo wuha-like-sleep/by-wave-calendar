@@ -96,6 +96,24 @@ export const loginAlerts = pgTable("login_alerts", {
   uniq: uniqueIndex("login_alerts_user_ip_ua_unique").on(t.userId, t.ipHash, t.uaHash),
 }));
 
+// Append-only audit trail for admin-level actions (token issuance, backup
+// restore, SSO provider create/edit, update-apply, etc.). Surfaces in
+// /admin/audit so multiple admins can see who did what when.
+export const adminAuditLog = pgTable("admin_audit_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  actorUserId: uuid("actor_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),  // e.g. "api_token.create", "backup.restore"
+  targetType: text("target_type"),   // "api_token", "sso_provider", "user", etc.
+  targetId: text("target_id"),
+  details: jsonb("details"),         // free-form snapshot of relevant fields
+  ip: text("ip").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  actorIdx: index("admin_audit_actor_idx").on(t.actorUserId),
+  createdIdx: index("admin_audit_created_idx").on(t.createdAt),
+}));
+
 export const loginChallenges = pgTable("login_challenges", {
   token: text("token").primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
