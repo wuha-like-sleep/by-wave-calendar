@@ -88,6 +88,9 @@
     week: {
       taskView: false,
       eventView: ["time", "allday"],
+      // Show the full 0-24 range; we visually dim non-working hours via
+      // CSS instead of clipping them, so users still see late-night
+      // events without scrolling.
       hourStart: 0,
       hourEnd: 24,
       startDayOfWeek: 1,

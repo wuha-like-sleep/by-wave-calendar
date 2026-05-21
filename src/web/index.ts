@@ -27,6 +27,7 @@ import { createReset, loadValidReset, consumeReset } from "../lib/password_reset
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
+import { buildIcsFeed } from "../services/ics.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
@@ -688,6 +689,35 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // ---------- ICS import ----------
+  // Single-calendar ICS snapshot download. Different from /ics/<token>:
+  // - This one is a one-shot file download (Content-Disposition: attachment),
+  //   not a subscription. The user gets a frozen .ics they can attach to
+  //   an email or import into another tool.
+  // - Auth is the normal session, not a share token — so you can grab your
+  //   own calendar without minting (and later having to revoke) a public URL.
+  app.get<{ Params: { id: string } }>("/app/calendars/:id/export.ics", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.code(404).type("text/plain").send("Not Found");
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.code(404).type("text/plain").send("Not Found");
+    const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, calId.data)).limit(1);
+    if (!cal) return reply.code(404).type("text/plain").send("Not Found");
+    const events = await db
+      .select()
+      .from(schema.events)
+      .where(and(eq(schema.events.calendarId, cal.id), isNull(schema.events.deletedAt)))
+      .orderBy(asc(schema.events.startsAt));
+    const body = buildIcsFeed(cal, events);
+    // Slug the filename so e.g. "工作 / Work" doesn't blow up downloads.
+    const safeName = cal.name.replace(/[^a-zA-Z0-9一-鿿-]+/g, "_").slice(0, 50) || "calendar";
+    reply
+      .header("Content-Type", "text/calendar; charset=utf-8")
+      .header("Cache-Control", "no-store")
+      .header("Content-Disposition", `attachment; filename="${safeName}.ics"`)
+      .send(body);
+  });
+
   app.post<{ Params: { id: string } }>("/app/calendars/:id/import/file", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;

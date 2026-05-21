@@ -133,3 +133,86 @@
   color: rgb(100 116 139); /* slate-500 */
   font-weight: 500;
 }
+
+/* ---------- Working hours overlay ----------
+   Highlight 09:00-18:00 (default) on the week/day time grid by tinting
+   the non-working hours with a faint grey wash. Toast UI Calendar's
+   time-grid is a single absolutely-positioned column per day; we use
+   linear-gradient stops at exactly the working-hour boundaries so the
+   wash sits behind the events without intercepting clicks.
+
+   The percentages assume a 24-hour visible range:
+     9 / 24 * 100 = 37.5%
+    18 / 24 * 100 = 75%
+   If a user later customizes hourStart/hourEnd we'd need to recompute
+   these in JS, but for now we just render the full day. */
+.toastui-calendar-week-view .toastui-calendar-time,
+.toastui-calendar-week-view .toastui-calendar-day-grid-row {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(148, 163, 184, 0.08) 0%,
+    rgba(148, 163, 184, 0.08) 37.5%,    /* up to 09:00 */
+    transparent 37.5%,
+    transparent 75%,                     /* 09:00–18:00 = working */
+    rgba(148, 163, 184, 0.08) 75%,
+    rgba(148, 163, 184, 0.08) 100%
+  );
+}
+
+/* ---------- Print stylesheet ----------
+   When the user picks "Print" (Ctrl/Cmd-P) we want a clean, paper-friendly
+   layout: drop the global nav, sidebar, toolbar, and FABs; let the
+   calendar grid expand to fill the page; force the brand colors to print
+   so events stay distinguishable on color printers. */
+@media print {
+  /* Hide all interactive chrome */
+  nav,
+  header.sticky,
+  #cal-sidebar,
+  #cal-sidebar-backdrop,
+  #btn-new-event,
+  #fab-quick-add,
+  footer,
+  .modal-close,
+  [id^="modal-"],
+  .bwc-toast,
+  #shortcuts-hint {
+    display: none !important;
+  }
+
+  /* Strip backgrounds & shadows so we don't waste ink */
+  body, html, #calendar-app, main {
+    background: white !important;
+    box-shadow: none !important;
+  }
+
+  /* Let the calendar take the whole page */
+  #calendar-app {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  #calendar {
+    height: auto !important;
+    min-height: 60vh !important;
+  }
+
+  /* Ensure event tile colors actually print */
+  .toastui-calendar-event,
+  .toastui-calendar-weekday-event,
+  .toastui-calendar-month-event {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* No animations, no transitions in print */
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Hide working-hours overlay in print — looks weird on paper */
+  .toastui-calendar-week-view .toastui-calendar-time,
+  .toastui-calendar-week-view .toastui-calendar-day-grid-row {
+    background-image: none !important;
+  }
+}

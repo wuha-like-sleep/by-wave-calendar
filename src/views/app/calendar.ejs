@@ -98,6 +98,15 @@
     </summary>
     <div class="mt-3 text-sm text-slate-500 mb-3">生成后把链接粘贴到 Google / Apple / Outlook 日历的「添加订阅日历」即可。</div>
 
+    <!-- One-shot snapshot download: 你的当前日历状态打包成 .ics，不需要订阅链接也不需要撤销。
+         适合"我就是想把这本日历存档/给朋友/迁移到其他工具"的场景。 -->
+    <a href="/app/calendars/<%= calendar.id %>/export.ics"
+       class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 mb-4"
+       download>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      下载这本日历的 .ics 快照
+    </a>
+
   <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens" class="flex flex-col sm:flex-row gap-2 mb-4">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="text" name="label" maxlength="100" placeholder="备注（如：给家人）"
