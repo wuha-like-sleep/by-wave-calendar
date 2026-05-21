@@ -127,9 +127,9 @@
               <div class="text-xs text-slate-500 break-all"><%= s.url %></div>
               <div class="text-xs mt-1">
                 <% if (s.lastStatus === 'ok') { %>
-                  <span class="text-emerald-600">✓ 上次同步 <%= s.lastFetchedAtLocal %> · <%= s.lastEventCount %> 个事件</span>
+                  <span class="text-emerald-600">✓ 上次同步 <%- s.lastFetchedAtLocal %> · <%= s.lastEventCount %> 个事件</span>
                 <% } else if (s.lastStatus === 'error') { %>
-                  <span class="text-red-600">✗ <%= s.lastFetchedAtLocal %> 失败：<%= s.lastError %></span>
+                  <span class="text-red-600">✗ <%- s.lastFetchedAtLocal %> 失败：<%= s.lastError %></span>
                 <% } else { %>
                   <span class="text-slate-400">尚未同步</span>
                 <% } %>
@@ -234,7 +234,7 @@
           <div class="min-w-0 flex-1">
             <div class="text-sm font-medium text-slate-900"><%= ev.summary %></div>
             <div class="mt-0.5 text-xs text-slate-500">
-              <%= ev.startsAtLocal %> → <%= ev.endsAtLocal %>
+              <%- ev.startsAtLocal %> → <%- ev.endsAtLocal %>
               <% if (ev.location) { %> · <%= ev.location %><% } %>
             </div>
             <% if (ev.description) { %>

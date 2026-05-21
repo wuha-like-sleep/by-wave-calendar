@@ -143,7 +143,7 @@ export const calendars = pgTable("calendars", {
   name: text("name").notNull(),
   description: text("description"),
   color: text("color").notNull().default("#3b82f6"),
-  timezone: text("timezone").notNull().default("UTC"),
+  timezone: text("timezone").notNull().default("Asia/Shanghai"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

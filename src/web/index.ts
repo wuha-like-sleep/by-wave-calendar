@@ -48,20 +48,22 @@ function redirectWith(reply: FastifyReply, path: string, flash?: Flash) {
   return reply.redirect(qs ? `${path}?${qs}` : path);
 }
 
-function localTime(d: Date, timezone = "Asia/Shanghai"): string {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(d);
-  } catch {
-    return d.toISOString();
-  }
+// Emit a <time> element carrying the UTC instant; the client-side local-time.js
+// reformats it in the visitor's browser timezone on load. The server-rendered
+// inner text is a no-JS fallback in the calendar's stored TZ (or Shanghai).
+function localTime(d: Date, timezone = "Asia/Shanghai", style: "datetime" | "date" | "time" | "full" | "relative" = "datetime"): string {
+  const fallback = (() => {
+    try {
+      return new Intl.DateTimeFormat("zh-CN", {
+        timeZone: timezone,
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(d);
+    } catch {
+      return d.toISOString();
+    }
+  })();
+  return `<time data-tz datetime="${d.toISOString()}" data-style="${style}">${fallback}</time>`;
 }
 
 async function loadAuthedUser(req: FastifyRequest, reply: FastifyReply) {

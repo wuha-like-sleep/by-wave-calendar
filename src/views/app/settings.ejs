@@ -32,7 +32,7 @@
     <div class="flex justify-between"><dt class="text-slate-500">邮箱</dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
     <div class="flex justify-between"><dt class="text-slate-500">昵称</dt><dd class="font-medium text-slate-900"><%= user.displayName || '—' %></dd></div>
     <div class="flex justify-between"><dt class="text-slate-500">角色</dt><dd class="font-medium text-slate-900"><%= user.isAdmin ? '管理员' : '普通用户' %></dd></div>
-    <div class="flex justify-between"><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900"><%= createdAtLocal %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900"><%- createdAtLocal %></dd></div>
   </dl>
 </section>
 
@@ -58,8 +58,8 @@
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900"><%= pk.deviceName || 'Passkey' %></div>
             <div class="text-xs text-slate-500">
-              添加于 <%= pk.createdAtLocal %>
-              <% if (pk.lastUsedAtLocal) { %> · 最近使用 <%= pk.lastUsedAtLocal %><% } %>
+              添加于 <%- pk.createdAtLocal %>
+              <% if (pk.lastUsedAtLocal) { %> · 最近使用 <%- pk.lastUsedAtLocal %><% } %>
             </div>
           </div>
           <button type="button" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"
@@ -138,8 +138,8 @@
             <div class="text-sm font-medium text-slate-900"><%= ap.label %></div>
             <div class="text-xs text-slate-500">
               前缀 <code class="font-mono text-slate-700"><%= ap.prefix %></code> ·
-              创建于 <%= ap.createdAtLocal %>
-              <% if (ap.lastUsedAtLocal) { %> · 最近使用 <%= ap.lastUsedAtLocal %><% } else { %> · 从未使用<% } %>
+              创建于 <%- ap.createdAtLocal %>
+              <% if (ap.lastUsedAtLocal) { %> · 最近使用 <%- ap.lastUsedAtLocal %><% } else { %> · 从未使用<% } %>
             </div>
           </div>
           <form method="post" action="/app/settings/app-passwords/<%= ap.id %>/revoke" onsubmit="return confirm('撤销后这个应用密码立即失效，对应客户端需重新生成。确定？');">
@@ -256,7 +256,7 @@
         <tbody>
           <% recentLogins.forEach(function(e){ %>
             <tr class="border-b border-slate-50">
-              <td class="py-2 px-5 sm:px-0 sm:pr-4 text-slate-700 whitespace-nowrap"><%= e.createdAtLocal %></td>
+              <td class="py-2 px-5 sm:px-0 sm:pr-4 text-slate-700 whitespace-nowrap"><%- e.createdAtLocal %></td>
               <td class="py-2 pr-4">
                 <% if (e.method === 'passkey') { %><span class="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs">Passkey</span>
                 <% } else if (e.method === 'mfa') { %><span class="inline-block rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-xs">密码+MFA</span>
