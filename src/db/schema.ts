@@ -20,10 +20,22 @@ export const users = pgTable("users", {
   mfaEnabled: boolean("mfa_enabled").notNull().default(false),
   mfaTotpSecret: text("mfa_totp_secret"),
   mfaBackupCodes: jsonb("mfa_backup_codes"),
+  failedLoginCount: integer("failed_login_count").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUnique: uniqueIndex("users_email_unique").on(t.email),
+}));
+
+export const passwordResets = pgTable("password_resets", {
+  token: text("token").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("password_resets_user_idx").on(t.userId),
 }));
 
 export const emailVerifications = pgTable("email_verifications", {

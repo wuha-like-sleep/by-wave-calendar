@@ -43,6 +43,13 @@
       "when": 1779357987529,
       "tag": "0005_smtp_in_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779360522599,
+      "tag": "0006_security_lockout_resets",
+      "breakpoints": true
     }
   ]
 }

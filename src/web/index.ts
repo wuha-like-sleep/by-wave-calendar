@@ -14,11 +14,13 @@ import {
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { newEventUid, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
-import { welcomeMail } from "../lib/email_templates.js";
+import { welcomeMail, passwordResetMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
 import { listTimezones } from "../lib/timezones.js";
+import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -124,14 +126,114 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/login", { error: "邮箱或密码格式不正确" });
     }
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
-    if (!user || !(await verifyPassword(body.data.password, user.passwordHash))) {
-      req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed");
+    if (!user) {
+      req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
       return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
     }
+    if (isLocked(user)) {
+      const mins = lockedRemainingMinutes(user);
+      return redirectWith(reply, "/login", { error: `账号已临时锁定，请 ${mins} 分钟后再试，或点击「忘记密码」重置。` });
+    }
+    if (!(await verifyPassword(body.data.password, user.passwordHash))) {
+      await recordFailedLogin(user);
+      req.log.warn({ userId: user.id, email: body.data.email, ip: req.ip }, "login_failed");
+      return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
+    }
+    await resetFailedLogin(user.id);
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     return reply.redirect("/app");
+  });
+
+  // -------- Forgot / reset password --------
+  app.get("/forgot-password", async (req, reply) => {
+    return reply.view("auth/forgot-password", {
+      title: "忘记密码",
+      user: null,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      form: {},
+    });
+  });
+
+  app.post("/forgot-password", {
+    config: { rateLimit: { max: 3, timeWindow: "5 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ email: z.string().email().max(254) }).safeParse(req.body);
+    // Generic response regardless of whether the email exists, to prevent enumeration.
+    const generic = "如果该邮箱已注册，重置链接将很快到达邮箱（请检查垃圾邮件）。";
+    if (!body.success) {
+      return redirectWith(reply, "/forgot-password", { success: generic });
+    }
+    const email = body.data.email.toLowerCase().trim();
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+    if (user) {
+      try {
+        const token = await createReset(user.id);
+        await sendMail(passwordResetMail(user.email, token));
+      } catch (err) {
+        req.log.warn({ err, email }, "password_reset_send_failed");
+      }
+    } else {
+      req.log.info({ email, ip: req.ip }, "forgot_password_unknown_email");
+    }
+    return redirectWith(reply, "/forgot-password", { success: generic });
+  });
+
+  app.get<{ Params: { token: string } }>("/reset-password/:token", async (req, reply) => {
+    const token = req.params.token;
+    const reset = await loadValidReset(token);
+    if (!reset) {
+      return reply.code(400).view("error", {
+        title: "链接无效",
+        user: null,
+        csrfToken: csrfTokenFor(req),
+        flash: {},
+        statusCode: 400,
+        heading: "重置链接无效或已过期",
+        message: "请重新申请密码重置邮件。链接 1 小时内有效，且每个链接只能使用一次。",
+      });
+    }
+    return reply.view("auth/reset-password", {
+      title: "重置密码",
+      user: null,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      token,
+    });
+  });
+
+  app.post<{ Params: { token: string } }>("/reset-password/:token", {
+    config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const token = req.params.token;
+    const reset = await loadValidReset(token);
+    if (!reset) {
+      return redirectWith(reply, "/forgot-password", { error: "重置链接无效或已过期，请重新申请" });
+    }
+    const body = z
+      .object({
+        password: z.string().min(8).max(200),
+        confirm: z.string().min(1).max(200),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: "密码至少 8 位" });
+    }
+    if (body.data.password !== body.data.confirm) {
+      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: "两次输入的密码不一致" });
+    }
+    const passwordHash = await hashPassword(body.data.password);
+    await db
+      .update(schema.users)
+      .set({ passwordHash, failedLoginCount: 0, lockedUntil: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, reset.userId));
+    await consumeReset(token);
+    await destroyAllUserSessions(reset.userId);
+    return redirectWith(reply, "/login", { success: "密码已重置，请使用新密码登录" });
   });
 
   app.get("/register", async (req, reply) => {

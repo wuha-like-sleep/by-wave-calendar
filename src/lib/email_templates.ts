@@ -135,6 +135,33 @@ ${ctx.location ? `- 地点：${ctx.location}\n` : ""}- 浏览器：${ctx.userAge
   return { to, subject: `【${brand}】新登录提醒 · ${methodLabel}`, html, text };
 }
 
+// ---------- Password reset ----------
+export function passwordResetMail(to: string, token: string): SendArgs {
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const link = `${baseUrl}/reset-password/${encodeURIComponent(token)}`;
+  const text = `${brand} 密码重置\n\n你（或冒充你的人）请求重置密码。\n点击下面链接设置新密码（1 小时内有效，只能用一次）：\n${link}\n\n如果不是你本人，忽略这封邮件即可，账号不会有任何变化。`;
+  const html = baseLayout({
+    title: `${brand} 密码重置`,
+    preheader: "1 小时内有效",
+    body: `
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;font-weight:600;">🔑 重置密码</h1>
+      <p style="margin:0 0 16px;color:#475569;line-height:1.6;font-size:14px;">
+        你请求重置 ${escape(brand)} 账号的密码。点击下面按钮设置新密码 —— 链接 <strong>1 小时内有效</strong>，且只能用一次。
+      </p>
+      <p style="margin:24px 0;">
+        <a href="${link}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">设置新密码</a>
+      </p>
+      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
+        按钮没反应？复制下面链接到浏览器打开：<br/>
+        <a href="${link}" style="color:#6366f1;text-decoration:underline;">${link}</a>
+      </p>
+      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+        ⚠️ 如果不是你本人请求的，忽略此邮件即可 —— 你的账号不会有任何变化。设置新密码后，<strong>所有已登录设备会被强制下线</strong>。
+      </p>`,
+  });
+  return { to, subject: `【${brand}】重置密码`, html, text };
+}
+
 // ---------- Welcome email after register ----------
 export function welcomeMail(to: string, displayName: string | null): SendArgs {
   const name = displayName || to.split("@")[0] || to;
