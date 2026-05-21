@@ -1,0 +1,78 @@
+<%- include('_nav') %>
+
+<form method="post" action="/admin/theme" class="space-y-6">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <h1 class="text-xl font-semibold text-slate-900 mb-1">主题色</h1>
+    <p class="text-sm text-slate-500 mb-5">选择品牌色系，所有按钮 / 链接 / 高亮会跟着变。即时预览：当前活动选项的卡片本身也使用该主题色。</p>
+
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <%
+        const palettes = [
+          { id: 'indigo',  name: '靛蓝',     colors: ['#eef2ff','#a5b4fc','#6366f1','#4338ca'] },
+          { id: 'emerald', name: '翠绿',     colors: ['#ecfdf5','#6ee7b7','#10b981','#047857'] },
+          { id: 'rose',    name: '玫瑰',     colors: ['#fff1f2','#fda4af','#f43f5e','#be123c'] },
+          { id: 'sky',     name: '天蓝',     colors: ['#f0f9ff','#7dd3fc','#0ea5e9','#0369a1'] },
+          { id: 'amber',   name: '琥珀',     colors: ['#fffbeb','#fcd34d','#f59e0b','#b45309'] },
+          { id: 'violet',  name: '紫罗兰',   colors: ['#f5f3ff','#c4b5fd','#8b5cf6','#6d28d9'] },
+          { id: 'slate',   name: '石板灰',   colors: ['#f8fafc','#cbd5e1','#64748b','#334155'] },
+        ];
+      %>
+      <% palettes.forEach(function(p){ %>
+        <label class="palette-card group cursor-pointer rounded-xl border-2 p-3 transition <%= currentPalette === p.id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+          <input type="radio" name="palette" value="<%= p.id %>" <%= currentPalette === p.id ? 'checked' : '' %> class="sr-only" />
+          <div class="flex items-center gap-1.5 mb-2">
+            <% p.colors.forEach(function(c){ %>
+              <span class="block h-6 w-6 rounded-md shadow-sm border border-slate-200/60" style="background: <%= c %>"></span>
+            <% }) %>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-slate-900"><%= p.name %></span>
+            <span class="text-xs text-slate-400 font-mono"><%= p.id %></span>
+          </div>
+        </label>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <h2 class="text-lg font-semibold text-slate-900 mb-1">布局密度</h2>
+    <p class="text-sm text-slate-500 mb-4">紧凑模式减少 section 间距和外边距，适合信息密集的页面 / 大屏。</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <% const densities = [
+        { id: 'comfortable', name: '舒适', desc: '默认间距，呼吸感更强' },
+        { id: 'compact',     name: '紧凑', desc: '更密的布局，一屏显示更多' },
+      ]; densities.forEach(function(d){ %>
+        <label class="cursor-pointer rounded-xl border-2 p-4 transition <%= currentDensity === d.id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+          <input type="radio" name="density" value="<%= d.id %>" <%= currentDensity === d.id ? 'checked' : '' %> class="sr-only" />
+          <div class="text-sm font-medium text-slate-900"><%= d.name %></div>
+          <div class="mt-1 text-xs text-slate-500"><%= d.desc %></div>
+        </label>
+      <% }) %>
+    </div>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <h2 class="text-lg font-semibold text-slate-900 mb-3">预览</h2>
+    <div class="rounded-xl border border-slate-200 p-4 bg-slate-50 space-y-3">
+      <div class="flex flex-wrap gap-2 items-center">
+        <button type="button" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white">主按钮</button>
+        <button type="button" class="rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-medium text-brand-700">次级按钮</button>
+        <a href="#" class="text-sm text-brand-600 hover:text-brand-700 font-medium">链接样式 →</a>
+      </div>
+      <div class="rounded-lg border border-brand-200 bg-brand-50 p-3">
+        <div class="text-sm font-medium text-brand-800">高亮卡片</div>
+        <div class="text-xs text-brand-700">这是被选中状态下的卡片背景与文字色。</div>
+      </div>
+      <div class="flex gap-2">
+        <span class="inline-block rounded-full bg-brand-100 text-brand-700 px-2.5 py-1 text-xs font-medium">徽标 A</span>
+        <span class="inline-block rounded-full bg-brand-600 text-white px-2.5 py-1 text-xs font-medium">徽标 B</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="flex justify-end gap-2">
+    <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存外观</button>
+  </div>
+</form>

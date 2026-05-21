@@ -71,6 +71,13 @@
       "when": 1779362064725,
       "tag": "0009_login_events",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779363847455,
+      "tag": "0010_theme_settings",
+      "breakpoints": true
     }
   ]
 }

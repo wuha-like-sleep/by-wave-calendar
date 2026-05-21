@@ -1,0 +1,2 @@
+ALTER TABLE "site_settings" ADD COLUMN "theme_palette" text DEFAULT 'indigo' NOT NULL;--> statement-breakpoint
+ALTER TABLE "site_settings" ADD COLUMN "theme_density" text DEFAULT 'comfortable' NOT NULL;

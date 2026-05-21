@@ -172,6 +172,8 @@ app.addHook("onRequest", async (_req, reply) => {
       registrationMode: settings.registrationMode,
       ssoEnabled: settings.ssoKeycloakEnabled,
       ssoLabel: settings.ssoKeycloakLabel,
+      themePalette: settings.themePalette,
+      themeDensity: settings.themeDensity,
       ...locals,
     });
 });

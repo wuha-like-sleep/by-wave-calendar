@@ -67,6 +67,8 @@ export const siteSettings = pgTable("site_settings", {
   smtpPass: text("smtp_pass"),
   mailFromAddress: text("mail_from_address"),
   mailFromName: text("mail_from_name").default("ByWave-Calendar"),
+  themePalette: text("theme_palette").notNull().default("indigo"),
+  themeDensity: text("theme_density").notNull().default("comfortable"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

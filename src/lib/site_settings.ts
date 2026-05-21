@@ -19,6 +19,8 @@ export type SettingsView = {
   smtpPass: string | null;
   mailFromAddress: string | null;
   mailFromName: string;
+  themePalette: string;
+  themeDensity: string;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -61,6 +63,8 @@ function toView(r: schema.SiteSettings): SettingsView {
     smtpPass: r.smtpPass || env.SMTP_PASS || null,
     mailFromAddress: r.mailFromAddress || env.MAIL_FROM_ADDRESS || null,
     mailFromName: r.mailFromName || env.MAIL_FROM_NAME,
+    themePalette: r.themePalette || "indigo",
+    themeDensity: r.themeDensity || "comfortable",
   };
 }
 
@@ -107,6 +111,8 @@ export async function updateSettings(patch: Partial<{
   smtpPass: string | null;
   mailFromAddress: string | null;
   mailFromName: string;
+  themePalette: string;
+  themeDensity: string;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

@@ -277,6 +277,39 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
   });
 
+  // ---------- Theme / appearance ----------
+  app.get("/admin/theme", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    return reply.view("admin/theme", {
+      title: "外观",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/theme",
+      currentPalette: settings.themePalette,
+      currentDensity: settings.themeDensity,
+    });
+  });
+
+  app.post("/admin/theme", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z
+      .object({
+        palette: z.enum(["indigo", "emerald", "rose", "sky", "amber", "violet", "slate"]),
+        density: z.enum(["comfortable", "compact"]),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/theme?error=" + encodeURIComponent("无效的选项"));
+    }
+    await updateSettings({ themePalette: body.data.palette, themeDensity: body.data.density });
+    return reply.redirect("/admin/theme?success=" + encodeURIComponent("外观已更新"));
+  });
+
   // ---------- Self-update (admin only) ----------
   app.get("/admin/update", async (req, reply) => {
     const user = await requireAdmin(req, reply);
