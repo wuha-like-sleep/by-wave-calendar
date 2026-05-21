@@ -1,5 +1,8 @@
 <!doctype html>
-<html lang="zh-CN" data-theme="<%= typeof themePalette !== 'undefined' ? themePalette : 'indigo' %>" data-density="<%= typeof themeDensity !== 'undefined' ? themeDensity : 'comfortable' %>">
+<html lang="zh-CN"
+      data-theme="<%= typeof themePalette !== 'undefined' ? themePalette : 'indigo' %>"
+      data-density="<%= typeof themeDensity !== 'undefined' ? themeDensity : 'comfortable' %>"
+      data-app-version="<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -13,6 +16,7 @@
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
     <script defer src="/static/lib/htmx.min.js"></script>
     <script src="/static/app.js?v=<%= v %>" defer></script>
+    <script src="/static/version-check.js?v=<%= v %>" defer></script>
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>

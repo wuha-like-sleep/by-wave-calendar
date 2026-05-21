@@ -1,6 +1,7 @@
 // Minimal service worker — registered for PWA install eligibility.
-// Cache strategy: network-first for app shell, ignore everything else for now.
-const CACHE = "bwc-shell-v1";
+// __ASSET_VERSION__ is replaced server-side by ASSET_VERSION on every boot
+// so each deploy gets a fresh cache bucket and the old ones are evicted in activate().
+const CACHE = "bwc-shell-__ASSET_VERSION__";
 const SHELL = ["/", "/app", "/static/css/styles.css"];
 
 self.addEventListener("install", (event) => {
@@ -12,9 +13,16 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((k) => k !== CACHE && k.startsWith("bwc-shell-")).map((k) => caches.delete(k)),
+    )),
   );
   self.clients.claim();
+});
+
+// Allow the page to ask the SW to take over immediately after a new version installs.
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {

@@ -143,6 +143,9 @@ await app.register(view, {
 // ---- Health ----
 app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.1.0" }));
 
+// ---- Asset version (boot timestamp) — busts browser & SW cache on every deploy ----
+const ASSET_VERSION = String(Date.now());
+
 // ---- PWA: serve manifest & sw at root ----
 app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, reply) => {
   reply.header("Content-Type", "application/manifest+json");
@@ -151,7 +154,19 @@ app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, 
 app.get("/sw.js", { config: { rateLimit: false } }, async (_req, reply) => {
   reply.header("Service-Worker-Allowed", "/");
   reply.header("Content-Type", "application/javascript");
-  return reply.sendFile("sw.js");
+  reply.header("Cache-Control", "no-cache, must-revalidate");
+  // Inline the version so each deploy gets a new cache bucket and old ones evict.
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const swPath = path.join(process.cwd(), "src", "public", "sw.js");
+  const body = (await fs.readFile(swPath, "utf8")).replace("__ASSET_VERSION__", ASSET_VERSION);
+  return reply.send(body);
+});
+
+// Used by the client to detect when its in-memory page is older than the live deploy.
+app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.header("Cache-Control", "no-store");
+  return reply.send({ version: ASSET_VERSION });
 });
 
 // ---- Routes ----
@@ -159,9 +174,6 @@ await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(icsRoutes);
-// Asset version — used to bust browser cache for /static JS+CSS on every deploy.
-const ASSET_VERSION = String(Date.now());
-
 // Inject DB-backed site settings into every reply.view call.
 app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();
