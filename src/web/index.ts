@@ -18,6 +18,7 @@ import { welcomeMail } from "../lib/email_templates.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
+import { listTimezones } from "../lib/timezones.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -314,6 +315,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       calendars,
+      timezones: listTimezones(),
       publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
       appShell: true,
     });

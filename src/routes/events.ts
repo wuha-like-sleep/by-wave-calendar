@@ -7,6 +7,12 @@ import { newEventUid } from "../lib/ids.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
+const extraSchema = z.object({
+  category: z.string().max(50).optional(),
+  timezone: z.string().max(100).optional(),
+  attendees: z.array(z.string().email().max(254)).max(50).optional(),
+}).optional();
+
 const createSchema = z.object({
   calendarId: z.string().uuid(),
   summary: z.string().min(1).max(500),
@@ -16,6 +22,7 @@ const createSchema = z.object({
   endsAt: isoDate,
   allDay: z.boolean().optional(),
   rrule: z.string().max(500).optional(),
+  extra: extraSchema,
 });
 
 const updateSchema = createSchema.omit({ calendarId: true }).partial();
@@ -107,6 +114,7 @@ export async function eventRoutes(app: FastifyInstance) {
         endsAt: new Date(body.endsAt),
         allDay: body.allDay ?? false,
         rrule: body.rrule,
+        extra: body.extra as unknown as object | null,
       })
       .returning();
     return reply.code(201).send(row);
@@ -128,6 +136,7 @@ export async function eventRoutes(app: FastifyInstance) {
         endsAt: body.endsAt ? new Date(body.endsAt) : undefined,
         allDay: body.allDay ?? undefined,
         rrule: body.rrule ?? undefined,
+        extra: body.extra !== undefined ? (body.extra as unknown as object | null) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(schema.events.id, id))

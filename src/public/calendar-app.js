@@ -1,14 +1,11 @@
 // by-wave-calendar single-page calendar app
-// Uses Toast UI Calendar v2.x for the grid, plus vanilla JS for modals + fetch.
 (function () {
   "use strict";
 
   const ctx = window.__bwc || { calendars: [], publicBaseUrl: "", csrfToken: "" };
-
   const headers = () => ({ "Content-Type": "application/json", "X-CSRF-Token": ctx.csrfToken });
   const fetchOpts = (extra = {}) => Object.assign({ credentials: "same-origin", headers: headers() }, extra);
 
-  // ---------- DOM helpers ----------
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
@@ -22,6 +19,21 @@
     const m = $(id);
     if (m) m.addEventListener("click", (e) => { if (e.target === m) closeModal(id); });
   });
+
+  // ---------- Sidebar drawer (mobile) ----------
+  const sidebar = $("#cal-sidebar");
+  const backdrop = $("#cal-sidebar-backdrop");
+  function openSidebar() {
+    sidebar.classList.remove("-translate-x-full");
+    backdrop.classList.remove("hidden");
+  }
+  function closeSidebar() {
+    sidebar.classList.add("-translate-x-full");
+    backdrop.classList.add("hidden");
+  }
+  $("#btn-toggle-sidebar").addEventListener("click", openSidebar);
+  $("#btn-close-sidebar")?.addEventListener("click", closeSidebar);
+  backdrop.addEventListener("click", closeSidebar);
 
   // ---------- Toast UI Calendar setup ----------
   const tuiCalendars = ctx.calendars.map((c) => ({
@@ -61,7 +73,6 @@
 
   let currentView = "week";
 
-  // ---------- Date label + range fetch ----------
   function formatPeriodLabel() {
     const start = cal.getDateRangeStart().toDate();
     const end = cal.getDateRangeEnd().toDate();
@@ -109,7 +120,7 @@
 
   function refresh() { formatPeriodLabel(); loadEvents(); }
 
-  // ---------- Toolbar bindings ----------
+  // ---------- Toolbar ----------
   $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); });
   $("#btn-prev").addEventListener("click", () => { cal.prev(); refresh(); });
   $("#btn-next").addEventListener("click", () => { cal.next(); refresh(); });
@@ -122,27 +133,44 @@
   }));
   $('.view-btn[data-view="week"]').classList.add("bg-brand-50", "text-brand-700", "font-semibold");
 
-  // ---------- Sidebar: toggle calendars ----------
+  // ---------- Sidebar calendar visibility toggle ----------
   $$(".cal-toggle").forEach((cb) => cb.addEventListener("change", () => {
     const id = cb.dataset.calId;
     if (cb.checked) visibleCalIds.add(id); else visibleCalIds.delete(id);
     loadEvents();
   }));
 
-  $("#btn-toggle-sidebar").addEventListener("click", () => {
-    const sb = $("#cal-sidebar");
-    sb.classList.toggle("hidden");
-    sb.classList.toggle("flex");
-    sb.classList.toggle("absolute"); sb.classList.toggle("z-30");
-    sb.classList.toggle("inset-y-0"); sb.classList.toggle("left-0");
-  });
-
-  // ---------- Event create / edit ----------
-  function toLocalInputValue(d) {
-    const pad = (n) => String(n).padStart(2, "0");
+  // ---------- Event modal ----------
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function toLocalDateTimeValue(d) {
     const t = new Date(d);
     return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`;
   }
+  function toLocalDateValue(d) {
+    const t = new Date(d);
+    return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`;
+  }
+
+  const allDayCheckbox = $('#form-event [name="allDay"]');
+  const timeRow = $("#time-row");
+  const dateRow = $("#date-row");
+
+  function syncAllDayUI() {
+    const isAllDay = allDayCheckbox.checked;
+    if (isAllDay) {
+      timeRow.classList.add("hidden");
+      dateRow.classList.remove("hidden");
+      // Mirror values
+      const s = $('#form-event [name="startsAt"]').value;
+      const e = $('#form-event [name="endsAt"]').value;
+      if (s) $('#form-event [name="startsAtDate"]').value = s.slice(0, 10);
+      if (e) $('#form-event [name="endsAtDate"]').value = e.slice(0, 10);
+    } else {
+      timeRow.classList.remove("hidden");
+      dateRow.classList.add("hidden");
+    }
+  }
+  allDayCheckbox.addEventListener("change", syncAllDayUI);
 
   function openEventModal(payload) {
     const form = $("#form-event");
@@ -152,28 +180,39 @@
     if (payload.summary) form.querySelector('[name="summary"]').value = payload.summary;
     if (payload.location) form.querySelector('[name="location"]').value = payload.location;
     if (payload.description) form.querySelector('[name="description"]').value = payload.description;
-    form.querySelector('[name="startsAt"]').value = toLocalInputValue(payload.startsAt || new Date());
-    form.querySelector('[name="endsAt"]').value = toLocalInputValue(payload.endsAt || new Date(Date.now() + 3600_000));
+    form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(payload.startsAt || new Date());
+    form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(payload.endsAt || new Date(Date.now() + 3600_000));
+    form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(payload.startsAt || new Date());
+    form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(payload.endsAt || new Date());
+    form.querySelector('[name="allDay"]').checked = !!payload.allDay;
+    form.querySelector('[name="category"]').value = payload.category || "";
+    form.querySelector('[name="attendees"]').value = (payload.attendees || []).join(", ");
+    if (payload.timezone) {
+      const tzSel = form.querySelector('[name="timezone"]');
+      if (Array.from(tzSel.options).some((o) => o.value === payload.timezone)) {
+        tzSel.value = payload.timezone;
+      }
+    }
+    syncAllDayUI();
     $("#modal-event-title").textContent = payload.id ? "编辑事件" : "新建事件";
     $("#btn-delete-event").classList.toggle("hidden", !payload.id);
     openModal("#modal-event");
   }
 
   $("#btn-new-event").addEventListener("click", () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) }));
-  $("#btn-new-event-mobile")?.addEventListener("click", () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) }));
 
   cal.on("selectDateTime", (info) => {
-    openEventModal({ startsAt: info.start, endsAt: info.end });
+    openEventModal({ startsAt: info.start, endsAt: info.end, allDay: info.isAllday });
     cal.clearGridSelections();
   });
 
   cal.on("clickEvent", async (info) => {
-    const id = info.event.id;
-    // Fetch fresh event data
     const calId = info.event.calendarId;
-    const evs = await fetch(`/api/calendars/${calId}/events`, fetchOpts()).then(r => r.json()).catch(() => []);
-    const fresh = evs.find((e) => e.id === id);
+    const id = info.event.id;
+    const evs = await fetch(`/api/calendars/${calId}/events`, fetchOpts()).then((r) => r.json()).catch(() => []);
+    const fresh = (evs || []).find((e) => e.id === id);
     if (!fresh) return;
+    const extra = fresh.extra || {};
     openEventModal({
       id: fresh.id,
       calendarId: fresh.calendarId,
@@ -182,21 +221,47 @@
       description: fresh.description,
       startsAt: fresh.startsAt,
       endsAt: fresh.endsAt,
+      allDay: fresh.allDay,
+      category: extra.category,
+      timezone: extra.timezone,
+      attendees: Array.isArray(extra.attendees) ? extra.attendees : [],
     });
   });
+
+  function parseEmails(s) {
+    return String(s || "")
+      .split(/[\s,;，；]+/)
+      .map((x) => x.trim().toLowerCase())
+      .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  }
 
   $("#form-event").addEventListener("submit", async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id;
-    delete data.id;
+    const isAllDay = !!data.allDay;
+    let startsLocal, endsLocal;
+    if (isAllDay) {
+      startsLocal = data.startsAtDate + "T00:00";
+      endsLocal = data.endsAtDate + "T23:59";
+    } else {
+      startsLocal = data.startsAt;
+      endsLocal = data.endsAt;
+    }
+    const attendees = parseEmails(data.attendees);
     const body = {
       calendarId: data.calendarId,
       summary: data.summary,
       location: data.location || undefined,
       description: data.description || undefined,
-      startsAt: new Date(data.startsAt).toISOString(),
-      endsAt: new Date(data.endsAt).toISOString(),
+      allDay: isAllDay,
+      startsAt: new Date(startsLocal).toISOString(),
+      endsAt: new Date(endsLocal).toISOString(),
+      extra: {
+        category: data.category || undefined,
+        timezone: data.timezone || undefined,
+        attendees: attendees.length ? attendees : undefined,
+      },
     };
     try {
       const url = id ? `/api/events/${id}` : "/api/events";
@@ -247,16 +312,16 @@
     }
   });
 
-  // ---------- Calendar context menu (share tokens, delete) ----------
+  // ---------- Calendar context menu ----------
   let currentMenuCalId = null;
   $$("[data-cal-menu]").forEach((btn) => btn.addEventListener("click", async (e) => {
     e.preventDefault(); e.stopPropagation();
     const id = btn.dataset.calMenu;
-    const cal = ctx.calendars.find((c) => c.id === id);
-    if (!cal) return;
+    const c = ctx.calendars.find((x) => x.id === id);
+    if (!c) return;
     currentMenuCalId = id;
-    $("#cal-menu-color").style.background = cal.color;
-    $("#cal-menu-name").textContent = cal.name;
+    $("#cal-menu-color").style.background = c.color;
+    $("#cal-menu-name").textContent = c.name;
     await loadShareTokens(id);
     openModal("#modal-cal-menu");
   }));
@@ -332,7 +397,6 @@
     }
   });
 
-  // ---------- Drag to update ----------
   cal.on("beforeUpdateEvent", async ({ event, changes }) => {
     try {
       const startsAt = changes.start ? new Date(changes.start).toISOString() : undefined;
@@ -349,11 +413,9 @@
     }
   });
 
-  // ---------- Utils ----------
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
-  // ---------- Boot ----------
   refresh();
 })();
