@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # by-wave-calendar 一键部署脚本（宝塔面板用，无反代模式）
-# 用法：在解压目录里跑：
-#   bash deploy/bt-panel/install.sh
+#
+# 用法：
+#   首次安装（交互式引导）：bash deploy/bt-panel/install.sh
+#   更新已有部署（跳过引导）：bash deploy/bt-panel/install.sh
+#
 # 可选环境变量：
 #   ADMIN_EMAIL / ADMIN_PASSWORD —— 跳过交互式提示，直接创建管理员
-#   SKIP_DEPS=1 —— 跳过 npm ci
-#   SKIP_MIGRATE=1 —— 跳过数据库迁移
-#   SKIP_ADMIN=1 —— 跳过管理员创建
-#   SKIP_SETCAP=1 —— 跳过 setcap（如果你以 root 跑 PM2 就不需要）
-#   PM2_NAME —— PM2 进程名（默认 by-wave-calendar）
+#   SKIP_DEPS=1                  —— 跳过 npm ci
+#   SKIP_MIGRATE=1               —— 跳过数据库迁移
+#   SKIP_ADMIN=1                 —— 跳过管理员创建
+#   SKIP_SETCAP=1                —— 跳过 setcap（如果你以 root 跑 PM2 就不需要）
+#   SKIP_SMOKE=1                 —— 跳过最后的 HTTP smoke 测试
+#   NONINTERACTIVE=1             —— 完全不弹任何 prompt，缺啥就 fail（用于自动化）
+#   PM2_NAME                     —— PM2 进程名（默认 by-wave-calendar）
 
 set -euo pipefail
 
@@ -16,138 +21,337 @@ PM2_NAME="${PM2_NAME:-by-wave-calendar}"
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$APP_DIR"
 
+# ---------- 输出辅助 ----------
 log()  { printf '\033[36m[install]\033[0m %s\n' "$*"; }
+ok()   { printf '\033[32m[install]\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m[install] WARN:\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[install] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
+hint() { printf '         \033[90m└─ %s\033[0m\n' "$*"; }
+
+step() {
+  printf '\n\033[1;36m▶ %s\033[0m\n' "$*"
+}
+
+# Read a single line from the user, with a default value. Skips when
+# NONINTERACTIVE=1 is set. Usage: `var=$(ask "prompt" "default")`
+ask() {
+  local prompt="$1" default="${2:-}"
+  if [ "${NONINTERACTIVE:-0}" = "1" ]; then
+    echo "$default"
+    return
+  fi
+  local reply
+  if [ -n "$default" ]; then
+    read -r -p "$prompt [$default]: " reply </dev/tty || true
+    echo "${reply:-$default}"
+  else
+    read -r -p "$prompt: " reply </dev/tty || true
+    echo "$reply"
+  fi
+}
+
+# Yes/no prompt. Returns 0 for yes, 1 for no. Default is "Y".
+confirm() {
+  local prompt="$1" default="${2:-y}"
+  if [ "${NONINTERACTIVE:-0}" = "1" ]; then
+    [ "$default" = "y" ]
+    return
+  fi
+  local reply
+  read -r -p "$prompt [Y/n]: " reply </dev/tty || true
+  reply="${reply:-$default}"
+  [ "${reply,,}" = "y" ] || [ "${reply,,}" = "yes" ]
+}
 
 log "工作目录: $APP_DIR"
 
-# ---------- 1. 工具链检查 ----------
-log "检查 Node / npm / PM2 / Postgres 客户端..."
-command -v node >/dev/null || fail "未找到 node。请在宝塔软件商店装 Node.js (>=20)。"
-command -v npm  >/dev/null || fail "未找到 npm。"
+# ========== 1. 工具链检查 ==========
+step "1/8 工具链检查"
+
+command -v node >/dev/null || {
+  warn "未找到 node。请在宝塔软件商店装 Node.js (>=20)。"
+  hint "宝塔 → 软件商店 → 搜 Node.js → 安装 → 设置全局 v20.x"
+  exit 1
+}
 NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-[ "$NODE_MAJOR" -ge 20 ] || fail "Node 版本太老 (当前: $(node -v))，需要 >= 20。"
+if [ "$NODE_MAJOR" -lt 20 ]; then
+  warn "Node 版本太老 (当前: $(node -v))，需要 >= 20。"
+  hint "宝塔 → 软件商店 → Node.js → 设置 → 切换全局版本 → v20.x"
+  exit 1
+fi
+ok "Node $(node -v)"
+
+command -v npm >/dev/null || fail "未找到 npm。"
 
 if ! command -v pm2 >/dev/null; then
   log "未找到 pm2，全局安装中..."
-  npm install -g pm2
+  npm install -g pm2 >/dev/null 2>&1 || fail "pm2 安装失败"
 fi
-command -v psql >/dev/null || warn "未找到 psql 客户端（不影响运行，仅提示）"
+ok "PM2 $(pm2 -v)"
 
-# ---------- 2. .env ----------
+if ! command -v psql >/dev/null; then
+  warn "未找到 psql 客户端（仅影响诊断，不影响运行）"
+  hint "若 DB 在本机：宝塔 → 数据库 → PostgreSQL 16+ → 安装"
+fi
+
+# ========== 2. .env 引导 ==========
+step "2/8 .env 配置"
+
 if [ ! -f .env ]; then
   if [ ! -f .env.example ]; then fail "缺少 .env 和 .env.example"; fi
-  log ".env 不存在，从 .env.example 复制..."
-  cp .env.example .env
-  SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('base64'))")
-  if sed --version >/dev/null 2>&1; then
-    sed -i "s|SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" .env
-  else
-    sed -i '' "s|SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" .env
-  fi
-  log "已生成随机 SESSION_SECRET。"
-  warn ".env 已创建，请编辑以下变量再重新执行本脚本："
-  echo "    DATABASE_URL"
-  echo "    PUBLIC_BASE_URL=https://rl.lz-ss.com"
-  echo "    USE_HTTPS=true"
-  echo "    HTTPS_CERT_PATH=/www/server/panel/vhost/cert/rl.lz-ss.com/fullchain.pem"
-  echo "    HTTPS_KEY_PATH=/www/server/panel/vhost/cert/rl.lz-ss.com/privkey.pem"
-  echo "    ACME_WEBROOT=/www/wwwroot/rl.lz-ss.com   （让宝塔续证不被打断）"
-  exit 0
-fi
-log ".env 已存在。"
+  log ".env 不存在，启动交互式向导..."
 
+  SECRET=$(node -e "console.log(require('crypto').randomBytes(48).toString('base64'))")
+
+  if [ "${NONINTERACTIVE:-0}" = "1" ]; then
+    log "NONINTERACTIVE=1，从 .env.example 原样复制（你需要稍后手动编辑）"
+    cp .env.example .env
+    if sed --version >/dev/null 2>&1; then
+      sed -i "s|SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" .env
+    else
+      sed -i '' "s|SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" .env
+    fi
+    warn ".env 已创建，请编辑后重新执行本脚本：DATABASE_URL / PUBLIC_BASE_URL / USE_HTTPS / HTTPS_CERT_PATH"
+    exit 0
+  fi
+
+  echo
+  echo "  接下来会问 4 个问题，回车接受默认值。"
+  echo "  之后所有配置都能在管理员后台 /admin 修改，不用手动改 .env。"
+  echo
+
+  # 域名
+  DOMAIN=$(ask "1) 你的域名（不带 https://，例如 calendar.example.com）" "")
+  if [ -z "$DOMAIN" ]; then
+    fail "域名是必填的。如果只是本地试用，请填 127.0.0.1:3000 并按提示选 USE_HTTPS=false。"
+  fi
+
+  # HTTPS？
+  if confirm "2) 用 HTTPS 直接监听 443/80？（推荐生产环境用，本机试用建议 No）" "y"; then
+    USE_HTTPS="true"
+    PUBLIC_BASE_URL="https://$DOMAIN"
+
+    # 自动发现宝塔证书路径
+    BT_CERT_DIR="/www/server/panel/vhost/cert/$DOMAIN"
+    if [ -f "$BT_CERT_DIR/fullchain.pem" ] && [ -f "$BT_CERT_DIR/privkey.pem" ]; then
+      ok "自动发现宝塔证书：$BT_CERT_DIR"
+      HTTPS_CERT_PATH="$BT_CERT_DIR/fullchain.pem"
+      HTTPS_KEY_PATH="$BT_CERT_DIR/privkey.pem"
+    else
+      warn "$BT_CERT_DIR 下没找到证书。先去宝塔申请 Let's Encrypt 证书。"
+      HTTPS_CERT_PATH=$(ask "  证书 fullchain.pem 路径" "$BT_CERT_DIR/fullchain.pem")
+      HTTPS_KEY_PATH=$(ask "  证书 privkey.pem 路径" "$BT_CERT_DIR/privkey.pem")
+    fi
+  else
+    USE_HTTPS="false"
+    PUBLIC_BASE_URL="http://$DOMAIN"
+    HTTPS_CERT_PATH=""
+    HTTPS_KEY_PATH=""
+  fi
+
+  # 数据库
+  echo
+  echo "3) 数据库连接（PostgreSQL 16+）"
+  if command -v psql >/dev/null && PGPASSWORD="" psql -U postgres -h 127.0.0.1 -lqt 2>/dev/null | head -1 >/dev/null 2>&1; then
+    ok "检测到本机 PostgreSQL"
+    DB_DEFAULT="postgres://bywave:bywave_dev@127.0.0.1:5432/bywave"
+  else
+    DB_DEFAULT="postgres://用户名:密码@127.0.0.1:5432/数据库名"
+  fi
+  DATABASE_URL=$(ask "   DATABASE_URL" "$DB_DEFAULT")
+  if [ "$DATABASE_URL" = "$DB_DEFAULT" ] && [[ "$DB_DEFAULT" == *"用户名"* ]]; then
+    fail "请先在宝塔 → 数据库 创建 PostgreSQL 库，再填实际连接串。"
+  fi
+
+  # ICP（中国大陆用户）
+  echo
+  ICP_NUMBER=$(ask "4) 中国大陆 ICP 备案号（无备案直接回车跳过，例如：沪ICP备2021023412号-2）" "")
+
+  cp .env.example .env
+  apply_kv() {
+    local key="$1" val="$2"
+    if [ -z "$val" ]; then return; fi
+    # Escape | and & for sed safety
+    val=$(printf '%s' "$val" | sed -e 's/[&|\\]/\\&/g')
+    if sed --version >/dev/null 2>&1; then
+      sed -i "s|^${key}=.*|${key}=${val}|" .env
+    else
+      sed -i '' "s|^${key}=.*|${key}=${val}|" .env
+    fi
+  }
+  apply_kv "SESSION_SECRET" "$SECRET"
+  apply_kv "PUBLIC_BASE_URL" "$PUBLIC_BASE_URL"
+  apply_kv "DATABASE_URL" "$DATABASE_URL"
+  apply_kv "USE_HTTPS" "$USE_HTTPS"
+  apply_kv "NODE_ENV" "production"
+  if [ -n "$HTTPS_CERT_PATH" ]; then
+    apply_kv "HTTPS_CERT_PATH" "$HTTPS_CERT_PATH"
+    apply_kv "HTTPS_KEY_PATH" "$HTTPS_KEY_PATH"
+  fi
+  if [ -n "$ICP_NUMBER" ]; then
+    # The .env.example has these commented; un-comment + fill
+    if grep -q "^# ICP_NUMBER=" .env; then
+      apply_kv "# ICP_NUMBER" "ICP_NUMBER=$ICP_NUMBER"
+      apply_kv "# ICP_URL" "ICP_URL=https://beian.miit.gov.cn/"
+      # apply_kv above set the literal key; fix that
+      sed -i "s|^# ICP_NUMBER=.*|ICP_NUMBER=$ICP_NUMBER|" .env 2>/dev/null || sed -i '' "s|^# ICP_NUMBER=.*|ICP_NUMBER=$ICP_NUMBER|" .env
+      sed -i "s|^# ICP_URL=.*|ICP_URL=https://beian.miit.gov.cn/|" .env 2>/dev/null || sed -i '' "s|^# ICP_URL=.*|ICP_URL=https://beian.miit.gov.cn/|" .env
+    fi
+  fi
+  ok ".env 写入完成"
+fi
+
+# Load env to verify
 set -a; . ./.env; set +a
 [ -n "${DATABASE_URL:-}" ] || fail ".env 里没有 DATABASE_URL"
 [ -n "${PUBLIC_BASE_URL:-}" ] || fail ".env 里没有 PUBLIC_BASE_URL"
+[ -n "${SESSION_SECRET:-}" ] || fail ".env 里没有 SESSION_SECRET"
+if [ "${SESSION_SECRET}" = "change-me-in-production-please-this-must-be-long-enough" ]; then
+  fail ".env 里 SESSION_SECRET 还是默认占位值，必须先改成随机字符串再启动。"
+fi
+ok ".env 校验通过"
 
-# ---------- 3. 依赖 + 编译 ----------
-# 两种模式：
-#   tarball 模式：dist/src/server.js 已存在 -> npm ci --omit=dev
-#   git/源码模式：dist 不存在 -> npm ci (含 devDeps) + npm run build, 然后 prune
+# ========== 3. 数据库连通性预检 ==========
+step "3/8 数据库连通性"
+if command -v psql >/dev/null; then
+  if psql "$DATABASE_URL" -c "SELECT 1" >/dev/null 2>&1; then
+    ok "数据库连通"
+  else
+    warn "数据库 ping 不通：$DATABASE_URL"
+    hint "常见原因：① 库还没建 ② 用户密码不对 ③ pg_hba.conf 限制 ④ PG 没启动"
+    hint "宝塔 → 数据库 → PostgreSQL → 看状态是否运行；点「修改」可以重置密码"
+    if ! confirm "依然继续？（迁移步骤会再试一次）" "n"; then
+      exit 1
+    fi
+  fi
+else
+  warn "未装 psql 客户端，跳过预检"
+fi
+
+# ========== 4. 依赖 + 编译 ==========
+step "4/8 安装依赖 + 编译"
 if [ -f dist/src/server.js ]; then
-  log "检测到 dist/，使用 tarball 模式..."
+  log "检测到 dist/，使用 tarball 模式"
   if [ "${SKIP_DEPS:-0}" = "1" ]; then
-    log "SKIP_DEPS=1，跳过依赖安装。"
+    log "SKIP_DEPS=1，跳过依赖安装"
   else
     log "安装生产依赖（npm ci --omit=dev）..."
-    npm ci --omit=dev
+    npm ci --omit=dev || fail "npm ci 失败，常见原因：网络不通 / package-lock 损坏"
   fi
 else
-  log "未检测到 dist/，使用源码模式（git clone）..."
+  log "未检测到 dist/，使用源码模式（git clone）"
   if [ "${SKIP_DEPS:-0}" = "1" ]; then
-    log "SKIP_DEPS=1，跳过依赖安装（但 build 还会跑）。"
+    log "SKIP_DEPS=1，跳过依赖安装（但 build 还会跑）"
   else
     log "安装全部依赖（含 devDeps，用于 build）..."
-    # 显式 --include=dev：当 .env 里有 NODE_ENV=production 时
-    # npm 默认会 omit dev，会缺 typescript / tsx，build 失败。
-    npm ci --include=dev
+    npm ci --include=dev || fail "npm ci 失败"
   fi
   log "编译 TypeScript..."
-  npm run build
+  npm run build || fail "npm run build 失败，看上面的报错"
   log "Prune devDeps..."
-  npm prune --omit=dev
+  npm prune --omit=dev || warn "prune 失败，不致命，继续"
 fi
+[ -f dist/src/server.js ] || fail "dist/src/server.js 仍不存在，编译失败"
+ok "编译产物已就绪"
 
-# ---------- 4. dist 检查 ----------
-[ -f dist/src/server.js ] || fail "dist/src/server.js 仍不存在，编译失败？"
-
-# ---------- 5. 数据库迁移 ----------
+# ========== 5. 数据库迁移 ==========
+step "5/8 数据库迁移"
 if [ "${SKIP_MIGRATE:-0}" = "1" ]; then
-  log "SKIP_MIGRATE=1，跳过迁移。"
+  log "SKIP_MIGRATE=1，跳过"
 else
-  log "运行数据库迁移..."
-  node dist/scripts/migrate.js
+  if ! node dist/scripts/migrate.js; then
+    fail "迁移失败，看上面的错。常见：DATABASE_URL 不对 / 库还没建 / 权限不够"
+  fi
+  ok "迁移完成"
 fi
 
-# ---------- 6. setcap (let Node bind 80/443 without root) ----------
+# ========== 6. setcap ==========
+step "6/8 端口绑定权限"
 if [ "${USE_HTTPS:-false}" = "true" ] && [ "${SKIP_SETCAP:-0}" != "1" ]; then
   NODE_BIN=$(readlink -f "$(command -v node)")
-  if command -v setcap >/dev/null && [ -w "$NODE_BIN" -o "$(id -u)" = "0" ]; then
-    log "给 Node 二进制加 cap_net_bind_service 权限（绑定 80/443）：$NODE_BIN"
+  if command -v setcap >/dev/null; then
+    log "给 Node 加 cap_net_bind_service 权限：$NODE_BIN"
     if [ "$(id -u)" = "0" ]; then
-      setcap 'cap_net_bind_service=+ep' "$NODE_BIN" || warn "setcap 失败，可能需要手动 sudo setcap"
+      setcap 'cap_net_bind_service=+ep' "$NODE_BIN" || warn "setcap 失败"
     else
       sudo setcap 'cap_net_bind_service=+ep' "$NODE_BIN" || warn "sudo setcap 失败"
     fi
+    ok "端口权限已配置"
   else
-    warn "找不到 setcap 或没权限。如果 PM2 不是 root 跑的，Node 无法绑 80/443"
-    warn "  以 root 跑 PM2：sudo pm2 start ... ；或手动执行 sudo setcap 'cap_net_bind_service=+ep' $NODE_BIN"
+    warn "找不到 setcap 命令"
+    hint "或者以 root 跑 PM2：sudo pm2 start ..."
   fi
-fi
-
-# ---------- 7. 管理员 ----------
-if [ "${SKIP_ADMIN:-0}" = "1" ]; then
-  log "SKIP_ADMIN=1，跳过管理员创建。"
 else
-  log "创建/更新管理员..."
-  node dist/scripts/create-admin.js
+  log "USE_HTTPS=false，跳过 setcap"
 fi
 
-# ---------- 8. PM2 启动 ----------
+# ========== 7. 管理员 ==========
+step "7/8 创建/更新管理员"
+if [ "${SKIP_ADMIN:-0}" = "1" ]; then
+  log "SKIP_ADMIN=1，跳过"
+else
+  node dist/scripts/create-admin.js || warn "create-admin 失败，可稍后手动跑：node dist/scripts/create-admin.js"
+fi
+
+# ========== 8. PM2 启动 ==========
+step "8/8 启动服务"
 mkdir -p logs
 if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-  log "PM2 进程 '$PM2_NAME' 已存在，执行 reload..."
-  pm2 reload "$PM2_NAME" --update-env
+  log "PM2 进程 '$PM2_NAME' 已存在，reload..."
+  pm2 reload "$PM2_NAME" --update-env >/dev/null
 else
   log "PM2 启动 '$PM2_NAME'..."
-  pm2 start deploy/bt-panel/ecosystem.config.cjs
+  pm2 start deploy/bt-panel/ecosystem.config.cjs >/dev/null
 fi
-
 pm2 save >/dev/null
-log "若想开机自启，请用 root 执行（一次性）: pm2 startup"
+ok "PM2 已启动"
 
-log "完成！"
-echo
-echo "下一步："
-if [ "${USE_HTTPS:-false}" = "true" ]; then
-  echo "  Node 直接监听 ${HTTPS_PORT:-443} (HTTPS) 和 ${HTTP_REDIRECT_PORT:-80} (重定向)"
-  echo "  请确认宝塔里的 rl.lz-ss.com 站点 **不要**让 nginx 占用 80/443"
-  echo "  (在 网站 → rl.lz-ss.com → 设置 → 停止 nginx 监听该站点；保留宝塔 SSL 自动续证)"
-  echo "  访问 https://rl.lz-ss.com 测试"
-else
-  echo "  服务在 127.0.0.1:${PORT:-3000}，外网访问需要宝塔反代或 USE_HTTPS=true"
+# ========== Smoke test ==========
+if [ "${SKIP_SMOKE:-0}" != "1" ]; then
+  step "Smoke test（验证服务真的活着）"
+  PROBE_PORT="${PORT:-3000}"
+  if [ "${USE_HTTPS:-false}" = "true" ]; then
+    PROBE_PORT="${HTTPS_PORT:-443}"
+    PROBE_URL="https://127.0.0.1:${PROBE_PORT}/health"
+    CURL_FLAGS="-sk"
+  else
+    PROBE_URL="http://127.0.0.1:${PROBE_PORT}/health"
+    CURL_FLAGS="-s"
+  fi
+  log "等待服务起来（最多 15 秒）..."
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    if curl $CURL_FLAGS --max-time 1 "$PROBE_URL" 2>/dev/null | grep -q '"status":"ok"'; then
+      ok "服务健康 ✓ ($PROBE_URL)"
+      break
+    fi
+    sleep 1
+    if [ "$i" = "15" ]; then
+      warn "服务起来了但 /health 检测失败"
+      hint "查日志：pm2 logs $PM2_NAME --lines 50"
+      hint "看进程：pm2 list"
+    fi
+  done
 fi
-echo "  查看日志: pm2 logs $PM2_NAME"
-echo "  查看状态: pm2 status"
+
+# ========== 完成 ==========
+echo
+printf '\033[1;32m✓ 部署完成！\033[0m\n\n'
+if [ "${USE_HTTPS:-false}" = "true" ]; then
+  echo "  📅 访问: $PUBLIC_BASE_URL"
+  echo "  ⚙️  Node 直接监听 ${HTTPS_PORT:-443} (HTTPS) 和 ${HTTP_REDIRECT_PORT:-80} (重定向)"
+  echo "  ⚠️  请确认宝塔里 ${PUBLIC_BASE_URL##*://} 站点【不要】让 nginx 占用 80/443"
+  echo "     宝塔 → 网站 → 站点设置 → 关闭 nginx 监听"
+else
+  echo "  📅 访问: $PUBLIC_BASE_URL"
+  echo "  ⚙️  服务在 127.0.0.1:${PORT:-3000}"
+  if [ "${PUBLIC_BASE_URL}" != "http://127.0.0.1:${PORT:-3000}" ]; then
+    echo "  ⚠️  外网访问需要宝塔反代或 USE_HTTPS=true"
+  fi
+fi
+echo
+echo "  💡 常用命令："
+echo "     pm2 logs $PM2_NAME       # 看实时日志"
+echo "     pm2 restart $PM2_NAME    # 改了 .env 后重启"
+echo "     pm2 list                 # 看进程状态"
+echo
+echo "  开机自启（一次性，需要 root）: pm2 startup"
