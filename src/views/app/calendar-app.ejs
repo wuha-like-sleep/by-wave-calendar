@@ -22,11 +22,12 @@
       <button type="button" data-view="day"   class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">日</button>
     </div>
     <!-- Sync status chip (offline indicator + pending outbox count).
-         Hidden by default; calendar-app.js shows it when state changes. -->
-    <span id="sync-chip" class="hidden inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" title="离线/同步状态">
+         Hidden by default; calendar-app.js shows it when state changes.
+         Click → opens the conflict modal when there are stuck items. -->
+    <button type="button" id="sync-chip" class="hidden inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" title="离线/同步状态">
       <span id="sync-chip-dot" class="inline-block h-1.5 w-1.5 rounded-full"></span>
       <span id="sync-chip-text"></span>
-    </span>
+    </button>
     <button type="button" id="btn-new-event" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       <span class="hidden sm:inline">新建事件</span>
@@ -380,6 +381,29 @@
         <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Modal: Sync conflicts. Opens when the user clicks the sync chip
+     while it's showing stuck-in-outbox items (5+ retry failures). Lists
+     each conflict with original timestamp + last error + 重试/丢弃 buttons. -->
+<div id="modal-conflicts" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
+      <h3 class="text-lg font-semibold text-slate-900">同步冲突</h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-5">
+      <p class="text-sm text-slate-600 mb-4">下面这些**本地编辑**没能同步到服务器（重试 5 次后放弃）。可能是断网恢复后服务器拒绝了变更，或者别的设备已经改过同一个事件。</p>
+      <ul id="conflicts-list" class="space-y-3"></ul>
+      <p id="conflicts-empty" class="hidden text-center text-sm text-slate-400 py-6">🎉 没有冲突项</p>
+    </div>
+    <div class="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+      <button type="button" id="btn-conflicts-retry-all" class="text-sm text-brand-700 hover:text-brand-800 hover:underline">全部重试</button>
+      <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">关闭</button>
+    </div>
   </div>
 </div>
 

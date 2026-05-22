@@ -245,6 +245,81 @@
     }));
   }
 
+  // List ALL items in the outbox. Used by the conflict UI to render a
+  // table of stuck operations. Each item carries .attempts and
+  // .lastError so the UI can explain why it's stuck.
+  async function listOutbox() {
+    return tx(STORE_OUTBOX, "readonly", (s) => new Promise((resolve) => {
+      const r = s.getAll();
+      r.onsuccess = () => resolve(r.result || []);
+    }));
+  }
+
+  // Just the items that already gave up (5 failures in a row). The
+  // conflict modal renders these as a "needs your attention" list.
+  async function listConflicts() {
+    const items = await listOutbox();
+    return items.filter((i) => i.giveUp);
+  }
+
+  // Retry a single stuck outbox item — reset attempts + giveUp so the
+  // next syncOutbox() picks it up again. Used by the conflict modal's
+  // "重试" button.
+  async function retryItem(outboxId) {
+    await tx(STORE_OUTBOX, "readwrite", (s) => new Promise((resolve) => {
+      const r = s.get(outboxId);
+      r.onsuccess = () => {
+        const it = r.result;
+        if (!it) return resolve();
+        delete it.giveUp;
+        it.attempts = 0;
+        it.lastError = null;
+        s.put(it);
+        resolve();
+      };
+    }));
+    emit("outbox-changed", { count: await pendingCount() });
+    syncOutbox();
+  }
+
+  // Discard a stuck outbox item. Also rolls back the local mirror so
+  // the user doesn't keep seeing the ghost optimistic edit:
+  //   - "create": delete the local-id row (it never existed on server)
+  //   - "update": leave the row, but a subsequent loadEvents() will
+  //               clobber the dirty copy with the server's version
+  //   - "delete": un-tombstone the row (un-deletes locally; server still
+  //               has it so this is harmless)
+  async function discardItem(outboxId) {
+    const item = await tx(STORE_OUTBOX, "readonly", (s) => new Promise((resolve) => {
+      const r = s.get(outboxId);
+      r.onsuccess = () => resolve(r.result);
+    }));
+    if (!item) return;
+    await tx(STORE_OUTBOX, "readwrite", (s) => s.delete(outboxId));
+    if (item.op === "create" && String(item.eventId).startsWith("local-")) {
+      await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
+    } else if (item.op === "delete") {
+      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+        const r = s.get(item.eventId);
+        r.onsuccess = () => {
+          if (r.result) { delete r.result._tombstone; delete r.result._dirty; s.put(r.result); }
+          resolve();
+        };
+      }));
+    } else {
+      // Update: leave the local copy; next sync will re-fetch from server.
+      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+        const r = s.get(item.eventId);
+        r.onsuccess = () => {
+          if (r.result) { delete r.result._dirty; s.put(r.result); }
+          resolve();
+        };
+      }));
+    }
+    emit("event-changed", { id: item.eventId, kind: "discarded" });
+    emit("outbox-changed", { count: await pendingCount() });
+  }
+
   let syncing = false;
   async function syncOutbox() {
     if (syncing || !navigator.onLine) return;
@@ -337,7 +412,8 @@
 
   window.bwcStore = {
     getAll, put, remove,
-    syncOutbox, pendingCount,
+    syncOutbox, pendingCount, listOutbox, listConflicts,
+    retryItem, discardItem,
     isOnline: () => serverReachable,
     onChange,
     getMeta, setMeta,

@@ -1413,9 +1413,11 @@
   });
 
   // ---------- Sync status chip ----------
-  // Hidden by default. Shows when offline (amber) or when there are
-  // pending operations in the outbox (blue with count). Hides itself
-  // when fully synced and online.
+  // Hidden by default. Three states:
+  //   amber  — offline (with pending count if any)
+  //   sky    — online but outbox has items being retried
+  //   red    — conflicts: items gave up after 5 retries; user must act
+  // Click opens the conflict modal when red.
   (function wireSyncChip() {
     const chip = $("#sync-chip");
     const dot = $("#sync-chip-dot");
@@ -1425,27 +1427,121 @@
     async function refresh() {
       const online = window.bwcStore.isOnline();
       const pending = await window.bwcStore.pendingCount();
-      if (online && pending === 0) {
+      const conflicts = await window.bwcStore.listConflicts();
+      const conflictCount = conflicts.length;
+      if (online && pending === 0 && conflictCount === 0) {
         chip.classList.add("hidden");
         return;
       }
       chip.classList.remove("hidden");
       // Tailwind utility chunks instead of inline color so Purge picks them up.
-      chip.className = chip.className.replace(/bg-(?:amber|sky|emerald)-\S+|text-(?:amber|sky|emerald)-\S+/g, "").trim();
-      if (!online) {
+      chip.className = chip.className.replace(/bg-(?:amber|sky|emerald|red)-\S+|text-(?:amber|sky|emerald|red)-\S+|hover:bg-\S+/g, "").trim();
+      // Conflict state wins over offline/in-progress because it requires
+      // user action and offline alone resolves itself when network returns.
+      if (conflictCount > 0) {
+        chip.classList.add("bg-red-50", "text-red-700", "hover:bg-red-100", "cursor-pointer");
+        dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-red-500";
+        text.textContent = `⚠ ${conflictCount} 条冲突，点击处理`;
+        chip.title = "点击查看同步冲突";
+      } else if (!online) {
         chip.classList.add("bg-amber-50", "text-amber-700");
         dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-amber-500";
         text.textContent = pending > 0 ? `离线 · ${pending} 条待同步` : "离线";
+        chip.title = "网络不可用";
       } else if (pending > 0) {
         chip.classList.add("bg-sky-50", "text-sky-700");
         dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse";
         text.textContent = `同步中 · ${pending}`;
+        chip.title = "正在向服务器同步";
       }
     }
 
-    window.bwcStore.onChange(refresh);
+    chip.addEventListener("click", async () => {
+      const conflicts = await window.bwcStore.listConflicts();
+      if (conflicts.length > 0) await openConflictsModal();
+    });
+
+    window.bwcStore.onChange((ev) => {
+      refresh();
+      // sync-conflict events also pop the modal — first-time alert so
+      // user notices their edit got stuck instead of waiting until they
+      // happen to glance at the chip.
+      if (ev.kind === "sync-conflict") {
+        if (window.bwc) window.bwc.toast("有同步冲突，点顶部红色徽章处理", "error");
+      }
+    });
     window.addEventListener("online", refresh);
     window.addEventListener("offline", refresh);
     refresh();
   })();
+
+  // ---------- Conflict modal renderer ----------
+  async function openConflictsModal() {
+    await renderConflicts();
+    openModal("#modal-conflicts");
+  }
+  async function renderConflicts() {
+    const list = $("#conflicts-list");
+    const empty = $("#conflicts-empty");
+    if (!list || !empty) return;
+    const items = await window.bwcStore.listConflicts();
+    if (items.length === 0) {
+      list.innerHTML = "";
+      empty.classList.remove("hidden");
+      return;
+    }
+    empty.classList.add("hidden");
+    const opLabel = { create: "新建", update: "修改", delete: "删除" };
+    list.innerHTML = items.map((it) => {
+      const title = (it.payload && it.payload.summary) || "(无标题)";
+      const when = new Date(it.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const err = it.lastError ? `<div class="mt-1 text-xs text-red-700 break-all">最后错误：${escapeHtml(it.lastError)}</div>` : "";
+      return `
+        <li class="rounded-lg border border-red-200 bg-red-50/40 p-3" data-outbox-id="${it.id}">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="inline-block rounded-full bg-red-100 text-red-700 text-xs px-2 py-0.5">${opLabel[it.op] || it.op}</span>
+                <span class="text-xs text-slate-500">${when}</span>
+                <span class="text-xs text-slate-400">· ${it.attempts} 次失败</span>
+              </div>
+              <div class="text-sm font-medium text-slate-800 break-words">${escapeHtml(title)}</div>
+              ${err}
+            </div>
+            <div class="flex gap-1.5 flex-shrink-0">
+              <button type="button" class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-conflict-retry="${it.id}">重试</button>
+              <button type="button" class="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50" data-conflict-discard="${it.id}">丢弃</button>
+            </div>
+          </div>
+        </li>`;
+    }).join("");
+  }
+  // Delegated click handler for retry / discard buttons inside the modal.
+  document.addEventListener("click", async (e) => {
+    const t = e.target;
+    if (!(t instanceof Element)) return;
+    const retryId = t.getAttribute("data-conflict-retry");
+    const discardId = t.getAttribute("data-conflict-discard");
+    if (retryId) {
+      await window.bwcStore.retryItem(parseInt(retryId, 10));
+      await renderConflicts();
+      // Force a reload so the optimistic state syncs with whatever the
+      // server returned.
+      setTimeout(() => loadEvents().catch(() => {}), 1500);
+    } else if (discardId) {
+      if (!confirm("丢弃这条变更？本地的优化更新会回滚。")) return;
+      await window.bwcStore.discardItem(parseInt(discardId, 10));
+      await renderConflicts();
+      await loadEvents().catch(() => {});
+    }
+  });
+  const retryAllBtn = $("#btn-conflicts-retry-all");
+  if (retryAllBtn) {
+    retryAllBtn.addEventListener("click", async () => {
+      const items = await window.bwcStore.listConflicts();
+      for (const it of items) await window.bwcStore.retryItem(it.id);
+      await renderConflicts();
+      setTimeout(() => loadEvents().catch(() => {}), 1500);
+    });
+  }
 })();
