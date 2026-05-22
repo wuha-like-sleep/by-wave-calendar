@@ -187,9 +187,24 @@ app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok"
 // cache and bounce back to the home page. We made this its own minimal
 // HTML page (no layout, no JS framework) so it works even when the rest
 // of the app is broken on their device.
-app.get("/reset-pwa", { config: { rateLimit: false } }, async (_req, reply) => {
+app.get("/reset-pwa", { config: { rateLimit: false } }, async (req, reply) => {
   reply.header("Cache-Control", "no-store");
   reply.type("text/html; charset=utf-8");
+  // Inline script needs the per-request CSP nonce, otherwise helmet's
+  // strict script-src 'self' 'nonce-X' silently blocks it and the page
+  // sits forever on "正在清理…" while the user wonders what's wrong.
+  // Also pin a relaxed CSP on this route so even if the nonce wiring
+  // ever breaks again, the rescue page itself still works — this page
+  // is server-generated only and exists specifically to recover the
+  // app, so 'unsafe-inline' here is a deliberate trade-off.
+  const nonce = (req.raw as unknown as { cspNonce?: string }).cspNonce ?? "";
+  reply.header("Content-Security-Policy",
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data:; " +
+    "connect-src 'self'; " +
+    "frame-ancestors 'self'");
   return reply.send(`<!doctype html>
 <html lang="zh-CN"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -208,7 +223,7 @@ app.get("/reset-pwa", { config: { rateLimit: false } }, async (_req, reply) => {
 <p>如果你的手机访问网站时一直触发下载或显示旧页面，这个页面会注销缓存的 service worker、清空本地缓存，然后让你重新打开正常的网站。</p>
 <div id="status">正在清理…</div>
 <a class="btn" href="/">完成后返回首页</a>
-<script>
+<script nonce="${nonce}">
 (async function(){
   const s = document.getElementById("status");
   const log = [];
