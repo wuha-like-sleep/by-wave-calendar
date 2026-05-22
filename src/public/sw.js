@@ -70,19 +70,35 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
   if (url.pathname.startsWith("/ics/")) return;
+  if (url.pathname.startsWith("/embed/")) return;
   if (url.pathname.startsWith("/login") || url.pathname.startsWith("/admin")) return;
+  if (url.pathname.startsWith("/reset-pwa")) return;  // never intercept the rescue page
 
-  // Network-first for HTML, cache-first for static assets
+  // Network-first for HTML, cache-first for static assets.
+  // BIG ONE: only cache 200-OK responses. Caching 4xx / 5xx / opaque
+  // would mean a transient server crash gets pinned to the device
+  // forever, and the user sees a stale broken page even after we fix
+  // the server. (This bit us hard during the rrule CJS crash loop.)
   const isStatic = url.pathname.startsWith("/static/");
   if (isStatic) {
     event.respondWith(
-      caches.match(req).then((cached) => cached || fetch(req).then((resp) => {
-        const copy = resp.clone();
-        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
-        return resp;
-      })),
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        return fetch(req).then((resp) => {
+          // Only cache successful, same-origin, basic responses.
+          if (resp && resp.ok && resp.status === 200 && resp.type === "basic") {
+            const copy = resp.clone();
+            caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => undefined);
+          }
+          return resp;
+        });
+      }),
     );
   } else {
+    // HTML: network-first. On network failure, fall back to cache.
+    // Don't cache the response — HTML carries per-request CSP nonces
+    // and CSRF tokens, caching it serves the wrong nonce/csrf to a
+    // later request and breaks every form on the page.
     event.respondWith(
       fetch(req).catch(() => caches.match(req).then((c) => c || new Response("Offline", { status: 503 }))),
     );

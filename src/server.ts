@@ -181,6 +181,61 @@ await app.register(view, {
 // ---- Health ----
 app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.1.0" }));
 
+// PWA rescue page. If a user's mobile browser has a stale service worker
+// from a previous crash window (cached 502 / wrong content-type / etc),
+// they can visit /reset-pwa to force-unregister every SW + dump every
+// cache and bounce back to the home page. We made this its own minimal
+// HTML page (no layout, no JS framework) so it works even when the rest
+// of the app is broken on their device.
+app.get("/reset-pwa", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.header("Cache-Control", "no-store");
+  reply.type("text/html; charset=utf-8");
+  return reply.send(`<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>清理 PWA 缓存</title>
+<style>
+  body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 420px; margin: 0 auto; padding: 24px; color: #0f172a; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { color: #475569; }
+  #status { margin-top: 24px; padding: 16px; border-radius: 12px; background: #f1f5f9; font-size: 14px; }
+  #status.done { background: #ecfdf5; color: #065f46; }
+  #status.err { background: #fef2f2; color: #991b1b; }
+  a.btn { display: block; margin-top: 16px; padding: 12px; text-align: center; background: #4f46e5; color: #fff; border-radius: 12px; text-decoration: none; font-weight: 500; }
+</style>
+</head><body>
+<h1>🧹 清理 PWA 缓存</h1>
+<p>如果你的手机访问网站时一直触发下载或显示旧页面，这个页面会注销缓存的 service worker、清空本地缓存，然后让你重新打开正常的网站。</p>
+<div id="status">正在清理…</div>
+<a class="btn" href="/">完成后返回首页</a>
+<script>
+(async function(){
+  const s = document.getElementById("status");
+  const log = [];
+  try {
+    if ("serviceWorker" in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const r of regs) { await r.unregister(); log.push("已注销 SW: " + (r.scope || "(无 scope)")); }
+      if (regs.length === 0) log.push("没有注册过 service worker");
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      for (const k of keys) { await caches.delete(k); log.push("已删缓存: " + k); }
+      if (keys.length === 0) log.push("没有任何缓存条目");
+    }
+    try { localStorage.clear(); log.push("已清 localStorage"); } catch (e) {}
+    try { sessionStorage.clear(); log.push("已清 sessionStorage"); } catch (e) {}
+    s.className = "done";
+    s.innerHTML = "<strong>✓ 清理完成</strong><br>" + log.join("<br>") + "<br><br>现在点下面的按钮回首页应该就正常了。如果还有问题，<strong>彻底关掉浏览器</strong>再打开。";
+  } catch (e) {
+    s.className = "err";
+    s.textContent = "出错了：" + (e && e.message ? e.message : e);
+  }
+})();
+</script>
+</body></html>`);
+});
+
 // ---- Asset version (boot timestamp) — busts browser & SW cache on every deploy ----
 const ASSET_VERSION = String(Date.now());
 // In production we serve mangled/minified JS from src/public/_built/* so the
