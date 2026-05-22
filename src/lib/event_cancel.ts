@@ -56,6 +56,9 @@ export async function cancelEvent(eventId: string, deletedBy: { id: string; emai
         startsAt: event.startsAt,
         endsAt: event.endsAt,
         allDay: event.allDay,
+        // Carry the event's IANA zone so the CANCEL email shows the same
+        // wall-clock the user originally saw, not the server's UTC view.
+        timezone: (event.extra as { timezone?: string } | null)?.timezone ?? null,
         icsBody: ics,
       }));
       sent++;

@@ -1054,6 +1054,7 @@ export async function webRoutes(app: FastifyInstance) {
         endsAt: event.endsAt,
         allDay: event.allDay,
         uid: event.uid,
+        timezone: (event.extra as { timezone?: string } | null)?.timezone ?? null,
         icsBody: ics,
         inviteToken,
       }));
@@ -1286,6 +1287,13 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.eventInviteTokens)
       .set({ responseStatus: body.data.status, respondedAt: new Date() })
       .where(eq(schema.eventInviteTokens.token, tok.token));
+    // Bump the source event's updatedAt so CalDAV ETag / ctag invalidates
+    // for the organizer's iOS Calendar — without this, the phone keeps
+    // showing PARTSTAT=NEEDS-ACTION because it never re-fetches.
+    await db
+      .update(schema.events)
+      .set({ updatedAt: new Date() })
+      .where(eq(schema.events.id, tok.sourceEventId));
     const msg = body.data.status === "accepted" ? "已回复：参加"
               : body.data.status === "declined" ? "已回复：不参加"
               :                                   "已回复：可能参加";
@@ -1502,6 +1510,14 @@ export async function webRoutes(app: FastifyInstance) {
     const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
     const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
 
+    // CalDAV connection info — surface the URL + username so users don't
+    // have to dig through docs to set up iPhone / macOS / Thunderbird.
+    // We don't show the principal-href because RFC 6764 discovery resolves
+    // it automatically from the base /caldav/ URL on every client we
+    // care about (Apple Calendar, Thunderbird, DAVx5, Outlook).
+    const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const caldavBaseUrl = `${baseUrl}/caldav/`;
+
     return reply.view("app/settings", {
       title: "设置",
       user,
@@ -1522,6 +1538,7 @@ export async function webRoutes(app: FastifyInstance) {
       })),
       newAppPassword: newPlain,
       newAppLabel: newLabel,
+      caldavBaseUrl,
     });
   });
 

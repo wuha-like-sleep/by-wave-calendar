@@ -287,6 +287,11 @@
           end,
           isAllday: !!e.allDay,
           category: e.allDay ? "allday" : "time",
+          // Stash the master's RRULE so beforeUpdateEvent (drag/resize)
+          // and clickEvent can detect "this is a recurring instance" and
+          // prompt 仅此次/此后/系列 instead of silently editing the
+          // whole series.
+          raw: { rrule: e.rrule || null, isOccurrence: !!e.isOccurrence },
           ...style,
         };
       });
@@ -637,6 +642,54 @@
   }
   allDayCheckbox.addEventListener("change", syncAllDayUI);
 
+  // ---- Timezone-aware "wall clock in event's TZ" hint ----
+  // datetime-local inputs always render in the browser's local zone, no
+  // matter what value we set. That's confusing when the event is anchored
+  // to a different IANA zone — you type 14:00 thinking "14:00 New York",
+  // but the input parses it as 14:00 wherever-you-are. To avoid that
+  // bug-class we surface a yellow strip that shows what the typed time
+  // means in the event's stored zone, side-by-side with the browser zone.
+  const tzHintEl = $("#tz-hint");
+  const browserTz = (() => {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (_e) { return "UTC"; }
+  })();
+  function syncTzHint() {
+    if (!tzHintEl) return;
+    const form = $("#form-event");
+    const tzInput = form.querySelector('[name="timezone"]');
+    const startsInput = form.querySelector('[name="startsAt"]');
+    const eventTz = (tzInput && tzInput.value || "").trim();
+    const startsLocal = startsInput && startsInput.value;
+    if (!eventTz || !startsLocal || eventTz === browserTz) {
+      tzHintEl.classList.add("hidden");
+      tzHintEl.textContent = "";
+      return;
+    }
+    // The browser's interpretation of the datetime-local input — Date()
+    // treats it as local time, which IS the user's intent (they typed
+    // the wall clock in their browser zone). Re-render that same instant
+    // in the event's stored zone so they can see the offset.
+    const instant = new Date(startsLocal);
+    if (isNaN(instant.getTime())) { tzHintEl.classList.add("hidden"); return; }
+    let inEventTz;
+    try {
+      inEventTz = new Intl.DateTimeFormat("zh-CN", {
+        timeZone: eventTz, year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(instant);
+    } catch (_e) {
+      // Bad/unknown zone — hide rather than show garbage.
+      tzHintEl.classList.add("hidden"); return;
+    }
+    tzHintEl.textContent = `⚠ 浏览器时区 ${browserTz}：你输入的 ${startsLocal.replace("T", " ")} 在事件时区（${eventTz}）是 ${inEventTz}`;
+    tzHintEl.classList.remove("hidden");
+  }
+  // Trigger on every relevant input change. Debounced via the browser's
+  // own event loop — these handlers are cheap (string + Intl format).
+  $('#form-event [name="startsAt"]').addEventListener("input", syncTzHint);
+  $('#form-event [name="timezone"]').addEventListener("input", syncTzHint);
+  $('#form-event [name="timezone"]').addEventListener("change", syncTzHint);
+
   // ---- "编辑" button in view-mode modal switches to edit mode ----
   const enterEditBtn = $("#btn-enter-edit");
   if (enterEditBtn) {
@@ -697,10 +750,74 @@
     });
   }
 
+  // Build a 3-option chooser modal for recurring-event edits/deletes.
+  // Returns Promise<"instance"|"future"|"series"|null> — null means
+  // the user cancelled (clicked outside or 取消). Used by both the
+  // delete button and the form submit handler when the event has an
+  // RRULE. The server's PATCH/DELETE handlers expect scope+recurrenceId
+  // for "instance" and "future"; "series" routes through the normal
+  // single-event code path.
+  function promptRecurringScope(action) {
+    return new Promise((resolve) => {
+      const isDelete = action === "delete";
+      const overlay = document.createElement("div");
+      overlay.className = "fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4";
+      const card = document.createElement("div");
+      card.className = "w-full max-w-md rounded-2xl bg-white shadow-2xl";
+      card.innerHTML =
+        '<div class="border-b border-slate-200 px-5 py-4">' +
+          '<h3 class="text-base font-semibold text-slate-900">' + (isDelete ? "删除重复事件" : "保存重复事件") + '</h3>' +
+          '<p class="mt-1 text-sm text-slate-500">这是一个重复事件，请选择' + (isDelete ? "删除" : "保存") + '范围：</p>' +
+        '</div>' +
+        '<div class="space-y-2 p-5">' +
+          '<button type="button" data-scope="instance" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
+            '<div class="text-sm font-medium text-slate-900">仅此事件</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">只' + (isDelete ? "删除" : "修改") + '当前这一次，其他不变</div>' +
+          '</button>' +
+          '<button type="button" data-scope="future" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
+            '<div class="text-sm font-medium text-slate-900">此事件及后续</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">从此次开始的所有后续</div>' +
+          '</button>' +
+          '<button type="button" data-scope="series" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
+            '<div class="text-sm font-medium text-slate-900">所有事件</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">' + (isDelete ? "删除" : "修改") + '整个重复系列</div>' +
+          '</button>' +
+        '</div>' +
+        '<div class="flex justify-end border-t border-slate-200 px-5 py-3">' +
+          '<button type="button" data-scope="" class="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">取消</button>' +
+        '</div>';
+      overlay.appendChild(card);
+      const cleanup = (s) => { try { overlay.remove(); } catch (_e) {} resolve(s || null); };
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) { cleanup(null); return; }
+        const btn = e.target.closest("button[data-scope]");
+        if (!btn) return;
+        cleanup(btn.dataset.scope);
+      });
+      document.body.appendChild(overlay);
+    });
+  }
+
   function openEventModal(payload) {
     const form = $("#form-event");
     form.reset();
     form.querySelector('[name="id"]').value = payload.id || "";
+    // Recurring-event scope tracking. The clickEvent handler passes
+    // `recurrenceId` = the start of the specific occurrence the user
+    // clicked (in TUI Calendar a recurring event renders N times, each
+    // with its own .start). We stash it on the form dataset so submit
+    // / delete handlers can ask "仅此次 / 此后 / 整个系列" and pass
+    // the right recurrenceId to the API. Cleared for new events.
+    let recIso = "";
+    if (payload.recurrenceId) {
+      try {
+        const r = payload.recurrenceId;
+        const d = r instanceof Date ? r : (r && typeof r.toDate === "function" ? r.toDate() : new Date(r));
+        if (d && !isNaN(d.getTime())) recIso = d.toISOString();
+      } catch (_e) { /* ignore — recurrenceId is optional */ }
+    }
+    form.dataset.recurrenceId = recIso;
+    form.dataset.hasRrule = (payload.rrule && String(payload.rrule).trim()) ? "1" : "";
     if (payload.calendarId) form.querySelector('[name="calendarId"]').value = payload.calendarId;
     if (payload.summary) form.querySelector('[name="summary"]').value = payload.summary;
     if (payload.location) form.querySelector('[name="location"]').value = payload.location;
@@ -756,6 +873,8 @@
       if (tzInput) tzInput.value = payload.timezone;
     }
     syncAllDayUI();
+    // Show tz hint immediately if the event is anchored to a non-browser zone.
+    if (typeof syncTzHint === "function") syncTzHint();
     // Mode: existing events open in VIEW mode (read-only with 编辑 button);
     // new events go straight to EDIT mode. payload.forceEdit lets internal
     // callers override (e.g. the 编辑 button itself).
@@ -940,10 +1059,16 @@
       location: fresh.location,
       description: fresh.description,
       url: extra.url || "",
-      startsAt: fresh.startsAt,
-      endsAt: fresh.endsAt,
+      // Show the clicked occurrence's start/end (not the master's) so
+      // editing "仅此次" starts from the right slot. fresh.startsAt is
+      // the master; info.event.start is the occurrence.
+      startsAt: info.event.start || fresh.startsAt,
+      endsAt: info.event.end || fresh.endsAt,
       allDay: fresh.allDay,
       rrule: fresh.rrule || "",
+      // The occurrence's start doubles as the RECURRENCE-ID. The server
+      // uses this to know which instance to add to exdates / split at.
+      recurrenceId: info.event.start || null,
       category: extra.category,
       timezone: extra.timezone,
       attendees: Array.isArray(extra.attendees) ? extra.attendees : [],
@@ -1008,10 +1133,36 @@
         }
       }
     } catch (_e) { /* soft check — never block save on a network glitch */ }
+    // Recurring-event scope dialog: if we're editing an existing event
+    // that has an RRULE, ask whether the change applies to just this
+    // occurrence, this+future, or the whole series. New events skip
+    // this (no RRULE yet) and series scope on a recurring event takes
+    // the regular master-patch path so bwcStore can still cache it.
+    const form = $("#form-event");
+    let recurringScope = null;
+    if (id && form && form.dataset.hasRrule === "1") {
+      recurringScope = await promptRecurringScope("edit");
+      if (!recurringScope) return; // user cancelled — leave modal open
+    }
     try {
-      // Route through bwcStore when available — optimistic local update +
-      // outbox queue means the modal can close instantly even on flaky network.
-      if (window.bwcStore) {
+      // Scoped recurring edits (instance / future) must hit the server
+      // directly — bwcStore's outbox doesn't yet model exdates or series
+      // splits, so an offline scoped edit would silently misbehave on
+      // sync. "Series" scope is equivalent to a normal master patch.
+      const isScopedRecurring = recurringScope === "instance" || recurringScope === "future";
+      if (isScopedRecurring) {
+        const recurrenceId = form.dataset.recurrenceId || undefined;
+        const resp = await fetch(`/api/events/${id}`, fetchOpts({
+          method: "PATCH",
+          body: JSON.stringify({ ...body, scope: recurringScope, recurrenceId }),
+        }));
+        if (!resp.ok) throw new Error(await resp.text());
+        closeModal("#modal-event");
+        await loadEvents();
+        window.bwc && window.bwc.toast("事件已更新", "success");
+      } else if (window.bwcStore) {
+        // Route through bwcStore when available — optimistic local update +
+        // outbox queue means the modal can close instantly even on flaky network.
         await window.bwcStore.put(id ? { ...body, id } : body, body.calendarId);
         closeModal("#modal-event");
         await loadEvents();
@@ -1038,8 +1189,66 @@
   });
 
   $("#btn-delete-event").addEventListener("click", async () => {
+    const form = $("#form-event");
     const id = $('#form-event [name="id"]').value;
-    if (!id || !confirm("删除该事件？")) return;
+    if (!id) return;
+    // For recurring events the scope dialog IS the confirmation.
+    // For non-recurring, the classic confirm() prompt.
+    let recurringScope = null;
+    if (form && form.dataset.hasRrule === "1") {
+      recurringScope = await promptRecurringScope("delete");
+      if (!recurringScope) return; // user cancelled
+    } else {
+      if (!confirm("删除该事件？")) return;
+    }
+    // Scoped recurring delete (this / this+future): bypass bwcStore
+    // and hit the server directly with ?scope=&recurrenceId= — the
+    // offline outbox model can't represent partial-series deletes
+    // safely.
+    const isScopedRecurring = recurringScope === "instance" || recurringScope === "future";
+    if (isScopedRecurring) {
+      const recurrenceId = form.dataset.recurrenceId || "";
+      const qs = `?scope=${recurringScope}&recurrenceId=${encodeURIComponent(recurrenceId)}`;
+      try {
+        const resp = await fetch(`/api/events/${id}${qs}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "X-CSRF-Token": ctx.csrfToken },
+        });
+        if (!resp.ok && resp.status !== 404) throw new Error(await resp.text());
+        closeModal("#modal-event");
+        await loadEvents();
+        window.bwc && window.bwc.toast(
+          recurringScope === "instance" ? "已删除此次" : "已删除此次及之后",
+          "success",
+        );
+      } catch (err) {
+        console.error("delete_recurring_scoped", err);
+        window.bwc && window.bwc.toast("删除失败", "error");
+      }
+      return;
+    }
+    // Undo handler — POSTs to /api/events/:id/restore which clears
+    // deletedAt. Used by both the bwcStore and direct-delete code
+    // paths below. Re-fetches grid on success.
+    async function undoDelete() {
+      try {
+        const resp = await fetch(`/api/events/${id}/restore`, fetchOpts({ method: "POST" }));
+        if (!resp.ok && resp.status !== 404) throw new Error(await resp.text());
+        // If bwcStore is in use, our local mirror still has the
+        // delete-pending state — easiest fix is to invalidate the cache
+        // and let getAll repopulate from the server.
+        if (window.bwcStore && window.bwcStore.invalidate) {
+          try { await window.bwcStore.invalidate(); } catch (_e) {}
+        }
+        await loadEvents();
+        window.bwc && window.bwc.toast("已撤销删除", "success");
+      } catch (err) {
+        console.error("undo_delete", err);
+        window.bwc && window.bwc.toast("撤销失败", "error");
+      }
+    }
+
     // Optimistic delete via bwcStore — works offline.
     if (window.bwcStore) {
       try {
@@ -1047,7 +1256,16 @@
         closeModal("#modal-event");
         await loadEvents();
         const offline = !window.bwcStore.isOnline();
-        window.bwc && window.bwc.toast(offline ? "已标记删除（联网后同步）" : "事件已删除", "success");
+        if (offline) {
+          // No undo for offline deletes — restore would race with the
+          // outbox replay. User can dig into the conflict modal if
+          // they really need to recover.
+          window.bwc && window.bwc.toast("已标记删除（联网后同步）", "success");
+        } else {
+          window.bwc && window.bwc.toast("事件已删除", "success", {
+            actionLabel: "撤销", onAction: undoDelete,
+          });
+        }
       } catch (err) {
         console.error("delete_event_store", err);
         window.bwc && window.bwc.toast("删除失败", "error");
@@ -1073,7 +1291,13 @@
     if (resp.ok || resp.status === 404) {
       closeModal("#modal-event");
       await loadEvents();
-      window.bwc && window.bwc.toast(resp.status === 404 ? "事件已不存在，已刷新" : "事件已删除", "success");
+      if (resp.status === 404) {
+        window.bwc && window.bwc.toast("事件已不存在，已刷新", "success");
+      } else {
+        window.bwc && window.bwc.toast("事件已删除", "success", {
+          actionLabel: "撤销", onAction: undoDelete,
+        });
+      }
       return;
     }
     let errBody = "";
@@ -1390,6 +1614,46 @@
       const body = {};
       if (startsAt) body.startsAt = startsAt;
       if (endsAt) body.endsAt = endsAt;
+
+      // Recurring events: dragging a single occurrence on the grid is
+      // ambiguous — does the user mean "move this one instance" or
+      // "shift the whole series"? Toast UI hands us the *occurrence*
+      // event, but its raw .rrule is the master's rule. Ask first.
+      // event.raw.rrule is populated by loadEvents from the API
+      // response — see the rrule mapping below in /api/events.
+      const isRecurring = !!(event.raw && event.raw.rrule);
+      let recurringScope = null;
+      if (isRecurring) {
+        recurringScope = await promptRecurringScope("edit");
+        if (!recurringScope) return; // user cancelled the drag
+      }
+
+      if (recurringScope === "instance" || recurringScope === "future") {
+        // `event.start` here is the PRE-drag occurrence start — Toast UI
+        // passes the original event to beforeUpdateEvent and applies
+        // `changes` only after we call updateEvent (which we don't, in
+        // the scoped path — we reload instead). That makes it the
+        // RECURRENCE-ID the server needs to identify which instance.
+        const occurrenceStart = event.start && event.start.toDate
+          ? event.start.toDate()
+          : new Date(event.start);
+        const recurrenceId = occurrenceStart.toISOString();
+        const resp = await fetch(`/api/events/${event.id}`, fetchOpts({
+          method: "PATCH",
+          body: JSON.stringify({ ...body, scope: recurringScope, recurrenceId }),
+        }));
+        if (!resp.ok) throw new Error();
+        // Server side returns either a detached event or new master —
+        // simplest is to reload the whole grid so we pick up exdates +
+        // new rows in one shot.
+        await loadEvents();
+        window.bwc && window.bwc.toast(
+          recurringScope === "instance" ? "已修改此次" : "已修改此次及之后",
+          "success",
+        );
+        return;
+      }
+
       const resp = await fetch(`/api/events/${event.id}`, fetchOpts({ method: "PATCH", body: JSON.stringify(body) }));
       if (!resp.ok) throw new Error();
       cal.updateEvent(event.id, event.calendarId, changes);

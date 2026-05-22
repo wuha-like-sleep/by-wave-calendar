@@ -9,6 +9,55 @@ export function updateBrandForEmails(siteName: string | null | undefined): void 
   brand = siteName?.trim() || env.MAIL_FROM_NAME;
 }
 
+// Format a Date for display in a specific IANA zone. Used by every email
+// that surfaces an event time so the recipient sees the wall-clock time
+// the organizer intended (e.g. "上海下午6点", not the organizer's UTC
+// equivalent re-interpreted in the receiver's locale).
+function formatInZone(d: Date, tz: string, allDay: boolean): string {
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: allDay ? undefined : "2-digit",
+      minute: allDay ? undefined : "2-digit",
+      hour12: false,
+    }).format(d);
+  } catch (_e) {
+    // Bad/unknown TZ — fall back to UTC so the email still renders.
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone: "UTC",
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: allDay ? undefined : "2-digit",
+      minute: allDay ? undefined : "2-digit",
+      hour12: false,
+    }).format(d);
+  }
+}
+
+// Friendly Chinese label for common IANA zones, plus a graceful fallback
+// to "(City Name)" extracted from the IANA id for anything we don't
+// have a translation for.
+const TZ_LABELS: Record<string, string> = {
+  "Asia/Shanghai": "上海时间", "Asia/Hong_Kong": "香港时间", "Asia/Taipei": "台北时间",
+  "Asia/Tokyo": "东京时间", "Asia/Seoul": "首尔时间", "Asia/Singapore": "新加坡时间",
+  "Asia/Bangkok": "曼谷时间", "Asia/Kolkata": "印度时间", "Asia/Dubai": "迪拜时间",
+  "Europe/London": "伦敦时间", "Europe/Paris": "巴黎时间", "Europe/Berlin": "柏林时间",
+  "Europe/Moscow": "莫斯科时间", "Europe/Madrid": "马德里时间", "Europe/Rome": "罗马时间",
+  "America/New_York": "纽约时间", "America/Los_Angeles": "洛杉矶时间",
+  "America/Chicago": "芝加哥时间", "America/Toronto": "多伦多时间",
+  "America/Sao_Paulo": "圣保罗时间",
+  "Australia/Sydney": "悉尼时间", "Australia/Melbourne": "墨尔本时间",
+  "Australia/Perth": "珀斯时间",
+  "Pacific/Auckland": "奥克兰时间", "Pacific/Honolulu": "夏威夷时间",
+  "UTC": "UTC",
+};
+function zoneLabel(tz: string): string {
+  if (TZ_LABELS[tz]) return TZ_LABELS[tz];
+  // Fallback: extract trailing component, replace underscores with space.
+  const tail = tz.split("/").pop() ?? tz;
+  return `${tail.replace(/_/g, " ")} 时间`;
+}
+
 function baseLayout(opts: { title: string; preheader?: string; body: string }): string {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -205,17 +254,20 @@ export type EventInviteCtx = {
   endsAt: Date;
   allDay: boolean;
   uid: string;
+  // IANA zone, e.g. "Asia/Shanghai" or "America/New_York". When set, the
+  // email formats times in this zone and shows a "(上海时间)" suffix.
+  // Defaults to Asia/Shanghai (kept for backward compat with old call sites).
+  timezone?: string | null;
   icsBody: string; // full VCALENDAR text with METHOD:REQUEST
   inviteToken?: string; // opaque token → /event-invite/:token page that imports into the recipient's chosen calendar
 };
 
 export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
-  const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: ctx.allDay ? undefined : "2-digit", minute: ctx.allDay ? undefined : "2-digit", hour12: false,
-  }).format(d);
+  const tz = ctx.timezone || "Asia/Shanghai";
+  const fmt = (d: Date) => formatInZone(d, tz, !!ctx.allDay);
+  const tzLabel = zoneLabel(tz);
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}\n${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入即可加进你的日历。`;
+  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入后将按你日历的时区显示。`;
   const html = baseLayout({
     title: ctx.summary,
     preheader: `${ctx.organizerName} 邀请你参加 ${ctx.summary}`,
@@ -226,8 +278,8 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
         ${escape(ctx.organizerName)} 邀请你参加这场${ctx.allDay ? "全天活动" : "活动"}。
       </p>
       <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 14px;">
-        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">开始</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))}</td></tr>
-        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">开始</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
         ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">地点</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
       </table>
       ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
@@ -264,14 +316,15 @@ export function eventCancelMail(to: string, ctx: {
   startsAt: Date;
   endsAt: Date;
   allDay: boolean;
+  // Optional IANA zone — same semantics as eventInviteMail.
+  timezone?: string | null;
   icsBody: string; // VCALENDAR with METHOD:CANCEL
 }): SendArgs {
-  const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
-    hour: ctx.allDay ? undefined : "2-digit", minute: ctx.allDay ? undefined : "2-digit", hour12: false,
-  }).format(d);
+  const tz = ctx.timezone || "Asia/Shanghai";
+  const fmt = (d: Date) => formatInZone(d, tz, !!ctx.allDay);
+  const tzLabel = zoneLabel(tz);
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-  const text = `${ctx.organizerName} 取消了活动：${ctx.summary}\n原定时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}\n\n附件 .ics 是取消通知（METHOD:CANCEL），客户端会自动从你的日历移除这场活动。`;
+  const text = `${ctx.organizerName} 取消了活动：${ctx.summary}\n原定时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n\n附件 .ics 是取消通知（METHOD:CANCEL），客户端会自动从你的日历移除这场活动。`;
   const html = baseLayout({
     title: `已取消：${ctx.summary}`,
     preheader: `${ctx.organizerName} 取消了 ${ctx.summary}`,
@@ -282,7 +335,7 @@ export function eventCancelMail(to: string, ctx: {
         <strong>${escape(ctx.organizerName)}</strong> 取消了这场活动。
       </p>
       <div style="margin:14px 0;padding:12px 14px;background:#fff1f2;border:1px solid #fecaca;border-radius:10px;color:#9f1239;font-size:13px;line-height:1.6;">
-        原定时间：${escape(fmt(ctx.startsAt))} — ${escape(fmt(ctx.endsAt))}
+        原定时间：${escape(fmt(ctx.startsAt))} — ${escape(fmt(ctx.endsAt))} <span style="color:#fb7185;font-size:11px;">${escape(tzLabel)}</span>
       </div>
       <p style="margin:14px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
         附件 <strong>invite.ics</strong> 是 METHOD:CANCEL 的标准取消通知 —— Apple / Google /

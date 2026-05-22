@@ -210,6 +210,88 @@
 })();
 </script>
 
+<section id="caldav-connect" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+  <div class="flex items-start justify-between gap-4 mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">CalDAV 同步</h2>
+      <p class="mt-1 text-sm text-slate-500">把 ByWave 日历直接接到 iPhone / Mac / Outlook / Thunderbird，双向同步事件 + 邀请 + RSVP。</p>
+    </div>
+  </div>
+
+  <dl class="space-y-3">
+    <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
+      <dt class="text-xs text-slate-500">服务器地址</dt>
+      <dd><code id="caldav-url" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"><%= caldavBaseUrl %></code></dd>
+      <button type="button" data-copy="caldav-url"
+              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">复制</button>
+    </div>
+    <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
+      <dt class="text-xs text-slate-500">用户名</dt>
+      <dd><code id="caldav-user" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"><%= user.email %></code></dd>
+      <button type="button" data-copy="caldav-user"
+              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">复制</button>
+    </div>
+    <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
+      <dt class="text-xs text-slate-500">密码</dt>
+      <dd class="text-sm text-slate-700">
+        建议<a href="#app-passwords" class="text-brand-700 hover:underline">生成下方应用密码</a>，主账号密码也可（不推荐 — 开启 MFA 后必须用应用密码）
+      </dd>
+      <span></span>
+    </div>
+  </dl>
+
+  <details class="mt-4 rounded-lg border border-slate-200 bg-slate-50">
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">iPhone / iPad 接入步骤</summary>
+    <ol class="list-decimal space-y-1 px-8 py-3 text-sm text-slate-700">
+      <li>设置 → 日历 → 帐户 → 添加帐户 → 其他 → 添加 CalDAV 帐户</li>
+      <li>服务器：粘贴上方「服务器地址」</li>
+      <li>用户名：邮箱；密码：应用专属密码</li>
+      <li>描述：随意，例如 "ByWave"；下一步保存</li>
+      <li>日历 App 打开「ByWave」分组即可看到所有日历；新建事件 + 邀请同事都会实时同步</li>
+    </ol>
+  </details>
+
+  <details class="mt-2 rounded-lg border border-slate-200 bg-slate-50">
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">macOS Calendar.app 接入步骤</summary>
+    <ol class="list-decimal space-y-1 px-8 py-3 text-sm text-slate-700">
+      <li>日历 → 设置 → 帐户 → 左下角 + → 选择「其他 CalDAV 帐户」</li>
+      <li>帐户类型：手动；用户名：邮箱；密码：应用密码；服务器地址：上方「服务器地址」</li>
+      <li>登录 → 选取要同步的日历 → 完成</li>
+    </ol>
+  </details>
+
+  <details class="mt-2 rounded-lg border border-slate-200 bg-slate-50">
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">Thunderbird / DAVx⁵ / Outlook</summary>
+    <ul class="list-disc space-y-1 px-8 py-3 text-sm text-slate-700">
+      <li><strong>Thunderbird</strong>：日历 → 新建日历 → 网络上 → CalDAV → 粘贴服务器地址</li>
+      <li><strong>Android (DAVx⁵)</strong>：添加帐户 → 用 URL 和用户名登录 → 服务器地址 + 邮箱 + 应用密码</li>
+      <li><strong>Outlook</strong>：原生不支持 CalDAV，可用 <code>Outlook CalDav Synchronizer</code> 插件或导出 .ics 订阅</li>
+    </ul>
+  </details>
+
+  <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+    💡 邀请功能在 CalDAV 上是双向的：你在手机上把同事的邮箱加进 ATTENDEE，对方会收到 ByWave 的邀请邮件；对方点击 Accept/Decline 后，下次手机同步就能看到对方的回执。
+  </div>
+</section>
+
+<script nonce="<%= cspNonce %>">
+  (function() {
+    document.querySelectorAll("[data-copy]").forEach(function(btn) {
+      btn.addEventListener("click", async function() {
+        var id = btn.getAttribute("data-copy");
+        var target = document.getElementById(id);
+        if (!target) return;
+        try {
+          await navigator.clipboard.writeText(target.textContent.trim());
+          var old = btn.textContent;
+          btn.textContent = "已复制";
+          setTimeout(function() { btn.textContent = old; }, 1500);
+        } catch (e) { /* clipboard blocked — leave UI silent */ }
+      });
+    });
+  })();
+</script>
+
 <section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>

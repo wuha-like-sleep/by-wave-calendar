@@ -211,6 +211,13 @@
       "when": 1779491500000,
       "tag": "0029_embed_toggle",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1779600000000,
+      "tag": "0030_event_exdates",
+      "breakpoints": true
     }
   ]
 }

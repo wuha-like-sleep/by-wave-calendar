@@ -18,6 +18,10 @@ mkdir -p "$STAGE"
 echo "[release] installing deps (full, for build)..."
 npm ci
 
+echo "[release] typecheck + unit tests (block release on failure)..."
+npm run typecheck
+npm test
+
 echo "[release] building..."
 npm run build
 

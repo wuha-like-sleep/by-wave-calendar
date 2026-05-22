@@ -193,6 +193,9 @@ export const loginAlerts = pgTable("login_alerts", {
   uniq: uniqueIndex("login_alerts_user_ip_ua_unique").on(t.userId, t.ipHash, t.uaHash),
 }));
 
+// NOTE: events.exdates is added in migration 0030. See drizzle/migrations.
+// We expose it on the type below so handlers can read/write it.
+
 // Append-only audit trail for admin-level actions (token issuance, backup
 // restore, SSO provider create/edit, update-apply, etc.). Surfaces in
 // /admin/audit so multiple admins can see who did what when.
@@ -344,6 +347,11 @@ export const events = pgTable("events", {
   endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
   allDay: boolean("all_day").notNull().default(false),
   rrule: text("rrule"),
+  // Per-instance exclusions for a recurring master. When the user deletes
+  // "just this occurrence" (or detaches it via edit-仅此次), we append
+  // the original instance start (ISO) to this array. rrule_expand reads
+  // it and skips matching occurrences. Null for non-recurring events.
+  exdates: jsonb("exdates"),
   extra: jsonb("extra"),
   rawIcs: text("raw_ics"),
   // Soft-delete column. Set instead of removing the row so invitation tokens

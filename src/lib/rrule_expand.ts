@@ -32,6 +32,10 @@ export type EventForExpansion = {
   startsAt: Date;
   endsAt: Date;
   rrule: string | null;
+  // Optional exclusion list of ISO timestamps. When the user deletes
+  // "just this occurrence" of a recurring event we append the instance
+  // start here; expandEvent skips those occurrences.
+  exdates?: string[] | null;
 };
 
 export type ExpandedOccurrence = {
@@ -83,8 +87,21 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
   const expandFrom = new Date(from.getTime() - Math.max(0, durationMs));
   const starts = rule.between(expandFrom, to, true).slice(0, MAX_OCCURRENCES_PER_EVENT);
 
+  // Build a Set of exdate timestamps (ms) for fast lookup. The
+  // exdates array on the event is stored as ISO strings; we normalize
+  // to ms here so a TZ-formatted vs naive-formatted exdate still
+  // compares equal to the rrule-computed instance start (which is
+  // always UTC).
+  const exdateSet = new Set<number>();
+  if (Array.isArray(event.exdates)) {
+    for (const e of event.exdates) {
+      const t = +new Date(e);
+      if (!isNaN(t)) exdateSet.add(t);
+    }
+  }
+
   const masterStartTime = event.startsAt.getTime();
-  return starts.map((start: Date) => {
+  return starts.filter((s: Date) => !exdateSet.has(s.getTime())).map((start: Date) => {
     const startMs = start.getTime();
     return {
       id: event.id,

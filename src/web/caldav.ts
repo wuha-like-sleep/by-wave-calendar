@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
-import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
 import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
@@ -156,6 +157,11 @@ async function loadAllEventsOf(calId: string) {
 }
 
 function rowToIcal(row: schema.Event): IcalEvent {
+  const extra = (row.extra ?? null) as null | {
+    attendees?: Array<{ email: string; cn?: string | null; role?: string | null; partstat?: string | null }>;
+    organizer?: string | null;
+    timezone?: string | null;
+  };
   return {
     uid: row.uid,
     summary: row.summary,
@@ -165,8 +171,20 @@ function rowToIcal(row: schema.Event): IcalEvent {
     endsAt: row.endsAt,
     allDay: row.allDay,
     rrule: row.rrule,
+    exdates: Array.isArray(row.exdates) ? (row.exdates as string[]) : null,
+    // Carry the event's IANA zone through to serializeEvent so CalDAV
+    // clients see DTSTART;TZID=Asia/Shanghai:… (wall-clock) instead of
+    // DTSTART:…Z. Makes the event display correctly when the recipient
+    // is in a different timezone than the organizer.
+    timezone: extra?.timezone ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    // Surface attendees + organizer in the synthesized VEVENT so that
+    // events created via the web UI (no rawIcs round-trip) still show
+    // their attendee list on CalDAV clients. PARTSTAT overlay happens
+    // downstream in rowToVCalendar.
+    organizer: extra?.organizer ?? null,
+    attendees: Array.isArray(extra?.attendees) ? extra!.attendees! : null,
   };
 }
 
@@ -174,21 +192,74 @@ function rowToIcal(row: schema.Event): IcalEvent {
 // the client originally sent (preserves ATTENDEE / VALARM / TRANSP / CATEGORIES /
 // X-*); falls back to synthesizing one from the parsed columns for events created
 // via the web UI (or imported) where no raw body was ever stored.
-function rowToVCalendar(row: schema.Event, calName: string): string {
+// `partstatByEmail` (optional): overlay current RSVP responses on ATTENDEE
+// lines so the organizer's phone reflects "alice accepted" the moment alice
+// clicks the link in the invite email — caller is responsible for batch-
+// loading the map to avoid N+1.
+function rowToVCalendar(row: schema.Event, calName: string, partstatByEmail?: Map<string, string>): string {
+  const CRLF = "\r\n";
+  let vevent: string;
   if (row.rawIcs && row.rawIcs.includes("BEGIN:VEVENT")) {
-    const CRLF = "\r\n";
-    return [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//ByWave-Calendar//CalDAV//EN",
-      "CALSCALE:GREGORIAN",
-      `X-WR-CALNAME:${calName.replace(/[\r\n]/g, " ")}`,
-      row.rawIcs,
-      "END:VCALENDAR",
-    ].join(CRLF) + CRLF;
+    // events.exdates is JSONB → `unknown`. Narrow before handing to the
+    // helper, which has a tight type to keep the lib DB-agnostic.
+    vevent = mergeExdatesIntoVevent(row.rawIcs, {
+      exdates: Array.isArray(row.exdates) ? (row.exdates as string[]) : null,
+      allDay: row.allDay,
+    });
+  } else {
+    // Synthesized — wrapSingleEvent already builds the full VCALENDAR.
+    // Apply PARTSTAT overlay then return.
+    const ics = wrapSingleEvent(rowToIcal(row), calName);
+    return partstatByEmail && partstatByEmail.size > 0 ? overlayPartstat(ics, partstatByEmail) : ics;
   }
-  return wrapSingleEvent(rowToIcal(row), calName);
+  if (partstatByEmail && partstatByEmail.size > 0) {
+    vevent = overlayPartstat(vevent, partstatByEmail);
+  }
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//ByWave-Calendar//CalDAV//EN",
+    "CALSCALE:GREGORIAN",
+    `X-WR-CALNAME:${calName.replace(/[\r\n]/g, " ")}`,
+    vevent,
+    "END:VCALENDAR",
+  ].join(CRLF) + CRLF;
 }
+
+// Batch-load RSVP responses for a set of events. Returns
+//   Map<eventId, Map<emailLowercase, PARTSTAT>>
+// Used by REPORT/GET handlers to overlay the organizer's view of
+// attendee responses without N+1 queries per event.
+async function loadAttendeeStatuses(eventIds: string[]): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  if (eventIds.length === 0) return out;
+  const rows = await db
+    .select({
+      eventId: schema.eventInviteTokens.sourceEventId,
+      email: schema.eventInviteTokens.recipientEmail,
+      status: schema.eventInviteTokens.responseStatus,
+    })
+    .from(schema.eventInviteTokens)
+    .where(inArray(schema.eventInviteTokens.sourceEventId, eventIds));
+  for (const r of rows) {
+    if (!r.status) continue;
+    const partstat =
+      r.status === "accepted" ? "ACCEPTED" :
+      r.status === "declined" ? "DECLINED" :
+      r.status === "tentative" ? "TENTATIVE" : null;
+    if (!partstat) continue;
+    let inner = out.get(r.eventId);
+    if (!inner) { inner = new Map(); out.set(r.eventId, inner); }
+    // Token rows are 1-per-recipient. Most recent response wins (we sort
+    // by responseStatus's just-set value, but in practice each recipient
+    // has at most one token per event).
+    inner.set(r.email.toLowerCase(), partstat);
+  }
+  return out;
+}
+
+// (overlayPartstat + mergeExdatesIntoVevent moved to ../lib/caldav_helpers.ts
+//  so they can be unit-tested without spinning up Fastify/DB.)
 
 // ---------- Route handlers ----------
 
@@ -354,11 +425,14 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
           .where(and(eq(schema.events.calendarId, cal.id))))
           .filter(e => wantedUids.includes(e.uid));
 
+    // Batch-load RSVP statuses for all matched events so the response
+    // reflects current accept/decline state without N+1 queries.
+    const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
     const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
       etag: etagOf(e.updatedAt),
       contentType: "text/calendar; charset=utf-8; component=VEVENT",
       lastModified: e.updatedAt,
-      calendarData: rowToVCalendar(e, cal.name),
+      calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
     }));
     sendXml(reply, multistatus(entries));
     return;
@@ -385,9 +459,10 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     });
   }
 
+  const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
   const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
     etag: etagOf(e.updatedAt),
-    calendarData: rowToVCalendar(e, cal.name),
+    calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
   }));
   sendXml(reply, multistatus(entries));
 }
@@ -415,10 +490,11 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
     .limit(1);
   if (!event) return reply.code(404).send("Not Found");
 
+  const statusMap = await loadAttendeeStatuses([event.id]);
   reply
     .header("Content-Type", "text/calendar; charset=utf-8")
     .header("ETag", etagOf(event.updatedAt));
-  return reply.send(rowToVCalendar(event, cal.name));
+  return reply.send(rowToVCalendar(event, cal.name, statusMap.get(event.id)));
 }
 
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
@@ -493,6 +569,20 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     if (parsed.alarms) extraPatch.alarms = parsed.alarms;
     if (parsed.organizer) extraPatch.organizer = parsed.organizer;
     if (parsed.categories) extraPatch.categories = parsed.categories;
+    // Persist the IANA zone the client sent (DTSTART;TZID=…). Without this
+    // an event created on iPhone in Shanghai TZ would round-trip as UTC and
+    // lose its "anchored to wall-clock" semantics — re-export would show
+    // the wrong time on phones in other zones.
+    if (parsed.timezone) extraPatch.timezone = parsed.timezone;
+
+    // EXDATE merge: take the union of whatever the client sent and what
+    // we already have. A "delete just this occurrence" on the phone
+    // shows up as a new EXDATE line; we never want to silently drop
+    // exclusions a different client added (web UI, another device)
+    // just because this PUT didn't echo them. Union is the safe op.
+    const incomingExdates = Array.isArray(parsed.exdates) ? parsed.exdates : [];
+    const existingExdates: string[] = Array.isArray(existing?.exdates) ? (existing!.exdates as string[]) : [];
+    const mergedExdates = Array.from(new Set([...existingExdates, ...incomingExdates]));
 
     if (existing) {
       if (ifMatchHdr && ifMatchHdr !== "*" && ifMatchHdr !== etagOf(existing.updatedAt)) {
@@ -508,6 +598,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
           endsAt: parsed.endsAt,
           allDay: parsed.allDay,
           rrule: parsed.rrule ?? null,
+          exdates: mergedExdates.length ? mergedExdates : null,
           // Un-soft-delete on resurrect (iOS PUTting an event whose UID matches
           // a previously soft-deleted row should bring it back rather than
           // tripping the UNIQUE (calendar_id, uid) constraint on insert).
@@ -536,6 +627,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         endsAt: parsed.endsAt,
         allDay: parsed.allDay,
         rrule: parsed.rrule ?? null,
+        exdates: mergedExdates.length ? mergedExdates : null,
         extra: Object.keys(extraPatch).length ? extraPatch : null,
         rawIcs: rawVevent,
       })
@@ -547,16 +639,27 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const stored = outcome.stored;
   const isResurrectOrCreate = outcome.isCreate;
 
-  // If this is a brand-new event that has ATTENDEEs other than the organizer
-  // themselves, mirror what /api/events does — send each attendee an "Add to
-  // your calendar" email with a METHOD:REQUEST .ics attachment. iOS / Apple
-  // Calendar PUTs go through this path too, so an event you add on the phone
-  // also gets the invite emails fired.
-  if (isResurrectOrCreate && parsed.attendees && parsed.attendees.length > 0) {
+  // Send invitation emails to attendees who haven't received one yet.
+  // For first-creation this is the full list; for updates this is the
+  // *new* additions (e.g. organizer added Bob to a meeting on their
+  // phone — Bob should get the invite email even though Alice was
+  // already a recipient from the original PUT). Already-invited people
+  // get a re-REQUEST email so their phone updates the event details.
+  if (parsed.attendees && parsed.attendees.length > 0) {
     const recipientList = parsed.attendees
       .map((a) => (a.email || "").toLowerCase().trim())
       .filter((e) => e && e.includes("@") && e !== user.email.toLowerCase());
     if (recipientList.length > 0) {
+      // Look up who we've already invited so we know who's "new" vs
+      // "re-notify". A re-creation (resurrect) treats everyone as new.
+      const existingTokens = isResurrectOrCreate ? [] : await db
+        .select({ recipientEmail: schema.eventInviteTokens.recipientEmail })
+        .from(schema.eventInviteTokens)
+        .where(eq(schema.eventInviteTokens.sourceEventId, stored.id));
+      const alreadyInvited = new Set(existingTokens.map((r) => r.recipientEmail.toLowerCase()));
+      const newRecipients = recipientList.filter((e) => !alreadyInvited.has(e));
+      const reNotifyRecipients = recipientList.filter((e) => alreadyInvited.has(e));
+
       const organizerName = user.displayName || user.email;
       const ics = invitationIcs({
         event: {
@@ -573,9 +676,13 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         organizerName,
         attendees: recipientList.map((email) => ({ email })),
         method: "REQUEST",
+        // SEQUENCE must increase on each REQUEST update or RFC 5546-compliant
+        // clients ignore the changes. Bump by 1 for re-notifies; new-only
+        // creates start at 0.
+        sequence: reNotifyRecipients.length > 0 ? 1 : 0,
       });
       const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-      for (const to of recipientList) {
+      for (const to of newRecipients) {
         const inviteToken = newInvitationToken();
         try {
           await db.insert(schema.eventInviteTokens).values({
@@ -597,11 +704,45 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
           endsAt: stored.endsAt,
           allDay: stored.allDay,
           uid: stored.uid,
+          timezone: (stored.extra as { timezone?: string } | null)?.timezone ?? null,
           icsBody: ics,
           inviteToken,
         })).catch((err) => req.log.warn({ err, to }, "caldav_invite_mail_failed"));
       }
-      req.log.info({ caldav: "put_invites_sent", count: recipientList.length, eventId: stored.id }, "caldav_put_invites");
+      // Re-notify: reuse the existing token so the recipient's RSVP
+      // history isn't reset. Their phone's calendar will update the
+      // event details from the new SEQUENCE-bumped .ics.
+      for (const to of reNotifyRecipients) {
+        const [existing] = await db
+          .select()
+          .from(schema.eventInviteTokens)
+          .where(and(
+            eq(schema.eventInviteTokens.sourceEventId, stored.id),
+            eq(schema.eventInviteTokens.recipientEmail, to),
+          ))
+          .limit(1);
+        if (!existing) continue;
+        sendMail(eventInviteMail(to, {
+          organizerEmail: user.email,
+          organizerName,
+          summary: stored.summary,
+          description: stored.description,
+          location: stored.location,
+          startsAt: stored.startsAt,
+          endsAt: stored.endsAt,
+          allDay: stored.allDay,
+          uid: stored.uid,
+          timezone: (stored.extra as { timezone?: string } | null)?.timezone ?? null,
+          icsBody: ics,
+          inviteToken: existing.token,
+        })).catch((err) => req.log.warn({ err, to }, "caldav_invite_renotify_failed"));
+      }
+      req.log.info({
+        caldav: "put_invites_sent",
+        newCount: newRecipients.length,
+        reNotifyCount: reNotifyRecipients.length,
+        eventId: stored.id,
+      }, "caldav_put_invites");
     }
   }
 

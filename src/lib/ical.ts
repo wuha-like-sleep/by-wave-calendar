@@ -15,6 +15,16 @@ export type IcalEvent = {
   endsAt: Date;
   allDay: boolean;
   rrule?: string | null;
+  // EXDATE values — ISO 8601 strings (UTC). When a client deletes "just this
+  // occurrence" of a recurring event, the master VEVENT lists the excluded
+  // instance starts here. Round-trip through CalDAV so iOS/macOS calendars
+  // stay in sync with the web "delete just this occurrence" feature.
+  exdates?: string[] | null;
+  // The IANA zone this event is anchored to (parsed from DTSTART;TZID=…
+  // on input, used to emit DTSTART;TZID=… on output). The Date fields
+  // above are always UTC instants; this just remembers which wall-clock
+  // they were created in.
+  timezone?: string | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
   transp?: string | null;
@@ -55,6 +65,27 @@ function formatDate(d: Date): string {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
+// Render a UTC Date as wall-clock YYYYMMDDTHHMMSS in the target IANA zone.
+// Used to emit DTSTART;TZID=Asia/Shanghai:20260601T180000 (no trailing Z).
+// Falls back to UTC if the zone is unknown — better than throwing.
+function formatWallClockInZone(d: Date, tzid: string): string {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tzid,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false,
+    });
+    const parts = fmt.formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+    // Intl renders midnight as "24" in some locales; normalize to "00".
+    let hh = get("hour"); if (hh === "24") hh = "00";
+    return `${get("year")}${get("month")}${get("day")}T${hh}${get("minute")}${get("second")}`;
+  } catch {
+    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+  }
+}
+
 function escapeText(s: string): string {
   return s
     .replace(/\\/g, "\\\\")
@@ -93,6 +124,17 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(event.startsAt)}`);
     lines.push(`DTEND;VALUE=DATE:${formatDate(event.endsAt)}`);
+  } else if (event.timezone) {
+    // Emit wall-clock in the event's zone with TZID parameter. iOS /
+    // macOS / Google / Outlook all render this as "this is 6pm Shanghai
+    // time" — phone shifts the display when the user travels, instead
+    // of statically showing the UTC equivalent. We don't emit a full
+    // VTIMEZONE block — modern clients use the IANA database directly
+    // and tolerate a missing VTIMEZONE per RFC 7986 / common practice.
+    const wall = formatWallClockInZone(event.startsAt, event.timezone);
+    const wallEnd = formatWallClockInZone(event.endsAt, event.timezone);
+    lines.push(`DTSTART;TZID=${event.timezone}:${wall}`);
+    lines.push(`DTEND;TZID=${event.timezone}:${wallEnd}`);
   } else {
     lines.push(`DTSTART:${formatDateTime(event.startsAt)}`);
     lines.push(`DTEND:${formatDateTime(event.endsAt)}`);
@@ -101,6 +143,37 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
   if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`);
   if (event.rrule) lines.push(`RRULE:${event.rrule}`);
+  // ORGANIZER + ATTENDEE for events that have them. CalDAV clients
+  // (iOS Calendar, macOS Calendar, Thunderbird) display these as the
+  // attendee list and surface the organizer's name on the event card.
+  // Without this, web-UI-created events look "naked" on the phone.
+  if (event.organizer) {
+    lines.push(`ORGANIZER:mailto:${event.organizer}`);
+  }
+  if (event.attendees && event.attendees.length > 0) {
+    for (const a of event.attendees) {
+      if (!a.email) continue;
+      const cn = a.cn ? `;CN=${escapeText(a.cn)}` : "";
+      const role = a.role ? `;ROLE=${a.role}` : ";ROLE=REQ-PARTICIPANT";
+      const partstat = a.partstat ? `;PARTSTAT=${a.partstat}` : ";PARTSTAT=NEEDS-ACTION";
+      lines.push(`ATTENDEE${cn}${role}${partstat};RSVP=TRUE:mailto:${a.email}`);
+    }
+  }
+  // EXDATE: one line per excluded instance (some clients merge them into
+  // a comma-joined list, but per-line is universally accepted and easier
+  // to debug). Match the all-day form when the master is all-day so the
+  // exclusion semantics line up — otherwise emit datetime+Z.
+  if (event.exdates && event.exdates.length > 0) {
+    for (const iso of event.exdates) {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) continue;
+      if (event.allDay) {
+        lines.push(`EXDATE;VALUE=DATE:${formatDate(d)}`);
+      } else {
+        lines.push(`EXDATE:${formatDateTime(d)}`);
+      }
+    }
+  }
   if (event.createdAt) lines.push(`CREATED:${formatDateTime(event.createdAt)}`);
   if (event.updatedAt) lines.push(`LAST-MODIFIED:${formatDateTime(event.updatedAt)}`);
   lines.push("END:VEVENT");
@@ -208,6 +281,10 @@ export function parseEvent(ics: string): IcalEvent | null {
   const singleProps: Record<string, ParsedLine> = {};
   const attendees: IcalAttendee[] = [];
   const alarms: IcalAlarm[] = [];
+  // EXDATE is allowed multiple times AND each line is a comma-separated list,
+  // so we collect ISO strings as we walk the body rather than overwriting in
+  // singleProps. RFC 5545 §3.8.5.1.
+  const exdates: string[] = [];
   let organizer: string | null = null;
   let categories: string[] | null = null;
 
@@ -236,6 +313,24 @@ export function parseEvent(ics: string): IcalEvent | null {
     }
     const parsed = parsePropLine(line);
     if (!parsed) { i++; continue; }
+    if (parsed.name === "EXDATE") {
+      // Comma-separated list of timestamps OR dates. The VALUE=DATE
+      // parameter (or a no-time YYYYMMDD string) means an all-day
+      // exclusion; otherwise treat as datetime. TZID respected the
+      // same way DTSTART handles it.
+      const isAllDay = parsed.line.params["VALUE"] === "DATE";
+      const tzid = parsed.line.params["TZID"];
+      for (const raw of parsed.line.value.split(",")) {
+        const v = raw.trim();
+        if (!v) continue;
+        try {
+          const d = parseICalDateValue(v, isAllDay || v.length === 8, tzid);
+          if (!isNaN(d.getTime())) exdates.push(d.toISOString());
+        } catch { /* skip malformed exdate, don't fail whole parse */ }
+      }
+      i++;
+      continue;
+    }
     if (parsed.name === "ATTENDEE") {
       const v = parsed.line.value || "";
       const email = v.toLowerCase().startsWith("mailto:") ? v.slice(7) : v;
@@ -275,6 +370,11 @@ export function parseEvent(ics: string): IcalEvent | null {
     endsAt: parseICalDateValue(dtend.value, allDay, endTzid),
     allDay,
     rrule: singleProps["RRULE"]?.value ?? null,
+    exdates: exdates.length ? exdates : null,
+    // Capture the TZID parameter from DTSTART for round-trip preservation.
+    // We don't try to merge start vs end TZID — an event spanning timezones
+    // is rare and CalDAV clients all use DTSTART's TZID for display anyway.
+    timezone: startTzid ?? null,
     createdAt: singleProps["CREATED"] ? parseICalDateValue(singleProps["CREATED"].value, false) : null,
     updatedAt: singleProps["LAST-MODIFIED"] ? parseICalDateValue(singleProps["LAST-MODIFIED"].value, false) : null,
     transp: singleProps["TRANSP"]?.value?.toUpperCase() ?? null,

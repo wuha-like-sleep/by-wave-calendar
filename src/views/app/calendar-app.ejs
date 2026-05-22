@@ -260,6 +260,13 @@
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
+      <!-- Timezone hint: shows the event's wall-clock in its stored zone
+           when the user's browser is in a different zone (e.g. you're in
+           Shanghai editing an event tagged as America/New_York → see
+           "原始: 09:00 (纽约时间)" so you don't accidentally interpret
+           the inputs as 9 AM Beijing time). Populated by calendar-app.js
+           on every modal open / time / timezone change. -->
+      <p id="tz-hint" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 hidden"></p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 hidden" id="date-row">
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1">开始日期</label>

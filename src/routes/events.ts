@@ -114,7 +114,13 @@ export async function eventRoutes(app: FastifyInstance) {
     const expanded: Array<typeof rows[number] & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
     for (const row of rows) {
       const occurrences = expandEvent(
-        { id: row.id, startsAt: row.startsAt, endsAt: row.endsAt, rrule: row.rrule ?? null },
+        {
+          id: row.id,
+          startsAt: row.startsAt,
+          endsAt: row.endsAt,
+          rrule: row.rrule ?? null,
+          exdates: (row.exdates as string[] | null) ?? null,
+        },
         fromDate,
         toDate,
       );
@@ -202,7 +208,7 @@ export async function eventRoutes(app: FastifyInstance) {
     // Fire-and-forget RSVP emails to attendees listed in extra.attendees.
     // The email carries a METHOD:REQUEST .ics so Gmail / Outlook / Apple Mail
     // render the "Add to calendar" / "Yes / Maybe / No" buttons natively.
-    const extra = (body.extra as { attendees?: string[] } | null) ?? null;
+    const extra = (body.extra as { attendees?: string[]; timezone?: string } | null) ?? null;
     if (row && extra && Array.isArray(extra.attendees) && extra.attendees.length > 0) {
       const organizerName = user.displayName || user.email;
       const ics = invitationIcs({
@@ -248,6 +254,9 @@ export async function eventRoutes(app: FastifyInstance) {
           endsAt: row.endsAt,
           allDay: row.allDay,
           uid: row.uid,
+          // Pass the event's stored timezone so the email shows
+          // "上海下午6点" rather than the server's UTC equivalent.
+          timezone: extra.timezone ?? null,
           icsBody: ics,
           inviteToken,
         })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));
@@ -261,12 +270,103 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.code(201).send(row);
   });
 
+  // Validation: scope (this/future/series) + recurrenceId (the original
+  // instance start). When scope=this or scope=future we MUST have a
+  // recurrenceId to know which occurrence the user means.
+  const recurringScopeSchema = z.object({
+    scope: z.enum(["instance", "future", "series"]).optional(),
+    recurrenceId: z.string().datetime({ offset: true }).optional(),
+  }).optional();
+
   app.patch("/events/:id", async (req, reply) => {
     const user = await requireUser(req, reply);
     const { id } = idParam.parse(req.params);
-    const body = updateSchema.parse(req.body);
+    // PATCH body may carry our recurring-scope fields alongside the
+    // event fields. updateSchema is .partial() so unknown keys are
+    // tolerated; we just pull scope/recurrenceId out before passing.
+    const rawBody = (req.body ?? {}) as Record<string, unknown>;
+    const scopeParsed = recurringScopeSchema.safeParse({
+      scope: rawBody.scope, recurrenceId: rawBody.recurrenceId,
+    });
+    const scope = scopeParsed.success ? scopeParsed.data?.scope ?? "series" : "series";
+    const recurrenceIso = scopeParsed.success ? scopeParsed.data?.recurrenceId : undefined;
+    const body = updateSchema.parse({ ...rawBody, scope: undefined, recurrenceId: undefined });
+
     const target = await loadOwnedEvent(id, user.id);
     if (!target) return reply.code(404).send({ error: "not_found" });
+
+    const isRecurring = !!target.rrule;
+
+    // --- scope=instance: detach this occurrence from the series ---
+    // Implementation: add the original instance start to master.exdates
+    // (so rrule_expand skips it), then create a NEW standalone (non-
+    // recurring) event with the user's edits + the new start/end.
+    if (isRecurring && scope === "instance" && recurrenceIso) {
+      const recurrenceDate = new Date(recurrenceIso);
+      const existingExdates: string[] = Array.isArray(target.exdates) ? target.exdates as string[] : [];
+      const newExdates = [...existingExdates, recurrenceDate.toISOString()];
+
+      // The instance the user is editing — if they didn't change start/end,
+      // default to the original recurrence time + master's duration.
+      const masterDuration = target.endsAt.getTime() - target.startsAt.getTime();
+      const newStart = body.startsAt ? new Date(body.startsAt) : recurrenceDate;
+      const newEnd = body.endsAt ? new Date(body.endsAt) : new Date(recurrenceDate.getTime() + masterDuration);
+
+      const [detached] = await db.insert(schema.events).values({
+        calendarId: target.calendarId,
+        uid: newEventUid(),
+        summary: body.summary ?? target.summary,
+        description: body.description ?? target.description,
+        location: body.location ?? target.location,
+        startsAt: newStart,
+        endsAt: newEnd,
+        allDay: body.allDay ?? target.allDay,
+        rrule: null,  // detached instance is not recurring
+        extra: body.extra !== undefined ? (body.extra as unknown as object | null) : (target.extra as object | null),
+      }).returning();
+
+      await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, id));
+      if (detached) void dispatchWebhook("event.updated", eventToWebhookPayload(detached)).catch(() => undefined);
+      return reply.send(detached);
+    }
+
+    // --- scope=future: split the series at this occurrence ---
+    // Master gets UNTIL=instance-1s appended to its RRULE (so existing
+    // earlier occurrences survive). A new standalone master starts at the
+    // chosen instance with the user's edits and same/edited RRULE.
+    if (isRecurring && scope === "future" && recurrenceIso) {
+      const recurrenceDate = new Date(recurrenceIso);
+      // RRULE UNTIL: ISO basic format YYYYMMDDTHHMMSSZ
+      const untilUtc = new Date(recurrenceDate.getTime() - 1000)
+        .toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const oldRrule = target.rrule || "";
+      // Strip any existing UNTIL= before adding ours, otherwise PG winds
+      // up with conflicting clauses (rrule lib just takes the first).
+      const cleanedRrule = oldRrule.split(";").filter((p) => !/^UNTIL=/i.test(p)).join(";");
+      const newMasterRrule = cleanedRrule + ";UNTIL=" + untilUtc;
+      await db.update(schema.events).set({ rrule: newMasterRrule, updatedAt: new Date() }).where(eq(schema.events.id, id));
+
+      const masterDuration = target.endsAt.getTime() - target.startsAt.getTime();
+      const newStart = body.startsAt ? new Date(body.startsAt) : recurrenceDate;
+      const newEnd = body.endsAt ? new Date(body.endsAt) : new Date(recurrenceDate.getTime() + masterDuration);
+
+      const [newMaster] = await db.insert(schema.events).values({
+        calendarId: target.calendarId,
+        uid: newEventUid(),
+        summary: body.summary ?? target.summary,
+        description: body.description ?? target.description,
+        location: body.location ?? target.location,
+        startsAt: newStart,
+        endsAt: newEnd,
+        allDay: body.allDay ?? target.allDay,
+        rrule: body.rrule ?? cleanedRrule,
+        extra: body.extra !== undefined ? (body.extra as unknown as object | null) : (target.extra as object | null),
+      }).returning();
+      if (newMaster) void dispatchWebhook("event.updated", eventToWebhookPayload(newMaster)).catch(() => undefined);
+      return reply.send(newMaster);
+    }
+
+    // --- scope=series (default) OR non-recurring: regular patch ---
     const [row] = await db
       .update(schema.events)
       .set({
@@ -308,11 +408,68 @@ export async function eventRoutes(app: FastifyInstance) {
     if (!target) {
       return reply.code(204).send();
     }
-    // Soft-delete the event and fire CANCEL emails to anyone we ever invited.
-    // The row stays so /event-invite/:token can render a "已取消" notice.
+    // Parse scope from the query string (DELETE has no body).
+    const q = (req.query ?? {}) as { scope?: string; recurrenceId?: string };
+    const scope = q.scope === "instance" || q.scope === "future" ? q.scope : "series";
+    const recurrenceIso = q.recurrenceId;
+    const isRecurring = !!target.rrule;
+
+    if (isRecurring && scope === "instance" && recurrenceIso) {
+      // Add to exdates and keep master alive.
+      const recurrenceDate = new Date(recurrenceIso);
+      const existingExdates: string[] = Array.isArray(target.exdates) ? target.exdates as string[] : [];
+      const newExdates = [...existingExdates, recurrenceDate.toISOString()];
+      await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, parsed.data.id));
+      return reply.code(204).send();
+    }
+    if (isRecurring && scope === "future" && recurrenceIso) {
+      const recurrenceDate = new Date(recurrenceIso);
+      const untilUtc = new Date(recurrenceDate.getTime() - 1000)
+        .toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const cleanedRrule = (target.rrule || "").split(";").filter((p) => !/^UNTIL=/i.test(p)).join(";");
+      await db.update(schema.events).set({
+        rrule: cleanedRrule + ";UNTIL=" + untilUtc, updatedAt: new Date(),
+      }).where(eq(schema.events.id, parsed.data.id));
+      return reply.code(204).send();
+    }
+
+    // Default / non-recurring: soft-delete the entire event and fire
+    // CANCEL emails to anyone we ever invited. The row stays so
+    // /event-invite/:token can render a "已取消" notice.
     await cancelEvent(parsed.data.id, { id: user.id, email: user.email, displayName: user.displayName });
     void dispatchWebhook("event.deleted", eventToWebhookPayload(target)).catch(() => undefined);
     return reply.code(204).send();
+  });
+
+  // Restore a soft-deleted event. Powers the toast 撤销 button — the
+  // user just deleted something and immediately wants it back. Idempotent.
+  // Only the owner of the calendar can restore. CANCEL emails already
+  // sent stay sent — we don't try to "un-cancel" iMIP, that's a no-go.
+  app.post("/events/:id/restore", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const { id } = idParam.parse(req.params);
+    // Load the soft-deleted row (loadOwnedEvent filters out deletedAt,
+    // so we query directly with the ownership join).
+    const [row] = await db
+      .select({ event: schema.events })
+      .from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+      .where(and(eq(schema.events.id, id), eq(schema.calendars.ownerId, user.id)))
+      .limit(1);
+    if (!row) return reply.code(404).send({ error: "not_found" });
+    if (!row.event.deletedAt) {
+      // Already alive — idempotent ok.
+      return reply.send(row.event);
+    }
+    const [restored] = await db
+      .update(schema.events)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(eq(schema.events.id, id))
+      .returning();
+    if (restored) {
+      void dispatchWebhook("event.updated", eventToWebhookPayload(restored)).catch(() => undefined);
+    }
+    return reply.send(restored);
   });
 }
 
