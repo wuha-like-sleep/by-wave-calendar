@@ -115,15 +115,38 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
   // 1) Bearer token (third-party API integration). Only honored when admin
   //    has enabled the API feature in /admin/api. Successful auth bypasses
   //    CSRF since the caller isn't a browser running with our cookies.
+  //
+  //    Two token formats are accepted:
+  //      bwc_*  — admin-issued API token (long-lived, full account scope)
+  //      bwo_*  — OAuth 2.0 access token (user-granted, scope-restricted)
   const auth = String(req.headers.authorization || "");
   if (auth.toLowerCase().startsWith("bearer ")) {
     const token = auth.slice(7).trim();
+    const { db, schema: s } = await import("../db/client.js");
+    const { eq } = await import("drizzle-orm");
+
+    // Try OAuth access token first (cheap looksLike check).
+    const { looksLikeOAuthToken, verifyOAuthToken, touchOAuthToken } = await import("./oauth_server.js");
+    if (looksLikeOAuthToken(token)) {
+      const verified = await verifyOAuthToken(token);
+      if (verified) {
+        const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
+        if (u) {
+          req.user = u;
+          void touchOAuthToken(verified.tokenId).catch(() => undefined);
+          (req as unknown as { authVia: string; oauthScopes: string[] }).authVia = "oauth";
+          (req as unknown as { oauthScopes: string[] }).oauthScopes = verified.scopes;
+          return u;
+        }
+      }
+      reply.code(401).send({ error: "invalid_token" });
+      throw new Error("invalid_token");
+    }
+
     const { looksLikeApiToken, verifyApiToken, touchApiToken } = await import("./api_token.js");
     if (looksLikeApiToken(token)) {
       const verified = await verifyApiToken(token);
       if (verified) {
-        const { db, schema: s } = await import("../db/client.js");
-        const { eq } = await import("drizzle-orm");
         const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
         if (u) {
           req.user = u;

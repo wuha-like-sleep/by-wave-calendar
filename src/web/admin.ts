@@ -24,6 +24,7 @@ import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../li
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { revokeAllUserCredentials } from "../lib/user_state.js";
+import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -938,6 +939,95 @@ export async function adminRoutes(app: FastifyInstance) {
     const { dispatchTestWebhook } = await import("../lib/webhooks.js");
     await dispatchTestWebhook(hook).catch(() => undefined);
     return reply.redirect("/admin/webhooks?success=" + encodeURIComponent("测试请求已发送，下方记录里看结果"));
+  });
+
+  // ---------- OAuth 应用管理 ----------
+  // 管理员注册第三方应用，给它们一个 client_id + secret，用户授权后
+  // 第三方应用可代表用户调用 /api/v1/* (受 scope 限制)。
+  app.get("/admin/oauth-apps", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const apps = await db.select({
+      id: schema.oauthClients.id,
+      clientId: schema.oauthClients.clientId,
+      name: schema.oauthClients.name,
+      description: schema.oauthClients.description,
+      redirectUris: schema.oauthClients.redirectUris,
+      allowedScopes: schema.oauthClients.allowedScopes,
+      enabled: schema.oauthClients.enabled,
+      createdAt: schema.oauthClients.createdAt,
+    }).from(schema.oauthClients).orderBy(asc(schema.oauthClients.createdAt));
+    const issuedSecret = typeof (req.query as { secret?: string }).secret === "string" ? (req.query as { secret: string }).secret : null;
+    const issuedClientId = typeof (req.query as { cid?: string }).cid === "string" ? (req.query as { cid: string }).cid : null;
+    return reply.view("admin/oauth-apps", {
+      title: "OAuth 应用 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/oauth-apps",
+      apps: apps.map((a) => ({
+        ...a,
+        redirectUriList: a.redirectUris.split("\n").map((s) => s.trim()).filter(Boolean),
+        scopesList: a.allowedScopes as string[],
+        createdAtLocal: localTimeIso(a.createdAt),
+      })),
+      scopes: OAUTH_SCOPES,
+      issuedSecret, issuedClientId,
+      baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+    });
+  });
+
+  app.post("/admin/oauth-apps", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      name: z.string().min(1).max(200),
+      description: z.string().max(500).optional().transform((s) => s?.trim() || undefined),
+      redirectUris: z.string().min(1).max(2000),
+      scopes: z.union([z.string(), z.array(z.string())]).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/oauth-apps?error=" + encodeURIComponent("参数无效"));
+    const uris = body.data.redirectUris.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    for (const u of uris) {
+      try { new URL(u); } catch { return reply.redirect("/admin/oauth-apps?error=" + encodeURIComponent("redirect_uri 不是合法 URL：" + u)); }
+    }
+    const requestedScopes = Array.isArray(body.data.scopes) ? body.data.scopes : (body.data.scopes ? [body.data.scopes] : ["read:events"]);
+    const allowed = requestedScopes.filter((s): s is OAuthScope => s in OAUTH_SCOPES);
+    if (allowed.length === 0) return reply.redirect("/admin/oauth-apps?error=" + encodeURIComponent("至少要勾一个 scope"));
+    const created = await createOAuthClient({
+      name: body.data.name,
+      description: body.data.description,
+      redirectUris: uris,
+      allowedScopes: allowed,
+    });
+    await audit(req, me.id, "oauth_app.create", { targetType: "oauth_client", targetId: created.id, details: { name: body.data.name } });
+    return reply.redirect(`/admin/oauth-apps?secret=${encodeURIComponent(created.clientSecret)}&cid=${encodeURIComponent(created.clientId)}&success=${encodeURIComponent("应用已创建")}`);
+  });
+
+  app.post("/admin/oauth-apps/:id/toggle", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/oauth-apps");
+    const [app] = await db.select().from(schema.oauthClients).where(eq(schema.oauthClients.id, id.data)).limit(1);
+    if (!app) return reply.redirect("/admin/oauth-apps");
+    await db.update(schema.oauthClients).set({ enabled: !app.enabled }).where(eq(schema.oauthClients.id, id.data));
+    await audit(req, me.id, app.enabled ? "oauth_app.disable" : "oauth_app.enable", { targetType: "oauth_client", targetId: id.data });
+    return reply.redirect("/admin/oauth-apps?success=" + encodeURIComponent(app.enabled ? "已禁用" : "已启用"));
+  });
+
+  app.post("/admin/oauth-apps/:id/delete", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/oauth-apps");
+    const [app] = await db.select().from(schema.oauthClients).where(eq(schema.oauthClients.id, id.data)).limit(1);
+    if (!app) return reply.redirect("/admin/oauth-apps");
+    // Cascade will drop authorization_codes and access_tokens.
+    await db.delete(schema.oauthClients).where(eq(schema.oauthClients.id, id.data));
+    await audit(req, me.id, "oauth_app.delete", { targetType: "oauth_client", details: { name: app.name } });
+    return reply.redirect("/admin/oauth-apps?success=" + encodeURIComponent("应用已删除（已撤销所有访问令牌）"));
   });
 
   void asc;

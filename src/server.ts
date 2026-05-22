@@ -17,6 +17,7 @@ import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
 import { pushRoutes } from "./routes/push.js";
+import { oauthServerRoutes } from "./web/oauth_server.js";
 import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
@@ -233,6 +234,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(pushRoutes, { prefix });
 }
 await app.register(icsRoutes);
+await app.register(oauthServerRoutes);
 
 // Envelope wrapping for /api/v1/* responses. Routes that already used
 // ok()/err() ship a pre-wrapped body (with an "ok" property at the top)

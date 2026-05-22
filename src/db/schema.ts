@@ -98,6 +98,69 @@ export const siteSettings = pgTable("site_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ---- OAuth 2.0 authorization server tables ----
+// We act as the IdP for third-party apps. Admin registers an app here;
+// users grant consent at /oauth/authorize; we exchange an auth code
+// for an access token at /oauth/token. The token then auths the app
+// against /api/v1/* via Authorization: Bearer ...
+//
+// Distinguished from api_tokens (which are admin-issued, no user
+// consent step): oauth_access_tokens are user-granted via a consent
+// screen, can be revoked by the user from /app/settings.
+export const oauthClients = pgTable("oauth_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Public-facing identifier (shown to user on consent screen). Use a
+  // human-friendly random string like "bwc_app_a4f9". Not secret.
+  clientId: text("client_id").notNull(),
+  // Hashed (bcrypt). Plain shown once to admin at creation; never again.
+  clientSecretHash: text("client_secret_hash").notNull(),
+  // Display info for the consent screen.
+  name: text("name").notNull(),
+  description: text("description"),
+  logoUrl: text("logo_url"),
+  // Newline-separated allowed redirect URIs. Strict equality match.
+  redirectUris: text("redirect_uris").notNull(),
+  // JSON array of scope strings. Empty array = read-only profile.
+  allowedScopes: jsonb("allowed_scopes").notNull().default(["read:events"]),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  clientIdUnique: uniqueIndex("oauth_clients_client_id_unique").on(t.clientId),
+}));
+
+export const oauthAuthorizationCodes = pgTable("oauth_authorization_codes", {
+  code: text("code").primaryKey(),
+  clientId: uuid("client_id").notNull().references(() => oauthClients.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // PKCE challenge (S256 only — we don't accept plain). Stored verbatim;
+  // verified at /oauth/token by hashing the supplied verifier.
+  codeChallenge: text("code_challenge"),
+  redirectUri: text("redirect_uri").notNull(),
+  scopes: jsonb("scopes").notNull(),
+  // Codes are one-time-use AND short-lived (10 min). Token exchange
+  // deletes the row to enforce single-use.
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const oauthAccessTokens = pgTable("oauth_access_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // bcrypt hash of the full token; prefix kept plain for lookups.
+  tokenHash: text("token_hash").notNull(),
+  prefix: text("prefix").notNull(),
+  clientId: uuid("client_id").notNull().references(() => oauthClients.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  scopes: jsonb("scopes").notNull(),
+  // 30-day default. User can revoke from /app/settings#oauth.
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  prefixIdx: index("oauth_access_tokens_prefix_idx").on(t.prefix),
+  userIdx: index("oauth_access_tokens_user_idx").on(t.userId),
+}));
+
 // Per-user Web Push subscriptions. One row per (user, device/browser);
 // the same user on phone + laptop gets two rows. Delete on push failure
 // with statusCode 410 (gone) — browser revoked the subscription.
@@ -492,6 +555,10 @@ export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
+export type OAuthClient = typeof oauthClients.$inferSelect;
+export type NewOAuthClient = typeof oauthClients.$inferInsert;
+export type OAuthAuthorizationCode = typeof oauthAuthorizationCodes.$inferSelect;
+export type OAuthAccessToken = typeof oauthAccessTokens.$inferSelect;
 export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
 export type SsoProvider = typeof ssoProviders.$inferSelect;

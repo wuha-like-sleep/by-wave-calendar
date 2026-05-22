@@ -1,0 +1,47 @@
+<div class="mx-auto max-w-md">
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
+    <div class="text-center mb-5">
+      <% if (client.logoUrl) { %>
+        <img src="<%= client.logoUrl %>" alt="<%= client.name %>" class="mx-auto h-16 w-16 rounded-2xl mb-3 object-cover" />
+      <% } else { %>
+        <div class="mx-auto h-16 w-16 rounded-2xl bg-gradient-to-br from-brand-100 to-violet-100 flex items-center justify-center text-2xl mb-3">🔗</div>
+      <% } %>
+      <h1 class="text-xl font-semibold text-slate-900"><%= client.name %></h1>
+      <% if (client.description) { %>
+        <p class="mt-1 text-sm text-slate-500"><%= client.description %></p>
+      <% } %>
+    </div>
+
+    <div class="rounded-xl bg-slate-50 border border-slate-200 p-4 mb-5">
+      <div class="text-sm text-slate-600 mb-3">
+        <strong><%= client.name %></strong> 想要访问你的 ByWave 账号，并获得以下权限：
+      </div>
+      <ul class="space-y-2">
+        <% scopes.forEach(function(s){ %>
+          <li class="flex items-start gap-2 text-sm text-slate-800">
+            <span class="text-emerald-600 mt-0.5">✓</span>
+            <span><%= s.description %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+
+    <div class="text-xs text-slate-400 mb-5 text-center">
+      授权后会跳回到 <%= client.name %>，你可以随时在 <a href="/app/settings#oauth" class="underline">设置 → 已授权应用</a> 撤销。
+    </div>
+
+    <form method="post" action="/oauth/authorize" class="grid grid-cols-2 gap-3">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="client_id" value="<%= params.client_id %>" />
+      <input type="hidden" name="redirect_uri" value="<%= params.redirect_uri %>" />
+      <input type="hidden" name="scope" value="<%= finalScopes.join(' ') %>" />
+      <% if (params.state) { %><input type="hidden" name="state" value="<%= params.state %>" /><% } %>
+      <% if (params.code_challenge) { %><input type="hidden" name="code_challenge" value="<%= params.code_challenge %>" /><% } %>
+      <button type="submit" name="decision" value="deny"
+              class="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">拒绝</button>
+      <button type="submit" name="decision" value="approve"
+              class="rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700">允许</button>
+    </form>
+  </div>
+  <p class="mt-3 text-center text-xs text-slate-400">登录为 <%= user.email %></p>
+</div>

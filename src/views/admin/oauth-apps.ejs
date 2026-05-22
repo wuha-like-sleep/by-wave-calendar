@@ -1,0 +1,115 @@
+<%- include('_nav') %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">OAuth 应用</h1>
+<p class="text-sm text-slate-500 mb-6">注册第三方应用后，应用会带用户走到我们的「授权」页面，用户同意后才能拿到访问 token。和 API Token 不一样的是：OAuth 走用户同意流程，scope 可限定，token 受用户自己控制（可在 /app/settings 撤销）。</p>
+
+<% if (issuedSecret) { %>
+  <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 mb-6">
+    <h2 class="text-sm font-semibold text-emerald-900 mb-2">✓ 应用已创建 —— client_secret 只显示这一次</h2>
+    <div class="text-xs text-emerald-800 mb-2">把下面这两个值告诉第三方应用的开发者；他们在自己服务器存好。secret 一定不能放到前端 JS 里。</div>
+    <div class="space-y-2">
+      <div>
+        <div class="text-xs text-slate-500 mb-0.5">client_id</div>
+        <code class="block break-all bg-white border border-emerald-200 rounded-md px-3 py-2 text-sm font-mono"><%= issuedClientId %></code>
+      </div>
+      <div>
+        <div class="text-xs text-slate-500 mb-0.5">client_secret</div>
+        <code class="block break-all bg-white border border-emerald-200 rounded-md px-3 py-2 text-sm font-mono"><%= issuedSecret %></code>
+      </div>
+    </div>
+  </div>
+<% } %>
+
+<!-- Create new -->
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">注册新应用</h2>
+  <form method="post" action="/admin/oauth-apps" class="space-y-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label class="text-sm">
+        <span class="block font-medium text-slate-700 mb-1">应用名称</span>
+        <input type="text" name="name" required maxlength="200" placeholder="如：我的 iOS 客户端"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </label>
+      <label class="text-sm">
+        <span class="block font-medium text-slate-700 mb-1">简介（用户授权时看到）</span>
+        <input type="text" name="description" maxlength="500" placeholder="可选"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </label>
+    </div>
+    <label class="text-sm block">
+      <span class="block font-medium text-slate-700 mb-1">redirect_uri 白名单 <span class="text-xs text-slate-400">(每行一个，多个 URL 用回车分隔)</span></span>
+      <textarea name="redirectUris" required rows="3" placeholder="https://app.example.com/oauth/callback"
+                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"></textarea>
+    </label>
+    <div>
+      <span class="block text-sm font-medium text-slate-700 mb-2">允许申请的权限范围（scope）</span>
+      <div class="space-y-1.5">
+        <% Object.entries(scopes).forEach(function(entry){ %>
+          <label class="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="scopes" value="<%= entry[0] %>" <%= entry[0] === 'read:events' ? 'checked' : '' %> class="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-600" />
+            <span><code class="text-xs bg-slate-100 px-1.5 py-0.5 rounded"><%= entry[0] %></code> · <%= entry[1] %></span>
+          </label>
+        <% }) %>
+      </div>
+    </div>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">创建应用</button>
+  </form>
+</section>
+
+<!-- Existing -->
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">已注册应用（<%= apps.length %>）</h2>
+  <% if (apps.length === 0) { %>
+    <p class="text-sm text-slate-400 text-center py-6">还没注册任何应用</p>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100">
+      <% apps.forEach(function(a){ %>
+        <li class="py-3 flex flex-col sm:flex-row sm:items-start gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-slate-800"><%= a.name %></span>
+              <% if (!a.enabled) { %><span class="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">已禁用</span><% } %>
+            </div>
+            <% if (a.description) { %><div class="text-xs text-slate-500 mb-1"><%= a.description %></div><% } %>
+            <div class="text-xs text-slate-600 mb-1"><code class="bg-slate-50 px-1.5 py-0.5 rounded"><%= a.clientId %></code></div>
+            <div class="text-xs text-slate-400">
+              <strong>回调:</strong> <% a.redirectUriList.forEach(function(u){ %><code class="bg-slate-50 px-1 mr-1"><%= u %></code><% }) %>
+            </div>
+            <div class="text-xs text-slate-400 mt-1">
+              <strong>权限:</strong> <% a.scopesList.forEach(function(s){ %><code class="bg-slate-50 px-1 mr-1"><%= s %></code><% }) %>
+            </div>
+          </div>
+          <div class="flex gap-1.5 flex-shrink-0">
+            <form method="post" action="/admin/oauth-apps/<%= a.id %>/toggle" class="m-0">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= a.enabled ? '禁用' : '启用' %></button>
+            </form>
+            <form method="post" action="/admin/oauth-apps/<%= a.id %>/delete" class="m-0" onsubmit="return confirm('删除应用？所有已发出的访问令牌都会立即失效。');">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50">删除</button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<!-- Integration guide -->
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">第三方应用接入说明</h2>
+  <ol class="space-y-3 text-sm text-slate-700 list-decimal list-inside">
+    <li>把用户跳转到：<br/>
+      <code class="block bg-slate-50 mt-1 p-2 rounded text-xs break-all"><%= baseUrl %>/oauth/authorize?client_id=&lt;client_id&gt;&redirect_uri=&lt;encoded&gt;&response_type=code&scope=read:events&state=&lt;随机&gt;</code>
+    </li>
+    <li>用户同意后会跳回 redirect_uri，URL 携带 <code>code=...&state=...</code>。</li>
+    <li>用 code 在你的服务器换 token：<br/>
+      <code class="block bg-slate-50 mt-1 p-2 rounded text-xs break-all">POST <%= baseUrl %>/oauth/token<br/>Content-Type: application/x-www-form-urlencoded<br/>grant_type=authorization_code&code=...&client_id=...&client_secret=...&redirect_uri=...</code>
+    </li>
+    <li>用 access_token 调 API（推荐 v1）：<br/>
+      <code class="block bg-slate-50 mt-1 p-2 rounded text-xs break-all">curl -H "Authorization: Bearer &lt;access_token&gt;" <%= baseUrl %>/api/v1/events</code>
+    </li>
+  </ol>
+  <p class="mt-4 text-xs text-slate-500">推荐用 PKCE（S256）增加安全性：在第 1 步加 <code>code_challenge=&lt;base64url(sha256(verifier))&gt;&code_challenge_method=S256</code>，第 3 步加 <code>code_verifier=&lt;原始 verifier&gt;</code>。</p>
+</section>
