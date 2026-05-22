@@ -14,7 +14,6 @@
         { href: '#push',     label: '推送通知' },
         { href: '#theme',    label: '外观' },
         { href: '#password', label: '密码' },
-        { href: '#logins',   label: '登录历史' },
       ].forEach(function(item){ %>
         <li>
           <a href="<%= item.href %>" data-settings-tab
@@ -32,9 +31,20 @@
   <dl class="space-y-3 text-sm">
     <div class="flex justify-between"><dt class="text-slate-500">邮箱</dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
     <div class="flex justify-between"><dt class="text-slate-500">昵称</dt><dd class="font-medium text-slate-900"><%= user.displayName || '—' %></dd></div>
-    <div class="flex justify-between"><dt class="text-slate-500">角色</dt><dd class="font-medium text-slate-900"><%= user.isAdmin ? '管理员' : '普通用户' %></dd></div>
     <div class="flex justify-between"><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900"><%- createdAtLocal %></dd></div>
   </dl>
+  <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-3 text-sm">
+    <a href="/app/logins" class="text-brand-700 hover:text-brand-800 hover:underline inline-flex items-center gap-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      登录历史
+    </a>
+    <% if (user.isAdmin) { %>
+      <a href="/admin" class="text-slate-600 hover:text-slate-900 hover:underline inline-flex items-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z"/><path d="M3 12h18"/></svg>
+        管理后台
+      </a>
+    <% } %>
+  </div>
 </section>
 
 <section id="passkey" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
@@ -339,49 +349,6 @@
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">更新密码</button>
   </form>
 </section>
-
-<section id="logins" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
-  <h2 class="text-lg font-semibold text-slate-900 mb-2">登录历史</h2>
-  <p class="text-sm text-slate-500 mb-4">最近 30 次成功登录。如果发现陌生 IP，立刻<a href="#" class="text-brand-600 hover:underline" onclick="document.querySelector('form[action=\'/app/settings/password\'] input[name=currentPassword]')?.focus();return false;">改密码</a>，所有设备会被踢出。</p>
-  <% if (!recentLogins || recentLogins.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没有登录记录</div>
-  <% } else { %>
-    <div class="overflow-x-auto -mx-5 sm:mx-0">
-      <table class="min-w-full text-sm">
-        <thead class="text-xs text-slate-400 uppercase">
-          <tr class="border-b border-slate-100">
-            <th class="text-left font-medium py-2 px-5 sm:px-0 sm:pr-4">时间</th>
-            <th class="text-left font-medium py-2 pr-4">方式</th>
-            <th class="text-left font-medium py-2 pr-4">IP</th>
-            <th class="text-left font-medium py-2 px-5 sm:px-0">浏览器</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% recentLogins.forEach(function(e){ %>
-            <tr class="border-b border-slate-50">
-              <td class="py-2 px-5 sm:px-0 sm:pr-4 text-slate-700 whitespace-nowrap"><%- e.createdAtLocal %></td>
-              <td class="py-2 pr-4">
-                <% if (e.method === 'passkey') { %><span class="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs">Passkey</span>
-                <% } else if (e.method === 'mfa') { %><span class="inline-block rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-xs">密码+MFA</span>
-                <% } else if (e.method === 'sso') { %><span class="inline-block rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs">SSO</span>
-                <% } else { %><span class="inline-block rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">密码</span><% } %>
-              </td>
-              <td class="py-2 pr-4 font-mono text-xs text-slate-700"><%= e.ip %></td>
-              <td class="py-2 px-5 sm:px-0 text-xs text-slate-500 max-w-xs truncate" title="<%= e.userAgent %>"><%= e.userAgent %></td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
-    </div>
-  <% } %>
-</section>
-
-<% if (user.isAdmin) { %>
-  <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5 sm:p-6 mb-6">
-    <h2 class="text-lg font-semibold text-amber-900 mb-2">管理员区</h2>
-    <p class="text-sm text-amber-800">注册策略 / SMTP / 站点名等都在 <a href="/admin" class="underline">管理后台</a>。</p>
-  </section>
-<% } %>
 
 <section id="danger" class="rounded-2xl border-2 border-red-200 bg-red-50/40 p-5 sm:p-6 mb-6 scroll-mt-32">
   <h2 class="text-lg font-semibold text-red-900 mb-2">⚠️ 删除账号</h2>

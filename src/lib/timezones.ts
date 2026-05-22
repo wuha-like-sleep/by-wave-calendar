@@ -1,8 +1,17 @@
-// Common IANA timezones with friendly Chinese labels.
+// IANA timezones. We expose ALL ~400 zones (sourced via
+// `Intl.supportedValuesOf('timeZone')` at module load) so the user can
+// pick anywhere in the world — picking a city from a curated list of
+// 20 is too restrictive for a globally-deployed calendar. Curated
+// zones with Chinese labels are sorted to the top of the list so the
+// common case (Asia/Shanghai etc.) is one keystroke away.
+//
 // The current UTC offset is computed at runtime so DST shifts are accurate
 // (e.g. America/New_York shows UTC-5 in winter, UTC-4 in summer).
 
-const ZONES = [
+// Curated entries with friendly Chinese labels. These appear first in
+// the listTimezones() output and are tagged so the client UI can render
+// them visually (e.g. as quick-pick chips at the top).
+const CURATED: { id: string; label: string }[] = [
   { id: "Asia/Shanghai",     label: "上海 / 北京" },
   { id: "Asia/Hong_Kong",    label: "香港" },
   { id: "Asia/Taipei",       label: "台北" },
@@ -26,6 +35,19 @@ const ZONES = [
   { id: "Pacific/Auckland",  label: "奥克兰（夏令时）" },
 ];
 
+// Pull the full IANA list from the JS runtime so we don't have to ship
+// (and maintain) a hardcoded 400-entry table. Falls back to the curated
+// list on runtimes that don't support supportedValuesOf (Node < 18).
+function allIanaZones(): string[] {
+  try {
+    const intl = Intl as unknown as { supportedValuesOf?: (k: string) => string[] };
+    if (typeof intl.supportedValuesOf === "function") {
+      return intl.supportedValuesOf("timeZone");
+    }
+  } catch { /* fallthrough */ }
+  return CURATED.map((z) => z.id);
+}
+
 function currentOffset(id: string): string {
   try {
     const now = new Date();
@@ -47,8 +69,24 @@ function currentOffset(id: string): string {
   }
 }
 
-export type TimezoneOption = { id: string; label: string; offset: string };
+export type TimezoneOption = { id: string; label: string; offset: string; curated: boolean };
 
+// Return ALL IANA zones, with the curated ones first (in their hand-picked
+// order so 上海 stays at the top) and the rest alphabetically. Each entry
+// carries `curated: true/false` so the UI can render the curated ones as
+// a quick-pick row above the searchable input.
 export function listTimezones(): TimezoneOption[] {
-  return ZONES.map(({ id, label }) => ({ id, label, offset: currentOffset(id) }));
+  const curatedIds = new Set(CURATED.map((z) => z.id));
+  const curated: TimezoneOption[] = CURATED.map(({ id, label }) => ({
+    id, label, offset: currentOffset(id), curated: true,
+  }));
+  const rest = allIanaZones()
+    .filter((id) => !curatedIds.has(id))
+    .sort()
+    .map<TimezoneOption>((id) => ({
+      // No friendly Chinese label for these — show the IANA id (e.g.
+      // "America/Toronto"). The offset is appended in the UI.
+      id, label: id, offset: currentOffset(id), curated: false,
+    }));
+  return [...curated, ...rest];
 }

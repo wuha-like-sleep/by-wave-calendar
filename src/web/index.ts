@@ -1496,7 +1496,8 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webauthnCredentials.createdAt));
 
     const apps = await listAppPasswords(user.id);
-    const recentLogins = await listRecentLogins(user.id, 30);
+    // Login history moved to a dedicated /app/logins page — settings is
+    // now leaner; the 资料 section links there.
     const q = (req.query ?? {}) as Record<string, unknown>;
     const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
     const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
@@ -1521,6 +1522,22 @@ export async function webRoutes(app: FastifyInstance) {
       })),
       newAppPassword: newPlain,
       newAppLabel: newLabel,
+    });
+  });
+
+  // Login history as its own page. Shows more rows (100 vs 30 in the
+  // old settings tab) since we're no longer crammed in alongside MFA
+  // and Passkey config. Linked from /app/settings#profile and from
+  // the security-alert email's "查看登录历史" button.
+  app.get("/app/logins", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const recentLogins = await listRecentLogins(user.id, 100);
+    return reply.view("app/logins", {
+      title: "登录历史",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
       recentLogins: recentLogins.map((e) => ({
         ...e,
         createdAtLocal: localTime(e.createdAt),

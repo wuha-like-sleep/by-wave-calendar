@@ -272,17 +272,21 @@
         </div>
       </div>
 
-      <!-- Timezone -->
+      <!-- Timezone — input with native <datalist> autocomplete. Type
+           "shang", "lon", "tor" and the browser filters the ~400 IANA
+           zones. Curated zones (上海 / 香港 / etc.) sit at the top of
+           the list so the common case is a single keystroke. -->
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">时区</label>
-        <select name="timezone" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+        <input type="text" name="timezone" list="tz-options" value="Asia/Shanghai" autocomplete="off"
+               placeholder="输入城市或 IANA 名（如 上海 / Tokyo / America/Toronto）"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <datalist id="tz-options">
           <% timezones.forEach(function(tz){ %>
-            <option value="<%= tz.id %>" <%= tz.id === 'Asia/Shanghai' ? 'selected' : '' %>>
-              <%= tz.label %> · <%= tz.offset %> · <%= tz.id %>
-            </option>
+            <option value="<%= tz.id %>" label="<%= tz.label %>（<%= tz.offset %>）"><%= tz.label %> · <%= tz.offset %></option>
           <% }) %>
-        </select>
-        <p class="mt-1 text-xs text-slate-400">显示当前 UTC 偏移；夏令时切换后自动重新计算</p>
+        </datalist>
+        <p class="mt-1 text-xs text-slate-400">支持输入搜索；UTC 偏移自动跟随夏令时</p>
       </div>
 
       <!-- Location -->
@@ -358,11 +362,11 @@
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1">时区</label>
-          <select name="timezone" class="w-full rounded-lg border border-slate-300 px-2 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
-            <% timezones.forEach(function(tz){ %>
-              <option value="<%= tz.id %>" <%= tz.id === 'Asia/Shanghai' ? 'selected' : '' %>><%= tz.label %> · <%= tz.offset %></option>
-            <% }) %>
-          </select>
+          <input type="text" name="timezone" list="tz-options" value="Asia/Shanghai" autocomplete="off"
+                 placeholder="如 Asia/Shanghai / Europe/Paris"
+                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <!-- Reuses the #tz-options datalist defined above; both inputs
+               share the same source so we don't ship 400 zones twice. -->
         </div>
       </div>
       <div data-cal-pane="share" class="hidden space-y-3">
