@@ -23,7 +23,7 @@ import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/ap
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
-import { revokeAllUserCredentials } from "../lib/user_state.js";
+import { revokeAllUserCredentials, countActiveAdmins } from "../lib/user_state.js";
 import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -409,6 +409,12 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     const [target] = await db.select({ isAdmin: schema.users.isAdmin }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
+    // Last-admin guard: refuse to demote the only remaining admin —
+    // otherwise the system ends up with zero admins and recovery
+    // requires manual DB surgery (UPDATE users SET is_admin = true...).
+    if (target.isAdmin && (await countActiveAdmins()) <= 1) {
+      return reply.redirect("/admin/users?error=" + encodeURIComponent("拒绝：这是最后一个管理员，撤销后系统将无人可管理"));
+    }
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     await audit(req, me.id, target.isAdmin ? "user.demote_admin" : "user.promote_admin", { targetType: "user", targetId: id.data });
     return reply.redirect("/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
@@ -423,12 +429,16 @@ export async function adminRoutes(app: FastifyInstance) {
     if (id.data === me.id) {
       return reply.redirect("/admin/users?error=" + encodeURIComponent("不能停用自己的账号"));
     }
-    const [target] = await db.select({ disabledAt: schema.users.disabledAt, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
+    const [target] = await db.select({ disabledAt: schema.users.disabledAt, isAdmin: schema.users.isAdmin, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
     if (target.disabledAt) {
       await db.update(schema.users).set({ disabledAt: null, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
       await audit(req, me.id, "user.enable", { targetType: "user", targetId: id.data, details: { email: target.email } });
       return reply.redirect("/admin/users?success=" + encodeURIComponent(`已重新启用 ${target.email}`));
+    }
+    // Last-admin guard: refuse to disable the only remaining admin.
+    if (target.isAdmin && (await countActiveAdmins()) <= 1) {
+      return reply.redirect("/admin/users?error=" + encodeURIComponent("拒绝：这是最后一个管理员，停用后系统将无人可管理"));
     }
     await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     // Also kill any live sessions so logout is immediate.

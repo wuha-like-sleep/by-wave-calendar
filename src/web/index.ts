@@ -1600,6 +1600,15 @@ export async function webRoutes(app: FastifyInstance) {
     if (!ok) {
       return redirectWith(reply, "/app/settings", { error: "密码错误，账号未删除" });
     }
+    // Last-admin guard: refuse self-delete if this would leave the system
+    // with zero admins. Same footgun as toggle-admin / toggle-disabled —
+    // recovery from zero-admins requires manual DB intervention.
+    if (user.isAdmin) {
+      const { countActiveAdmins } = await import("../lib/user_state.js");
+      if ((await countActiveAdmins()) <= 1) {
+        return redirectWith(reply, "/app/settings", { error: "你是唯一的管理员，无法删除自己。请先提升另一个用户为管理员。" });
+      }
+    }
     // Hard delete — FK cascades clean up calendars/events/sessions/etc.
     await destroyAllUserSessions(user.id);
     await db.delete(schema.users).where(eq(schema.users.id, user.id));

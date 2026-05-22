@@ -63,6 +63,20 @@ app.addContentTypeParser(
   (_req, body, done) => done(null, body),
 );
 
+// Browser CSP-report content types. Modern Chrome/Firefox send
+// "application/csp-report"; new spec uses "application/reports+json"
+// (an array of reports). Parse both as lenient JSON so /csp-report
+// can log them.
+app.addContentTypeParser(
+  /^application\/(csp-report|reports\+json)\b/i,
+  { parseAs: "string" },
+  (_req, body, done) => {
+    const s = String(body || "").trim();
+    if (!s) return done(null, null);
+    try { done(null, JSON.parse(s)); } catch { done(null, s); }
+  },
+);
+
 // Fastify's default JSON parser throws 400 on empty bodies even for DELETE /
 // PATCH requests where Content-Type is technically set but no body is sent.
 // Override to treat empty string as null so DELETE /api/events/:id never
@@ -112,6 +126,13 @@ await app.register(helmet, {
       "form-action": ["'self'"],
       "object-src": ["'none'"],
       "upgrade-insecure-requests": env.NODE_ENV === "production" ? [] : null,
+      // CSP violation reporting — browsers POST to /csp-report when they
+      // block something. Without this we had zero visibility into "is
+      // CSP eating legit JS in some user's browser?". report-uri is the
+      // legacy directive; report-to (the new spec) plus the
+      // Report-To header would be ideal but isn't widely supported yet,
+      // so we stick with report-uri for now.
+      "report-uri": ["/csp-report"],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -180,6 +201,34 @@ await app.register(view, {
 
 // ---- Health ----
 app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.1.0" }));
+
+// CSP violation report sink. Browsers POST a small JSON document here
+// when something gets blocked by the Content-Security-Policy directives
+// above. We log it server-side via pino so admins notice via their normal
+// log pipeline; no DB write because the volume can spike (one CSP
+// breakage = N reports per page load × M users) and we don't want to
+// thrash PG. Body parsing accepts both legacy "application/csp-report"
+// and the newer "application/reports+json" content-types.
+app.post("/csp-report", {
+  config: { rateLimit: { max: 60, timeWindow: "1 minute" } },
+  // Skip CSRF: this endpoint is hit by the browser itself with no cookies
+  // (CSP reports are sent with credentials omitted by spec). Adding it to
+  // the CSRF skip list rather than the global hook check.
+}, async (req, reply) => {
+  try {
+    const body = req.body as unknown as { "csp-report"?: Record<string, unknown> } | Record<string, unknown> | Array<Record<string, unknown>>;
+    // Legacy single-event shape: { "csp-report": {...} }. New shape: { type, body, url, ... }
+    // OR an array of those. Just log the whole thing; we're not parsing the
+    // structure further (admin can grep pino logs if a real violation shows up).
+    req.log.warn({ cspReport: body, ua: req.headers["user-agent"] }, "csp_violation");
+  } catch (e) {
+    req.log.warn({ err: e }, "csp_violation_parse_failed");
+  }
+  // 204 = "I got it, don't retry". Browsers don't read the body anyway.
+  return reply.code(204).send();
+});
+// Also accept the OPTIONS preflight some browsers send before the report.
+app.options("/csp-report", { config: { rateLimit: false } }, async (_req, reply) => reply.code(204).send());
 
 // PWA rescue page. If a user's mobile browser has a stale service worker
 // from a previous crash window (cached 502 / wrong content-type / etc),
@@ -422,6 +471,10 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
 const CSRF_EXEMPT_PATHS = new Set([
   "/api/auth/login", "/api/v1/auth/login",
   "/api/auth/register", "/api/v1/auth/register",
+  // CSP violation reports are POSTed by the browser itself with no
+  // cookies (per spec credentials are omitted). No session = no CSRF
+  // surface; the endpoint just logs the report and returns 204.
+  "/csp-report",
 ]);
 app.addHook("preHandler", async (req, reply) => {
   if (!req.url.startsWith("/api/")) return;
