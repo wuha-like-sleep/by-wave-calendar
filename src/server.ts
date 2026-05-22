@@ -338,6 +338,33 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
   });
 });
 
+// ---- API security: CSRF for state-changing /api/* under session-cookie auth ----
+// SameSite=Lax already blocks cross-site cookie attachment on POST, but
+// defense-in-depth: require an X-CSRF-Token header (HMAC-bound to the
+// session) on every mutating /api/* request that's NOT using a Bearer
+// API token. Bearer auth lives in the Authorization header which the
+// browser can't auto-attach cross-origin, so CSRF doesn't apply there.
+//
+// Anonymous bootstrap routes (/auth/login, /auth/register) are exempt
+// because there's no session to protect yet.
+const CSRF_EXEMPT_PATHS = new Set([
+  "/api/auth/login", "/api/v1/auth/login",
+  "/api/auth/register", "/api/v1/auth/register",
+]);
+app.addHook("preHandler", async (req, reply) => {
+  if (!req.url.startsWith("/api/")) return;
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
+  // Strip query string for the exempt match.
+  const path = req.url.split("?")[0] || "";
+  if (CSRF_EXEMPT_PATHS.has(path)) return;
+  // Bearer token: header-only, browsers can't auto-attach. Skip.
+  const auth = String(req.headers.authorization || "");
+  if (auth.toLowerCase().startsWith("bearer ")) return;
+  // Session-cookie path: must carry CSRF. verifyCsrf sends the 403 itself.
+  const { verifyCsrf } = await import("./lib/csrf.js");
+  verifyCsrf(req, reply);
+});
+
 // Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;
 // session-cookie callers are unaffected because they have no `authVia` tag.
 app.addHook("preHandler", async (req, reply) => {
@@ -394,6 +421,7 @@ app.setErrorHandler(async (err: FastifyError, req, reply) => {
   if (err.statusCode === 429) {
     return reply.code(429).send({ error: "too_many_requests", message: err.message });
   }
+  // Always log full error server-side; never reach the user.
   req.log.error({ err }, "request_failed");
   const accept = req.headers.accept ?? "";
   if (accept.includes("text/html")) {
@@ -408,7 +436,19 @@ app.setErrorHandler(async (err: FastifyError, req, reply) => {
       message: env.NODE_ENV === "production" ? "服务器内部错误" : (err.message ?? "internal_error"),
     });
   }
-  return reply.code(err.statusCode ?? 500).send({ error: err.message ?? "internal_error" });
+  // JSON path: in production NEVER leak err.message — could contain SQL
+  // statements, file paths, stack hints, internal IPs from PG error
+  // descriptions, etc. In dev surface the message so debugging is easy.
+  // 5xx specifically: always sanitize. 4xx with status set: surface the
+  // (developer-defined) message which is already safe.
+  const status = err.statusCode ?? 500;
+  if (status >= 500) {
+    return reply.code(status).send({
+      error: "internal_error",
+      message: env.NODE_ENV === "production" ? "服务器内部错误" : (err.message ?? "internal_error"),
+    });
+  }
+  return reply.code(status).send({ error: err.message ?? "internal_error" });
 });
 
 // ---- 404 ----
