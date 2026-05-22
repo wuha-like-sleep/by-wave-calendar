@@ -6,7 +6,20 @@
 // RFC 5545 has too many edge cases (BYDAY with negative offsets, MONTHLY
 // with BYSETPOS, leap-day YEARLY) to hand-roll without subtle bugs.
 
-import { RRule, rrulestr } from "rrule";
+// rrule v2.x ships only a CommonJS build with a fake-ESM shim that doesn't
+// expose named exports correctly in Node's strict ESM mode. Native named
+// imports throw at module load:
+//   SyntaxError: Named export 'rrulestr' not found.
+// Workaround: default-import the whole module and destructure. The default
+// export is the CJS module.exports object. We also pull the *type* RRule
+// in via a type-only named import — TS strips type-only imports at
+// runtime, so this doesn't trigger the CJS-named-export crash.
+import rrulePkg from "rrule";
+import type { RRule as RRuleType } from "rrule";
+const { RRule, rrulestr } = rrulePkg as unknown as {
+  RRule: typeof RRuleType;
+  rrulestr: (s: string) => RRuleType;
+};
 
 // Soft cap on how many occurrences we'll emit per event in one expansion.
 // Prevents a malicious or malformed RRULE (e.g. FREQ=SECONDLY) from
@@ -50,13 +63,13 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
     return [{ id: event.id, startsAt: event.startsAt, endsAt: event.endsAt, isOccurrence: false }];
   }
 
-  let rule: RRule;
+  let rule: RRuleType;
   try {
     // The DB stores just the RRULE: line (e.g. "FREQ=WEEKLY;BYDAY=MO"),
     // so prefix it with DTSTART before parsing. rrulestr accepts both
     // forms but DTSTART is needed for it to anchor occurrences.
     const dtstartUtc = event.startsAt.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-    rule = rrulestr(`DTSTART:${dtstartUtc}\nRRULE:${event.rrule}`) as RRule;
+    rule = rrulestr(`DTSTART:${dtstartUtc}\nRRULE:${event.rrule}`);
   } catch {
     // Malformed RRULE — fall back to just the master. Better to show
     // something than to crash the whole calendar grid.
@@ -71,7 +84,7 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
   const starts = rule.between(expandFrom, to, true).slice(0, MAX_OCCURRENCES_PER_EVENT);
 
   const masterStartTime = event.startsAt.getTime();
-  return starts.map((start) => {
+  return starts.map((start: Date) => {
     const startMs = start.getTime();
     return {
       id: event.id,
