@@ -126,9 +126,11 @@
               <code class="text-xs text-slate-500 truncate flex-1 bg-slate-50 px-2 py-1 rounded"><%= t.url %></code>
             </div>
           </div>
-          <div class="flex gap-2 flex-shrink-0">
+          <div class="flex gap-2 flex-shrink-0 flex-wrap">
             <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-                    onclick="window.bwc.copy('<%= t.url %>')">复制</button>
+                    onclick="window.bwc.copy('<%= t.url %>')">复制 ICS</button>
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
+                    onclick="window.bwc.copy('&lt;iframe src=&quot;<%= t.url.replace('/ics/', '/embed/').replace('.ics', '') %>&quot; width=&quot;100%&quot; height=&quot;600&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;')">复制嵌入代码</button>
             <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens/<%= t.token %>/revoke" class="m-0" onsubmit="return confirm('确定撤销该订阅链接？已订阅的客户端会失效');">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">撤销</button>

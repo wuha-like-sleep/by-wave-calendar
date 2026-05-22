@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title><%= calendar.name %></title>
+  <link rel="stylesheet" href="/static/lib/toastui-calendar.min.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; color: #0f172a; }
+    .embed-toolbar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+    }
+    .embed-toolbar .title { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .embed-toolbar button {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: 4px 10px; font-size: 12px; cursor: pointer;
+    }
+    .embed-toolbar button:hover { background: #f8fafc; }
+    .embed-toolbar .period { color: #475569; font-size: 12px; min-width: 0; padding: 0 4px; }
+    #embed-cal { height: calc(100% - 41px); }
+    .powered {
+      position: fixed; bottom: 6px; right: 8px; font-size: 10px;
+      color: #94a3b8; text-decoration: none; background: rgba(255,255,255,0.85);
+      padding: 2px 6px; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="embed-toolbar">
+    <button type="button" id="btn-prev" aria-label="上一段">◀</button>
+    <button type="button" id="btn-today">今天</button>
+    <button type="button" id="btn-next" aria-label="下一段">▶</button>
+    <span class="period" id="period-label">…</span>
+    <span class="title" style="color: <%= calendar.color || '#6366f1' %>">● <%= calendar.name %></span>
+    <select id="view-select" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:12px;background:#fff;">
+      <option value="month">月</option>
+      <option value="week" selected>周</option>
+      <option value="day">日</option>
+    </select>
+  </div>
+  <div id="embed-cal"></div>
+  <a class="powered" href="<%= publicBaseUrl %>" target="_blank" rel="noopener">Powered by ByWave</a>
+
+  <script src="/static/lib/toastui-calendar.min.js"></script>
+  <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+  (function(){
+    const EVENTS = <%- JSON.stringify(events) %>;
+    const CAL_COLOR = "<%= calendar.color || '#6366f1' %>";
+    const cal = new tui.Calendar("#embed-cal", {
+      defaultView: "week",
+      useFormPopup: false,
+      useDetailPopup: true,
+      isReadOnly: true,
+      week: {
+        taskView: false, eventView: ["time", "allday"],
+        hourStart: 7, hourEnd: 23, startDayOfWeek: 1,
+        dayNames: ["周日","周一","周二","周三","周四","周五","周六"],
+        showNowIndicator: true,
+      },
+      month: { startDayOfWeek: 1, dayNames: ["日","一","二","三","四","五","六"], visibleWeeksCount: 0, isAlways6Weeks: false },
+      calendars: [{ id: "embed", name: "", backgroundColor: CAL_COLOR, borderColor: CAL_COLOR, dragBackgroundColor: CAL_COLOR, color: "#fff" }],
+    });
+    cal.createEvents(EVENTS.map(e => ({
+      id: e.id, calendarId: "embed",
+      title: e.summary, location: e.location || undefined, body: e.description || undefined,
+      start: e.allDay ? e.startsAt.slice(0,10) : e.startsAt,
+      end:   e.allDay ? e.endsAt.slice(0,10)   : e.endsAt,
+      isAllday: !!e.allDay, category: e.allDay ? "allday" : "time",
+    })));
+
+    let view = "week";
+    function updateLabel(){
+      const s = cal.getDateRangeStart().toDate();
+      const e = cal.getDateRangeEnd().toDate();
+      const fmt = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric" });
+      if (view === "month") {
+        const mid = new Date((+s + +e)/2);
+        document.getElementById("period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long" }).format(mid);
+      } else if (view === "day") {
+        document.getElementById("period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric", weekday:"long" }).format(s);
+      } else {
+        document.getElementById("period-label").textContent = `${fmt.format(s)} – ${fmt.format(e)}`;
+      }
+    }
+    document.getElementById("btn-today").addEventListener("click", () => { cal.today(); updateLabel(); });
+    document.getElementById("btn-prev").addEventListener("click", () => { cal.prev(); updateLabel(); });
+    document.getElementById("btn-next").addEventListener("click", () => { cal.next(); updateLabel(); });
+    document.getElementById("view-select").addEventListener("change", (e) => {
+      view = e.target.value; cal.changeView(view); updateLabel();
+    });
+    updateLabel();
+
+    // Iframe auto-resize: tell the parent how tall we should be so the
+    // hosting page (Notion / 个人主页) doesn't need to guess. Falls
+    // through harmlessly when not embedded (window.parent === window).
+    function emitHeight(){
+      try {
+        if (window.parent !== window) {
+          const h = document.documentElement.scrollHeight;
+          window.parent.postMessage({ type: "bwc-embed-height", height: h }, "*");
+        }
+      } catch {}
+    }
+    setTimeout(emitHeight, 200);
+    window.addEventListener("resize", () => setTimeout(emitHeight, 100));
+  })();
+  </script>
+</body>
+</html>
