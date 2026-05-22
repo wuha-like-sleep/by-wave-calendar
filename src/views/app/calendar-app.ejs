@@ -21,6 +21,12 @@
       <button type="button" data-view="week"  class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">周</button>
       <button type="button" data-view="day"   class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">日</button>
     </div>
+    <!-- Sync status chip (offline indicator + pending outbox count).
+         Hidden by default; calendar-app.js shows it when state changes. -->
+    <span id="sync-chip" class="hidden inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" title="离线/同步状态">
+      <span id="sync-chip-dot" class="inline-block h-1.5 w-1.5 rounded-full"></span>
+      <span id="sync-chip-text"></span>
+    </span>
     <button type="button" id="btn-new-event" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       <span class="hidden sm:inline">新建事件</span>
@@ -511,4 +517,7 @@
 <% const calV = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
 <% const calJs = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
 <script src="/static/lib/toastui-calendar.min.js"></script>
+<!-- Offline event store (IndexedDB cache + outbox queue) must load BEFORE
+     calendar-app.js so window.bwcStore exists when loadEvents() runs. -->
+<script src="<%= calJs %>/event-store.js?v=<%= calV %>" defer></script>
 <script src="<%= calJs %>/calendar-app.js?v=<%= calV %>" defer></script>

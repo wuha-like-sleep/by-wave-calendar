@@ -148,13 +148,24 @@
   async function loadEvents() {
     const start = cal.getDateRangeStart().toDate();
     const end = cal.getDateRangeEnd().toDate();
-    const url = `/api/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`;
     try {
-      const resp = await fetch(url, fetchOpts());
-      if (!resp.ok) throw new Error("load_failed");
-      const data = await resp.json();
+      // Go through bwcStore if available — gives us offline cache + outbox
+      // optimistic edits. Falls back to plain fetch if event-store.js
+      // didn't load (e.g. older client without IndexedDB).
+      let data;
+      if (window.bwcStore) {
+        data = await window.bwcStore.getAll({
+          from: start.toISOString(),
+          to: end.toISOString(),
+        });
+      } else {
+        const url = `/api/events?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`;
+        const resp = await fetch(url, fetchOpts());
+        if (!resp.ok) throw new Error("load_failed");
+        data = await resp.json();
+      }
       cal.clear();
-      const events = data.events
+      const events = (data.events || [])
         .filter((e) => visibleCalIds.has(e.calendarId))
         .map((e) => {
           // For all-day events the server stores UTC midnight (≈ pure date);
@@ -815,13 +826,28 @@
       }
     } catch (_e) { /* soft check — never block save on a network glitch */ }
     try {
-      const url = id ? `/api/events/${id}` : "/api/events";
-      const method = id ? "PATCH" : "POST";
-      const resp = await fetch(url, fetchOpts({ method, body: JSON.stringify(body) }));
-      if (!resp.ok) throw new Error(await resp.text());
-      closeModal("#modal-event");
-      await loadEvents();
-      window.bwc && window.bwc.toast(id ? "事件已更新" : "事件已添加", "success");
+      // Route through bwcStore when available — optimistic local update +
+      // outbox queue means the modal can close instantly even on flaky network.
+      if (window.bwcStore) {
+        await window.bwcStore.put(id ? { ...body, id } : body, body.calendarId);
+        closeModal("#modal-event");
+        await loadEvents();
+        const offline = !window.bwcStore.isOnline();
+        window.bwc && window.bwc.toast(
+          offline
+            ? (id ? "事件已暂存（离线，联网后自动同步）" : "事件已暂存（离线，联网后自动同步）")
+            : (id ? "事件已更新" : "事件已添加"),
+          "success",
+        );
+      } else {
+        const url = id ? `/api/events/${id}` : "/api/events";
+        const method = id ? "PATCH" : "POST";
+        const resp = await fetch(url, fetchOpts({ method, body: JSON.stringify(body) }));
+        if (!resp.ok) throw new Error(await resp.text());
+        closeModal("#modal-event");
+        await loadEvents();
+        window.bwc && window.bwc.toast(id ? "事件已更新" : "事件已添加", "success");
+      }
     } catch (err) {
       console.error(err);
       window.bwc && window.bwc.toast("保存失败", "error");
@@ -831,6 +857,20 @@
   $("#btn-delete-event").addEventListener("click", async () => {
     const id = $('#form-event [name="id"]').value;
     if (!id || !confirm("删除该事件？")) return;
+    // Optimistic delete via bwcStore — works offline.
+    if (window.bwcStore) {
+      try {
+        await window.bwcStore.remove(id);
+        closeModal("#modal-event");
+        await loadEvents();
+        const offline = !window.bwcStore.isOnline();
+        window.bwc && window.bwc.toast(offline ? "已标记删除（联网后同步）" : "事件已删除", "success");
+      } catch (err) {
+        console.error("delete_event_store", err);
+        window.bwc && window.bwc.toast("删除失败", "error");
+      }
+      return;
+    }
     let resp;
     try {
       // DELETE has no body — sending Content-Type: application/json without a
@@ -1183,4 +1223,41 @@
     clearTimeout(window.__bwcResize);
     window.__bwcResize = setTimeout(() => { try { cal.render(); } catch (e) {} }, 150);
   });
+
+  // ---------- Sync status chip ----------
+  // Hidden by default. Shows when offline (amber) or when there are
+  // pending operations in the outbox (blue with count). Hides itself
+  // when fully synced and online.
+  (function wireSyncChip() {
+    const chip = $("#sync-chip");
+    const dot = $("#sync-chip-dot");
+    const text = $("#sync-chip-text");
+    if (!chip || !dot || !text || !window.bwcStore) return;
+
+    async function refresh() {
+      const online = window.bwcStore.isOnline();
+      const pending = await window.bwcStore.pendingCount();
+      if (online && pending === 0) {
+        chip.classList.add("hidden");
+        return;
+      }
+      chip.classList.remove("hidden");
+      // Tailwind utility chunks instead of inline color so Purge picks them up.
+      chip.className = chip.className.replace(/bg-(?:amber|sky|emerald)-\S+|text-(?:amber|sky|emerald)-\S+/g, "").trim();
+      if (!online) {
+        chip.classList.add("bg-amber-50", "text-amber-700");
+        dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-amber-500";
+        text.textContent = pending > 0 ? `离线 · ${pending} 条待同步` : "离线";
+      } else if (pending > 0) {
+        chip.classList.add("bg-sky-50", "text-sky-700");
+        dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse";
+        text.textContent = `同步中 · ${pending}`;
+      }
+    }
+
+    window.bwcStore.onChange(refresh);
+    window.addEventListener("online", refresh);
+    window.addEventListener("offline", refresh);
+    refresh();
+  })();
 })();
