@@ -11,6 +11,94 @@
 
   function openModal(id) { $(id).classList.remove("hidden"); $(id).classList.add("flex"); }
   function closeModal(id) { $(id).classList.add("hidden"); $(id).classList.remove("flex"); }
+
+  // ---------- helpers used by event modal + drag/drop ----------
+
+  // Snap a date to the nearest 5-minute boundary. Used by:
+  //  - drag/resize end (so dropping an event on the grid doesn't lock to
+  //    Toast UI's default 30-min cell — we re-quantize to 5 min)
+  //  - the new-event "selectDateTime" path
+  function roundTo5Min(date) {
+    const STEP = 5 * 60 * 1000;
+    const d = new Date(date);
+    d.setTime(Math.round(d.getTime() / STEP) * STEP);
+    return d;
+  }
+
+  // "下一个事件" banner — finds the soonest upcoming event in the next 24h
+  // that isn't yet started, OR the currently-in-progress event if any.
+  // Caller passes the raw events array (server shape) and current ms.
+  function updateNextEventBanner(rawEvents, now) {
+    const banner = $("#next-event-banner");
+    const text = $("#next-event-text");
+    const jump = $("#next-event-jump");
+    if (!banner || !text) return;
+    const horizonMs = now + 24 * 3600 * 1000;
+    // Prefer in-progress (start <= now <= end), else soonest upcoming.
+    let inProgress = null, nextUp = null;
+    for (const e of rawEvents) {
+      const s = +new Date(e.startsAt), en = +new Date(e.endsAt);
+      if (s <= now && en > now && !inProgress) inProgress = { e, s, en };
+      else if (s > now && s < horizonMs && (!nextUp || s < nextUp.s)) nextUp = { e, s, en };
+    }
+    const target = inProgress || nextUp;
+    if (!target) { banner.classList.add("hidden"); return; }
+    const fmt = (ms) => {
+      const mins = Math.round((ms - now) / 60000);
+      if (mins < 0) return `${Math.abs(mins)} 分钟前开始`;
+      if (mins < 60) return `${mins} 分钟后开始`;
+      const hours = Math.round(mins / 60);
+      if (hours < 24) return `${hours} 小时后开始`;
+      return new Date(target.s).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    };
+    const verb = inProgress ? "进行中" : fmt(target.s);
+    text.textContent = `${target.e.summary || "(无标题)"} · ${verb}`;
+    banner.classList.remove("hidden");
+    if (jump) {
+      jump.onclick = () => {
+        try { cal.setDate(new Date(target.s)); refresh(); } catch (_e) {}
+      };
+    }
+  }
+
+  // View vs edit mode for the event modal. View = read-only display
+  // with an 编辑 button; edit = inputs enabled, 保存/删除 visible.
+  // Set on every openEventModal call; new-event flow goes straight to
+  // edit, click-existing goes to view first.
+  function setModalMode(mode) {
+    const form = $("#form-event");
+    if (!form) return;
+    const editing = mode === "edit";
+    // Toggle ALL inputs / selects / textareas inside the form.
+    form.querySelectorAll("input, select, textarea").forEach((el) => {
+      // Hidden inputs (id / attendees JSON string) must stay enabled
+      // so the form submits with their values.
+      if (el.type === "hidden") return;
+      el.disabled = !editing;
+      el.classList.toggle("opacity-70", !editing);
+      el.classList.toggle("cursor-not-allowed", !editing);
+    });
+    // Footer button visibility.
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const cancelBtn = form.querySelector('.modal-close.rounded-lg');
+    const deleteBtn = $("#btn-delete-event");
+    const enterEditBtn = $("#btn-enter-edit");
+    if (submitBtn) submitBtn.classList.toggle("hidden", !editing);
+    if (cancelBtn) {
+      cancelBtn.classList.toggle("hidden", false);
+      // In view mode "取消" is misleading — there's nothing to cancel.
+      // Swap the label to "关闭" without changing the click behavior.
+      cancelBtn.textContent = editing ? "取消" : "关闭";
+    }
+    if (deleteBtn) deleteBtn.classList.toggle("hidden", !editing || !form.querySelector('[name="id"]').value);
+    if (enterEditBtn) enterEditBtn.classList.toggle("hidden", editing);
+    // Title
+    const titleEl = $("#modal-event-title");
+    if (titleEl) {
+      const isExisting = !!form.querySelector('[name="id"]').value;
+      titleEl.textContent = editing ? (isExisting ? "编辑事件" : "新建事件") : "事件详情";
+    }
+  }
   $$(".modal-close").forEach((b) => b.addEventListener("click", (e) => {
     const m = e.target.closest("[id^=modal-]");
     if (m) closeModal("#" + m.id);
@@ -165,29 +253,48 @@
         data = await resp.json();
       }
       cal.clear();
-      const events = (data.events || [])
-        .filter((e) => visibleCalIds.has(e.calendarId))
-        .map((e) => {
-          // For all-day events the server stores UTC midnight (≈ pure date);
-          // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
-          // the user's local timezone boundary.
-          const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
-          const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
-          return {
-            id: e.id,
-            calendarId: e.calendarId,
-            title: e.summary,
-            location: e.location || undefined,
-            body: e.description || undefined,
-            start,
-            end,
-            isAllday: !!e.allDay,
-            category: e.allDay ? "allday" : "time",
-          };
-        });
+      const now = Date.now();
+      // Track raw events (with parsed Date) so we can pick the "next up" event
+      // for the banner without re-parsing.
+      const rawEvents = (data.events || []).filter((e) => visibleCalIds.has(e.calendarId));
+      const events = rawEvents.map((e) => {
+        // For all-day events the server stores UTC midnight (≈ pure date);
+        // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
+        // the user's local timezone boundary.
+        const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
+        const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
+        // Past-event styling: events whose end is already in the past get
+        // muted colors so the user's eye is drawn to upcoming + in-progress.
+        // We don't move them out of the grid (still browsable in history),
+        // just dim them.
+        const endMs = +new Date(e.endsAt);
+        const isPast = endMs < now;
+        const style = isPast
+          ? {
+              backgroundColor: "#e2e8f0",
+              borderColor: "#cbd5e1",
+              dragBackgroundColor: "#cbd5e1",
+              color: "#64748b",
+            }
+          : {};
+        return {
+          id: e.id,
+          calendarId: e.calendarId,
+          title: e.summary,
+          location: e.location || undefined,
+          body: e.description || undefined,
+          start,
+          end,
+          isAllday: !!e.allDay,
+          category: e.allDay ? "allday" : "time",
+          ...style,
+        };
+      });
       cal.createEvents(events);
       // Force a render so the red now-line redraws after we just cleared.
       try { cal.render(); } catch (_e) {}
+      // Update the "下一个事件" banner from the same data.
+      updateNextEventBanner(rawEvents, now);
     } catch (err) {
       console.error(err);
       window.bwc && window.bwc.toast("加载事件失败", "error");
@@ -530,6 +637,66 @@
   }
   allDayCheckbox.addEventListener("change", syncAllDayUI);
 
+  // ---- "编辑" button in view-mode modal switches to edit mode ----
+  const enterEditBtn = $("#btn-enter-edit");
+  if (enterEditBtn) {
+    enterEditBtn.addEventListener("click", () => {
+      const form = $("#form-event");
+      const hasId = !!form.querySelector('[name="id"]').value;
+      setModalMode("edit");
+      // The delete button should be visible in edit mode for existing events.
+      $("#btn-delete-event").classList.toggle("hidden", !hasId);
+    });
+  }
+
+  // ---- Start/end time linkage ----
+  // When the user changes 开始时间 in the modal, shift 结束时间 by the same
+  // delta so the duration is preserved. Without this you have to manually
+  // re-pick the end every time you bump the start by 10 minutes.
+  //
+  // Tracks the previously-known startsAt so we can compute the delta on
+  // each change. Reset every time the modal opens (in openEventModal).
+  const startsAtInput = $('#form-event [name="startsAt"]');
+  const endsAtInput = $('#form-event [name="endsAt"]');
+  const startsAtDateInput = $('#form-event [name="startsAtDate"]');
+  const endsAtDateInput = $('#form-event [name="endsAtDate"]');
+  let lastStartsAt = null;       // datetime-local
+  let lastStartsAtDate = null;   // date
+  function parseLocalDateTime(s) {
+    // datetime-local has no timezone; treat as local.
+    if (!s) return null;
+    return new Date(s);
+  }
+  function fmtLocalDateTime(d) {
+    if (!d || isNaN(+d)) return "";
+    return toLocalDateTimeValue(d);
+  }
+  if (startsAtInput && endsAtInput) {
+    startsAtInput.addEventListener("change", () => {
+      const newStart = parseLocalDateTime(startsAtInput.value);
+      const oldStart = parseLocalDateTime(lastStartsAt);
+      const oldEnd = parseLocalDateTime(endsAtInput.value);
+      lastStartsAt = startsAtInput.value;
+      if (!newStart || !oldStart || !oldEnd) return;
+      const delta = +newStart - +oldStart;
+      if (delta === 0) return;
+      endsAtInput.value = fmtLocalDateTime(new Date(+oldEnd + delta));
+    });
+  }
+  if (startsAtDateInput && endsAtDateInput) {
+    startsAtDateInput.addEventListener("change", () => {
+      const newStart = startsAtDateInput.value ? new Date(startsAtDateInput.value + "T00:00") : null;
+      const oldStart = lastStartsAtDate ? new Date(lastStartsAtDate + "T00:00") : null;
+      const oldEnd = endsAtDateInput.value ? new Date(endsAtDateInput.value + "T00:00") : null;
+      lastStartsAtDate = startsAtDateInput.value;
+      if (!newStart || !oldStart || !oldEnd) return;
+      const deltaDays = Math.round((+newStart - +oldStart) / 86400000);
+      if (!deltaDays) return;
+      const shifted = new Date(+oldEnd + deltaDays * 86400000);
+      endsAtDateInput.value = toLocalDateValue(shifted);
+    });
+  }
+
   function openEventModal(payload) {
     const form = $("#form-event");
     form.reset();
@@ -542,6 +709,11 @@
     form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(payload.endsAt || new Date(Date.now() + 3600_000));
     form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(payload.startsAt || new Date());
     form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(payload.endsAt || new Date());
+    // Remember the just-set start values so the change-listener can
+    // compute deltas correctly (we want to track delta from the
+    // user's most-recent typed value, not from form.reset()'s blank).
+    lastStartsAt = form.querySelector('[name="startsAt"]').value;
+    lastStartsAtDate = form.querySelector('[name="startsAtDate"]').value;
     form.querySelector('[name="allDay"]').checked = !!payload.allDay;
     form.querySelector('[name="category"]').value = payload.category || "";
     // Attendees: hidden field holds the comma-joined list (preserved across
@@ -581,8 +753,12 @@
       }
     }
     syncAllDayUI();
-    $("#modal-event-title").textContent = payload.id ? "编辑事件" : "新建事件";
-    $("#btn-delete-event").classList.toggle("hidden", !payload.id);
+    // Mode: existing events open in VIEW mode (read-only with 编辑 button);
+    // new events go straight to EDIT mode. payload.forceEdit lets internal
+    // callers override (e.g. the 编辑 button itself).
+    const modeFlag = (payload.id && !payload.forceEdit) ? "view" : "edit";
+    setModalMode(modeFlag);
+    $("#btn-delete-event").classList.toggle("hidden", !payload.id || modeFlag !== "edit");
     openModal("#modal-event");
     // Clear the natural-language input every time the modal opens —
     // stale text from a previous session is more confusing than helpful.
@@ -739,7 +915,11 @@
   $("#btn-new-event").addEventListener("click", () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) }));
 
   cal.on("selectDateTime", (info) => {
-    openEventModal({ startsAt: info.start, endsAt: info.end, allDay: info.isAllday });
+    // Quantize the click-drag selection to 5 minutes — Toast UI by default
+    // snaps to 30-minute cells which is too coarse for short meetings.
+    const start = info.isAllday ? info.start : roundTo5Min(info.start);
+    const end = info.isAllday ? info.end : roundTo5Min(info.end);
+    openEventModal({ startsAt: start, endsAt: end, allDay: info.isAllday });
     cal.clearGridSelections();
   });
 
@@ -1197,6 +1377,11 @@
 
   cal.on("beforeUpdateEvent", async ({ event, changes }) => {
     try {
+      // Snap drag/resize to 5-minute boundaries. Toast UI Calendar's grid
+      // snaps to its hour-cell subdivisions (30 min default); we want finer
+      // control without making the grid itself visually busier.
+      if (changes.start && !event.isAllday) changes.start = roundTo5Min(changes.start);
+      if (changes.end && !event.isAllday) changes.end = roundTo5Min(changes.end);
       const startsAt = changes.start ? new Date(changes.start).toISOString() : undefined;
       const endsAt = changes.end ? new Date(changes.end).toISOString() : undefined;
       const body = {};

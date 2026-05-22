@@ -141,8 +141,16 @@
     </aside>
 
     <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
-    <section class="flex-1 min-h-0 min-w-0 bg-white">
-      <div id="calendar" style="height: 100%; min-height: calc(100vh - 14rem);"></div>
+    <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
+      <!-- "下一个事件" banner. Hidden when no upcoming event in next 24h
+           OR the next event is the one currently in progress. JS toggles
+           the .hidden class + fills in #next-event-text. -->
+      <div id="next-event-banner" class="hidden mx-3 sm:mx-5 mt-2 flex items-center gap-2 rounded-lg border border-brand-100 bg-gradient-to-r from-brand-50/70 to-violet-50/70 px-3 py-1.5 text-sm">
+        <span class="text-base">🔔</span>
+        <span id="next-event-text" class="flex-1 min-w-0 text-slate-700 truncate"></span>
+        <button type="button" id="next-event-jump" class="text-xs text-brand-700 hover:text-brand-800 font-medium flex-shrink-0">跳转</button>
+      </div>
+      <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem);"></div>
     </section>
   </div>
 </div>
@@ -152,9 +160,18 @@
   <div class="bg-white w-full sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900">新建事件</h3>
-      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-      </button>
+      <div class="flex items-center gap-2">
+        <!-- "进入编辑" toggle, only visible when modal opens in view mode
+             (i.e. user clicked an existing event). Edit mode hides it. -->
+        <button type="button" id="btn-enter-edit"
+          class="hidden inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+          编辑
+        </button>
+        <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>
     <form id="form-event" class="p-5 space-y-4">
       <input type="hidden" name="id" />
@@ -233,12 +250,12 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="time-row">
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1">开始</label>
-          <input type="datetime-local" name="startsAt" required
+          <input type="datetime-local" name="startsAt" required step="300"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1">结束</label>
-          <input type="datetime-local" name="endsAt" required
+          <input type="datetime-local" name="endsAt" required step="300"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
