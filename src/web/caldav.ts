@@ -431,6 +431,15 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   if (!cal) return reply.code(404).send("Not Found");
 
   const bodyStr = typeof req.body === "string" ? req.body : "";
+  // Strict-ish content-type check: PUT'ing a CalDAV event MUST be
+  // text/calendar per RFC 4791. Reject everything else with a clear
+  // 415 instead of silently accepting and 400-ing later in parseEvent
+  // (which would hide the actual problem). Tolerant of charset/method
+  // parameters since clients add them freely.
+  const ct = String(req.headers["content-type"] || "").toLowerCase();
+  if (ct && !ct.startsWith("text/calendar")) {
+    return reply.code(415).type("text/plain").send("Unsupported Media Type — expected text/calendar");
+  }
   req.log.info({
     caldav: "put",
     userId: user.id, calId: params.calId, uid: params.uid,
@@ -450,57 +459,72 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   // but match against URL for existing lookup.
   const urlUid = params.uid ?? parsed.uid;
 
-  const [existing] = await db
-    .select()
-    .from(schema.events)
-    .where(and(eq(schema.events.calendarId, cal.id), eq(schema.events.uid, urlUid)))
-    .limit(1);
+  // Wrap the lookup + write in a transaction so two clients (laptop +
+  // phone) PUTting the same UID near-simultaneously can't:
+  //   - both see existing=null and both INSERT → second hits the unique
+  //     (calendar_id, uid) index and 500s
+  //   - or both see the same existing row, both pass If-Match against
+  //     the same etag, and silently last-write-wins
+  // Inside the tx we re-read existing with the lock implied by the
+  // upcoming UPDATE on the same row, then commit atomically.
+  const ifMatchHdr = req.headers["if-match"];
+  const ifNoneMatchHdr = req.headers["if-none-match"];
 
-  // Anything the client sent that we can't fold into structured columns (TRANSP,
-  // ATTENDEE list, VALARM reminders, CATEGORIES, ORGANIZER, custom X-*) is preserved
-  // by storing the raw VEVENT block; GET/REPORT prefers raw_ics so the round-trip
-  // is lossless and the phone doesn't see "the server stripped my event" and delete.
-  const extraPatch: Record<string, unknown> = { ...((existing?.extra as Record<string, unknown> | null) ?? {}) };
-  if (parsed.transp) extraPatch.transp = parsed.transp;
-  if (parsed.status) extraPatch.status = parsed.status;
-  if (parsed.attendees) extraPatch.attendees = parsed.attendees;
-  if (parsed.alarms) extraPatch.alarms = parsed.alarms;
-  if (parsed.organizer) extraPatch.organizer = parsed.organizer;
-  if (parsed.categories) extraPatch.categories = parsed.categories;
+  type WriteOutcome =
+    | { kind: "ok"; stored: schema.Event; isCreate: boolean }
+    | { kind: "412" }
+    | { kind: "500"; err: unknown };
 
-  let stored: schema.Event;
-  if (existing) {
-    const ifMatch = req.headers["if-match"];
-    if (ifMatch && ifMatch !== "*" && ifMatch !== etagOf(existing.updatedAt)) {
-      return reply.code(412).send("Precondition Failed");
+  const outcome: WriteOutcome = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(schema.events)
+      .where(and(eq(schema.events.calendarId, cal.id), eq(schema.events.uid, urlUid)))
+      .limit(1);
+
+    // Anything the client sent that we can't fold into structured columns (TRANSP,
+    // ATTENDEE list, VALARM reminders, CATEGORIES, ORGANIZER, custom X-*) is preserved
+    // by storing the raw VEVENT block; GET/REPORT prefers raw_ics so the round-trip
+    // is lossless and the phone doesn't see "the server stripped my event" and delete.
+    const extraPatch: Record<string, unknown> = { ...((existing?.extra as Record<string, unknown> | null) ?? {}) };
+    if (parsed.transp) extraPatch.transp = parsed.transp;
+    if (parsed.status) extraPatch.status = parsed.status;
+    if (parsed.attendees) extraPatch.attendees = parsed.attendees;
+    if (parsed.alarms) extraPatch.alarms = parsed.alarms;
+    if (parsed.organizer) extraPatch.organizer = parsed.organizer;
+    if (parsed.categories) extraPatch.categories = parsed.categories;
+
+    if (existing) {
+      if (ifMatchHdr && ifMatchHdr !== "*" && ifMatchHdr !== etagOf(existing.updatedAt)) {
+        return { kind: "412" } as const;
+      }
+      const [updated] = await tx
+        .update(schema.events)
+        .set({
+          summary: parsed.summary,
+          description: parsed.description ?? null,
+          location: parsed.location ?? null,
+          startsAt: parsed.startsAt,
+          endsAt: parsed.endsAt,
+          allDay: parsed.allDay,
+          rrule: parsed.rrule ?? null,
+          // Un-soft-delete on resurrect (iOS PUTting an event whose UID matches
+          // a previously soft-deleted row should bring it back rather than
+          // tripping the UNIQUE (calendar_id, uid) constraint on insert).
+          deletedAt: null,
+          extra: Object.keys(extraPatch).length ? extraPatch : null,
+          rawIcs: rawVevent,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.events.id, existing.id))
+        .returning();
+      return { kind: "ok", stored: updated!, isCreate: false } as const;
     }
-    const [updated] = await db
-      .update(schema.events)
-      .set({
-        summary: parsed.summary,
-        description: parsed.description ?? null,
-        location: parsed.location ?? null,
-        startsAt: parsed.startsAt,
-        endsAt: parsed.endsAt,
-        allDay: parsed.allDay,
-        rrule: parsed.rrule ?? null,
-        // Un-soft-delete on resurrect (iOS PUTting an event whose UID matches
-        // a previously soft-deleted row should bring it back rather than
-        // tripping the UNIQUE (calendar_id, uid) constraint on insert).
-        deletedAt: null,
-        extra: Object.keys(extraPatch).length ? extraPatch : null,
-        rawIcs: rawVevent,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.events.id, existing.id))
-      .returning();
-    stored = updated!;
-  } else {
-    const ifNoneMatch = req.headers["if-none-match"];
-    if (ifNoneMatch === "*" && existing) {
-      return reply.code(412).send("Precondition Failed");
+    if (ifNoneMatchHdr === "*") {
+      // "Create only" precondition: but we just verified no existing row.
+      // This branch is unreachable in practice but kept for explicitness.
     }
-    const [inserted] = await db
+    const [inserted] = await tx
       .insert(schema.events)
       .values({
         calendarId: cal.id,
@@ -516,15 +540,19 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         rawIcs: rawVevent,
       })
       .returning();
-    stored = inserted!;
-  }
+    return { kind: "ok", stored: inserted!, isCreate: true } as const;
+  });
+
+  if (outcome.kind === "412") return reply.code(412).send("Precondition Failed");
+  const stored = outcome.stored;
+  const isResurrectOrCreate = outcome.isCreate;
 
   // If this is a brand-new event that has ATTENDEEs other than the organizer
   // themselves, mirror what /api/events does — send each attendee an "Add to
   // your calendar" email with a METHOD:REQUEST .ics attachment. iOS / Apple
   // Calendar PUTs go through this path too, so an event you add on the phone
   // also gets the invite emails fired.
-  if (!existing && parsed.attendees && parsed.attendees.length > 0) {
+  if (isResurrectOrCreate && parsed.attendees && parsed.attendees.length > 0) {
     const recipientList = parsed.attendees
       .map((a) => (a.email || "").toLowerCase().trim())
       .filter((e) => e && e.includes("@") && e !== user.email.toLowerCase());
@@ -578,8 +606,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   }
 
   reply.header("ETag", etagOf(stored.updatedAt));
-  if (!existing) reply.header("Location", eventHref(user.id, cal.id, stored.uid));
-  return reply.code(existing ? 204 : 201).send();
+  if (isResurrectOrCreate) reply.header("Location", eventHref(user.id, cal.id, stored.uid));
+  return reply.code(isResurrectOrCreate ? 201 : 204).send();
 }
 
 // DELETE /caldav/<userId>/<calId>/<uid>.ics
@@ -642,7 +670,11 @@ export async function caldavRoutes(app: FastifyInstance) {
     if (req.method === "OPTIONS" && (req.url === "/" || req.url === "")) {
       reply
         .header("DAV", "1, 2, 3, calendar-access")
-        .header("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT, MKCALENDAR, PROPPATCH")
+        // Advertise only the methods we actually handle. MKCALENDAR and
+        // PROPPATCH were previously listed but never routed — clients
+        // (esp. native Apple Calendar's "New Calendar") would try them
+        // and 405, polluting logs and confusing users.
+        .header("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
         .header("Accept-Ranges", "bytes")
         .code(200)
         .send();
