@@ -632,6 +632,7 @@ export async function adminRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       activeNav: "/admin/security",
       settings,
+      publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
     });
   });
 
@@ -646,6 +647,7 @@ export async function adminRoutes(app: FastifyInstance) {
         lockoutThreshold: z.coerce.number().int().min(1).max(100),
         lockoutMinutes: z.coerce.number().int().min(1).max(10080),
         forceAdminMfa: z.string().optional(),
+        embedEnabled: z.string().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -657,6 +659,7 @@ export async function adminRoutes(app: FastifyInstance) {
       lockoutThreshold: body.data.lockoutThreshold,
       lockoutMinutes: body.data.lockoutMinutes,
       forceAdminMfa: body.data.forceAdminMfa === "on",
+      embedEnabled: body.data.embedEnabled === "on",
     });
     return reply.redirect("/admin/security?success=" + encodeURIComponent("安全设置已保存"));
   });

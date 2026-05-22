@@ -3,6 +3,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { buildIcsFeed } from "../services/ics.js";
 import { env } from "../env.js";
+import { getSettings } from "../lib/site_settings.js";
 
 export async function icsRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>("/ics/:token", async (req, reply) => {
@@ -56,6 +57,12 @@ export async function icsRoutes(app: FastifyInstance) {
   // sees the contents. Renders a stripped-down Toast UI Calendar in an
   // iframe-safe HTML page (no nav, no toolbar chrome from layout.ejs).
   app.get<{ Params: { token: string } }>("/embed/:token", async (req, reply) => {
+    // Site-wide kill switch from /admin/security. When off, /embed/* is
+    // indistinguishable from "token doesn't exist" — 404 with no extra
+    // info so we don't accidentally leak that the feature ever existed.
+    const settings = await getSettings();
+    if (!settings.embedEnabled) return reply.code(404).type("text/plain").send("Not Found");
+
     const token = req.params.token.replace(/\.html$/i, "");
     if (!token || token.length < 8) return reply.code(404).type("text/plain").send("Not Found");
 

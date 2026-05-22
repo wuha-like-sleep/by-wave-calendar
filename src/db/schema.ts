@@ -88,6 +88,10 @@ export const siteSettings = pgTable("site_settings", {
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),
+  // When false, /embed/<token> returns 404 site-wide. Admin can flip this
+  // off if they don't want third-party sites embedding the calendar iframe.
+  // Doesn't affect the underlying ICS share — those still work via /ics/.
+  embedEnabled: boolean("embed_enabled").notNull().default(true),
   // VAPID key pair for Web Push. Generated lazily on first /admin/push
   // visit; persisted so push subscriptions stay valid across restarts.
   vapidPublicKey: text("vapid_public_key"),
