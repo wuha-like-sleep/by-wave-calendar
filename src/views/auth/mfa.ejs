@@ -16,7 +16,7 @@
       <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">验证</button>
     </form>
 
-    <form method="post" action="/logout" class="mt-6 text-center">
+    <form method="post" action="/sign-out" class="mt-6 text-center">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <button type="submit" class="text-sm text-slate-500 hover:text-slate-700">取消并登出</button>
     </form>

@@ -38,9 +38,9 @@
     <% } else if (!emailMatches) { %>
       <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 mb-4">
         当前登录账号是 <strong><%= user.email %></strong>，不匹配邀请的邮箱 <strong><%= invitation.email %></strong>。<br/>
-        请先<a href="/logout-then-login" class="underline">退出登录</a>，用 <%= invitation.email %> 重新登录。
+        请先<a href="/sign-out?next=/login" class="underline">退出登录</a>，用 <%= invitation.email %> 重新登录。
       </div>
-      <form method="post" action="/logout">
+      <form method="post" action="/sign-out">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit" class="w-full inline-flex justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">退出当前账号</button>
       </form>

@@ -527,21 +527,39 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/verify-email", { success: "新的验证码已发送" });
   });
 
-  app.post("/logout", async (req, reply) => {
+  // Logout handler — shared by two URL surfaces.
+  //
+  // We register at BOTH /logout and /sign-out because 宝塔 / 阿里云 / 各种
+  // WAF often have default rules that block the literal "/logout" path
+  // (CSRF-paranoid rule false-positive), returning 444. Hosters can't
+  // always disable WAF rules, so we ship a safe alternative.
+  //
+  // POST requires CSRF; GET is intentionally idempotent (URL-bar flow,
+  // service-worker fetch, etc.) — the worst a CSRF "attack" can do is
+  // log the user out, which is the same outcome they were aiming at.
+  const doLogoutPost = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!verifyCsrf(req, reply)) return;
     await destroySession(req, reply);
     clearThemeCookies(reply);
     return reply.redirect("/");
-  });
-  // GET /logout for "type it in the URL bar" flow. Idempotent (just destroys
-  // the session and clears cookies), so no CSRF protection — the worst a
-  // hostile site can do via image/link tag is log you out, which is the
-  // same outcome you wanted anyway.
-  app.get("/logout", async (req, reply) => {
+  };
+  const doLogoutGet = async (req: FastifyRequest, reply: FastifyReply) => {
     await destroySession(req, reply);
     clearThemeCookies(reply);
-    return reply.redirect("/");
-  });
+    // Optional ?next= for "log out then go to <page>" flows (e.g. the
+    // invite/accept page wanting to land the user on /login afterwards).
+    // Strict relative-path validation — must start with "/" and not "//"
+    // (which would be a protocol-relative URL → open redirect).
+    const next = typeof (req.query as { next?: string }).next === "string"
+      ? (req.query as { next: string }).next
+      : "";
+    const safe = /^\/[^/]/.test(next) ? next : "/";
+    return reply.redirect(safe);
+  };
+  app.post("/logout", doLogoutPost);
+  app.get("/logout", doLogoutGet);
+  app.post("/sign-out", doLogoutPost);
+  app.get("/sign-out", doLogoutGet);
 
   // -------- Authed app --------
   // Main calendar view (Google/Synology-style grid + sidebar).

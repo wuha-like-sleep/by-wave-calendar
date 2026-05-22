@@ -21,7 +21,7 @@
         </nav>
         <div class="flex items-center gap-2">
           <span class="hidden sm:inline text-sm text-slate-500"><%= user.displayName || user.email %></span>
-          <form method="post" action="/logout" class="m-0">
+          <form method="post" action="/sign-out" class="m-0">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
             <button type="submit" class="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50">退出</button>
           </form>
