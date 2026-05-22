@@ -121,20 +121,29 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get("/admin/sso", async (req, reply) => {
+  // SSO management. Dual-registered at /admin/sso and /admin/idp because
+  // 宝塔 WAF blocks the "sso" substring outright (returns 444). /admin/idp
+  // is the working path; /admin/sso kept around for users who whitelist
+  // the original. All internal redirects target /admin/idp so the post-
+  // submit URL never hits the WAF.
+  const ssoIndex = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     const providers = await listAllProviders();
     return reply.view("admin/sso", {
       title: "SSO · 管理后台",
       user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
-      activeNav: "/admin/sso",
+      activeNav: "/admin/idp",
       providers,
-      callbackUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/sso/callback`,
+      // Tell admins to register THIS callback URL with the IdP. The /auth/sso
+      // variant won't work behind WAF, so we surface the safer one.
+      callbackUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/idp/callback`,
     });
-  });
+  };
+  app.get("/admin/sso", ssoIndex);
+  app.get("/admin/idp", ssoIndex);
 
-  app.post("/admin/sso/providers", async (req, reply) => {
+  const ssoCreateProvider = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
@@ -148,25 +157,27 @@ export async function adminRoutes(app: FastifyInstance) {
       sortOrder: z.coerce.number().int().default(0),
     }).safeParse(req.body);
     if (!body.success) {
-      return reply.redirect("/admin/sso?error=" + encodeURIComponent("参数无效：" + body.error.errors[0]?.message));
+      return reply.redirect("/admin/idp?error=" + encodeURIComponent("参数无效：" + body.error.errors[0]?.message));
     }
     try {
       await createProvider(body.data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
-      return reply.redirect("/admin/sso?error=" + encodeURIComponent(`新增失败：${msg.includes("duplicate") ? "slug 已存在" : msg}`));
+      return reply.redirect("/admin/idp?error=" + encodeURIComponent(`新增失败：${msg.includes("duplicate") ? "slug 已存在" : msg}`));
     }
-    return reply.redirect("/admin/sso?success=" + encodeURIComponent(`已添加「${body.data.label}」`));
-  });
+    return reply.redirect("/admin/idp?success=" + encodeURIComponent(`已添加「${body.data.label}」`));
+  };
+  app.post("/admin/sso/providers", ssoCreateProvider);
+  app.post("/admin/idp/providers", ssoCreateProvider);
 
-  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id", async (req, reply) => {
+  const ssoUpdateProvider = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
-    if (!id.success) return reply.redirect("/admin/sso");
+    if (!id.success) return reply.redirect("/admin/idp");
     const prov = await getProviderById(id.data);
-    if (!prov) return reply.redirect("/admin/sso?error=" + encodeURIComponent("提供方不存在"));
+    if (!prov) return reply.redirect("/admin/idp?error=" + encodeURIComponent("提供方不存在"));
     const body = z.object({
       issuerUrl: z.string().url(),
       clientId: z.string().min(1).max(200),
@@ -175,7 +186,7 @@ export async function adminRoutes(app: FastifyInstance) {
       enabled: z.string().optional().transform((v) => v === "on"),
       sortOrder: z.coerce.number().int().default(0),
     }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/admin/sso?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return reply.redirect("/admin/idp?error=" + encodeURIComponent("参数无效"));
     const patch: Parameters<typeof updateProvider>[1] = {
       issuerUrl: body.data.issuerUrl,
       clientId: body.data.clientId,
@@ -185,18 +196,22 @@ export async function adminRoutes(app: FastifyInstance) {
     };
     if (body.data.clientSecret && body.data.clientSecret.trim()) patch.clientSecret = body.data.clientSecret.trim();
     await updateProvider(id.data, patch);
-    return reply.redirect("/admin/sso?success=" + encodeURIComponent(`已更新「${body.data.label}」`));
-  });
+    return reply.redirect("/admin/idp?success=" + encodeURIComponent(`已更新「${body.data.label}」`));
+  };
+  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id", ssoUpdateProvider);
+  app.post<{ Params: { id: string } }>("/admin/idp/providers/:id", ssoUpdateProvider);
 
-  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id/delete", async (req, reply) => {
+  const ssoDeleteProvider = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
-    if (!id.success) return reply.redirect("/admin/sso");
+    if (!id.success) return reply.redirect("/admin/idp");
     await deleteProvider(id.data);
-    return reply.redirect("/admin/sso?success=" + encodeURIComponent("已删除"));
-  });
+    return reply.redirect("/admin/idp?success=" + encodeURIComponent("已删除"));
+  };
+  app.post<{ Params: { id: string } }>("/admin/sso/providers/:id/delete", ssoDeleteProvider);
+  app.post<{ Params: { id: string } }>("/admin/idp/providers/:id/delete", ssoDeleteProvider);
 
   app.post("/admin/settings", async (req, reply) => {
     const user = await requireAdmin(req, reply);
@@ -246,7 +261,7 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/smtp?success=" + encodeURIComponent("SMTP 配置已保存"));
   });
 
-  app.post("/admin/sso/keycloak", async (req, reply) => {
+  const ssoKeycloakLegacy = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
@@ -257,18 +272,19 @@ export async function adminRoutes(app: FastifyInstance) {
       clientSecret: z.string().max(400).optional().transform((v) => v?.trim() || null),
       label: z.string().max(100).optional().transform((v) => v?.trim() || "使用 SSO 登录"),
     }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/admin/sso?error=" + encodeURIComponent("SSO 参数无效"));
+    if (!body.success) return reply.redirect("/admin/idp?error=" + encodeURIComponent("SSO 参数无效"));
     const patch: Parameters<typeof updateSettings>[0] = {
       ssoKeycloakEnabled: body.data.enabled,
       ssoKeycloakIssuerUrl: body.data.issuerUrl,
       ssoKeycloakClientId: body.data.clientId,
       ssoKeycloakLabel: body.data.label,
     };
-    // Only update secret if a non-empty value was submitted, so unchanged secrets aren't wiped.
     if (body.data.clientSecret) patch.ssoKeycloakClientSecret = body.data.clientSecret;
     await updateSettings(patch);
-    return reply.redirect("/admin/sso?success=" + encodeURIComponent("SSO 设置已保存"));
-  });
+    return reply.redirect("/admin/idp?success=" + encodeURIComponent("SSO 设置已保存"));
+  };
+  app.post("/admin/sso/keycloak", ssoKeycloakLegacy);
+  app.post("/admin/idp/keycloak", ssoKeycloakLegacy);
 
   // ---------- Logo upload ----------
   app.post("/admin/logo", async (req, reply) => {

@@ -1,4 +1,4 @@
-<%- include('_nav', { activeNav: '/admin/sso' }) %>
+<%- include('_nav', { activeNav: '/admin/idp' }) %>
 
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">SSO 登录方式</h1>
 <p class="text-sm text-slate-500 mb-4">可以添加多个 OIDC 提供方（Keycloak / Auth0 / Okta / Google Workspace / 飞书 等），登录页会为每个启用项渲染一个按钮。SSO 登录的账号自动跳过邮箱验证。</p>
@@ -31,7 +31,7 @@
               </div>
               <span class="text-xs text-slate-400">展开编辑 ▾</span>
             </summary>
-            <form method="post" action="/admin/sso/providers/<%= p.id %>" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form method="post" action="/admin/idp/providers/<%= p.id %>" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
@@ -64,7 +64,7 @@
                 <span class="text-slate-700">启用（关闭后登录页不显示该按钮）</span>
               </label>
               <div class="sm:col-span-2 flex justify-between items-center pt-2 border-t border-slate-100">
-                <form method="post" action="/admin/sso/providers/<%= p.id %>/delete"
+                <form method="post" action="/admin/idp/providers/<%= p.id %>/delete"
                       onsubmit="return confirm('确定删除 <%= p.label %>？删除后该按钮立即消失。')">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除提供方</button>
@@ -81,7 +81,7 @@
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-4">添加新提供方</h2>
-  <form method="post" action="/admin/sso/providers" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  <form method="post" action="/admin/idp/providers" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="text-sm">
       <span class="block font-medium text-slate-700 mb-1">slug <span class="text-xs text-slate-400">(URL 标识，如 <code>keycloak</code> / <code>okta</code> / <code>google</code>)</span></span>

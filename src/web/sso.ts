@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -20,22 +20,31 @@ import { hashPassword } from "../lib/password.js";
 
 const STATE_COOKIE = "bwc_sso_state";
 
-// Keep redirect URI provider-agnostic so existing IdP configs keep working
-// after the multi-provider refactor — provider slug rides in the state cookie.
+// Redirect URI used in the OIDC dance. We deliberately use /auth/idp/...
+// instead of /auth/sso/... because 宝塔 / 阿里云 / 等 WAF 默认规则把
+// "sso" 当成敏感关键字直接 444 拦截 (拦掉 IdP 回调 = SSO 流程整个废掉).
+// Keeps the old /auth/sso/* paths registered too so previously-configured
+// IdPs that already point to /auth/sso/callback keep working IF the
+// user whitelists /auth/sso in their WAF; new providers should use the
+// /auth/idp variant.
 function redirectUri(): string {
-  return `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/sso/callback`;
+  return `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/idp/callback`;
 }
 
 export async function ssoRoutes(app: FastifyInstance) {
   // Legacy entry point (only one Keycloak): pick the first enabled provider,
   // or 404 if SSO isn't enabled. Keeps old "use SSO login" buttons working.
-  app.get("/auth/sso/login", async (_req, reply) => {
+  // Dual-registered on /auth/sso and /auth/idp so the in-app button works
+  // even when the WAF blocks the "sso" variant.
+  const handleLegacyLogin = async (_req: FastifyRequest, reply: FastifyReply) => {
     const list = await listEnabledProvidersPublic();
     if (list.length === 0) return reply.code(404).type("text/plain").send("SSO not enabled");
-    return reply.redirect(`/auth/sso/${encodeURIComponent(list[0]!.slug)}/login`);
-  });
+    return reply.redirect(`/auth/idp/${encodeURIComponent(list[0]!.slug)}/login`);
+  };
+  app.get("/auth/sso/login", handleLegacyLogin);
+  app.get("/auth/idp/login", handleLegacyLogin);
 
-  app.get<{ Params: { slug: string } }>("/auth/sso/:slug/login", async (req, reply) => {
+  const handleProviderLogin = async (req: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
     const slug = req.params.slug;
     const prov = await getProviderBySlug(slug);
     if (!prov || !prov.enabled) return reply.code(404).type("text/plain").send("Provider not found");
@@ -63,11 +72,14 @@ export async function ssoRoutes(app: FastifyInstance) {
       req.log.warn({ err, slug }, "sso_login_start_failed");
       return reply.redirect("/login?error=" + encodeURIComponent("SSO 配置异常：" + (err instanceof Error ? err.message : "未知错误")));
     }
-  });
+  };
+  app.get<{ Params: { slug: string } }>("/auth/sso/:slug/login", handleProviderLogin);
+  app.get<{ Params: { slug: string } }>("/auth/idp/:slug/login", handleProviderLogin);
 
-  app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(
-    "/auth/sso/callback",
-    async (req, reply) => {
+  const handleCallback = async (
+    req: FastifyRequest<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>,
+    reply: FastifyReply,
+  ) => {
       if (req.query.error) {
         return reply.redirect("/login?error=" + encodeURIComponent(`SSO 返回错误：${req.query.error_description || req.query.error}`));
       }
@@ -164,6 +176,9 @@ export async function ssoRoutes(app: FastifyInstance) {
         req.log.warn({ err, slug: parsed.slug }, "sso_callback_failed");
         return reply.redirect("/login?error=" + encodeURIComponent("SSO 登录失败：" + (err instanceof Error ? err.message : "未知错误")));
       }
-    },
-  );
+  };
+  app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(
+    "/auth/sso/callback", handleCallback);
+  app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(
+    "/auth/idp/callback", handleCallback);
 }
