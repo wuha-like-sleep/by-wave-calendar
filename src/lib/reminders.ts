@@ -3,6 +3,7 @@ import { db, schema } from "../db/client.js";
 import { sendMail } from "./mailer.js";
 import { env } from "../env.js";
 import { expandEvent } from "./rrule_expand.js";
+import { pushToUser } from "./push.js";
 
 // We support iCalendar TRIGGER values shaped like "-PT15M" / "-PT1H" / "-P1D"
 // (negative relative durations) — the common case. Anything weirder is
@@ -88,8 +89,19 @@ export async function dispatchDueReminders(logger: { warn: (m: unknown) => void 
         // Find the owner of this event's calendar = the user to remind.
         const [cal] = await db.select({ ownerId: schema.calendars.ownerId }).from(schema.calendars).where(eq(schema.calendars.id, ev.calendarId)).limit(1);
         if (!cal) continue;
-        const [owner] = await db.select({ email: schema.users.email, displayName: schema.users.displayName, disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, cal.ownerId)).limit(1);
+        const [owner] = await db.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName, disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, cal.ownerId)).limit(1);
         if (!owner || owner.disabledAt) continue;  // don't email disabled users
+        // Fire a web-push notification in parallel with the email. If the
+        // user has no push subscriptions registered, pushToUser is a no-op.
+        // Tag includes the trigger so identical reminders on different
+        // events still surface separately, but the same alarm firing twice
+        // (shouldn't happen due to remindersSent unique key) collapses.
+        void pushToUser(owner.id, {
+          title: `⏰ ${fmtRelative(offset)}后：${ev.summary}`,
+          body: `${fmtTime(occ.startsAt)}${ev.location ? " · " + ev.location : ""}`,
+          url: "/app",
+          tag: `event-${ev.id}-${alarm.trigger}`,
+        }).catch(() => undefined);
         try {
           await sendMail({
             to: owner.email,

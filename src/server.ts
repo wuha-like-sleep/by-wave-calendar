@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
+import { pushRoutes } from "./routes/push.js";
 import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
 import { webauthnRoutes } from "./web/webauthn.js";
@@ -221,6 +222,7 @@ await app.register(authRoutes);
 await app.register(calendarRoutes);
 await app.register(eventRoutes);
 await app.register(searchRoutes);
+await app.register(pushRoutes);
 await app.register(icsRoutes);
 
 // Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;

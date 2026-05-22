@@ -25,6 +25,43 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
+// ---------- Web Push ----------
+// Display the push payload as an OS notification. Payload format is
+// our own (set in pushToUser): { title, body, url, tag }.
+self.addEventListener("push", (event) => {
+  let data = { title: "ByWave", body: "" };
+  try {
+    if (event.data) data = event.data.json();
+  } catch { /* malformed payload; just show the defaults */ }
+  const opts = {
+    body: data.body || "",
+    icon: "/static/icons/icon-192.png",
+    // No dedicated badge yet — browsers fall back to icon. If we want
+    // monochrome small-badge later, add /static/icons/badge-72.png.
+    tag: data.tag || "bwc-default",
+    data: { url: data.url || "/app" },
+    requireInteraction: false,
+  };
+  event.waitUntil(self.registration.showNotification(data.title || "ByWave", opts));
+});
+
+// On click, open the target URL (focus existing tab if already open).
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/app";
+  event.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of all) {
+      // Same origin and already pointing to our app — just focus it.
+      if (c.url.startsWith(self.location.origin) && "focus" in c) {
+        c.navigate(targetUrl).catch(() => undefined);
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(targetUrl);
+  })());
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;

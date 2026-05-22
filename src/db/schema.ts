@@ -88,8 +88,32 @@ export const siteSettings = pgTable("site_settings", {
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),
+  // VAPID key pair for Web Push. Generated lazily on first /admin/push
+  // visit; persisted so push subscriptions stay valid across restarts.
+  vapidPublicKey: text("vapid_public_key"),
+  vapidPrivateKey: text("vapid_private_key"),
+  // VAPID requires a "subject" — typically mailto:admin@... — for the
+  // push services to contact you if your pushes misbehave.
+  vapidSubject: text("vapid_subject"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Per-user Web Push subscriptions. One row per (user, device/browser);
+// the same user on phone + laptop gets two rows. Delete on push failure
+// with statusCode 410 (gone) — browser revoked the subscription.
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+}, (t) => ({
+  userIdx: index("push_subscriptions_user_idx").on(t.userId),
+  endpointUnique: uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint),
+}));
 
 export const loginAlerts = pgTable("login_alerts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -466,6 +490,8 @@ export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;
 export type Webhook = typeof webhooks.$inferSelect;
 export type NewWebhook = typeof webhooks.$inferInsert;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type NewPushSubscription = typeof pushSubscriptions.$inferInsert;
 export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
 export type SsoProvider = typeof ssoProviders.$inferSelect;

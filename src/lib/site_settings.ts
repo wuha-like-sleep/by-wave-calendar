@@ -28,6 +28,9 @@ export type SettingsView = {
   lockoutMinutes: number;
   apiEnabled: boolean;
   forceAdminMfa: boolean;
+  vapidPublicKey: string | null;
+  vapidPrivateKey: string | null;
+  vapidSubject: string | null;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -78,6 +81,9 @@ function toView(r: schema.SiteSettings): SettingsView {
     lockoutMinutes: r.lockoutMinutes || 15,
     apiEnabled: r.apiEnabled,
     forceAdminMfa: r.forceAdminMfa,
+    vapidPublicKey: r.vapidPublicKey,
+    vapidPrivateKey: r.vapidPrivateKey,
+    vapidSubject: r.vapidSubject,
   };
 }
 
@@ -135,6 +141,9 @@ export async function updateSettings(patch: Partial<{
   lockoutMinutes: number;
   apiEnabled: boolean;
   forceAdminMfa: boolean;
+  vapidPublicKey: string | null;
+  vapidPrivateKey: string | null;
+  vapidSubject: string | null;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

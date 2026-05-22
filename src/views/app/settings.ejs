@@ -11,6 +11,7 @@
         { href: '#passkey',  label: 'Passkey' },
         { href: '#mfa',      label: '二次验证' },
         { href: '#app-passwords', label: '应用密码' },
+        { href: '#push',     label: '推送通知' },
         { href: '#theme',    label: '外观' },
         { href: '#password', label: '密码' },
         { href: '#logins',   label: '登录历史' },
@@ -96,6 +97,108 @@
     <a href="/app/settings/mfa/setup" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">启用 TOTP</a>
   <% } %>
 </section>
+
+<section id="push" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">浏览器推送通知</h2>
+  <p class="text-sm text-slate-500 mb-4">允许浏览器在事件到达提醒时间时显示桌面通知（手机锁屏也能弹）。无需邮件，但需要浏览器开启过这个站点的通知权限。</p>
+  <div id="push-status" class="text-sm text-slate-500 mb-3">检测中…</div>
+  <div class="flex gap-2">
+    <button type="button" id="btn-push-enable" class="hidden inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+      🔔 开启推送
+    </button>
+    <button type="button" id="btn-push-disable" class="hidden inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+      关闭推送
+    </button>
+    <button type="button" id="btn-push-test" class="hidden inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+      发送测试通知
+    </button>
+  </div>
+</section>
+
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+// Web Push opt-in flow. Pure browser-side: gets the VAPID public key from
+// /api/push/public-key, calls PushManager.subscribe(), forwards the
+// resulting subscription to /api/push/subscribe.
+(async function () {
+  const status = document.getElementById("push-status");
+  const enableBtn = document.getElementById("btn-push-enable");
+  const disableBtn = document.getElementById("btn-push-disable");
+  const testBtn = document.getElementById("btn-push-test");
+  if (!status || !enableBtn || !disableBtn) return;
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    status.textContent = "你的浏览器不支持 Web Push（试试 Chrome / Edge / Safari 16+）";
+    return;
+  }
+  if (Notification.permission === "denied") {
+    status.textContent = "浏览器已拒绝通知权限。要重新开启，请在地址栏左侧的小锁图标里手动允许通知。";
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+
+  function urlBase64ToUint8Array(b64) {
+    const padding = "=".repeat((4 - b64.length % 4) % 4);
+    const base64 = (b64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return new Uint8Array(Array.from(raw, c => c.charCodeAt(0)));
+  }
+
+  function updateUI() {
+    if (sub) {
+      status.textContent = "✓ 已开启 —— 提醒会同时发到这台设备的浏览器通知";
+      enableBtn.classList.add("hidden");
+      disableBtn.classList.remove("hidden");
+      testBtn.classList.remove("hidden");
+    } else {
+      status.textContent = "还没开启";
+      enableBtn.classList.remove("hidden");
+      disableBtn.classList.add("hidden");
+      testBtn.classList.add("hidden");
+    }
+  }
+  updateUI();
+
+  enableBtn.addEventListener("click", async () => {
+    enableBtn.disabled = true;
+    try {
+      const r = await fetch("/api/push/public-key");
+      const { publicKey } = await r.json();
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      updateUI();
+    } catch (e) {
+      status.textContent = "开启失败：" + (e && e.message ? e.message : e);
+    }
+    enableBtn.disabled = false;
+  });
+
+  disableBtn.addEventListener("click", async () => {
+    if (!sub) return;
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe().catch(() => undefined);
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+    await fetch("/api/push/unsubscribe", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      body: JSON.stringify({ endpoint }),
+    });
+    sub = null;
+    updateUI();
+  });
+})();
+</script>
 
 <section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
   <div class="flex items-start justify-between gap-4 mb-3">
