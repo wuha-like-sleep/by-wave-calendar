@@ -10,7 +10,7 @@ import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 
 export async function searchRoutes(app: FastifyInstance) {
-  app.get("/api/search", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+  app.get("/search", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = await requireUser(req, reply);
     const q = z.object({
       q: z.string().min(1).max(100),

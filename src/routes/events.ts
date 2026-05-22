@@ -10,6 +10,7 @@ import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
+import { ok, okList, err } from "../lib/api_response.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -38,7 +39,7 @@ const idParam = z.object({ id: z.string().uuid() });
 export async function eventRoutes(app: FastifyInstance) {
   // Fetch events across all (or a subset of) user's calendars in a date range.
   // Used by the calendar app view to populate the grid.
-  app.get("/api/events", async (req, reply) => {
+  app.get("/events", async (req, reply) => {
     const user = await requireUser(req, reply);
     const q = z
       .object({
@@ -125,7 +126,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send({ calendars: visible, events: expanded });
   });
 
-  app.get("/api/calendars/:id/events", async (req, reply) => {
+  app.get("/calendars/:id/events", async (req, reply) => {
     const user = await requireUser(req, reply);
     const { id } = idParam.parse(req.params);
     if (!(await ownsCalendar(id, user.id))) {
@@ -141,7 +142,7 @@ export async function eventRoutes(app: FastifyInstance) {
 
   // Cheap overlap check for the client — POST so we can keep tomorrow's
   // "exclude editing self" form clean without putting an event UUID in the URL.
-  app.post("/api/events/conflicts", async (req, reply) => {
+  app.post("/events/conflicts", async (req, reply) => {
     const user = await requireUser(req, reply);
     const body = z.object({
       calendarId: z.string().uuid(),
@@ -173,7 +174,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send({ conflicts });
   });
 
-  app.post("/api/events", async (req, reply) => {
+  app.post("/events", async (req, reply) => {
     const user = await requireUser(req, reply);
     const body = createSchema.parse(req.body);
     if (!(await ownsCalendar(body.calendarId, user.id))) {
@@ -260,7 +261,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.code(201).send(row);
   });
 
-  app.patch("/api/events/:id", async (req, reply) => {
+  app.patch("/events/:id", async (req, reply) => {
     const user = await requireUser(req, reply);
     const { id } = idParam.parse(req.params);
     const body = updateSchema.parse(req.body);
@@ -292,7 +293,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send(row);
   });
 
-  app.delete("/api/events/:id", async (req, reply) => {
+  app.delete("/events/:id", async (req, reply) => {
     const user = await requireUser(req, reply);
     const parsed = idParam.safeParse(req.params);
     // Fully idempotent: a malformed ID (e.g. iOS sometimes hands us its

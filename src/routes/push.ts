@@ -12,12 +12,12 @@ import { requireUser } from "../lib/session.js";
 import { getPublicVapidKey } from "../lib/push.js";
 
 export async function pushRoutes(app: FastifyInstance) {
-  app.get("/api/push/public-key", async (_req, reply) => {
+  app.get("/push/public-key", async (_req, reply) => {
     const key = await getPublicVapidKey();
     return reply.send({ publicKey: key });
   });
 
-  app.post("/api/push/subscribe", async (req, reply) => {
+  app.post("/push/subscribe", async (req, reply) => {
     const user = await requireUser(req, reply);
     const body = z.object({
       endpoint: z.string().url().max(2048),
@@ -52,7 +52,7 @@ export async function pushRoutes(app: FastifyInstance) {
     return reply.send({ ok: true });
   });
 
-  app.post("/api/push/unsubscribe", async (req, reply) => {
+  app.post("/push/unsubscribe", async (req, reply) => {
     const user = await requireUser(req, reply);
     const body = z.object({ endpoint: z.string().url().max(2048) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });

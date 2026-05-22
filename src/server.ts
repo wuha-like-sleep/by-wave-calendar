@@ -218,12 +218,125 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
 });
 
 // ---- Routes ----
-await app.register(authRoutes);
-await app.register(calendarRoutes);
-await app.register(eventRoutes);
-await app.register(searchRoutes);
-await app.register(pushRoutes);
+// Each route plugin uses paths relative to the API prefix (e.g.
+// "/events" rather than "/api/events"). We mount the same plugin twice:
+//   /api/*    — legacy. Bare JSON payloads, kept for backwards compat
+//               with the in-app JS client and existing API-token users.
+//   /api/v1/* — current. The onSend hook below wraps responses in a
+//               uniform envelope { ok: true, data } / { ok: false, error }
+//               and surfaces machine-readable error codes.
+for (const prefix of ["/api", "/api/v1"]) {
+  await app.register(authRoutes, { prefix });
+  await app.register(calendarRoutes, { prefix });
+  await app.register(eventRoutes, { prefix });
+  await app.register(searchRoutes, { prefix });
+  await app.register(pushRoutes, { prefix });
+}
 await app.register(icsRoutes);
+
+// Envelope wrapping for /api/v1/* responses. Routes that already used
+// ok()/err() ship a pre-wrapped body (with an "ok" property at the top)
+// which we detect and pass through unchanged. Everything else (legacy
+// reply.send() calls reused from /api/*) gets transparently wrapped.
+app.addHook("onSend", async (req, reply, payload) => {
+  if (!req.url?.startsWith("/api/v1")) return payload;
+  const contentType = reply.getHeader("content-type");
+  if (typeof contentType !== "string" || !contentType.includes("json")) return payload;
+  if (typeof payload !== "string") return payload;  // streamed / Buffer
+  let parsed: unknown;
+  try { parsed = JSON.parse(payload); } catch { return payload; }
+  // Already wrapped by an ok()/err() helper — pass through.
+  if (parsed && typeof parsed === "object" && "ok" in (parsed as object)) return payload;
+  const sc = reply.statusCode;
+  if (sc >= 200 && sc < 300) {
+    return JSON.stringify({ ok: true, data: parsed });
+  }
+  // Error: try to extract a code/message from the legacy { error: "..." } shape.
+  let code = "error";
+  let message = "";
+  if (parsed && typeof parsed === "object") {
+    const p = parsed as { error?: unknown; message?: unknown };
+    if (typeof p.error === "string") code = p.error;
+    if (typeof p.message === "string") message = p.message;
+  }
+  return JSON.stringify({ ok: false, error: { code, message: message || code } });
+});
+
+// Minimal OpenAPI 3 description of /api/v1/*. Hand-written for now —
+// when the API stabilizes we can move to auto-generation from the Zod
+// schemas. Useful for n8n / Zapier / API client generators.
+app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.header("Content-Type", "application/json; charset=utf-8");
+  return reply.send({
+    openapi: "3.1.0",
+    info: {
+      title: "ByWave Calendar API",
+      version: "1.0.0",
+      description: "Standardized REST API. All responses wrap in { ok, data } / { ok: false, error }.",
+    },
+    servers: [{ url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/v1` }],
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", description: "API token from /admin/api" },
+        cookieAuth: { type: "apiKey", in: "cookie", name: "bwc_sid", description: "Browser session" },
+      },
+      schemas: {
+        Envelope: {
+          type: "object",
+          properties: {
+            ok: { type: "boolean" },
+            data: { description: "Present on success" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string", example: "weak_password" },
+                message: { type: "string", example: "密码至少 10 位" },
+              },
+            },
+            meta: { type: "object" },
+          },
+          required: ["ok"],
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }, { cookieAuth: [] }],
+    paths: {
+      "/auth/register": { post: { summary: "Create account", responses: { "200": { description: "Created" }, "400": { description: "Weak password" }, "409": { description: "Email already registered" } } } },
+      "/auth/login": { post: { summary: "Log in", responses: { "200": { description: "Logged in" }, "401": { description: "Bad credentials" } } } },
+      "/auth/logout": { post: { summary: "Log out" } },
+      "/auth/me": { get: { summary: "Current user" } },
+      "/calendars": {
+        get: { summary: "List my calendars" },
+        post: { summary: "Create calendar" },
+      },
+      "/calendars/{id}": {
+        patch: { summary: "Update calendar" },
+        delete: { summary: "Delete calendar" },
+      },
+      "/calendars/{id}/events": { get: { summary: "List events in one calendar" } },
+      "/calendars/{id}/share-tokens": {
+        get: { summary: "List ICS share tokens" },
+        post: { summary: "Create ICS share token" },
+      },
+      "/calendars/{id}/share-tokens/{token}": {
+        delete: { summary: "Revoke ICS share token" },
+      },
+      "/events": {
+        get: { summary: "List events across visible calendars in a date range (expands RRULE)" },
+        post: { summary: "Create event" },
+      },
+      "/events/{id}": {
+        patch: { summary: "Update event" },
+        delete: { summary: "Soft-delete event + fire CANCEL emails" },
+      },
+      "/events/conflicts": { post: { summary: "Check for overlapping events" } },
+      "/search": { get: { summary: "Search events", parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }] } },
+      "/push/public-key": { get: { summary: "VAPID public key for browser PushManager" } },
+      "/push/subscribe": { post: { summary: "Register a push subscription" } },
+      "/push/unsubscribe": { post: { summary: "Remove a push subscription" } },
+    },
+  });
+});
 
 // Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;
 // session-cookie callers are unaffected because they have no `authVia` tag.
