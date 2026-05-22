@@ -768,6 +768,14 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/admin/update", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
+    // Read version from package.json at request time (cheap; ~10ms) so
+    // it's accurate even if the process is running pre-restart code.
+    let pkgVersion = "0.0.0";
+    try {
+      const fs = await import("node:fs/promises");
+      const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
+      pkgVersion = pkg.version || "0.0.0";
+    } catch { /* fallthrough */ }
     return reply.view("admin/update", {
       title: "系统更新",
       user,
@@ -777,6 +785,9 @@ export async function adminRoutes(app: FastifyInstance) {
       remote: pickRemote(),
       branch: pickBranch(),
       pm2Name: process.env.PM2_PROCESS_NAME || "by-wave-calendar",
+      pkgVersion,
+      nodeVersion: process.versions.node,
+      uptimeSeconds: Math.floor(process.uptime()),
     });
   });
 

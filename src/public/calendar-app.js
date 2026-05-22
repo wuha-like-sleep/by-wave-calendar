@@ -747,10 +747,13 @@
       reminderSelect.value = opt ? t : (payload.id ? "" : "-PT15M");
     }
     if (payload.timezone) {
-      const tzSel = form.querySelector('[name="timezone"]');
-      if (Array.from(tzSel.options).some((o) => o.value === payload.timezone)) {
-        tzSel.value = payload.timezone;
-      }
+      // The timezone control used to be a <select>; we switched it to
+      // <input list=tz-options> so it accepts free-text IANA ids and the
+      // browser autocompletes against ~420 zones. Set the input value
+      // directly — if the supplied id is bogus, the user sees the raw
+      // string and can correct it.
+      const tzInput = form.querySelector('[name="timezone"]');
+      if (tzInput) tzInput.value = payload.timezone;
     }
     syncAllDayUI();
     // Mode: existing events open in VIEW mode (read-only with 编辑 button);
