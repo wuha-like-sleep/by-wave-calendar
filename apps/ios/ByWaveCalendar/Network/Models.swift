@@ -88,6 +88,9 @@ struct PasswordLoginInput: Encodable {
     let label: String
     let kind: String
     let appVersion: String
+    // Stable per-install UUID (iCloud Keychain). Server uses it to dedup
+    // re-logins from the same physical phone.
+    let clientDeviceId: String
 }
 
 // Response shape mirrors pair-claim + adds the user's email + display name

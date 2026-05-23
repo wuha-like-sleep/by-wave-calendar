@@ -239,6 +239,13 @@
       "when": 1779850000000,
       "tag": "0033_apps_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0034_device_client_id",
+      "breakpoints": true
     }
   ]
 }

@@ -6,8 +6,32 @@
 //   the phone POSTs the scanned code → we issue refresh + access tokens.
 // /api/v1/auth/refresh          (no auth — refresh token IS the auth)
 //   the phone trades a refresh token for a fresh access JWT.
+// /api/v1/auth/web-session      (bearer auth — phone trades JWT for a
+//   short-lived "open web in browser" URL with auto-login. Used by the
+//   iOS APP's 「账号管理」flow so the user doesn't re-enter password
+//   to access change-password / MFA / Passkey / delete-account pages
+//   that already live in the web UI. The companion handler is in
+//   src/web/index.ts: GET /app/auth/from-native?token=…&next=… )
 // /api/v1/devices               (auth — list / revoke own devices)
 // /api/v1/devices/me            (auth — what device am I, if I'm a bearer-bound app)
+//
+// In-memory web-session token store. Process-local; survives crashes
+// fine because the tokens are 5-minute one-shot anyway. If we ever
+// scale to PM2 cluster mode, move this to PG or Redis — for now the
+// ecosystem.config.cjs runs a single fork.
+const webSessionTokens = new Map<string, { userId: string; expiresAt: number }>();
+function _purgeExpiredWebSessions(): void {
+  const now = Date.now();
+  for (const [k, v] of webSessionTokens) if (v.expiresAt < now) webSessionTokens.delete(k);
+}
+export function consumeWebSessionToken(token: string): string | null {
+  _purgeExpiredWebSessions();
+  const v = webSessionTokens.get(token);
+  if (!v) return null;
+  webSessionTokens.delete(token);  // one-shot
+  if (v.expiresAt < Date.now()) return null;
+  return v.userId;
+}
 
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
@@ -88,6 +112,10 @@ export async function deviceRoutes(app: FastifyInstance) {
       label: z.string().min(1).max(60),
       kind: z.enum(["ios", "android", "desktop", "other"]).default("other"),
       appVersion: z.string().max(40).optional(),
+      // Stable per-install UUID from the APP (iCloud Keychain). Optional
+      // for backwards compat with older clients. When present, the server
+      // reuses the existing devices row for this (userId, clientDeviceId).
+      clientDeviceId: z.string().min(8).max(64).optional(),
     }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
 
@@ -97,6 +125,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       label: body.data.label,
       kind: body.data.kind,
       appVersion: body.data.appVersion ?? null,
+      clientDeviceId: body.data.clientDeviceId ?? null,
       ip: req.ip,
       userAgent: ua,
     });
@@ -128,6 +157,9 @@ export async function deviceRoutes(app: FastifyInstance) {
       label: z.string().min(1).max(60),
       kind: z.enum(["ios", "android", "desktop", "other"]).default("other"),
       appVersion: z.string().max(40).optional(),
+      // See pair-claim for rationale — dedup by stable client UUID so
+      // re-login doesn't create a duplicate devices row.
+      clientDeviceId: z.string().min(8).max(64).optional(),
     }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
 
@@ -161,21 +193,22 @@ export async function deviceRoutes(app: FastifyInstance) {
       });
     }
 
-    // Create the device row + tokens.
+    // Create the device row + tokens (or reuse existing one for the same
+    // clientDeviceId — see upsertDeviceForUser).
     const refresh = await issueRefreshToken();
     const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
-    const [device] = await db.insert(schema.devices).values({
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
       userId: user.id,
-      label: body.data.label.trim(),
+      label: body.data.label,
       kind: body.data.kind,
-      refreshTokenHash: refresh.hash,
-      refreshTokenPrefix: refresh.prefix,
       appVersion: body.data.appVersion ?? null,
-      firstSeenIp: req.ip,
-      firstUserAgent: ua,
-      lastSeenAt: new Date(),
-      lastSeenIp: req.ip,
-    }).returning();
+      clientDeviceId: body.data.clientDeviceId ?? null,
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: req.ip,
+      userAgent: ua,
+    });
     if (!device) return reply.code(500).send({ error: "device_create_failed" });
     const access = signAccessToken(user.id, device.id);
     return reply.send({
@@ -244,6 +277,45 @@ export async function deviceRoutes(app: FastifyInstance) {
       label: device.label,
       kind: device.kind,
       hasPushToken: !!device.pushToken,
+    });
+  });
+
+  // -------- mint a web-session token (Bearer auth required) --------
+  // The iOS APP calls this when the user taps an account-management row
+  // (修改密码 / MFA / Passkey / 删除账户) in SettingsView. We mint a
+  // 5-minute one-shot token, return a URL the APP opens in
+  // SFSafariViewController. When that URL loads, the GET handler in
+  // src/web/index.ts consumes the token, calls createSession to set the
+  // bwc_sid cookie, and 302s to the requested settings page. End result:
+  // user lands inside the existing web UI fully signed in, without ever
+  // typing a password.
+  //
+  // `next` is the in-site path to redirect to after the bridge runs.
+  // It's validated server-side (path must start with /app/) so we can't
+  // be turned into an open redirect to a phishing page.
+  app.post("/auth/web-session", {
+    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const body = z.object({
+      next: z.string().min(1).max(200).regex(/^\/app(\/.*)?$/, "next 必须以 /app/ 开头").optional(),
+    }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+
+    // 24 hex chars (96 bits) is plenty for a 5-minute token; not in DB,
+    // not externally visible past the SFSafariViewController.
+    const { randomBytes } = await import("node:crypto");
+    const token = randomBytes(24).toString("hex");
+    const ttlMs = 5 * 60 * 1000;
+    webSessionTokens.set(token, { userId: user.id, expiresAt: Date.now() + ttlMs });
+
+    const base = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const params = new URLSearchParams({ token });
+    if (body.data.next) params.set("next", body.data.next);
+    return reply.send({
+      url: `${base}/app/auth/from-native?${params.toString()}`,
+      expiresAt: new Date(Date.now() + ttlMs).toISOString(),
     });
   });
 

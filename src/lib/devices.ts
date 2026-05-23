@@ -40,11 +40,18 @@ export type ClaimedPairing = {
 // Step 2: phone POSTs the code → we mark it claimed, create a `devices`
 // row with a fresh refresh token, and return both tokens. The pairing
 // row stays (audit), but is unusable for further claims (claimed_at set).
+//
+// If `clientDeviceId` is provided AND a non-revoked row already exists
+// for (userId, clientDeviceId), we UPDATE that row in place instead of
+// inserting a new one. This is how "退出登录 → 重新登录" stops creating
+// duplicate devices entries: the iOS APP keeps the stable UUID in iCloud
+// Keychain even after the user clears its refresh token locally.
 export async function claimPairing(input: {
   code: string;
   label: string;
   kind: string;
   appVersion?: string | null;
+  clientDeviceId?: string | null;
   ip?: string | null;
   userAgent?: string | null;
 }): Promise<ClaimedPairing | null> {
@@ -62,20 +69,17 @@ export async function claimPairing(input: {
   if (!u || !userIsActive(u)) return null;
 
   const refresh = await issueRefreshToken();
-  // Insert the device row first so we have an id for the access token's
-  // `did` claim; then update pairing → claimed.
-  const [device] = await db.insert(schema.devices).values({
+  const device = await upsertDeviceForUser({
     userId: pair.userId,
-    label: input.label.trim() || "未命名设备",
-    kind: input.kind || "other",
-    refreshTokenHash: refresh.hash,
-    refreshTokenPrefix: refresh.prefix,
+    label: input.label,
+    kind: input.kind,
     appVersion: input.appVersion ?? null,
-    firstSeenIp: input.ip ?? null,
-    firstUserAgent: input.userAgent ?? null,
-    lastSeenAt: new Date(),
-    lastSeenIp: input.ip ?? null,
-  }).returning();
+    clientDeviceId: input.clientDeviceId ?? null,
+    refreshHash: refresh.hash,
+    refreshPrefix: refresh.prefix,
+    ip: input.ip ?? null,
+    userAgent: input.userAgent ?? null,
+  });
   if (!device) return null;
   await db
     .update(schema.devicePairings)
@@ -90,6 +94,69 @@ export async function claimPairing(input: {
     deviceId: device.id,
     userId: pair.userId,
   };
+}
+
+// Shared helper: insert or update the device row for this login attempt.
+// When `clientDeviceId` is provided and a live row already exists for
+// (userId, clientDeviceId), we update its tokens / metadata in place and
+// reuse the same id. Push tokens and last_seen survive the cycle.
+// Returns the resulting devices row (whether reused or freshly inserted).
+export async function upsertDeviceForUser(input: {
+  userId: string;
+  label: string;
+  kind: string;
+  appVersion: string | null;
+  clientDeviceId: string | null;
+  refreshHash: string;
+  refreshPrefix: string;
+  ip: string | null;
+  userAgent: string | null;
+}): Promise<schema.Device | null> {
+  if (input.clientDeviceId) {
+    const [existing] = await db
+      .select()
+      .from(schema.devices)
+      .where(and(
+        eq(schema.devices.userId, input.userId),
+        eq(schema.devices.clientDeviceId, input.clientDeviceId),
+        isNull(schema.devices.revokedAt),
+      ))
+      .limit(1);
+    if (existing) {
+      const [updated] = await db
+        .update(schema.devices)
+        .set({
+          // Refresh token rotates every login (old one becomes unusable
+          // because it's hashed and the hash is replaced).
+          refreshTokenHash: input.refreshHash,
+          refreshTokenPrefix: input.refreshPrefix,
+          // Label might change if user renamed their phone.
+          label: input.label.trim() || existing.label,
+          kind: input.kind || existing.kind,
+          appVersion: input.appVersion ?? existing.appVersion,
+          lastSeenAt: new Date(),
+          lastSeenIp: input.ip ?? existing.lastSeenIp,
+          // Keep first_seen_* historical — they describe the original bind.
+        })
+        .where(eq(schema.devices.id, existing.id))
+        .returning();
+      return updated ?? existing;
+    }
+  }
+  const [device] = await db.insert(schema.devices).values({
+    userId: input.userId,
+    label: input.label.trim() || "未命名设备",
+    kind: input.kind || "other",
+    refreshTokenHash: input.refreshHash,
+    refreshTokenPrefix: input.refreshPrefix,
+    appVersion: input.appVersion,
+    clientDeviceId: input.clientDeviceId,
+    firstSeenIp: input.ip,
+    firstUserAgent: input.userAgent,
+    lastSeenAt: new Date(),
+    lastSeenIp: input.ip,
+  }).returning();
+  return device ?? null;
 }
 
 // Exchange refresh → access. Called by the app whenever its cached

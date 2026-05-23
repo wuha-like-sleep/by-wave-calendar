@@ -10,6 +10,7 @@
 // this device's refresh token so it can't refresh after.
 
 import SwiftUI
+import SafariServices
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
@@ -18,6 +19,13 @@ struct SettingsView: View {
     @State private var revoking = false
     @State private var showRevokeAlert = false
     @State private var errorMessage: String?
+    // Account-management web sheet — set to a URL when the user taps one
+    // of the rows under 「账号管理」. Cleared on dismiss.
+    @State private var webURL: URL?
+    // True while we're hitting POST /api/v1/auth/web-session to mint the
+    // one-shot link — disables the row buttons + shows a spinner.
+    @State private var openingWebFor: AccountAction?
+    @State private var showDeleteAccountWarning = false
     // EventKit mirror state. Mirrored from EventKitMirror.shared so the
     // toggle UI updates in real time; we re-write it back on toggle.
     @State private var ekMirrorEnabled: Bool = EventKitMirror.shared.isEnabled
@@ -33,6 +41,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 accountSection
+                accountManagementSection
                 connectionSection
                 eventKitSection
                 notificationsSection
@@ -57,6 +66,20 @@ struct SettingsView: View {
             } message: {
                 Text("解绑后这个 APP 立即失去访问权限，需要重新扫码或用密码登录。服务器端的事件不受影响。")
             }
+            .alert("删除账户？", isPresented: $showDeleteAccountWarning) {
+                Button("取消", role: .cancel) {}
+                Button("继续", role: .destructive) {
+                    Task { await openAccountManagement(.deleteAccount) }
+                }
+            } message: {
+                Text("删除账户会同时清除所有日历、事件、订阅、邀请、绑定的设备和 CalDAV 应用密码 — 无法恢复。继续会跳转到浏览器要你输入密码确认。")
+            }
+            .sheet(item: $webURL) { url in
+                // SFSafariViewController auto-uses the system Safari engine
+                // so any Passkey / Touch ID / Face ID prompts work natively.
+                SafariWebView(url: url)
+                    .ignoresSafeArea()
+            }
         }
     }
 
@@ -70,6 +93,71 @@ struct SettingsView: View {
                     Text(name).foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    // 账号管理 — each row opens the corresponding web page inside an
+    // in-app Safari view, signed in via a one-shot token. So password
+    // change / MFA setup / Passkey management / account deletion all
+    // happen inside the APP without typing a password.
+    private var accountManagementSection: some View {
+        Section {
+            accountRow(action: .changePassword, label: "修改密码", systemImage: "key.fill")
+            accountRow(action: .mfa, label: "二次验证 (MFA)", systemImage: "lock.shield")
+            accountRow(action: .passkeys, label: "Passkey 管理", systemImage: "person.badge.key.fill")
+            accountRow(action: .ssoBind, label: "第三方账户绑定", systemImage: "link")
+            accountRow(action: .deleteAccount, label: "删除账户", systemImage: "trash", role: .destructive)
+        } header: {
+            Text("账号管理")
+        } footer: {
+            Text("修改密码 / MFA / Passkey / 删除账户都在浏览器里完成 — 点击会自动登录到对应网页，处理完返回 APP 即可。")
+                .font(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private func accountRow(action: AccountAction, label: String, systemImage: String, role: ButtonRole? = nil) -> some View {
+        Button(role: role) {
+            if action == .deleteAccount {
+                showDeleteAccountWarning = true
+            } else {
+                Task { await openAccountManagement(action) }
+            }
+        } label: {
+            HStack {
+                Label(label, systemImage: systemImage)
+                Spacer()
+                if openingWebFor == action {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(.tertiary)
+                        .font(.footnote)
+                }
+            }
+        }
+        .disabled(openingWebFor != nil)
+    }
+
+    // Hit POST /api/v1/auth/web-session, then present the returned URL.
+    // Errors fall back to the inline errorMessage banner.
+    private func openAccountManagement(_ action: AccountAction) async {
+        openingWebFor = action
+        defer { openingWebFor = nil }
+        do {
+            let client = APIClient(state: state)
+            struct Body: Encodable { let next: String }
+            struct Resp: Decodable { let url: String }
+            let resp: Resp = try await client.post("/auth/web-session", body: Body(next: action.path))
+            guard let u = URL(string: resp.url) else {
+                errorMessage = "服务器返回的 URL 无效"
+                return
+            }
+            webURL = u
+        } catch let e as APIError {
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -313,4 +401,51 @@ struct SettingsView: View {
         guard parts.count >= 3, parts[0] == "bwd" else { return nil }
         return String(parts[1])
     }
+}
+
+// MARK: - Account-management web bridge
+
+/// Each row in 账号管理 maps to a web page anchor. The server's
+/// /app/auth/from-native validator only accepts paths starting with
+/// "/app/", so they're all relative.
+enum AccountAction: Equatable {
+    case changePassword
+    case mfa
+    case passkeys
+    case ssoBind
+    case deleteAccount
+
+    var path: String {
+        switch self {
+        case .changePassword: return "/app/settings#password"
+        case .mfa:            return "/app/settings/mfa/setup"
+        case .passkeys:       return "/app/settings#passkeys"
+        case .ssoBind:        return "/app/settings#sso"
+        case .deleteAccount:  return "/app/settings#danger-zone"
+        }
+    }
+}
+
+/// SwiftUI wrapper around SFSafariViewController. We use the Safari VC
+/// (not ASWebAuthenticationSession or WKWebView) because:
+///   - it shares cookies / Passkey credentials with mobile Safari, so a
+///     Passkey created in Safari is immediately usable inside the APP,
+///   - it ships with a built-in "Done" button users instinctively use,
+///   - WKWebView wouldn't trigger Apple's native Passkey UI on its own.
+struct SafariWebView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let cfg = SFSafariViewController.Configuration()
+        cfg.entersReaderIfAvailable = false
+        let vc = SFSafariViewController(url: url, configuration: cfg)
+        vc.dismissButtonStyle = .done
+        return vc
+    }
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+// URL needs Identifiable conformance for sheet(item:) to bind cleanly.
+// absoluteString is unique enough for our usage.
+extension URL: Identifiable {
+    public var id: String { absoluteString }
 }

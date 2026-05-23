@@ -1648,6 +1648,46 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.redirect(`${scheme}://auth/complete?${params.toString()}`);
   });
 
+  // Companion to POST /api/v1/auth/web-session. The iOS APP opens this
+  // URL inside SFSafariViewController; we consume the one-shot token,
+  // create a real bwc_sid session cookie, and redirect to the requested
+  // page. From the user's perspective: tap a settings row in the APP →
+  // get dropped inside the web UI signed in.
+  //
+  // Token storage is in-memory (see src/routes/devices.ts). 5-minute TTL,
+  // single-use. If validation fails we render the standard error page —
+  // do NOT echo back the token in any output (logs go to pino; the URL
+  // bar will still show it for a moment but it's already burned).
+  app.get("/app/auth/from-native", async (req, reply) => {
+    const q = z.object({
+      token: z.string().min(32).max(64),
+      next: z.string().min(1).max(200).optional(),
+    }).safeParse(req.query);
+    if (!q.success) {
+      return reply.code(400).view("error", {
+        title: "登录链接无效", user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: "登录链接格式不对",
+        message: "请回到 APP 重新生成链接（链接只能使用一次，且 5 分钟内有效）。",
+      });
+    }
+    const { consumeWebSessionToken } = await import("../routes/devices.js");
+    const userId = consumeWebSessionToken(q.data.token);
+    if (!userId) {
+      return reply.code(403).view("error", {
+        title: "登录链接已过期", user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 403, heading: "登录链接已过期或已被使用",
+        message: "请回到 APP 重新打开账号管理页。",
+      });
+    }
+    const { createSession } = await import("../lib/session.js");
+    await createSession(reply, userId, { mfaSatisfied: true });
+    // Validate next — must be a relative /app/ path. The Zod regex on
+    // the API side already enforces this, but defense-in-depth at the
+    // consumer end too in case future callers forget.
+    const next = (q.data.next && /^\/app(\/.*)?$/.test(q.data.next)) ? q.data.next : "/app/settings";
+    return reply.redirect(next);
+  });
+
   app.get("/app/logins", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;

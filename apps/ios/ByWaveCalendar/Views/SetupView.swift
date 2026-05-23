@@ -390,6 +390,7 @@ struct SetupView: View {
                 label: PairingService.suggestedLabel(),
                 kind: "ios",
                 appVersion: PairingService.appVersion,
+                clientDeviceId: Keychain.clientDeviceId(),
             ))
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }

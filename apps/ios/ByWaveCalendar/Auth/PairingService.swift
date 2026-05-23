@@ -100,11 +100,15 @@ enum PairingService {
         var req = URLRequest(url: serverURL.appendingPathComponent("/api/v1/devices/pair-claim"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // clientDeviceId is the stable per-Apple-ID UUID (iCloud Keychain).
+        // The server uses it to dedup — re-pairing from the same physical
+        // device updates the existing row instead of growing a duplicate.
         let body: [String: Any] = [
             "code": code.uppercased(),
             "label": label,
             "kind": "ios",
             "appVersion": appVersion,
+            "clientDeviceId": Keychain.clientDeviceId(),
         ]
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
