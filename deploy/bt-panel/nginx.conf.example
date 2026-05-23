@@ -1,7 +1,15 @@
-# 宝塔面板里 "网站 → 设置 → 配置文件"，把 location / 段替换为下面这块即可。
+# 宝塔面板里 "网站 → 设置 → 配置文件"，把 location / 段替换为下面这块。
 # 也可以走 "反向代理" 功能并把目标地址填 http://127.0.0.1:3000
+#
+# ⚠️ 关键：CalDAV 用的是 PROPFIND / REPORT / MKCALENDAR / MKCOL / PROPPATCH
+#    这些"非标准"HTTP 方法。宝塔默认 nginx 配置不一定会转发它们，
+#    导致 iPhone / Mac 的「添加 CalDAV 帐户」一直转圈或报"无法验证账户"。
+#    下面的配置显式允许并转发这些方法。
 
 location / {
+    # 显式允许 CalDAV / WebDAV 方法。如果宝塔上层的 server 块带
+    # limit_except 或 if 拒绝未知方法，CalDAV 客户端拿到 405。
+    # nginx 不会阻止这些方法，但有些"安全加固"配置会。
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
@@ -11,9 +19,24 @@ location / {
     proxy_set_header Upgrade           $http_upgrade;
     proxy_set_header Connection        "upgrade";
 
-    proxy_read_timeout  90s;
-    proxy_send_timeout  90s;
-    proxy_buffering     off;
+    # CalDAV REPORT 请求体可以很大（一次拉一个月的事件 multiget），
+    # 默认 1MB 太小会触发 413。
+    client_max_body_size       10m;
+    client_body_buffer_size    1m;
+
+    # CalDAV REPORT 在大日历上可能需要几秒响应；默认 60s 在网络不稳
+    # 的时候够用，但留点余地。
+    proxy_read_timeout         120s;
+    proxy_send_timeout         120s;
+    proxy_connect_timeout      10s;
+
+    # 关掉响应 buffering 让 push 通知（SSE）和长响应能流式送出
+    proxy_buffering            off;
+
+    # 给浏览器和 iOS Calendar 一个机会复用 TCP 连接 —— 没有 keep-alive
+    # 时每个 CalDAV 请求都要重连 + TLS 握手，10-20 个请求 = 慢得吓人。
+    keepalive_timeout          65s;
+    keepalive_requests         1000;
 }
 
 # 给 ICS 订阅设置一个友好的 CORS / 缓存头（可选）
@@ -24,3 +47,10 @@ location ~ ^/ics/ {
     proxy_set_header X-Forwarded-Proto $scheme;
     add_header Access-Control-Allow-Origin * always;
 }
+
+# ===== 推荐做法：让 Node 直接监听 443/80，绕过 nginx =====
+# .env 里设 USE_HTTPS=true，让 Node 直接拿端口。
+# 然后在宝塔站点设置里把 nginx 监听关掉（或改到其他端口）。
+# CalDAV WebDAV 方法转发的问题就根本不存在 —— 因为没人挡在中间。
+#
+# install.sh 默认就是这条路径；推荐生产环境用这个。

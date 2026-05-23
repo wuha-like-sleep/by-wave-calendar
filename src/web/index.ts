@@ -23,6 +23,7 @@ import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
@@ -1588,6 +1589,9 @@ export async function webRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/settings");
     await revokeAppPassword(user.id, id.data);
+    // Same TTL invalidation as password change — phone with the
+    // revoked password should fail next sync, not 60s from now.
+    invalidateCalDavAuthCache(user.id);
     return redirectWith(reply, "/app/settings", { success: "应用密码已撤销" });
   });
 
@@ -1674,6 +1678,9 @@ export async function webRoutes(app: FastifyInstance) {
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
     // Invalidate all sessions including current; user must re-login
     await destroyAllUserSessions(user.id);
+    // Drop any cached CalDAV auth tokens for this user — otherwise
+    // their iPhone could keep syncing for up to 60s on the old password.
+    invalidateCalDavAuthCache(user.id);
     await destroySession(req, reply);
     return redirectWith(reply, "/login", { success: "密码已更新，请重新登录" });
   });

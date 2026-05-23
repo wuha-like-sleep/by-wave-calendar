@@ -319,18 +319,50 @@ if [ "${SKIP_SMOKE:-0}" != "1" ]; then
     CURL_FLAGS="-s"
   fi
   log "等待服务起来（最多 15 秒）..."
+  HEALTH_OK=0
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
     if curl $CURL_FLAGS --max-time 1 "$PROBE_URL" 2>/dev/null | grep -q '"status":"ok"'; then
       ok "服务健康 ✓ ($PROBE_URL)"
+      HEALTH_OK=1
       break
     fi
     sleep 1
-    if [ "$i" = "15" ]; then
-      warn "服务起来了但 /health 检测失败"
-      hint "查日志：pm2 logs $PM2_NAME --lines 50"
-      hint "看进程：pm2 list"
-    fi
   done
+  if [ "$HEALTH_OK" = "0" ]; then
+    warn "服务起来了但 /health 检测失败"
+    hint "查日志：pm2 logs $PM2_NAME --lines 50"
+    hint "看进程：pm2 list"
+  fi
+
+  # CalDAV PROPFIND smoke test — proves the server (and any reverse
+  # proxy in front of it) actually accepts WebDAV methods. We send
+  # an unauthenticated PROPFIND and expect a 401 reply with a
+  # WWW-Authenticate header. If we get 405 / 502 / 400 instead, the
+  # reverse proxy is filtering out PROPFIND and iPhone's "添加帐户"
+  # will fail with no useful error.
+  if [ "$HEALTH_OK" = "1" ]; then
+    CALDAV_URL="${PROBE_URL%/health}/caldav/"
+    PF_RESPONSE=$(curl $CURL_FLAGS --max-time 3 -X PROPFIND -i \
+      -H "Depth: 0" -H "Content-Type: application/xml" \
+      --data '<?xml version="1.0"?><propfind xmlns="DAV:"><prop/></propfind>' \
+      "$CALDAV_URL" 2>/dev/null | head -5 || true)
+    if echo "$PF_RESPONSE" | grep -qi "401 "; then
+      ok "CalDAV PROPFIND 通了（返回 401，鉴权流程正常）"
+    elif echo "$PF_RESPONSE" | grep -qiE "405 |Method Not Allowed"; then
+      warn "CalDAV PROPFIND 被 nginx 反代拒绝（405 Method Not Allowed）"
+      hint "如果你走宝塔反代，编辑站点 nginx 配置加上 PROPFIND/REPORT 支持"
+      hint "参考 deploy/bt-panel/nginx.conf.example"
+      hint "或者改用 USE_HTTPS=true 让 Node 直接监听 443（推荐）"
+    elif echo "$PF_RESPONSE" | grep -qiE "502 |Bad Gateway"; then
+      warn "CalDAV PROPFIND 502 —— 反代到 Node 失败"
+      hint "查 nginx 错误日志：tail -100 /www/wwwlogs/yourdomain.error.log"
+    elif [ -z "$PF_RESPONSE" ]; then
+      warn "CalDAV PROPFIND 无响应（可能 curl 没 -X PROPFIND 支持？跳过）"
+    else
+      warn "CalDAV PROPFIND 返回了意外的响应："
+      echo "$PF_RESPONSE" | head -3 | sed 's/^/         /'
+    fi
+  fi
 fi
 
 # ========== 完成 ==========

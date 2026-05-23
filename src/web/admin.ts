@@ -24,6 +24,7 @@ import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../li
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { revokeAllUserCredentials, countActiveAdmins } from "../lib/user_state.js";
+import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
 import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
@@ -150,6 +151,11 @@ export async function adminRoutes(app: FastifyInstance) {
         uptimeSec: Math.floor(process.uptime()),
         memMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
       },
+      // CalDAV auth cache stats — surface hit rate so admins can see
+      // the iOS/Android sync acceleration is working. Cold cache or
+      // 0% hit rate would indicate every request is doing bcrypt
+      // (which is what makes CalDAV sync take 5-10 seconds).
+      caldavCache: getCalDavAuthCacheStats(),
     });
   });
 
@@ -510,6 +516,9 @@ export async function adminRoutes(app: FastifyInstance) {
     // and app passwords (CalDAV in Apple Calendar) outlive sessions and
     // would otherwise keep working after the disable.
     await revokeAllUserCredentials(id.data);
+    // Drop CalDAV auth cache so any iPhone-in-the-wild gets 401
+    // within a request instead of waiting 60s for TTL.
+    invalidateCalDavAuthCache(id.data);
     await audit(req, me.id, "user.disable", { targetType: "user", targetId: id.data, details: { email: target.email } });
     return reply.redirect("/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线，API Token 和应用密码已撤销）`));
   });
@@ -526,6 +535,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Kick = nuclear option: also revoke API tokens + app passwords so the
     // user's mobile CalDAV client and n8n workflows stop syncing too.
     await revokeAllUserCredentials(id.data);
+    invalidateCalDavAuthCache(id.data);
     await audit(req, me.id, "user.revoke_sessions", { targetType: "user", targetId: id.data, details: { email: target.email, sessionsKilled: deleted.length } });
     return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话，并撤销了 API Token / 应用密码`));
   });
