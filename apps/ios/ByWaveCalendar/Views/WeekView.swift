@@ -142,24 +142,33 @@ struct WeekView: View {
     }
 
     // MARK: - Header (weekday labels + date numbers)
+    // Pin to a fixed compact height (52pt) — without this constraint
+    // the VStack would happily give the row whatever's left over after
+    // the ScrollView claims its share, blowing the date numbers up
+    // huge on tall phones.
     private var headerRow: some View {
         HStack(spacing: 0) {
             // Time gutter spacer
             Color.clear.frame(width: timeGutterWidth)
             ForEach(dayStarts, id: \.self) { day in
                 DayHeader(day: day)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(.vertical, 6)
+        .frame(height: 52)
+        .padding(.vertical, 4)
         .background(Color(.systemBackground))
         .overlay(Divider(), alignment: .bottom)
     }
 
     // MARK: - All-day row
+    // Each pill is ~20pt tall; cap at allDayMaxRows × 20 + padding so
+    // a busy all-day day can't push the time grid completely off
+    // screen. With 3 rows = ~70pt, comfortably under the threshold.
     private var allDayRow: some View {
         let perDay = bucketAllDayByDay()
         let maxRows = min(allDayMaxRows, perDay.values.map { $0.count }.max() ?? 0)
+        let rowHeight = CGFloat(maxRows) * 20 + 16
         return HStack(spacing: 0) {
             Text("全天")
                 .font(.caption2)
@@ -182,6 +191,7 @@ struct WeekView: View {
                 }
             }
         }
+        .frame(height: rowHeight)
         .padding(.vertical, 4)
         .background(Theme.subtleSurface)
         .overlay(Divider(), alignment: .bottom)

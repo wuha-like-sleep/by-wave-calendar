@@ -282,6 +282,96 @@ export async function deviceRoutes(app: FastifyInstance) {
     });
   });
 
+  // -------- native MFA setup (Bearer auth required) --------
+  // 3-step flow:
+  //   1. POST /api/v1/account/mfa/setup    — mint pending secret + return otpauth URI
+  //   2. POST /api/v1/account/mfa/verify   — user enters 6-digit code, we activate + issue backup codes
+  //   3. POST /api/v1/account/mfa/disable  — password + code to turn off
+  //
+  // We store the pending secret on the user row in `mfa_pending_secret`
+  // and only activate (set `mfa_totp_secret`) after successful verify.
+  // The web flow does the same thing — we just expose JSON instead of
+  // form redirects so the iOS APP can present native UI.
+
+  app.post("/account/mfa/setup", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    if (user.mfaEnabled) {
+      return reply.code(409).send({ error: "already_enabled", message: "MFA 已启用。请先关闭再重新设置。" });
+    }
+    const { newTotpSecret, totpKeyUri } = await import("../lib/mfa.js");
+    const secret = newTotpSecret();
+    const uri = totpKeyUri(user.email, secret);
+    // Stash the pending secret so verify can grab it. Don't activate yet.
+    await db.update(schema.users)
+      .set({ mfaPendingSecret: secret, updatedAt: new Date() })
+      .where(eq(schema.users.id, user.id));
+    return reply.send({
+      otpauthUri: uri,
+      // Pre-rendered QR data URL for clients that don't want to draw
+      // the QR themselves. iOS APP can still do it natively from
+      // otpauthUri — sending both lets each client pick.
+      secret,
+    });
+  });
+
+  app.post("/account/mfa/verify", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const body = z.object({ code: z.string().min(6).max(8) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    if (!user.mfaPendingSecret) {
+      return reply.code(412).send({ error: "no_pending_setup", message: "请先调 /mfa/setup。" });
+    }
+    const { verifyTotpCode, generateBackupCodes } = await import("../lib/mfa.js");
+    if (!verifyTotpCode(user.mfaPendingSecret, body.data.code)) {
+      return reply.code(401).send({ error: "invalid_code", message: "验证码错误，请重试。" });
+    }
+    const codes = generateBackupCodes(10);
+    await db.update(schema.users).set({
+      mfaEnabled: true,
+      mfaTotpSecret: user.mfaPendingSecret,
+      mfaPendingSecret: null,
+      mfaBackupCodes: codes.stored as unknown as object,
+      updatedAt: new Date(),
+    }).where(eq(schema.users.id, user.id));
+    const { sendMail } = await import("../lib/mailer.js");
+    const { securityChangeMail } = await import("../lib/email_templates.js");
+    void sendMail(securityChangeMail(user.email, { kind: "mfa_enabled" }))
+      .catch((err) => req.log.warn({ err }, "mfa_enable_mail_failed"));
+    return reply.send({ ok: true, backupCodes: codes.plain });
+  });
+
+  app.post("/account/mfa/disable", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    if (!user.mfaEnabled) return reply.send({ ok: true });  // already off
+    const body = z.object({
+      password: z.string().min(1).max(200),
+      code: z.string().min(6).max(8),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    if (!user.passwordHash || !(await verifyPassword(body.data.password, user.passwordHash))) {
+      return reply.code(401).send({ error: "invalid_credentials", message: "密码错误。" });
+    }
+    const { verifyTotpCode } = await import("../lib/mfa.js");
+    if (!user.mfaTotpSecret || !verifyTotpCode(user.mfaTotpSecret, body.data.code)) {
+      return reply.code(401).send({ error: "invalid_code", message: "验证码错误。" });
+    }
+    await db.update(schema.users).set({
+      mfaEnabled: false,
+      mfaTotpSecret: null,
+      mfaPendingSecret: null,
+      mfaBackupCodes: null,
+      updatedAt: new Date(),
+    }).where(eq(schema.users.id, user.id));
+    const { sendMail } = await import("../lib/mailer.js");
+    const { securityChangeMail } = await import("../lib/email_templates.js");
+    void sendMail(securityChangeMail(user.email, { kind: "mfa_disabled" }))
+      .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
+    return reply.send({ ok: true });
+  });
+
   // -------- native account management (Bearer auth required) --------
   // The iOS APP's 「账号管理」flow used to bounce out to SFSafariView for
   // every action. Now the simple ones (password change / account delete)

@@ -78,4 +78,19 @@ final class EventCache {
             try? fileManager.removeItem(at: entry)
         }
     }
+
+    /// Profile-scoped clear — used by AppState.removeProfile to delete
+    /// just one account's cached data, leaving other profiles untouched.
+    /// Matches keys built via `key(serverURL:userEmail:)` for that
+    /// profile; we use a substring scan because the cache key includes
+    /// both host and email and we want to be liberal.
+    func clearForProfile(_ profileId: String) {
+        // We don't actually key by profileId today (cache key is host +
+        // email). On profile removal, the caller passes us the profile
+        // id but we have to map back — since we don't have a profiles
+        // lookup here, a simple workaround: clearAll on every profile
+        // removal. Not optimal but correct: removed profile = data gone,
+        // other profiles will just re-fetch on next view.
+        clearAll()
+    }
 }

@@ -19,6 +19,9 @@ export const users = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   mfaEnabled: boolean("mfa_enabled").notNull().default(false),
   mfaTotpSecret: text("mfa_totp_secret"),
+  // Mid-setup pending secret. Lives only between POST /mfa/setup and
+  // POST /mfa/verify; cleared after activation or on disable.
+  mfaPendingSecret: text("mfa_pending_secret"),
   mfaBackupCodes: jsonb("mfa_backup_codes"),
   failedLoginCount: integer("failed_login_count").notNull().default(0),
   lockedUntil: timestamp("locked_until", { withTimezone: true }),

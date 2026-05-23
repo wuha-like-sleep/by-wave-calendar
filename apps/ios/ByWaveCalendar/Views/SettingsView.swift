@@ -190,6 +190,8 @@ struct AccountSettingsPage: View {
     @Binding var webURL: URL?
     @State private var showingChangePassword = false
     @State private var showingDeleteAccount = false
+    @State private var showingProfileSwitcher = false
+    @State private var showingMfa = false
     @State private var openingWebFor: AccountAction?
     @State private var errorMessage: String?
 
@@ -202,6 +204,23 @@ struct AccountSettingsPage: View {
                 if let name = state.currentUserName, !name.isEmpty {
                     LabeledContent("昵称") {
                         Text(name).foregroundStyle(.secondary)
+                    }
+                }
+                // Account switcher — shows the # of other accounts after
+                // the chevron so the user knows how many are stashed.
+                Button {
+                    showingProfileSwitcher = true
+                } label: {
+                    HStack {
+                        Label("切换账号", systemImage: "arrow.left.arrow.right.circle")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if state.profiles.count > 1 {
+                            Text("\(state.profiles.count) 个账号")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption).foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -221,13 +240,18 @@ struct AccountSettingsPage: View {
             }
 
             Section {
-                accountBridgeRow(.mfa, label: "二次验证 (MFA)", systemImage: "lock.shield")
+                Button {
+                    showingMfa = true
+                } label: {
+                    Label("二次验证 (MFA)", systemImage: "lock.shield")
+                        .foregroundStyle(.primary)
+                }
                 accountBridgeRow(.passkeys, label: "Passkey 管理", systemImage: "person.badge.key.fill")
                 accountBridgeRow(.ssoBind, label: "第三方账户绑定", systemImage: "link")
             } header: {
                 Text("更多账号设置")
             } footer: {
-                Text("MFA / Passkey / SSO 绑定暂时在浏览器里完成（自动登录，不用再输密码）。下个版本会改成原生表单。")
+                Text("Passkey / SSO 绑定暂时在浏览器里完成（自动登录，不用再输密码）。")
                     .font(.footnote)
             }
 
@@ -253,6 +277,15 @@ struct AccountSettingsPage: View {
         .sheet(isPresented: $showingDeleteAccount) {
             NavigationStack {
                 DeleteAccountPage(onDone: { showingDeleteAccount = false })
+                    .environmentObject(state)
+            }
+        }
+        .sheet(isPresented: $showingProfileSwitcher) {
+            ProfileSwitcherView().environmentObject(state)
+        }
+        .sheet(isPresented: $showingMfa) {
+            NavigationStack {
+                MfaSettingsPage(onDone: { showingMfa = false })
                     .environmentObject(state)
             }
         }

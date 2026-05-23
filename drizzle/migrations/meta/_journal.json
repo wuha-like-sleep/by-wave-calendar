@@ -246,6 +246,13 @@
       "when": 1779900000000,
       "tag": "0034_device_client_id",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1779950000000,
+      "tag": "0035_mfa_pending_secret",
+      "breakpoints": true
     }
   ]
 }

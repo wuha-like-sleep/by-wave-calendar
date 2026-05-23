@@ -14,23 +14,42 @@
 import Foundation
 import Security
 
-enum KeychainKey: String {
-    case refreshToken = "bwc.refreshToken"
-    // Stable per-Apple-ID UUID. Generated lazily on first use and
-    // persisted forever. Synced via iCloud so it's the same on iPhone
-    // + iPad + new device. The server uses it to dedup repeat sign-ins
-    // from the same physical install — "退出登录 → 再登录" no longer
-    // grows the device list.
-    case clientDeviceId = "bwc.clientDeviceId"
-    // Last server URL the user paired with. Synced so a fresh install
-    // on another Apple device can auto-fill the server field.
-    case lastServerURL = "bwc.lastServerURL"
+enum KeychainKey: Equatable {
+    /// Refresh token — scoped per-profile so multiple sign-ins to
+    /// different servers/accounts don't collide. The String is the
+    /// Profile.id (UUID). Never synced via iCloud — each device must
+    /// claim its own.
+    case refreshToken(profileId: String)
+    /// Legacy unparameterized refresh token slot from pre-multi-account
+    /// builds. Only read for migration; new writes go to the scoped
+    /// variant above.
+    case legacyRefreshToken
+    /// Stable per-Apple-ID UUID. Generated lazily on first use and
+    /// persisted forever. Synced via iCloud so it's the same on iPhone
+    /// + iPad + new device. The server uses it to dedup repeat sign-ins
+    /// from the same physical install — "退出登录 → 再登录" no longer
+    /// grows the device list.
+    case clientDeviceId
+    /// Last server URL the user paired with. Synced so a fresh install
+    /// on another Apple device can auto-fill the server field.
+    case lastServerURL
+
+    /// Keychain account string. Profile-scoped keys append the id so
+    /// each account gets its own slot.
+    var accountKey: String {
+        switch self {
+        case .refreshToken(let pid): return "bwc.refreshToken.\(pid)"
+        case .legacyRefreshToken: return "bwc.refreshToken"
+        case .clientDeviceId: return "bwc.clientDeviceId"
+        case .lastServerURL: return "bwc.lastServerURL"
+        }
+    }
 
     /// Whether this key should sync via iCloud Keychain. False = stays
     /// on this device only (safer for secrets like refresh tokens).
     var synchronizable: Bool {
         switch self {
-        case .refreshToken: return false
+        case .refreshToken, .legacyRefreshToken: return false
         case .clientDeviceId, .lastServerURL: return true
         }
     }
@@ -47,13 +66,13 @@ enum Keychain {
         SecItemDelete([
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: key.rawValue,
+            kSecAttrAccount: key.accountKey,
             kSecAttrSynchronizable: kSecAttrSynchronizableAny,
         ] as CFDictionary)
         var attrs: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
+            kSecAttrAccount as String: key.accountKey,
             kSecValueData as String: data,
             // iCloud-synced items need a different accessibility class —
             // …AfterFirstUnlock with no DeviceOnly suffix is the right one.
@@ -69,7 +88,7 @@ enum Keychain {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key.rawValue,
+            kSecAttrAccount as String: key.accountKey,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
@@ -92,7 +111,7 @@ enum Keychain {
         SecItemDelete([
             kSecClass: kSecClassGenericPassword,
             kSecAttrService: service,
-            kSecAttrAccount: key.rawValue,
+            kSecAttrAccount: key.accountKey,
             kSecAttrSynchronizable: kSecAttrSynchronizableAny,
         ] as CFDictionary)
     }

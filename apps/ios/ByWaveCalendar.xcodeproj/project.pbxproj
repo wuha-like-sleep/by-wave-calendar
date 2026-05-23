@@ -35,6 +35,9 @@
 		1F000100000000000000001A /* PushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001A /* PushService.swift */; };
 		1F000100000000000000001B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001B /* Assets.xcassets */; };
 		1F000100000000000000001C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001C /* Theme.swift */; };
+		1F000100000000000000001E /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001E /* Profile.swift */; };
+		1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001F /* ProfileSwitcherView.swift */; };
+		1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000020 /* MfaSettingsPage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -68,6 +71,9 @@
 		1B000100000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1B000100000000000000001C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1B000100000000000000001D /* ByWaveCalendar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ByWaveCalendar.entitlements; sourceTree = "<group>"; };
+		1B000100000000000000001E /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		1B000100000000000000001F /* ProfileSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSwitcherView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000020 /* MfaSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MfaSettingsPage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +100,7 @@
 			children = (
 				1B0001000000000000000001 /* ByWaveCalendarApp.swift */,
 				1B0001000000000000000002 /* AppState.swift */,
+				1B000100000000000000001E /* Profile.swift */,
 				1E0001000000000000000003 /* Network */,
 				1E0001000000000000000004 /* Auth */,
 				1E0001000000000000000007 /* Sync */,
@@ -142,6 +149,8 @@
 				1B0001000000000000000017 /* CalendarFilterView.swift */,
 				1B0001000000000000000018 /* SearchView.swift */,
 				1B000100000000000000001C /* Theme.swift */,
+				1B000100000000000000001F /* ProfileSwitcherView.swift */,
+				1B0001000000000000000020 /* MfaSettingsPage.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -262,6 +271,9 @@
 				1F0001000000000000000019 /* LocalNotifications.swift in Sources */,
 				1F000100000000000000001A /* PushService.swift in Sources */,
 				1F000100000000000000001C /* Theme.swift in Sources */,
+				1F000100000000000000001E /* Profile.swift in Sources */,
+				1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */,
+				1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
