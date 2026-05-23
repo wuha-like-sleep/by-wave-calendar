@@ -43,6 +43,7 @@
 		1F0001000000000000000023 /* ServerCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000023 /* ServerCapabilities.swift */; };
 		1F0001000000000000000024 /* AttendeesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000024 /* AttendeesPage.swift */; };
 		1F0001000000000000000025 /* DateFormatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000025 /* DateFormatters.swift */; };
+		1F0001000000000000000026 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000026 /* Localizable.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -85,7 +86,20 @@
 		1B0001000000000000000023 /* ServerCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCapabilities.swift; sourceTree = "<group>"; };
 		1B0001000000000000000024 /* AttendeesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendeesPage.swift; sourceTree = "<group>"; };
 		1B0001000000000000000025 /* DateFormatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatters.swift; sourceTree = "<group>"; };
+		1B0001000000000000000027 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+/* Begin PBXVariantGroup section */
+		1B0001000000000000000026 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1B0001000000000000000027 /* zh-Hans */,
+				1B0001000000000000000028 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		1C0001000000000000000001 /* Frameworks */ = {
@@ -114,6 +128,7 @@
 				1B000100000000000000001E /* Profile.swift */,
 				1B0001000000000000000023 /* ServerCapabilities.swift */,
 				1B0001000000000000000025 /* DateFormatters.swift */,
+				1B0001000000000000000026 /* Localizable.strings */,
 				1E0001000000000000000008 /* Legal */,
 				1E0001000000000000000003 /* Network */,
 				1E0001000000000000000004 /* Auth */,
@@ -250,6 +265,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1F000100000000000000001B /* Assets.xcassets in Resources */,
+				1F0001000000000000000026 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

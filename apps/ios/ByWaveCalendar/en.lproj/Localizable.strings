@@ -1,0 +1,117 @@
+// Localizable.strings (English)
+// Key = the Chinese source string from the views. This file provides the
+// English translation that iOS picks when the device locale prefers en-*.
+
+// MARK: - General
+"完成" = "Done";
+"取消" = "Cancel";
+"保存" = "Save";
+"删除" = "Delete";
+"确定" = "OK";
+"好" = "OK";
+"出错了" = "Something went wrong";
+"继续" = "Continue";
+"重试" = "Retry";
+
+// MARK: - Calendar tabs / nav
+"日" = "Day";
+"周" = "Week";
+"月" = "Month";
+"年" = "Year";
+"今天" = "Today";
+"日历" = "Calendar";
+"无事件" = "No events";
+"今天没有事件" = "Nothing scheduled today";
+"明天没有事件" = "Nothing scheduled tomorrow";
+
+// MARK: - Setup / Login
+"扫码" = "Scan";
+"密码" = "Password";
+"配对码" = "Pair code";
+"登录" = "Sign In";
+"登录中…" = "Signing in…";
+"服务器地址" = "Server address";
+"邮箱" = "Email";
+"邮箱地址" = "Email address";
+"打开相机扫码" = "Open camera to scan";
+"用浏览器登录" = "Sign in via browser";
+"快速登录（推荐）" = "Quick sign-in (recommended)";
+"登录你的服务器，开始同步" = "Sign in to your server to start syncing";
+
+// MARK: - Settings top-level
+"设置" = "Settings";
+"账号" = "Account";
+"同步与通知" = "Sync & Notifications";
+"外观" = "Appearance";
+"关于" = "About";
+"未登录" = "Not signed in";
+"切换账号" = "Switch account";
+"添加另一个账号" = "Add another account";
+"已登录的账号" = "Signed-in accounts";
+
+// MARK: - Account management
+"身份" = "Identity";
+"昵称" = "Display name";
+"安全" = "Security";
+"修改密码" = "Change password";
+"二次验证 (MFA)" = "Two-factor (MFA)";
+"Passkey 管理" = "Passkeys";
+"第三方账户绑定" = "Linked accounts";
+"删除账户" = "Delete account";
+"删除账户？" = "Delete account?";
+"永久删除" = "Delete permanently";
+"更多账号设置" = "More account settings";
+
+// MARK: - Sync / notifications
+"连接" = "Connection";
+"服务器" = "Server";
+"设备名" = "Device name";
+"系统日历" = "System calendar";
+"同步到系统日历" = "Mirror to System Calendar";
+"提醒通知" = "Reminders";
+"事件开始前提醒" = "Notify before event starts";
+"提前" = "Lead time";
+
+// MARK: - Appearance
+"主题" = "Theme";
+"跟随系统" = "System";
+"浅色" = "Light";
+"深色" = "Dark";
+"品牌色" = "Brand color";
+"主色" = "Accent";
+
+// MARK: - About
+"版本" = "Version";
+"APP 版本" = "App version";
+"服务器版本" = "Server version";
+"法律" = "Legal";
+"项目" = "Project";
+"版本信息" = "Version info";
+"隐私政策" = "Privacy Policy";
+"使用条款" = "Terms of Service";
+"GitHub 仓库" = "GitHub Repository";
+"自托管日历，专为你设计" = "Self-hosted calendar, designed for you";
+"感谢使用 ByWave Calendar 💜" = "Thanks for using ByWave Calendar 💜";
+
+// MARK: - Event editor
+"新建事件" = "New event";
+"编辑事件" = "Edit event";
+"事件详情" = "Event details";
+"事件标题" = "Title";
+"时间" = "Time";
+"开始" = "Start";
+"结束" = "End";
+"全天" = "All day";
+"时区" = "Time zone";
+"地点" = "Location";
+"备注" = "Notes";
+"邀请人" = "Attendees";
+"管理参与者" = "Manage attendees";
+"创建" = "Create";
+
+// MARK: - Sign out / device
+"解绑并退出登录" = "Unbind & sign out";
+"只退出登录（保留服务器端的绑定）" = "Sign out only (keep device binding)";
+"解绑当前设备？" = "Unbind this device?";
+"解绑" = "Unbind";
+"解绑中…" = "Unbinding…";
