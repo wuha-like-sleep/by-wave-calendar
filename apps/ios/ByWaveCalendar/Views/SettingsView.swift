@@ -772,22 +772,27 @@ struct AboutSettingsPage: View {
     @Binding var webURL: URL?
     /// While we're HEAD-probing the active server's legal page, this
     /// holds the title so the row can show a spinner instead of the
-    /// chevron. Cleared once we know to open Safari or local fallback.
+    /// chevron.
     @State private var probingLegal: String?
     /// Set to a (title, content) pair when we've decided to show the
-    /// bundled local fallback (server doesn't have the page or wasn't
-    /// reachable). Drives the local legal sheet.
+    /// bundled local fallback. Drives the local legal sheet.
     @State private var localLegal: LegalSheetItem?
 
     var body: some View {
         Form {
-            Section("应用") {
-                LabeledContent("版本") {
-                    Text("\(PairingService.appVersion) (\(SettingsView.buildNumber))")
-                        .foregroundStyle(.secondary).font(.callout)
-                }
+            // Hero — app icon (recreated from Theme.brandGradient so we
+            // don't depend on Bundle.main loading the actual AppIcon),
+            // name, version, tagline. Listed first so it dominates the
+            // page like a proper "About" screen rather than reading as
+            // yet another settings list.
+            Section {
+                heroBanner
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .frame(maxWidth: .infinity)
             }
-            // Legal — dynamic per active server. Each server operator
+
+            // Legal — dynamic per active server. Each operator
             // configures their own /privacy and /terms web pages so a
             // self-hosted fork shows its own policies, not the original
             // author's. When the user isn't signed in (or the server
@@ -797,25 +802,61 @@ struct AboutSettingsPage: View {
             Section {
                 legalRow(title: "隐私政策",
                          systemImage: "hand.raised.fill",
+                         tint: .blue,
                          serverPath: "/privacy",
                          fallback: LegalContent.privacy)
                 legalRow(title: "使用条款",
                          systemImage: "doc.text.fill",
+                         tint: .teal,
                          serverPath: "/terms",
                          fallback: LegalContent.terms)
             } header: {
                 Text("法律")
             } footer: {
                 if let host = state.serverURL?.host {
-                    Text("优先显示「\(host)」服务器配置的政策；如果服务器上没有这个页面，会自动回退到 APP 内置的通用版本。")
+                    Text("优先显示「\(host)」服务器配置的政策；服务器上没有此页面时回退到 APP 内置通用版本。")
                         .font(.footnote)
                 } else {
                     Text("当前未登录，显示 APP 内置的通用版本。登录服务器后会优先显示该服务器配置的政策。")
                         .font(.footnote)
                 }
             }
-            Section("项目") {
-                aboutLinkRow(label: "GitHub 仓库", url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
+
+            Section {
+                projectRow(title: "GitHub 仓库",
+                           subtitle: "查看源码 / 提 issue / 加星支持",
+                           systemImage: "chevron.left.forwardslash.chevron.right",
+                           tint: .purple,
+                           url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
+            } header: {
+                Text("项目")
+            } footer: {
+                Text("ByWave Calendar 是一个开源的自托管日历平台。欢迎贡献代码、报告问题、提交改进建议。")
+                    .font(.footnote)
+            }
+
+            Section {
+                LabeledContent {
+                    Text("\(PairingService.appVersion) (\(SettingsView.buildNumber))")
+                        .foregroundStyle(.secondary).font(.callout.monospacedDigit())
+                } label: {
+                    Label("APP 版本", systemImage: "iphone")
+                }
+                if !state.serverCapabilities.version.isEmpty {
+                    LabeledContent {
+                        Text(state.serverCapabilities.version)
+                            .foregroundStyle(.secondary).font(.callout.monospacedDigit())
+                    } label: {
+                        Label("服务器版本", systemImage: "server.rack")
+                    }
+                }
+            } header: {
+                Text("版本信息")
+            } footer: {
+                Text("感谢使用 ByWave Calendar 💜")
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.top, 4)
             }
         }
         .navigationTitle("关于")
@@ -832,18 +873,60 @@ struct AboutSettingsPage: View {
         }
     }
 
-    /// External link — opens in SafariViewController (only used for the
-    /// GitHub repo now; the legal pages route through legalRow below).
-    private func aboutLinkRow(label: String, url: URL) -> some View {
+    /// Hero banner — re-uses Theme.brandGradient + white calendar glyph
+    /// matching the app icon. Stays in sync if Theme.brandStart/End ever
+    /// changes. Below it: name + version + tagline.
+    private var heroBanner: some View {
+        VStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Theme.brandGradient)
+                .frame(width: 96, height: 96)
+                .overlay {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 44, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .shadow(color: Theme.brandShadow, radius: 18, y: 8)
+            VStack(spacing: 4) {
+                Text("ByWave Calendar")
+                    .font(.title2.weight(.bold))
+                Text("自托管日历，专为你设计")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Text("v\(PairingService.appVersion)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
+    }
+
+    /// Project row — colored icon + title + subtitle + chevron. Used
+    /// for the GitHub link (and any future "buy me a coffee" etc).
+    private func projectRow(title: String, subtitle: String, systemImage: String, tint: Color, url: URL) -> some View {
         Button {
             webURL = url
         } label: {
-            HStack {
-                Text(label).foregroundStyle(.primary)
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(tint)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: systemImage)
+                        .foregroundStyle(.white)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.body).foregroundStyle(.primary)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
                 Spacer()
                 Image(systemName: "arrow.up.right.square")
                     .foregroundStyle(.tertiary).font(.footnote)
             }
+            .padding(.vertical, 2)
         }
     }
 
@@ -857,7 +940,7 @@ struct AboutSettingsPage: View {
     ///   * If we don't have a server URL at all (cold launch, never
     ///     signed in) → show the bundled local fallback directly.
     @ViewBuilder
-    private func legalRow(title: String, systemImage: String, serverPath: String, fallback: String) -> some View {
+    private func legalRow(title: String, systemImage: String, tint: Color, serverPath: String, fallback: String) -> some View {
         Button {
             if state.serverURL == nil {
                 localLegal = LegalSheetItem(title: title, content: fallback)
@@ -865,8 +948,16 @@ struct AboutSettingsPage: View {
                 Task { await openLegal(title: title, serverPath: serverPath, fallback: fallback) }
             }
         } label: {
-            HStack {
-                Label(title, systemImage: systemImage).foregroundStyle(.primary)
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(tint)
+                        .frame(width: 30, height: 30)
+                    Image(systemName: systemImage)
+                        .foregroundStyle(.white)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                Text(title).font(.body).foregroundStyle(.primary)
                 Spacer()
                 if probingLegal == title {
                     ProgressView().controlSize(.small)
@@ -875,6 +966,7 @@ struct AboutSettingsPage: View {
                         .font(.caption).foregroundStyle(.tertiary)
                 }
             }
+            .padding(.vertical, 2)
         }
         .disabled(probingLegal != nil)
     }
