@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+    Push Notifications entitlement. Without this, APNs registration
+    fails with the error "未找到应用程序的 aps-environment 的授权字符串".
+
+    "development" works for both Xcode debug builds (real device or
+    iOS 16+ simulator on Apple Silicon) and ad-hoc / TestFlight builds.
+    For App Store submission Xcode will auto-promote to "production"
+    based on the provisioning profile, so no separate Release-only
+    entitlements file is needed.
+
+    The app uses silent (content-available) pushes only — no alert /
+    badge / sound permission required from the user at runtime.
+    -->
+    <key>aps-environment</key>
+    <string>development</string>
+</dict>
+</plist>

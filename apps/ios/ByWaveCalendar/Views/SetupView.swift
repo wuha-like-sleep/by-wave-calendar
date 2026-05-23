@@ -10,17 +10,30 @@
 import SwiftUI
 
 private enum LoginMethod: String, CaseIterable, Identifiable {
-    case password = "密码"
+    // Order matters — first wins as the default selection. Scan-first
+    // because it's zero-typing: QR encodes both server URL + code so
+    // the user just opens the camera. Password is the secondary path
+    // when the user can't reach a web browser to generate a QR.
     case scan = "扫码"
+    case password = "密码"
     case code = "配对码"
     var id: String { rawValue }
+
+    /// Whether this method needs the user to type a server URL. Scan
+    /// embeds the URL in the QR payload, so we hide the field there.
+    var needsServerURL: Bool {
+        switch self {
+        case .scan: return false
+        case .password, .code: return true
+        }
+    }
 }
 
 struct SetupView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var serverURLInput: String = ""
-    @State private var method: LoginMethod = .password
+    @State private var method: LoginMethod = .scan
 
     // Password method
     @State private var email: String = ""
@@ -33,30 +46,44 @@ struct SetupView: View {
     @State private var isWorking = false
     @State private var errorMessage: String?
 
+    // UserDefaults key for "last server URL" — used to prefill the
+    // field on a return visit (sign-out → sign-in same server).
+    private static let lastServerURLKey = "bwc.serverURL"
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 22) {
                     hero
-                    serverURLField
                     methodPicker
+                    // URL field only appears for methods that need it.
+                    // Scan-mode shows nothing here — the QR carries the
+                    // server URL, so making the user type it again is
+                    // pointless and confusing.
+                    if method.needsServerURL {
+                        serverURLField
+                    }
                     // Body per method
                     Group {
                         switch method {
-                        case .password: passwordForm
                         case .scan:     scanForm
+                        case .password: passwordForm
                         case .code:     codeForm
                         }
                     }
                     // Browser-based login. Covers Passkey + MFA + SSO
                     // without needing native equivalents — we just hand
                     // off to the server's web login flow via
-                    // ASWebAuthenticationSession.
-                    browserLoginButton
+                    // ASWebAuthenticationSession (auto-closes the sheet
+                    // when the server redirects to bywave://). Only
+                    // shown when we know a server URL (so the user
+                    // doesn't see an "open browser" button that 404s
+                    // because the field is empty).
+                    if method.needsServerURL {
+                        browserLoginButton
+                    }
                     if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote).foregroundStyle(.red)
-                            .multilineTextAlignment(.center)
+                        errorBanner(text: errorMessage)
                     }
                     Spacer(minLength: 40)
                 }
@@ -71,7 +98,46 @@ struct SetupView: View {
                     }
                 }
             }
+            .onAppear {
+                // Prefill last-used server URL so returning users don't
+                // have to re-type "rl.lz-ss.com" every time. New users
+                // get an empty field with helper placeholder.
+                if serverURLInput.isEmpty,
+                   let last = UserDefaults.standard.string(forKey: Self.lastServerURLKey)
+                {
+                    serverURLInput = last
+                }
+            }
+            .onChange(of: method) { _, _ in
+                // Clear errors when user switches methods — prior error
+                // (e.g. "邮箱或密码错误") shouldn't follow them into the
+                // scan tab.
+                errorMessage = nil
+            }
         }
+    }
+
+    private func errorBanner(text: String) -> some View {
+        // Multi-line banner — replaces the single-line red footnote so
+        // longer messages (especially the apps_disabled hint) wrap.
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(text)
+                    .font(.footnote)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.orange.opacity(0.4), lineWidth: 0.5),
+        )
     }
 
     // MARK: - Hero
@@ -147,25 +213,62 @@ struct SetupView: View {
 
     // MARK: - Scan
     private var scanForm: some View {
-        VStack(spacing: 10) {
-            Text("在浏览器登录后，进入设置 → 我的设备 → 「绑定新设备」，对准二维码")
-                .font(.callout).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+        VStack(spacing: 14) {
+            // Headline + step-by-step in one place — replaces the long
+            // dense gray run-on sentence. Numbered list reads faster.
+            VStack(alignment: .leading, spacing: 8) {
+                Label("快速登录（推荐）", systemImage: "sparkles")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                HStack(alignment: .top, spacing: 8) {
+                    stepBadge(1)
+                    Text("在电脑或手机浏览器登录你的 ByWave Calendar")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    stepBadge(2)
+                    Text("进入「设置 → 我的设备 → 绑定新设备」")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    stepBadge(3)
+                    Text("用本机相机对准二维码 — 服务器地址和配对码都在码里")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+
             Button {
                 showingScanner = true
             } label: {
-                HStack {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.system(size: 18, weight: .semibold))
-                    Text("打开相机扫码").font(.body.weight(.semibold))
+                HStack(spacing: 10) {
+                    if isWorking {
+                        ProgressView().controlSize(.small).tint(.white)
+                        Text("处理中…").font(.body.weight(.semibold))
+                    } else {
+                        Image(systemName: "qrcode.viewfinder")
+                            .font(.system(size: 22, weight: .semibold))
+                        Text("打开相机扫码").font(.body.weight(.semibold))
+                    }
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .frame(maxWidth: .infinity).padding(.vertical, 16)
                 .background(brandGradient)
                 .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .shadow(color: Theme.brandShadow, radius: 8, y: 4)
             }
             .disabled(isWorking)
         }
+    }
+
+    private func stepBadge(_ n: Int) -> some View {
+        Text("\(n)")
+            .font(.caption.weight(.bold).monospacedDigit())
+            .foregroundStyle(.white)
+            .frame(width: 18, height: 18)
+            .background(Theme.brandStart, in: Circle())
     }
 
     // MARK: - Manual code
@@ -263,7 +366,12 @@ struct SetupView: View {
         }
         // Strip trailing slash so /api/v1 paths assemble cleanly.
         if s.hasSuffix("/") { s.removeLast() }
-        return URL(string: s)
+        guard let url = URL(string: s), url.host != nil else { return nil }
+        // Save eagerly so a failed login attempt doesn't make the user
+        // re-type the URL next time. completePairing also writes this
+        // key on success — duplicate write is harmless.
+        UserDefaults.standard.set(s, forKey: Self.lastServerURLKey)
+        return url
     }
 
     private func loginWithPassword() async {
@@ -290,17 +398,17 @@ struct SetupView: View {
                 let err = body["error"] as? String
                 let msg = body["message"] as? String
                 if err == "mfa_required" {
-                    errorMessage = msg ?? "账号开启了 MFA，请改用扫码登录"
+                    errorMessage = msg ?? "账号开启了二次验证（MFA）。\n请切到「扫码」登录 — 在网页 /app/settings#devices 生成二维码。"
                 } else if err == "invalid_credentials" {
                     errorMessage = "邮箱或密码错误"
                 } else if err == "account_disabled" {
                     errorMessage = "账号已停用，请联系管理员"
                 } else if err == "account_locked" {
-                    errorMessage = msg ?? "登录失败次数过多，稍后再试"
+                    errorMessage = msg ?? "登录失败次数过多，请稍后再试。"
                 } else if err == "apps_disabled" {
-                    errorMessage = "管理员已停用 APP 同步功能"
+                    errorMessage = "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。"
                 } else {
-                    errorMessage = "登录失败 (HTTP \(http.statusCode))"
+                    errorMessage = msg ?? "登录失败 (HTTP \(http.statusCode))"
                 }
                 return
             }

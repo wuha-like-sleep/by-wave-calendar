@@ -43,6 +43,10 @@ struct CalendarView: View {
 
     // Polling timer — fires every 60s while in foreground.
     @State private var pollTask: Task<Void, Never>?
+    // Debounce task for anchor/mode changes. Swiping rapidly through
+    // a week would otherwise fire 5+ /api/v1/events requests back to
+    // back; this collapses them into one after the user pauses.
+    @State private var navDebounceTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -122,11 +126,12 @@ struct CalendarView: View {
                 Task { await load(force: true) }
             }
             .onChange(of: mode) { _, _ in
-                Task { await load(force: false) }
+                scheduleDebouncedLoad()
             }
             .onChange(of: anchor) { _, _ in
-                Task { await load(force: false) }
+                scheduleDebouncedLoad()
             }
+            .onDisappear { navDebounceTask?.cancel() }
             .sheet(isPresented: $showingCreate) {
                 NavigationStack {
                     EventEditView(
@@ -401,6 +406,23 @@ struct CalendarView: View {
             errorMessage = e.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Debounced load
+    // Anchor/mode changes from swipe nav fire in rapid succession (each
+    // chevron-tap or drag triggers @State updates). Without debounce we
+    // hit the server N times and waste battery, and the UI feels janky
+    // because each reload runs EventKit mirror + notification reschedule.
+    // 220ms is long enough to coalesce a triple-tap, short enough to
+    // feel "immediate" after a single swipe lands.
+    private func scheduleDebouncedLoad() {
+        navDebounceTask?.cancel()
+        navDebounceTask = Task { [weak state] in
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            if Task.isCancelled { return }
+            guard state != nil else { return }
+            await load(force: false)
         }
     }
 

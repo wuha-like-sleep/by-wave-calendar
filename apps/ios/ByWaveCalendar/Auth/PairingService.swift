@@ -50,15 +50,34 @@ private struct EnvelopeOr<T: Decodable>: Decodable {
 enum PairingError: Error, LocalizedError {
     case malformedQR
     case invalidServerURL
-    case server(status: Int, message: String?)
+    case server(status: Int, errorCode: String?, message: String?)
     case network(Error)
 
     var errorDescription: String? {
         switch self {
-        case .malformedQR: return "二维码内容无效，请确认从 ByWave Calendar 网页生成"
-        case .invalidServerURL: return "服务器地址无效"
-        case .server(let s, let m): return "服务器错误 (HTTP \(s)) \(m ?? "")"
-        case .network(let e): return "网络错误：\(e.localizedDescription)"
+        case .malformedQR:
+            return "二维码内容无效，请确认从 ByWave Calendar 网页生成"
+        case .invalidServerURL:
+            return "服务器地址无效"
+        case .server(let s, let code, let msg):
+            // Map known server error codes to friendly Chinese text.
+            // Falls back to raw HTTP status when the server returns an
+            // unknown error code (e.g. proxy 502 / 503).
+            switch code {
+            case "apps_disabled":
+                return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。"
+            case "invalid_or_expired_code":
+                return "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。"
+            case "bad_request":
+                return "配对码格式不对。请确认是 6 位字符（字母 + 数字）。"
+            default:
+                if let msg, !msg.isEmpty { return msg }
+                if s == 429 { return "请求太频繁，请等一会再试。" }
+                if s == 502 || s == 503 || s == 504 { return "服务器暂时无法响应（HTTP \(s)），稍后重试。" }
+                return "服务器错误 (HTTP \(s))\(code.map { " - \($0)" } ?? "")"
+            }
+        case .network(let e):
+            return "网络错误：\(e.localizedDescription)"
         }
     }
 }
@@ -89,9 +108,14 @@ enum PairingService {
                 throw PairingError.network(NSError(domain: "no-http-response", code: 0))
             }
             if http.statusCode != 200 {
-                // Try to parse a JSON error message.
-                let msg = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
-                throw PairingError.server(status: http.statusCode, message: msg)
+                // Parse the server's standard error envelope:
+                //   { error: "code_slug", message: "可选中文文案" }
+                // Both fields are optional; we pass them through to
+                // PairingError.server which decides on a friendly text.
+                let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+                let code = body["error"] as? String
+                let msg = body["message"] as? String
+                throw PairingError.server(status: http.statusCode, errorCode: code, message: msg)
             }
             // Both shapes: {accessToken, ...} or {data: {accessToken, ...}}
             let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
