@@ -49,6 +49,9 @@ struct SetupView: View {
     @State private var showingScanner = false
     @State private var isWorking = false
     @State private var errorMessage: String?
+    /// Set when password login succeeded but server requires a TOTP
+    /// 6-digit code. Drives the MFA code entry sheet.
+    @State private var pendingMfa: PendingMfa?
 
     // UserDefaults key for "last server URL" — used to prefill the
     // field on a return visit (sign-out → sign-in same server).
@@ -100,6 +103,28 @@ struct SetupView: View {
                     if case .success(let raw) = result {
                         Task { await pairFromScan(raw) }
                     }
+                }
+            }
+            .sheet(item: $pendingMfa) { item in
+                NavigationStack {
+                    MfaCodeEntrySheet(
+                        serverURL: item.serverURL,
+                        mfaToken: item.mfaToken,
+                        onComplete: { resp in
+                            let expDate = ISO8601DateFormatter().date(from: resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+                            state.completePairing(
+                                serverURL: item.serverURL,
+                                refreshToken: resp.refreshToken,
+                                accessToken: resp.accessToken,
+                                accessTokenExpiresAt: expDate,
+                                userEmail: resp.userEmail,
+                                userName: resp.userName,
+                            )
+                            pendingMfa = nil
+                            dismiss()
+                        },
+                        onCancel: { pendingMfa = nil },
+                    )
                 }
             }
             .onAppear {
@@ -394,24 +419,31 @@ struct SetupView: View {
                 let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
                 let err = body["error"] as? String
                 let msg = body["message"] as? String
-                if err == "mfa_required" {
-                    errorMessage = msg ?? "账号开启了二次验证（MFA）。\n请切到「扫码」登录 — 在网页 /app/settings#devices 生成二维码。"
-                } else if err == "invalid_credentials" {
+                if err == "invalid_credentials" {
                     errorMessage = "邮箱或密码错误"
                 } else if err == "account_disabled" {
                     errorMessage = "账号已停用，请联系管理员"
                 } else if err == "account_locked" {
                     errorMessage = msg ?? "登录失败次数过多，请稍后再试。"
                 } else if err == "apps_disabled" {
-                    errorMessage = "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。"
+                    errorMessage = "管理员未启用 APP 同步功能"
                 } else {
                     errorMessage = msg ?? "登录失败 (HTTP \(http.statusCode))"
                 }
                 return
             }
-            // Server returns the same envelope shape as pair-claim.
+            // Two possible 200 shapes:
+            //   1. mfaPending=true + mfaToken — account has TOTP, prompt
+            //      user for the 6-digit code natively.
+            //   2. Standard success with tokens.
             let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
             let payload = (outer["data"] as? [String: Any]) ?? outer
+            if let pending = payload["mfaPending"] as? Bool, pending,
+               let mfaToken = payload["mfaToken"] as? String
+            {
+                pendingMfa = PendingMfa(serverURL: url, mfaToken: mfaToken)
+                return
+            }
             let payloadData = try JSONSerialization.data(withJSONObject: payload)
             let r = try JSONDecoder().decode(PasswordLoginResponse.self, from: payloadData)
             let expDate = ISO8601DateFormatter().date(from: r.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
@@ -489,6 +521,99 @@ struct SetupView: View {
             dismiss()
         } catch let e as PairingError {
             errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - MFA code entry (second step of password login)
+
+/// Identifiable wrapper around (serverURL, mfaToken) so SwiftUI's
+/// sheet(item:) binding works. mfaToken is unique per attempt.
+struct PendingMfa: Identifiable {
+    var id: String { mfaToken }
+    let serverURL: URL
+    let mfaToken: String
+}
+
+/// Compact native sheet that prompts for the 6-digit TOTP code after
+/// a successful password verification on an MFA-enabled account.
+/// Posts to /api/v1/auth/login-mfa-verify and returns the standard
+/// PasswordLoginResponse on success.
+struct MfaCodeEntrySheet: View {
+    let serverURL: URL
+    let mfaToken: String
+    let onComplete: (PasswordLoginResponse) -> Void
+    let onCancel: () -> Void
+
+    @State private var code: String = ""
+    @State private var verifying = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("6 位验证码或备用码", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .font(.title3.monospacedDigit())
+                    .multilineTextAlignment(.center)
+            } header: {
+                Text("二次验证")
+            }
+            if let errorMessage {
+                Section { Text(errorMessage).foregroundStyle(.red).font(.callout) }
+            }
+        }
+        .navigationTitle("输入验证码")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("取消") { onCancel() }.disabled(verifying)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: { Task { await verify() } }) {
+                    if verifying { ProgressView().controlSize(.small) }
+                    else { Text("验证").bold() }
+                }
+                .disabled(verifying || code.count < 6)
+            }
+        }
+    }
+
+    private func verify() async {
+        verifying = true
+        errorMessage = nil
+        defer { verifying = false }
+        do {
+            var req = URLRequest(url: serverURL.appendingPathComponent("/api/v1/auth/login-mfa-verify"))
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONEncoder().encode(MfaVerifyInput(
+                mfaToken: mfaToken,
+                code: code.trimmingCharacters(in: .whitespacesAndNewlines),
+            ))
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+            if http.statusCode != 200 {
+                let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+                let err = body["error"] as? String
+                let msg = body["message"] as? String
+                if err == "invalid_code" {
+                    errorMessage = "验证码错误"
+                } else if err == "mfa_token_expired" {
+                    errorMessage = msg ?? "验证码会话已过期，请重新登录"
+                } else {
+                    errorMessage = msg ?? "登录失败 (HTTP \(http.statusCode))"
+                }
+                return
+            }
+            let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+            let payload = (outer["data"] as? [String: Any]) ?? outer
+            let payloadData = try JSONSerialization.data(withJSONObject: payload)
+            let r = try JSONDecoder().decode(PasswordLoginResponse.self, from: payloadData)
+            onComplete(r)
         } catch {
             errorMessage = error.localizedDescription
         }

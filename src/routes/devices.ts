@@ -20,6 +20,29 @@
 // scale to PM2 cluster mode, move this to PG or Redis — for now the
 // ecosystem.config.cjs runs a single fork.
 const webSessionTokens = new Map<string, { userId: string; expiresAt: number }>();
+
+// MFA-pending login state. When password verification succeeds for an
+// MFA-enabled account, we stash the device-creation params here keyed
+// by a short-lived random token and return that to the client. The
+// client then POSTs /auth/login-mfa-verify with the token + 6-digit
+// TOTP code, and we issue the actual refresh+access pair.
+//
+// 5-minute TTL, single-use. Same process-local caveat as above.
+interface MfaPendingState {
+  userId: string;
+  label: string;
+  kind: string;
+  appVersion: string | null;
+  clientDeviceId: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  expiresAt: number;
+}
+const mfaPendingTokens = new Map<string, MfaPendingState>();
+function _purgeExpiredMfa(): void {
+  const now = Date.now();
+  for (const [k, v] of mfaPendingTokens) if (v.expiresAt < now) mfaPendingTokens.delete(k);
+}
 function _purgeExpiredWebSessions(): void {
   const now = Date.now();
   for (const [k, v] of webSessionTokens) if (v.expiresAt < now) webSessionTokens.delete(k);
@@ -148,9 +171,10 @@ export async function deviceRoutes(app: FastifyInstance) {
   //   - Disabled-account check
   //   - Login lockout (15min after 5 failures)
   //   - Timing-safe verify so non-existent emails don't leak
-  // Refuses when MFA is enabled — we don't expose a phone-typed TOTP
-  // path yet; users with MFA must use QR pairing (where they're
-  // already authenticated on the web with MFA satisfied).
+  // MFA-enabled accounts: we don't error — instead we mint a short-
+  // lived mfaToken and return { mfaPending: true, mfaToken }. The
+  // client (iOS APP) then prompts for the 6-digit TOTP code and posts
+  // to /auth/login-mfa-verify to complete the login natively.
   app.post("/auth/login-password", { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
     const body = z.object({
@@ -184,21 +208,36 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     await resetFailedLogin(user.id);
 
-    // MFA gate — refuse password login when MFA is on. The user has to
-    // do QR pairing instead (where they sign in with MFA on the web).
-    // We don't surface TOTP-on-phone yet; can add a later iteration if
-    // there's demand.
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+
+    // MFA-pending path — password is right, but account requires TOTP.
+    // Stash the device-creation params and return a token the client
+    // must echo back to /auth/login-mfa-verify with the code.
     if (user.mfaEnabled) {
-      return reply.code(412).send({
-        error: "mfa_required",
-        message: "你的账号开启了二次验证。请改用「扫码登录」：在网页 /app/settings 里点「绑定新设备」",
+      _purgeExpiredMfa();
+      const { randomBytes } = await import("node:crypto");
+      const mfaToken = randomBytes(24).toString("hex");
+      const ttlMs = 5 * 60 * 1000;
+      mfaPendingTokens.set(mfaToken, {
+        userId: user.id,
+        label: body.data.label,
+        kind: body.data.kind,
+        appVersion: body.data.appVersion ?? null,
+        clientDeviceId: body.data.clientDeviceId ?? null,
+        ip: req.ip,
+        userAgent: ua,
+        expiresAt: Date.now() + ttlMs,
+      });
+      return reply.send({
+        mfaPending: true,
+        mfaToken,
+        mfaExpiresAt: new Date(Date.now() + ttlMs).toISOString(),
       });
     }
 
     // Create the device row + tokens (or reuse existing one for the same
     // clientDeviceId — see upsertDeviceForUser).
     const refresh = await issueRefreshToken();
-    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
     const { upsertDeviceForUser } = await import("../lib/devices.js");
     const device = await upsertDeviceForUser({
       userId: user.id,
@@ -210,6 +249,84 @@ export async function deviceRoutes(app: FastifyInstance) {
       refreshPrefix: refresh.prefix,
       ip: req.ip,
       userAgent: ua,
+    });
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+    return reply.send({
+      accessToken: access.token,
+      accessTokenExpiresAt: access.expiresAt.toISOString(),
+      refreshToken: refresh.plain,
+      deviceId: device.id,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.displayName,
+    });
+  });
+
+  // -------- MFA verify (second step of password login) --------
+  // Client posts { mfaToken, code } after seeing mfaPending=true in the
+  // /auth/login-password response. Code can be a 6-digit TOTP or one
+  // of the 10 backup codes. On success we mint refresh+access just
+  // like a clean password login.
+  app.post("/auth/login-mfa-verify", {
+    config: { rateLimit: { max: 12, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    const body = z.object({
+      mfaToken: z.string().min(32).max(64),
+      code: z.string().min(6).max(20),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+
+    _purgeExpiredMfa();
+    const pending = mfaPendingTokens.get(body.data.mfaToken);
+    if (!pending) {
+      return reply.code(401).send({ error: "mfa_token_expired", message: "验证码会话已过期，请重新输入密码登录。" });
+    }
+    if (pending.expiresAt < Date.now()) {
+      mfaPendingTokens.delete(body.data.mfaToken);
+      return reply.code(401).send({ error: "mfa_token_expired", message: "验证码会话已过期，请重新输入密码登录。" });
+    }
+
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, pending.userId)).limit(1);
+    if (!user || !user.mfaEnabled || !user.mfaTotpSecret) {
+      mfaPendingTokens.delete(body.data.mfaToken);
+      return reply.code(401).send({ error: "mfa_state_invalid" });
+    }
+
+    // Try TOTP first, then backup codes. Same precedence as the web flow.
+    const { verifyTotpCode, consumeBackupCode } = await import("../lib/mfa.js");
+    let verified = verifyTotpCode(user.mfaTotpSecret, body.data.code);
+    if (!verified) {
+      const codes = (user.mfaBackupCodes as { hash: string; used: boolean }[] | null) ?? [];
+      const consumed = consumeBackupCode(codes, body.data.code);
+      if (consumed.ok) {
+        verified = true;
+        // Mark the code as used so it can't be reused.
+        await db.update(schema.users)
+          .set({ mfaBackupCodes: consumed.updated as unknown as object, updatedAt: new Date() })
+          .where(eq(schema.users.id, user.id));
+      }
+    }
+    if (!verified) {
+      return reply.code(401).send({ error: "invalid_code", message: "验证码错误" });
+    }
+
+    // Consume the mfa token now — single-use.
+    mfaPendingTokens.delete(body.data.mfaToken);
+
+    const refresh = await issueRefreshToken();
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
+      userId: user.id,
+      label: pending.label,
+      kind: pending.kind,
+      appVersion: pending.appVersion,
+      clientDeviceId: pending.clientDeviceId,
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: pending.ip,
+      userAgent: pending.userAgent,
     });
     if (!device) return reply.code(500).send({ error: "device_create_failed" });
     const access = signAccessToken(user.id, device.id);

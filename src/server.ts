@@ -203,7 +203,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "1.1.1" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "1.2.0" }));
 
 // Public diagnostic endpoint for APP onboarding troubleshooting. The
 // iOS / Android APP can ping this BEFORE the user attempts to log in
@@ -234,7 +234,7 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
     violet: "#7C3AED",
   };
   return {
-    version: "1.1.1",
+    version: "1.2.0",
     appsEnabled: s.appsEnabled,
     siteName: s.siteName,
     themePalette: s.themePalette,
@@ -475,7 +475,7 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
     openapi: "3.1.0",
     info: {
       title: "ByWave Calendar API",
-      version: "1.1.1",
+      version: "1.2.0",
       description: "Standardized REST API. All responses wrap in { ok, data } / { ok: false, error }.",
     },
     servers: [{ url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/v1` }],

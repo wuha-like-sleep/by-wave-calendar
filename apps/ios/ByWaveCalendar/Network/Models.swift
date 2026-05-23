@@ -108,6 +108,20 @@ struct CalendarCreateInput: Encodable {
     let timezone: String?
 }
 
+// MFA-pending response shape (server v1.2.0+) — password was right but
+// account requires TOTP. Client must POST /auth/login-mfa-verify with
+// { mfaToken, code } to complete the login.
+struct MfaPendingResponse: Decodable {
+    let mfaPending: Bool
+    let mfaToken: String
+    let mfaExpiresAt: String?
+}
+
+struct MfaVerifyInput: Encodable {
+    let mfaToken: String
+    let code: String
+}
+
 // Server returns the saved row on create/update — same shape as EventDTO
 // (mostly), but we keep this distinct so future server-side additions
 // (e.g. server-computed `extra`) don't break decoding.
