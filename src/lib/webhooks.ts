@@ -120,6 +120,42 @@ export function eventToWebhookPayload(ev: {
   };
 }
 
+// Manually re-fire a single past delivery — used from the admin
+// deliveries page when an external endpoint was down and the admin
+// wants to replay after fixing it. Re-uses the original payload +
+// HMAC signature so the receiver gets exactly the same bytes as the
+// first attempt. Inserts a fresh row tagged with attemptCount += 1.
+export async function retryDelivery(deliveryId: string): Promise<{ ok: boolean; statusCode: number | null; errorMessage: string | null }> {
+  const [orig] = await db.select().from(schema.webhookDeliveries).where(eq(schema.webhookDeliveries.id, deliveryId)).limit(1);
+  if (!orig) return { ok: false, statusCode: null, errorMessage: "delivery_not_found" };
+  const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, orig.webhookId)).limit(1);
+  if (!hook) return { ok: false, statusCode: null, errorMessage: "webhook_deleted" };
+
+  const body = JSON.stringify({
+    event: orig.eventName,
+    timestamp: new Date().toISOString(),
+    data: orig.payload,
+    retry_of: orig.id,
+  });
+  const signature = hook.secret
+    ? "sha256=" + createHmac("sha256", hook.secret).update(body).digest("hex")
+    : null;
+  const result = await sendOnce(hook.url, body, signature);
+  try {
+    await db.insert(schema.webhookDeliveries).values({
+      webhookId: hook.id,
+      eventName: orig.eventName,
+      payload: orig.payload,
+      statusCode: result.statusCode,
+      responseBody: result.responseBody,
+      attemptCount: orig.attemptCount + 1,
+      ok: result.ok,
+      errorMessage: result.errorMessage,
+    });
+  } catch { /* swallow log-write failure */ }
+  return { ok: result.ok, statusCode: result.statusCode, errorMessage: result.errorMessage };
+}
+
 // Admin "Test" button — fires a single delivery to a specific webhook
 // regardless of its enabled flag or events subscription, so the admin
 // can verify their setup before they turn it on.

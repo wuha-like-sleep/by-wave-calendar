@@ -239,9 +239,55 @@
 
   const visibleCalIds = new Set(ctx.calendars.map((c) => c.id));
 
+  // Show pulse skeleton blocks while events load. Disappears as soon
+  // as cal.createEvents runs (or loadEvents errors). On the local cache
+  // path this barely flashes; on cold-start / slow network it prevents
+  // the "white grid" feel that makes users think the page hung.
+  function showLoadingSkeleton() {
+    const host = document.getElementById("calendar");
+    if (!host) return;
+    let overlay = document.getElementById("calendar-skeleton");
+    if (overlay) return; // already showing
+    overlay = document.createElement("div");
+    overlay.id = "calendar-skeleton";
+    overlay.className = "absolute inset-0 pointer-events-none z-10 px-4 pt-16 flex flex-col gap-2";
+    overlay.innerHTML =
+      '<div class="h-7 rounded-md bg-slate-200/70 animate-pulse w-2/3"></div>' +
+      '<div class="h-7 rounded-md bg-slate-200/70 animate-pulse w-1/2"></div>' +
+      '<div class="h-7 rounded-md bg-slate-200/70 animate-pulse w-3/4"></div>' +
+      '<div class="h-7 rounded-md bg-slate-200/70 animate-pulse w-1/3"></div>' +
+      '<div class="h-7 rounded-md bg-slate-200/70 animate-pulse w-2/5"></div>';
+    // Toast UI's calendar root needs `relative` so absolute overlay anchors.
+    if (getComputedStyle(host).position === "static") host.style.position = "relative";
+    host.appendChild(overlay);
+  }
+  function hideLoadingSkeleton() {
+    document.getElementById("calendar-skeleton")?.remove();
+  }
+
+  // Friendly first-run nudge. Shows when the user has zero events across
+  // any visible calendar (empty grid means "you've never used the app",
+  // most of the time). Auto-hides as soon as they create or import one.
+  function syncEmptyState(rawEventCount) {
+    const banner = document.getElementById("empty-state");
+    if (!banner) return;
+    // Only show on first paint. If the user already has events anywhere,
+    // hide; if they go to a future empty week, we still hide (it's normal
+    // to have a quiet week). The signal is "no events anywhere in the
+    // current view AND no events ever loaded since page load".
+    if (rawEventCount > 0) {
+      banner.classList.add("hidden");
+      hasEverLoadedEvents = true;
+      return;
+    }
+    if (!hasEverLoadedEvents) banner.classList.remove("hidden");
+  }
+  let hasEverLoadedEvents = false;
+
   async function loadEvents() {
     const start = cal.getDateRangeStart().toDate();
     const end = cal.getDateRangeEnd().toDate();
+    showLoadingSkeleton();
     try {
       // Go through bwcStore if available — gives us offline cache + outbox
       // optimistic edits. Falls back to plain fetch if event-store.js
@@ -306,9 +352,12 @@
       try { cal.render(); } catch (_e) {}
       // Update the "下一个事件" banner from the same data.
       updateNextEventBanner(rawEvents, now);
+      syncEmptyState(rawEvents.length);
     } catch (err) {
       console.error(err);
       window.bwc && window.bwc.toast("加载事件失败", "error");
+    } finally {
+      hideLoadingSkeleton();
     }
   }
 
@@ -1052,6 +1101,9 @@
   const openNewEvent = () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) });
   $("#btn-new-event").addEventListener("click", openNewEvent);
   $("#btn-new-event-fab")?.addEventListener("click", openNewEvent);
+  // Empty-state nudge buttons reuse the same handlers.
+  $("#empty-new-event")?.addEventListener("click", openNewEvent);
+  $("#empty-import")?.addEventListener("click", () => openImportCalendar());
 
   cal.on("selectDateTime", (info) => {
     // Quantize the click-drag selection to 5 minutes — Toast UI by default

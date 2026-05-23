@@ -129,6 +129,46 @@ function sendXml(reply: FastifyReply, body: string, code = 207): void {
     .send(body);
 }
 
+// Stream a multistatus body chunk by chunk instead of building the
+// whole 5-10MB XML string up front. Used for REPORT responses on
+// large calendars — for 10K events the in-memory string was easily
+// 5MB+ and multiple concurrent CalDAV clients would balloon RSS.
+//
+// Each `entry` is a fully-formed <response>…</response> string. We
+// write the XML envelope, each entry as it's built, then close.
+// Caller is responsible for awaiting the returned Promise so the
+// HTTP response actually finishes before the handler returns.
+async function streamMultistatus(
+  reply: FastifyReply,
+  entries: AsyncIterable<string> | Iterable<string>,
+  code = 207,
+): Promise<void> {
+  reply
+    .code(code)
+    .header("Content-Type", 'application/xml; charset="utf-8"')
+    .header("DAV", "1, 2, 3, calendar-access");
+  // Take over the raw socket so Fastify doesn't try to send a body
+  // after we stream. .hijack() is the documented escape hatch for
+  // chunked custom responses.
+  reply.hijack();
+  const raw = reply.raw;
+  raw.writeHead(code, {
+    "Content-Type": 'application/xml; charset="utf-8"',
+    "DAV": "1, 2, 3, calendar-access",
+    "Transfer-Encoding": "chunked",
+  });
+  raw.write(`${XML_DECL}\n<multistatus ${NS}>\n`);
+  // Backpressure: respect socket .write() returning false. Without
+  // this we could pile up megabytes in the Node write buffer for a
+  // slow client.
+  for await (const entry of entries) {
+    if (!raw.write(entry + "\n")) {
+      await new Promise<void>((resolve) => raw.once("drain", resolve));
+    }
+  }
+  raw.end("</multistatus>\n");
+}
+
 function setOptionsHeaders(reply: FastifyReply): void {
   reply
     .header("DAV", "1, 2, 3, calendar-access")
@@ -452,13 +492,20 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     // Batch-load RSVP statuses for all matched events so the response
     // reflects current accept/decline state without N+1 queries.
     const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
-    const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
-      etag: etagOf(e.updatedAt),
-      contentType: "text/calendar; charset=utf-8; component=VEVENT",
-      lastModified: e.updatedAt,
-      calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
-    }));
-    sendXml(reply, multistatus(entries));
+    // Stream the response — for large multiget bodies (iOS pulls
+    // hundreds of events at once on first sync) the multistatus XML
+    // was easily 10MB+, all held in memory at once. Generator yields
+    // one <response> at a time; streamMultistatus flushes each.
+    await streamMultistatus(reply, (function* () {
+      for (const e of events) {
+        yield responseEntry(eventHref(user.id, cal.id, e.uid), {
+          etag: etagOf(e.updatedAt),
+          contentType: "text/calendar; charset=utf-8; component=VEVENT",
+          lastModified: e.updatedAt,
+          calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
+        });
+      }
+    })());
     return;
   }
 
@@ -488,11 +535,14 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
   }
 
   const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
-  const entries = events.map(e => responseEntry(eventHref(user.id, cal.id, e.uid), {
-    etag: etagOf(e.updatedAt),
-    calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
-  }));
-  sendXml(reply, multistatus(entries));
+  await streamMultistatus(reply, (function* () {
+    for (const e of events) {
+      yield responseEntry(eventHref(user.id, cal.id, e.uid), {
+        etag: etagOf(e.updatedAt),
+        calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
+      });
+    }
+  })());
 }
 
 function parseIcalUtcStamp(val: string): Date | null {

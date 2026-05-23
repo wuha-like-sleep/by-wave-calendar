@@ -166,6 +166,20 @@
         <span id="next-event-text" class="flex-1 min-w-0 text-slate-700 truncate"></span>
         <button type="button" id="next-event-jump" class="text-xs text-brand-700 hover:text-brand-800 font-medium flex-shrink-0">跳转</button>
       </div>
+      <%# First-run onboarding nudge. calendar-app.js shows this only
+          when the API returns zero events on the very first load, and
+          hides it the moment any event is created or imported. Doesn't
+          come back if the user navigates to an empty week later. %>
+      <div id="empty-state" class="hidden mx-3 sm:mx-5 mt-2 rounded-2xl border border-dashed border-slate-300 bg-white px-4 sm:px-6 py-6 text-center">
+        <div class="text-4xl mb-2">📅</div>
+        <h3 class="text-base font-semibold text-slate-900">第一次用？</h3>
+        <p class="mt-1 text-sm text-slate-500 max-w-md mx-auto">点右下角的 + 新建第一个事件，或者从 .ics / CalDAV 把现有日历导进来。</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" id="empty-new-event" class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">新建第一个事件</button>
+          <button type="button" id="empty-import" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">导入 .ics / 订阅</button>
+          <a href="/app/settings#caldav-connect" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">手机 CalDAV 同步</a>
+        </div>
+      </div>
       <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem);"></div>
     </section>
   </div>
@@ -616,7 +630,10 @@
 </script>
 <% const calV = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
 <% const calJs = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
-<script src="/static/lib/toastui-calendar.min.js"></script>
+<%# defer keeps the order (toastui → event-store → calendar-app) but no
+    longer blocks HTML parsing — first paint feedback comes ~300ms sooner
+    on cold loads. event-store and calendar-app are already defer. %>
+<script src="/static/lib/toastui-calendar.min.js" defer></script>
 <!-- Offline event store (IndexedDB cache + outbox queue) must load BEFORE
      calendar-app.js so window.bwcStore exists when loadEvents() runs. -->
 <script src="<%= calJs %>/event-store.js?v=<%= calV %>" defer></script>

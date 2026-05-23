@@ -1054,6 +1054,53 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/webhooks?success=" + encodeURIComponent("测试请求已发送，下方记录里看结果"));
   });
 
+  // List deliveries for one webhook — full history with payload + response.
+  // Admins use this to debug external integration failures.
+  app.get("/admin/webhooks/:id/deliveries", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/webhooks");
+    const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
+    if (!hook) return reply.redirect("/admin/webhooks?error=" + encodeURIComponent("Webhook 不存在"));
+    const deliveries = await db
+      .select()
+      .from(schema.webhookDeliveries)
+      .where(eq(schema.webhookDeliveries.webhookId, id.data))
+      .orderBy(desc(schema.webhookDeliveries.createdAt))
+      .limit(200);
+    return reply.view("admin/webhook-deliveries", {
+      title: `${hook.label} · Webhook 投递记录 · 管理后台`,
+      user: me,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/webhooks",
+      hook,
+      deliveries: deliveries.map((d) => ({
+        ...d,
+        createdAtLocal: d.createdAt.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }),
+        // Truncate response body in the list view; full body shows in detail.
+        responseShort: d.responseBody ? d.responseBody.slice(0, 200) : null,
+      })),
+    });
+  });
+
+  // Manual retry — admin clicks 重试 on a failed delivery after fixing
+  // the receiver. Returns to the deliveries page with a flash.
+  app.post("/admin/webhooks/:id/deliveries/:deliveryId/retry", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const params = req.params as { id: string; deliveryId: string };
+    const dId = z.string().uuid().safeParse(params.deliveryId);
+    const hId = z.string().uuid().safeParse(params.id);
+    if (!dId.success || !hId.success) return reply.redirect("/admin/webhooks");
+    const { retryDelivery } = await import("../lib/webhooks.js");
+    const result = await retryDelivery(dId.data);
+    const msg = result.ok ? "重试成功" : `重试失败 (HTTP ${result.statusCode ?? "?"})`;
+    return reply.redirect(`/admin/webhooks/${hId.data}/deliveries?${result.ok ? "success" : "error"}=${encodeURIComponent(msg)}`);
+  });
+
   // ---------- OAuth 应用管理 ----------
   // 管理员注册第三方应用，给它们一个 client_id + secret，用户授权后
   // 第三方应用可代表用户调用 /api/v1/* (受 scope 限制)。

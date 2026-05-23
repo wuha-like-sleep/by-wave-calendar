@@ -66,6 +66,7 @@
             </div>
           </div>
           <div class="flex gap-1.5 flex-shrink-0">
+            <a href="/admin/webhooks/<%= h.id %>/deliveries" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">详情</a>
             <form method="post" action="/admin/webhooks/<%= h.id %>/test" class="m-0">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">测试</button>

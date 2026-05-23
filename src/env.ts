@@ -11,6 +11,12 @@ const schema = z.object({
   HOST: z.string().default("127.0.0.1"),
   PUBLIC_BASE_URL: z.string().url(),
   DATABASE_URL: z.string().min(1),
+  // PG connection pool max. Default 20 covers a typical 1-process pm2
+  // deployment: reminders cron + per-request connections + CalDAV burst
+  // syncs can otherwise queue behind the prior 10-connection limit and
+  // make every endpoint feel slow during peak. Bump to 40+ if you put
+  // multiple users on the same calendar via heavy CalDAV / API traffic.
+  DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 chars"),
   REGISTRATION_OPEN: boolFlag.default(true),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(120),

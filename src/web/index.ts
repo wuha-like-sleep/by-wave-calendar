@@ -1547,6 +1547,22 @@ export async function webRoutes(app: FastifyInstance) {
   // old settings tab) since we're no longer crammed in alongside MFA
   // and Passkey config. Linked from /app/settings#profile and from
   // the security-alert email's "查看登录历史" button.
+  // Full-page event search. /api/v1/search powers the Cmd+K palette; this
+  // page wraps the same endpoint for cases where users want to scan more
+  // than 10 results at a time (e.g. "where's that meeting from 3 months ago?").
+  app.get("/app/search", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    const q = (req.query as { q?: string })?.q ?? "";
+    return reply.view("app/search", {
+      title: "搜索事件",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      initialQuery: q,
+    });
+  });
+
   app.get("/app/logins", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;

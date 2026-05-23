@@ -74,7 +74,7 @@
         <span class="text-xs text-slate-500">命中率</span>
       </div>
       <div class="text-xs text-slate-500 mt-0.5">
-        <%= caldavCache.hits %> 次命中 / <%= caldavCache.misses %> 次走 bcrypt · <%= caldavCache.size %> 个活跃 session
+        <%= caldavCache.hits %> 命中 / <%= caldavCache.misses %> bcrypt / <%= caldavCache.coalesced %> 合并 · <%= caldavCache.size %> session
       </div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">

@@ -1,11 +1,12 @@
-// Cmd+K command palette backend. Searches across the calling user's
-// events (visible across owned + shared calendars). Returns a
-// flat list capped at 30 — the palette itself never needs more than
-// what's visible above the fold.
+// Cmd+K command palette + /app/search backend. Searches the calling
+// user's events (owned + shared calendars). Two callers:
+//   - palette.js (Cmd+K): wants the top ~10 most-relevant results fast
+//   - /app/search page: wants up to 100 with ordering by recency
+// Both use the same endpoint; the `limit` param tunes which.
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, eq, inArray, isNull, ilike, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ilike, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 
@@ -14,6 +15,9 @@ export async function searchRoutes(app: FastifyInstance) {
     const user = await requireUser(req, reply);
     const q = z.object({
       q: z.string().min(1).max(100),
+      // Cap at 100; default 30 keeps the Cmd+K palette fast (it overrides
+      // upward only on the dedicated /app/search page).
+      limit: z.coerce.number().int().min(1).max(100).default(30),
     }).safeParse(req.query);
     if (!q.success) return reply.send({ events: [] });
     // Wildcard wrap for ILIKE; escape % and _ so users can't accidentally
@@ -59,7 +63,10 @@ export async function searchRoutes(app: FastifyInstance) {
           ilike(schema.events.location, needle),
         ),
       ))
-      .limit(30);
+      // Recency-first — "the meeting from three months ago" gets surfaced
+      // before "the meeting from three years ago" by default.
+      .orderBy(desc(schema.events.startsAt))
+      .limit(q.data.limit);
 
     return reply.send({
       events: rows.map((e) => ({

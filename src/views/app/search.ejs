@@ -1,0 +1,121 @@
+<div class="max-w-3xl mx-auto py-6 px-4">
+  <header class="mb-4 flex items-center gap-3">
+    <a href="/app" class="text-sm text-slate-500 hover:text-slate-700">← 日历</a>
+    <h1 class="text-xl font-semibold text-slate-900 flex-1">搜索事件</h1>
+  </header>
+
+  <div class="relative mb-4">
+    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/>
+    </svg>
+    <input id="search-input" type="search" inputmode="search" autocomplete="off"
+           value="<%= initialQuery %>"
+           placeholder="按标题 / 描述 / 地点 搜索…"
+           class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <p class="mt-1 text-xs text-slate-400">最多 100 个结果，按时间倒序。也可以 <kbd class="rounded border border-slate-300 bg-slate-50 px-1 font-mono text-[10px]">Cmd+K</kbd> 快速搜索。</p>
+  </div>
+
+  <div id="search-status" class="text-xs text-slate-400 mb-2 hidden"></div>
+  <ul id="search-results" class="space-y-2"></ul>
+  <div id="search-empty" class="hidden rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+    <div class="text-4xl mb-2">🔍</div>
+    没有匹配的事件
+  </div>
+</div>
+
+<script nonce="<%= cspNonce %>">
+(function() {
+  const input = document.getElementById("search-input");
+  const list = document.getElementById("search-results");
+  const status = document.getElementById("search-status");
+  const empty = document.getElementById("search-empty");
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+  function highlight(text, query) {
+    if (!query || !text) return escapeHtml(text || "");
+    const i = text.toLowerCase().indexOf(query.toLowerCase());
+    if (i < 0) return escapeHtml(text);
+    return escapeHtml(text.slice(0, i)) +
+      '<mark class="bg-amber-100 text-amber-900 rounded-sm">' + escapeHtml(text.slice(i, i + query.length)) + '</mark>' +
+      escapeHtml(text.slice(i + query.length));
+  }
+  function fmtDate(iso) {
+    try {
+      return new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(new Date(iso));
+    } catch (_e) { return iso; }
+  }
+
+  let lastQuery = "";
+  let debounce = null;
+
+  async function runSearch(query) {
+    if (!query || query.length < 1) {
+      list.innerHTML = "";
+      empty.classList.add("hidden");
+      status.classList.add("hidden");
+      return;
+    }
+    status.textContent = "搜索中…";
+    status.classList.remove("hidden");
+    try {
+      const resp = await fetch("/api/v1/search?limit=100&q=" + encodeURIComponent(query), {
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": csrf, "Accept": "application/json" },
+      });
+      if (!resp.ok) throw new Error("search_failed");
+      const data = await resp.json();
+      // The /api/v1 envelope wraps the route's response as data.<key>; the
+      // legacy /api alias returns the raw {events:[...]}. Try both.
+      const events = (data && data.events) || (data && data.data && data.data.events) || [];
+      lastQuery = query;
+      renderResults(events, query);
+    } catch (err) {
+      console.error(err);
+      status.textContent = "搜索失败，重试一下？";
+    }
+  }
+
+  function renderResults(events, query) {
+    if (events.length === 0) {
+      list.innerHTML = "";
+      empty.classList.remove("hidden");
+      status.textContent = "无结果";
+      return;
+    }
+    empty.classList.add("hidden");
+    status.textContent = `${events.length} 个结果`;
+    list.innerHTML = events.map((e) => `
+      <li>
+        <a href="/app#event-${encodeURIComponent(e.id)}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition">
+          <div class="flex items-start gap-3">
+            <span class="mt-1 inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background:${escapeHtml(e.calendarColor)}"></span>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm font-medium text-slate-900 truncate">${highlight(e.summary, query)}</div>
+              <div class="mt-0.5 text-xs text-slate-500 truncate">
+                ${fmtDate(e.startsAt)}
+                ${e.location ? ' · 📍 ' + highlight(e.location, query) : ''}
+                · <span class="text-slate-400">${escapeHtml(e.calendarName)}</span>
+              </div>
+            </div>
+          </div>
+        </a>
+      </li>
+    `).join("");
+  }
+
+  input.addEventListener("input", () => {
+    clearTimeout(debounce);
+    const q = input.value.trim();
+    debounce = setTimeout(() => runSearch(q), 200);
+  });
+  // Search immediately if URL has ?q=…
+  if (input.value.trim()) runSearch(input.value.trim());
+  input.focus();
+})();
+</script>
