@@ -480,6 +480,10 @@ struct WeekView: View {
             endsAt: f.string(from: m.newEnd),
             allDay: nil,
             rrule: nil,
+            // Drag-to-move only changes start/end — leave the event's
+            // existing timezone / attendees / category untouched. Server
+            // treats a nil extra as "no change" (PATCH semantics).
+            extra: nil,
             scope: scope?.rawValue,
             recurrenceId: recIso,
         )
