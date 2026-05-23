@@ -70,6 +70,12 @@ enum PairingError: Error, LocalizedError {
                 return "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。"
             case "bad_request":
                 return "配对码格式不对。请确认是 6 位字符（字母 + 数字）。"
+            case "csrf_invalid":
+                // Shouldn't reach the APP under v0.7.4+ — exempt list now
+                // includes pair-claim / login-password / refresh. If this
+                // still fires, the server is on an older build that
+                // hasn't pulled the fix.
+                return "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）"
             default:
                 if let msg, !msg.isEmpty { return msg }
                 if s == 429 { return "请求太频繁，请等一会再试。" }

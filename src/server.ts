@@ -203,7 +203,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.4" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.5" }));
 
 // Public diagnostic endpoint for APP onboarding troubleshooting. The
 // iOS / Android APP can ping this BEFORE the user attempts to log in
@@ -222,7 +222,7 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
   const { getSettings } = await import("./lib/site_settings.js");
   const s = await getSettings();
   return {
-    version: "0.7.4",
+    version: "0.7.5",
     appsEnabled: s.appsEnabled,
     siteName: s.siteName,
     serverTime: new Date().toISOString(),
@@ -540,6 +540,18 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
 const CSRF_EXEMPT_PATHS = new Set([
   "/api/auth/login", "/api/v1/auth/login",
   "/api/auth/register", "/api/v1/auth/register",
+  // Native APP bootstrap endpoints — anonymous, NOT cookie-bound. The
+  // one-time pair code / email+password / refresh token IS the auth.
+  // CSRF only protects session cookies that browsers auto-attach
+  // cross-site; these endpoints don't use cookies at all, so the
+  // attack model doesn't apply. Without these exemptions iOS / Android
+  // / desktop APP login returns a confusing 403 even when admin's
+  // appsEnabled toggle is on — the real reason got swallowed by the
+  // global preHandler before reaching the route. (Same logic as
+  // /api/auth/login above.)
+  "/api/v1/devices/pair-claim",
+  "/api/v1/auth/login-password",
+  "/api/v1/auth/refresh",
   // CSP violation reports are POSTed by the browser itself with no
   // cookies (per spec credentials are omitted). No session = no CSRF
   // surface; the endpoint just logs the report and returns 204.
