@@ -121,6 +121,35 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
+  // Privacy + Terms — required by Apple App Store Connect for any APP
+  // that handles personal data. Linked from the site footer + iOS APP
+  // Settings + initial signup flow. Updated date is sourced from
+  // package.json's version timestamp via getReleaseDate so a server
+  // upgrade automatically refreshes the "最近更新" line.
+  app.get("/privacy", async (req, reply) => {
+    const settings = await getSettings();
+    return reply.view("legal/privacy", {
+      title: "隐私政策",
+      user: await loadUserFromRequest(req),
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      siteName: settings.siteName || "ByWave Calendar",
+      updatedDate: "2026-05-23",
+    });
+  });
+
+  app.get("/terms", async (req, reply) => {
+    const settings = await getSettings();
+    return reply.view("legal/terms", {
+      title: "使用条款",
+      user: await loadUserFromRequest(req),
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      siteName: settings.siteName || "ByWave Calendar",
+      updatedDate: "2026-05-23",
+    });
+  });
+
   // -------- Auth pages --------
   app.get("/login", async (req, reply) => {
     const user = await loadUserFromRequest(req);

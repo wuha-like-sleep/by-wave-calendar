@@ -1,0 +1,440 @@
+// CalendarView.swift
+// v0.5 shell. Owns:
+//   - View mode (day / week / month / year)
+//   - The "anchor" date that the current view centers on
+//   - Date navigation (prev / today / next)
+//   - Fetching events for the visible window
+//   - On-disk cache (cold launch = instant render, then refetch)
+//   - Foreground refresh (scenePhase becomes .active → reload)
+//   - 60s background polling timer
+//   - Last-synced label
+//   - "+" toolbar to create events
+//   - "齿轮" toolbar to open settings
+
+import SwiftUI
+
+private enum ViewMode: String, CaseIterable, Identifiable {
+    case day = "日"
+    case week = "周"
+    case month = "月"
+    case year = "年"
+    var id: String { rawValue }
+}
+
+struct CalendarView: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var mode: ViewMode = .day
+    @State private var anchor: Date = Calendar.current.startOfDay(for: Date())
+
+    @State private var events: [EventDTO] = []
+    @State private var calendars: [CalendarMeta] = []
+    @State private var isLoading = false
+    @State private var lastSyncedAt: Date?
+    @State private var errorMessage: String?
+    @State private var showingCreate = false
+    @State private var showingSettings = false
+    @State private var showingFilter = false
+    @State private var showingSearch = false
+    // Horizontal-swipe tracking for date navigation. Reset on each new
+    // gesture; commits to a direction once user has moved > 50 pt.
+    @State private var swipeOffset: CGFloat = 0
+
+    // Polling timer — fires every 60s while in foreground.
+    @State private var pollTask: Task<Void, Never>?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                navBar
+                ZStack {
+                    contentForMode
+                    if isLoading && events.isEmpty {
+                        // Cache miss + first fetch in flight
+                        ProgressView()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .background(Color(.systemGroupedBackground))
+                    }
+                }
+            }
+            .navigationTitle(navTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        anchor = Calendar.current.startOfDay(for: Date())
+                    } label: {
+                        Text("今天").font(.callout.weight(.medium))
+                    }
+                    .disabled(Calendar.current.isDateInToday(anchor) && mode == .day)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            showingSearch = true
+                        } label: { Label("搜索", systemImage: "magnifyingglass") }
+                        Button {
+                            showingFilter = true
+                        } label: {
+                            Label(state.hiddenCalendarIds.isEmpty ? "筛选日历" : "筛选日历 (\(visibleCalCount))",
+                                  systemImage: "line.3.horizontal.decrease.circle")
+                        }
+                        Button {
+                            Task { await load(force: true) }
+                        } label: { Label("刷新", systemImage: "arrow.clockwise") }
+                            .disabled(isLoading)
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showingCreate = true } label: { Image(systemName: "plus") }
+                        .disabled(calendars.isEmpty)
+                }
+            }
+            .refreshable { await load(force: true) }
+            .task {
+                // On first appearance, hydrate from cache → instant render,
+                // then fetch fresh. Cache hit means an old `lastSyncedAt`
+                // appears in the footer until the new response replaces it.
+                loadFromCache()
+                await load(force: false)
+                startPolling()
+            }
+            .onDisappear { stopPolling() }
+            .onChange(of: scenePhase) { _, new in
+                // Returning to foreground → refresh + restart polling.
+                if new == .active {
+                    Task { await load(force: false) }
+                    startPolling()
+                } else {
+                    stopPolling()
+                }
+            }
+            // APNs silent push from the server posts this notification.
+            // We reload immediately so the UI reflects whatever changed
+            // on the server side (event created on another device, etc.).
+            .onReceive(NotificationCenter.default.publisher(for: .bwcRemoteDataChanged)) { _ in
+                Task { await load(force: true) }
+            }
+            .onChange(of: mode) { _, _ in
+                Task { await load(force: false) }
+            }
+            .onChange(of: anchor) { _, _ in
+                Task { await load(force: false) }
+            }
+            .sheet(isPresented: $showingCreate) {
+                NavigationStack {
+                    EventEditView(
+                        mode: .create,
+                        calendars: calendars,
+                        onSaved: { _ in
+                            showingCreate = false
+                            Task { await load(force: true) }
+                        },
+                        onCancel: { showingCreate = false },
+                    )
+                }
+            }
+            .sheet(isPresented: $showingSettings) { SettingsView() }
+            .sheet(isPresented: $showingFilter) {
+                CalendarFilterView(calendars: calendars).environmentObject(state)
+            }
+            .sheet(isPresented: $showingSearch) {
+                SearchView(calendars: calendars).environmentObject(state)
+            }
+            // Horizontal swipe on the body navigates dates. We only commit
+            // when the gesture is decisively horizontal (avoids stealing
+            // List scroll). Translation > 60 pt → snap to prev/next.
+            .gesture(
+                DragGesture(minimumDistance: 18)
+                    .onEnded { value in
+                        let h = value.translation.width
+                        let v = value.translation.height
+                        // Ignore vertical-dominant gestures (List scroll, sheet pull-down).
+                        if abs(h) < abs(v) * 1.2 { return }
+                        if h < -60 { shiftAnchor(by: 1) }
+                        else if h > 60 { shiftAnchor(by: -1) }
+                    },
+            )
+        }
+    }
+
+    private var visibleCalCount: Int {
+        calendars.filter { !state.hiddenCalendarIds.contains($0.id) }.count
+    }
+
+    // MARK: - Header (mode picker + nav arrows + anchor date)
+    private var navBar: some View {
+        VStack(spacing: 6) {
+            Picker("视图", selection: $mode) {
+                ForEach(ViewMode.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 14)
+
+            HStack(spacing: 6) {
+                Button { shiftAnchor(by: -1) } label: { Image(systemName: "chevron.left") }
+                Spacer()
+                Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
+                    Text(anchorLabel)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                }
+                Spacer()
+                Button { shiftAnchor(by: 1) } label: { Image(systemName: "chevron.right") }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 4)
+
+            if let synced = lastSyncedAt {
+                Text(syncedLabel(for: synced))
+                    .font(.caption2).foregroundStyle(.tertiary)
+            } else if let err = errorMessage {
+                Text(err).font(.caption2).foregroundStyle(.red)
+            }
+        }
+        .padding(.top, 6)
+        .background(Color(.systemBackground))
+    }
+
+    // MARK: - Body for each mode
+    // All sub-views receive events already filtered by the user's
+    // hidden-calendars set so toggling visibility in CalendarFilterView
+    // re-renders the grids immediately.
+    private var visibleEvents: [EventDTO] { state.visibleEvents(events) }
+
+    @ViewBuilder
+    private var contentForMode: some View {
+        switch mode {
+        case .day:
+            DayView(
+                anchor: anchor,
+                events: eventsForDay(anchor),
+                calendars: calendars,
+                onEventChanged: { Task { await load(force: true) } },
+            )
+        case .week:
+            WeekView(
+                weekStart: startOfWeek(anchor),
+                events: visibleEvents,
+                calendars: calendars,
+                onEventChanged: { Task { await load(force: true) } },
+            )
+        case .month:
+            MonthView(
+                monthAnchor: anchor,
+                events: visibleEvents,
+                calendars: calendars,
+                onEventChanged: { Task { await load(force: true) } },
+            )
+        case .year:
+            YearView(
+                yearAnchor: anchor,
+                events: visibleEvents,
+                onMonthTap: { tappedMonthAnchor in
+                    anchor = tappedMonthAnchor
+                    mode = .month
+                },
+            )
+        }
+    }
+
+    private var navTitle: String {
+        switch mode {
+        case .day, .week: return "日历"
+        case .month, .year: return "日历"
+        }
+    }
+
+    private var anchorLabel: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        switch mode {
+        case .day:
+            f.dateFormat = "yyyy年M月d日 EEEE"
+            return f.string(from: anchor)
+        case .week:
+            let start = startOfWeek(anchor)
+            let end = Calendar.current.date(byAdding: .day, value: 6, to: start)!
+            f.dateFormat = "M月d日"
+            return "\(f.string(from: start)) – \(f.string(from: end))"
+        case .month:
+            f.dateFormat = "yyyy年M月"
+            return f.string(from: anchor)
+        case .year:
+            f.dateFormat = "yyyy年"
+            return f.string(from: anchor)
+        }
+    }
+
+    private func syncedLabel(for date: Date) -> String {
+        let secs = Int(Date().timeIntervalSince(date))
+        if secs < 30 { return "已同步" }
+        if secs < 60 { return "\(secs) 秒前同步" }
+        if secs < 3600 { return "\(secs / 60) 分钟前同步" }
+        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "HH:mm 同步"
+        return f.string(from: date)
+    }
+
+    // MARK: - Navigation
+    private func shiftAnchor(by direction: Int) {
+        let cal = Calendar.current
+        switch mode {
+        case .day:
+            anchor = cal.date(byAdding: .day, value: direction, to: anchor) ?? anchor
+        case .week:
+            anchor = cal.date(byAdding: .day, value: 7 * direction, to: anchor) ?? anchor
+        case .month:
+            anchor = cal.date(byAdding: .month, value: direction, to: anchor) ?? anchor
+        case .year:
+            anchor = cal.date(byAdding: .year, value: direction, to: anchor) ?? anchor
+        }
+    }
+
+    // MARK: - Date math
+    private func startOfWeek(_ date: Date) -> Date {
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2  // Monday
+        let comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: date)
+        return cal.date(from: comps) ?? date
+    }
+
+    private func eventsForDay(_ day: Date) -> [EventDTO] {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: day)
+        let end = cal.date(byAdding: .day, value: 1, to: start)!
+        return state.visibleEvents(events)
+            .filter { $0.startsAt < end && $0.endsAt > start }
+            .sorted { $0.startsAt < $1.startsAt }
+    }
+
+    // MARK: - Fetch window for the current mode
+    private func currentWindow() -> (Date, Date) {
+        let cal = Calendar.current
+        switch mode {
+        case .day:
+            let start = cal.startOfDay(for: anchor)
+            let end = cal.date(byAdding: .day, value: 1, to: start)!
+            return (start, end)
+        case .week:
+            let start = startOfWeek(anchor)
+            let end = cal.date(byAdding: .day, value: 7, to: start)!
+            return (start, end)
+        case .month:
+            let comps = cal.dateComponents([.year, .month], from: anchor)
+            let start = cal.date(from: comps) ?? anchor
+            let end = cal.date(byAdding: .month, value: 1, to: start) ?? anchor
+            return (start, end)
+        case .year:
+            let y = cal.component(.year, from: anchor)
+            let start = cal.date(from: DateComponents(year: y, month: 1, day: 1)) ?? anchor
+            let end = cal.date(from: DateComponents(year: y + 1, month: 1, day: 1)) ?? anchor
+            return (start, end)
+        }
+    }
+
+    // MARK: - Cache hydration
+    private func loadFromCache() {
+        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+        guard let payload = EventCache.shared.read(key: key) else { return }
+        // Use cached events only if the current view window overlaps the
+        // cached window — otherwise we'd show stale events from a totally
+        // different range. Server fetch updates within a moment anyway.
+        let (start, end) = currentWindow()
+        if payload.windowStart <= end && payload.windowEnd >= start {
+            self.events = payload.events
+            self.calendars = payload.calendars
+            self.lastSyncedAt = payload.cachedAt
+        }
+    }
+
+    // MARK: - Fetch
+    private func load(force: Bool) async {
+        // De-duplicate concurrent loads (polling + manual refresh racing).
+        if isLoading && !force { return }
+        let (from, to) = currentWindow()
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        let iso = ISO8601DateFormatter()
+        let path = "/events?from=\(iso.string(from: from).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&to=\(iso.string(from: to).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)"
+
+        do {
+            let client = APIClient(state: state)
+            let resp: EventsResponse = try await client.get(path)
+            self.calendars = resp.calendars
+            self.events = resp.events.sorted { $0.startsAt < $1.startsAt }
+            self.lastSyncedAt = Date()
+            // Persist to disk so next launch is instant.
+            let payload = EventCachePayload(
+                events: self.events,
+                calendars: self.calendars,
+                cachedAt: Date(),
+                windowStart: from,
+                windowEnd: to,
+            )
+            let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+            EventCache.shared.write(key: key, payload: payload)
+            // Fire EventKit mirror (no-op if disabled / no permission).
+            Task {
+                await EventKitMirror.shared.mirror(events: resp.events, windowStart: from, windowEnd: to)
+            }
+            // Re-schedule local notifications. No-op when feature disabled
+            // or permission denied. Always uses the full event set so
+            // reminders for events outside the current view window still
+            // queue up. We only re-schedule on substantial loads (day view
+            // fetches just one day → we'd lose the rest); skip when the
+            // window is < 2 days to avoid clearing the long-range schedule.
+            let windowDays = Calendar.current.dateComponents([.day], from: from, to: to).day ?? 0
+            if windowDays >= 2 {
+                Task {
+                    await LocalNotifications.shared.reschedule(events: resp.events, calendars: resp.calendars)
+                }
+            }
+        } catch let e as APIError {
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Polling
+    private func startPolling() {
+        stopPolling()
+        pollTask = Task { [weak state] in
+            // Sleep first, then loop forever. Foreground only — the
+            // scenePhase observer cancels us when going to background.
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                if Task.isCancelled { return }
+                guard state != nil else { return }
+                await load(force: false)
+            }
+        }
+    }
+
+    private func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
+    }
+}
+
+// MARK: - Color from hex
+// Reused across all sub-views. Defined once here.
+extension Color {
+    init?(hex: String?) {
+        guard var s = hex else { return nil }
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
+        let r = Double((v >> 16) & 0xff) / 255
+        let g = Double((v >> 8) & 0xff) / 255
+        let b = Double(v & 0xff) / 255
+        self = Color(red: r, green: g, blue: b)
+    }
+}

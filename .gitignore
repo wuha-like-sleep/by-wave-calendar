@@ -16,9 +16,7 @@ src/public/_built/
 # User-uploaded files
 src/public/uploads/
 
-# Native APP starter source — kept local only, not pushed to public
-# remote. The server-side device-pairing API (Phase 1) stays in this
-# repo; the app implementation lives in a separate private workspace.
-apps/ios/
-apps/android/
-apps/desktop/
+# Native APP starter source. Android + desktop kept local until they
+# reach the same maturity as iOS; uncomment when they're ready to push.
+# apps/android/
+# apps/desktop/

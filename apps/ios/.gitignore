@@ -1,0 +1,18 @@
+# Xcode per-user state — kept local, never committed.
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Build output
+DerivedData/
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# macOS noise
+.DS_Store
