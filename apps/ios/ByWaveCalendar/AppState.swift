@@ -76,6 +76,13 @@ final class AppState: ObservableObject {
         Color(hex: themeAccentHex) ?? Color(red: 79/255, green: 70/255, blue: 229/255)
     }
 
+    /// Backwards-compat: what server version are we talking to, and
+    /// which iOS-facing features does it support. Refreshed alongside
+    /// the theme on every bootstrap + profile switch. Defaults to
+    /// .unknown which optimistically enables every feature (so a brand
+    /// new server we haven't probed yet doesn't get UI hidden).
+    @Published var serverCapabilities: ServerCapabilities = .unknown
+
     /// Hidden calendar IDs — cross-profile to match legacy behavior.
     /// Could become per-profile in a future refactor but most users
     /// only have one server, so global is fine for now.
@@ -209,29 +216,58 @@ final class AppState: ObservableObject {
         Task { await self.refreshThemeFromServer() }
     }
 
-    /// Pull /api/v1/health/app and update the active profile's theme.
+    /// Pull /api/v1/health/app and update the active profile's theme
+    /// PLUS the cached `serverCapabilities` so the rest of the APP can
+    /// branch on what the server supports. Older servers don't have
+    /// /api/v1/health/app — we fall back to the much older /health
+    /// (which only returns version + status, no theme).
     func refreshThemeFromServer() async {
         guard let serverURL else { return }
-        guard let url = URL(string: serverURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/v1/health/app") else { return }
-        var req = URLRequest(url: url)
-        req.timeoutInterval = 8
-        do {
-            let (data, _) = try await URLSession.shared.data(for: req)
-            let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-            let payload = (outer["data"] as? [String: Any]) ?? outer
-            if let accent = payload["themeAccent"] as? String, !accent.isEmpty {
-                themeAccentHex = accent
-                UserDefaults.standard.set(accent, forKey: "bwc.themeAccent")
-                // Persist on profile too so next launch shows it instantly.
-                if let id = activeProfileId,
-                   let idx = profiles.firstIndex(where: { $0.id == id })
-                {
-                    profiles[idx].themeAccentHex = accent
-                    persistProfiles()
-                }
+        let base = serverURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        // Try the modern endpoint first (v0.7.4+).
+        var payload: [String: Any]?
+        if let url = URL(string: base + "/api/v1/health/app") {
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 8
+            if let (data, resp) = try? await URLSession.shared.data(for: req),
+               let http = resp as? HTTPURLResponse,
+               (200..<300).contains(http.statusCode)
+            {
+                let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+                payload = (outer["data"] as? [String: Any]) ?? outer
             }
-        } catch {
-            // Network blip — keep last cached value.
+        }
+
+        // Fall back to /health for older servers. Only gives us version,
+        // not theme — accent stays at the previously-cached value.
+        if payload == nil, let url = URL(string: base + "/health") {
+            var req = URLRequest(url: url)
+            req.timeoutInterval = 8
+            if let (data, _) = try? await URLSession.shared.data(for: req) {
+                payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            }
+        }
+
+        guard let payload else { return }
+
+        // Update server version → ServerCapabilities. This branch runs
+        // even when only /health responded.
+        if let version = payload["version"] as? String, !version.isEmpty {
+            serverCapabilities = ServerCapabilities(version: version)
+        }
+
+        // Update theme only when the response actually has the field
+        // (newer endpoint only).
+        if let accent = payload["themeAccent"] as? String, !accent.isEmpty {
+            themeAccentHex = accent
+            UserDefaults.standard.set(accent, forKey: "bwc.themeAccent")
+            if let id = activeProfileId,
+               let idx = profiles.firstIndex(where: { $0.id == id })
+            {
+                profiles[idx].themeAccentHex = accent
+                persistProfiles()
+            }
         }
     }
 

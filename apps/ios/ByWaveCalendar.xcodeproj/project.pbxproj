@@ -40,6 +40,7 @@
 		1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000020 /* MfaSettingsPage.swift */; };
 		1F0001000000000000000021 /* LegalContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000021 /* LegalContent.swift */; };
 		1F0001000000000000000022 /* LegalPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000022 /* LegalPage.swift */; };
+		1F0001000000000000000023 /* ServerCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000023 /* ServerCapabilities.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -79,6 +80,7 @@
 		1B0001000000000000000021 /* LegalContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalContent.swift; sourceTree = "<group>"; };
 		1B0001000000000000000022 /* LegalPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalPage.swift; sourceTree = "<group>"; };
 		1E0001000000000000000008 /* Legal */ = {isa = PBXGroup; children = (1B0001000000000000000021 /* LegalContent.swift */); path = Legal; sourceTree = "<group>"; };
+		1B0001000000000000000023 /* ServerCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCapabilities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,6 +108,7 @@
 				1B0001000000000000000001 /* ByWaveCalendarApp.swift */,
 				1B0001000000000000000002 /* AppState.swift */,
 				1B000100000000000000001E /* Profile.swift */,
+				1B0001000000000000000023 /* ServerCapabilities.swift */,
 				1E0001000000000000000008 /* Legal */,
 				1E0001000000000000000003 /* Network */,
 				1E0001000000000000000004 /* Auth */,
@@ -283,6 +286,7 @@
 				1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */,
 				1F0001000000000000000021 /* LegalContent.swift in Sources */,
 				1F0001000000000000000022 /* LegalPage.swift in Sources */,
+				1F0001000000000000000023 /* ServerCapabilities.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

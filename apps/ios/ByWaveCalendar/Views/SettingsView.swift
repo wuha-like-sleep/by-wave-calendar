@@ -154,7 +154,11 @@ struct SettingsView: View {
                 struct DeviceRow: Decodable { let id: String; let prefix: String }
             }
             let resp: DevicesResp = try await client.get("/devices")
-            guard let refresh = Keychain.read(.refreshToken),
+            // After multi-account refactor (v0.10.0) the refresh token
+            // lives under a per-profile Keychain key. Read it via the
+            // ACTIVE profile's id; not the legacy unscoped slot.
+            guard let activeId = state.activeProfileId,
+                  let refresh = Keychain.read(.refreshToken(profileId: activeId)),
                   let prefix = parsePrefix(refresh)
             else {
                 throw APIError.notSignedIn

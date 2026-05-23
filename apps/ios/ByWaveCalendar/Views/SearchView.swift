@@ -43,8 +43,17 @@ struct SearchView: View {
                     Section { Text(errorMessage).foregroundStyle(.red).font(.callout) }
                 }
                 if results.isEmpty && !isSearching && !query.isEmpty {
-                    ContentUnavailableView("没有匹配", systemImage: "magnifyingglass")
-                        .listRowBackground(Color.clear)
+                    // Custom empty state — was ContentUnavailableView but
+                    // that's iOS 17+. Open to lowering deployment target.
+                    VStack(spacing: 12) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 36))
+                            .foregroundStyle(.tertiary)
+                        Text("没有匹配").font(.headline).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+                    .listRowBackground(Color.clear)
                 } else if isSearching && results.isEmpty {
                     HStack { Spacer(); ProgressView(); Spacer() }
                         .listRowBackground(Color.clear)
