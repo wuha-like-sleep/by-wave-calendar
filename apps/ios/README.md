@@ -1,100 +1,91 @@
 # ByWave Calendar — iOS 原生 APP（v0.1 起步包）
 
-这是一个可直接放到 Xcode 跑的 SwiftUI 起步包。当前能跑的：
+完整可跑的 Xcode 项目。**双击 `ByWaveCalendar.xcodeproj` → ⌘R 就跑**。
+
+当前功能：
 - 输入服务器地址 OR 扫码登录（来自 Web 的 `/app/settings#devices`）
 - Keychain 持久化 refresh token
-- 访问令牌自动刷新
-- 列出今天的事件（只读）
+- 访问令牌自动刷新（401 透明重试）
+- 列出今天 + 接下来 7 天的事件（只读）
+- 启动 splash + pull-to-refresh + 退出登录
 
 后续会补：
-- 事件创建 / 编辑 / 删除
+- 事件创建 / 编辑 / 删除 + 重复事件三选项
 - 月/周视图（自绘 SwiftUI）
 - APNs 推送通知
 - Sign in with Apple
-- 离线缓存 + Core Data
+- 离线缓存（Core Data）
 - RSVP 邀请
 
-## 在 Xcode 里把它跑起来
+## 怎么跑
 
-### 1. 新建 Xcode 项目
+```bash
+cd ~/Desktop/by-wave-calendar/apps/ios
+open ByWaveCalendar.xcodeproj
+```
 
-1. Xcode → File → New → Project → iOS → **App**
-2. Product Name: `ByWaveCalendar`
-3. Interface: **SwiftUI**
-4. Language: **Swift**
-5. Storage: **None**（自己用 Keychain，不用 Core Data）
-6. **Include Tests**: ✓
-7. 把项目存到任意位置（不一定在这个 monorepo 里）
+打开 Xcode 后：
 
-### 2. 把这些源文件加进去
+1. **左上选签名**：左侧导航点项目蓝图标 → TARGETS → ByWaveCalendar → **Signing & Capabilities** → "Team" 下拉选你的 Apple Developer 账号
+   - Bundle Identifier 默认是 `cn.bywave.calendar`，可能跟别人冲突。先改成你自己的，比如 `com.你名字.bywave-calendar`
+2. **选目标设备**：顶部模拟器选 iPhone 15 / 你的 iPhone
+3. **⌘R 跑**
+4. APP 启动 → 「服务器地址」屏幕：
+   - 输入 `https://rl.lz-ss.com`
+   - 或点「扫码登录」→ 用相机对准网页 `/app/settings#devices` → 「绑定新设备」弹出来的 QR
+5. 成功登录 → 看到今天 + 接下来 7 天的事件列表
 
-把下面这些文件**整段拷贝**到 Xcode 项目里（替换默认的 `ContentView.swift` 和 `ByWaveCalendarApp.swift`，并新建对应的文件夹组）：
+## 真机本地调试
+
+iOS 默认不允许 http 明文流量。如果你的服务器跑在 `http://192.168.x.x:3000`，需要给项目加 ATS 例外。
+
+在 Xcode 里：
+- 左侧导航点 ByWaveCalendar 蓝图标 → TARGETS → Info（这是 Info plist 编辑器）
+- 加 Key: **App Transport Security Settings**
+- 展开 → 加 sub key **Allow Arbitrary Loads in Local Networking** = YES
+
+生产 https 不需要这一段。
+
+## 项目架构
 
 ```
 ByWaveCalendar/
-├── ByWaveCalendarApp.swift          ← 替换 Xcode 默认的
-├── AppState.swift                   ← 新建
+├── ByWaveCalendarApp.swift   # @main 入口
+├── AppState.swift            # 全局状态 / 自动 token 刷新
 ├── Network/
-│   ├── APIClient.swift              ← 新建
-│   └── Models.swift                 ← 新建
+│   ├── APIClient.swift       # URLSession 封装，自动 Bearer + 401 重试
+│   └── Models.swift          # EventDTO / CalendarMeta
 ├── Auth/
-│   ├── Keychain.swift               ← 新建
-│   └── PairingService.swift         ← 新建
+│   ├── Keychain.swift        # refresh token 存 iOS Keychain
+│   └── PairingService.swift  # 扫码后调 /devices/pair-claim
 └── Views/
-    ├── RootView.swift               ← 新建
-    ├── SetupView.swift              ← 新建
-    ├── ScannerView.swift            ← 新建
-    └── CalendarView.swift           ← 新建（替换默认 ContentView）
+    ├── RootView.swift        # 路由 SetupView / CalendarView
+    ├── SetupView.swift       # 服务器地址 + 扫码按钮
+    ├── ScannerView.swift     # AVFoundation 自绘 QR 扫描
+    └── CalendarView.swift    # 今天 + 7 天事件列表
 ```
 
-在 Xcode 里：
-1. 右键项目根 → **New Group** → 起名 `Network`、`Auth`、`Views`
-2. 每个 Group 上右键 → **New File** → **Swift File** → 用上面的文件名
-3. 粘贴本仓库 `apps/ios/ByWaveCalendar/<group>/<file>.swift` 的内容
-
-### 3. 配置权限（相机扫码用）
-
-打开 `Info` 标签（Xcode 14+ 里项目的 Info 是 plist 编辑器）：
-- 加 Key: **Privacy - Camera Usage Description**
-- Value: `扫码登录需要使用相机`
-
-### 4. Target 设置
-
-- **Minimum Deployments**: iOS 16.0（用了 `NavigationStack`、`async/await`）
-- **Bundle Identifier**: 任意，比如 `cn.lz-ss.bywave-calendar`
-- 用你 Apple Developer 账号的 Team 签名
-
-### 5. 跑
-
-- Xcode 顶部选 iPhone 模拟器（or 真机）
-- ⌘R 跑
-- App 启动 → 「服务器地址」屏 → 输入 `https://rl.lz-ss.com`（或本地开发用 `http://你的电脑IP:3000`）→「连接」
-- 或者点「扫码登录」，去 Web 端 `/app/settings#devices` → 「绑定新设备」 → 扫弹出的 QR
-
-### 真机本地调试小贴士
-
-iOS 默认不允许 http 明文流量。开发时如果你的服务器跑在 `http://192.168.x.x:3000`，需要在 Info.plist 加：
-
-```xml
-<key>NSAppTransportSecurity</key>
-<dict>
-    <key>NSAllowsLocalNetworking</key>
-    <true/>
-</dict>
-```
-
-生产环境用 https 就不用这一段。
-
-## 项目架构速览
+主要类的职责：
 
 - **AppState** (`@MainActor ObservableObject`)：全局状态 — 服务器 URL / refresh token / access token / current user
 - **APIClient**：URLSession 封装，自动给请求加 `Authorization: Bearer ...`，401 自动调 refresh，成功后重发原请求
-- **Keychain**：refresh token 存到 iOS Keychain（设备解锁后可读）
+- **Keychain**：refresh token 存 iOS Keychain（设备解锁后可读）
 - **PairingService**：调 `/api/v1/devices/pair-claim` 把扫到的 code 换成 token
-- **RootView**：根据 AppState 分流到 SetupView 或 CalendarView
+- **RootView**：根据 AppState 分流到 SetupView 或 CalendarView，含启动 splash
 - **SetupView**：服务器地址输入 + 扫码按钮
 - **ScannerView**：`AVCaptureSession` 扫 QR
 - **CalendarView**：调 `/api/v1/events?from=...&to=...` 显示当天的事件列表
+
+## 项目设置（已经预置好了）
+
+- **iOS 最低**：16.0（要 NavigationStack + async/await）
+- **Bundle ID**：`cn.bywave.calendar`（**记得改成你自己的**）
+- **Display Name**：ByWaveCalendar
+- **Marketing Version**：0.1.0
+- **相机权限文案**：「扫描二维码登录需要使用相机」(已在 build settings 里)
+- **支持横竖屏**：iPhone 竖屏 + 左右横屏；iPad 全部方向
+- **Swift**：5.0
+- **Deployment Target**：iOS 16
 
 ## 下一步迭代
 
@@ -110,3 +101,18 @@ iOS 默认不允许 http 明文流量。开发时如果你的服务器跑在 `ht
 8. Sign in with Apple（先得把 server 端的 Apple SSO 写出来）
 9. Widget（今日事件 small/medium widget）
 10. Apple Watch 配套
+
+## 常见错误
+
+**「Could not find the developer disk image」**
+- 你的 iPhone iOS 版本比 Xcode 新。升级 Xcode（App Store）解决。
+
+**「The provided account does not have access to "..."」**
+- Bundle Identifier 跟别的开发者的撞了。改成你自己的（建议格式 `com.姓名首字母.bywave-calendar`）。
+
+**编译报错 "Cannot find 'NavigationStack' in scope"**
+- 你不小心把 Deployment Target 改到 < iOS 16 了。改回去。
+
+**扫码闪退 / 黑屏**
+- 没给相机权限。设置 → 隐私 → 相机 → ByWaveCalendar 打开。
+- 或者真机调试时第一次没弹权限询问 —— 删 APP 重装。
