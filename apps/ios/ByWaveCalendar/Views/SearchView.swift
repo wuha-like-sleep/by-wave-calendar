@@ -173,6 +173,10 @@ private extension SearchResult {
             allDay: false,
             rrule: nil,
             isOccurrence: nil,
+            // extra (timezone / attendees / category) isn't returned by
+            // /search — EventDetailView re-fetches via /events when the
+            // user taps "edit", so nil is harmless.
+            extra: nil,
         )
     }
 }
