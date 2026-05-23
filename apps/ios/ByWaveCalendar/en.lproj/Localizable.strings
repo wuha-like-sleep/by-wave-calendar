@@ -44,6 +44,10 @@
 "用本机相机对准二维码 — 服务器地址和配对码都在码里" = "Aim camera at the QR — server URL and code are inside";
 "如果你开启了二次验证（MFA），请改用「扫码」" = "If you have MFA, you may need the scan flow";
 "对准网页上的二维码" = "Aim at the QR on screen";
+"将二维码放入框内 — 自动识别" = "Frame the QR — scan starts automatically";
+"已取消" = "Cancelled";
+"相机初始化失败" = "Camera failed to start";
+"关闭" = "Close";
 "没有相机权限" = "Camera permission needed";
 "打开 设置 → 隐私 → 相机 → ByWaveCalendar，开启权限后回到 APP 重试。" = "Open Settings → Privacy → Camera → ByWaveCalendar to grant access.";
 

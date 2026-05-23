@@ -23,7 +23,21 @@ npm run typecheck
 npm test
 
 echo "[release] building..."
+# Verify the minified bundle actually got rewritten — older versions of
+# minify-public-js.mjs silently bailed out unless NODE_ENV=production was
+# set, which made every release ship a stale src/public/_built/ bundle and
+# every web-side fix invisible in production. The fail-loud check below
+# guarantees we never deploy a stale bundle again.
+rm -rf src/public/_built
 npm run build
+if [ ! -f src/public/_built/calendar-app.js ]; then
+  echo "[release] ERROR: src/public/_built/calendar-app.js was not generated."
+  echo "[release] This means the minify step bailed out — production would serve a stale bundle."
+  exit 1
+fi
+# Surface the bundle's mtime so the release log shows it's fresh.
+echo "[release] minified bundle:"
+ls -lh src/public/_built/calendar-app.js
 
 echo "[release] copying files into $STAGE..."
 cp -R dist             "$STAGE/dist"

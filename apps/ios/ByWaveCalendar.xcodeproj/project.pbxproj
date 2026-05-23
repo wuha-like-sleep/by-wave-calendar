@@ -82,24 +82,12 @@
 		1B0001000000000000000020 /* MfaSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MfaSettingsPage.swift; sourceTree = "<group>"; };
 		1B0001000000000000000021 /* LegalContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalContent.swift; sourceTree = "<group>"; };
 		1B0001000000000000000022 /* LegalPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalPage.swift; sourceTree = "<group>"; };
-		1E0001000000000000000008 /* Legal */ = {isa = PBXGroup; children = (1B0001000000000000000021 /* LegalContent.swift */); path = Legal; sourceTree = "<group>"; };
 		1B0001000000000000000023 /* ServerCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCapabilities.swift; sourceTree = "<group>"; };
 		1B0001000000000000000024 /* AttendeesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendeesPage.swift; sourceTree = "<group>"; };
 		1B0001000000000000000025 /* DateFormatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatters.swift; sourceTree = "<group>"; };
 		1B0001000000000000000027 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-/* Begin PBXVariantGroup section */
-		1B0001000000000000000026 /* Localizable.strings */ = {
-			isa = PBXVariantGroup;
-			children = (
-				1B0001000000000000000027 /* zh-Hans */,
-				1B0001000000000000000028 /* en */,
-			);
-			name = Localizable.strings;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		1C0001000000000000000001 /* Frameworks */ = {
@@ -203,6 +191,14 @@
 				1B000100000000000000001A /* PushService.swift */,
 			);
 			path = Sync;
+			sourceTree = "<group>";
+		};
+		1E0001000000000000000008 /* Legal */ = {
+			isa = PBXGroup;
+			children = (
+				1B0001000000000000000021 /* LegalContent.swift */,
+			);
+			path = Legal;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -315,6 +311,18 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		1B0001000000000000000026 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				1B0001000000000000000027 /* zh-Hans */,
+				1B0001000000000000000028 /* en */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		2D0001000000000000000001 /* Debug */ = {
@@ -445,13 +453,16 @@
 		2D0001000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ByWaveCalendar/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Calendar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
@@ -463,7 +474,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -475,13 +486,16 @@
 		2D0001000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ByWaveCalendar/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Calendar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
@@ -493,7 +507,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

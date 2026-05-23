@@ -285,8 +285,19 @@
   let hasEverLoadedEvents = false;
 
   async function loadEvents() {
-    const start = cal.getDateRangeStart().toDate();
-    const end = cal.getDateRangeEnd().toDate();
+    const startRaw = cal.getDateRangeStart().toDate();
+    const endRaw = cal.getDateRangeEnd().toDate();
+    // Normalize the visible range to a closed [start-of-day, end-of-day]
+    // window. Toast UI's week & month views return `end` as the LAST day at
+    // 00:00:00 local — so the server's `startsAt <= to` filter excludes any
+    // event later in that day (e.g. 04:00 Sunday gets dropped for a
+    // Mon-Sun week). Day view already returns end-of-day, but normalizing
+    // here keeps every code path consistent. See v1.3.1 — fix
+    // week-view-missing-events bug, root cause in TUI's getWeekDates.
+    const start = new Date(startRaw);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(endRaw);
+    end.setHours(23, 59, 59, 999);
     showLoadingSkeleton();
     try {
       // Go through bwcStore if available — gives us offline cache + outbox

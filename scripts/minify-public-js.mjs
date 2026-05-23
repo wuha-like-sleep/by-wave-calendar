@@ -29,8 +29,16 @@ async function walk(dir, base = dir) {
 }
 
 async function main() {
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[minify] NODE_ENV=${process.env.NODE_ENV || "(unset)"} — skipping in non-production build. Source files untouched.`);
+  // The minify step used to gate on NODE_ENV=production. That was wrong:
+  // release.sh runs `npm run build` without setting NODE_ENV, so the gate
+  // bailed out and every release shipped the same stale `_built/` bundle
+  // — fixes in src/public/*.js never made it into the deployed minified
+  // JS that the production server actually serves from /static/_built/.
+  // Now we always minify when this script is called. `npm run dev` calls
+  // build:assets but skips minify via the BWC_SKIP_MINIFY env var so the
+  // dev loop stays fast.
+  if (process.env.BWC_SKIP_MINIFY === "1") {
+    console.log("[minify] BWC_SKIP_MINIFY=1 — skipping (dev mode). Source files untouched.");
     return;
   }
   await rm(OUT, { recursive: true, force: true });
