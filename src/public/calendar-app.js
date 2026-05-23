@@ -167,8 +167,12 @@
     color: "#ffffff",
   }));
 
+  // On phones the 7-column week view is unreadable — labels truncate to
+  // 2 chars, drag-to-create misfires constantly. Default to "day" on
+  // mobile; the view-switcher header still lets the user pick weekly.
+  const isMobileViewport = window.matchMedia("(max-width: 640px)").matches;
   const cal = new tui.Calendar("#calendar", {
-    defaultView: "week",
+    defaultView: isMobileViewport ? "day" : "week",
     useFormPopup: false,
     useDetailPopup: false,
     useCreationPopup: false,
@@ -197,7 +201,9 @@
     },
   });
 
-  let currentView = "week";
+  // Keep this in sync with the defaultView passed to tui.Calendar above —
+  // otherwise the view-switcher buttons start out highlighting the wrong tab.
+  let currentView = isMobileViewport ? "day" : "week";
 
   // Scroll the time grid so "now" is roughly in the middle on first load
   // (24-hour view means a lot of empty hours otherwise). Toast UI doesn't
@@ -377,7 +383,8 @@
     refresh();
     if (currentView !== "month") scrollGridToNow();
   }));
-  $('.view-btn[data-view="week"]').classList.add("bg-brand-50", "text-brand-700", "font-semibold");
+  // Highlight whichever view we started in (week on desktop, day on mobile).
+  $(`.view-btn[data-view="${currentView}"]`)?.classList.add("bg-brand-50", "text-brand-700", "font-semibold");
   // Initial position: scroll the week grid to the current hour on first paint.
   scrollGridToNow();
 
@@ -761,9 +768,12 @@
     return new Promise((resolve) => {
       const isDelete = action === "delete";
       const overlay = document.createElement("div");
-      overlay.className = "fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4";
+      // Bottom-sheet on mobile (items-end + full-width), centered card
+      // on desktop. Matches the visual language of the event modal so
+      // users feel "I'm picking an option for the thing I just clicked".
+      overlay.className = "fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4";
       const card = document.createElement("div");
-      card.className = "w-full max-w-md rounded-2xl bg-white shadow-2xl";
+      card.className = "w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl bg-white shadow-2xl";
       card.innerHTML =
         '<div class="border-b border-slate-200 px-5 py-4">' +
           '<h3 class="text-base font-semibold text-slate-900">' + (isDelete ? "删除重复事件" : "保存重复事件") + '</h3>' +
@@ -863,14 +873,18 @@
       const opt = Array.from(reminderSelect.options).find((o) => o.value === t);
       reminderSelect.value = opt ? t : (payload.id ? "" : "-PT15M");
     }
-    if (payload.timezone) {
-      // The timezone control used to be a <select>; we switched it to
-      // <input list=tz-options> so it accepts free-text IANA ids and the
-      // browser autocompletes against ~420 zones. Set the input value
-      // directly — if the supplied id is bogus, the user sees the raw
-      // string and can correct it.
-      const tzInput = form.querySelector('[name="timezone"]');
-      if (tzInput) tzInput.value = payload.timezone;
+    // Timezone field is now a hidden <input> driven by the custom
+    // searchable combobox (#modal-tz). Set the underlying value, then
+    // ask the picker to refresh its visible label. Falls back to
+    // "Asia/Shanghai" when the event has no stored timezone so the
+    // picker never shows an empty trigger.
+    const tzInput = form.querySelector('[name="timezone"]');
+    if (tzInput) {
+      tzInput.value = payload.timezone || "Asia/Shanghai";
+      const tzPicker = tzInput.closest("[data-tz-picker]");
+      if (tzPicker && typeof window.bwcSyncTzPicker === "function") {
+        window.bwcSyncTzPicker(tzPicker);
+      }
     }
     syncAllDayUI();
     // Show tz hint immediately if the event is anchored to a non-browser zone.
@@ -1034,7 +1048,10 @@
     }
   }
 
-  $("#btn-new-event").addEventListener("click", () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) }));
+  // Both the desktop toolbar button and the mobile FAB share this handler.
+  const openNewEvent = () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) });
+  $("#btn-new-event").addEventListener("click", openNewEvent);
+  $("#btn-new-event-fab")?.addEventListener("click", openNewEvent);
 
   cal.on("selectDateTime", (info) => {
     // Quantize the click-drag selection to 5 minutes — Toast UI by default
@@ -1675,6 +1692,131 @@
     clearTimeout(window.__bwcResize);
     window.__bwcResize = setTimeout(() => { try { cal.render(); } catch (e) {} }, 150);
   });
+
+  // ---------- Timezone picker (custom searchable combobox) ----------
+  // Replaces the old <input list=tz-options> which let users free-type
+  // garbage like "上海" — that "looked right" but isn't a valid IANA id
+  // so the event broke silently on display + email + CalDAV.
+  //
+  // Now: hidden field always holds a known IANA id; the trigger button
+  // shows the friendly label; clicking opens a modal with a search box
+  // that filters by Chinese label / IANA id / UTC offset. Always
+  // commits a value from the curated+IANA list.
+  (function wireTzPicker() {
+    const modal = $("#modal-tz");
+    const search = $("#tz-search");
+    const list = $("#tz-list");
+    if (!modal || !search || !list) return;
+    const zones = Array.isArray(window.bwcTimezones) ? window.bwcTimezones : [];
+    if (zones.length === 0) return;
+
+    // Track the picker element that opened the modal, so we know where
+    // to write the result back. Only one modal can be open at a time.
+    let activePicker = null;
+
+    function labelFor(zoneId) {
+      // Find the first matching curated entry; fall back to the IANA id.
+      const z = zones.find((t) => t.id === zoneId);
+      if (!z) return zoneId || "Asia/Shanghai";
+      return `${z.label}（${z.offset}）`;
+    }
+
+    function syncPickerLabel(picker) {
+      const hidden = picker.querySelector('input[name="timezone"]');
+      const label = picker.querySelector("[data-tz-label]");
+      if (!hidden || !label) return;
+      label.textContent = labelFor(hidden.value);
+    }
+
+    function renderList(filter) {
+      const q = filter.trim().toLowerCase();
+      const matches = q
+        ? zones.filter((z) => {
+            const hay = `${z.label} ${z.id} ${z.offset}`.toLowerCase();
+            return hay.includes(q);
+          })
+        : zones;
+      // Cap at 200 results so a blank search doesn't dump 420 DOM nodes.
+      const capped = matches.slice(0, 200);
+      list.innerHTML = capped.length === 0
+        ? '<li class="py-6 text-center text-sm text-slate-400">没有匹配的时区</li>'
+        : capped.map((z) =>
+            `<li><button type="button" data-tz-pick="${z.id}" class="w-full flex items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 active:bg-slate-100">
+              <span class="text-slate-900">${escapeHtml(z.label)}</span>
+              <span class="ml-3 text-xs text-slate-500 font-mono">${escapeHtml(z.id)} · ${escapeHtml(z.offset)}</span>
+            </button></li>`,
+          ).join("");
+    }
+
+    function openTzModal(picker) {
+      activePicker = picker;
+      modal.classList.remove("hidden");
+      search.value = "";
+      renderList("");
+      // Focus the search field on desktop; on mobile we don't auto-focus
+      // because pulling up the keyboard right when the bottom-sheet
+      // animates in feels janky. Tap-to-focus works fine.
+      if (!window.matchMedia("(max-width: 640px)").matches) {
+        setTimeout(() => search.focus(), 30);
+      }
+      // Scroll the currently-selected item into view if it's in the list.
+      const hidden = picker.querySelector('input[name="timezone"]');
+      if (hidden && hidden.value) {
+        const found = list.querySelector(`[data-tz-pick="${CSS.escape(hidden.value)}"]`);
+        if (found) found.scrollIntoView({ block: "center" });
+      }
+    }
+
+    function closeTzModal() {
+      modal.classList.add("hidden");
+      activePicker = null;
+    }
+
+    function commitPick(zoneId) {
+      if (!activePicker) return;
+      const hidden = activePicker.querySelector('input[name="timezone"]');
+      if (hidden) hidden.value = zoneId;
+      syncPickerLabel(activePicker);
+      // Notify listeners (e.g. tz-hint in event modal) by firing 'change'
+      // on the hidden input.
+      if (hidden) hidden.dispatchEvent(new Event("change", { bubbles: true }));
+      closeTzModal();
+    }
+
+    // Delegate clicks on triggers — works for pickers in modals that
+    // weren't in the DOM at startup (event modal opens lazily).
+    document.body.addEventListener("click", (e) => {
+      const trigger = e.target.closest("[data-tz-trigger]");
+      if (trigger) {
+        const picker = trigger.closest("[data-tz-picker]");
+        if (picker) { e.preventDefault(); openTzModal(picker); return; }
+      }
+    });
+
+    // List clicks → pick
+    list.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-tz-pick]");
+      if (btn) commitPick(btn.dataset.tzPick);
+    });
+
+    // Close handlers: X button, backdrop click, Escape key.
+    modal.querySelector("[data-tz-close]")?.addEventListener("click", closeTzModal);
+    modal.addEventListener("click", (e) => { if (e.target === modal) closeTzModal(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.classList.contains("hidden")) closeTzModal();
+    });
+
+    // Live filter as the user types
+    search.addEventListener("input", () => renderList(search.value));
+
+    // Initial label sync for every picker present at page load.
+    document.querySelectorAll("[data-tz-picker]").forEach(syncPickerLabel);
+
+    // Re-sync whenever some other code (event modal opening with an
+    // existing event's timezone) writes to the hidden input directly.
+    // We can't observe value= changes natively, so expose a helper.
+    window.bwcSyncTzPicker = (picker) => syncPickerLabel(picker);
+  })();
 
   // ---------- Sync status chip ----------
   // Hidden by default. Three states:

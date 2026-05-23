@@ -6,20 +6,23 @@
     <button type="button" id="btn-toggle-sidebar" class="p-2 rounded-md hover:bg-slate-100" aria-label="侧栏">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">今天</button>
+    <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 min-h-[36px]">今天</button>
     <div class="inline-flex items-center">
-      <button type="button" id="btn-prev" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="上一段">
+      <!-- Touch targets: 36×36 minimum (was 28×28). Apple HIG / Material both
+           recommend 44px for ideal touch; 36px is the sane minimum that
+           still fits two arrows + the date label on a 360px-wide screen. -->
+      <button type="button" id="btn-prev" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="上一段">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <button type="button" id="btn-next" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="下一段">
+      <button type="button" id="btn-next" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="下一段">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
     </div>
     <h2 id="period-label" class="text-sm sm:text-lg font-semibold text-slate-900 flex-1 min-w-0 truncate">…</h2>
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-      <button type="button" data-view="month" class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">月</button>
-      <button type="button" data-view="week"  class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">周</button>
-      <button type="button" data-view="day"   class="view-btn px-2.5 sm:px-3 py-1.5 text-sm rounded-md text-slate-600">日</button>
+      <button type="button" data-view="month" class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">月</button>
+      <button type="button" data-view="week"  class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">周</button>
+      <button type="button" data-view="day"   class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">日</button>
     </div>
     <!-- Sync status chip (offline indicator + pending outbox count).
          Hidden by default; calendar-app.js shows it when state changes.
@@ -28,11 +31,23 @@
       <span id="sync-chip-dot" class="inline-block h-1.5 w-1.5 rounded-full"></span>
       <span id="sync-chip-text"></span>
     </button>
-    <button type="button" id="btn-new-event" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+    <!-- Desktop "new event" button; on mobile the FAB below takes over
+         since this lives in a cramped wrapping toolbar. -->
+    <button type="button" id="btn-new-event" class="hidden sm:inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      <span class="hidden sm:inline">新建事件</span>
+      <span>新建事件</span>
     </button>
   </header>
+
+  <!-- Mobile FAB: one-thumb reach for creating events. Hidden on
+       sm+ where the toolbar's text button is already visible. The
+       click handler is shared with #btn-new-event (calendar-app.js
+       binds the same handler to both ids). -->
+  <button type="button" id="btn-new-event-fab"
+          class="sm:hidden fixed bottom-5 right-5 z-30 h-14 w-14 rounded-full bg-brand-600 text-white shadow-lg flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-transform"
+          aria-label="新建事件">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
 
   <!-- Floating shortcuts hint -->
   <button type="button" id="btn-shortcuts" class="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-brand-600" aria-label="键盘快捷键" title="键盘快捷键 (按 ?)">
@@ -280,21 +295,21 @@
         </div>
       </div>
 
-      <!-- Timezone — input with native <datalist> autocomplete. Type
-           "shang", "lon", "tor" and the browser filters the ~400 IANA
-           zones. Curated zones (上海 / 香港 / etc.) sit at the top of
-           the list so the common case is a single keystroke. -->
-      <div>
+      <!-- Timezone picker — custom combobox, NOT a <datalist>. The
+           datalist approach let users free-type any string, which broke
+           events when they typed Chinese names like "上海" expecting it
+           to be valid (it isn't — only IANA ids work). This widget
+           always commits a valid IANA id. data-tz-picker wires up the
+           JS in calendar-app.js. -->
+      <div data-tz-picker>
         <label class="block text-xs font-medium text-slate-600 mb-1">时区</label>
-        <input type="text" name="timezone" list="tz-options" value="Asia/Shanghai" autocomplete="off"
-               placeholder="输入城市或 IANA 名（如 上海 / Tokyo / America/Toronto）"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        <datalist id="tz-options">
-          <% timezones.forEach(function(tz){ %>
-            <option value="<%= tz.id %>" label="<%= tz.label %>（<%= tz.offset %>）"><%= tz.label %> · <%= tz.offset %></option>
-          <% }) %>
-        </datalist>
-        <p class="mt-1 text-xs text-slate-400">支持输入搜索；UTC 偏移自动跟随夏令时</p>
+        <input type="hidden" name="timezone" value="Asia/Shanghai" />
+        <button type="button" data-tz-trigger
+                class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 hover:bg-slate-50">
+          <span data-tz-label class="truncate text-slate-900">上海（UTC+8）</span>
+          <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
+        </button>
+        <p class="mt-1 text-xs text-slate-400">点击搜索：上海 / Tokyo / 纽约 / America/Toronto</p>
       </div>
 
       <!-- Location -->
@@ -368,13 +383,14 @@
           <div class="flex flex-wrap gap-1.5" data-color-picker="form-calendar"></div>
           <input type="hidden" name="color" value="#6366f1" />
         </div>
-        <div>
+        <div data-tz-picker>
           <label class="block text-sm font-medium text-slate-700 mb-1">时区</label>
-          <input type="text" name="timezone" list="tz-options" value="Asia/Shanghai" autocomplete="off"
-                 placeholder="如 Asia/Shanghai / Europe/Paris"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-          <!-- Reuses the #tz-options datalist defined above; both inputs
-               share the same source so we don't ship 400 zones twice. -->
+          <input type="hidden" name="timezone" value="Asia/Shanghai" />
+          <button type="button" data-tz-trigger
+                  class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+            <span data-tz-label class="truncate text-slate-900">上海（UTC+8）</span>
+            <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
+          </button>
         </div>
       </div>
       <div data-cal-pane="share" class="hidden space-y-3">
@@ -390,6 +406,38 @@
     </form>
   </div>
 </div>
+
+<!-- Modal: Timezone picker. Shared across every [data-tz-picker]
+     element on the page. Search filters by Chinese label, IANA id, or
+     UTC offset; selecting commits a known-valid IANA id to the hidden
+     <input name="timezone"> in the picker that opened the modal. -->
+<div id="modal-tz" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col max-h-[85vh]">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <h3 class="text-base font-semibold text-slate-900">选择时区</h3>
+      <button type="button" data-tz-close class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="px-5 pt-3 pb-2">
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
+        <input id="tz-search" type="search" inputmode="search" autocomplete="off"
+               placeholder="搜索：上海 / Tokyo / Toronto / +8"
+               class="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </div>
+    </div>
+    <ul id="tz-list" class="flex-1 overflow-y-auto px-2 pb-3" role="listbox">
+      <!-- Populated by JS from window.bwcTimezones -->
+    </ul>
+  </div>
+</div>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+  // Inject the curated + IANA timezone list as JSON for the JS picker.
+  // Shipped inline because the calendar-app.js bundle doesn't get
+  // template variables; ~5KB gzipped, acceptable.
+  window.bwcTimezones = <%- JSON.stringify(timezones) %>;
+</script>
 
 <!-- Modal: Sync conflicts. Opens when the user clicks the sync chip
      while it's showing stuck-in-outbox items (5+ retry failures). Lists
