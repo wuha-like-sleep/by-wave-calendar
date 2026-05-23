@@ -225,6 +225,13 @@
       "when": 1779700000000,
       "tag": "0031_event_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1779800000000,
+      "tag": "0032_devices_and_pairings",
+      "breakpoints": true
     }
   ]
 }

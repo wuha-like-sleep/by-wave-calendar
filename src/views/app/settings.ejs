@@ -292,6 +292,172 @@
   })();
 </script>
 
+<!-- ============== 我的设备（iOS / Android / 桌面 APP） ============== -->
+<section id="devices" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+  <div class="flex items-start justify-between gap-4 mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">我的设备</h2>
+      <p class="mt-1 text-sm text-slate-500">用 iOS / Android / 桌面原生 APP 同步日历的设备。Web 浏览器不在这里 —— 用「踢出登录」管理浏览器会话。</p>
+    </div>
+    <button type="button" id="btn-pair-device"
+            class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+      绑定新设备
+    </button>
+  </div>
+
+  <ul id="device-list" class="divide-y divide-slate-100 border-t border-slate-100">
+    <li class="py-6 text-center text-sm text-slate-400">加载中…</li>
+  </ul>
+</section>
+
+<!-- Modal: pair new device. Shows a QR + the 6-char code as fallback. -->
+<div id="modal-pair-device" class="hidden fixed inset-0 z-[70] bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <h3 class="text-base font-semibold text-slate-900">绑定新设备</h3>
+      <button type="button" id="btn-pair-close" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="p-5">
+      <p class="text-sm text-slate-600 mb-4">在 iOS / Android APP 上选「扫码登录」，对准下面这张码就行：</p>
+      <div id="pair-qr" class="mx-auto bg-white p-3 rounded-lg border border-slate-200 w-56 h-56 flex items-center justify-center">
+        <span class="text-xs text-slate-400">生成中…</span>
+      </div>
+      <details class="mt-4">
+        <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-700">手动输入也行（如果手机没相机权限）</summary>
+        <div class="mt-2 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <div class="text-xs text-slate-500 mb-1">服务器地址</div>
+            <code id="pair-url" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 font-mono text-xs"></code>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 mb-1">配对码</div>
+            <code id="pair-code" class="block rounded-md bg-slate-50 border border-slate-200 px-3 py-2 font-mono text-lg text-center"></code>
+          </div>
+        </div>
+      </details>
+      <p id="pair-expires" class="mt-3 text-xs text-amber-700 text-center">5 分钟内有效</p>
+    </div>
+  </div>
+</div>
+
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+(function() {
+  const csrf = '<%= csrfToken %>';
+  const list = document.getElementById("device-list");
+  const modal = document.getElementById("modal-pair-device");
+  const qrBox = document.getElementById("pair-qr");
+  const pairUrl = document.getElementById("pair-url");
+  const pairCode = document.getElementById("pair-code");
+  const pairExp = document.getElementById("pair-expires");
+  const btnPair = document.getElementById("btn-pair-device");
+  const btnClose = document.getElementById("btn-pair-close");
+
+  function fmtAgo(iso) {
+    if (!iso) return "从未";
+    const diff = Date.now() - new Date(iso).getTime();
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return "刚刚";
+    if (min < 60) return min + " 分钟前";
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return hr + " 小时前";
+    const d = Math.floor(hr / 24);
+    return d + " 天前";
+  }
+  function kindLabel(k) {
+    return ({ ios: "iOS", android: "Android", desktop: "桌面" }[k]) || "其他";
+  }
+
+  async function loadDevices() {
+    try {
+      const resp = await fetch("/api/v1/devices", { credentials: "same-origin" });
+      const data = await resp.json();
+      const devs = (data && (data.devices || data.data?.devices)) || [];
+      if (devs.length === 0) {
+        list.innerHTML = '<li class="py-6 text-center text-sm text-slate-400">还没有绑定 APP。点右上「绑定新设备」加一个。</li>';
+        return;
+      }
+      list.innerHTML = devs.map(function(d) {
+        return '<li class="py-3 flex items-center justify-between gap-3">' +
+          '<div class="min-w-0">' +
+            '<div class="text-sm font-medium text-slate-900">' +
+              escapeHtml(d.label) +
+              ' <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-normal text-slate-500">' + kindLabel(d.kind) + '</span>' +
+            '</div>' +
+            '<div class="text-xs text-slate-500 mt-0.5">' +
+              '最近活动 ' + fmtAgo(d.lastSeenAt) + (d.lastSeenIp ? ' · ' + escapeHtml(d.lastSeenIp) : '') +
+              (d.appVersion ? ' · v' + escapeHtml(d.appVersion) : '') +
+            '</div>' +
+          '</div>' +
+          '<button type="button" data-revoke="' + d.id + '" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">解绑</button>' +
+        '</li>';
+      }).join("");
+    } catch (err) {
+      console.error("load_devices", err);
+      list.innerHTML = '<li class="py-6 text-center text-sm text-red-500">加载失败 —— 刷新一下</li>';
+    }
+  }
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  list.addEventListener("click", async function(e) {
+    const btn = e.target.closest("[data-revoke]");
+    if (!btn) return;
+    if (!(await window.bwc.confirm({ message: "解绑这个设备？该 APP 会立即失去同步能力。", danger: true, confirmLabel: "解绑" }))) return;
+    try {
+      const resp = await fetch("/api/v1/devices/" + encodeURIComponent(btn.dataset.revoke), {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": csrf },
+      });
+      if (!resp.ok) throw new Error();
+      window.bwc.toast("已解绑", "success");
+      loadDevices();
+    } catch (_e) { window.bwc.toast("解绑失败", "error"); }
+  });
+
+  btnPair.addEventListener("click", async function() {
+    modal.classList.remove("hidden");
+    qrBox.innerHTML = '<span class="text-xs text-slate-400">生成中…</span>';
+    try {
+      const resp = await fetch("/api/v1/devices/pair-init", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+      });
+      const data = await resp.json();
+      const d = (data && data.data) || data;
+      qrBox.innerHTML = d.qrSvg;
+      // SVG fills its container; cap with inline width
+      const svg = qrBox.querySelector("svg");
+      if (svg) { svg.setAttribute("width", "100%"); svg.setAttribute("height", "100%"); }
+      // Parse payload for the manual-input fallback
+      try {
+        const p = JSON.parse(d.payload);
+        pairUrl.textContent = p.url;
+        pairCode.textContent = p.code;
+      } catch (_e) {}
+      const expMs = new Date(d.expiresAt).getTime() - Date.now();
+      pairExp.textContent = "约 " + Math.max(0, Math.floor(expMs / 60000)) + " 分钟内有效，过期后重新点「绑定新设备」即可";
+      // Refresh device list 30s later so the new device appears once the
+      // app finishes the claim (we don't have push for this — polling is fine).
+      setTimeout(loadDevices, 30000);
+    } catch (err) {
+      console.error("pair_init", err);
+      qrBox.innerHTML = '<span class="text-xs text-red-500">生成失败</span>';
+    }
+  });
+  btnClose.addEventListener("click", function() { modal.classList.add("hidden"); loadDevices(); });
+  modal.addEventListener("click", function(e) { if (e.target === modal) { modal.classList.add("hidden"); loadDevices(); } });
+
+  loadDevices();
+})();
+</script>
+
 <section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>

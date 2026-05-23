@@ -16,6 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
+import { deviceRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
 import { oauthServerRoutes } from "./web/oauth_server.js";
 import { icsRoutes } from "./routes/ics.js";
@@ -201,7 +202,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.5.1" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.6.0" }));
 
 // CSP violation report sink. Browsers POST a small JSON document here
 // when something gets blocked by the Content-Security-Policy directives
@@ -392,6 +393,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(calendarRoutes, { prefix });
   await app.register(eventRoutes, { prefix });
   await app.register(searchRoutes, { prefix });
+  await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
 }
 await app.register(icsRoutes);

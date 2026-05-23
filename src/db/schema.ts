@@ -323,6 +323,48 @@ export const apiTokens = pgTable("api_tokens", {
   prefixIdx: index("api_tokens_prefix_idx").on(t.prefix),
 }));
 
+// Native app / desktop client registrations. Each row represents one
+// installed app instance bound to a user. Refresh tokens are long-lived
+// (years) and traded for short-lived JWT access tokens via /api/v1/auth/refresh.
+// Distinct from `apiTokens` (which are admin-issued for n8n / Zapier).
+export const devices = pgTable("devices", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),                // "iPhone 15 Pro" or self-described
+  kind: text("kind").notNull().default("other"), // ios / android / desktop / other
+  refreshTokenHash: text("refresh_token_hash").notNull(),  // bcrypt of full token
+  refreshTokenPrefix: text("refresh_token_prefix").notNull(),  // bwd_XXXXXXXX_ — for index lookup
+  appVersion: text("app_version"),
+  pushToken: text("push_token"),                 // APNs / FCM token (set later)
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+  lastSeenIp: text("last_seen_ip"),
+  firstSeenIp: text("first_seen_ip"),
+  firstUserAgent: text("first_user_agent"),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index("devices_user_idx").on(t.userId),
+  prefixIdx: index("devices_prefix_idx").on(t.refreshTokenPrefix),
+}));
+
+// Pairing codes — short-lived (5 min) one-time codes generated when the user
+// clicks "Pair new device" on the web. The QR encodes (serverUrl, code);
+// the app posts the code back to /api/v1/devices/pair-claim to receive
+// refresh + access tokens. Pairing codes are 6-char human-readable in
+// case the user has to type them manually.
+export const devicePairings = pgTable("device_pairings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  code: text("code").notNull().unique(),       // 6 alphanumeric, displayed in QR
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  claimedDeviceId: uuid("claimed_device_id"),  // null until claimed
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  codeIdx: index("device_pairings_code_idx").on(t.code),
+  expiresIdx: index("device_pairings_expires_idx").on(t.expiresAt),
+}));
+
 export const calendars = pgTable("calendars", {
   id: uuid("id").primaryKey().defaultRandom(),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -570,6 +612,9 @@ export type SiteSettings = typeof siteSettings.$inferSelect;
 export type CalendarMember = typeof calendarMembers.$inferSelect;
 export type CalendarInvitation = typeof calendarInvitations.$inferSelect;
 export type AppPassword = typeof appPasswords.$inferSelect;
+export type Device = typeof devices.$inferSelect;
+export type NewDevice = typeof devices.$inferInsert;
+export type DevicePairing = typeof devicePairings.$inferSelect;
 export type NewAppPassword = typeof appPasswords.$inferInsert;
 export type CalendarSubscription = typeof calendarSubscriptions.$inferSelect;
 export type NewCalendarSubscription = typeof calendarSubscriptions.$inferInsert;

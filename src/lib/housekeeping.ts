@@ -1,5 +1,6 @@
 import { lt, isNotNull, and } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
+import { purgeStaleDeviceRows } from "./devices.js";
 
 // Days after which soft-deleted events are physically purged. 90 days is
 // long enough that the user can recover via DB backup if they realize a
@@ -31,6 +32,11 @@ export function startHousekeepingScheduler(log: { info: (m: string) => void; war
       const { events } = await purgeOldSoftDeletes();
       if (events > 0) {
         log.info(`[housekeeping] purged ${events} soft-deleted event(s) older than ${SOFT_DELETE_RETENTION_DAYS}d`);
+      }
+      // Pairing codes (expired > 1d) + long-revoked devices (> 90d).
+      const dev = await purgeStaleDeviceRows();
+      if (dev.pairings + dev.devices > 0) {
+        log.info(`[housekeeping] purged ${dev.pairings} stale pairing code(s), ${dev.devices} long-revoked device(s)`);
       }
     } catch (err) {
       log.warn({ err });

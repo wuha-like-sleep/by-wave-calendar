@@ -159,6 +159,32 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
       reply.code(401).send({ error: "invalid_token" });
       throw new Error("invalid_token");
     }
+
+    // Device access token (JWT, HS256 — issued via /api/v1/devices/pair-claim
+    // or /api/v1/auth/refresh). Used by native iOS / Android / desktop apps.
+    // The token's `did` claim points to a `devices` row — if that row was
+    // revoked we reject regardless of signature/expiry, so admin revokes
+    // take effect within 1 hour (the JWT TTL) at worst.
+    const { looksLikeAccessToken, verifyAccessToken } = await import("./device_tokens.js");
+    if (looksLikeAccessToken(token)) {
+      const payload = verifyAccessToken(token);
+      if (payload) {
+        const { loadDeviceById } = await import("./devices.js");
+        const device = await loadDeviceById(payload.did);
+        if (device && device.userId === payload.sub) {
+          const [u] = await db.select().from(s.users).where(eq(s.users.id, payload.sub)).limit(1);
+          const { userIsActive } = await import("./user_state.js");
+          if (u && userIsActive(u)) {
+            req.user = u;
+            (req as unknown as { authVia: string; deviceId: string }).authVia = "device:" + device.kind;
+            (req as unknown as { deviceId: string }).deviceId = device.id;
+            return u;
+          }
+        }
+      }
+      reply.code(401).send({ error: "invalid_token" });
+      throw new Error("invalid_token");
+    }
   }
 
   // 2) Session cookie (normal browser flow).
