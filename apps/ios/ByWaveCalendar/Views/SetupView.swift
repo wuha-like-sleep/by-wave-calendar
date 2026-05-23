@@ -165,13 +165,15 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("服务器地址")
                 .font(.caption).foregroundStyle(.secondary)
-            TextField("https://your-server.com", text: $serverURLInput)
+            TextField("rl.lz-ss.com 或 192.168.1.100:8080", text: $serverURLInput)
                 .textContentType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .padding(.horizontal, 12).padding(.vertical, 11)
                 .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
+            Text("不用加 https:// 或 http:// — APP 自动探测。")
+                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -357,25 +359,23 @@ struct SetupView: View {
 
     // MARK: - Actions
 
-    private func normalizedServerURL() -> URL? {
-        var s = serverURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Resolve whatever the user typed into a working URL. Probes https
+    /// first then http when no scheme is given, so "rl.lz-ss.com" and
+    /// "192.168.1.100:8080" both Just Work. Returns nil only when
+    /// neither scheme reaches the server.
+    private func normalizedServerURL() async -> URL? {
+        let s = serverURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return nil }
-        // Tolerate user pasting "rl.lz-ss.com" — add https:// when missing.
-        if !s.hasPrefix("http://") && !s.hasPrefix("https://") {
-            s = "https://" + s
-        }
-        // Strip trailing slash so /api/v1 paths assemble cleanly.
-        if s.hasSuffix("/") { s.removeLast() }
-        guard let url = URL(string: s), url.host != nil else { return nil }
+        guard let url = await PairingService.probeServerURL(s) else { return nil }
         // Save eagerly so a failed login attempt doesn't make the user
         // re-type the URL next time. completePairing also writes this
         // key on success — duplicate write is harmless.
-        UserDefaults.standard.set(s, forKey: Self.lastServerURLKey)
+        UserDefaults.standard.set(url.absoluteString, forKey: Self.lastServerURLKey)
         return url
     }
 
     private func loginWithPassword() async {
-        guard let url = normalizedServerURL() else {
+        guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效"; return
         }
         isWorking = true; errorMessage = nil
@@ -433,7 +433,7 @@ struct SetupView: View {
     }
 
     private func loginViaBrowser() async {
-        guard let url = normalizedServerURL() else {
+        guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效"; return
         }
         isWorking = true; errorMessage = nil
@@ -460,7 +460,7 @@ struct SetupView: View {
     }
 
     private func pairWithCode() async {
-        guard let url = normalizedServerURL() else {
+        guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效"; return
         }
         await doClaim(serverURL: url, code: manualCode.trimmingCharacters(in: .whitespacesAndNewlines))

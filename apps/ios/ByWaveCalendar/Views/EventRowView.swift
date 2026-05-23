@@ -14,8 +14,19 @@ struct EventRowView: View {
     var onDuplicate: (() -> Void)? = nil
     var onCopySummary: (() -> Void)? = nil
 
+    /// "Past" = the event has fully ended before now. Used to gray out
+    /// + strike through the title so the user can tell at a glance
+    /// which events on a busy day are still to come vs. already over.
+    private var isPast: Bool {
+        event.endsAt < Date()
+    }
+
     var body: some View {
         rowContent
+            // Drop the whole row's opacity for past events. Combined
+            // with strikethrough on the title, this matches what iOS
+            // Calendar does after an event ends — easy at-a-glance scan.
+            .opacity(isPast ? 0.55 : 1.0)
             .contextMenu {
                 if let onCopySummary {
                     Button {
@@ -50,11 +61,22 @@ struct EventRowView: View {
                 .padding(.top, 6)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
-                    Text(event.summary).font(.body.weight(.medium)).lineLimit(2)
+                    Text(event.summary)
+                        .font(.body.weight(.medium))
+                        .lineLimit(2)
+                        .strikethrough(isPast, color: .secondary)
                     if event.rrule != nil {
                         Image(systemName: "repeat")
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                    }
+                    if isPast {
+                        // Tiny ✓ pill so it's not JUST visual styling —
+                        // accessibility users + tiny strikethrough on dense
+                        // lists won't miss it.
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 HStack(spacing: 6) {

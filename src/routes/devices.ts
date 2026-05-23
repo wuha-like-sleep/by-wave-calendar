@@ -282,6 +282,82 @@ export async function deviceRoutes(app: FastifyInstance) {
     });
   });
 
+  // -------- native account management (Bearer auth required) --------
+  // The iOS APP's 「账号管理」flow used to bounce out to SFSafariView for
+  // every action. Now the simple ones (password change / account delete)
+  // have native JSON endpoints so the APP can do everything in-form
+  // without ever leaving the surface. MFA setup + Passkey register
+  // stay on the Safari bridge for now (they need additional native UI).
+
+  app.post("/account/password", {
+    config: { rateLimit: { max: 6, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const body = z.object({
+      currentPassword: z.string().min(1).max(200),
+      newPassword: z.string().min(8).max(200),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    // Reject SSO-only accounts (no local password to verify).
+    if (!user.passwordHash) {
+      return reply.code(412).send({ error: "no_local_password", message: "你的账号通过 SSO 登录，没有本地密码可改。" });
+    }
+    if (!(await verifyPassword(body.data.currentPassword, user.passwordHash))) {
+      return reply.code(401).send({ error: "invalid_credentials", message: "当前密码错误" });
+    }
+    const { passwordPolicyError } = await import("../lib/password.js");
+    const policy = passwordPolicyError(body.data.newPassword);
+    if (policy) {
+      return reply.code(400).send({ error: "weak_password", message: policy });
+    }
+    const { hashPassword } = await import("../lib/password.js");
+    const hash = await hashPassword(body.data.newPassword);
+    await db.update(schema.users).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    // Re-using the existing security-change email + invalidating sessions
+    // is intentional — change-password should kick all other clients out.
+    // The CURRENT device's refresh token stays valid (we don't touch
+    // the devices table here), so the APP can keep working. Other web
+    // sessions and other devices get 401 on next call.
+    const { sendMail } = await import("../lib/mailer.js");
+    const { securityChangeMail } = await import("../lib/email_templates.js");
+    void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
+      .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
+    const { destroyAllUserSessions } = await import("../lib/session.js");
+    await destroyAllUserSessions(user.id);
+    return reply.send({ ok: true });
+  });
+
+  app.post("/account/delete", {
+    config: { rateLimit: { max: 3, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireUser(req, reply);
+    if (!user) return;
+    const body = z.object({
+      password: z.string().min(1).max(200),
+      confirm: z.literal("删除我的账号"),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return reply.code(400).send({ error: "bad_confirmation", message: "请输入密码并精确输入「删除我的账号」以确认" });
+    }
+    if (!user.passwordHash) {
+      return reply.code(412).send({ error: "no_local_password", message: "SSO 账号请联系管理员删除。" });
+    }
+    if (!(await verifyPassword(body.data.password, user.passwordHash))) {
+      return reply.code(401).send({ error: "invalid_credentials", message: "密码错误，账号未删除" });
+    }
+    if (user.isAdmin) {
+      const { countActiveAdmins } = await import("../lib/user_state.js");
+      if ((await countActiveAdmins()) <= 1) {
+        return reply.code(412).send({ error: "last_admin", message: "你是唯一的管理员，无法删除自己。请先提升另一个用户为管理员。" });
+      }
+    }
+    const { destroyAllUserSessions } = await import("../lib/session.js");
+    await destroyAllUserSessions(user.id);
+    await db.delete(schema.users).where(eq(schema.users.id, user.id));
+    return reply.send({ ok: true });
+  });
+
   // -------- mint a web-session token (Bearer auth required) --------
   // The iOS APP calls this when the user taps an account-management row
   // (修改密码 / MFA / Passkey / 删除账户) in SettingsView. We mint a

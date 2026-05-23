@@ -273,11 +273,16 @@ struct WeekView: View {
         let color = Color(hex: calLookup[p.event.calendarId]?.color) ?? .accentColor
         let isDragging = dragState?.eventId == p.event.id
         let mode = dragState?.mode
+        // Already-ended events fade out + get a strikethrough on the
+        // title so a Saturday morning glance shows "today's left" vs
+        // "today's done" at a flash.
+        let isPast = p.event.endsAt < Date()
         // Move mode: rect translates dx/dy. Resize mode: rect height
         // grows by dy (start stays put); we ignore dx in resize.
         let dragDx = (isDragging && mode == .move) ? dragState!.dx : 0
         let dragDy = (isDragging && mode == .move) ? dragState!.dy : 0
         let resizeDy = (isDragging && mode == .resize) ? dragState!.dy : 0
+        let bgOpacity: Double = isDragging ? 0.7 : (isPast ? 0.55 : 0.95)
         return ZStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.event.summary)
@@ -287,6 +292,7 @@ struct WeekView: View {
                     // calendar color is pastel (e.g. light yellow / pink).
                     // Without it, white text vanishes on a #FBBF24 bar.
                     .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+                    .strikethrough(isPast, color: .white.opacity(0.85))
                     .lineLimit(p.height > 36 ? 2 : 1)
                 if p.height > 50, let location = p.event.location, !location.isEmpty {
                     Text(location)
@@ -299,7 +305,7 @@ struct WeekView: View {
             }
             .padding(.horizontal, 4).padding(.vertical, 3)
             .frame(width: p.width, height: max(p.height + resizeDy, 18), alignment: .topLeading)
-            .background(color.opacity(isDragging ? 0.7 : 0.95), in: RoundedRectangle(cornerRadius: 4))
+            .background(color.opacity(bgOpacity), in: RoundedRectangle(cornerRadius: 4))
             // Resize handle — bottom 6pt strip, slightly darker. Gesture
             // attached separately so we can detect "is the touch on the
             // handle" by Y position in onChanged.

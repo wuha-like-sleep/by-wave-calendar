@@ -144,6 +144,64 @@ enum PairingService {
         }
     }
 
+    /// Try to resolve a host the user typed (e.g. "rl.lz-ss.com" or
+    /// "192.168.1.100:8080") into a working URL by probing both schemes.
+    /// Behavior:
+    ///   - If the input already starts with `https://` or `http://`, return it as-is.
+    ///   - Otherwise ping `/api/v1/health/app` over https first; on
+    ///     connection / SSL failure, fall back to http.
+    ///   - Cached: once we find a working scheme for a host, remember
+    ///     it in UserDefaults so subsequent sign-ins don't pay the
+    ///     2× probe latency.
+    /// Returns nil only when both schemes fail to respond at all.
+    static func probeServerURL(_ input: String) async -> URL? {
+        var raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if raw.isEmpty { return nil }
+        // Strip trailing slash to keep the cache key stable.
+        while raw.hasSuffix("/") { raw.removeLast() }
+
+        // Explicit scheme → trust the user, no probe needed.
+        if raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+            return URL(string: raw)
+        }
+
+        // Check cache — if we successfully resolved this host before,
+        // reuse that scheme. Avoids re-probing on every sign-in.
+        let cacheKey = "bwc.schemeCache.\(raw.lowercased())"
+        if let cached = UserDefaults.standard.string(forKey: cacheKey),
+           let cachedURL = URL(string: cached)
+        {
+            return cachedURL
+        }
+
+        // Probe order: https first (better security default), then http.
+        // Both use the cheap public health endpoint with a short timeout.
+        for scheme in ["https", "http"] {
+            let candidate = "\(scheme)://\(raw)"
+            guard let url = URL(string: candidate) else { continue }
+            if await reachable(url) {
+                UserDefaults.standard.set(candidate, forKey: cacheKey)
+                return url
+            }
+        }
+        return nil
+    }
+
+    /// Light probe — calls /api/v1/health/app with a 5-second timeout
+    /// and accepts any 2xx response. Failures (connection refused,
+    /// SSL handshake, timeout) all return false.
+    private static func reachable(_ baseURL: URL) async -> Bool {
+        var req = URLRequest(url: baseURL.appendingPathComponent("/api/v1/health/app"))
+        req.timeoutInterval = 5
+        req.httpMethod = "GET"
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            return (resp as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? false
+        } catch {
+            return false
+        }
+    }
+
     // Convenience label like "Henrik 的 iPhone 15 Pro" for the device list.
     static func suggestedLabel() -> String {
         let device = UIDevice.current
