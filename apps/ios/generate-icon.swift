@@ -86,45 +86,37 @@ ctx.move(to: CGPoint(x: bodyX + 24, y: dividerY))
 ctx.addLine(to: CGPoint(x: bodyX + bodyW - 24, y: dividerY))
 ctx.strokePath()
 
-// ---- The date number — main brand mark inside the calendar body. ----
-// Borrows from iOS Calendar's icon language: a huge bold numeral
-// centered in the content area under the divider. Static "23" so it
-// doesn't go stale (Apple uses a private API to update theirs daily;
-// third-party apps can't, so a moving target would just be wrong all
-// year). 23 is intentional — both digits are visually balanced
-// (no narrow "1" or wide "8") and reads cleanly at every iOS icon
-// scale from 60pt to the App Store 1024.
-let contentTop    = dividerY            // under the divider
-let contentBottom = bodyY               // calendar's bottom edge
+// ---- The wave — main brand mark inside the calendar body. ----
+// One smooth S-curve (single crest on the left, single trough on the
+// right) that spans the calendar's content area below the divider.
+// Picked over a date number because the wave directly echoes the
+// brand name (ByWave). Single big swell, not multiple ripples — at
+// small icon sizes (Spotlight, multitask switcher) multiple wiggles
+// smush into a noisy blob.
+let contentTop    = dividerY                  // under the divider
+let contentBottom = bodyY                     // calendar's bottom edge
 let contentMidY   = (contentTop + contentBottom) / 2
-let bodyMidX      = bodyX + bodyW / 2
+let waveLeft  = bodyX + 80
+let waveRight = bodyX + bodyW - 80
+let waveAmp:  CGFloat = 90                    // peak ↔ trough offset
 
-let dateString = "23" as NSString
-let dateFontSize: CGFloat = 280
-let dateFont = NSFont.systemFont(ofSize: dateFontSize, weight: .heavy)
-let dateAttrs: [NSAttributedString.Key: Any] = [
-    .font: dateFont,
-    .foregroundColor: NSColor.white,
-]
-let dateSize = dateString.size(withAttributes: dateAttrs)
+ctx.setLineWidth(58)
+ctx.move(to: CGPoint(x: waveLeft, y: contentMidY))
 
-// Apple's Quartz coords have origin at bottom-left. We center horizontally
-// AND vertically inside the calendar's content area. The text bounding
-// box reports the glyph's ascent + descent, so subtract half its height
-// from the midpoint to get the draw origin.
-let drawOrigin = CGPoint(
-    x: bodyMidX - dateSize.width / 2,
-    y: contentMidY - dateSize.height / 2 + 14,  // optical lift — digits feel low otherwise
+let segWidth = (waveRight - waveLeft) / 2
+let cp1 = CGPoint(x: waveLeft + segWidth * 0.45, y: contentMidY + waveAmp)
+let cp2 = CGPoint(x: waveLeft + segWidth - segWidth * 0.45, y: contentMidY + waveAmp)
+ctx.addCurve(
+    to: CGPoint(x: waveLeft + segWidth, y: contentMidY),
+    control1: cp1, control2: cp2,
 )
-
-// NSString.draw routes through the current NSGraphicsContext, not the
-// CGContext we've been using for vector strokes. Bridge by pushing a
-// new NSGraphicsContext that wraps our existing CGContext for the
-// duration of the text draw.
-NSGraphicsContext.saveGraphicsState()
-NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
-dateString.draw(at: drawOrigin, withAttributes: dateAttrs)
-NSGraphicsContext.restoreGraphicsState()
+let cp3 = CGPoint(x: waveLeft + segWidth + segWidth * 0.45, y: contentMidY - waveAmp)
+let cp4 = CGPoint(x: waveRight - segWidth * 0.45, y: contentMidY - waveAmp)
+ctx.addCurve(
+    to: CGPoint(x: waveRight, y: contentMidY),
+    control1: cp3, control2: cp4,
+)
+ctx.strokePath()
 
 // Write PNG
 guard let cgImage = ctx.makeImage() else { exit(1) }
