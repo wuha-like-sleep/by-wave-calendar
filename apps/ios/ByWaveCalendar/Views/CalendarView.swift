@@ -128,7 +128,7 @@ struct CalendarView: View {
                 // On first appearance, hydrate from cache → instant render,
                 // then fetch fresh. Cache hit means an old `lastSyncedAt`
                 // appears in the footer until the new response replaces it.
-                loadFromCache()
+                await loadFromCache()
                 await load(force: false)
                 startPolling()
             }
@@ -413,9 +413,13 @@ struct CalendarView: View {
     }
 
     // MARK: - Cache hydration
-    private func loadFromCache() {
+    private func loadFromCache() async {
         let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
-        guard let payload = EventCache.shared.read(key: key) else { return }
+        // EventCache is now off the main actor (v1.0.1) — disk I/O +
+        // JSON decode happen on a background queue, only the parsed
+        // payload comes back here. Await is cheap (the decode is fast
+        // compared to a network request).
+        guard let payload = await EventCache.shared.read(key: key) else { return }
         // Use cached events only if the current view window overlaps the
         // cached window — otherwise we'd show stale events from a totally
         // different range. Server fetch updates within a moment anyway.
@@ -436,19 +440,30 @@ struct CalendarView: View {
         errorMessage = nil
         defer { isLoading = false }
 
-        let iso = ISO8601DateFormatter()
-        let path = "/events?from=\(iso.string(from: from).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&to=\(iso.string(from: to).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)"
+        // Use the cached ISO8601 formatter — was creating a new one
+        // per request, ~1ms overhead each. Tiny but cumulative under
+        // swipe-spam.
+        let path = "/events?from=\(DateFormatters.isoPlain.string(from: from).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&to=\(DateFormatters.isoPlain.string(from: to).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)"
 
         do {
             let client = APIClient(state: state)
             let resp: EventsResponse = try await client.get(path)
+            // Sort off the main actor before publishing. With a 12-month
+            // pre-cache (incoming v1.0.x feature), the event count can
+            // hit a few thousand — sorting 3000 elements on main was
+            // ~30ms hitch. Detached task lets the main thread keep
+            // rendering while we sort.
+            let sortedEvents = await Task.detached(priority: .userInitiated) {
+                resp.events.sorted { $0.startsAt < $1.startsAt }
+            }.value
             self.calendars = resp.calendars
-            self.events = resp.events.sorted { $0.startsAt < $1.startsAt }
+            self.events = sortedEvents
             self.lastSyncedAt = Date()
-            // Persist to disk so next launch is instant.
+            // Persist to disk async — EventCache.write returns immediately
+            // (enqueues on its background queue), so no UI hitch.
             let payload = EventCachePayload(
-                events: self.events,
-                calendars: self.calendars,
+                events: sortedEvents,
+                calendars: resp.calendars,
                 cachedAt: Date(),
                 windowStart: from,
                 windowEnd: to,

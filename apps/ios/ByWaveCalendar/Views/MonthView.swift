@@ -150,8 +150,7 @@ struct MonthView: View {
     }
 
     private func dayTitle(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日"
-        return f.string(from: d)
+        DateFormatters.monthDay.string(from: d)
     }
 }
 

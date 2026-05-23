@@ -99,20 +99,14 @@ struct EventRowView: View {
     }
 
     private var timeLabel: String {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        // Use cached shared formatters — instantiating DateFormatter
+        // per row was a measurable hot path (DateFormatter init is
+        // surprisingly expensive on iOS).
         if event.allDay {
-            f.dateFormat = "M月d日（全天）"
-            return f.string(from: event.startsAt)
+            return DateFormatters.allDayShort.string(from: event.startsAt)
         }
-        let cal = Calendar.current
-        let sameDay = cal.isDate(event.startsAt, inSameDayAs: event.endsAt)
-        if sameDay {
-            f.dateFormat = "HH:mm"
-            return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
-        } else {
-            f.dateFormat = "M/d HH:mm"
-            return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
-        }
+        let sameDay = Calendar.current.isDate(event.startsAt, inSameDayAs: event.endsAt)
+        let f = sameDay ? DateFormatters.timeShort : DateFormatters.dateTimeShort
+        return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
     }
 }

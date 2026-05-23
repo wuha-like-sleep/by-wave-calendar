@@ -667,8 +667,6 @@ private struct DayHeader: View {
         }
     }
     private func weekdayLabel(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "EEE"
-        return f.string(from: d)
+        DateFormatters.weekdayShort.string(from: d)
     }
 }
