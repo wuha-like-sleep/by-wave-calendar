@@ -4,9 +4,11 @@
 //
 // Run: swift apps/ios/generate-icon.swift apps/ios/.../icon-1024.png
 //
-// Design: purple gradient square, with a simplified white "calendar"
-// glyph (rounded body + two staples + horizontal divider). Tuned to
-// look balanced when iOS masks it into a rounded square / circle.
+// Design (v2): purple gradient square, with a white calendar glyph
+// (rounded body + two top staples + horizontal divider) containing
+// a stylized wave (~~~) inside — the "Wave" in ByWave. Wave is drawn
+// as a smooth cubic-bezier so it reads cleanly even when iOS masks
+// the icon down to ~60pt in the multitask switcher.
 
 import Foundation
 import AppKit
@@ -33,6 +35,11 @@ guard let ctx = CGContext(
 ) else { exit(1) }
 
 // Background gradient — same direction + colors as the boot splash logo.
+// Indigo (#4F46E5) top-left → violet (#7C3AED) bottom-right matches
+// the brand "indigo" palette token the server defaults to. The splash
+// screen in iOS APP uses the same gradient, so the cold-launch
+// transition (app icon → splash) looks like one continuous animation
+// rather than two abrupt shifts.
 let colors = [
     CGColor(srgbRed: 0.31, green: 0.27, blue: 0.90, alpha: 1.0),
     CGColor(srgbRed: 0.49, green: 0.23, blue: 0.93, alpha: 1.0),
@@ -51,7 +58,7 @@ ctx.setLineWidth(46)
 ctx.setLineCap(.round)
 ctx.setLineJoin(.round)
 
-// Body — rounded rectangle, centered, occupying middle 55%
+// Body — rounded rectangle, centered, occupying middle ~55%
 let bodyW: CGFloat = 560
 let bodyH: CGFloat = 500
 let bodyX = (size - bodyW) / 2
@@ -72,11 +79,52 @@ ctx.move(to: CGPoint(x: bodyX + bodyW - 150, y: stapleTop))
 ctx.addLine(to: CGPoint(x: bodyX + bodyW - 150, y: stapleBot))
 ctx.strokePath()
 
-// Horizontal divider line under the staples
+// Horizontal divider line under the staples — separates the "month
+// header" zone from the body where dates would normally sit.
 let dividerY = bodyY + bodyH - 140
 ctx.move(to: CGPoint(x: bodyX + 24, y: dividerY))
 ctx.addLine(to: CGPoint(x: bodyX + bodyW - 24, y: dividerY))
 ctx.strokePath()
+
+// ---- The date number — main brand mark inside the calendar body. ----
+// Borrows from iOS Calendar's icon language: a huge bold numeral
+// centered in the content area under the divider. Static "23" so it
+// doesn't go stale (Apple uses a private API to update theirs daily;
+// third-party apps can't, so a moving target would just be wrong all
+// year). 23 is intentional — both digits are visually balanced
+// (no narrow "1" or wide "8") and reads cleanly at every iOS icon
+// scale from 60pt to the App Store 1024.
+let contentTop    = dividerY            // under the divider
+let contentBottom = bodyY               // calendar's bottom edge
+let contentMidY   = (contentTop + contentBottom) / 2
+let bodyMidX      = bodyX + bodyW / 2
+
+let dateString = "23" as NSString
+let dateFontSize: CGFloat = 280
+let dateFont = NSFont.systemFont(ofSize: dateFontSize, weight: .heavy)
+let dateAttrs: [NSAttributedString.Key: Any] = [
+    .font: dateFont,
+    .foregroundColor: NSColor.white,
+]
+let dateSize = dateString.size(withAttributes: dateAttrs)
+
+// Apple's Quartz coords have origin at bottom-left. We center horizontally
+// AND vertically inside the calendar's content area. The text bounding
+// box reports the glyph's ascent + descent, so subtract half its height
+// from the midpoint to get the draw origin.
+let drawOrigin = CGPoint(
+    x: bodyMidX - dateSize.width / 2,
+    y: contentMidY - dateSize.height / 2 + 14,  // optical lift — digits feel low otherwise
+)
+
+// NSString.draw routes through the current NSGraphicsContext, not the
+// CGContext we've been using for vector strokes. Bridge by pushing a
+// new NSGraphicsContext that wraps our existing CGContext for the
+// duration of the text draw.
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+dateString.draw(at: drawOrigin, withAttributes: dateAttrs)
+NSGraphicsContext.restoreGraphicsState()
 
 // Write PNG
 guard let cgImage = ctx.makeImage() else { exit(1) }
