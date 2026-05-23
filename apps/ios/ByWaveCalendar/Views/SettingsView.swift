@@ -27,10 +27,31 @@ struct SettingsView: View {
     /// flows (MFA / Passkey / SSO). Set to a URL to present; cleared
     /// on dismiss.
     @State private var webURL: URL?
+    @State private var showingProfileSwitcher = false
 
     var body: some View {
         NavigationStack {
             List {
+                // Profile card — prominent top-of-page entry to the
+                // account switcher. Shows avatar + email + "切换账号"
+                // CTA so multi-account is discoverable without digging
+                // into the 账号 sub-page.
+                Section {
+                    Button {
+                        showingProfileSwitcher = true
+                    } label: {
+                        profileHeaderCard
+                    }
+                } footer: {
+                    if state.profiles.count > 1 {
+                        Text("当前活跃账号 · 已添加 \(state.profiles.count) 个账号，点击切换")
+                            .font(.footnote)
+                    } else {
+                        Text("点击切换账号或添加另一个账号。")
+                            .font(.footnote)
+                    }
+                }
+
                 Section {
                     NavigationLink {
                         AccountSettingsPage(webURL: $webURL)
@@ -83,6 +104,9 @@ struct SettingsView: View {
             .sheet(item: $webURL) { url in
                 SafariWebView(url: url).ignoresSafeArea()
             }
+            .sheet(isPresented: $showingProfileSwitcher) {
+                ProfileSwitcherView().environmentObject(state)
+            }
             .alert("出错了", isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } },
@@ -92,6 +116,53 @@ struct SettingsView: View {
                 Text(errorMessage ?? "")
             }
         }
+    }
+
+    /// Prominent top card showing the active account: big avatar circle
+    /// with the email's first letter, email + server host underneath,
+    /// and an "切换账号" chevron on the right. Made tappable so the whole
+    /// row is the affordance, not just a small button.
+    private var profileHeaderCard: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(state.themeAccent)
+                    .frame(width: 52, height: 52)
+                Text(profileInitial)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(state.currentUserEmail ?? "未登录")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                if let host = state.serverURL?.host {
+                    Text(host)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 3) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(state.themeAccent)
+                Text("切换账号").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var profileInitial: String {
+        if let email = state.currentUserEmail, let c = email.first {
+            return String(c).uppercased()
+        }
+        if let host = state.serverURL?.host, let c = host.first {
+            return String(c).uppercased()
+        }
+        return "?"
     }
 
     /// Reusable row used by the top-level menu. Tinted icon + title +

@@ -37,6 +37,7 @@ struct CalendarView: View {
     @State private var showingSettings = false
     @State private var showingFilter = false
     @State private var showingSearch = false
+    @State private var showingProfileSwitcher = false
     // Horizontal-swipe tracking for date navigation. Reset on each new
     // gesture; commits to a direction once user has moved > 50 pt.
     @State private var swipeOffset: CGFloat = 0
@@ -83,6 +84,20 @@ struct CalendarView: View {
                         Text("今天").font(.callout.weight(.medium))
                     }
                     .disabled(Calendar.current.isDateInToday(anchor) && mode == .day)
+                }
+                // Profile-switcher button — Google-style avatar circle
+                // top-right. Tinted with brand accent, first letter of
+                // email inside. Tap → opens ProfileSwitcherView sheet.
+                // A small dot badge in the lower-right indicates "more
+                // than one account stashed" so the affordance is
+                // discoverable for users who don't know about multi-acct.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showingProfileSwitcher = true
+                    } label: {
+                        profileAvatarBadge
+                    }
+                    .accessibilityLabel(Text("切换账号"))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
@@ -164,6 +179,9 @@ struct CalendarView: View {
             .sheet(isPresented: $showingSearch) {
                 SearchView(calendars: calendars).environmentObject(state)
             }
+            .sheet(isPresented: $showingProfileSwitcher) {
+                ProfileSwitcherView().environmentObject(state)
+            }
             // Horizontal swipe on the body navigates dates. We only commit
             // when the gesture is decisively horizontal (avoids stealing
             // List scroll). Translation > 60 pt → snap to prev/next.
@@ -183,6 +201,45 @@ struct CalendarView: View {
 
     private var visibleCalCount: Int {
         calendars.filter { !state.hiddenCalendarIds.contains($0.id) }.count
+    }
+
+    /// Small tinted circle showing the active account's email initial.
+    /// A dot badge appears in the lower-right when there's more than one
+    /// profile so users discover the multi-account feature without
+    /// digging into Settings.
+    private var profileAvatarBadge: some View {
+        ZStack(alignment: .bottomTrailing) {
+            ZStack {
+                Circle()
+                    .fill(state.themeAccent)
+                    .frame(width: 28, height: 28)
+                Text(profileInitial)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white)
+            }
+            if state.profiles.count > 1 {
+                // Tiny dot badge — signals "you have multiple accounts
+                // here, tap to switch". 8pt circle with border so it
+                // doesn't blend into a busy header background.
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 9, height: 9)
+                    .overlay(
+                        Circle().stroke(Color(.systemBackground), lineWidth: 1.5),
+                    )
+                    .offset(x: 2, y: 2)
+            }
+        }
+    }
+
+    private var profileInitial: String {
+        if let email = state.currentUserEmail, let c = email.first {
+            return String(c).uppercased()
+        }
+        if let host = state.serverURL?.host, let c = host.first {
+            return String(c).uppercased()
+        }
+        return "?"
     }
 
     // MARK: - Header (mode picker + nav arrows + anchor date)
