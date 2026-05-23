@@ -18,6 +18,7 @@ private enum LoginMethod: String, CaseIterable, Identifiable {
 
 struct SetupView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.colorScheme) private var colorScheme
     @State private var serverURLInput: String = ""
     @State private var method: LoginMethod = .password
 
@@ -77,17 +78,14 @@ struct SetupView: View {
     private var hero: some View {
         VStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 18)
-                .fill(LinearGradient(colors: [
-                    Color(red: 0.31, green: 0.27, blue: 0.9),
-                    Color(red: 0.49, green: 0.23, blue: 0.93),
-                ], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(Theme.brandGradient)
                 .frame(width: 72, height: 72)
                 .overlay {
                     Image(systemName: "calendar")
                         .font(.system(size: 32, weight: .semibold))
                         .foregroundStyle(.white)
                 }
-                .shadow(color: Color(red: 0.31, green: 0.27, blue: 0.9).opacity(0.25), radius: 12, y: 6)
+                .shadow(color: Theme.brandShadow, radius: 12, y: 6)
             Text("ByWave Calendar")
                 .font(.title2.bold())
             Text("登录你的服务器，开始同步")
@@ -107,7 +105,7 @@ struct SetupView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .padding(.horizontal, 12).padding(.vertical, 11)
-                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -130,11 +128,11 @@ struct SetupView: View {
                 .autocorrectionDisabled()
                 .keyboardType(.emailAddress)
                 .padding(.horizontal, 12).padding(.vertical, 11)
-                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
             SecureField("密码", text: $password)
                 .textContentType(.password)
                 .padding(.horizontal, 12).padding(.vertical, 11)
-                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
             Button {
                 Task { await loginWithPassword() }
             } label: {
@@ -182,7 +180,7 @@ struct SetupView: View {
                 .font(.title3.monospaced())
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 12).padding(.vertical, 14)
-                .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
             Button {
                 Task { await pairWithCode() }
             } label: {
@@ -209,7 +207,7 @@ struct SetupView: View {
                     Text("用浏览器登录").font(.body.weight(.medium))
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                .background(Theme.chip, in: RoundedRectangle(cornerRadius: 12))
                 .foregroundStyle(.primary)
             }
             .disabled(isWorking || serverURLInput.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -232,18 +230,14 @@ struct SetupView: View {
     }
 
     private var bgGradient: some View {
-        LinearGradient(colors: [
-            Color(red: 0.98, green: 0.99, blue: 1.0),
-            Color(red: 0.96, green: 0.97, blue: 1.0),
-        ], startPoint: .top, endPoint: .bottom)
+        // Adaptive — light haze on light mode, deep neutral on dark.
+        // Driven by colorScheme so it flips with system appearance.
+        Theme.surfaceGradient(for: colorScheme)
             .ignoresSafeArea()
     }
 
     private var brandGradient: LinearGradient {
-        LinearGradient(colors: [
-            Color(red: 0.31, green: 0.27, blue: 0.9),
-            Color(red: 0.49, green: 0.23, blue: 0.93),
-        ], startPoint: .leading, endPoint: .trailing)
+        Theme.brandGradientHorizontal
     }
 
     private func primaryButtonLabel(text: String) -> some View {

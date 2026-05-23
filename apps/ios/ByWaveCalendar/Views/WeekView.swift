@@ -176,18 +176,19 @@ struct WeekView: View {
             }
         }
         .padding(.vertical, 4)
-        .background(Color.gray.opacity(0.06))
+        .background(Theme.subtleSurface)
         .overlay(Divider(), alignment: .bottom)
     }
 
     private func allDayPill(ev: EventDTO) -> some View {
         let color = Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor
         return Text(ev.summary)
-            .font(.caption2.weight(.medium))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 6).padding(.vertical, 2)
+            .padding(.horizontal, 6).padding(.vertical, 3)
             .background(color, in: RoundedRectangle(cornerRadius: 4))
             .onTapGesture { detailFor = ev }
     }
@@ -210,7 +211,7 @@ struct WeekView: View {
                 .frame(height: hourHeight, alignment: .top)
                 .id("hour-\(hour)")
                 .overlay(
-                    Rectangle().fill(Color.gray.opacity(0.15)).frame(height: 0.5),
+                    Rectangle().fill(Theme.gridLine).frame(height: 0.5),
                     alignment: .top,
                 )
             }
@@ -221,7 +222,7 @@ struct WeekView: View {
                 Color.clear.frame(width: timeGutterWidth)
                 ForEach(0..<7, id: \.self) { _ in
                     Rectangle()
-                        .fill(Color.gray.opacity(0.15))
+                        .fill(Theme.gridLine)
                         .frame(width: 0.5)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -273,20 +274,25 @@ struct WeekView: View {
         return ZStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.event.summary)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(.white)
+                    // Subtle shadow keeps the title legible when the
+                    // calendar color is pastel (e.g. light yellow / pink).
+                    // Without it, white text vanishes on a #FBBF24 bar.
+                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
                     .lineLimit(p.height > 36 ? 2 : 1)
                 if p.height > 50, let location = p.event.location, !location.isEmpty {
                     Text(location)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .font(.system(size: 10))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4).padding(.vertical, 3)
             .frame(width: p.width, height: max(p.height + resizeDy, 18), alignment: .topLeading)
-            .background(color.opacity(isDragging ? 0.7 : 0.92), in: RoundedRectangle(cornerRadius: 4))
+            .background(color.opacity(isDragging ? 0.7 : 0.95), in: RoundedRectangle(cornerRadius: 4))
             // Resize handle — bottom 6pt strip, slightly darker. Gesture
             // attached separately so we can detect "is the touch on the
             // handle" by Y position in onChanged.

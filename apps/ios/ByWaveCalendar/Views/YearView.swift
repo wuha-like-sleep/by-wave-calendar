@@ -106,7 +106,7 @@ private struct MonthCard: View {
                         .foregroundStyle(isCurrentMonth ? Color.accentColor : .secondary)
                         .padding(.horizontal, 5).padding(.vertical, 1)
                         .background(
-                            Capsule().fill(isCurrentMonth ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.12))
+                            Capsule().fill(isCurrentMonth ? Color.accentColor.opacity(0.15) : Theme.chip)
                         )
                 }
             }
@@ -125,17 +125,17 @@ private struct MonthCard: View {
         .padding(10)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(isCurrentMonth ? Color.accentColor.opacity(0.06) : Color.gray.opacity(0.06))
+                .fill(isCurrentMonth ? Color.accentColor.opacity(0.12) : Theme.card)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(isCurrentMonth ? Color.accentColor.opacity(0.4) : Color.gray.opacity(0.15), lineWidth: isCurrentMonth ? 1 : 0.5)
+                .strokeBorder(isCurrentMonth ? Color.accentColor.opacity(0.5) : Theme.gridLine, lineWidth: isCurrentMonth ? 1 : 0.5)
         )
     }
 
     private func dotColor(inMonth: Bool, busy: Bool) -> Color {
-        if !inMonth { return Color.gray.opacity(0.12) }
+        if !inMonth { return Theme.veryDimContent }
         if busy { return Color.accentColor }
-        return Color.gray.opacity(0.28)
+        return Theme.dimContent
     }
 }

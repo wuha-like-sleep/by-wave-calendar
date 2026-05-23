@@ -146,7 +146,7 @@ struct MonthView: View {
             }
         }
         .padding(.vertical, 6)
-        .background(Color.gray.opacity(0.05))
+        .background(Theme.subtleSurface)
     }
 
     private func dayTitle(_ d: Date) -> String {
@@ -182,6 +182,9 @@ private struct DayCell: View {
                 Spacer()
             }
             // Up to 3 events with a colored bar; more compressed when no space.
+            // Text bumped from 9pt → 10.5pt with medium weight for legibility
+            // — 9pt was readable on a Retina screen but too thin in dark mode
+            // / for older eyes.
             if height > 60 {
                 ForEach(events.prefix(3)) { ev in
                     HStack(spacing: 3) {
@@ -189,14 +192,14 @@ private struct DayCell: View {
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
                             .frame(width: 3)
                         Text(ev.summary)
-                            .font(.system(size: 9))
+                            .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
                 }
                 if events.count > 3 {
                     Text("+\(events.count - 3)")
-                        .font(.system(size: 9))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
             } else {
@@ -205,10 +208,10 @@ private struct DayCell: View {
                     ForEach(events.prefix(4)) { ev in
                         Circle()
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
-                            .frame(width: 4, height: 4)
+                            .frame(width: 5, height: 5)
                     }
                     if events.count > 4 {
-                        Text("+\(events.count - 4)").font(.system(size: 8)).foregroundStyle(.secondary)
+                        Text("+\(events.count - 4)").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -217,7 +220,7 @@ private struct DayCell: View {
         .padding(.horizontal, 4).padding(.vertical, 4)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
-            Rectangle().stroke(Color.gray.opacity(0.15), lineWidth: 0.5)
+            Rectangle().stroke(Theme.gridLine, lineWidth: 0.5)
         )
         .opacity(inMonth ? 1.0 : 0.35)
     }

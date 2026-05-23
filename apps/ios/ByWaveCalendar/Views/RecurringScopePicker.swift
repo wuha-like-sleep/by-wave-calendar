@@ -68,7 +68,7 @@ struct RecurringScopePicker: View {
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 }
