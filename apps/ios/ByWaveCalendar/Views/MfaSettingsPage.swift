@@ -79,10 +79,6 @@ struct MfaSettingsPage: View {
 
     private var setupForm: some View {
         Form {
-            Section {
-                Text("用你的认证器（Google Authenticator / 1Password / iCloud 钥匙串）扫描下面的二维码，然后输入显示的 6 位验证码。")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
             if let uri = otpauthUri, let qr = qrImage(from: uri) {
                 Section {
                     qr.resizable()
@@ -93,9 +89,6 @@ struct MfaSettingsPage: View {
                         .padding(.vertical, 8)
                 } header: {
                     Text("二维码")
-                } footer: {
-                    Text("无法扫描？长按下方链接复制到剪贴板，粘贴进认证器：")
-                        .font(.footnote)
                 }
                 Section {
                     Text(uri)
@@ -132,7 +125,7 @@ struct MfaSettingsPage: View {
                 } icon: {
                     Image(systemName: "checkmark.shield.fill").foregroundStyle(.green)
                 }
-                Text("把下面的备用码保存到密码管理器。手机丢了或认证器失效时，每个码可以用一次登录。")
+                Text("保存这些备用码 — 认证器失效时每个码可用一次。")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("备用码（仅此一次显示）") {

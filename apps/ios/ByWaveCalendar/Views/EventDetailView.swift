@@ -112,9 +112,6 @@ struct EventDetailView: View {
                         .font(.system(.callout, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                    Text("编辑或删除时会弹出三选项：仅此次 / 此事件及后续 / 整个系列。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
 

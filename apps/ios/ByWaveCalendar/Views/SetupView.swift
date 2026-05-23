@@ -169,15 +169,13 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("服务器地址")
                 .font(.caption).foregroundStyle(.secondary)
-            TextField("calendar.example.com 或 192.168.1.100:8080", text: $serverURLInput)
+            TextField("calendar.example.com", text: $serverURLInput)
                 .textContentType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.URL)
                 .padding(.horizontal, 12).padding(.vertical, 11)
                 .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
-            Text("不用加 https:// 或 http:// — APP 自动探测。")
-                .font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -280,9 +278,6 @@ struct SetupView: View {
     // MARK: - Manual code
     private var codeForm: some View {
         VStack(spacing: 12) {
-            Text("没法扫码？输入 6 位配对码（从网页的「绑定新设备」对话框里复制）")
-                .font(.callout).foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
             TextField("ABC123", text: $manualCode)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
@@ -320,9 +315,6 @@ struct SetupView: View {
                 .foregroundStyle(.primary)
             }
             .disabled(isWorking || serverURLInput.trimmingCharacters(in: .whitespaces).isEmpty)
-            Text("Passkey / 二次验证 / 第三方 SSO 都在浏览器登录里")
-                .font(.caption2).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 

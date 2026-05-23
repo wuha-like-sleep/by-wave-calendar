@@ -70,9 +70,6 @@ struct AttendeesPage: View {
                 }
             } header: {
                 Text("邀请新参与者")
-            } footer: {
-                Text("对方会收到一封带 .ics 附件的邀请邮件，可以直接在邮件客户端添加到日历，也能点「添加到我的日历」走网页加入。")
-                    .font(.footnote)
             }
 
             // Current attendees list — swipe to revoke.
@@ -107,11 +104,6 @@ struct AttendeesPage: View {
                 }
             } header: {
                 Text("当前参与者 (\(attendees.count))")
-            } footer: {
-                if !attendees.isEmpty {
-                    Text("左滑可撤销 — 对方收到 METHOD:CANCEL 的 .ics 邮件，日历客户端会自动移除该活动。")
-                        .font(.footnote)
-                }
             }
 
             // History — all tokens ever issued for this event.

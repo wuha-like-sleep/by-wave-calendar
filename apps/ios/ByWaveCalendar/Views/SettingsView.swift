@@ -42,14 +42,6 @@ struct SettingsView: View {
                     } label: {
                         profileHeaderCard
                     }
-                } footer: {
-                    if state.profiles.count > 1 {
-                        Text("当前活跃账号 · 已添加 \(state.profiles.count) 个账号，点击切换")
-                            .font(.footnote)
-                    } else {
-                        Text("点击切换账号或添加另一个账号。")
-                            .font(.footnote)
-                    }
                 }
 
                 Section {
@@ -99,7 +91,7 @@ struct SettingsView: View {
                     Task { await revokeThisDevice() }
                 }
             } message: {
-                Text("解绑后这个 APP 立即失去访问权限，需要重新扫码或用密码登录。服务器端的事件不受影响。")
+                Text("APP 将立即失去访问权限。")
             }
             .sheet(item: $webURL) { url in
                 SafariWebView(url: url).ignoresSafeArea()
@@ -309,9 +301,6 @@ struct AccountSettingsPage: View {
                 }
             } header: {
                 Text("安全")
-            } footer: {
-                Text("修改密码后所有其它设备 / 网页会话立即失效，本设备保持登录。")
-                    .font(.footnote)
             }
 
             Section {
@@ -325,11 +314,10 @@ struct AccountSettingsPage: View {
                 accountBridgeRow(.ssoBind, label: "第三方账户绑定", systemImage: "link")
             } header: {
                 Text("更多账号设置")
-            } footer: {
-                Text("Passkey / SSO 绑定暂时在浏览器里完成（自动登录，不用再输密码）。")
-                    .font(.footnote)
             }
 
+            // Keep the danger warning — irreversible action genuinely
+            // needs the explicit caveat. Everything else gets trimmed.
             Section {
                 Button(role: .destructive) {
                     showingDeleteAccount = true
@@ -337,7 +325,7 @@ struct AccountSettingsPage: View {
                     Label("删除账户", systemImage: "trash")
                 }
             } footer: {
-                Text("删除账户会同时清除所有日历、事件、订阅、邀请、绑定的设备和 CalDAV 应用密码 — 无法恢复。")
+                Text("无法恢复 — 所有数据将被永久清除。")
                     .font(.footnote)
             }
         }
@@ -453,7 +441,7 @@ struct ChangePasswordPage: View {
             } header: {
                 Text("新密码")
             } footer: {
-                Text("至少 8 位。修改后其它设备 / 网页会话会立即失效，本机保持登录。")
+                Text("至少 8 位")
                     .font(.footnote)
             }
             if let errorMessage {
@@ -524,7 +512,7 @@ struct DeleteAccountPage: View {
         Form {
             Section {
                 Label {
-                    Text("删除账户不可恢复。所有日历、事件、订阅、邀请、绑定的设备和 CalDAV 应用密码都会被永久清除。")
+                    Text("此操作无法恢复。")
                         .font(.callout)
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill")
@@ -541,9 +529,6 @@ struct DeleteAccountPage: View {
                     .textInputAutocapitalization(.never)
             } header: {
                 Text("二次确认")
-            } footer: {
-                Text("精确输入「\(confirmPhrase)」六个字以确认操作。")
-                    .font(.footnote)
             }
             if let errorMessage {
                 Section { Text(errorMessage).foregroundStyle(.red).font(.callout) }
@@ -611,9 +596,6 @@ struct SyncSettingsPage: View {
                 }
             } header: {
                 Text("连接")
-            } footer: {
-                Text("在网页 /app/settings#devices 可以看到所有绑定的设备。")
-                    .font(.footnote)
             }
 
             Section {
@@ -632,7 +614,7 @@ struct SyncSettingsPage: View {
             } header: {
                 Text("系统日历")
             } footer: {
-                Text("开启后，ByWave 的事件会同步到 iOS「日历」APP 的一个名叫「ByWave Calendar」的子日历里。Spotlight / Siri / 通知中心都能看到。这是单向同步：在 iOS 日历里改了不会同步回 ByWave。关闭会删除已同步的镜像。")
+                Text("单向同步到 iOS 日历的「ByWave Calendar」子日历。")
                     .font(.footnote)
             }
 
@@ -665,9 +647,6 @@ struct SyncSettingsPage: View {
                 }
             } header: {
                 Text("提醒通知")
-            } footer: {
-                Text("APP 在本地排好通知队列，事件开始前震动 + 弹横幅。完全离线 — 不需要服务器推送配置。一次最多排 32 个最近的事件。")
-                    .font(.footnote)
             }
         }
         .navigationTitle("同步与通知")
@@ -742,22 +721,14 @@ struct AppearanceSettingsPage: View {
                 .labelsHidden()
             } header: {
                 Text("主题")
-            } footer: {
-                Text("跟随系统时会读 iOS 设置 → 显示与亮度。强制浅色 / 深色会忽略系统设定。")
-                    .font(.footnote)
             }
-            Section {
+            Section("品牌色") {
                 LabeledContent("主色") {
                     HStack(spacing: 8) {
                         Circle().fill(state.themeAccent).frame(width: 18, height: 18)
                         Text(state.themeAccentHex).font(.callout.monospaced()).foregroundStyle(.secondary)
                     }
                 }
-            } header: {
-                Text("品牌色")
-            } footer: {
-                Text("APP 的强调色跟随服务器 — 管理员可在网页后台 → 管理 → 设置 → 主题 切换。")
-                    .font(.footnote)
             }
         }
         .navigationTitle("外观")
@@ -812,14 +783,6 @@ struct AboutSettingsPage: View {
                          fallback: LegalContent.terms)
             } header: {
                 Text("法律")
-            } footer: {
-                if let host = state.serverURL?.host {
-                    Text("优先显示「\(host)」服务器配置的政策；服务器上没有此页面时回退到 APP 内置通用版本。")
-                        .font(.footnote)
-                } else {
-                    Text("当前未登录，显示 APP 内置的通用版本。登录服务器后会优先显示该服务器配置的政策。")
-                        .font(.footnote)
-                }
             }
 
             Section {
@@ -830,9 +793,6 @@ struct AboutSettingsPage: View {
                            url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
             } header: {
                 Text("项目")
-            } footer: {
-                Text("ByWave Calendar 是一个开源的自托管日历平台。欢迎贡献代码、报告问题、提交改进建议。")
-                    .font(.footnote)
             }
 
             Section {
@@ -852,11 +812,6 @@ struct AboutSettingsPage: View {
                 }
             } header: {
                 Text("版本信息")
-            } footer: {
-                Text("感谢使用 ByWave Calendar 💜")
-                    .font(.footnote)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.top, 4)
             }
         }
         .navigationTitle("关于")

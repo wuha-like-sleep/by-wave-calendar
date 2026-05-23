@@ -216,7 +216,7 @@ struct EventEditView: View {
                         }
                     }
                 } else {
-                    Text("保存事件后会出现「管理参与者」入口；进入独立页面单独邀请和撤销，每个邀请会发一封 .ics 邮件给对方。")
+                    Text("保存后可邀请")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             } header: {

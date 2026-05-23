@@ -29,8 +29,7 @@
 </header>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">邀请新参与者</h2>
-  <p class="text-sm text-slate-500 mb-4">每次提交一个邮箱。对方会收到一封带 .ics 附件的邀请邮件，可以直接在邮件客户端添加到自己日历，也可以点「添加到我的日历」走我们的网页加入。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-4">邀请新参与者</h2>
   <form method="post" action="/app/events/<%= event.id %>/attendees/invite" class="flex flex-col sm:flex-row gap-2">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="email" name="email" required maxlength="254" placeholder="参与者邮箱"

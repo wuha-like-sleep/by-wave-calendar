@@ -32,9 +32,6 @@ struct CalendarFilterView: View {
                     }
                 } header: {
                     Text("显示的日历")
-                } footer: {
-                    Text("关闭的日历事件不显示在日 / 周 / 月 / 年视图，但仍然存在 — 在网页或重新打开开关后即可看到。")
-                        .font(.footnote)
                 }
 
                 if !state.hiddenCalendarIds.isEmpty {

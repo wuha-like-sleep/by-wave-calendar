@@ -46,9 +46,6 @@ struct ProfileSwitcherView: View {
                     }
                 } header: {
                     Text("已登录的账号")
-                } footer: {
-                    Text("点击切换。左滑账号可以从这台手机移除（服务器上的事件不会被删）。")
-                        .font(.footnote)
                 }
 
                 Section {
@@ -86,7 +83,7 @@ struct ProfileSwitcherView: View {
                     pendingRemoveId = nil
                 }
             } message: {
-                Text("移除后这台手机上不再保存这个账号的登录信息，服务器上的事件和绑定的设备不会被删除。")
+                Text("移除后本机不再保存登录信息。")
             }
         }
     }

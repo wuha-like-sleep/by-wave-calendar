@@ -92,7 +92,6 @@ private struct EmptyDayPlaceholder: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.tertiary)
             Text(label).font(.headline)
-            Text("点右上角 + 新建一个，或下拉刷新").font(.callout).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
