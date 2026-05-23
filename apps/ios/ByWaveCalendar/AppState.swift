@@ -13,6 +13,35 @@
 
 import Foundation
 import Combine
+import SwiftUI
+
+// Theme override the user picks in Settings. Defaulting to .system lets
+// iOS Settings → Display & Brightness drive everything; the other two
+// force a specific scheme. Stored in UserDefaults as the raw String.
+enum AppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+    var id: String { rawValue }
+
+    /// Maps to SwiftUI's preferredColorScheme. `.system` → nil = let
+    /// the OS decide. The other two pin the scheme regardless of OS.
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .light: return "浅色"
+        case .dark: return "深色"
+        }
+    }
+}
 
 @MainActor
 final class AppState: ObservableObject {
@@ -32,6 +61,17 @@ final class AppState: ObservableObject {
     private static let userEmailKey = "bwc.userEmail"
     private static let userNameKey = "bwc.userName"
     private static let hiddenCalsKey = "bwc.hiddenCalendarIds"
+    private static let appearanceKey = "bwc.appearance"
+
+    // User-chosen appearance override. `.system` follows iOS Settings →
+    // Display & Brightness; `.light` / `.dark` force regardless. Bound
+    // to the root view via .preferredColorScheme. Persisted across
+    // launches so user doesn't see a flash on cold start.
+    @Published var appearance: AppearanceMode = AppearanceMode(rawValue:
+        UserDefaults.standard.string(forKey: "bwc.appearance") ?? ""
+    ) ?? .system {
+        didSet { UserDefaults.standard.set(appearance.rawValue, forKey: Self.appearanceKey) }
+    }
 
     // Calendars the user has chosen to hide from the visible event list.
     // Persisted across launches. Empty set = show everything.

@@ -35,6 +35,12 @@ export type ClaimedPairing = {
   accessTokenExpiresAt: Date;
   deviceId: string;
   userId: string;
+  // Email + display name are useful for the APP to render "signed in as
+  // alice@…" right after pairing, without an extra /users/me round-trip.
+  // They're already loaded for the active-user check below, so passing
+  // them up is free.
+  userEmail: string;
+  userName: string | null;
 };
 
 // Step 2: phone POSTs the code → we mark it claimed, create a `devices`
@@ -93,6 +99,8 @@ export async function claimPairing(input: {
     accessTokenExpiresAt: access.expiresAt,
     deviceId: device.id,
     userId: pair.userId,
+    userEmail: u.email,
+    userName: u.displayName,
   };
 }
 

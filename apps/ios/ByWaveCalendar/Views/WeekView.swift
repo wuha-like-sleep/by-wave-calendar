@@ -54,6 +54,11 @@ struct WeekView: View {
     private var allDayEvents: [EventDTO] { events.filter { $0.allDay } }
 
     var body: some View {
+        // Outer VStack MUST claim the full available height — otherwise
+        // CalendarView's enclosing ZStack centers us vertically and
+        // headerRow ends up floating in the middle of the screen with
+        // the time grid stuck at the bottom (which is exactly the bug
+        // user reported in the v0.7.6 screenshot).
         VStack(spacing: 0) {
             headerRow
             if !allDayEvents.isEmpty { allDayRow }
@@ -66,6 +71,7 @@ struct WeekView: View {
                     }
                     .frame(height: hourHeight * 24)
                 }
+                .frame(maxHeight: .infinity)
                 .onAppear {
                     // Land somewhere useful: an hour before current time
                     // when today is in this week; otherwise 8 AM.
@@ -78,6 +84,7 @@ struct WeekView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sheet(item: $detailFor) { ev in
             NavigationStack {
                 EventDetailView(

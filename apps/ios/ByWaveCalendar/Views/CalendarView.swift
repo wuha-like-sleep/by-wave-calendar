@@ -52,8 +52,15 @@ struct CalendarView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 navBar
-                ZStack {
+                ZStack(alignment: .top) {
                     contentForMode
+                        // Without these the WeekView's outer VStack would
+                        // be vertically centered inside the ZStack (default
+                        // .center alignment), pushing the date headers and
+                        // time grid into the middle of the screen with
+                        // empty space above. Day/Month/Year are all happy
+                        // to fill too.
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     if isLoading && events.isEmpty {
                         // Cache miss + first fetch in flight
                         ProgressView()
@@ -61,6 +68,7 @@ struct CalendarView: View {
                             .background(Color(.systemGroupedBackground))
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle(navTitle)
             .navigationBarTitleDisplayMode(.inline)

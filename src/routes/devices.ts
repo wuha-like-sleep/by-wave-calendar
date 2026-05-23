@@ -137,6 +137,8 @@ export async function deviceRoutes(app: FastifyInstance) {
       refreshToken: result.refreshToken,
       deviceId: result.deviceId,
       userId: result.userId,
+      userEmail: result.userEmail,
+      userName: result.userName,
     });
   });
 

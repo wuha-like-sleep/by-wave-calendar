@@ -43,6 +43,7 @@ struct SettingsView: View {
                 accountSection
                 accountManagementSection
                 connectionSection
+                appearanceSection
                 eventKitSection
                 notificationsSection
                 aboutSection
@@ -158,6 +159,25 @@ struct SettingsView: View {
             errorMessage = e.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    // 外观 — light / dark / system picker. Persists via AppState's
+    // @Published appearance, applied at the root via .preferredColorScheme.
+    // No app restart needed; SwiftUI re-renders with the new scheme.
+    private var appearanceSection: some View {
+        Section {
+            Picker("主题", selection: $state.appearance) {
+                ForEach(AppearanceMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("外观")
+        } footer: {
+            Text("跟随系统时会读 iOS 设置 → 显示与亮度。")
+                .font(.footnote)
         }
     }
 
@@ -310,23 +330,26 @@ struct SettingsView: View {
             // Privacy + Terms live on the connected server, not bundled in
             // the APP — that way they always reflect the server operator's
             // current policy (you on your self-hosted instance, not the
-            // open-source project's defaults).
+            // open-source project's defaults). All three open inside the
+            // APP via SafariViewController so the user doesn't get bounced
+            // out to mobile Safari mid-flow.
             if let serverURL = state.serverURL {
-                Link(destination: serverURL.appendingPathComponent("/privacy")) {
-                    LabeledContent("隐私政策") {
-                        Image(systemName: "arrow.up.right.square")
-                    }
-                }
-                Link(destination: serverURL.appendingPathComponent("/terms")) {
-                    LabeledContent("使用条款") {
-                        Image(systemName: "arrow.up.right.square")
-                    }
-                }
+                aboutLinkRow(label: "隐私政策", url: serverURL.appendingPathComponent("/privacy"))
+                aboutLinkRow(label: "使用条款", url: serverURL.appendingPathComponent("/terms"))
             }
-            Link(destination: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!) {
-                LabeledContent("项目主页") {
-                    Image(systemName: "arrow.up.right.square")
-                }
+            aboutLinkRow(label: "项目主页", url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
+        }
+    }
+
+    private func aboutLinkRow(label: String, url: URL) -> some View {
+        Button {
+            webURL = url
+        } label: {
+            HStack {
+                Text(label).foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .foregroundStyle(.tertiary).font(.footnote)
             }
         }
     }

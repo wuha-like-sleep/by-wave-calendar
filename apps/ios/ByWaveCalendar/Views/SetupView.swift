@@ -482,8 +482,8 @@ struct SetupView: View {
                 refreshToken: resp.refreshToken,
                 accessToken: resp.accessToken,
                 accessTokenExpiresAt: expDate,
-                userEmail: nil,
-                userName: nil,
+                userEmail: resp.userEmail,
+                userName: resp.userName,
             )
         } catch let e as PairingError {
             errorMessage = e.localizedDescription

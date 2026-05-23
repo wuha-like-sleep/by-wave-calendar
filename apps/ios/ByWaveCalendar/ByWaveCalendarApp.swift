@@ -19,7 +19,11 @@ struct ByWaveCalendarApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(state)
-                .preferredColorScheme(nil) // follow system; will add a setting later
+                // User-chosen appearance override (Settings → 外观). nil
+                // means "follow system" — the @Published appearance on
+                // AppState drives this so changes take effect immediately
+                // without an app restart.
+                .preferredColorScheme(state.appearance.colorScheme)
                 .tint(Color(red: 79/255, green: 70/255, blue: 229/255)) // brand-600
                 .onAppear {
                     // PushService needs AppState (for serverURL + tokens)

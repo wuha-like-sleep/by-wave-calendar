@@ -23,6 +23,11 @@ struct ClaimResponse: Decodable {
     let refreshToken: String
     let deviceId: String
     let userId: String
+    // Server v0.8.1+ includes these; older servers don't, hence optional.
+    // SetupView passes them to AppState.completePairing so the SettingsView
+    // can show 邮箱 / 昵称 right after scanning (instead of "—").
+    let userEmail: String?
+    let userName: String?
 }
 
 // Server envelope wrapper (some endpoints return data directly, others wrap).
