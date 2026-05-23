@@ -33,10 +33,19 @@ import {
 // admin toggle takes effect immediately (no restart). pair-claim and
 // refresh hit this without auth — they're public endpoints used by the
 // APP — but we still want to refuse them when the feature is off.
-async function ensureAppsEnabled(reply: FastifyReply): Promise<boolean> {
+//
+// The req param is optional for backward compatibility but should be
+// passed wherever possible so the warn log includes the path that was
+// blocked — vital for users debugging "I enabled it but still get 403".
+async function ensureAppsEnabled(reply: FastifyReply, req?: { log: { warn: (msg: unknown, ...args: unknown[]) => void }; url?: string; ip?: string }): Promise<boolean> {
   const s = await getSettings();
   if (s.appsEnabled) return true;
-  reply.code(403).send({ error: "apps_disabled", message: "管理员已停用 APP 同步" });
+  if (req) {
+    // Surface this loudly in pm2 logs so the admin can grep for it.
+    // Pino structured logging — "apps_disabled" is the searchable token.
+    req.log.warn({ event: "apps_disabled_block", path: req.url, ip: req.ip }, "APP request blocked: appsEnabled=false. Toggle in admin → API & APPs.");
+  }
+  reply.code(403).send({ error: "apps_disabled", message: "管理员已停用 APP 同步。请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" });
   return false;
 }
 
@@ -47,7 +56,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // an SVG-encoded QR for the web page to drop in directly.
   app.post("/devices/pair-init", async (req, reply) => {
     const user = await requireUser(req, reply);
-    if (!(await ensureAppsEnabled(reply))) return;
+    if (!(await ensureAppsEnabled(reply, req))) return;
     const { code, expiresAt } = await initPairing(user.id);
 
     // The QR encodes a JSON pairing envelope:
@@ -73,7 +82,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // Returns { accessToken, refreshToken, expiresAt } on success, 401 on
   // expired/claimed/invalid code.
   app.post("/devices/pair-claim", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
-    if (!(await ensureAppsEnabled(reply))) return;
+    if (!(await ensureAppsEnabled(reply, req))) return;
     const body = z.object({
       code: z.string().min(4).max(20),
       label: z.string().min(1).max(60),
@@ -112,7 +121,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // path yet; users with MFA must use QR pairing (where they're
   // already authenticated on the web with MFA satisfied).
   app.post("/auth/login-password", { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } }, async (req, reply) => {
-    if (!(await ensureAppsEnabled(reply))) return;
+    if (!(await ensureAppsEnabled(reply, req))) return;
     const body = z.object({
       email: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
       password: z.string().min(1).max(200),
@@ -183,7 +192,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // -------- refresh access token --------
   // Phone hits this on 401 or when its cached access token is near expiry.
   app.post("/auth/refresh", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
-    if (!(await ensureAppsEnabled(reply))) return;
+    if (!(await ensureAppsEnabled(reply, req))) return;
     const body = z.object({ refreshToken: z.string().min(20).max(80) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     const result = await refreshAccessToken({ refreshToken: body.data.refreshToken, ip: req.ip });

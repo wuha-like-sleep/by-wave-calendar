@@ -203,7 +203,31 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.3" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.4" }));
+
+// Public diagnostic endpoint for APP onboarding troubleshooting. The
+// iOS / Android APP can ping this BEFORE the user attempts to log in
+// and show a proactive banner if the admin has disabled APP sync. Also
+// useful for admins debugging "why does my phone say 403?" — they can
+// just open https://server/api/v1/health/app in any browser and see
+// exactly what the running server thinks.
+//
+// We deliberately keep this anonymous (no auth) because:
+//   - it only exposes booleans the admin already controls,
+//   - the same info is visible to anyone who tries to log in (they get
+//     a 403 with the same error code anyway),
+//   - it's the only way an unsigned-in client can self-diagnose.
+app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async () => {
+  // Lazy import to avoid pulling getSettings into the eager init path.
+  const { getSettings } = await import("./lib/site_settings.js");
+  const s = await getSettings();
+  return {
+    version: "0.7.4",
+    appsEnabled: s.appsEnabled,
+    siteName: s.siteName,
+    serverTime: new Date().toISOString(),
+  };
+});
 
 // CSP violation report sink. Browsers POST a small JSON document here
 // when something gets blocked by the Content-Security-Policy directives
@@ -655,6 +679,18 @@ startHousekeepingScheduler({
 });
 
 logApnsStartup({ info: (m) => app.log.info(m) });
+
+// Surface critical APP-related toggles at startup. If apps_enabled is
+// off, the iOS / Android APP will see 403 on every auth call — this
+// log is the canonical place to verify before going hunting in admin.
+{
+  const { getSettings } = await import("./lib/site_settings.js");
+  const s = await getSettings();
+  app.log.info({ appsEnabled: s.appsEnabled, apiEnabled: s.apiEnabled, embedEnabled: s.embedEnabled }, `[startup] feature toggles — appsEnabled=${s.appsEnabled}`);
+  if (!s.appsEnabled) {
+    app.log.warn("[startup] appsEnabled=false — 原生 APP 登录会被拒绝 (HTTP 403 apps_disabled). 在 /admin/api#apps 打开开关。");
+  }
+}
 
 try {
   if (env.USE_HTTPS) {
