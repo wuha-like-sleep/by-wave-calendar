@@ -704,11 +704,29 @@ struct AboutSettingsPage: View {
                         .foregroundStyle(.secondary).font(.callout)
                 }
             }
-            Section("法律") {
-                if let serverURL = state.serverURL {
-                    aboutLinkRow(label: "隐私政策", url: serverURL.appendingPathComponent("/privacy"))
-                    aboutLinkRow(label: "使用条款", url: serverURL.appendingPathComponent("/terms"))
+            // Legal text bundled inside the APP — no Safari, no server
+            // URL. Open-source friendly: a fork built from this code
+            // doesn't leak the original author's domain into every user's
+            // settings. The server's /privacy + /terms pages still exist
+            // for WEB users (where the operator can customize them).
+            Section {
+                NavigationLink {
+                    LegalPage(title: "隐私政策", markdownSource: LegalContent.privacy)
+                } label: {
+                    Label("隐私政策", systemImage: "hand.raised.fill")
+                        .foregroundStyle(.primary)
                 }
+                NavigationLink {
+                    LegalPage(title: "使用条款", markdownSource: LegalContent.terms)
+                } label: {
+                    Label("使用条款", systemImage: "doc.text.fill")
+                        .foregroundStyle(.primary)
+                }
+            } header: {
+                Text("法律")
+            } footer: {
+                Text("APP 本身的政策；服务器运营者另有具体政策时，请咨询服务器管理员。")
+                    .font(.footnote)
             }
             Section("项目") {
                 aboutLinkRow(label: "GitHub 仓库", url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
@@ -718,6 +736,8 @@ struct AboutSettingsPage: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    /// External link — opens in SafariViewController (only used for the
+    /// GitHub repo now; the legal pages render natively above).
     private func aboutLinkRow(label: String, url: URL) -> some View {
         Button {
             webURL = url

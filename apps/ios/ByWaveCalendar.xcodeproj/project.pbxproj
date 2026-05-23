@@ -38,6 +38,8 @@
 		1F000100000000000000001E /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001E /* Profile.swift */; };
 		1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001F /* ProfileSwitcherView.swift */; };
 		1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000020 /* MfaSettingsPage.swift */; };
+		1F0001000000000000000021 /* LegalContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000021 /* LegalContent.swift */; };
+		1F0001000000000000000022 /* LegalPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000022 /* LegalPage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -74,6 +76,9 @@
 		1B000100000000000000001E /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		1B000100000000000000001F /* ProfileSwitcherView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileSwitcherView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000020 /* MfaSettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MfaSettingsPage.swift; sourceTree = "<group>"; };
+		1B0001000000000000000021 /* LegalContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalContent.swift; sourceTree = "<group>"; };
+		1B0001000000000000000022 /* LegalPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalPage.swift; sourceTree = "<group>"; };
+		1E0001000000000000000008 /* Legal */ = {isa = PBXGroup; children = (1B0001000000000000000021 /* LegalContent.swift */); path = Legal; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -101,6 +106,7 @@
 				1B0001000000000000000001 /* ByWaveCalendarApp.swift */,
 				1B0001000000000000000002 /* AppState.swift */,
 				1B000100000000000000001E /* Profile.swift */,
+				1E0001000000000000000008 /* Legal */,
 				1E0001000000000000000003 /* Network */,
 				1E0001000000000000000004 /* Auth */,
 				1E0001000000000000000007 /* Sync */,
@@ -151,6 +157,7 @@
 				1B000100000000000000001C /* Theme.swift */,
 				1B000100000000000000001F /* ProfileSwitcherView.swift */,
 				1B0001000000000000000020 /* MfaSettingsPage.swift */,
+				1B0001000000000000000022 /* LegalPage.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -274,6 +281,8 @@
 				1F000100000000000000001E /* Profile.swift in Sources */,
 				1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */,
 				1F0001000000000000000020 /* MfaSettingsPage.swift in Sources */,
+				1F0001000000000000000021 /* LegalContent.swift in Sources */,
+				1F0001000000000000000022 /* LegalPage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
