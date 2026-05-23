@@ -364,6 +364,17 @@ export const events = pgTable("events", {
   calIdx: index("events_calendar_idx").on(t.calendarId),
   uidUnique: uniqueIndex("events_calendar_uid_unique").on(t.calendarId, t.uid),
   startsIdx: index("events_starts_idx").on(t.startsAt),
+  // Composite — CalDAV REPORT + /api/events filter both calendarId AND
+  // deletedAt IS NULL on every request. The single-column calIdx forces
+  // a heap re-scan for deleted_at; the composite resolves the predicate
+  // entirely from the index.
+  calDeletedIdx: index("events_cal_deleted_idx").on(t.calendarId, t.deletedAt),
+  // Reminders cron runs every minute and scans all rows where rrule IS NOT NULL.
+  // Partial index keeps the index small (only recurring masters).
+  rruleIdx: index("events_rrule_idx").on(t.rrule),
+  // Soft-delete purge cron queries deleted_at < cutoff. Without this it
+  // sequentially scans the whole table once a day.
+  deletedAtIdx: index("events_deleted_at_idx").on(t.deletedAt),
 }));
 
 export const calendarMembers = pgTable("calendar_members", {

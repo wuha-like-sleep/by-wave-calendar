@@ -28,6 +28,7 @@ import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
 import { startReminderScheduler } from "./lib/reminders.js";
+import { startHousekeepingScheduler } from "./lib/housekeeping.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
@@ -200,7 +201,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.3.2" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.4.0" }));
 
 // CSP violation report sink. Browsers POST a small JSON document here
 // when something gets blocked by the Content-Security-Policy directives
@@ -308,9 +309,50 @@ const ASSET_VERSION = String(Date.now());
 const JS_BASE_PATH = env.NODE_ENV === "production" ? "/static/_built" : "/static";
 
 // ---- PWA: serve manifest & sw at root ----
+// Generated rather than served as a static file so the install name
+// reflects the admin's site_settings.siteName. iOS / Android home-screen
+// installs read `short_name` (and "name" as fallback) — without this
+// every install shows "ByWave-Calendar" no matter how the admin
+// branded the site.
 app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, reply) => {
+  const settings = await getSettings();
+  const siteName = (settings.siteName || "ByWave-Calendar").trim() || "ByWave-Calendar";
+  // short_name should fit in the 12-char home-screen label budget. We
+  // truncate at 12 visible chars (Chinese chars count as 1 each, which
+  // is what iOS actually measures).
+  const shortName = siteName.length > 12 ? siteName.slice(0, 12) : siteName;
+  const manifest = {
+    id: "/app",
+    name: siteName,
+    short_name: shortName,
+    description: "日历共享平台 — 多日历协作、订阅链接、Passkey 登录、双向同步",
+    start_url: "/app",
+    scope: "/",
+    display: "standalone",
+    display_override: ["window-controls-overlay", "standalone", "minimal-ui", "browser"],
+    orientation: "any",
+    background_color: "#f8fafc",
+    theme_color: "#4f46e5",
+    lang: "zh-CN",
+    categories: ["productivity", "utilities"],
+    prefer_related_applications: false,
+    icons: [
+      { src: settings.logoUrl || "/static/favicon.svg", sizes: "any", type: settings.logoUrl ? "image/png" : "image/svg+xml", purpose: "any" },
+      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/static/icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/static/icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+    ],
+    shortcuts: [
+      { name: "我的日历", url: "/app", icons: [{ src: "/static/favicon.svg", sizes: "any" }] },
+      { name: "新建事件", url: "/app#new-event", icons: [{ src: "/static/favicon.svg", sizes: "any" }] },
+    ],
+  };
   reply.header("Content-Type", "application/manifest+json");
-  return reply.sendFile("manifest.webmanifest");
+  // Short cache — site name doesn't change minute-by-minute but we
+  // want admin renames to land on next refresh, not 24h later.
+  reply.header("Cache-Control", "public, max-age=300");
+  return reply.send(manifest);
 });
 app.get("/sw.js", { config: { rateLimit: false } }, async (_req, reply) => {
   reply.header("Service-Worker-Allowed", "/");
@@ -600,6 +642,11 @@ startSubscriptionScheduler({
 });
 
 startReminderScheduler({
+  info: (m) => app.log.info(m),
+  warn: (m) => app.log.warn(m),
+});
+
+startHousekeepingScheduler({
   info: (m) => app.log.info(m),
   warn: (m) => app.log.warn(m),
 });

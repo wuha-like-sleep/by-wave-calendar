@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -72,9 +72,49 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     const settings = await getSettings();
-    const userCount = await db.select({ c: sql<number>`count(*)::int` }).from(schema.users);
-    const calendarCount = await db.select({ c: sql<number>`count(*)::int` }).from(schema.calendars);
-    const eventCount = await db.select({ c: sql<number>`count(*)::int` }).from(schema.events);
+
+    // Counts. Use parallel queries — they don't depend on each other,
+    // so Promise.all is a real win on a busy DB.
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [
+      userRow, activeUserRow, disabledUserRow, adminRow,
+      calendarRow, eventRow, recurringRow, deletedRow,
+      loginDayRow, loginWeekRow,
+      webhookRow, deliveryFailRow, oauthAppRow, apiTokenRow,
+      inviteOpenRow, inviteAcceptedRow,
+    ] = await Promise.all([
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.users),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.users).where(isNull(schema.users.disabledAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.users).where(isNotNull(schema.users.disabledAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.users).where(eq(schema.users.isAdmin, true)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.calendars),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.events).where(isNull(schema.events.deletedAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.events).where(and(isNotNull(schema.events.rrule), isNull(schema.events.deletedAt))),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.events).where(isNotNull(schema.events.deletedAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.loginEvents).where(gte(schema.loginEvents.createdAt, oneDayAgo)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.loginEvents).where(gte(schema.loginEvents.createdAt, sevenDaysAgo)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.webhooks).where(eq(schema.webhooks.enabled, true)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.webhookDeliveries)
+        .where(and(gte(schema.webhookDeliveries.createdAt, oneDayAgo), eq(schema.webhookDeliveries.ok, false))),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.oauthClients),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.apiTokens).where(isNull(schema.apiTokens.revokedAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.eventInviteTokens).where(isNull(schema.eventInviteTokens.respondedAt)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.eventInviteTokens).where(isNotNull(schema.eventInviteTokens.respondedAt)),
+    ]);
+
+    // Recent audit-log entries — top 5 give a "what happened lately" feel.
+    const recentAudit = await db
+      .select({
+        id: schema.adminAuditLog.id,
+        action: schema.adminAuditLog.action,
+        targetType: schema.adminAuditLog.targetType,
+        createdAt: schema.adminAuditLog.createdAt,
+        actorUserId: schema.adminAuditLog.actorUserId,
+      })
+      .from(schema.adminAuditLog)
+      .orderBy(desc(schema.adminAuditLog.createdAt))
+      .limit(5);
 
     return reply.view("admin/index", {
       title: "管理后台",
@@ -83,9 +123,32 @@ export async function adminRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       settings,
       stats: {
-        users: userCount[0]?.c ?? 0,
-        calendars: calendarCount[0]?.c ?? 0,
-        events: eventCount[0]?.c ?? 0,
+        users: userRow[0]?.c ?? 0,
+        usersActive: activeUserRow[0]?.c ?? 0,
+        usersDisabled: disabledUserRow[0]?.c ?? 0,
+        admins: adminRow[0]?.c ?? 0,
+        calendars: calendarRow[0]?.c ?? 0,
+        events: eventRow[0]?.c ?? 0,
+        recurringEvents: recurringRow[0]?.c ?? 0,
+        deletedEvents: deletedRow[0]?.c ?? 0,
+        loginsDay: loginDayRow[0]?.c ?? 0,
+        loginsWeek: loginWeekRow[0]?.c ?? 0,
+        activeWebhooks: webhookRow[0]?.c ?? 0,
+        failedDeliveriesDay: deliveryFailRow[0]?.c ?? 0,
+        oauthApps: oauthAppRow[0]?.c ?? 0,
+        apiTokensLive: apiTokenRow[0]?.c ?? 0,
+        invitesOpen: inviteOpenRow[0]?.c ?? 0,
+        invitesAccepted: inviteAcceptedRow[0]?.c ?? 0,
+      },
+      recentAudit: recentAudit.map((r) => ({
+        ...r,
+        createdAtLocal: r.createdAt.toLocaleString("zh-CN", { timeZone: "Asia/Shanghai", hour12: false }),
+      })),
+      // Boot info — surfaces "is the server actually alive?" at a glance.
+      runtime: {
+        nodeVersion: process.versions.node,
+        uptimeSec: Math.floor(process.uptime()),
+        memMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
       },
     });
   });

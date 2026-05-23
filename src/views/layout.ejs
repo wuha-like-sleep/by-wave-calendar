@@ -11,6 +11,11 @@
     <title><%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></title>
     <link rel="icon" type="image/svg+xml" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/favicon.svg' %>" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <%# iOS reads apple-mobile-web-app-title for the home-screen icon
+        label rather than the manifest's short_name — so set both. %>
+    <meta name="apple-mobile-web-app-title" content="<%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %>" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <% const v = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
     <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />

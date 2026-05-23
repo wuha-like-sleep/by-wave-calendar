@@ -1,67 +1,167 @@
 <%- include('_nav', { activeNav: '/admin' }) %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6">管理后台</h1>
+<header class="mb-6 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900">概览</h1>
+    <p class="mt-1 text-sm text-slate-500">站点关键指标 + 服务状态 · 实时统计</p>
+  </div>
+  <div class="text-right text-xs text-slate-500 leading-relaxed">
+    <div>Node <code class="font-mono text-slate-700"><%= runtime.nodeVersion %></code></div>
+    <div>启动 <%= Math.floor(runtime.uptimeSec / 3600) %>h <%= Math.floor((runtime.uptimeSec % 3600) / 60) %>m · 内存 <%= runtime.memMb %> MB</div>
+  </div>
+</header>
 
-<section class="grid grid-cols-3 gap-3 sm:gap-4 mb-6">
-  <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
+<!-- ========== Headline stats ========== -->
+<section class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+  <a href="/admin/users" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
     <div class="text-2xl font-bold text-slate-900"><%= stats.users %></div>
     <div class="text-xs text-slate-500 mt-1">用户</div>
-  </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
+    <div class="mt-2 text-[11px] text-slate-500">活跃 <span class="text-emerald-700"><%= stats.usersActive %></span> · 停用 <span class="text-amber-700"><%= stats.usersDisabled %></span> · 管理员 <%= stats.admins %></div>
+  </a>
+  <div class="rounded-xl border border-slate-200 bg-white p-4">
     <div class="text-2xl font-bold text-slate-900"><%= stats.calendars %></div>
     <div class="text-xs text-slate-500 mt-1">日历</div>
+    <div class="mt-2 text-[11px] text-slate-500">人均 <%= stats.users > 0 ? (stats.calendars / stats.users).toFixed(1) : '0' %> 本</div>
   </div>
-  <div class="rounded-xl border border-slate-200 bg-white p-4 text-center">
-    <div class="text-2xl font-bold text-slate-900"><%= stats.events %></div>
+  <div class="rounded-xl border border-slate-200 bg-white p-4">
+    <div class="text-2xl font-bold text-slate-900"><%= stats.events.toLocaleString('zh-CN') %></div>
     <div class="text-xs text-slate-500 mt-1">事件</div>
+    <div class="mt-2 text-[11px] text-slate-500">含重复 <%= stats.recurringEvents %> 个 · 软删除 <%= stats.deletedEvents %></div>
+  </div>
+  <div class="rounded-xl border border-slate-200 bg-white p-4">
+    <div class="text-2xl font-bold text-slate-900"><%= stats.loginsDay %></div>
+    <div class="text-xs text-slate-500 mt-1">24h 登录</div>
+    <div class="mt-2 text-[11px] text-slate-500">本周 <%= stats.loginsWeek %> 次</div>
   </div>
 </section>
 
-<section class="grid sm:grid-cols-2 gap-3 sm:gap-4">
-  <a href="/admin/site" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
-    <div class="text-sm font-semibold text-slate-900">站点设置</div>
-    <div class="text-xs text-slate-500 mt-1">站点名、注册策略、ICP 备案</div>
-    <div class="mt-3 text-xs text-slate-600 truncate"><%= settings.siteName %> · <%= settings.registrationMode %></div>
-  </a>
-  <a href="/admin/logo" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
-    <div class="text-sm font-semibold text-slate-900">平台 Logo</div>
-    <div class="text-xs text-slate-500 mt-1">上传 / 删除自定义 logo</div>
-    <div class="mt-3 flex items-center gap-2">
-      <% if (settings.logoUrl) { %>
-        <img src="<%= settings.logoUrl %>" alt="logo" class="h-8 w-8 rounded-md object-cover border border-slate-200" />
-        <span class="text-xs text-emerald-700">已上传</span>
-      <% } else { %>
-        <div class="h-8 w-8 rounded-md bg-gradient-to-br from-brand-500 to-brand-700"></div>
-        <span class="text-xs text-slate-500">默认渐变</span>
-      <% } %>
+<!-- ========== Service status ========== -->
+<section class="mb-6">
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">服务状态</h2>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+    <% function statusCard(href, label, ok, detail) { %>
+      <a href="<%= href %>" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+        <div class="flex items-center justify-between">
+          <div class="text-sm font-medium text-slate-900"><%= label %></div>
+          <span class="inline-flex items-center gap-1 text-xs <%= ok ? 'text-emerald-700' : 'text-amber-700' %>">
+            <span class="inline-block h-1.5 w-1.5 rounded-full <%= ok ? 'bg-emerald-500' : 'bg-amber-500' %>"></span>
+            <%= ok ? '正常' : '未配置' %>
+          </span>
+        </div>
+        <div class="mt-1.5 text-xs text-slate-500 truncate"><%= detail %></div>
+      </a>
+    <% } %>
+    <%- statusCard('/admin/smtp', 'SMTP 邮件', !!settings.smtpHost, settings.smtpHost || '未配置 — 邀请 / 提醒 / 验证邮件不会发出') %>
+    <%- statusCard('/admin/idp',  'SSO',       !!settings.ssoKeycloakEnabled, settings.ssoKeycloakEnabled ? '已启用第三方登录' : '仅密码 / Passkey 登录') %>
+    <%- statusCard('/admin/security', '安全策略', true, '密码策略 / 锁定阈值 / MFA 控制') %>
+    <%- statusCard('/admin/webhooks', 'Webhooks', stats.activeWebhooks > 0, stats.activeWebhooks > 0 ? `${stats.activeWebhooks} 个启用` + (stats.failedDeliveriesDay > 0 ? ` · 24h 失败 ${stats.failedDeliveriesDay}` : '') : '未配置 — 事件不会推送到外部系统') %>
+  </div>
+</section>
+
+<!-- ========== Operational signals ========== -->
+<section class="mb-6">
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">运营信号</h2>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500 mb-1">事件邀请</div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-lg font-semibold text-slate-900"><%= stats.invitesAccepted %></span>
+        <span class="text-xs text-slate-500">已回执</span>
+      </div>
+      <div class="text-xs text-amber-700 mt-0.5"><%= stats.invitesOpen %> 个邀请未回应</div>
     </div>
-  </a>
-  <a href="/admin/smtp" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
-    <div class="text-sm font-semibold text-slate-900">SMTP 邮件</div>
-    <div class="text-xs text-slate-500 mt-1">注册验证码、登录提醒、邀请的发件配置</div>
-    <div class="mt-3 text-xs">
-      <% if (settings.smtpHost) { %>
-        <span class="text-emerald-700">✓ 已配置</span>
-        <span class="text-slate-500 ml-1">· <%= settings.smtpHost %></span>
-      <% } else { %>
-        <span class="text-amber-700">⚠ 未配置 — 邮件功能停用</span>
-      <% } %>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500 mb-1">API · OAuth</div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-lg font-semibold text-slate-900"><%= stats.apiTokensLive %></span>
+        <span class="text-xs text-slate-500">活跃 API token</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5"><%= stats.oauthApps %> 个 OAuth 应用</div>
     </div>
-  </a>
-  <a href="/admin/sso" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
-    <div class="text-sm font-semibold text-slate-900">SSO · OIDC</div>
-    <div class="text-xs text-slate-500 mt-1">Keycloak / Authelia / 任何 OIDC 兼容 IDP</div>
-    <div class="mt-3 text-xs">
-      <% if (settings.ssoKeycloakEnabled) { %>
-        <span class="text-emerald-700">✓ 已启用</span>
-      <% } else { %>
-        <span class="text-slate-400">已关闭</span>
-      <% } %>
+    <% if (stats.failedDeliveriesDay > 0) { %>
+      <a href="/admin/webhooks" class="rounded-xl border border-red-200 bg-red-50 p-4 hover:bg-red-100 transition">
+        <div class="text-xs text-red-700 mb-1">⚠ 需要注意</div>
+        <div class="text-sm text-red-900 font-medium">Webhook 24h 失败 <%= stats.failedDeliveriesDay %> 次</div>
+        <div class="text-xs text-red-700 mt-0.5">点击查看送达记录</div>
+      </a>
+    <% } else if (stats.deletedEvents > 1000) { %>
+      <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div class="text-xs text-amber-700 mb-1">软删除堆积</div>
+        <div class="text-sm text-amber-900 font-medium"><%= stats.deletedEvents %> 个已删事件未回收</div>
+        <div class="text-xs text-amber-700 mt-0.5">日常 cron 会清 90 天前的</div>
+      </div>
+    <% } else { %>
+      <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div class="text-xs text-emerald-700 mb-1">✓ 一切正常</div>
+        <div class="text-sm text-emerald-900 font-medium">最近 24h 无告警</div>
+        <div class="text-xs text-emerald-700 mt-0.5">服务、邀请、Webhook、登录全部健康</div>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<!-- ========== Recent admin actions ========== -->
+<% if (recentAudit && recentAudit.length > 0) { %>
+  <section class="mb-6">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">最近管理操作</h2>
+      <a href="/admin/audit" class="text-xs text-brand-700 hover:underline">查看全部 →</a>
     </div>
-  </a>
-  <a href="/admin/users" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition sm:col-span-2">
-    <div class="text-sm font-semibold text-slate-900">用户管理</div>
-    <div class="text-xs text-slate-500 mt-1">查看 / 设管理员</div>
-    <div class="mt-3 text-xs text-slate-600">共 <%= stats.users %> 个用户</div>
-  </a>
+    <ul class="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
+      <% recentAudit.forEach(function(a){ %>
+        <li class="px-4 py-2.5 flex items-center justify-between gap-3 text-sm">
+          <div class="min-w-0">
+            <div class="text-slate-900 truncate"><code class="text-xs font-mono text-slate-600"><%= a.action %></code> · <span class="text-slate-500"><%= a.targetType %></span></div>
+            <div class="text-xs text-slate-400 mt-0.5"><%- a.createdAtLocal %></div>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
+
+<!-- ========== Branding & config quick links ========== -->
+<section>
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">配置入口</h2>
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <a href="/admin/site" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">站点 · 注册策略</div>
+      <div class="text-xs text-slate-500 mt-1 truncate"><%= settings.siteName %> · <%= settings.registrationMode %></div>
+    </a>
+    <a href="/admin/logo" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">Logo · 外观</div>
+      <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
+        <% if (settings.logoUrl) { %>
+          <img src="<%= settings.logoUrl %>" alt="" class="h-5 w-5 rounded object-cover border border-slate-200" />
+          <span class="text-emerald-700">自定义</span>
+        <% } else { %>
+          <span>默认渐变</span>
+        <% } %>
+      </div>
+    </a>
+    <a href="/admin/theme" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">主题色</div>
+      <div class="text-xs text-slate-500 mt-1 truncate">用户可在设置里覆盖</div>
+    </a>
+    <a href="/admin/api" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">API tokens</div>
+      <div class="text-xs text-slate-500 mt-1"><%= stats.apiTokensLive %> 个活跃</div>
+    </a>
+    <a href="/admin/oauth-apps" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">OAuth 应用</div>
+      <div class="text-xs text-slate-500 mt-1"><%= stats.oauthApps %> 个已登记</div>
+    </a>
+    <a href="/admin/backup" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">备份 / 恢复</div>
+      <div class="text-xs text-slate-500 mt-1">JSON 导出 + 上传恢复</div>
+    </a>
+    <a href="/admin/audit" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">审计日志</div>
+      <div class="text-xs text-slate-500 mt-1">所有管理操作 / 安全事件</div>
+    </a>
+    <a href="/admin/update" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
+      <div class="text-sm font-semibold text-slate-900">更新 / 重启</div>
+      <div class="text-xs text-slate-500 mt-1">检查新版本 · 重启进程</div>
+    </a>
+  </div>
 </section>

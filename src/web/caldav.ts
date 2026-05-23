@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
-import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
@@ -152,8 +152,32 @@ async function loadCalendarOwned(userId: string, calId: string) {
   return cal ?? null;
 }
 
-async function loadAllEventsOf(calId: string) {
-  return db.select().from(schema.events).where(and(eq(schema.events.calendarId, calId), isNull(schema.events.deletedAt))).orderBy(asc(schema.events.startsAt));
+// Load events for a calendar. When the CalDAV REPORT body carries a
+// <time-range start="…" end="…"/> filter we push it into SQL so we
+// don't dump the entire history into memory for clients that only
+// want next month. Recurring masters always come through regardless
+// of the range — their occurrences could fall in the window even if
+// the master DTSTART is far in the past.
+async function loadAllEventsOf(calId: string, range?: { start: Date | null; end: Date | null }) {
+  const conds = [
+    eq(schema.events.calendarId, calId),
+    isNull(schema.events.deletedAt),
+  ];
+  if (range?.start) {
+    // Drop events whose end is before the requested start AND aren't
+    // recurring. The OR makes Postgres still load every recurring master.
+    conds.push(or(
+      gte(schema.events.endsAt, range.start),
+      isNotNull(schema.events.rrule),
+    )!);
+  }
+  if (range?.end) {
+    conds.push(or(
+      lte(schema.events.startsAt, range.end),
+      isNotNull(schema.events.rrule),
+    )!);
+  }
+  return db.select().from(schema.events).where(and(...conds)).orderBy(asc(schema.events.startsAt));
 }
 
 function rowToIcal(row: schema.Event): IcalEvent {
@@ -450,7 +474,11 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     if (e) end = parseIcalUtcStamp(e);
   }
 
-  let events = await loadAllEventsOf(cal.id);
+  // Push the time-range into SQL so we don't fan a giant calendar
+  // (10K+ events) into memory just to throw most of them away. We
+  // still keep the JS filter below as a safety net for edge cases the
+  // SQL coarse-grain didn't catch (e.g. allDay UTC-midnight ambiguity).
+  let events = await loadAllEventsOf(cal.id, { start, end });
   if (start || end) {
     events = events.filter(ev => {
       if (start && ev.endsAt < start) return false;
