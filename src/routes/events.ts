@@ -10,6 +10,7 @@ import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
+import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
 
 const isoDate = z.string().datetime({ offset: true });
@@ -270,6 +271,9 @@ export async function eventRoutes(app: FastifyInstance) {
     // webhook_deliveries table; never blocks the API response.
     if (row) {
       void dispatchWebhook("event.created", eventToWebhookPayload(row)).catch(() => undefined);
+      // Silent push to the calendar owner's iOS devices so the APP
+      // refreshes within seconds. No-op when APNs isn't configured.
+      void pushEventChanged(user.id, row.id, "event.created").catch(() => undefined);
     }
     return reply.code(201).send(row);
   });
@@ -330,7 +334,10 @@ export async function eventRoutes(app: FastifyInstance) {
       }).returning();
 
       await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, id));
-      if (detached) void dispatchWebhook("event.updated", eventToWebhookPayload(detached)).catch(() => undefined);
+      if (detached) {
+        void dispatchWebhook("event.updated", eventToWebhookPayload(detached)).catch(() => undefined);
+        void pushEventChanged(user.id, detached.id, "event.updated").catch(() => undefined);
+      }
       return reply.send(detached);
     }
 
@@ -366,7 +373,10 @@ export async function eventRoutes(app: FastifyInstance) {
         rrule: body.rrule ?? cleanedRrule,
         extra: body.extra !== undefined ? (body.extra as unknown as object | null) : (target.extra as object | null),
       }).returning();
-      if (newMaster) void dispatchWebhook("event.updated", eventToWebhookPayload(newMaster)).catch(() => undefined);
+      if (newMaster) {
+        void dispatchWebhook("event.updated", eventToWebhookPayload(newMaster)).catch(() => undefined);
+        void pushEventChanged(user.id, newMaster.id, "event.updated").catch(() => undefined);
+      }
       return reply.send(newMaster);
     }
 
@@ -402,6 +412,7 @@ export async function eventRoutes(app: FastifyInstance) {
       .returning();
     if (row) {
       void dispatchWebhook("event.updated", eventToWebhookPayload(row)).catch(() => undefined);
+      void pushEventChanged(user.id, row.id, "event.updated").catch(() => undefined);
     }
     return reply.send(row);
   });
@@ -451,6 +462,7 @@ export async function eventRoutes(app: FastifyInstance) {
     // /event-invite/:token can render a "已取消" notice.
     await cancelEvent(parsed.data.id, { id: user.id, email: user.email, displayName: user.displayName });
     void dispatchWebhook("event.deleted", eventToWebhookPayload(target)).catch(() => undefined);
+    void pushEventChanged(user.id, target.id, "event.deleted").catch(() => undefined);
     return reply.code(204).send();
   });
 
@@ -481,6 +493,7 @@ export async function eventRoutes(app: FastifyInstance) {
       .returning();
     if (restored) {
       void dispatchWebhook("event.updated", eventToWebhookPayload(restored)).catch(() => undefined);
+      void pushEventChanged(user.id, restored.id, "event.restored").catch(() => undefined);
     }
     return reply.send(restored);
   });

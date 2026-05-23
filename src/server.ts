@@ -30,6 +30,7 @@ import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
 import { startReminderScheduler } from "./lib/reminders.js";
 import { startHousekeepingScheduler } from "./lib/housekeeping.js";
+import { logApnsStartup } from "./lib/apns.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
@@ -202,7 +203,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.6.3" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.0" }));
 
 // CSP violation report sink. Browsers POST a small JSON document here
 // when something gets blocked by the Content-Security-Policy directives
@@ -652,6 +653,8 @@ startHousekeepingScheduler({
   info: (m) => app.log.info(m),
   warn: (m) => app.log.warn(m),
 });
+
+logApnsStartup({ info: (m) => app.log.info(m) });
 
 try {
   if (env.USE_HTTPS) {

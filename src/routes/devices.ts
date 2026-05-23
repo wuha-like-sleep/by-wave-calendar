@@ -12,7 +12,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import QRCode from "qrcode";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 import { env } from "../env.js";
@@ -191,6 +191,50 @@ export async function deviceRoutes(app: FastifyInstance) {
     return reply.send({
       accessToken: result.accessToken,
       accessTokenExpiresAt: result.expiresAt.toISOString(),
+    });
+  });
+
+  // -------- register / unregister APNs push token --------
+  // Called by the iOS APP after iOS hands it a device token. We store
+  // it on the device row identified by the JWT's `did` claim.
+  app.post("/devices/me/push-token", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const deviceId = (req as unknown as { deviceId?: string }).deviceId;
+    if (!deviceId) {
+      return reply.code(400).send({ error: "not_a_device_session" });
+    }
+    const body = z.object({
+      pushToken: z.string().min(20).max(200).nullable(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    // Confirm the device belongs to this user (defense-in-depth — the
+    // JWT path already verified, but a stale `did` claim could survive).
+    const [device] = await db.select().from(schema.devices)
+      .where(and(eq(schema.devices.id, deviceId), eq(schema.devices.userId, user.id)))
+      .limit(1);
+    if (!device) return reply.code(404).send({ error: "device_not_found" });
+    await db.update(schema.devices)
+      .set({ pushToken: body.data.pushToken })
+      .where(eq(schema.devices.id, deviceId));
+    return reply.send({ ok: true });
+  });
+
+  // Identify the device this request is authed as. APP uses this to
+  // resolve "which devices row is me" without needing to scan the
+  // list — handy for self-revoke from the SettingsView.
+  app.get("/devices/me", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const deviceId = (req as unknown as { deviceId?: string }).deviceId;
+    if (!deviceId) return reply.code(400).send({ error: "not_a_device_session" });
+    const [device] = await db.select().from(schema.devices)
+      .where(and(eq(schema.devices.id, deviceId), eq(schema.devices.userId, user.id)))
+      .limit(1);
+    if (!device) return reply.code(404).send({ error: "device_not_found" });
+    return reply.send({
+      id: device.id,
+      label: device.label,
+      kind: device.kind,
+      hasPushToken: !!device.pushToken,
     });
   });
 

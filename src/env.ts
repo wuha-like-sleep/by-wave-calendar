@@ -11,6 +11,20 @@ const schema = z.object({
   HOST: z.string().default("127.0.0.1"),
   PUBLIC_BASE_URL: z.string().url(),
   DATABASE_URL: z.string().min(1),
+  // Apple Push Notification Service (optional). When APNS_KEY_ID is
+  // blank, all push attempts no-op and the server logs once at boot.
+  // Sandbox vs production is auto-selected by APNS_PRODUCTION.
+  //   APNS_KEY_PATH = absolute path to the .p8 key file from Apple
+  //     Developer Console → Keys → "+" → Apple Push Notifications service
+  //   APNS_KEY_ID   = 10-char ID shown next to the key in the console
+  //   APNS_TEAM_ID  = 10-char team ID from your Apple Developer membership
+  //   APNS_BUNDLE_ID = e.g. cn.bywave.calendar (matches the iOS app)
+  APNS_KEY_PATH: z.string().optional(),
+  APNS_KEY_ID: z.string().optional(),
+  APNS_TEAM_ID: z.string().optional(),
+  APNS_BUNDLE_ID: z.string().optional(),
+  APNS_PRODUCTION: boolFlag.default(false),
+
   // PG connection pool max. Default 20 covers a typical 1-process pm2
   // deployment: reminders cron + per-request connections + CalDAV burst
   // syncs can otherwise queue behind the prior 10-connection limit and
