@@ -203,7 +203,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.5" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.7.6" }));
 
 // Public diagnostic endpoint for APP onboarding troubleshooting. The
 // iOS / Android APP can ping this BEFORE the user attempts to log in
@@ -222,7 +222,7 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
   const { getSettings } = await import("./lib/site_settings.js");
   const s = await getSettings();
   return {
-    version: "0.7.5",
+    version: "0.7.6",
     appsEnabled: s.appsEnabled,
     siteName: s.siteName,
     serverTime: new Date().toISOString(),

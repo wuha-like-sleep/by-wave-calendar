@@ -36,6 +36,28 @@ final class APIClient {
         self.state = state
     }
 
+    // Build a final URL from the server origin + caller path. Caller
+    // paths look like "/events" or "/events?from=...&to=...".
+    //
+    // We can't use URL.appendingPathComponent here — Foundation
+    // percent-escapes `?` (treats it as a path segment character),
+    // which turns "/events?from=X" into "/events%3Ffrom=X" and the
+    // server route doesn't match → 404 not_found. That was the cause
+    // of the first-screen "服务器错误 404 — not_found" right after
+    // sign-in (the calendar view immediately hits /events?from=…&to=…).
+    //
+    // Instead we build the URL by string concat and re-parse — query
+    // string values were already percent-encoded by the caller (see
+    // CalendarView's load()), so URL(string:) succeeds cleanly.
+    static func makeURL(server: URL, path: String) -> URL? {
+        // Strip any trailing slash on the server origin so the joined
+        // URL has exactly one slash between "rl.lz-ss.com" and "/api".
+        var base = server.absoluteString
+        if base.hasSuffix("/") { base.removeLast() }
+        let joined = base + "/api/v1" + (path.hasPrefix("/") ? path : "/" + path)
+        return URL(string: joined)
+    }
+
     // GET helper. Path is relative to /api/v1, e.g. "/events?from=...".
     func get<T: Decodable>(_ path: String) async throws -> T {
         try await request(method: "GET", path: path, body: nil)
@@ -62,7 +84,9 @@ final class APIClient {
     private func requestVoid(method: String, path: String, body: Data?, isRetry: Bool = false) async throws {
         guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
         let token = try await state.currentAccessToken()
-        let url = serverURL.appendingPathComponent("/api/v1" + path)
+        guard let url = Self.makeURL(server: serverURL, path: path) else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -91,7 +115,9 @@ final class APIClient {
     private func request<T: Decodable>(method: String, path: String, body: Data?, isRetry: Bool = false) async throws -> T {
         guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
         let token = try await state.currentAccessToken()
-        let url = serverURL.appendingPathComponent("/api/v1" + path)
+        guard let url = Self.makeURL(server: serverURL, path: path) else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
         var req = URLRequest(url: url)
         req.httpMethod = method
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
