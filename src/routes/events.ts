@@ -466,6 +466,132 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
+  // ---------- Event attendees (JSON endpoints mirroring web flow) ----------
+  // The web has its own form-based attendees page under
+  // /app/events/:id/attendees; these JSON endpoints expose the same
+  // semantics for native APP clients. Mirror: extra.attendees array
+  // on the event row + per-recipient tokens in event_invite_tokens.
+
+  app.get<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const { id } = idParam.parse(req.params);
+    const event = await loadOwnedEvent(id, user.id);
+    if (!event) return reply.code(404).send({ error: "not_found" });
+    const extra = (event.extra as { attendees?: string[] } | null) ?? {};
+    const attendees = Array.isArray(extra.attendees) ? extra.attendees : [];
+    const tokens = await db
+      .select()
+      .from(schema.eventInviteTokens)
+      .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
+      .orderBy(asc(schema.eventInviteTokens.createdAt));
+    return reply.send({
+      attendees,
+      tokens: tokens.map((t) => ({
+        token: t.token,
+        recipientEmail: t.recipientEmail,
+        createdAt: t.createdAt.toISOString(),
+        expiresAt: t.expiresAt.toISOString(),
+        acceptedAt: t.acceptedAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  // Invite one email. Same flow as the web POST /attendees/invite —
+  // adds to extra.attendees, creates a token row, sends .ics email.
+  app.post<{ Params: { id: string } }>("/events/:id/attendees", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const { id } = idParam.parse(req.params);
+    const body = z.object({
+      email: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_email" });
+    const event = await loadOwnedEvent(id, user.id);
+    if (!event) return reply.code(404).send({ error: "not_found" });
+    const extra = (event.extra as Record<string, unknown> | null) ?? {};
+    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    if (current.includes(body.data.email)) {
+      return reply.code(409).send({ error: "already_invited", message: `${body.data.email} 已是参与者` });
+    }
+    const next = [...current, body.data.email];
+    await db.update(schema.events)
+      .set({ extra: { ...extra, attendees: next }, updatedAt: new Date() })
+      .where(eq(schema.events.id, event.id));
+
+    const inviteToken = newInvitationToken();
+    try {
+      await db.insert(schema.eventInviteTokens).values({
+        token: inviteToken,
+        sourceEventId: event.id,
+        recipientEmail: body.data.email,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      });
+      const ics = invitationIcs({
+        event: {
+          uid: event.uid,
+          summary: event.summary,
+          description: event.description,
+          location: event.location,
+          startsAt: event.startsAt,
+          endsAt: event.endsAt,
+          allDay: event.allDay,
+          updatedAt: new Date(),
+        },
+        organizerEmail: user.email,
+        organizerName: user.displayName || user.email,
+        attendees: [{ email: body.data.email }],
+        method: "REQUEST",
+      });
+      await sendMail(eventInviteMail(body.data.email, {
+        organizerEmail: user.email,
+        organizerName: user.displayName || user.email,
+        summary: event.summary,
+        description: event.description,
+        location: event.location,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        allDay: event.allDay,
+        uid: event.uid,
+        timezone: (event.extra as { timezone?: string } | null)?.timezone ?? null,
+        icsBody: ics,
+        inviteToken,
+      }));
+    } catch (err) {
+      req.log.warn({ err, to: body.data.email }, "event_invite_send_failed");
+      return reply.code(207).send({
+        ok: true,
+        warning: "added_but_mail_failed",
+        message: `${body.data.email} 已添加为参与者，但邀请邮件发送失败`,
+      });
+    }
+    return reply.send({ ok: true, email: body.data.email });
+  });
+
+  // Revoke. iOS sends email in body (avoid URL-encoding @ in path).
+  app.delete<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
+    const user = await requireUser(req, reply);
+    const { id } = idParam.parse(req.params);
+    const body = z.object({
+      email: z.string().email().transform((s) => s.toLowerCase().trim()),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_email" });
+    const event = await loadOwnedEvent(id, user.id);
+    if (!event) return reply.code(404).send({ error: "not_found" });
+    const extra = (event.extra as Record<string, unknown> | null) ?? {};
+    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    const next = current.filter((e) => e !== body.data.email);
+    await db.update(schema.events)
+      .set({ extra: { ...extra, attendees: next }, updatedAt: new Date() })
+      .where(eq(schema.events.id, event.id));
+    await db.delete(schema.eventInviteTokens).where(and(
+      eq(schema.eventInviteTokens.sourceEventId, event.id),
+      eq(schema.eventInviteTokens.recipientEmail, body.data.email),
+      isNull(schema.eventInviteTokens.acceptedAt),
+    ));
+    return reply.send({ ok: true });
+  });
+
   // Restore a soft-deleted event. Powers the toast 撤销 button — the
   // user just deleted something and immediately wants it back. Idempotent.
   // Only the owner of the calendar can restore. CANCEL emails already

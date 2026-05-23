@@ -62,11 +62,9 @@ struct EventEditView: View {
     // tz; "(默认)" in the picker means "don't send any" → server uses the
     // calendar's stored tz (Asia/Shanghai by default).
     @State private var timezone: String = TimeZone.current.identifier
-    // Comma-separated emails the user wants to invite. Server fires
-    // .ics invitations on POST and notifies on PATCH (web client does
-    // same thing). Kept as a single text field to avoid building a
-    // full chip editor here — most events have 1-3 invitees.
-    @State private var attendeesInput: String = ""
+    // attendees are no longer collected here — see AttendeesPage which
+    // appears as a NavigationLink ONLY for already-saved events. Matches
+    // the web flow ("保存事件后会出现「管理参与者」入口").
     @State private var saving = false
     @State private var errorMessage: String?
 
@@ -111,13 +109,11 @@ struct EventEditView: View {
             }
             _allDay = State(initialValue: e.allDay)
             _calendarId = State(initialValue: e.calendarId)
-            // Preload timezone + attendees from the server's extra JSONB
-            // so edits see what the user previously chose.
+            // Preload timezone from the server's extra JSONB. Attendees
+            // are not preloaded here — they live on the dedicated
+            // AttendeesPage which fetches them fresh each open.
             if let tz = e.extra?.timezone, !tz.isEmpty {
                 _timezone = State(initialValue: tz)
-            }
-            if let atts = e.extra?.attendees, !atts.isEmpty {
-                _attendeesInput = State(initialValue: atts.joined(separator: ", "))
             }
         } else {
             // Sensible default for "new event": next half-hour, 60min
@@ -195,20 +191,36 @@ struct EventEditView: View {
                 TextField("可选 — 例如 上海 / Zoom 会议室", text: $location)
             }
 
-            // 邀请人 — comma- or space-separated emails. Server fires .ics
-            // invitations on first save. Re-saving doesn't re-send to the
-            // same addresses (server dedups via event_invite_tokens).
+            // 邀请人 — matches the web flow: invites are managed on a
+            // dedicated page AFTER the event is saved. New events show
+            // a hint; editing events show a NavigationLink → AttendeesPage
+            // which calls the JSON endpoints (POST/DELETE one at a time
+            // with .ics email per invite).
             Section {
-                TextField("邮箱，多个用逗号或空格分隔", text: $attendeesInput, axis: .vertical)
-                    .keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .lineLimit(1...3)
+                if let existing = mode.existing {
+                    NavigationLink {
+                        AttendeesPage(eventId: existing.id, eventTitle: existing.summary)
+                            .environmentObject(state)
+                    } label: {
+                        HStack {
+                            Label("管理参与者", systemImage: "person.2.fill")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            let count = existing.extra?.attendees?.count ?? 0
+                            if count > 0 {
+                                Text("\(count) 人")
+                                    .font(.callout).foregroundStyle(.secondary)
+                            } else {
+                                Text("尚未邀请").font(.callout).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                } else {
+                    Text("保存事件后会出现「管理参与者」入口；进入独立页面单独邀请和撤销，每个邀请会发一封 .ics 邮件给对方。")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
             } header: {
                 Text("邀请人")
-            } footer: {
-                Text("第一次保存会向新加入的邮箱发送带 .ics 附件的邀请。已经发过的不重复发。")
-                    .font(.footnote)
             }
 
             Section("备注") {
@@ -318,17 +330,12 @@ struct EventEditView: View {
 
     /// Build the `extra` field for the API request. Returns nil when
     /// nothing's set so we don't blank-out the field on edit (server
-    /// preserves existing extra when key not present).
+    /// preserves existing extra when key not present). Attendees are
+    /// managed via AttendeesPage's own endpoints — not touched here.
     private func buildExtra() -> EventExtra? {
         let tz = allDay ? nil : (timezone.isEmpty ? nil : timezone)
-        // Accept both commas and whitespace separators; trim + lowercase.
-        let parts = attendeesInput
-            .split(whereSeparator: { $0 == "," || $0 == " " || $0 == "\n" || $0 == ";" })
-            .map { String($0).trimmingCharacters(in: .whitespaces).lowercased() }
-            .filter { $0.contains("@") }
-        let attendees = parts.isEmpty ? nil : parts
-        if tz == nil && attendees == nil { return nil }
-        return EventExtra(timezone: tz, attendees: attendees, category: nil)
+        if tz == nil { return nil }
+        return EventExtra(timezone: tz, attendees: nil, category: nil)
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is

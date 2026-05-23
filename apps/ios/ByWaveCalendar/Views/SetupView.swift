@@ -32,6 +32,10 @@ private enum LoginMethod: String, CaseIterable, Identifiable {
 struct SetupView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.colorScheme) private var colorScheme
+    // Used when SetupView is presented as a sheet (e.g. ProfileSwitcher's
+    // "添加另一个账号"). At root (first sign-in) this dismiss is a no-op,
+    // so it's always safe to call after a successful pairing.
+    @Environment(\.dismiss) private var dismiss
     @State private var serverURLInput: String = ""
     @State private var method: LoginMethod = .scan
 
@@ -427,6 +431,10 @@ struct SetupView: View {
                 userEmail: r.userEmail,
                 userName: r.userName,
             )
+            // Close the sheet when SetupView was presented from
+            // ProfileSwitcher's "添加另一个账号". No-op at first launch
+            // because root-presented views can't dismiss themselves.
+            dismiss()
         } catch {
             errorMessage = "网络错误：\(error.localizedDescription)"
         }
@@ -485,6 +493,8 @@ struct SetupView: View {
                 userEmail: resp.userEmail,
                 userName: resp.userName,
             )
+            // Close when shown as a sheet (ProfileSwitcher "添加账号"); no-op at root.
+            dismiss()
         } catch let e as PairingError {
             errorMessage = e.localizedDescription
         } catch {
