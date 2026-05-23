@@ -31,7 +31,7 @@ open ByWaveCalendar.xcodeproj
 2. **选目标设备**：顶部模拟器选 iPhone 15 / 你的 iPhone
 3. **⌘R 跑**
 4. APP 启动 → 「服务器地址」屏幕：
-   - 输入 `https://rl.lz-ss.com`
+   - 输入 `https://calendar.example.com`
    - 或点「扫码登录」→ 用相机对准网页 `/app/settings#devices` → 「绑定新设备」弹出来的 QR
 5. 成功登录 → 看到今天 + 接下来 7 天的事件列表
 

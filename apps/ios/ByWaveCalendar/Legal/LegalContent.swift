@@ -1,10 +1,9 @@
 // LegalContent.swift
 // Privacy policy + Terms of Service bundled inside the APP.
 //
-// Why in-app instead of fetching from `serverURL/privacy`:
+// Why in-app fallback (when server doesn't have /privacy):
 //   * The project is open-source — bundling specific operator URLs
-//     (rl.lz-ss.com etc.) would leak the original author's host into
-//     every fork.
+//     in the binary would leak any one operator's host into every fork.
 //   * Apple's App Store requires a privacy policy accessible BEFORE
 //     login; if we only fetch from the server, App Review can't see it
 //     until they configure a server in the APP. In-app text is always

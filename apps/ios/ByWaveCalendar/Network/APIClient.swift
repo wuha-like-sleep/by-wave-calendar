@@ -51,7 +51,7 @@ final class APIClient {
     // CalendarView's load()), so URL(string:) succeeds cleanly.
     static func makeURL(server: URL, path: String) -> URL? {
         // Strip any trailing slash on the server origin so the joined
-        // URL has exactly one slash between "rl.lz-ss.com" and "/api".
+        // URL has exactly one slash between "calendar.example.com" and "/api".
         var base = server.absoluteString
         if base.hasSuffix("/") { base.removeLast() }
         let joined = base + "/api/v1" + (path.hasPrefix("/") ? path : "/" + path)

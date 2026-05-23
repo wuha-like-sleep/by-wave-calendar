@@ -144,7 +144,7 @@ enum PairingService {
         }
     }
 
-    /// Try to resolve a host the user typed (e.g. "rl.lz-ss.com" or
+    /// Try to resolve a host the user typed (e.g. "calendar.example.com" or
     /// "192.168.1.100:8080") into a working URL by probing both schemes.
     /// Behavior:
     ///   - If the input already starts with `https://` or `http://`, return it as-is.

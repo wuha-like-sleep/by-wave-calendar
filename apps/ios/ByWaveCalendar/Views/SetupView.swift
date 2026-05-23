@@ -100,7 +100,7 @@ struct SetupView: View {
             }
             .onAppear {
                 // Prefill last-used server URL so returning users don't
-                // have to re-type "rl.lz-ss.com" every time. New users
+                // have to re-type "calendar.example.com" every time. New users
                 // get an empty field with helper placeholder.
                 if serverURLInput.isEmpty,
                    let last = UserDefaults.standard.string(forKey: Self.lastServerURLKey)
@@ -165,7 +165,7 @@ struct SetupView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("服务器地址")
                 .font(.caption).foregroundStyle(.secondary)
-            TextField("rl.lz-ss.com 或 192.168.1.100:8080", text: $serverURLInput)
+            TextField("calendar.example.com 或 192.168.1.100:8080", text: $serverURLInput)
                 .textContentType(.URL)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -360,7 +360,7 @@ struct SetupView: View {
     // MARK: - Actions
 
     /// Resolve whatever the user typed into a working URL. Probes https
-    /// first then http when no scheme is given, so "rl.lz-ss.com" and
+    /// first then http when no scheme is given, so "calendar.example.com" and
     /// "192.168.1.100:8080" both Just Work. Returns nil only when
     /// neither scheme reaches the server.
     private func normalizedServerURL() async -> URL? {
