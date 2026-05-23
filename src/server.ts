@@ -203,7 +203,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.8.1" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.9.0" }));
 
 // Public diagnostic endpoint for APP onboarding troubleshooting. The
 // iOS / Android APP can ping this BEFORE the user attempts to log in
@@ -221,10 +221,24 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
   // Lazy import to avoid pulling getSettings into the eager init path.
   const { getSettings } = await import("./lib/site_settings.js");
   const s = await getSettings();
+  // Theme palette → hex accent. Mirrors web's tailwind brand-600 values.
+  // iOS reads `themeAccent` on launch and applies it as the global .tint
+  // so server-controlled branding flows through to the native APP without
+  // a separate config endpoint.
+  const accentByPalette: Record<string, string> = {
+    indigo: "#4F46E5",
+    emerald: "#059669",
+    rose: "#E11D48",
+    sky: "#0284C7",
+    amber: "#D97706",
+    violet: "#7C3AED",
+  };
   return {
-    version: "0.8.1",
+    version: "0.9.0",
     appsEnabled: s.appsEnabled,
     siteName: s.siteName,
+    themePalette: s.themePalette,
+    themeAccent: accentByPalette[s.themePalette] ?? accentByPalette.indigo,
     serverTime: new Date().toISOString(),
   };
 });

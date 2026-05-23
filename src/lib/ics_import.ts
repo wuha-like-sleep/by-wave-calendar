@@ -119,6 +119,14 @@ export async function refreshSubscription(subId: string): Promise<{ ok: true; re
   if (!sub) return { ok: false, error: "subscription_not_found" };
   try {
     const text = await fetchIcsUrl(sub.url);
+    // Surface a clear error when the upstream returned HTML / login page
+    // instead of an actual ICS feed. Without this check refreshSubscription
+    // happily "succeeds" with 0 events, hiding the real issue from the user.
+    const trimmed = text.trimStart();
+    if (!trimmed.startsWith("BEGIN:VCALENDAR")) {
+      const preview = trimmed.slice(0, 80).replace(/\s+/g, " ");
+      throw new Error(`URL didn't return an ICS feed (got: "${preview}…"). Check the link — needs to be a webcal:// or .ics URL, not an HTML page.`);
+    }
     const result = await importIcsText(sub.calendarId, text, { sourceTag: `sub:${sub.id}` });
     await db
       .update(schema.calendarSubscriptions)

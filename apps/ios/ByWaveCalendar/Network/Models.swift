@@ -25,12 +25,42 @@ struct EventDTO: Codable, Identifiable, Hashable {
     // isOccurrence is set by the server's RRULE expansion. true for the
     // 2nd+ render of a recurring event; false for the master / non-recurring.
     let isOccurrence: Bool?
+    // Server's JSONB extra column — timezone, attendees, category. We
+    // mirror only the fields the APP currently cares about; the server
+    // round-trips the rest unchanged via createSchema's extraSchema.
+    let extra: EventExtraDTO?
+}
+
+// Read-side mirror of EventExtra. Defined as a separate type so the
+// Encodable (request body) and Decodable (response body) shapes can
+// drift if needed without breaking each other.
+struct EventExtraDTO: Codable, Hashable {
+    let timezone: String?
+    let attendees: [String]?
+    let category: String?
 }
 
 // The /api/v1/events endpoint returns { calendars: [...], events: [...] }.
 struct EventsResponse: Decodable {
     let calendars: [CalendarMeta]
     let events: [EventDTO]
+}
+
+// Extra metadata bag that piggybacks on POST/PATCH /events. Mirrors
+// server extraSchema in src/routes/events.ts:
+//   - timezone: IANA tz name (e.g. "Asia/Shanghai") to interpret start/end in
+//   - attendees: email list — server fires invitation .ics emails on insert
+//   - category: optional grouping label
+struct EventExtra: Encodable {
+    let timezone: String?
+    let attendees: [String]?
+    let category: String?
+
+    var isEmpty: Bool {
+        (timezone?.isEmpty ?? true)
+            && (attendees?.isEmpty ?? true)
+            && (category?.isEmpty ?? true)
+    }
 }
 
 // Body for POST /events (create) — matches the server's createSchema in
@@ -44,6 +74,7 @@ struct EventCreateInput: Encodable {
     let endsAt: String
     let allDay: Bool?
     let rrule: String?
+    let extra: EventExtra?
 }
 
 // Body for PATCH /events/:id (update). All fields optional — server only
@@ -63,8 +94,18 @@ struct EventUpdateInput: Encodable {
     let endsAt: String?
     let allDay: Bool?
     let rrule: String?
+    let extra: EventExtra?
     let scope: String?
     let recurrenceId: String?
+}
+
+// Body for POST /api/v1/calendars (create) — matches server createSchema
+// in src/routes/calendars.ts. color must be #rrggbb hex, timezone IANA.
+struct CalendarCreateInput: Encodable {
+    let name: String
+    let description: String?
+    let color: String?
+    let timezone: String?
 }
 
 // Server returns the saved row on create/update — same shape as EventDTO

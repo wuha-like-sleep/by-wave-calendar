@@ -155,7 +155,11 @@ struct CalendarView: View {
             }
             .sheet(isPresented: $showingSettings) { SettingsView() }
             .sheet(isPresented: $showingFilter) {
-                CalendarFilterView(calendars: calendars).environmentObject(state)
+                CalendarFilterView(
+                    calendars: calendars,
+                    onCalendarsChanged: { Task { await load(force: true) } },
+                )
+                .environmentObject(state)
             }
             .sheet(isPresented: $showingSearch) {
                 SearchView(calendars: calendars).environmentObject(state)

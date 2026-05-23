@@ -24,7 +24,10 @@ struct ByWaveCalendarApp: App {
                 // AppState drives this so changes take effect immediately
                 // without an app restart.
                 .preferredColorScheme(state.appearance.colorScheme)
-                .tint(Color(red: 79/255, green: 70/255, blue: 229/255)) // brand-600
+                // Tint follows whatever the server's themePalette resolves
+                // to (fetched on bootstrap). Falls back to brand purple if
+                // the server hasn't been reached yet or returned no value.
+                .tint(state.themeAccent)
                 .onAppear {
                     // PushService needs AppState (for serverURL + tokens)
                     // to POST the push token back to the server. Wire it

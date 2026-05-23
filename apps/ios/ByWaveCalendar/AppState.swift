@@ -57,6 +57,17 @@ final class AppState: ObservableObject {
     private(set) var accessToken: String?
     private var accessTokenExpiresAt: Date?
 
+    // Server-driven theme accent. Fetched from /api/v1/health/app on
+    // bootstrap so APP branding matches the web (admin can pick
+    // indigo / emerald / rose / etc. and both surfaces sync). Default
+    // matches the app icon's purple so cold-launch before fetch still
+    // looks right. Persisted to UserDefaults so the next launch is
+    // instantly themed without waiting for the network round-trip.
+    @Published var themeAccentHex: String = UserDefaults.standard.string(forKey: "bwc.themeAccent") ?? "#4F46E5"
+    var themeAccent: Color {
+        Color(hex: themeAccentHex) ?? Color(red: 79/255, green: 70/255, blue: 229/255)
+    }
+
     private static let serverURLKey = "bwc.serverURL"
     private static let userEmailKey = "bwc.userEmail"
     private static let userNameKey = "bwc.userName"
@@ -113,6 +124,31 @@ final class AppState: ObservableObject {
                     self.isSignedIn = false
                 }
             }
+            // Fire-and-forget theme fetch — no auth needed, low risk if
+            // it fails (we just keep the cached hex from last launch).
+            Task { await self.refreshThemeFromServer() }
+        }
+    }
+
+    /// Pull /api/v1/health/app and update themeAccentHex. Cheap, anonymous,
+    /// 30/min rate limited. Failures are silent — APP keeps using cache.
+    func refreshThemeFromServer() async {
+        guard let serverURL else { return }
+        guard let url = URL(string: serverURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/v1/health/app") else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 8
+        do {
+            let (data, _) = try await URLSession.shared.data(for: req)
+            // Server v1 envelope wraps as { ok, data: {...} }; older
+            // versions returned the body directly. Handle both.
+            let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+            let payload = (outer["data"] as? [String: Any]) ?? outer
+            if let accent = payload["themeAccent"] as? String, !accent.isEmpty {
+                self.themeAccentHex = accent
+                UserDefaults.standard.set(accent, forKey: "bwc.themeAccent")
+            }
+        } catch {
+            // Network blip — keep last cached value.
         }
     }
 

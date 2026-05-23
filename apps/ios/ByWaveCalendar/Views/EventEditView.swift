@@ -58,6 +58,15 @@ struct EventEditView: View {
     @State private var endsAt: Date
     @State private var allDay: Bool
     @State private var calendarId: String
+    // IANA timezone name interpreting start/end. Defaults to the system
+    // tz; "(默认)" in the picker means "don't send any" → server uses the
+    // calendar's stored tz (Asia/Shanghai by default).
+    @State private var timezone: String = TimeZone.current.identifier
+    // Comma-separated emails the user wants to invite. Server fires
+    // .ics invitations on POST and notifies on PATCH (web client does
+    // same thing). Kept as a single text field to avoid building a
+    // full chip editor here — most events have 1-3 invitees.
+    @State private var attendeesInput: String = ""
     @State private var saving = false
     @State private var errorMessage: String?
 
@@ -102,6 +111,14 @@ struct EventEditView: View {
             }
             _allDay = State(initialValue: e.allDay)
             _calendarId = State(initialValue: e.calendarId)
+            // Preload timezone + attendees from the server's extra JSONB
+            // so edits see what the user previously chose.
+            if let tz = e.extra?.timezone, !tz.isEmpty {
+                _timezone = State(initialValue: tz)
+            }
+            if let atts = e.extra?.attendees, !atts.isEmpty {
+                _attendeesInput = State(initialValue: atts.joined(separator: ", "))
+            }
         } else {
             // Sensible default for "new event": next half-hour, 60min
             // duration. Caller can override via prefilledStart (e.g.
@@ -162,11 +179,36 @@ struct EventEditView: View {
                         .onChange(of: endsAt) { _, _ in
                             endLinkedToStart = false
                         }
+                    // Timezone picker — only meaningful for timed events.
+                    // All-day events span the calendar's local day per ICS
+                    // spec, so the field would be misleading.
+                    Picker("时区", selection: $timezone) {
+                        ForEach(EventEditView.commonTimezones, id: \.self) { tz in
+                            Text(tz).tag(tz)
+                        }
+                    }
+                    .pickerStyle(.menu)
                 }
             }
 
             Section("地点") {
                 TextField("可选 — 例如 上海 / Zoom 会议室", text: $location)
+            }
+
+            // 邀请人 — comma- or space-separated emails. Server fires .ics
+            // invitations on first save. Re-saving doesn't re-send to the
+            // same addresses (server dedups via event_invite_tokens).
+            Section {
+                TextField("邮箱，多个用逗号或空格分隔", text: $attendeesInput, axis: .vertical)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .lineLimit(1...3)
+            } header: {
+                Text("邀请人")
+            } footer: {
+                Text("第一次保存会向新加入的邮箱发送带 .ics 附件的邀请。已经发过的不重复发。")
+                    .font(.footnote)
             }
 
             Section("备注") {
@@ -220,6 +262,7 @@ struct EventEditView: View {
 
         let isoStart = iso(startsAt, allDay: allDay, isStart: true)
         let isoEnd = iso(endsAt, allDay: allDay, isStart: false)
+        let extra = buildExtra()
 
         do {
             let client = APIClient(state: state)
@@ -239,6 +282,7 @@ struct EventEditView: View {
                     endsAt: isoEnd,
                     allDay: allDay,
                     rrule: nil,
+                    extra: extra,
                 ))
             case .edit(let existing):
                 // Only send calendarId when it actually changed — otherwise
@@ -259,6 +303,7 @@ struct EventEditView: View {
                     endsAt: isoEnd,
                     allDay: allDay,
                     rrule: nil,
+                    extra: extra,
                     scope: scope?.rawValue,
                     recurrenceId: recIdIso,
                 ))
@@ -270,6 +315,40 @@ struct EventEditView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    /// Build the `extra` field for the API request. Returns nil when
+    /// nothing's set so we don't blank-out the field on edit (server
+    /// preserves existing extra when key not present).
+    private func buildExtra() -> EventExtra? {
+        let tz = allDay ? nil : (timezone.isEmpty ? nil : timezone)
+        // Accept both commas and whitespace separators; trim + lowercase.
+        let parts = attendeesInput
+            .split(whereSeparator: { $0 == "," || $0 == " " || $0 == "\n" || $0 == ";" })
+            .map { String($0).trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { $0.contains("@") }
+        let attendees = parts.isEmpty ? nil : parts
+        if tz == nil && attendees == nil { return nil }
+        return EventExtra(timezone: tz, attendees: attendees, category: nil)
+    }
+
+    /// Top-of-list candidate timezones for the picker. The system tz is
+    /// inserted at index 0 (if not already present) so 「上海开发者」
+    /// gets Asia/Shanghai as default. Full IANA list would be 500+ rows
+    /// and overwhelm the menu picker; this is the same shortlist the
+    /// web client uses.
+    static let commonTimezones: [String] = {
+        var list = [
+            "Asia/Shanghai", "Asia/Tokyo", "Asia/Singapore", "Asia/Hong_Kong",
+            "Asia/Seoul", "Asia/Taipei", "Asia/Bangkok", "Asia/Kolkata",
+            "Asia/Dubai", "Europe/London", "Europe/Berlin", "Europe/Paris",
+            "Europe/Moscow", "America/New_York", "America/Chicago",
+            "America/Los_Angeles", "America/Sao_Paulo", "Australia/Sydney",
+            "Pacific/Auckland", "UTC",
+        ]
+        let current = TimeZone.current.identifier
+        if !list.contains(current) { list.insert(current, at: 0) }
+        return list
+    }()
 
     private func iso(_ d: Date, allDay: Bool, isStart: Bool) -> String {
         if allDay {
