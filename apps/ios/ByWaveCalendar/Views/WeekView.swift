@@ -625,7 +625,7 @@ private struct DayHeader: View {
         VStack(spacing: 2) {
             Text(weekdayLabel(day))
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(isToday ? .accentColor : .secondary)
+                .foregroundStyle(isToday ? Color.accentColor : Color.secondary)
             Text("\(cal.component(.day, from: day))")
                 .font(.callout.weight(isToday ? .bold : .regular))
                 .frame(minWidth: 24, minHeight: 24)

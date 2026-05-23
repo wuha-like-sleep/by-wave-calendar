@@ -55,6 +55,11 @@ final class EventKitMirror {
             case .authorized: return .granted
             case .denied, .restricted: return .denied
             case .notDetermined: return .notDetermined
+            // iOS 17+ cases — unreachable here at runtime but the
+            // compiler still requires them to be handled because they
+            // exist in the EKAuthorizationStatus enum at type-level.
+            case .fullAccess: return .granted
+            case .writeOnly: return .notDetermined
             @unknown default: return .notDetermined
             }
         }
