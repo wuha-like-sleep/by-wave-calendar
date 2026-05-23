@@ -149,10 +149,16 @@ struct CalendarView: View {
                 Task { await load(force: true) }
             }
             .onChange(of: mode) { _, _ in
-                scheduleDebouncedLoad()
+                // Mode switch is pure UI now (filter window changes) —
+                // events are already cached for a wide range. No fetch.
             }
             .onChange(of: anchor) { _, _ in
-                scheduleDebouncedLoad()
+                // Only refetch when the user navigated far enough out of
+                // the cached window. Within range, views filter locally
+                // and switching dates is instant.
+                if anchorOutsideFetchedWindow() {
+                    scheduleDebouncedLoad()
+                }
             }
             .onDisappear { navDebounceTask?.cancel() }
             .sheet(isPresented: $showingCreate) {
@@ -387,29 +393,41 @@ struct CalendarView: View {
             .sorted { $0.startsAt < $1.startsAt }
     }
 
-    // MARK: - Fetch window for the current mode
+    // MARK: - Fetch window
+    // v1.2.1: switched from per-view windows (day = 1 day, week = 7 days,
+    // ...) to a single wide window centered on `anchor`. Reason: when
+    // each view fetched only its own range, switching day→week→month
+    // showed inconsistent event sets — each view kept the LAST window's
+    // snapshot in `self.events`. Now every load fetches the same wide
+    // range and the per-view filters slice it locally; switching modes
+    // is pure UI work, no network hit.
+    //
+    // The window is anchored ±range around the current anchor. When the
+    // user navigates far outside it (e.g. jump to next year), a new
+    // fetch covers the new range.
+    private static let windowMonthsBack: Int = 2
+    private static let windowMonthsForward: Int = 13
+
+    /// The single wide window we refetch into. All views filter from
+    /// this in-memory set.
     private func currentWindow() -> (Date, Date) {
         let cal = Calendar.current
-        switch mode {
-        case .day:
-            let start = cal.startOfDay(for: anchor)
-            let end = cal.date(byAdding: .day, value: 1, to: start)!
-            return (start, end)
-        case .week:
-            let start = startOfWeek(anchor)
-            let end = cal.date(byAdding: .day, value: 7, to: start)!
-            return (start, end)
-        case .month:
-            let comps = cal.dateComponents([.year, .month], from: anchor)
-            let start = cal.date(from: comps) ?? anchor
-            let end = cal.date(byAdding: .month, value: 1, to: start) ?? anchor
-            return (start, end)
-        case .year:
-            let y = cal.component(.year, from: anchor)
-            let start = cal.date(from: DateComponents(year: y, month: 1, day: 1)) ?? anchor
-            let end = cal.date(from: DateComponents(year: y + 1, month: 1, day: 1)) ?? anchor
-            return (start, end)
-        }
+        let start = cal.date(byAdding: .month, value: -Self.windowMonthsBack, to: anchor) ?? anchor
+        let end = cal.date(byAdding: .month, value: Self.windowMonthsForward, to: anchor) ?? anchor
+        return (cal.startOfDay(for: start), cal.startOfDay(for: end))
+    }
+
+    /// True if the anchor moved far enough that the existing window
+    /// no longer comfortably covers what the user is looking at. Used
+    /// to skip refetches when navigating within the cached range.
+    @State private var lastFetchedWindow: (start: Date, end: Date)?
+    private func anchorOutsideFetchedWindow() -> Bool {
+        guard let w = lastFetchedWindow else { return true }
+        // Add a 2-week safety margin so we refetch BEFORE the visible
+        // edge of week/month view hits the boundary.
+        let margin: TimeInterval = 14 * 86400
+        return anchor < w.start.addingTimeInterval(margin)
+            || anchor > w.end.addingTimeInterval(-margin)
     }
 
     // MARK: - Cache hydration
@@ -439,6 +457,10 @@ struct CalendarView: View {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        // Remember what range we just covered so anchor-change handlers
+        // can decide whether to refetch (only when navigating far enough
+        // outside the cached window).
+        lastFetchedWindow = (start: from, end: to)
 
         // Use the cached ISO8601 formatter — was creating a new one
         // per request, ~1ms overhead each. Tiny but cumulative under
