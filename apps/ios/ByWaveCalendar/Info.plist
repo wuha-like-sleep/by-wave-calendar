@@ -17,5 +17,22 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!--
+	Languages this APP ships translations for. Required for iOS 16+ to
+	expose the per-app language picker in Settings → ByWaveCalendar →
+	Language. Without this key the picker is hidden even if .lproj
+	bundles are present.
+	-->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh-Hans</string>
+		<string>en</string>
+	</array>
+	<!--
+	Lets iOS mix-and-match resources across .lproj bundles so partial
+	translations don't fall back to the development language wholesale.
+	-->
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 </dict>
 </plist>

@@ -15,6 +15,7 @@
 
 import SwiftUI
 import SafariServices
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
@@ -722,6 +723,30 @@ struct AppearanceSettingsPage: View {
             } header: {
                 Text("主题")
             }
+
+            // Language — iOS 16+ has built-in per-app language picker.
+            // We deep-link to it. The picker only appears in Settings if
+            // the app declares CFBundleLocalizations + the system has
+            // multiple matching locale .lproj bundles, which we do.
+            Section {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Label("语言", systemImage: "globe").foregroundStyle(.primary)
+                        Spacer()
+                        Text(currentLanguageLabel)
+                            .font(.callout).foregroundStyle(.secondary)
+                        Image(systemName: "arrow.up.right.square")
+                            .foregroundStyle(.tertiary).font(.footnote)
+                    }
+                }
+            } header: {
+                Text("语言")
+            }
+
             Section("品牌色") {
                 LabeledContent("主色") {
                     HStack(spacing: 8) {
@@ -733,6 +758,18 @@ struct AppearanceSettingsPage: View {
         }
         .navigationTitle("外观")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    /// Human-friendly label for the active iOS-resolved language.
+    /// Driven by Bundle.main.preferredLocalizations.first so it matches
+    /// whatever the system / per-app override resolved to.
+    private var currentLanguageLabel: String {
+        let preferred = Bundle.main.preferredLocalizations.first ?? "zh-Hans"
+        switch preferred {
+        case let s where s.hasPrefix("zh"): return "简体中文"
+        case let s where s.hasPrefix("en"): return "English"
+        default: return preferred
+        }
     }
 }
 
