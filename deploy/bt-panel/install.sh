@@ -167,6 +167,14 @@ if [ ! -f .env ]; then
   echo
   ICP_NUMBER=$(ask "4) 中国大陆 ICP 备案号（无备案直接回车跳过，例如：沪ICP备2021023412号-2）" "")
 
+  # 原生 APP 同步（iOS / Android / 桌面）
+  echo
+  if confirm "5) 启用原生 APP 同步？（iOS / Android / 桌面 APP 扫码登录用，关闭则只能用网页 + CalDAV）" "y"; then
+    APPS_ENABLED="true"
+  else
+    APPS_ENABLED="false"
+  fi
+
   cp .env.example .env
   apply_kv() {
     local key="$1" val="$2"
@@ -263,6 +271,21 @@ else
     fail "迁移失败，看上面的错。常见：DATABASE_URL 不对 / 库还没建 / 权限不够"
   fi
   ok "迁移完成"
+fi
+
+# Apply the APP-sync choice from the .env wizard. Only run on a fresh
+# install (when APPS_ENABLED is set above). Upgrades preserve whatever
+# the admin previously chose via /admin/api.
+if [ -n "${APPS_ENABLED:-}" ]; then
+  if node dist/scripts/set-site-flag.js apps_enabled "$APPS_ENABLED" >/dev/null 2>&1; then
+    if [ "$APPS_ENABLED" = "true" ]; then
+      ok "已启用原生 APP 同步"
+    else
+      ok "未启用原生 APP 同步（仅 Web + CalDAV）"
+    fi
+  else
+    warn "保存 APP 同步开关失败，可稍后到 /admin/api 手动改"
+  fi
 fi
 
 # ========== 6. setcap ==========
@@ -385,5 +408,14 @@ echo "  💡 常用命令："
 echo "     pm2 logs $PM2_NAME       # 看实时日志"
 echo "     pm2 restart $PM2_NAME    # 改了 .env 后重启"
 echo "     pm2 list                 # 看进程状态"
+if [ -n "${APPS_ENABLED:-}" ]; then
+  if [ "$APPS_ENABLED" = "true" ]; then
+    echo
+    echo "  📱 原生 APP 同步：已启用 —— 用户可在「设置 → 我的设备」绑定 iOS / Android APP"
+  else
+    echo
+    echo "  📱 原生 APP 同步：未启用 —— 仅支持 Web + CalDAV；要打开就去 /admin/api"
+  fi
+fi
 echo
 echo "  开机自启（一次性，需要 root）: pm2 startup"

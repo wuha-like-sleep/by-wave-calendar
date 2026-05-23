@@ -165,8 +165,17 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
     // The token's `did` claim points to a `devices` row — if that row was
     // revoked we reject regardless of signature/expiry, so admin revokes
     // take effect within 1 hour (the JWT TTL) at worst.
+    //
+    // Also gated by site_settings.appsEnabled: when admin turns off the
+    // APP feature, even valid+unexpired JWTs stop working immediately.
     const { looksLikeAccessToken, verifyAccessToken } = await import("./device_tokens.js");
     if (looksLikeAccessToken(token)) {
+      const { getSettings } = await import("./site_settings.js");
+      const settings = await getSettings();
+      if (!settings.appsEnabled) {
+        reply.code(403).send({ error: "apps_disabled" });
+        throw new Error("apps_disabled");
+      }
       const payload = verifyAccessToken(token);
       if (payload) {
         const { loadDeviceById } = await import("./devices.js");

@@ -299,15 +299,30 @@
       <h2 class="text-lg font-semibold text-slate-900">我的设备</h2>
       <p class="mt-1 text-sm text-slate-500">用 iOS / Android / 桌面原生 APP 同步日历的设备。Web 浏览器不在这里 —— 用「踢出登录」管理浏览器会话。</p>
     </div>
-    <button type="button" id="btn-pair-device"
-            class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-      绑定新设备
-    </button>
+    <% if (appsEnabled) { %>
+      <button type="button" id="btn-pair-device"
+              class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        绑定新设备
+      </button>
+    <% } else { %>
+      <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">已停用</span>
+    <% } %>
   </div>
 
-  <ul id="device-list" class="divide-y divide-slate-100 border-t border-slate-100">
-    <li class="py-6 text-center text-sm text-slate-400">加载中…</li>
-  </ul>
+  <% if (!appsEnabled) { %>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      管理员已关闭 APP 同步功能。
+      <% if (user.isAdmin) { %>
+        前往 <a href="/admin/api#apps" class="text-brand-700 hover:underline font-medium">管理后台 → API</a> 重新启用。
+      <% } else { %>
+        请联系管理员开启。
+      <% } %>
+    </div>
+  <% } else { %>
+    <ul id="device-list" class="divide-y divide-slate-100 border-t border-slate-100">
+      <li class="py-6 text-center text-sm text-slate-400">加载中…</li>
+    </ul>
+  <% } %>
 </section>
 
 <!-- Modal: pair new device. Shows a QR + the 6-char code as fallback. -->
@@ -353,6 +368,10 @@
   const pairExp = document.getElementById("pair-expires");
   const btnPair = document.getElementById("btn-pair-device");
   const btnClose = document.getElementById("btn-pair-close");
+  // Feature is admin-disabled — the EJS didn't render the device list or
+  // the pair button, so there's nothing to wire up. Bail before any
+  // null-deref. addEventListener calls below would throw otherwise.
+  if (!list || !btnPair) return;
 
   function fmtAgo(iso) {
     if (!iso) return "从未";

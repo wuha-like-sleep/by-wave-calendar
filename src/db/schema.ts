@@ -85,6 +85,14 @@ export const siteSettings = pgTable("site_settings", {
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),
+  // Master switch for the native iOS / Android / desktop APP feature.
+  // When off:
+  //   - /api/v1/devices/pair-init / pair-claim / auth/refresh all 403
+  //   - Bearer JWT auth path rejects (paired apps lose access)
+  //   - /app/settings#devices hides the "绑定新设备" button + shows notice
+  // Default ON because most self-hosted admins want it; turn off if you
+  // don't want any non-web clients touching your server.
+  appsEnabled: boolean("apps_enabled").notNull().default(true),
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),

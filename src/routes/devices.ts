@@ -9,11 +9,12 @@
 // /api/v1/devices               (auth — list / revoke own devices)
 // /api/v1/devices/me            (auth — what device am I, if I'm a bearer-bound app)
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { requireUser } from "../lib/session.js";
 import { env } from "../env.js";
+import { getSettings } from "../lib/site_settings.js";
 import {
   initPairing,
   claimPairing,
@@ -22,6 +23,17 @@ import {
   revokeDevice,
 } from "../lib/devices.js";
 
+// Master feature gate. Reads the latest site_settings on each call so an
+// admin toggle takes effect immediately (no restart). pair-claim and
+// refresh hit this without auth — they're public endpoints used by the
+// APP — but we still want to refuse them when the feature is off.
+async function ensureAppsEnabled(reply: FastifyReply): Promise<boolean> {
+  const s = await getSettings();
+  if (s.appsEnabled) return true;
+  reply.code(403).send({ error: "apps_disabled", message: "管理员已停用 APP 同步" });
+  return false;
+}
+
 export async function deviceRoutes(app: FastifyInstance) {
   // -------- pair-init (web user starts the QR flow) --------
   // We accept any authed user (cookie or bearer). The response carries
@@ -29,6 +41,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // an SVG-encoded QR for the web page to drop in directly.
   app.post("/devices/pair-init", async (req, reply) => {
     const user = await requireUser(req, reply);
+    if (!(await ensureAppsEnabled(reply))) return;
     const { code, expiresAt } = await initPairing(user.id);
 
     // The QR encodes a JSON pairing envelope:
@@ -54,6 +67,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // Returns { accessToken, refreshToken, expiresAt } on success, 401 on
   // expired/claimed/invalid code.
   app.post("/devices/pair-claim", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply))) return;
     const body = z.object({
       code: z.string().min(4).max(20),
       label: z.string().min(1).max(60),
@@ -85,6 +99,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // -------- refresh access token --------
   // Phone hits this on 401 or when its cached access token is near expiry.
   app.post("/auth/refresh", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply))) return;
     const body = z.object({ refreshToken: z.string().min(20).max(80) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     const result = await refreshAccessToken({ refreshToken: body.data.refreshToken, ip: req.ip });

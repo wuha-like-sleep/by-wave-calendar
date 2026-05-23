@@ -1519,6 +1519,10 @@ export async function webRoutes(app: FastifyInstance) {
     const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     const caldavBaseUrl = `${baseUrl}/caldav/`;
 
+    // Surface the apps-enabled flag so the EJS can hide the
+    // 「绑定新设备」 button + show a notice when the admin turned it off.
+    const siteSettings = await getSettings();
+
     return reply.view("app/settings", {
       title: "设置",
       user,
@@ -1540,6 +1544,7 @@ export async function webRoutes(app: FastifyInstance) {
       newAppPassword: newPlain,
       newAppLabel: newLabel,
       caldavBaseUrl,
+      appsEnabled: siteSettings.appsEnabled,
     });
   });
 

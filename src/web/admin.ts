@@ -651,11 +651,18 @@ export async function adminRoutes(app: FastifyInstance) {
     const providers = await listEnabledProvidersPublic();
     const issuedToken = typeof (req.query as { issued?: string }).issued === "string" ? (req.query as { issued: string }).issued : null;
     const issuedLabel = typeof (req.query as { issuedLabel?: string }).issuedLabel === "string" ? (req.query as { issuedLabel: string }).issuedLabel : null;
+    // Active (non-revoked) APP device count for the「原生 APP 同步」card.
+    const [devCount] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.devices)
+      .where(isNull(schema.devices.revokedAt));
     return reply.view("admin/api", {
       title: "API · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
       activeNav: "/admin/api",
       apiEnabled: settings.apiEnabled,
+      appsEnabled: settings.appsEnabled,
+      deviceCount: devCount?.c ?? 0,
       ssoEnabled: providers.length > 0,
       tokens: tokens.map((t) => ({
         ...t,
@@ -677,6 +684,20 @@ export async function adminRoutes(app: FastifyInstance) {
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ apiEnabled: enabled });
     return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "API 已启用" : "API 已关闭（现存 token 暂停工作）"));
+  });
+
+  // Master switch for the native iOS / Android / desktop APP feature.
+  // Flipping off doesn't physically delete `devices` rows — it just
+  // makes the auth path refuse them. Re-enable to restore access for
+  // every previously-paired device.
+  app.post("/admin/apps/toggle", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
+    await updateSettings({ appsEnabled: enabled });
+    await audit(req, u.id, enabled ? "apps.enable" : "apps.disable", { targetType: "site_settings" });
+    return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "原生 APP 同步已启用" : "原生 APP 同步已关闭（已绑定的 APP 立即失效）") + "#apps");
   });
 
   app.post("/admin/api/tokens", {
