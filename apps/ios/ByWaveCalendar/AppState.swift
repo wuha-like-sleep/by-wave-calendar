@@ -425,20 +425,6 @@ final class AppState: ObservableObject {
     }
 }
 
-// Small JSONEncoder/Decoder convenience that uses ISO8601 dates so
-// Profile's Date fields round-trip cleanly.
-private extension JSONEncoder {
-    static func iso() -> JSONEncoder {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        return e
-    }
-}
-
-private extension JSONDecoder {
-    static func iso() -> JSONDecoder {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }
-}
+// JSONEncoder.iso() / JSONDecoder.iso() helpers are defined in
+// APIClient.swift as internal extensions, so they're already visible
+// here. Don't redeclare — that's what caused the v0.10.3 build break.
