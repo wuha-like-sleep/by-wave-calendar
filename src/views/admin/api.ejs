@@ -96,7 +96,7 @@
               </td>
               <td class="py-2 px-5 sm:px-0 text-right">
                 <form method="post" action="/admin/api/tokens/<%= t.id %>/revoke" class="m-0 inline-block"
-                      onsubmit="return confirm('撤销 <%= t.label %>？该 token 立即失效，外部系统会拿到 401。');">
+                      data-confirm="撤销 <%= t.label %>？该 token 立即失效，外部系统会拿到 401。" data-confirm-danger="1" data-confirm-ok="撤销">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="text-xs text-red-600 hover:text-red-700">撤销</button>
                 </form>

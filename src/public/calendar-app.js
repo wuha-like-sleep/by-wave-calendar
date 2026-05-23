@@ -1146,7 +1146,11 @@
         if (Array.isArray(conflicts) && conflicts.length > 0) {
           const names = conflicts.slice(0, 3).map((c) => "• " + c.summary).join("\n");
           const more = conflicts.length > 3 ? `\n• …还有 ${conflicts.length - 3} 个` : "";
-          if (!confirm(`和现有事件时间冲突：\n${names}${more}\n\n仍要保存？`)) return;
+          if (!(await window.bwc.confirm({
+            title: "时间冲突",
+            message: `和现有事件时间冲突：\n${names}${more}\n\n仍要保存？`,
+            confirmLabel: "仍然保存",
+          }))) return;
         }
       }
     } catch (_e) { /* soft check — never block save on a network glitch */ }
@@ -1210,13 +1214,13 @@
     const id = $('#form-event [name="id"]').value;
     if (!id) return;
     // For recurring events the scope dialog IS the confirmation.
-    // For non-recurring, the classic confirm() prompt.
+    // For non-recurring, the styled bwc.confirm dialog.
     let recurringScope = null;
     if (form && form.dataset.hasRrule === "1") {
       recurringScope = await promptRecurringScope("delete");
       if (!recurringScope) return; // user cancelled
     } else {
-      if (!confirm("删除该事件？")) return;
+      if (!(await window.bwc.confirm({ message: "删除该事件？", danger: true, confirmLabel: "删除" }))) return;
     }
     // Scoped recurring delete (this / this+future): bypass bwcStore
     // and hit the server directly with ?scope=&recurrenceId= — the
@@ -1579,7 +1583,7 @@
       `;}).join("");
       list.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => window.bwc.copy(b.dataset.copy)));
       list.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
-        if (!confirm("撤销该订阅链接？")) return;
+        if (!(await window.bwc.confirm({ message: "撤销该订阅链接？已订阅的客户端会失效。", danger: true, confirmLabel: "撤销" }))) return;
         await fetch(`/api/calendars/${calId}/share-tokens/${b.dataset.revoke}`, fetchOpts({ method: "DELETE" }));
         await loadShareTokens(calId);
         window.bwc && window.bwc.toast("已撤销", "success");
@@ -1608,7 +1612,12 @@
 
   $("#btn-delete-calendar").addEventListener("click", async () => {
     if (!currentMenuCalId) return;
-    if (!confirm("确认删除整个日历？所有事件和订阅链接都会消失。")) return;
+    if (!(await window.bwc.confirm({
+      title: "删除日历",
+      message: "所有事件和订阅链接都会消失，且不可恢复。",
+      danger: true,
+      confirmLabel: "删除日历",
+    }))) return;
     try {
       const resp = await fetch(`/api/calendars/${currentMenuCalId}`, fetchOpts({ method: "DELETE" }));
       if (!resp.ok) throw new Error();
@@ -1935,7 +1944,11 @@
       // server returned.
       setTimeout(() => loadEvents().catch(() => {}), 1500);
     } else if (discardId) {
-      if (!confirm("丢弃这条变更？本地的优化更新会回滚。")) return;
+      if (!(await window.bwc.confirm({
+        message: "丢弃这条变更？本地的优化更新会回滚。",
+        danger: true,
+        confirmLabel: "丢弃",
+      }))) return;
       await window.bwcStore.discardItem(parseInt(discardId, 10));
       await renderConflicts();
       await loadEvents().catch(() => {});

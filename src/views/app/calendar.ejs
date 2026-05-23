@@ -17,7 +17,7 @@
       </div>
     </div>
     <div class="flex flex-wrap gap-2">
-      <form method="post" action="/app/calendars/<%= calendar.id %>/delete" onsubmit="return confirm('确定删除整个日历？此操作不可恢复');" class="m-0">
+      <form method="post" action="/app/calendars/<%= calendar.id %>/delete" data-confirm="确定删除整个日历？此操作不可恢复。" data-confirm-danger="1" data-confirm-ok="删除日历" data-confirm-title="删除日历" class="m-0">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">删除日历</button>
       </form>
@@ -58,7 +58,7 @@
               <div class="text-sm font-medium text-slate-900"><%= m.displayName || m.email %></div>
               <div class="text-xs text-slate-500"><%= m.email %> · <%= m.role === 'editor' ? '可编辑' : '只读' %></div>
             </div>
-            <form method="post" action="/app/calendars/<%= calendar.id %>/members/<%= m.id %>/remove" class="m-0" onsubmit="return confirm('确定移除该成员？');">
+            <form method="post" action="/app/calendars/<%= calendar.id %>/members/<%= m.id %>/remove" class="m-0" data-confirm="确定移除该成员？" data-confirm-danger="1" data-confirm-ok="移除">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">移除</button>
             </form>
@@ -78,7 +78,7 @@
               <div class="text-sm font-medium text-slate-900"><%= inv.email %></div>
               <div class="text-xs text-slate-500"><%= inv.role === 'editor' ? '可编辑' : '只读' %> · 到期 <%- inv.expiresAtLocal %></div>
             </div>
-            <form method="post" action="/app/calendars/<%= calendar.id %>/invitations/<%= encodeURIComponent(inv.token) %>/revoke" class="m-0" onsubmit="return confirm('撤销这条邀请？');">
+            <form method="post" action="/app/calendars/<%= calendar.id %>/invitations/<%= encodeURIComponent(inv.token) %>/revoke" class="m-0" data-confirm="撤销这条邀请？" data-confirm-danger="1" data-confirm-ok="撤销">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">撤销</button>
             </form>
@@ -131,7 +131,7 @@
                     onclick="window.bwc.copy('<%= t.url %>')">复制 ICS</button>
             <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
                     onclick="window.bwc.copy('&lt;iframe src=&quot;<%= t.url.replace('/ics/', '/embed/').replace('.ics', '') %>&quot; width=&quot;100%&quot; height=&quot;600&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;')">复制嵌入代码</button>
-            <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens/<%= t.token %>/revoke" class="m-0" onsubmit="return confirm('确定撤销该订阅链接？已订阅的客户端会失效');">
+            <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens/<%= t.token %>/revoke" class="m-0" data-confirm="确定撤销该订阅链接？已订阅的客户端会失效。" data-confirm-danger="1" data-confirm-ok="撤销">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-red-700 hover:bg-red-50">撤销</button>
             </form>
@@ -225,7 +225,7 @@
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                 <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 px-2 py-1">立即同步</button>
               </form>
-              <form method="post" action="/app/calendars/<%= calendar.id %>/subscriptions/<%= s.id %>/delete" class="m-0" onsubmit="return confirm('删除这个订阅？已导入的事件会保留，但不再自动同步。');">
+              <form method="post" action="/app/calendars/<%= calendar.id %>/subscriptions/<%= s.id %>/delete" class="m-0" data-confirm="删除这个订阅？已导入的事件会保留，但不再自动同步。" data-confirm-danger="1" data-confirm-ok="删除">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                 <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">删除</button>
               </form>
@@ -336,7 +336,7 @@
               <p class="mt-1 text-xs text-slate-500 whitespace-pre-wrap"><%= ev.description %></p>
             <% } %>
           </div>
-          <form method="post" action="/app/events/<%= ev.id %>/delete" class="m-0 flex-shrink-0" onsubmit="return confirm('删除该事件？');">
+          <form method="post" action="/app/events/<%= ev.id %>/delete" class="m-0 flex-shrink-0" data-confirm="删除该事件？" data-confirm-danger="1" data-confirm-ok="删除">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
             <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">删除</button>
           </form>

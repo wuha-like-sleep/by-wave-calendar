@@ -74,7 +74,7 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= h.enabled ? '暂停' : '启用' %></button>
             </form>
-            <form method="post" action="/admin/webhooks/<%= h.id %>/delete" class="m-0" onsubmit="return confirm('删除这个 Webhook？历史记录也会一起删。');">
+            <form method="post" action="/admin/webhooks/<%= h.id %>/delete" class="m-0" data-confirm="删除这个 Webhook？历史记录也会一起删。" data-confirm-danger="1" data-confirm-ok="删除">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50">删除</button>
             </form>

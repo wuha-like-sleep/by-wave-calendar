@@ -11,10 +11,10 @@
         <div class="text-xs text-slate-500">受邀者</div>
         <div class="font-medium"><%= booking.guestName %> &lt;<%= booking.guestEmail %>&gt;</div>
       </div>
-      <form method="post" action="/book-cancel/<%= encodeURIComponent(booking.cancelToken) %>">
+      <form method="post" action="/book-cancel/<%= encodeURIComponent(booking.cancelToken) %>"
+            data-confirm="确认取消这次预约？" data-confirm-danger="1" data-confirm-ok="取消预约">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700"
-                onclick="return confirm('确认取消这次预约？');">
+        <button type="submit" class="w-full inline-flex items-center justify-center rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700">
           取消预约
         </button>
       </form>

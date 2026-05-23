@@ -24,7 +24,7 @@
     <p class="text-sm text-red-800 mb-4"><strong>⚠️ 危险操作。</strong>上传的备份会<strong>整库替换</strong>当前数据，所有现存的用户、日历、事件都会被这份文件里的内容覆盖。无法撤回。</p>
 
     <form method="post" action="/admin/backup/import" enctype="multipart/form-data" class="space-y-3"
-          onsubmit="return confirmRestore();">
+          id="backup-restore-form">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="file" name="file" accept=".json,application/json" required
              class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
@@ -69,8 +69,23 @@
 </section>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
-function confirmRestore() {
-  if (!document.getElementById("confirm-restore").checked) return false;
-  return confirm("最后确认：当前所有日历 / 事件 / 用户都会被清空并替换为文件里的内容。继续？");
-}
+// The restore form needs the checkbox AND an extra modal confirm. We
+// can't use plain data-confirm because of the checkbox dependency.
+document.getElementById("backup-restore-form")?.addEventListener("submit", async function(e) {
+  if (this.__bwcConfirmed) { this.__bwcConfirmed = false; return; }
+  e.preventDefault();
+  if (!document.getElementById("confirm-restore").checked) {
+    window.bwc.toast("请先勾选确认框", "error");
+    return;
+  }
+  const ok = await window.bwc.confirm({
+    title: "恢复备份",
+    message: "当前所有日历 / 事件 / 用户都会被清空并替换为文件里的内容。继续？",
+    danger: true,
+    confirmLabel: "覆盖并恢复",
+  });
+  if (!ok) return;
+  this.__bwcConfirmed = true;
+  this.requestSubmit();
+});
 </script>

@@ -65,7 +65,7 @@
               </label>
               <div class="sm:col-span-2 flex justify-between items-center pt-2 border-t border-slate-100">
                 <form method="post" action="/admin/idp/providers/<%= p.id %>/delete"
-                      onsubmit="return confirm('确定删除 <%= p.label %>？删除后该按钮立即消失。')">
+                      data-confirm="确定删除 <%= p.label %>？删除后该按钮立即消失。" data-confirm-danger="1" data-confirm-ok="删除">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除提供方</button>
                 </form>

@@ -33,7 +33,7 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="text-xs <%= l.enabled ? 'text-amber-600 hover:text-amber-700' : 'text-emerald-600 hover:text-emerald-700' %>"><%= l.enabled ? '暂停' : '启用' %></button>
             </form>
-            <form method="post" action="/app/booking-links/<%= l.id %>/delete" class="m-0" onsubmit="return confirm('确定删除？现有预约不受影响。');">
+            <form method="post" action="/app/booking-links/<%= l.id %>/delete" class="m-0" data-confirm="确定删除？现有预约不受影响。" data-confirm-danger="1" data-confirm-ok="删除">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="text-xs text-red-600 hover:text-red-700">删除</button>
             </form>

@@ -6,7 +6,7 @@
   <div class="flex items-center gap-4 mb-4">
     <% if (settings.logoUrl) { %>
       <img src="<%= settings.logoUrl %>" alt="logo" class="h-16 w-16 rounded-xl object-cover border border-slate-200 bg-slate-50" />
-      <form method="post" action="/admin/logo/delete" class="m-0" onsubmit="return confirm('删除当前 Logo？');">
+      <form method="post" action="/admin/logo/delete" class="m-0" data-confirm="删除当前 Logo？" data-confirm-danger="1" data-confirm-ok="删除">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除当前</button>
       </form>

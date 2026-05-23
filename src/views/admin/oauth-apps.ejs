@@ -85,7 +85,7 @@
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= a.enabled ? '禁用' : '启用' %></button>
             </form>
-            <form method="post" action="/admin/oauth-apps/<%= a.id %>/delete" class="m-0" onsubmit="return confirm('删除应用？所有已发出的访问令牌都会立即失效。');">
+            <form method="post" action="/admin/oauth-apps/<%= a.id %>/delete" class="m-0" data-confirm="删除应用？所有已发出的访问令牌都会立即失效。" data-confirm-danger="1" data-confirm-ok="删除">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50">删除</button>
             </form>
