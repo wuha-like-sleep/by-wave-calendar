@@ -695,6 +695,14 @@ struct AppearanceSettingsPage: View {
 struct AboutSettingsPage: View {
     @EnvironmentObject var state: AppState
     @Binding var webURL: URL?
+    /// While we're HEAD-probing the active server's legal page, this
+    /// holds the title so the row can show a spinner instead of the
+    /// chevron. Cleared once we know to open Safari or local fallback.
+    @State private var probingLegal: String?
+    /// Set to a (title, content) pair when we've decided to show the
+    /// bundled local fallback (server doesn't have the page or wasn't
+    /// reachable). Drives the local legal sheet.
+    @State private var localLegal: LegalSheetItem?
 
     var body: some View {
         Form {
@@ -704,29 +712,32 @@ struct AboutSettingsPage: View {
                         .foregroundStyle(.secondary).font(.callout)
                 }
             }
-            // Legal text bundled inside the APP — no Safari, no server
-            // URL. Open-source friendly: a fork built from this code
-            // doesn't leak the original author's domain into every user's
-            // settings. The server's /privacy + /terms pages still exist
-            // for WEB users (where the operator can customize them).
+            // Legal — dynamic per active server. Each server operator
+            // configures their own /privacy and /terms web pages so a
+            // self-hosted fork shows its own policies, not the original
+            // author's. When the user isn't signed in (or the server
+            // doesn't have policies yet) we fall back to the bundled
+            // generic LegalContent — guarantees App Store Review always
+            // sees SOMETHING and the user gets a sensible default.
             Section {
-                NavigationLink {
-                    LegalPage(title: "隐私政策", markdownSource: LegalContent.privacy)
-                } label: {
-                    Label("隐私政策", systemImage: "hand.raised.fill")
-                        .foregroundStyle(.primary)
-                }
-                NavigationLink {
-                    LegalPage(title: "使用条款", markdownSource: LegalContent.terms)
-                } label: {
-                    Label("使用条款", systemImage: "doc.text.fill")
-                        .foregroundStyle(.primary)
-                }
+                legalRow(title: "隐私政策",
+                         systemImage: "hand.raised.fill",
+                         serverPath: "/privacy",
+                         fallback: LegalContent.privacy)
+                legalRow(title: "使用条款",
+                         systemImage: "doc.text.fill",
+                         serverPath: "/terms",
+                         fallback: LegalContent.terms)
             } header: {
                 Text("法律")
             } footer: {
-                Text("APP 本身的政策；服务器运营者另有具体政策时，请咨询服务器管理员。")
-                    .font(.footnote)
+                if let host = state.serverURL?.host {
+                    Text("优先显示「\(host)」服务器配置的政策；如果服务器上没有这个页面，会自动回退到 APP 内置的通用版本。")
+                        .font(.footnote)
+                } else {
+                    Text("当前未登录，显示 APP 内置的通用版本。登录服务器后会优先显示该服务器配置的政策。")
+                        .font(.footnote)
+                }
             }
             Section("项目") {
                 aboutLinkRow(label: "GitHub 仓库", url: URL(string: "https://github.com/wuha-like-sleep/by-wave-calendar")!)
@@ -734,10 +745,20 @@ struct AboutSettingsPage: View {
         }
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $localLegal) { item in
+            NavigationStack {
+                LegalPage(title: item.title, markdownSource: item.content)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("完成") { localLegal = nil }
+                        }
+                    }
+            }
+        }
     }
 
     /// External link — opens in SafariViewController (only used for the
-    /// GitHub repo now; the legal pages render natively above).
+    /// GitHub repo now; the legal pages route through legalRow below).
     private func aboutLinkRow(label: String, url: URL) -> some View {
         Button {
             webURL = url
@@ -750,6 +771,71 @@ struct AboutSettingsPage: View {
             }
         }
     }
+
+    /// Legal-row dispatcher:
+    ///   * If we have a server URL, HEAD-probe it first.
+    ///   * If the server replies 2xx → open Safari → user reads the
+    ///     operator-configured page.
+    ///   * If the server is unreachable / returns 4xx/5xx / times out
+    ///     → show the bundled local fallback so the user always sees
+    ///     SOMETHING.
+    ///   * If we don't have a server URL at all (cold launch, never
+    ///     signed in) → show the bundled local fallback directly.
+    @ViewBuilder
+    private func legalRow(title: String, systemImage: String, serverPath: String, fallback: String) -> some View {
+        Button {
+            if state.serverURL == nil {
+                localLegal = LegalSheetItem(title: title, content: fallback)
+            } else {
+                Task { await openLegal(title: title, serverPath: serverPath, fallback: fallback) }
+            }
+        } label: {
+            HStack {
+                Label(title, systemImage: systemImage).foregroundStyle(.primary)
+                Spacer()
+                if probingLegal == title {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.caption).foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .disabled(probingLegal != nil)
+    }
+
+    /// HEAD probe with 4-second timeout. Cheap server check that
+    /// doesn't drag in the full HTML body.
+    private func openLegal(title: String, serverPath: String, fallback: String) async {
+        guard let serverURL = state.serverURL else {
+            localLegal = LegalSheetItem(title: title, content: fallback)
+            return
+        }
+        probingLegal = title
+        defer { probingLegal = nil }
+        let url = serverURL.appendingPathComponent(serverPath)
+        var req = URLRequest(url: url)
+        req.httpMethod = "HEAD"
+        req.timeoutInterval = 4
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
+                webURL = url
+                return
+            }
+        } catch {
+            // Fall through to fallback on any network / SSL error.
+        }
+        localLegal = LegalSheetItem(title: title, content: fallback)
+    }
+}
+
+/// Sheet payload for the local-fallback legal page. Identifiable so
+/// sheet(item:) binds cleanly to the optional state.
+struct LegalSheetItem: Identifiable {
+    var id: String { title }
+    let title: String
+    let content: String
 }
 
 // MARK: - Account-management web bridge
