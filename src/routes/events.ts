@@ -32,7 +32,11 @@ const createSchema = z.object({
   extra: extraSchema,
 });
 
-const updateSchema = createSchema.omit({ calendarId: true }).partial();
+// Update accepts calendarId too so apps can move an event between
+// calendars the user owns. Ownership is verified at apply time
+// (loadOwnedEvent + ownsCalendar check) so a malicious request can't
+// drop an event into someone else's calendar.
+const updateSchema = createSchema.partial();
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -367,9 +371,18 @@ export async function eventRoutes(app: FastifyInstance) {
     }
 
     // --- scope=series (default) OR non-recurring: regular patch ---
+    // If the user wants to move the event to a different calendar, confirm
+    // they actually own that calendar — otherwise they could drop an event
+    // into someone else's calendar via a crafted PATCH.
+    if (body.calendarId && body.calendarId !== target.calendarId) {
+      if (!(await ownsCalendar(body.calendarId, user.id))) {
+        return reply.code(403).send({ error: "target_calendar_not_owned" });
+      }
+    }
     const [row] = await db
       .update(schema.events)
       .set({
+        calendarId: body.calendarId ?? undefined,
         summary: body.summary ?? undefined,
         description: body.description ?? undefined,
         location: body.location ?? undefined,

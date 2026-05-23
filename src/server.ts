@@ -202,7 +202,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.6.1" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "0.6.2" }));
 
 // CSP violation report sink. Browsers POST a small JSON document here
 // when something gets blocked by the Content-Security-Policy directives

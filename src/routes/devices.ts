@@ -12,9 +12,15 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import QRCode from "qrcode";
+import { eq } from "drizzle-orm";
+import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
+import { verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
+import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { userIsActive } from "../lib/user_state.js";
+import { issueRefreshToken, signAccessToken } from "../lib/device_tokens.js";
 import {
   initPairing,
   claimPairing,
@@ -93,6 +99,84 @@ export async function deviceRoutes(app: FastifyInstance) {
       refreshToken: result.refreshToken,
       deviceId: result.deviceId,
       userId: result.userId,
+    });
+  });
+
+  // -------- password login (alternative to QR pairing) --------
+  // For users who'd rather type email+password than scan a QR. Same
+  // safeguards as the web login flow:
+  //   - Disabled-account check
+  //   - Login lockout (15min after 5 failures)
+  //   - Timing-safe verify so non-existent emails don't leak
+  // Refuses when MFA is enabled — we don't expose a phone-typed TOTP
+  // path yet; users with MFA must use QR pairing (where they're
+  // already authenticated on the web with MFA satisfied).
+  app.post("/auth/login-password", { config: { rateLimit: { max: 6, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply))) return;
+    const body = z.object({
+      email: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
+      password: z.string().min(1).max(200),
+      label: z.string().min(1).max(60),
+      kind: z.enum(["ios", "android", "desktop", "other"]).default("other"),
+      appVersion: z.string().max(40).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
+    if (!user) {
+      // Burn the same bcrypt CPU as a real verify so the response time
+      // doesn't leak whether the email is registered.
+      await verifyPasswordTimingSafe(body.data.password);
+      return reply.code(401).send({ error: "invalid_credentials" });
+    }
+    if (!userIsActive(user)) {
+      return reply.code(403).send({ error: "account_disabled" });
+    }
+    if (isLocked(user)) {
+      return reply.code(429).send({ error: "account_locked", message: "登录失败次数过多，请稍后再试" });
+    }
+    if (!(await verifyPassword(body.data.password, user.passwordHash))) {
+      await recordFailedLogin(user);
+      return reply.code(401).send({ error: "invalid_credentials" });
+    }
+    await resetFailedLogin(user.id);
+
+    // MFA gate — refuse password login when MFA is on. The user has to
+    // do QR pairing instead (where they sign in with MFA on the web).
+    // We don't surface TOTP-on-phone yet; can add a later iteration if
+    // there's demand.
+    if (user.mfaEnabled) {
+      return reply.code(412).send({
+        error: "mfa_required",
+        message: "你的账号开启了二次验证。请改用「扫码登录」：在网页 /app/settings 里点「绑定新设备」",
+      });
+    }
+
+    // Create the device row + tokens.
+    const refresh = await issueRefreshToken();
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+    const [device] = await db.insert(schema.devices).values({
+      userId: user.id,
+      label: body.data.label.trim(),
+      kind: body.data.kind,
+      refreshTokenHash: refresh.hash,
+      refreshTokenPrefix: refresh.prefix,
+      appVersion: body.data.appVersion ?? null,
+      firstSeenIp: req.ip,
+      firstUserAgent: ua,
+      lastSeenAt: new Date(),
+      lastSeenIp: req.ip,
+    }).returning();
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+    return reply.send({
+      accessToken: access.token,
+      accessTokenExpiresAt: access.expiresAt.toISOString(),
+      refreshToken: refresh.plain,
+      deviceId: device.id,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.displayName,
     });
   });
 
