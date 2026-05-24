@@ -62,6 +62,8 @@ struct EventEditView: View {
     // tz; "(默认)" in the picker means "don't send any" → server uses the
     // calendar's stored tz (Asia/Shanghai by default).
     @State private var timezone: String = TimeZone.current.identifier
+    // v1.3.3 — Meeting/document URL, stored at extra.url server-side.
+    @State private var url: String = ""
     // attendees are no longer collected here — see AttendeesPage which
     // appears as a NavigationLink ONLY for already-saved events. Matches
     // the web flow ("保存事件后会出现「管理参与者」入口").
@@ -114,6 +116,12 @@ struct EventEditView: View {
             // AttendeesPage which fetches them fresh each open.
             if let tz = e.extra?.timezone, !tz.isEmpty {
                 _timezone = State(initialValue: tz)
+            }
+            // Preload URL from extra. Existing events created on the web
+            // (where the link field has been live for a while) will have
+            // this populated; new iOS-created events start empty.
+            if let storedURL = e.extra?.url, !storedURL.isEmpty {
+                _url = State(initialValue: storedURL)
             }
         } else {
             // Sensible default for "new event": next half-hour, 60min
@@ -228,6 +236,18 @@ struct EventEditView: View {
                     .lineLimit(3...8)
             }
 
+            // v1.3.3 — separate URL field, matches the web event-editor's
+            // 「链接」row. Stored at extra.url JSON-side. Surfaced in
+            // EventDetailView as a tappable link.
+            Section {
+                TextField("https://… (会议链接 / 文档地址等)", text: $url)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+            } header: {
+                Text("链接")
+            }
+
             if let errorMessage {
                 Section {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
@@ -334,8 +354,10 @@ struct EventEditView: View {
     /// managed via AttendeesPage's own endpoints — not touched here.
     private func buildExtra() -> EventExtra? {
         let tz = allDay ? nil : (timezone.isEmpty ? nil : timezone)
-        if tz == nil { return nil }
-        return EventExtra(timezone: tz, attendees: nil, category: nil)
+        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let urlValue = trimmedURL.isEmpty ? nil : trimmedURL
+        if tz == nil && urlValue == nil { return nil }
+        return EventExtra(timezone: tz, attendees: nil, category: nil, url: urlValue)
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is

@@ -38,6 +38,10 @@ struct EventExtraDTO: Codable, Hashable {
     let timezone: String?
     let attendees: [String]?
     let category: String?
+    // v1.3.3 — Meeting/document link, e.g. Zoom URL. Same JSONB field
+    // the web event-editor writes to via `name="url"`. Optional so old
+    // events (and other clients) decode cleanly.
+    let url: String?
 }
 
 // The /api/v1/events endpoint returns { calendars: [...], events: [...] }.
@@ -55,11 +59,13 @@ struct EventExtra: Encodable {
     let timezone: String?
     let attendees: [String]?
     let category: String?
+    let url: String?
 
     var isEmpty: Bool {
         (timezone?.isEmpty ?? true)
             && (attendees?.isEmpty ?? true)
             && (category?.isEmpty ?? true)
+            && (url?.isEmpty ?? true)
     }
 }
 

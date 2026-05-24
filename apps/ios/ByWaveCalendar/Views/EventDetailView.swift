@@ -99,6 +99,34 @@ struct EventDetailView: View {
                 }
             }
 
+            // Link (v1.3.3) — extra.url, set on the web event-editor's
+            // 「链接」row or in iOS EventEditView. Surfaced here as a
+            // tappable Link so users can launch a Zoom call / open a
+            // shared doc straight from the event without copy/paste.
+            // Only shown when the URL looks well-formed; bad data is
+            // skipped silently so an old garbage value doesn't crash.
+            if let urlString = current.extra?.url,
+               !urlString.isEmpty,
+               let parsedURL = URL(string: urlString) {
+                Section("链接") {
+                    Link(destination: parsedURL) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "link")
+                                .foregroundStyle(.tint)
+                            Text(urlString)
+                                .foregroundStyle(.tint)
+                                .lineLimit(2)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Image(systemName: "arrow.up.right.square")
+                                .font(.footnote)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .accessibilityLabel(Text("打开链接 \(urlString)"))
+                }
+            }
+
             // Attendees (v1.3.2) — EventDetailView used to skip this
             // section entirely. Events created on the web with invitees
             // would land here with current.extra.attendees populated, but

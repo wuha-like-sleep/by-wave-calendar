@@ -152,6 +152,9 @@
 "全天" = "All day";
 "地点" = "Location";
 "备注" = "Notes";
+"链接" = "Link";
+"https://… (会议链接 / 文档地址等)" = "https://… (meeting link / document URL)";
+"打开链接 %@" = "Open link %@";
 "可选" = "Optional";
 "邀请人" = "Attendees";
 "管理参与者" = "Manage attendees";

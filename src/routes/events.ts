@@ -19,6 +19,22 @@ const extraSchema = z.object({
   category: z.string().max(50).optional(),
   timezone: z.string().max(100).optional(),
   attendees: z.array(z.string().email().max(254)).max(50).optional(),
+  // v1.3.3 — `url` field for meeting/doc link (separate from `description`).
+  // The web event-editor form has had this input forever, and the web JS
+  // even includes it in the POST body, but Zod's default `strip` was
+  // silently dropping it on the server because the schema didn't list
+  // it. Result: link saved → forgotten → user thinks the field is broken.
+  url: z.string().url().max(2000).optional(),
+  // Web event-editor reminder block — array of { trigger, action,
+  // description }. Same "silently stripped" story as `url` above. We
+  // don't deeply validate the alarm shape here (CalDAV/.ics has a much
+  // richer schema and the web only emits a narrow subset); just accept
+  // an array of objects under the limit and round-trip through JSONB.
+  alarms: z.array(z.object({
+    trigger: z.string().max(50),
+    action: z.string().max(20).optional(),
+    description: z.string().max(500).optional(),
+  })).max(8).optional(),
 }).optional();
 
 const createSchema = z.object({
