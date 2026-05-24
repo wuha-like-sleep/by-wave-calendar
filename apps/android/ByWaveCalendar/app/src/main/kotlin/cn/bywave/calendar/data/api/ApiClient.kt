@@ -14,6 +14,9 @@ package cn.bywave.calendar.data.api
 
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.data.auth.TokenStore
+import cn.bywave.calendar.data.model.EventCreateInput
+import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.EventsResponse
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
@@ -29,8 +32,11 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
@@ -46,6 +52,18 @@ interface BywaveApi {
         @Query("from") from: String,
         @Query("to") to: String,
     ): EventsResponse
+
+    @POST("api/v1/events")
+    suspend fun createEvent(@Body body: EventCreateInput): EventDTO
+
+    @PATCH("api/v1/events/{id}")
+    suspend fun updateEvent(
+        @Path("id") id: String,
+        @Body body: EventUpdateInput,
+    ): EventDTO
+
+    @DELETE("api/v1/events/{id}")
+    suspend fun deleteEvent(@Path("id") id: String)
 }
 
 class ApiClient private constructor(

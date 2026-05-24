@@ -45,5 +45,36 @@
     <string name="settings_account">账号</string>
     <string name="settings_about">关于</string>
     <string name="settings_signout">退出登录</string>
+    <string name="settings_signout_confirm">退出后本机日历缓存会清空，下次需要重新登录。</string>
     <string name="settings_version">版本 %1$s</string>
+    <string name="settings_server">服务器</string>
+    <string name="settings_email">邮箱</string>
+    <string name="settings_language">语言</string>
+    <string name="settings_privacy">隐私政策</string>
+    <string name="settings_terms">使用条款</string>
+    <string name="settings_support">技术支持</string>
+    <string name="settings_github">GitHub 仓库</string>
+
+    <!-- Event edit -->
+    <string name="event_new">新建事件</string>
+    <string name="event_edit">编辑事件</string>
+    <string name="event_summary">标题</string>
+    <string name="event_summary_hint">事件标题</string>
+    <string name="event_calendar">日历</string>
+    <string name="event_allday">全天</string>
+    <string name="event_start">开始</string>
+    <string name="event_end">结束</string>
+    <string name="event_location">地点</string>
+    <string name="event_location_hint">可选 — 例如 上海 / Zoom 会议室</string>
+    <string name="event_link">链接</string>
+    <string name="event_link_hint">https://… (会议链接 / 文档地址等)</string>
+    <string name="event_description">备注</string>
+    <string name="event_description_hint">议程、要点、注意事项……</string>
+    <string name="event_delete_confirm_title">删除事件？</string>
+    <string name="event_delete_confirm_message">此操作不可恢复。</string>
+
+    <!-- Scanner -->
+    <string name="scan_hint">将二维码放入框内 — 自动识别</string>
+    <string name="scan_no_camera_permission">没有相机权限</string>
+    <string name="scan_grant_permission">授权</string>
 </resources>

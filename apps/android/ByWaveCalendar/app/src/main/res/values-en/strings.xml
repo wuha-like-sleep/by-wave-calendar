@@ -44,5 +44,34 @@ to match the development locale.
     <string name="settings_account">Account</string>
     <string name="settings_about">About</string>
     <string name="settings_signout">Sign out</string>
+    <string name="settings_signout_confirm">Signing out clears local cache. You\'ll need to sign in again next time.</string>
     <string name="settings_version">Version %1$s</string>
+    <string name="settings_server">Server</string>
+    <string name="settings_email">Email</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_privacy">Privacy Policy</string>
+    <string name="settings_terms">Terms of Service</string>
+    <string name="settings_support">Support</string>
+    <string name="settings_github">GitHub Repository</string>
+
+    <string name="event_new">New event</string>
+    <string name="event_edit">Edit event</string>
+    <string name="event_summary">Title</string>
+    <string name="event_summary_hint">Event title</string>
+    <string name="event_calendar">Calendar</string>
+    <string name="event_allday">All day</string>
+    <string name="event_start">Starts</string>
+    <string name="event_end">Ends</string>
+    <string name="event_location">Location</string>
+    <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
+    <string name="event_link">Link</string>
+    <string name="event_link_hint">https://… (meeting link / document URL)</string>
+    <string name="event_description">Notes</string>
+    <string name="event_description_hint">Agenda, takeaways, notes…</string>
+    <string name="event_delete_confirm_title">Delete event?</string>
+    <string name="event_delete_confirm_message">This cannot be undone.</string>
+
+    <string name="scan_hint">Frame the QR — scan starts automatically</string>
+    <string name="scan_no_camera_permission">Camera permission required</string>
+    <string name="scan_grant_permission">Grant</string>
 </resources>

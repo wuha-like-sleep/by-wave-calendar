@@ -1,9 +1,11 @@
-// Top-level calendar screen. Owns the view-mode tabs (Day / Week /
-// Month), the navigation bar (prev / today / next + refresh), and
-// dispatches to the appropriate sub-view. Tapping an event opens
-// EventDetailSheet as a modal bottom sheet.
+// Top-level calendar screen. View-mode tabs (Day/Week/Month) + nav
+// bar (prev / today / next + refresh + settings) + FAB to create
+// events. Event tap opens EventDetailSheet; "edit" from there →
+// EventEditScreen; FAB → EventEditScreen in create mode.
 //
-// Mirrors iOS CalendarView's role (NavigationStack + Picker + contentForMode).
+// Navigation between detail sheet and edit screen / settings is owned
+// by the parent (MainActivity NavHost) via callbacks; CalendarScreen
+// stays declarative.
 
 package cn.bywave.calendar.ui.calendar
 
@@ -18,14 +20,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +43,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,19 +55,20 @@ import cn.bywave.calendar.ui.event.EventDetailSheet
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
-    onSignOut: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onCreateEvent: () -> Unit,
+    onEditEvent: (EventDTO) -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
-    var showSignOutDialog by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("日历") },
                 navigationIcon = {
-                    IconButton(onClick = { showSignOutDialog = true }) {
+                    IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "设置")
                     }
                 },
@@ -75,6 +78,11 @@ fun CalendarScreen(
                     }
                 },
             )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onCreateEvent) {
+                Icon(Icons.Default.Add, contentDescription = "新建事件")
+            }
         },
     ) { innerPadding ->
         CalendarBody(
@@ -99,23 +107,9 @@ fun CalendarScreen(
             event = ev,
             calendars = state.calendars,
             onDismiss = { selectedEvent = null },
-        )
-    }
-
-    if (showSignOutDialog) {
-        AlertDialog(
-            onDismissRequest = { showSignOutDialog = false },
-            title = { Text("退出登录") },
-            text = { Text("退出后本机日历缓存会清空，下次需要重新登录。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSignOutDialog = false
-                    vm.signOut()
-                    onSignOut()
-                }) { Text("退出") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignOutDialog = false }) { Text("取消") }
+            onEdit = {
+                selectedEvent = null
+                onEditEvent(ev)
             },
         )
     }
@@ -179,7 +173,6 @@ private fun CalendarBody(
             }
         }
 
-        // Sync status / error
         val statusText = when {
             state.loading -> "同步中…"
             state.errorMessage != null -> state.errorMessage
@@ -196,7 +189,6 @@ private fun CalendarBody(
 
         Spacer(Modifier.size(4.dp))
 
-        // Dispatch to the right view
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             if (state.loading && state.events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

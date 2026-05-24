@@ -40,6 +40,39 @@ class SetupViewModel : ViewModel() {
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
 
+    /**
+     * Consume a `bywave://pair?...` URL scanned from the server's
+     * "Pair new device" QR. We trade the one-time pair code for a
+     * refresh token via /api/v1/devices/pair, then save credentials
+     * exactly like the email/password path.
+     *
+     * v0.3: only fills the server URL + email and asks the user to
+     * type their password. v0.4 will redeem the pair code directly.
+     */
+    fun onScanned(raw: String) {
+        val parsed = parsePairUrl(raw) ?: run {
+            _state.update { it.copy(errorMessage = "二维码格式不正确") }
+            return
+        }
+        _state.update {
+            it.copy(
+                server = parsed.server,
+                email = parsed.email,
+                errorMessage = null,
+            )
+        }
+    }
+
+    private data class PairPayload(val server: String, val email: String)
+
+    private fun parsePairUrl(raw: String): PairPayload? {
+        if (!raw.startsWith("bywave://", ignoreCase = true)) return null
+        val uri = runCatching { android.net.Uri.parse(raw) }.getOrNull() ?: return null
+        val server = uri.getQueryParameter("server") ?: return null
+        val email = uri.getQueryParameter("email").orEmpty()
+        return PairPayload(server = server, email = email)
+    }
+
     fun signIn() {
         val s = _state.value
         if (!s.canSubmit) return

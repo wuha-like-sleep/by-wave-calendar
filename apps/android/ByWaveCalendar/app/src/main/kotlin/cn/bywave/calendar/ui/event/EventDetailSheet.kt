@@ -34,10 +34,14 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -64,13 +68,14 @@ fun EventDetailSheet(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        EventDetailContent(event = event, calendars = calendars)
+        EventDetailContent(event = event, calendars = calendars, onEdit = onEdit)
     }
 }
 
@@ -78,6 +83,7 @@ fun EventDetailSheet(
 private fun EventDetailContent(
     event: EventDTO,
     calendars: List<CalendarMeta>,
+    onEdit: () -> Unit,
 ) {
     val context = LocalContext.current
     val color = calendarColor(event, calendars)
@@ -227,6 +233,18 @@ private fun EventDetailContent(
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
+        }
+
+        // Edit button — full-width, leads into EventEditScreen which
+        // ALSO contains the delete action (mirrors iOS — single screen
+        // for the edit + delete flow).
+        Button(
+            onClick = onEdit,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null)
+            Spacer(Modifier.size(8.dp))
+            Text("编辑")
         }
 
         Spacer(Modifier.height(8.dp))

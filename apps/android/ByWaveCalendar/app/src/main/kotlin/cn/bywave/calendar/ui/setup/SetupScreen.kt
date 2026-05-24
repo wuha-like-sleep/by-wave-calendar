@@ -40,6 +40,7 @@ import cn.bywave.calendar.R
 @Composable
 fun SetupScreen(
     onSignedIn: () -> Unit,
+    onScanQr: () -> Unit,
     vm: SetupViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -58,6 +59,7 @@ fun SetupScreen(
             onEmailChange = vm::onEmailChange,
             onPasswordChange = vm::onPasswordChange,
             onSignIn = vm::signIn,
+            onScanQr = onScanQr,
         )
     }
 }
@@ -70,6 +72,7 @@ private fun SetupContent(
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onSignIn: () -> Unit,
+    onScanQr: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -155,14 +158,23 @@ private fun SetupContent(
         }
 
         Spacer(Modifier.height(8.dp))
-        // QR scan slot for v0.2 — disabled now so the button is
-        // visible but doesn't lie about working. Same hint copy as iOS.
+
+        // QR scan (v0.3) — opens ScannerScreen, which on success fills
+        // server URL + email into the form so the user just types
+        // their password.
+        androidx.compose.material3.OutlinedButton(
+            onClick = onScanQr,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            enabled = !state.busy,
+        ) {
+            Text(stringResource(R.string.setup_qr_scan))
+        }
         Text(
             text = stringResource(R.string.setup_qr_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
     }
 }
