@@ -150,6 +150,41 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
+  // Public landing for app downloads — iOS App Store + Android APK +
+  // browser fallback. Linked from the footer + landing hero + GitHub
+  // / Gitee READMEs. URLs below are surfaced as locals so a single-line
+  // edit here is the only thing needed when we cut a new release.
+  //
+  // Empty strings render the "not yet available" placeholder branches
+  // in the template; non-empty strings switch to active download
+  // buttons. Don't conditionally include the keys — the template reads
+  // them with `<%= varName %>` which would print "undefined" on missing.
+  app.get("/download", async (req, reply) => {
+    const settings = await getSettings();
+    return reply.view("download", {
+      title: "下载",
+      user: await loadUserFromRequest(req),
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      siteName: settings.siteName || "ByWave Calendar",
+      // iOS — placeholder until App Store approval lands. Replace with
+      // the real App Store URL (https://apps.apple.com/cn/app/…/idNNNN)
+      // once Apple Review approves the v1.3.3 build we submitted.
+      iosVersion: "1.3.3",
+      iosAppStoreUrl: "",
+      iosEtaWeek: "本周内",
+      // Android — APK URL is the latest GitHub Release asset. We can
+      // point to a stable "latest" URL via GitHub's redirect; when we
+      // tag v0.1.0 + attach the signed APK it becomes the active link.
+      androidVersion: "0.1.0",
+      androidApkUrl: "",
+      androidApkSize: "~15 MB",
+      androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
+      androidApkGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
+      androidEtaWeek: "本月内",
+    });
+  });
+
   // Public-facing support / help page. Required for App Store
   // submission — Apple wants a working Support URL that doesn't 404
   // and lets users contact us without an account. Also linked from
