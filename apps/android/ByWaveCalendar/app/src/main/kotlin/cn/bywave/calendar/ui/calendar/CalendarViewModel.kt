@@ -1,7 +1,13 @@
-// Owns the events list + selected day. v0.1 keeps it simple: fetch the
-// current day's events from the server every time the day changes or
-// the user pulls to refresh. v0.2 will add Room cache + 15-month wide
-// window (mirror of iOS CalendarView's v1.2.1 fix).
+// v0.2: adds view mode (Day/Week/Month) + 15-month wide-window fetch.
+//
+// We learn from iOS v1.2.1 here: a "fetch the events for the visible
+// week" approach causes inconsistencies when switching modes (week
+// fetch missed events that day fetch had). Always pull a wide window
+// (-2 / +13 months around anchor) and filter locally per view.
+//
+// `events` is the wide cache. `eventsForAnchor(mode)` slices it for the
+// current view: Day → single day filter, Week → 7 days, Month → 42-day
+// grid window.
 
 package cn.bywave.calendar.ui.calendar
 
@@ -18,16 +24,25 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
+
+enum class ViewMode { Day, Week, Month }
 
 data class CalendarUiState(
+    val mode: ViewMode = ViewMode.Day,
     val anchor: LocalDate = LocalDate.now(),
     val loading: Boolean = false,
     val events: List<EventDTO> = emptyList(),
     val calendars: List<CalendarMeta> = emptyList(),
     val errorMessage: String? = null,
     val lastSyncedAt: Instant? = null,
+    /** Window currently covered by `events`. Used to decide whether
+     *  an anchor change needs a refetch. */
+    val fetchedFrom: LocalDate? = null,
+    val fetchedTo: LocalDate? = null,
 )
 
 class CalendarViewModel : ViewModel() {
@@ -37,32 +52,89 @@ class CalendarViewModel : ViewModel() {
 
     init { load() }
 
-    fun load() {
+    fun setMode(mode: ViewMode) {
+        _state.update { it.copy(mode = mode) }
+        // No fetch — mode change is pure local filtering since v0.2
+        // (same trade-off iOS v1.2.1 made).
+    }
+
+    fun setAnchor(date: LocalDate) {
+        _state.update { it.copy(anchor = date) }
+        if (anchorOutsideCachedWindow(date)) load()
+    }
+
+    fun shiftAnchor(units: Long) {
+        val s = _state.value
+        val next = when (s.mode) {
+            ViewMode.Day -> s.anchor.plusDays(units)
+            ViewMode.Week -> s.anchor.plusWeeks(units)
+            ViewMode.Month -> s.anchor.plusMonths(units)
+        }
+        setAnchor(next)
+    }
+
+    fun goToday() = setAnchor(LocalDate.now())
+
+    /** Force a fetch even if anchor is inside the cached window
+     *  (pull-to-refresh + post-edit reload). */
+    fun reload() = load()
+
+    /** Sign-out hook — called from CalendarScreen's settings menu. */
+    fun signOut() {
+        tokens.signOut()
+        ApiClient.reset()
+    }
+
+    // ---- Filtering for each view ----
+
+    fun eventsForDay(day: LocalDate): List<EventDTO> =
+        _state.value.events
+            .filter { eventOnDay(it, day) }
+            .sortedBy { it.startsAt }
+
+    fun eventsForWeek(weekStart: LocalDate): Map<LocalDate, List<EventDTO>> {
+        val byDay = mutableMapOf<LocalDate, MutableList<EventDTO>>()
+        val days = (0L..6L).map { weekStart.plusDays(it) }
+        for (day in days) byDay[day] = mutableListOf()
+        for (e in _state.value.events) {
+            for (day in days) if (eventOnDay(e, day)) byDay[day]!!.add(e)
+        }
+        for ((_, list) in byDay) list.sortBy { it.startsAt }
+        return byDay
+    }
+
+    // ---- Fetch ----
+
+    private fun load() {
         val server = tokens.serverUrl ?: run {
             _state.update { it.copy(errorMessage = "未登录") }
             return
         }
         _state.update { it.copy(loading = true, errorMessage = null) }
+
         viewModelScope.launch {
             try {
-                val client = ApiClient.forServer(server, tokens)
-                val anchor = _state.value.anchor
-                // Fetch a 3-day window centered on anchor to cover
-                // multi-day events that bleed into "today" from the
-                // edges. v0.2 will widen this to 15 months.
                 val zone = ZoneId.systemDefault()
-                val from = anchor.minusDays(1).atStartOfDay(zone).toInstant()
-                val to = anchor.plusDays(2).atStartOfDay(zone).toInstant().minusNanos(1)
-                val fromIso = ISO_WITH_OFFSET.format(from.atZone(zone))
-                val toIso = ISO_WITH_OFFSET.format(to.atZone(zone))
+                val anchor = _state.value.anchor
+                val from = anchor.minusMonths(WINDOW_MONTHS_BACK)
+                val to = anchor.plusMonths(WINDOW_MONTHS_FORWARD)
+                val fromInstant = from.atStartOfDay(zone).toInstant()
+                val toInstant = to.plusDays(1).atStartOfDay(zone).toInstant().minusNanos(1)
 
-                val resp = client.api.events(from = fromIso, to = toIso)
+                val client = ApiClient.forServer(server, tokens)
+                val resp = client.api.events(
+                    from = ISO.format(fromInstant.atZone(zone)),
+                    to = ISO.format(toInstant.atZone(zone)),
+                )
+
                 _state.update {
                     it.copy(
                         loading = false,
                         events = resp.events,
                         calendars = resp.calendars,
                         lastSyncedAt = Instant.now(),
+                        fetchedFrom = from,
+                        fetchedTo = to,
                     )
                 }
             } catch (e: Exception) {
@@ -76,33 +148,32 @@ class CalendarViewModel : ViewModel() {
         }
     }
 
-    fun shiftAnchor(daysOffset: Long) {
-        _state.update { it.copy(anchor = it.anchor.plusDays(daysOffset)) }
-        load()
-    }
-
-    fun goToday() {
-        _state.update { it.copy(anchor = LocalDate.now()) }
-        load()
-    }
-
-    /** Events that touch the currently-anchored day. Same filter shape
-     *  iOS DayView uses: startsAt < endOfDay && endsAt > startOfDay. */
-    fun eventsForAnchor(): List<EventDTO> {
-        val zone = ZoneId.systemDefault()
-        val day = _state.value.anchor
-        val startOfDay = day.atStartOfDay(zone).toInstant()
-        val endOfDay = day.plusDays(1).atStartOfDay(zone).toInstant()
-        return _state.value.events.filter { e ->
-            val s = runCatching { Instant.parse(e.startsAt) }.getOrNull() ?: return@filter false
-            val ed = runCatching { Instant.parse(e.endsAt) }.getOrNull() ?: return@filter false
-            s.isBefore(endOfDay) && ed.isAfter(startOfDay)
-        }.sortedBy { it.startsAt }
+    private fun anchorOutsideCachedWindow(date: LocalDate): Boolean {
+        val from = _state.value.fetchedFrom ?: return true
+        val to = _state.value.fetchedTo ?: return true
+        // 2-week safety margin — refetch BEFORE the visible edge hits
+        // the cached boundary (so swiping is instant when in range).
+        val marginDays = 14L
+        return date.isBefore(from.plusDays(marginDays)) || date.isAfter(to.minusDays(marginDays))
     }
 
     private companion object {
-        // "2026-05-24T00:00:00+08:00" — matches what the server's
-        // datetime({ offset: true }) Zod validator accepts.
-        val ISO_WITH_OFFSET: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        const val WINDOW_MONTHS_BACK = 2L
+        const val WINDOW_MONTHS_FORWARD = 13L
+        val ISO: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
     }
+}
+
+// ---- Helpers used outside the VM too ----
+
+/** First-cell day of the 6×7 month grid (Mon-first), which may dip into
+ *  the previous month if the 1st isn't a Monday. */
+internal fun monthGridStart(month: YearMonth): LocalDate {
+    val first = month.atDay(1)
+    return first.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))
+}
+
+internal fun monthGridDays(month: YearMonth): List<LocalDate> {
+    val start = monthGridStart(month)
+    return (0L until 42L).map { start.plusDays(it) }
 }
