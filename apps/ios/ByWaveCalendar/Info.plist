@@ -13,10 +13,12 @@
 			</array>
 		</dict>
 	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
+	<!--
+	UIBackgroundModes with remote-notification was removed for App Store
+	v1.3.3 because aps-environment entitlement was also removed (server
+	isn't sending APNs pushes yet). Re-add both together when re-enabling
+	push. See ByWaveCalendar.entitlements for the full toggle checklist.
+	-->
 	<!--
 	Languages this APP ships translations for. Required for iOS 16+ to
 	expose the per-app language picker in Settings → ByWaveCalendar →

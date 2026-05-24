@@ -3,19 +3,18 @@
 <plist version="1.0">
 <dict>
     <!--
-    Push Notifications entitlement. Without this, APNs registration
-    fails with the error "未找到应用程序的 aps-environment 的授权字符串".
+    Empty entitlements — APNs push capability removed for v1.3.3 App
+    Store submission because the server isn't actually sending pushes
+    (no APNs cert configured) and an unused capability invites reviewer
+    questions. PushService.swift stays in place but its
+    registerForRemoteNotifications call will now no-op via
+    didFailToRegisterForRemoteNotificationsWithError — graceful.
 
-    "development" works for both Xcode debug builds (real device or
-    iOS 16+ simulator on Apple Silicon) and ad-hoc / TestFlight builds.
-    For App Store submission Xcode will auto-promote to "production"
-    based on the provisioning profile, so no separate Release-only
-    entitlements file is needed.
-
-    The app uses silent (content-available) pushes only — no alert /
-    badge / sound permission required from the user at runtime.
+    To re-enable later:
+      - add back <key>aps-environment</key> with value "production"
+      - re-tick "Push Notifications" on the App ID at
+        developer.apple.com → Identifiers
+      - restore UIBackgroundModes remote-notification in Info.plist
     -->
-    <key>aps-environment</key>
-    <string>development</string>
 </dict>
 </plist>
