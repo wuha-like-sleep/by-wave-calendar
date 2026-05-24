@@ -60,6 +60,10 @@ struct WeekView: View {
         // the time grid stuck at the bottom (which is exactly the bug
         // user reported in the v0.7.6 screenshot).
         VStack(spacing: 0) {
+            // v1.3.2 DIAGNOSTIC — surfaces "why is week view empty?" data
+            // in-app instead of needing Xcode logs. Remove once the
+            // sync bug is resolved.
+            diagnosticBanner
             headerRow
             if !allDayEvents.isEmpty { allDayRow }
             ScrollViewReader { proxy in
@@ -139,6 +143,32 @@ struct WeekView: View {
         } message: {
             Text(moveErrorMessage ?? "")
         }
+    }
+
+    // MARK: - Diagnostic banner (v1.3.2, temporary)
+    // Surfaces the data the week-view rendering decisions hinge on so we
+    // can tell from a screenshot whether the bug is "events empty" or
+    // "events present but mis-positioned". Will be removed once the
+    // iOS week-view-missing-events bug is resolved.
+    private var diagnosticBanner: some View {
+        let f = DateFormatter()
+        f.dateFormat = "MM/dd HH:mm"
+        f.timeZone = TimeZone.current
+        let firstStr: String = {
+            if let d = timedEvents.first?.startsAt { return f.string(from: d) }
+            return "—"
+        }()
+        let weekStartStr = f.string(from: weekStart)
+        let lastDayStr: String = {
+            if let d = dayStarts.last { return f.string(from: d) }
+            return "—"
+        }()
+        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)")
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.yellow.opacity(0.12))
     }
 
     // MARK: - Header (weekday labels + date numbers)
