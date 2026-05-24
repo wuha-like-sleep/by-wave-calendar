@@ -297,6 +297,26 @@ struct WeekView: View {
     }
 
     // MARK: - Event layer (positions all timed events)
+    //
+    // v1.3.2 BUGFIX — the inner ZStack used to be sized by its largest
+    // child's natural frame (~ 52 × 124 — one tap-cell or one event
+    // rect). All children were then `.offset(x: 244, y: 756)` etc. to
+    // their grid positions. SwiftUI silently culled those rects because
+    // they sit OUTSIDE the ZStack's tiny layout frame — `.offset` does
+    // shift the visual position but the renderer was treating the
+    // offset target area as unreachable. nowLine "worked" only because
+    // its Rectangle was `.frame(width: columnWidth, ...)` which alone
+    // grew the ZStack to (at least) `columnWidth` × 1.5 — wide enough
+    // for the offset target to fall inside, but events still went past
+    // its bottom edge.
+    //
+    // Fix: switch from `.frame() + .offset()` to `.position(x:, y:)`,
+    // which positions children's CENTER at the given point in the
+    // parent's coordinate space. Parent is the GR (full grid 414×1344).
+    // This way SwiftUI knows the children are inside the parent's
+    // rendering area and renders them properly. Cleaner intent too —
+    // we're saying "put this rect at this point", not "lay it out at
+    // 0,0 and shift visually."
     private var eventLayer: some View {
         GeometryReader { geo in
             let columnWidth = (geo.size.width - timeGutterWidth) / 7
@@ -310,9 +330,9 @@ struct WeekView: View {
                         Color.clear
                             .frame(width: columnWidth, height: hourHeight)
                             .contentShape(Rectangle())
-                            .offset(
-                                x: timeGutterWidth + CGFloat(dayIdx) * columnWidth,
-                                y: CGFloat(hour) * hourHeight,
+                            .position(
+                                x: timeGutterWidth + (CGFloat(dayIdx) + 0.5) * columnWidth,
+                                y: (CGFloat(hour) + 0.5) * hourHeight,
                             )
                             .onTapGesture {
                                 guard let firstCal = calendars.first else { return }
@@ -322,9 +342,14 @@ struct WeekView: View {
                     }
                 }
                 ForEach(positionedEvents(width: columnWidth)) { p in
+                    // `.position` anchors the view's CENTER at (x, y).
+                    // positionedEvents emits top-left coords, so add
+                    // half width/height to convert.
                     eventRect(for: p)
+                        .position(x: p.x + p.width / 2, y: p.y + p.height / 2)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -382,7 +407,11 @@ struct WeekView: View {
         }
         .scaleEffect(isDragging && mode == .move ? 1.04 : 1.0)
         .shadow(color: isDragging ? .black.opacity(0.25) : .clear, radius: isDragging ? 8 : 0, y: isDragging ? 4 : 0)
-        .offset(x: p.x + dragDx, y: p.y + dragDy)
+        // Positional offset moved up to the eventLayer's ForEach where we
+        // use `.position(x:y:)` on the whole eventRect. Only the in-drag
+        // dx/dy translation stays here so the drag preview still slides
+        // under the user's finger.
+        .offset(x: dragDx, y: dragDy)
         .zIndex(isDragging ? 100 : 0)
         .animation(.easeOut(duration: 0.12), value: isDragging)
         // Tap = open detail; long-press + drag (on body) = move.
