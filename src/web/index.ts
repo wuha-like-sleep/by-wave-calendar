@@ -134,7 +134,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-23",
+      updatedDate: "2026-05-24",
     });
   });
 
@@ -146,7 +146,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-23",
+      updatedDate: "2026-05-24",
     });
   });
 

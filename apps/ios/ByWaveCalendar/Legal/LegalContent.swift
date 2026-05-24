@@ -13,15 +13,18 @@
 // "the server operator" rather than a specific domain. Self-hosters
 // can update the SERVER-side /privacy + /terms pages to reflect their
 // own operational specifics; the APP's bundled text covers what the
-// APP itself does (cache events on disk, register for APNs, sync to
-// EventKit, etc.) which is identical across every deployment.
+// APP itself does (cache events on disk, sync to EventKit, etc.) which
+// is identical across every deployment.
+//
+// v1.3.3 — APNs push registration removed; APP currently does not
+// subscribe to Apple Push. Privacy text reflects this.
 
 import Foundation
 
 enum LegalContent {
     /// One source of truth — bump on every meaningful change so the
     /// version line at the bottom of each page nudges users to re-read.
-    static let lastUpdated = "2026-05-23"
+    static let lastUpdated = "2026-05-24"
 
     static let privacy: String = """
     # 隐私政策
@@ -40,8 +43,8 @@ enum LegalContent {
     - 把最近一次拉取的日历事件缓存在 APP 的 Documents 目录下，方便离线查看
     - 如果你开启「同步到系统日历」，会把事件镜像到 iOS「日历」APP 的一个子日历里
     - 如果你开启「事件开始前提醒」，会在本机排好 iOS 本地通知队列
-    - 如果你授权推送通知，会向 Apple 推送服务（APNs）注册 device token，并把它上传给你的服务器，\
-      以便服务器在事件变更时给本机发静默推送
+    - 通过定期后台轮询和应用前台刷新从你绑定的服务器拉取最新事件 \
+      （当前版本未使用 Apple Push / APNs；后续启用时会在升级说明里另行公告）
 
     APP 不会把以上任何数据发送给 ByWave Calendar 项目的开发者或任何其它第三方。\
     iCloud Keychain 同步的项目（服务器地址、设备标识符）由 Apple 的端到端加密保护，开发者也无法访问。
@@ -50,7 +53,7 @@ enum LegalContent {
 
     - **相机**：仅用于扫描登录二维码；不录像、不保存照片
     - **日历**：仅当你开启「同步到系统日历」时申请；APP 不会读取你 iOS 日历里已有的事件，只写入
-    - **通知**：仅当你开启「事件开始前提醒」或服务器静默推送时申请
+    - **通知**：仅当你开启「事件开始前提醒」时申请（本机定时本地通知，不走 Apple Push）
 
     所有权限都可以在 iOS 系统设置 → ByWave Calendar 里随时关闭。关闭后 APP 仍能正常使用，\
     只是相应功能（扫码登录 / 系统日历同步 / 提醒）不可用。

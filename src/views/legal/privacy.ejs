@@ -17,7 +17,7 @@
   <h3>1.2 日历内容</h3>
   <ul>
     <li><strong>日历元数据</strong>：日历名、颜色、时区、分享设置。</li>
-    <li><strong>事件</strong>：标题、描述、地点、开始/结束时间、重复规则、与会人 email、提醒（VALARM）。</li>
+    <li><strong>事件</strong>：标题、描述、地点、链接（会议/文档 URL）、开始/结束时间、重复规则、与会人 email、提醒（VALARM）、时区。</li>
     <li><strong>事件邀请</strong>：受邀人 email、RSVP 状态、邀请 token。</li>
     <li><strong>软删除事件</strong>：删除后 90 天内仍保留在数据库中，便于通过"撤销删除"恢复；之后由 cron 物理删除。</li>
   </ul>
@@ -26,7 +26,8 @@
   <ul>
     <li><strong>登录历史</strong>：每次成功登录的时间、IP、User-Agent，用于在「设置 → 我的登录」展示，便于您审计可疑访问。</li>
     <li><strong>会话 cookie</strong>：网页登录后服务器会签发 HttpOnly cookie 以保持登录状态。</li>
-    <li><strong>设备绑定（APP）</strong>：当您把 iOS / Android / 桌面 APP 绑定到服务器时，存储设备名、平台、APP 版本、首次/最近一次连接的 IP + User-Agent、APNs push token（仅 iOS）。</li>
+    <li><strong>设备绑定（APP）</strong>：当您把 iOS / Android / 桌面 APP 绑定到服务器时，存储设备名、平台、APP 版本、首次/最近一次连接的 IP + User-Agent。当前版本 iOS APP 未启用 APNs 推送，不会存储 push token；后续版本若启用会另行更新本说明。</li>
+    <li><strong>多账号档案（iOS APP）</strong>：当您在 iOS APP 中绑定多个服务器时，每个账号档案（服务器地址、邮箱、显示名）独立存储在本机 Keychain 中。这些档案本身不会被同步到服务器；iCloud Keychain 端到端加密可选地同步到您自己的其它 Apple 设备。</li>
     <li><strong>API token / 应用密码</strong>：仅哈希存储，明文只在签发时显示一次。</li>
   </ul>
 
@@ -52,7 +53,7 @@
     <li>账号安全：检测异常登录、风险登录验证、防止暴力破解、停用账号时立即吊销所有 token。</li>
     <li>邮件通知：邀请、取消、提醒、登录提醒、密码重置、二次验证。</li>
     <li>外部集成：当您在 admin 后台配置 Webhook 时，事件变更会推送到您指定的 URL。</li>
-    <li>多设备同步：APP 通过 APNs / 长轮询接收服务器的事件变更，<strong>仅同步您自己的事件</strong>。</li>
+    <li>多设备同步：APP 通过定期后台轮询与应用前台刷新拉取服务器的事件变更，<strong>仅同步您自己的事件</strong>。当前版本未使用推送通道。</li>
   </ul>
 
   <h2>4. 数据存储与安全</h2>
@@ -72,7 +73,6 @@
     <li><strong>日历分享</strong>：您主动生成的订阅链接（ICS / 嵌入 widget）会暴露相应日历的事件，链接持有者均可访问。</li>
     <li><strong>第三方集成</strong>：您在 admin 后台启用的 Webhook / OAuth 应用 / API token 会按您的配置访问您的数据。</li>
     <li><strong>邮件发送</strong>：通过您的 admin 配置的 SMTP 服务器发送。</li>
-    <li><strong>APNs / Apple Push</strong>：iOS APP 的通知通过 Apple 服务器投递；payload 不含具体事件内容，只是"数据已变更"的信号。</li>
     <li><strong>SSO</strong>：当您选择第三方登录（Keycloak、Authelia 等）时，您的邮箱会传给该 IdP 完成身份验证。</li>
   </ul>
 
