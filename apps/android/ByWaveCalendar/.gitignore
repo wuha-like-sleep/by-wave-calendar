@@ -1,0 +1,31 @@
+# Android / Gradle build artifacts — none of this should ever land in
+# git. The wrapper jar/script is regenerated on `gradle wrapper` in
+# Android Studio's first project sync, so we don't commit binaries.
+
+# Built outputs
+build/
+app/build/
+captures/
+
+# Gradle local cache + lock files
+.gradle/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# Gradle wrapper binary — committed by convention but Android Studio
+# will fetch it on sync from the gradle-wrapper.properties URL. We keep
+# the .properties but not the .jar to avoid committing a binary blob.
+gradle/wrapper/gradle-wrapper.jar
+gradlew
+gradlew.bat
+
+# macOS noise
+.DS_Store
+
+# Keystore — NEVER commit signing keys
+*.jks
+*.keystore
+keystore.properties

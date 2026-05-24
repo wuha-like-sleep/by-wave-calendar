@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Internet for API calls. We don't request CHANGE_NETWORK_STATE or
+         ACCESS_NETWORK_STATE because Retrofit + OkHttp don't need them
+         for our use case. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Camera — needed only for the QR scan setup flow. We declare
+         camera as NOT required so devices without a camera can still
+         install the APP and use email/password login. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera"
+                  android:required="false" />
+
+    <!-- Calendar permissions — only needed when user enables "mirror to
+         system calendar" feature. We request at runtime, not on install. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+
+    <!-- Notifications (Android 13+ requires runtime permission). We ask
+         only when user enables "event start reminders" in settings. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".BywaveApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="false"
+        android:theme="@style/Theme.ByWaveCalendar"
+        android:enableOnBackInvokedCallback="true"
+        tools:targetApi="34">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.ByWaveCalendar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode">
+
+            <!-- Standard launcher entry point. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- bywave:// URL scheme — server's pair-device QR codes
+                 deep-link back into the APP via this. Mirrors iOS
+                 CFBundleURLSchemes = "bywave". -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${appAuthRedirectScheme}" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

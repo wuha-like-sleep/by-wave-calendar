@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Visible APP name under the launcher icon. Matches iOS
+         CFBundleDisplayName = "ByWave Calendar". -->
+    <string name="app_name">ByWave Calendar</string>
+
+    <!-- Setup / Login -->
+    <string name="setup_title">登录你的服务器</string>
+    <string name="setup_subtitle">登录你的 ByWave Calendar 服务器，开始同步</string>
+    <string name="setup_server_label">服务器地址</string>
+    <string name="setup_server_hint">https://example.com 或 example.com</string>
+    <string name="setup_email_label">邮箱</string>
+    <string name="setup_email_hint">you@example.com</string>
+    <string name="setup_password_label">密码</string>
+    <string name="setup_signin">登录</string>
+    <string name="setup_signing_in">登录中…</string>
+    <string name="setup_or">或</string>
+    <string name="setup_qr_scan">扫码登录</string>
+    <string name="setup_qr_hint">在网页「设置 → 我的设备 → 绑定新设备」生成二维码，对准它扫一下</string>
+
+    <!-- Calendar -->
+    <string name="calendar_title">日历</string>
+    <string name="calendar_today">今天</string>
+    <string name="calendar_day">日</string>
+    <string name="calendar_week">周</string>
+    <string name="calendar_month">月</string>
+    <string name="calendar_year">年</string>
+    <string name="calendar_no_events_today">今天没有事件</string>
+    <string name="calendar_no_events">无事件</string>
+    <string name="calendar_synced">已同步</string>
+    <string name="calendar_syncing">同步中…</string>
+
+    <!-- Common -->
+    <string name="action_save">保存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_delete">删除</string>
+    <string name="action_done">完成</string>
+    <string name="action_retry">重试</string>
+    <string name="action_close">关闭</string>
+    <string name="error_generic">出错了</string>
+    <string name="error_network">网络错误，请检查连接</string>
+
+    <!-- Settings -->
+    <string name="settings_title">设置</string>
+    <string name="settings_account">账号</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_signout">退出登录</string>
+    <string name="settings_version">版本 %1$s</string>
+</resources>

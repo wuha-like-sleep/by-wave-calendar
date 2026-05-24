@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Auto-backup rules for Android 12+. We turn `android:allowBackup="false"`
+on the application so Android system backup (Google Drive) never picks
+up our encrypted token store — it would be useless on a restore anyway
+since EncryptedSharedPreferences keys are device-bound, and we don't
+want refresh tokens floating into Google's backup system. This file is
+still required to be present per Android 12 lint rules.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+    </device-transfer>
+</data-extraction-rules>

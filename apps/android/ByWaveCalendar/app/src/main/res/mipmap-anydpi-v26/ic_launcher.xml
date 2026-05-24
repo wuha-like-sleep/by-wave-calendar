@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Adaptive icon (Android 8.0+). Launchers compose `background` + `foreground`
+layers and clip to a system-defined shape (circle on Pixel, squircle on
+Samsung, etc). Foreground is the calendar mark; background is a solid
+purple matching the brand accent. The 108dp safe-area means everything
+within the central 66dp is guaranteed to be visible — anything past the
+inner radius might get masked off.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/brand_purple" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

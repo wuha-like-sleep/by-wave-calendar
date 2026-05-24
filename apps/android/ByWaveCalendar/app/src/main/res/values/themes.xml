@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+    Static Material 3 theme used during APP launch (splash) before
+    Compose takes over. The actual runtime UI uses our Kotlin
+    `ByWaveTheme` composable so this file just needs sane defaults to
+    avoid a white flash. We set windowBackground + status bar to the
+    background color from Color.kt for visual continuity.
+    -->
+    <style name="Theme.ByWaveCalendar" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

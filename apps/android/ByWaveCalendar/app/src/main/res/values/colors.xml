@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon background — solid purple matching the iOS icon's
+         gradient midpoint (#6640E9 from sampling the original 1024x1024
+         calendar icon).  Picked for visual continuity across the
+         iOS/Android pair so users running both don't see two different
+         brand colors. -->
+    <color name="brand_purple">#6640E9</color>
+</resources>
