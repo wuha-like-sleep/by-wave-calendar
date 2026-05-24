@@ -99,6 +99,48 @@ struct EventDetailView: View {
                 }
             }
 
+            // Attendees (v1.3.2) — EventDetailView used to skip this
+            // section entirely. Events created on the web with invitees
+            // would land here with current.extra.attendees populated, but
+            // there was nowhere to show them, so users assumed the
+            // invitees weren't synced. Surface count + emails read-only,
+            // and link out to AttendeesPage for add/revoke management
+            // (same path as EventEditView).
+            if let attendees = current.extra?.attendees, !attendees.isEmpty {
+                Section {
+                    NavigationLink {
+                        AttendeesPage(eventId: current.id, eventTitle: current.summary)
+                            .environmentObject(state)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Label("邀请人", systemImage: "person.2.fill")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Text("\(attendees.count) 人")
+                                    .font(.callout).foregroundStyle(.secondary)
+                            }
+                            // Show first 3 emails inline so users don't
+                            // have to drill in for a quick glance.
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(attendees.prefix(3), id: \.self) { email in
+                                    Text(email)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                                if attendees.count > 3 {
+                                    Text("还有 \(attendees.count - 3) 个…")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            .padding(.leading, 28)  // line up under the label text
+                        }
+                    }
+                }
+            }
+
             if let desc = current.description, !desc.isEmpty {
                 Section("描述") {
                     Text(desc)

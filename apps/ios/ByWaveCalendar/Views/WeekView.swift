@@ -60,10 +60,6 @@ struct WeekView: View {
         // the time grid stuck at the bottom (which is exactly the bug
         // user reported in the v0.7.6 screenshot).
         VStack(spacing: 0) {
-            // v1.3.2 DIAGNOSTIC — surfaces "why is week view empty?" data
-            // in-app instead of needing Xcode logs. Remove once the
-            // sync bug is resolved.
-            diagnosticBanner
             headerRow
             if !allDayEvents.isEmpty { allDayRow }
             ScrollViewReader { proxy in
@@ -143,51 +139,6 @@ struct WeekView: View {
         } message: {
             Text(moveErrorMessage ?? "")
         }
-    }
-
-    // MARK: - Diagnostic banner (v1.3.2, temporary)
-    // Surfaces the data the week-view rendering decisions hinge on so we
-    // can tell from a screenshot whether the bug is "events empty" or
-    // "events present but mis-positioned". Will be removed once the
-    // iOS week-view-missing-events bug is resolved.
-    private var diagnosticBanner: some View {
-        let f = DateFormatter()
-        f.dateFormat = "MM/dd HH:mm"
-        f.timeZone = TimeZone.current
-        let firstStr: String = {
-            if let d = timedEvents.first?.startsAt { return f.string(from: d) }
-            return "—"
-        }()
-        let weekStartStr = f.string(from: weekStart)
-        let lastDayStr: String = {
-            if let d = dayStarts.last { return f.string(from: d) }
-            return "—"
-        }()
-        // Recompute the SAME per-day filter positionedEvents uses, so we
-        // can see exactly which (day, count) buckets it produces — and
-        // for the first matched event, where it would render (x, y).
-        let perDayCounts: [(Int, Int)] = {
-            let cal = Calendar.current
-            return dayStarts.enumerated().map { (idx, day) -> (Int, Int) in
-                let dayStart = cal.startOfDay(for: day)
-                let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
-                let n = timedEvents.filter { $0.startsAt < dayEnd && $0.endsAt > dayStart }.count
-                return (idx, n)
-            }
-        }()
-        let bucketStr = perDayCounts.map { "\($0.0):\($0.1)" }.joined(separator: " ")
-        let posCount = positionedEvents(width: 50).count
-        // First PositionedEvent's geometry — surfaces "are x/y/w/h sane?"
-        let firstPosStr: String = {
-            guard let p = positionedEvents(width: 50).first else { return "—" }
-            return String(format: "x=%.0f y=%.0f w=%.0f h=%.0f", p.x, p.y, p.width, p.height)
-        }()
-        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count) pos=\(posCount)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)\nbuckets=\(bucketStr) | p0=\(firstPosStr)")
-            .font(.system(size: 10, design: .monospaced))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.yellow.opacity(0.12))
     }
 
     // MARK: - Header (weekday labels + date numbers)
