@@ -163,7 +163,21 @@ struct WeekView: View {
             if let d = dayStarts.last { return f.string(from: d) }
             return "—"
         }()
-        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)")
+        // Recompute the SAME per-day filter positionedEvents uses, so we
+        // can see exactly which (day, count) buckets it produces — and
+        // for the first matched event, where it would render (x, y).
+        let perDayCounts: [(Int, Int)] = {
+            let cal = Calendar.current
+            return dayStarts.enumerated().map { (idx, day) -> (Int, Int) in
+                let dayStart = cal.startOfDay(for: day)
+                let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
+                let n = timedEvents.filter { $0.startsAt < dayEnd && $0.endsAt > dayStart }.count
+                return (idx, n)
+            }
+        }()
+        let bucketStr = perDayCounts.map { "\($0.0):\($0.1)" }.joined(separator: " ")
+        let posCount = positionedEvents(width: 50).count
+        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count) pos=\(posCount)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)\nbuckets=\(bucketStr)")
             .font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8).padding(.vertical, 4)
