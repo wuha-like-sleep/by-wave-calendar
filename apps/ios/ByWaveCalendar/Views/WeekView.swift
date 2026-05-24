@@ -177,7 +177,12 @@ struct WeekView: View {
         }()
         let bucketStr = perDayCounts.map { "\($0.0):\($0.1)" }.joined(separator: " ")
         let posCount = positionedEvents(width: 50).count
-        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count) pos=\(posCount)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)\nbuckets=\(bucketStr)")
+        // First PositionedEvent's geometry — surfaces "are x/y/w/h sane?"
+        let firstPosStr: String = {
+            guard let p = positionedEvents(width: 50).first else { return "—" }
+            return String(format: "x=%.0f y=%.0f w=%.0f h=%.0f", p.x, p.y, p.width, p.height)
+        }()
+        return Text("DBG: ev=\(events.count) timed=\(timedEvents.count) ad=\(allDayEvents.count) days=\(dayStarts.count) cal=\(calendars.count) pos=\(posCount)\nwk=\(weekStartStr) → \(lastDayStr) · first=\(firstStr)\nbuckets=\(bucketStr) | p0=\(firstPosStr)")
             .font(.system(size: 10, design: .monospaced))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 8).padding(.vertical, 4)
