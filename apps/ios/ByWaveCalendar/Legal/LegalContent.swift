@@ -81,9 +81,10 @@ enum LegalContent {
 
     ## 6. 联系方式
 
-    APP 本身的开源项目仓库：https://github.com/wuha-like-sleep/by-wave-calendar
-
-    具体到你账户里的数据的处理问题，请联系你绑定的那台服务器的管理员。
+    - APP / 软件层面的问题：邮件 info@by-wave.com，或到 \
+      https://github.com/wuha-like-sleep/by-wave-calendar 提 issue
+    - 账户 / 数据 / 服务器层面的问题：联系你绑定的那台服务器的管理员
+    - 通用咨询 / 商务合作：info@by-wave.com（1-3 工作日回复）
 
     ---
 

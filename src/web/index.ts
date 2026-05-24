@@ -150,6 +150,22 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
+  // Public-facing support / help page. Required for App Store
+  // submission — Apple wants a working Support URL that doesn't 404
+  // and lets users contact us without an account. Also linked from
+  // the site footer alongside /privacy and /terms.
+  app.get("/support", async (req, reply) => {
+    const settings = await getSettings();
+    return reply.view("legal/support", {
+      title: "技术支持",
+      user: await loadUserFromRequest(req),
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      siteName: settings.siteName || "ByWave Calendar",
+      updatedDate: "2026-05-24",
+    });
+  });
+
   // -------- Auth pages --------
   app.get("/login", async (req, reply) => {
     const user = await loadUserFromRequest(req);
