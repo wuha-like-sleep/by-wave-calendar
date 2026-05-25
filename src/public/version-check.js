@@ -1,113 +1,164 @@
-// Detect new server version + warn when the page is stuck on a stale
-// cache (server unreachable / SW serving from cache).
+// Silent background update — detects a new server version and reloads
+// the page on the user's behalf at a moment that won't destroy their
+// work. No countdown banner, no "click to refresh" — just appear with
+// the new version next time they look.
 //
-// Two banner states:
-//   "update"  — server has a newer version than this page. Auto-reloads
-//               after a 5s countdown (button to skip the wait). Clears
-//               all caches + unregisters waiting SW before reloading
-//               so the next load isn't poisoned by the old cached files.
-//   "offline" — /api/version has failed 3+ times in a row, meaning the
-//               user is probably staring at a service-worker-cached
-//               page that the server can no longer refresh. Offers an
-//               "强制清缓存重试" button.
+// Reload triggers (first one that hits wins):
+//   1. visibilitychange → hidden  — they switched tab / backgrounded
+//      the APP / locked their phone. Best window: when they come back
+//      they see the new version, and nothing was on screen anyway.
+//   2. Idle ≥ 120s — no mousemove / keydown / touchstart / scroll.
+//      They're not actively working, safe to swap underneath.
+//   3. After 30 min of holding a pending update with no safe window —
+//      show a tiny bottom-right chip "↻ 新版本就绪" they can click.
+//      Last resort to escape an indefinitely-active tab.
 //
-// Polls every 30s when the tab is visible, plus immediately on
-// load / visibilitychange / pageshow. Stops polling when hidden so
-// background tabs don't burn battery.
+// Safety check before any reload: bail (and retry on next trigger) if
+//   - an <input> / <textarea> / contenteditable is focused, OR
+//   - a <dialog> / [role=dialog] / .modal is currently open, OR
+//   - any <form> has data-bwc-dirty="true".
+// We'd rather take 5 more minutes than discard their half-written event.
+//
+// "offline" banner is still useful — when /api/version 3xx-fails in a
+// row, the user is staring at a stale SW cache. We tell them.
 
 (function () {
   "use strict";
   const local = document.documentElement.getAttribute("data-app-version") || "0";
   if (!local || local === "0") return;
 
-  let banner = null;
-  let bannerKind = null;       // "update" | "offline" | null
-  let dismissedFor = null;     // version string the user dismissed
-  let failures = 0;            // consecutive /api/version failures
+  let pendingVersion = null;     // remote version we've decided to reload to
+  let pendingSince = 0;          // ms timestamp when we first noticed it
+  let failures = 0;              // consecutive /api/version failures
   let pollTimer = null;
-  let autoReloadTimer = null;
+  let idleTimer = null;
+  let chipShown = false;
+  let offlineBanner = null;
 
-  // ---- DOM ----
+  const IDLE_MS = 120 * 1000;       // 2 min of no input → safe to reload
+  const POLL_MS = 30 * 1000;        // server probe cadence
+  const CHIP_AFTER_MS = 30 * 60_000; // 30 min of pending → show chip
+  const HIDE_DELAY_MS = 250;        // wait a beat after hidden, in case it's a flicker
 
-  function buildBanner(kind) {
-    removeBanner();
-    bannerKind = kind;
-    banner = document.createElement("div");
-    banner.id = "bwc-update-banner";
-    banner.setAttribute("role", "status");
-    const bg = kind === "update" ? "bg-emerald-600" : "bg-amber-600";
-    banner.className =
-      "fixed top-0 inset-x-0 z-[70] " + bg + " text-white shadow-md " +
-      "px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 text-sm";
-    document.body.appendChild(banner);
-    return banner;
-  }
-  function removeBanner() {
-    if (banner) { banner.remove(); banner = null; bannerKind = null; }
-    if (autoReloadTimer) { clearInterval(autoReloadTimer); autoReloadTimer = null; }
-  }
+  // ---- Safety: is "now" a safe moment to reload? ----
 
-  function showUpdateBanner(remote) {
-    if (bannerKind === "update") return;
-    const b = buildBanner("update");
-    let countdown = 5;
-    b.innerHTML =
-      '<span>🎉 新版本已发布</span>' +
-      '<span id="bwc-countdown" class="text-xs opacity-90">' + countdown + ' 秒后自动刷新</span>' +
-      '<button type="button" data-act="refresh" class="rounded-full bg-white text-emerald-700 px-3 py-0.5 text-xs font-semibold hover:bg-slate-100">立即更新</button>' +
-      '<button type="button" data-act="dismiss" class="text-white/70 hover:text-white text-xs px-1" aria-label="跳过本次">本次跳过</button>';
-    b.querySelector('[data-act="refresh"]').addEventListener("click", function () { doRefresh(); });
-    b.querySelector('[data-act="dismiss"]').addEventListener("click", function () {
-      dismissedFor = remote;
-      removeBanner();
-    });
-    autoReloadTimer = setInterval(function () {
-      countdown--;
-      const el = document.getElementById("bwc-countdown");
-      if (el) el.textContent = countdown + " 秒后自动刷新";
-      if (countdown <= 0) {
-        clearInterval(autoReloadTimer);
-        autoReloadTimer = null;
-        doRefresh();
-      }
-    }, 1000);
+  function isSafeToReload() {
+    const ae = document.activeElement;
+    if (ae) {
+      const tag = ae.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return false;
+      if (ae.isContentEditable) return false;
+    }
+    // Any modal-ish element open? The APP uses `id="modal-*"` containers
+    // that toggle Tailwind's .hidden — when one is visible, the user
+    // is mid-task and we must not yank the page.
+    if (document.querySelector('[id^="modal-"]:not(.hidden)')) return false;
+    if (document.querySelector("dialog[open]")) return false;
+    if (document.querySelector('[role="dialog"]:not([aria-hidden="true"])')) return false;
+    if (document.querySelector(".modal.show, .modal[open], .modal.is-open")) return false;
+    // Forms marked dirty by the APP.
+    if (document.querySelector('form[data-bwc-dirty="true"]')) return false;
+    return true;
   }
 
-  function showOfflineBanner() {
-    if (bannerKind === "offline") return;
-    const b = buildBanner("offline");
-    b.innerHTML =
-      '<span>⚠️ 服务器似乎不可达，你看到的可能是缓存版本</span>' +
-      '<button type="button" data-act="purge" class="rounded-full bg-white text-amber-700 px-3 py-0.5 text-xs font-semibold hover:bg-slate-100">强制清缓存重试</button>' +
-      '<button type="button" data-act="dismiss" class="text-white/70 hover:text-white text-xs px-1" aria-label="忽略">忽略</button>';
-    b.querySelector('[data-act="purge"]').addEventListener("click", function () { doRefresh(); });
-    b.querySelector('[data-act="dismiss"]').addEventListener("click", function () {
-      // Dismiss for this tab session only; next failure will bring it back
-      // if the user reloads or switches tabs.
-      removeBanner();
-    });
-  }
+  // ---- Reload (clears caches + unregisters waiting SW first) ----
 
-  // ---- Action: clear everything, reload ----
-
-  async function doRefresh() {
-    removeBanner();
+  async function doSilentReload() {
+    if (!pendingVersion) return;
     try {
-      // 1) Tell any waiting SW to take over immediately.
       if ("serviceWorker" in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const r of regs) {
           if (r.waiting) r.waiting.postMessage({ type: "SKIP_WAITING" });
         }
       }
-      // 2) Nuke every cache so the next load is fresh from the network.
       if (window.caches) {
         const keys = await caches.keys();
-        await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        await Promise.all(keys.map((k) => caches.delete(k)));
       }
-    } catch (e) { /* ignore */ }
-    // 3) Hard reload bypassing HTTP cache.
+    } catch (_e) { /* ignore — reload regardless */ }
     window.location.reload();
+  }
+
+  function tryReload() {
+    if (!pendingVersion) return false;
+    if (!isSafeToReload()) return false;
+    doSilentReload();
+    return true;
+  }
+
+  // ---- Triggers ----
+
+  function onVisibilityChange() {
+    if (document.hidden && pendingVersion) {
+      // Page just got hidden. Give it a brief moment then reload silently.
+      // The user comes back to the new version with no perceived friction.
+      setTimeout(() => {
+        if (document.hidden) tryReload();
+      }, HIDE_DELAY_MS);
+    }
+  }
+
+  function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!pendingVersion) return;
+    idleTimer = setTimeout(() => {
+      if (pendingVersion) tryReload();
+    }, IDLE_MS);
+  }
+
+  function bindIdleEvents() {
+    const events = ["mousemove", "keydown", "touchstart", "scroll", "click"];
+    for (const e of events) {
+      window.addEventListener(e, resetIdleTimer, { passive: true });
+    }
+  }
+
+  // ---- The "I've been waiting a long time" escape hatch chip ----
+
+  function maybeShowChip() {
+    if (chipShown || !pendingVersion) return;
+    if (Date.now() - pendingSince < CHIP_AFTER_MS) return;
+    chipShown = true;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.id = "bwc-update-chip";
+    chip.className =
+      "fixed bottom-4 right-4 z-[70] rounded-full bg-emerald-600 text-white " +
+      "shadow-lg px-3 py-1.5 text-xs font-medium hover:bg-emerald-700 " +
+      "flex items-center gap-1.5";
+    chip.innerHTML = '<span aria-hidden="true">↻</span><span>新版本就绪</span>';
+    chip.title = "点击刷新到最新版本";
+    chip.addEventListener("click", () => { doSilentReload(); });
+    document.body.appendChild(chip);
+  }
+
+  // ---- Offline banner (unchanged in intent, minor tidy) ----
+
+  function showOfflineBanner() {
+    if (offlineBanner) return;
+    offlineBanner = document.createElement("div");
+    offlineBanner.id = "bwc-offline-banner";
+    offlineBanner.setAttribute("role", "status");
+    offlineBanner.className =
+      "fixed top-0 inset-x-0 z-[70] bg-amber-600 text-white shadow-md " +
+      "px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 text-sm";
+    offlineBanner.innerHTML =
+      '<span>⚠️ 服务器似乎不可达，你看到的可能是缓存版本</span>' +
+      '<button type="button" data-act="purge" class="rounded-full bg-white text-amber-700 px-3 py-0.5 text-xs font-semibold hover:bg-slate-100">强制清缓存重试</button>' +
+      '<button type="button" data-act="dismiss" class="text-white/70 hover:text-white text-xs px-1" aria-label="忽略">忽略</button>';
+    offlineBanner.querySelector('[data-act="purge"]').addEventListener("click", () => {
+      // Same "nuke + reload" path as the silent update, but user-initiated.
+      pendingVersion = pendingVersion || "force";
+      doSilentReload();
+    });
+    offlineBanner.querySelector('[data-act="dismiss"]').addEventListener("click", () => {
+      removeOfflineBanner();
+    });
+    document.body.appendChild(offlineBanner);
+  }
+  function removeOfflineBanner() {
+    if (offlineBanner) { offlineBanner.remove(); offlineBanner = null; }
   }
 
   // ---- Polling ----
@@ -118,33 +169,51 @@
       if (!resp.ok) throw new Error("status " + resp.status);
       const data = await resp.json();
       failures = 0;
-      // Network is back — if we were showing the "offline" banner, drop it.
-      if (bannerKind === "offline") removeBanner();
+      if (offlineBanner) removeOfflineBanner();
       const remote = String(data.version || "");
       if (!remote || remote === local) return;
-      if (remote === dismissedFor) return;
-      showUpdateBanner(remote);
-    } catch (e) {
+      if (remote !== pendingVersion) {
+        // First time we notice this new version.
+        pendingVersion = remote;
+        pendingSince = Date.now();
+        resetIdleTimer();
+      }
+      // Try reloading right now — works if e.g. the user is idle on
+      // a clean view with no modal/input. Most cases will fall through
+      // here and reload on the next visibility/idle trigger instead.
+      tryReload();
+      maybeShowChip();
+    } catch (_e) {
       failures++;
-      if (failures >= 3 && bannerKind !== "update") showOfflineBanner();
+      if (failures >= 3 && !pendingVersion) showOfflineBanner();
     }
   }
 
   function startPolling() {
     if (pollTimer) return;
-    // Run once immediately, then every 30s.
     check();
-    pollTimer = setInterval(check, 30 * 1000);
+    pollTimer = setInterval(check, POLL_MS);
   }
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
-  window.addEventListener("load", startPolling);
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden) stopPolling(); else startPolling();
+  // ---- Wire up ----
+
+  window.addEventListener("load", () => {
+    startPolling();
+    bindIdleEvents();
   });
-  // iOS Safari fires pageshow (not load) when returning from bfcache —
-  // without this we'd miss the version drift after switching apps.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      // Don't keep polling in background tabs (battery), but DO try one
+      // last reload now if we already have a pending version.
+      onVisibilityChange();
+      stopPolling();
+    } else {
+      startPolling();
+    }
+  });
+  // iOS Safari bfcache: pageshow without a fresh load. Re-check.
   window.addEventListener("pageshow", check);
 })();
