@@ -92,6 +92,21 @@ class CalendarViewModel : ViewModel() {
 
     fun reload() = load()
 
+    /** Delete an event by id from the server, then reload to refresh
+     *  the local cache. Used by the long-press action sheet. */
+    fun deleteEvent(id: String) {
+        viewModelScope.launch {
+            try {
+                val profile = profiles.active() ?: return@launch
+                val client = ApiClient.forProfile(profile, profiles)
+                client.api.deleteEvent(id)
+                load()
+            } catch (e: Exception) {
+                _state.update { it.copy(errorMessage = e.localizedMessage ?: "删除失败") }
+            }
+        }
+    }
+
     /** Sign out the currently active profile only. If there are
      *  other profiles, ProfileStore picks the next-most-recent as the
      *  new active; if this was the last one, activeId becomes null. */

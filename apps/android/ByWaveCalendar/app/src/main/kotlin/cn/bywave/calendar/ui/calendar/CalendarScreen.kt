@@ -27,7 +27,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -56,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.event.EventActionsSheet
 import cn.bywave.calendar.ui.event.EventDetailSheet
 import cn.bywave.calendar.ui.profile.ProfileSwitcherDialog
 
@@ -65,8 +69,10 @@ fun CalendarScreen(
     onOpenSettings: () -> Unit,
     onCreateEvent: () -> Unit,
     onEditEvent: (EventDTO) -> Unit,
+    onDuplicateEvent: (EventDTO) -> Unit,
     onOpenAttendees: (EventDTO) -> Unit,
     onAddAccount: () -> Unit,
+    onOpenSearch: () -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
@@ -76,6 +82,8 @@ fun CalendarScreen(
 
     val state by vm.state.collectAsState()
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
+    var actionsForEvent by remember { mutableStateOf<EventDTO?>(null) }
+    var pendingDelete by remember { mutableStateOf<EventDTO?>(null) }
     var showSwitcher by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -88,6 +96,9 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Default.Search, contentDescription = "搜索")
+                    }
                     IconButton(onClick = { vm.reload() }, enabled = !state.loading) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
                     }
@@ -135,6 +146,7 @@ fun CalendarScreen(
             onNext = { vm.shiftAnchor(+1) },
             onToday = { vm.goToday() },
             onEventClick = { selectedEvent = it },
+            onEventLongPress = { actionsForEvent = it },
             onDayClick = { day ->
                 vm.setMode(ViewMode.Day)
                 vm.setAnchor(day)
@@ -175,6 +187,49 @@ fun CalendarScreen(
             },
         )
     }
+
+    val actionsEv = actionsForEvent
+    if (actionsEv != null) {
+        EventActionsSheet(
+            event = actionsEv,
+            calendars = state.calendars,
+            onEdit = {
+                actionsForEvent = null
+                onEditEvent(actionsEv)
+            },
+            onDuplicate = {
+                actionsForEvent = null
+                onDuplicateEvent(actionsEv)
+            },
+            onDelete = {
+                actionsForEvent = null
+                pendingDelete = actionsEv      // pop confirm dialog
+            },
+            onOpenAttendees = {
+                actionsForEvent = null
+                onOpenAttendees(actionsEv)
+            },
+            onDismiss = { actionsForEvent = null },
+        )
+    }
+
+    val pd = pendingDelete
+    if (pd != null) {
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除事件？") },
+            text = { Text("「${pd.summary}」将被永久删除，此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    vm.deleteEvent(pd.id)
+                }) { Text("删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            },
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -187,6 +242,7 @@ private fun CalendarBody(
     onNext: () -> Unit,
     onToday: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
+    onEventLongPress: (EventDTO) -> Unit,
     onDayClick: (java.time.LocalDate) -> Unit,
     eventsForDay: (java.time.LocalDate) -> List<EventDTO>,
 ) {
@@ -263,12 +319,14 @@ private fun CalendarBody(
                         events = eventsForDay(state.anchor),
                         calendars = state.calendars,
                         onEventClick = onEventClick,
+                        onEventLongPress = onEventLongPress,
                     )
                     ViewMode.Week -> WeekView(
                         weekStart = startOfWeek(state.anchor),
                         events = state.events,
                         calendars = state.calendars,
                         onEventClick = onEventClick,
+                        onEventLongPress = onEventLongPress,
                     )
                     ViewMode.Month -> MonthView(
                         anchor = state.anchor,

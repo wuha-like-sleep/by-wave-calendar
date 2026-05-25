@@ -15,8 +15,9 @@
 
 package cn.bywave.calendar.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -66,6 +67,7 @@ fun WeekView(
     events: List<EventDTO>,
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit,
+    onEventLongPress: (EventDTO) -> Unit = {},
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
@@ -134,6 +136,7 @@ fun WeekView(
                                 slotWidth = slotW,
                                 columnWidth = columnWidth,
                                 onClick = { onEventClick(ev) },
+                                onLongClick = { onEventLongPress(ev) },
                             )
                         }
                     }
@@ -248,6 +251,7 @@ private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventChip(
     event: EventDTO,
@@ -258,6 +262,7 @@ private fun EventChip(
     slotWidth: Dp,
     columnWidth: Dp,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val zone = ZoneId.systemDefault()
     val dayStart = day.atStartOfDay(zone)
@@ -287,7 +292,7 @@ private fun EventChip(
             .height(h)
             .clip(RoundedCornerShape(4.dp))
             .background(color.copy(alpha = 0.95f))
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 4.dp, vertical = 3.dp),
     ) {
         Text(

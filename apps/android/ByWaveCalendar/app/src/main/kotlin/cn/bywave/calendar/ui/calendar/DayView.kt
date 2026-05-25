@@ -4,8 +4,9 @@
 
 package cn.bywave.calendar.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ fun DayView(
     events: List<EventDTO>,
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit,
+    onEventLongPress: (EventDTO) -> Unit = {},
 ) {
     if (events.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -54,17 +56,24 @@ fun DayView(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items = events, key = { "${it.id}@${it.startsAt}" }) { ev ->
-            EventRow(event = ev, calendars = calendars, onClick = { onEventClick(ev) })
+            EventRow(
+                event = ev,
+                calendars = calendars,
+                onClick = { onEventClick(ev) },
+                onLongClick = { onEventLongPress(ev) },
+            )
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventRow(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
@@ -74,7 +83,7 @@ private fun EventRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

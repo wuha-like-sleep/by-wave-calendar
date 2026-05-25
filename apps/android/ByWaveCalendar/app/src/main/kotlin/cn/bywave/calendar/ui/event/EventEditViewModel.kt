@@ -40,6 +40,9 @@ import java.time.format.DateTimeFormatter
 sealed class EventEditMode {
     data class Create(val seedStart: LocalDateTime? = null) : EventEditMode()
     data class Edit(val source: EventDTO) : EventEditMode()
+    /** "Copy as new event" — same fields as source but a brand new id
+     *  + next-half-hour start. Lands at the server as a fresh POST. */
+    data class Duplicate(val source: EventDTO) : EventEditMode()
 }
 
 data class EventEditUiState(
@@ -96,6 +99,31 @@ class EventEditViewModel : ViewModel() {
                     url = s.extra?.url.orEmpty(),
                     start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
                     end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
+                    allDay = s.allDay,
+                )
+            }
+            is EventEditMode.Duplicate -> {
+                val s = mode.source
+                val zone = ZoneId.systemDefault()
+                // Keep the original duration but shift the start to
+                // next half-hour so we don't post in the past.
+                val origStart = runCatching { Instant.parse(s.startsAt) }.getOrNull()
+                val origEnd = runCatching { Instant.parse(s.endsAt) }.getOrNull()
+                val durationMin = if (origStart != null && origEnd != null) {
+                    java.time.Duration.between(origStart, origEnd).toMinutes().coerceAtLeast(15L)
+                } else 60L
+                val newStart = nextHalfHour()
+                _state.value = EventEditUiState(
+                    isEdit = false,                     // POST, not PATCH
+                    sourceId = null,
+                    calendars = calendars,
+                    calendarId = s.calendarId,
+                    summary = s.summary,
+                    location = s.location.orEmpty(),
+                    description = s.description.orEmpty(),
+                    url = s.extra?.url.orEmpty(),
+                    start = newStart,
+                    end = newStart.plusMinutes(durationMin),
                     allDay = s.allDay,
                 )
             }

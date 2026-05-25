@@ -34,6 +34,7 @@ import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.event.AttendeesScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
+import cn.bywave.calendar.ui.search.SearchScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
 import cn.bywave.calendar.ui.setup.ScannerScreen
 import cn.bywave.calendar.ui.setup.SetupScreen
@@ -105,11 +106,42 @@ private fun AppRoot() {
                 onOpenSettings = { nav.navigate("settings") },
                 onCreateEvent = { nav.navigate("event_new") },
                 onEditEvent = { ev -> nav.navigate("event_edit/${ev.id}") },
+                onDuplicateEvent = { ev -> nav.navigate("event_duplicate/${ev.id}") },
                 onOpenAttendees = { ev ->
                     val title = java.net.URLEncoder.encode(ev.summary, "UTF-8")
                     nav.navigate("attendees/${ev.id}/$title")
                 },
                 onAddAccount = { nav.navigate("setup") },
+                onOpenSearch = { nav.navigate("search") },
+            )
+        }
+
+        composable("search") {
+            // Search VM observes the same EventRepository the calendar
+            // VM does, so it sees the same wide-window cache and re-
+            // renders if a background fetch lands while open.
+            // Capture the calendar VM at composable scope so the
+            // onEventClick lambda can drive it without ViewModelProvider
+            // gymnastics.
+            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
+            SearchScreen(
+                onBack = { nav.popBackStack() },
+                onEventClick = { ev ->
+                    // For v0.7 we drop back to calendar at the event's
+                    // day in Day mode. v0.8 will instead open
+                    // EventDetailSheet over the search list directly.
+                    val day = runCatching {
+                        java.time.Instant.parse(ev.startsAt)
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toLocalDate()
+                    }.getOrNull()
+                    if (day != null) {
+                        calVm.setMode(cn.bywave.calendar.ui.calendar.ViewMode.Day)
+                        calVm.setAnchor(day)
+                    }
+                    nav.popBackStack()
+                },
             )
         }
 
@@ -161,6 +193,32 @@ private fun AppRoot() {
             }
             EventEditScreen(
                 initialMode = EventEditMode.Edit(source),
+                calendars = state.calendars,
+                onDismiss = { nav.popBackStack() },
+                onSaved = {
+                    nav.popBackStack()
+                    calVm.reload()
+                },
+            )
+        }
+
+        composable(
+            route = "event_duplicate/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+        ) { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
+            val state by calVm.state.collectAsState()
+            val source = remember(id, state.events) {
+                state.events.firstOrNull { it.id == id }
+            }
+            if (source == null) {
+                androidx.compose.runtime.LaunchedEffect(id) { nav.popBackStack() }
+                return@composable
+            }
+            EventEditScreen(
+                initialMode = EventEditMode.Duplicate(source),
                 calendars = state.calendars,
                 onDismiss = { nav.popBackStack() },
                 onSaved = {
