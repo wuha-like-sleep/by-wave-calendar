@@ -17,6 +17,9 @@ import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
+// Retrofit 2.11+ official kotlinx-serialization converter package.
+// Same as data/api/ApiClient.kt — both rely on the asConverterFactory
+// extension function this jar exports.
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.GET
 import java.util.concurrent.TimeUnit

@@ -276,7 +276,7 @@ fun SettingsScreen(
             // Sign out
             Section(title = "") {
                 ActionRow(
-                    icon = Icons.AutoMirrored.Filled.Logout,
+                    icon = Icons.Filled.Logout,
                     label = stringResource(R.string.settings_signout),
                     danger = true,
                     onClick = { showSignOutDialog = true },

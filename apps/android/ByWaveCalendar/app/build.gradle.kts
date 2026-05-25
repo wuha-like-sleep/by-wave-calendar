@@ -31,6 +31,34 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "bywave"
     }
 
+    // Release signing config. Reads from gradle properties so the
+    // keystore + passwords NEVER end up in this file (which lives in git).
+    // Set these in ~/.gradle/gradle.properties OR pass via -P flags:
+    //   BYWAVE_KEYSTORE_PATH=/abs/path/to/release.jks
+    //   BYWAVE_KEYSTORE_PASSWORD=...
+    //   BYWAVE_KEY_ALIAS=bywave
+    //   BYWAVE_KEY_PASSWORD=...
+    //
+    // If any property is missing, the release signing config silently
+    // bails to null and assembleRelease falls back to the unsigned APK
+    // (which the OS refuses to install). That's the right safety net —
+    // we never want a debug-signed "release" to escape into the wild.
+    val keystorePath = (project.findProperty("BYWAVE_KEYSTORE_PATH") as String?)
+    val keystorePass = (project.findProperty("BYWAVE_KEYSTORE_PASSWORD") as String?)
+    val keyAlias_    = (project.findProperty("BYWAVE_KEY_ALIAS") as String?) ?: "bywave"
+    val keyPass      = (project.findProperty("BYWAVE_KEY_PASSWORD") as String?)
+
+    signingConfigs {
+        if (!keystorePath.isNullOrBlank() && !keystorePass.isNullOrBlank() && !keyPass.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = keystorePass
+                keyAlias = keyAlias_
+                keyPassword = keyPass
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false  // start with R8 off — toggle on once we
@@ -41,6 +69,8 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Wire signing config if it was successfully created above.
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
         getByName("debug") {
             applicationIdSuffix = ".debug"

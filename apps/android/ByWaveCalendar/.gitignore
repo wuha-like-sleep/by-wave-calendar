@@ -29,3 +29,4 @@ gradlew.bat
 *.jks
 *.keystore
 keystore.properties
+.kotlin/

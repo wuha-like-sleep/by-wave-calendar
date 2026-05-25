@@ -28,6 +28,9 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+// Retrofit 2.11+ ships its own converter at this exact package.
+// (The earlier JakeWharton converter required different wiring — we
+// switched to the official one in v0.8 to get `asConverterFactory`.)
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE

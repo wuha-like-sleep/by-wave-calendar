@@ -114,9 +114,10 @@ fun AttendeesScreen(
                     else Text("邀请")
                 }
             }
-            if (state.errorMessage != null) {
+            val errMsg = state.errorMessage  // delegated state doesn't smart-cast
+            if (errMsg != null) {
                 Text(
-                    text = state.errorMessage,
+                    text = errMsg,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(top = 4.dp),

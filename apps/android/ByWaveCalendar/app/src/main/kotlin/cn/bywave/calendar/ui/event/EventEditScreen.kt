@@ -88,6 +88,7 @@ fun EventEditScreen(
     val bootstrapKey = when (initialMode) {
         is EventEditMode.Create -> "create-${initialMode.seedStart}"
         is EventEditMode.Edit -> "edit-${initialMode.source.id}"
+        is EventEditMode.Duplicate -> "duplicate-${initialMode.source.id}"
     }
     LaunchedEffect(bootstrapKey) { vm.bootstrap(initialMode, calendars) }
     LaunchedEffect(state.finished) { if (state.finished) onSaved() }
@@ -192,9 +193,13 @@ fun EventEditScreen(
                 modifier = Modifier.fillMaxWidth().height(120.dp),
             )
 
-            if (state.errorMessage != null) {
+            // Kotlin doesn't smart-cast through a delegated property
+            // (state is a property delegate via collectAsState), so we
+            // copy into a local val before nullability narrows.
+            val errMsg = state.errorMessage
+            if (errMsg != null) {
                 Text(
-                    text = state.errorMessage,
+                    text = errMsg,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -282,7 +287,10 @@ private fun CalendarDropdown(
                 }
             },
         )
-        androidx.compose.material3.ExposedDropdownMenu(
+        // ExposedDropdownMenu is a member of ExposedDropdownMenuBoxScope —
+        // calling it via FQN resolves to a non-existent top-level
+        // function. Drop the qualifier and let the receiver scope provide it.
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
