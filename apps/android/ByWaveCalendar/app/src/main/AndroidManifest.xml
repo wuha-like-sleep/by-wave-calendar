@@ -23,6 +23,20 @@
          only when user enables "event start reminders" in settings. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Exact alarms — used by Reminders to schedule "N minutes before
+         event start" notifications. Android 12+ treats this as a
+         special permission the user grants via Settings → Apps →
+         Special access → Alarms & reminders. If not granted, we fall
+         back to setWindow() with a 60s tolerance which doesn't need
+         this permission. USE_EXACT_ALARM (without "SCHEDULE_") is the
+         Play Store-only variant — irrelevant for our APK distribution. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!-- Cooperative scheduling — re-arming alarms after a reboot. The
+         receiver also acts on boot completed to reschedule from the
+         last cached events. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:name=".BywaveApp"
         android:allowBackup="false"
@@ -58,5 +72,13 @@
                 <data android:scheme="${appAuthRedirectScheme}" />
             </intent-filter>
         </activity>
+
+        <!-- ReminderReceiver — fires when an AlarmManager pending intent
+             lands. Materializes the saved-in-intent extras into a
+             NotificationManagerCompat post. Not exported because the
+             only sender is our own AlarmManager. -->
+        <receiver
+            android:name=".sync.ReminderReceiver"
+            android:exported="false" />
     </application>
 </manifest>

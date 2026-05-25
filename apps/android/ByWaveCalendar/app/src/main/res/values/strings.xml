@@ -77,4 +77,25 @@
     <string name="scan_hint">将二维码放入框内 — 自动识别</string>
     <string name="scan_no_camera_permission">没有相机权限</string>
     <string name="scan_grant_permission">授权</string>
+
+    <!-- Sync (v0.6) -->
+    <string name="settings_sync_section">同步与通知</string>
+    <string name="settings_mirror_title">同步到系统日历</string>
+    <string name="settings_mirror_desc">把事件镜像到 Android 系统「日历」provider，让 Google 日历 / 默认日历 / 桌面小组件都能看到。</string>
+    <string name="settings_reminders_title">事件开始前提醒</string>
+    <string name="settings_reminders_desc">在事件开始前若干分钟弹出本机通知。不走 Apple/Google 服务器，纯本机定时。</string>
+    <string name="settings_reminder_lead">提前时间</string>
+    <string name="settings_reminder_lead_5">5 分钟</string>
+    <string name="settings_reminder_lead_10">10 分钟</string>
+    <string name="settings_reminder_lead_15">15 分钟</string>
+    <string name="settings_reminder_lead_30">30 分钟</string>
+    <string name="settings_reminder_lead_60">1 小时</string>
+    <string name="settings_reminder_lead_120">2 小时</string>
+    <string name="settings_perm_calendar_denied">系统日历权限被拒。请到「设置 → 应用 → ByWave Calendar → 权限」开启日历权限。</string>
+    <string name="settings_perm_notifications_denied">通知权限被拒。请到「设置 → 应用 → ByWave Calendar → 通知」开启。</string>
+
+    <!-- Reminder channel -->
+    <string name="reminder_channel_name">事件提醒</string>
+    <string name="reminder_channel_desc">事件开始前的本机定时通知。</string>
+    <string name="reminder_default_body">即将开始</string>
 </resources>

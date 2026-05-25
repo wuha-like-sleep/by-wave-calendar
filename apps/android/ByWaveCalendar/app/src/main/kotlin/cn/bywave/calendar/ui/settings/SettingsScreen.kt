@@ -5,9 +5,13 @@
 
 package cn.bywave.calendar.ui.settings
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,18 +34,24 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,10 +62,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
+import cn.bywave.calendar.data.store.SyncPreferences
 import cn.bywave.calendar.ui.calendar.mutedTextColor
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,7 +79,27 @@ fun SettingsScreen(
     val profiles = remember { BywaveApp.instance.profiles }
     val active = profiles.active()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val prefsStore = remember { SyncPreferences(context) }
+    val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
     var showSignOutDialog by remember { mutableStateOf(false) }
+    var permissionWarning by remember { mutableStateOf<String?>(null) }
+
+    // -- Permission launchers --
+    val calendarPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { granted ->
+        val ok = granted[Manifest.permission.READ_CALENDAR] == true &&
+            granted[Manifest.permission.WRITE_CALENDAR] == true
+        if (ok) scope.launch { prefsStore.setMirrorToSystem(true) }
+        else permissionWarning = context.getString(R.string.settings_perm_calendar_denied)
+    }
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) scope.launch { prefsStore.setRemindersEnabled(true) }
+        else permissionWarning = context.getString(R.string.settings_perm_notifications_denied)
+    }
 
     Scaffold(
         topBar = {
@@ -95,6 +128,75 @@ fun SettingsScreen(
                 ReadRow(label = stringResource(R.string.settings_email), value = active?.email ?: "—")
                 HorizontalDivider()
                 ReadRow(label = stringResource(R.string.settings_server), value = active?.serverUrl ?: "—")
+            }
+
+            // Sync (v0.6)
+            Section(title = stringResource(R.string.settings_sync_section)) {
+                SwitchRow(
+                    title = stringResource(R.string.settings_mirror_title),
+                    subtitle = stringResource(R.string.settings_mirror_desc),
+                    checked = prefs.mirrorToSystemCalendar,
+                    onCheckedChange = { wanted ->
+                        if (wanted) {
+                            // Ask for calendar runtime perms first; on grant
+                            // the callback flips the pref. On deny we just
+                            // show a hint and leave it off.
+                            val hasRead = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.READ_CALENDAR,
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            val hasWrite = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.WRITE_CALENDAR,
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            if (hasRead && hasWrite) {
+                                scope.launch { prefsStore.setMirrorToSystem(true) }
+                            } else {
+                                calendarPermLauncher.launch(arrayOf(
+                                    Manifest.permission.READ_CALENDAR,
+                                    Manifest.permission.WRITE_CALENDAR,
+                                ))
+                            }
+                        } else {
+                            scope.launch { prefsStore.setMirrorToSystem(false) }
+                        }
+                    },
+                )
+                HorizontalDivider()
+                SwitchRow(
+                    title = stringResource(R.string.settings_reminders_title),
+                    subtitle = stringResource(R.string.settings_reminders_desc),
+                    checked = prefs.remindersEnabled,
+                    onCheckedChange = { wanted ->
+                        if (wanted) {
+                            val needsRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                            val hasPerm = !needsRuntime || ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.POST_NOTIFICATIONS,
+                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            if (hasPerm) {
+                                scope.launch { prefsStore.setRemindersEnabled(true) }
+                            } else {
+                                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        } else {
+                            scope.launch { prefsStore.setRemindersEnabled(false) }
+                        }
+                    },
+                )
+                if (prefs.remindersEnabled) {
+                    HorizontalDivider()
+                    LeadTimeRow(
+                        currentMinutes = prefs.reminderLeadMinutes,
+                        onPick = { m -> scope.launch { prefsStore.setReminderLeadMinutes(m) } },
+                    )
+                }
+            }
+
+            if (permissionWarning != null) {
+                Text(
+                    text = permissionWarning!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
 
             // System
@@ -262,5 +364,86 @@ private fun openExternal(context: android.content.Context, url: String) {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
+    }
+}
+
+@Composable
+private fun SwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Medium)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = mutedTextColor(),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        Spacer(Modifier.size(8.dp))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun LeadTimeRow(
+    currentMinutes: Int,
+    onPick: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = listOf(5, 10, 15, 30, 60, 120)
+    val labelRes = when (currentMinutes) {
+        5 -> R.string.settings_reminder_lead_5
+        10 -> R.string.settings_reminder_lead_10
+        30 -> R.string.settings_reminder_lead_30
+        60 -> R.string.settings_reminder_lead_60
+        120 -> R.string.settings_reminder_lead_120
+        else -> R.string.settings_reminder_lead_15
+    }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.settings_reminder_lead), modifier = Modifier.weight(1f))
+            Text(text = stringResource(labelRes), color = mutedTextColor())
+            Spacer(Modifier.size(8.dp))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = mutedTextColor())
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            for (m in options) {
+                val res = when (m) {
+                    5 -> R.string.settings_reminder_lead_5
+                    10 -> R.string.settings_reminder_lead_10
+                    15 -> R.string.settings_reminder_lead_15
+                    30 -> R.string.settings_reminder_lead_30
+                    60 -> R.string.settings_reminder_lead_60
+                    else -> R.string.settings_reminder_lead_120
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(res)) },
+                    onClick = {
+                        onPick(m)
+                        expanded = false
+                    },
+                )
+            }
+        }
     }
 }
