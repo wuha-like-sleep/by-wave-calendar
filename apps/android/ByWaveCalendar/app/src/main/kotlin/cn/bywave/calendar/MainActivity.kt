@@ -23,6 +23,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -40,6 +41,10 @@ import cn.bywave.calendar.ui.setup.ScannerScreen
 import cn.bywave.calendar.ui.setup.SetupScreen
 import cn.bywave.calendar.ui.setup.SetupViewModel
 import cn.bywave.calendar.ui.theme.ByWaveTheme
+import cn.bywave.calendar.update.UpdateAvailableSheet
+import cn.bywave.calendar.update.UpdateChecker
+import cn.bywave.calendar.update.UpdateState
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,6 +58,16 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        // Background update probe. Throttled inside UpdateChecker to once
+        // per 6h per process — repeated resume events (e.g. system bar
+        // pull-downs) won't hammer the endpoint.
+        lifecycleScope.launch {
+            UpdateChecker.checkIfDue(applicationContext)
+        }
+    }
 }
 
 @Composable
@@ -61,6 +76,20 @@ private fun AppRoot() {
     val activeId by profiles.activeId.collectAsState()
     val nav = rememberNavController()
     val loggedIn = activeId != null
+
+    // In-app updater sheet — surfaces above whatever screen is showing
+    // whenever UpdateChecker flips to Available. Sits at the root so
+    // "settings → 立即检查更新" or a forced check from anywhere bubbles
+    // up to the same UI rather than each screen having to host its own.
+    val updateState by UpdateChecker.state.collectAsState()
+    val avail = updateState as? UpdateState.Available
+    if (avail != null) {
+        UpdateAvailableSheet(
+            release = avail.release,
+            mandatory = avail.mandatory,
+            onDismiss = { /* state already updated by sheet's onUserDismissed call */ },
+        )
+    }
 
     NavHost(
         navController = nav,

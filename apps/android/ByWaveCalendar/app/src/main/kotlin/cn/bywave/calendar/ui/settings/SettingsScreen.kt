@@ -68,6 +68,7 @@ import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.store.SyncPreferences
 import cn.bywave.calendar.ui.calendar.mutedTextColor
+import cn.bywave.calendar.update.UpdateChecker
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -240,6 +241,24 @@ fun SettingsScreen(
                     label = stringResource(R.string.settings_github),
                     onClick = { openExternal(context, "https://github.com/wuha-like-sleep/by-wave-calendar") },
                     trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+                )
+                HorizontalDivider()
+                // Manual update probe — useful when someone has dismissed
+                // the auto-prompt and wants to come back to it, or when
+                // we ship a fix and don't want them to wait 6h for the
+                // throttle window. Clears the throttle + any prior
+                // dismissal so the next check will surface a new sheet.
+                val updateScope = rememberCoroutineScope()
+                ActionRow(
+                    label = "检查更新",
+                    onClick = {
+                        UpdateChecker.resetThrottle()
+                        UpdateChecker.clearDismissal()
+                        updateScope.launch {
+                            UpdateChecker.checkIfDue(context.applicationContext, force = true)
+                        }
+                    },
+                    trailingIcon = Icons.Default.ChevronRight,
                 )
                 HorizontalDivider()
                 Row(

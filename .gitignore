@@ -16,6 +16,11 @@ src/public/_built/
 # User-uploaded files
 src/public/uploads/
 
+# Runtime data — Android release manifest + APK files served by
+# /api/app/android/latest and /downloads/android/*.apk. Deploy admin
+# drops files into <projectRoot>/data/ ; never committed.
+data/
+
 # Native APP starter source. Android + desktop kept local until they
 # reach the same maturity as iOS; uncomment when they're ready to push.
 # apps/android/

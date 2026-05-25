@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider paths. The in-app updater downloads the APK into
+  context.cacheDir/updates/ and hands the system installer a content://
+  URI rooted at that location. We deliberately ONLY expose cache/updates
+  — never the full cacheDir or filesDir — to keep the surface minimal.
+
+  ApkInstaller.kt writes APKs to:
+    <cache>/updates/bywave-calendar-<version>.apk
+  and resolves them with getUriForFile() against the "updates" tag below.
+-->
+<paths>
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>

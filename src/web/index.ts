@@ -161,6 +161,15 @@ export async function webRoutes(app: FastifyInstance) {
   // them with `<%= varName %>` which would print "undefined" on missing.
   app.get("/download", async (req, reply) => {
     const settings = await getSettings();
+    // Read the Android release manifest so the version + APK link shown on
+    // /download stays in sync with what the in-app updater sees. Falls
+    // back to "not yet published" placeholders if the manifest is missing.
+    const { getLatestRelease } = await import("../lib/android_release.js");
+    const rel = await getLatestRelease();
+    const apkUrl = rel ? `/downloads/android/${encodeURIComponent(rel.filename)}` : "";
+    const apkSize = rel
+      ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
+      : "~15 MB";
     return reply.view("download", {
       title: "下载",
       user: await loadUserFromRequest(req),
@@ -177,12 +186,13 @@ export async function webRoutes(app: FastifyInstance) {
       iosAppStoreUrl: "",
       iosTestFlightUrl: "https://testflight.apple.com/join/rkM3hkpX",
       iosEtaWeek: "本周内",
-      // Android — APK URL is the latest GitHub Release asset. We can
-      // point to a stable "latest" URL via GitHub's redirect; when we
-      // tag v0.1.0 + attach the signed APK it becomes the active link.
-      androidVersion: "0.1.0",
-      androidApkUrl: "",
-      androidApkSize: "~15 MB",
+      // Android — version + APK URL come from the live manifest at
+      // data/app-android-manifest.json (gitignored, deployed separately).
+      // When the manifest is absent we show the GitHub/Gitee Releases
+      // fallback links so users can still find a build.
+      androidVersion: rel?.versionName || "0.8.0",
+      androidApkUrl: apkUrl,
+      androidApkSize: apkSize,
       androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       androidApkGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
       androidEtaWeek: "本月内",

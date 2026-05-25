@@ -15,7 +15,8 @@ Kotlin + Jetpack Compose 原生 Android 客户端，配套 `apps/ios` 的 iOS AP
 | v0.5 | 多账号 (Profile) + 头像角标切换器 + 添加另一账号 | ✅ |
 | v0.6 | 系统日历镜像 + 本地提醒（AlarmManager + 通知 channel）+ 设置开关 | ✅ |
 | v0.7 | 全局搜索 + 长按事件菜单（编辑 / 复制 / 邀请人 / 删除）+ 深色模式 audit | ✅ |
-| v0.8 | 签名 release APK 流程 + 自动构建上传 | 待开发 |
+| v0.8 | APP 内自动更新（/api/app/android/latest + FileProvider 系统安装） | ✅ |
+| v0.9 | 签名 release APK 流程 + GitHub Actions 自动构建 | 待开发 |
 | v1.0 | 对齐 iOS v1.3.x 全部功能 | 目标 |
 
 ## 技术栈

@@ -419,6 +419,69 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
   return reply.send({ version: ASSET_VERSION });
 });
 
+// ---- Android in-app update ----
+// The Android APP polls this on resume (6h throttle in client). If the
+// returned versionCode > local versionCode it pops the update sheet,
+// downloads the APK from the `url` field below, and triggers the system
+// install flow via FileProvider. Returns 404 when no release is published
+// so the APP simply does nothing — never blocks startup on this.
+{
+  const { getLatestRelease, apkPathFor } = await import("./lib/android_release.js");
+  app.get("/api/app/android/latest", { config: { rateLimit: false } }, async (req, reply) => {
+    const rel = await getLatestRelease();
+    if (!rel) return reply.code(404).send({ error: "no_release_published" });
+    // Build absolute URL — the APP can be on a different host (e.g. user
+    // hits server.example.com but the APK is at the same origin) but
+    // some users put a CDN in front, so prefer the request's own origin.
+    const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
+    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+    const origin = `${proto}://${host}`;
+    reply.header("Cache-Control", "public, max-age=60");
+    return reply.send({
+      versionCode: rel.versionCode,
+      versionName: rel.versionName,
+      url: `${origin}/downloads/android/${encodeURIComponent(rel.filename)}`,
+      sha256: rel.sha256,
+      sizeBytes: rel.sizeBytes,
+      releasedAt: rel.releasedAt,
+      notes: rel.notes,
+      mandatory: rel.mandatory,
+      minSupportedVersionCode: rel.minSupportedVersionCode,
+    });
+  });
+
+  // Serve the APK file itself. We don't use @fastify/static for this because
+  // the file lives outside src/public (it's in data/, alongside DB backups
+  // etc.) and we want a hard 404 when the file mysteriously disappears
+  // rather than falling through to some other handler.
+  app.get<{ Params: { filename: string } }>(
+    "/downloads/android/:filename",
+    { config: { rateLimit: false } },
+    async (req, reply) => {
+      const filename = req.params.filename;
+      if (!/^[\w.\-]+\.apk$/i.test(filename)) {
+        return reply.code(400).send({ error: "invalid_filename" });
+      }
+      const full = apkPathFor(filename);
+      if (!full) return reply.code(400).send({ error: "invalid_filename" });
+      const fs = await import("node:fs");
+      const fsp = await import("node:fs/promises");
+      try {
+        const st = await fsp.stat(full);
+        reply.header("Content-Type", "application/vnd.android.package-archive");
+        reply.header("Content-Length", String(st.size));
+        reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+        // APKs are immutable per filename (the version is in the name),
+        // so cache them hard. CDNs in front of us will love this.
+        reply.header("Cache-Control", "public, max-age=2592000, immutable");
+        return reply.send(fs.createReadStream(full));
+      } catch {
+        return reply.code(404).send({ error: "apk_not_found" });
+      }
+    },
+  );
+}
+
 // ---- Routes ----
 // Each route plugin uses paths relative to the API prefix (e.g.
 // "/events" rather than "/api/events"). We mount the same plugin twice:

@@ -37,6 +37,26 @@
          last cached events. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- In-app updater (v0.8). REQUEST_INSTALL_PACKAGES + the per-app
+         "install unknown apps" toggle is what Android 8+ requires to
+         hand off a downloaded APK to the system installer. We don't
+         try to silent-install (impossible without system signature) —
+         we just trigger the OS confirm dialog. User taps "安装" once
+         per update. The "unknown sources" toggle is a one-time grant
+         per app; subsequent updates skip that step.
+
+         REQUEST_INSTALL_PACKAGES makes the Play Store reject the APK,
+         which is fine — we ship via direct APK only. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- DownloadManager queries for in-progress / completed downloads. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
+
     <application
         android:name=".BywaveApp"
         android:allowBackup="false"
@@ -80,5 +100,20 @@
         <receiver
             android:name=".sync.ReminderReceiver"
             android:exported="false" />
+
+        <!-- FileProvider — exposes the downloaded APK to the system
+             package installer with a content:// URI. Android 7+ refuses
+             file:// URIs in install intents; this is the canonical
+             handoff path. Authority must match the one we build in
+             ApkInstaller.kt (BuildConfig.APPLICATION_ID + ".fileprovider"). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>
