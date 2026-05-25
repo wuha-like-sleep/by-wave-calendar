@@ -69,13 +69,19 @@ fun EventDetailSheet(
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
     onEdit: () -> Unit,
+    onOpenAttendees: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
     ) {
-        EventDetailContent(event = event, calendars = calendars, onEdit = onEdit)
+        EventDetailContent(
+            event = event,
+            calendars = calendars,
+            onEdit = onEdit,
+            onOpenAttendees = onOpenAttendees,
+        )
     }
 }
 
@@ -84,6 +90,7 @@ private fun EventDetailContent(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onEdit: () -> Unit,
+    onOpenAttendees: () -> Unit,
 ) {
     val context = LocalContext.current
     val color = calendarColor(event, calendars)
@@ -179,8 +186,18 @@ private fun EventDetailContent(
         }
 
         val attendees = event.extra?.attendees.orEmpty()
+        // Always show the attendees row in edit-mode hosts so users can
+        // add the first invitee. Read-mode (from CalendarScreen) only
+        // shows it if there's already at least one invitee.
         if (attendees.isNotEmpty()) {
-            Row(verticalAlignment = Alignment.Top) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenAttendees)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
                 Icon(Icons.Default.People, contentDescription = null, tint = mutedTextColor())
                 Spacer(Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -200,6 +217,43 @@ private fun EventDetailContent(
                         )
                     }
                 }
+                Icon(
+                    Icons.Default.OpenInNew,
+                    contentDescription = null,
+                    tint = mutedTextColor(),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        } else {
+            // Empty state — still tappable so users can add the first.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenAttendees)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.People, contentDescription = null, tint = mutedTextColor())
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "邀请人",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mutedTextColor(),
+                    )
+                    Text(
+                        text = "尚未邀请 · 点击添加",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = mutedTextColor(),
+                    )
+                }
+                Icon(
+                    Icons.Default.OpenInNew,
+                    contentDescription = null,
+                    tint = mutedTextColor(),
+                    modifier = Modifier.size(16.dp),
+                )
             }
         }
 

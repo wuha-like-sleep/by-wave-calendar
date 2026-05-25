@@ -1,13 +1,7 @@
-// v0.2: adds view mode (Day/Week/Month) + 15-month wide-window fetch.
-//
-// We learn from iOS v1.2.1 here: a "fetch the events for the visible
-// week" approach causes inconsistencies when switching modes (week
-// fetch missed events that day fetch had). Always pull a wide window
-// (-2 / +13 months around anchor) and filter locally per view.
-//
-// `events` is the wide cache. `eventsForAnchor(mode)` slices it for the
-// current view: Day → single day filter, Week → 7 days, Month → 42-day
-// grid window.
+// v0.4 refactor: read state from EventRepository (Room-backed) instead
+// of holding events in the VM directly. Cold launch hits the cache
+// immediately and the UI paints; the network fetch happens in the
+// background and writes into Room, which republishes via Flow.
 
 package cn.bywave.calendar.ui.calendar
 
@@ -18,8 +12,12 @@ import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -39,23 +37,31 @@ data class CalendarUiState(
     val calendars: List<CalendarMeta> = emptyList(),
     val errorMessage: String? = null,
     val lastSyncedAt: Instant? = null,
-    /** Window currently covered by `events`. Used to decide whether
-     *  an anchor change needs a refetch. */
     val fetchedFrom: LocalDate? = null,
     val fetchedTo: LocalDate? = null,
 )
 
 class CalendarViewModel : ViewModel() {
     private val tokens = BywaveApp.instance.tokenStore
+    private val repository = BywaveApp.instance.repository
+
     private val _state = MutableStateFlow(CalendarUiState())
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
 
-    init { load() }
+    init {
+        // Observe Room — cold start sees cache instantly, later
+        // network fetches update Room which updates state via this flow.
+        repository.observe()
+            .onEach { snap ->
+                _state.update { it.copy(events = snap.events, calendars = snap.calendars) }
+            }
+            .launchIn(viewModelScope)
+
+        load()
+    }
 
     fun setMode(mode: ViewMode) {
         _state.update { it.copy(mode = mode) }
-        // No fetch — mode change is pure local filtering since v0.2
-        // (same trade-off iOS v1.2.1 made).
     }
 
     fun setAnchor(date: LocalDate) {
@@ -75,14 +81,14 @@ class CalendarViewModel : ViewModel() {
 
     fun goToday() = setAnchor(LocalDate.now())
 
-    /** Force a fetch even if anchor is inside the cached window
-     *  (pull-to-refresh + post-edit reload). */
     fun reload() = load()
 
-    /** Sign-out hook — called from CalendarScreen's settings menu. */
     fun signOut() {
-        tokens.signOut()
-        ApiClient.reset()
+        viewModelScope.launch {
+            tokens.signOut()
+            repository.wipe()
+            ApiClient.reset()
+        }
     }
 
     // ---- Filtering for each view ----
@@ -106,7 +112,7 @@ class CalendarViewModel : ViewModel() {
     // ---- Fetch ----
 
     private fun load() {
-        val server = tokens.serverUrl ?: run {
+        if (tokens.serverUrl == null) {
             _state.update { it.copy(errorMessage = "未登录") }
             return
         }
@@ -121,17 +127,14 @@ class CalendarViewModel : ViewModel() {
                 val fromInstant = from.atStartOfDay(zone).toInstant()
                 val toInstant = to.plusDays(1).atStartOfDay(zone).toInstant().minusNanos(1)
 
-                val client = ApiClient.forServer(server, tokens)
-                val resp = client.api.events(
-                    from = ISO.format(fromInstant.atZone(zone)),
-                    to = ISO.format(toInstant.atZone(zone)),
+                repository.fetchAndCache(
+                    fromIso = ISO.format(fromInstant.atZone(zone)),
+                    toIso = ISO.format(toInstant.atZone(zone)),
                 )
 
                 _state.update {
                     it.copy(
                         loading = false,
-                        events = resp.events,
-                        calendars = resp.calendars,
                         lastSyncedAt = Instant.now(),
                         fetchedFrom = from,
                         fetchedTo = to,
@@ -151,8 +154,6 @@ class CalendarViewModel : ViewModel() {
     private fun anchorOutsideCachedWindow(date: LocalDate): Boolean {
         val from = _state.value.fetchedFrom ?: return true
         val to = _state.value.fetchedTo ?: return true
-        // 2-week safety margin — refetch BEFORE the visible edge hits
-        // the cached boundary (so swiping is instant when in range).
         val marginDays = 14L
         return date.isBefore(from.plusDays(marginDays)) || date.isAfter(to.minusDays(marginDays))
     }
@@ -164,10 +165,8 @@ class CalendarViewModel : ViewModel() {
     }
 }
 
-// ---- Helpers used outside the VM too ----
+// ---- Month grid helpers ----
 
-/** First-cell day of the 6×7 month grid (Mon-first), which may dip into
- *  the previous month if the 1st isn't a Monday. */
 internal fun monthGridStart(month: YearMonth): LocalDate {
     val first = month.atDay(1)
     return first.with(TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))

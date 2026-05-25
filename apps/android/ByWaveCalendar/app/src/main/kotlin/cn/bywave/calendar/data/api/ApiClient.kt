@@ -14,12 +14,16 @@ package cn.bywave.calendar.data.api
 
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.data.auth.TokenStore
+import cn.bywave.calendar.data.model.AttendeeInviteRequest
+import cn.bywave.calendar.data.model.AttendeeRevokeRequest
+import cn.bywave.calendar.data.model.AttendeesResponse
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.EventsResponse
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
+import cn.bywave.calendar.data.model.MfaVerifyRequest
 import cn.bywave.calendar.data.model.RefreshRequest
 import cn.bywave.calendar.data.model.RefreshResponse
 import kotlinx.serialization.json.Json
@@ -44,6 +48,9 @@ interface BywaveApi {
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): LoginResponse
 
+    @POST("api/v1/auth/mfa")
+    suspend fun verifyMfa(@Body body: MfaVerifyRequest): LoginResponse
+
     @POST("api/v1/auth/refresh")
     suspend fun refresh(@Body body: RefreshRequest): RefreshResponse
 
@@ -64,6 +71,26 @@ interface BywaveApi {
 
     @DELETE("api/v1/events/{id}")
     suspend fun deleteEvent(@Path("id") id: String)
+
+    // -- Attendees (v0.4) --
+    @GET("api/v1/events/{id}/attendees")
+    suspend fun attendees(@Path("id") id: String): AttendeesResponse
+
+    @POST("api/v1/events/{id}/attendees")
+    suspend fun inviteAttendee(
+        @Path("id") id: String,
+        @Body body: AttendeeInviteRequest,
+    )
+
+    @retrofit2.http.HTTP(
+        method = "DELETE",
+        path = "api/v1/events/{id}/attendees",
+        hasBody = true,
+    )
+    suspend fun revokeAttendee(
+        @Path("id") id: String,
+        @Body body: AttendeeRevokeRequest,
+    )
 }
 
 class ApiClient private constructor(

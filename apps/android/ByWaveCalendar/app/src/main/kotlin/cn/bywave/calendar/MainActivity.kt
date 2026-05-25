@@ -35,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import cn.bywave.calendar.ui.calendar.CalendarScreen
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
+import cn.bywave.calendar.ui.event.AttendeesScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
@@ -107,15 +108,43 @@ private fun AppRoot() {
                 onOpenSettings = { nav.navigate("settings") },
                 onCreateEvent = { nav.navigate("event_new") },
                 onEditEvent = { ev -> nav.navigate("event_edit/${ev.id}") },
+                onOpenAttendees = { ev ->
+                    val title = java.net.URLEncoder.encode(ev.summary, "UTF-8")
+                    nav.navigate("attendees/${ev.id}/$title")
+                },
+            )
+        }
+
+        composable(
+            route = "attendees/{id}/{title}",
+            arguments = listOf(
+                navArgument("id") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            val titleRaw = entry.arguments?.getString("title").orEmpty()
+            val title = runCatching {
+                java.net.URLDecoder.decode(titleRaw, "UTF-8")
+            }.getOrDefault(titleRaw)
+            AttendeesScreen(
+                eventId = id,
+                eventTitle = title,
+                onBack = { nav.popBackStack() },
             )
         }
 
         composable("settings") {
+            // Get the calendar VM scoped to the "calendar" route so we
+            // call its signOut() — which also wipes Room cache. Plain
+            // tokens.signOut() would leave stale events on disk for
+            // the next user to briefly see before refetch.
+            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 onSignOut = {
-                    tokens.signOut()
-                    cn.bywave.calendar.data.api.ApiClient.reset()
+                    calVm.signOut()
                     loggedIn = false
                     nav.navigate("setup") {
                         popUpTo("calendar") { inclusive = true }

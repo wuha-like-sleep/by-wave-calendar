@@ -86,6 +86,29 @@ data class RefreshResponse(
     val refreshToken: String,
 )
 
+/** Second step when [LoginResponse.mfaPending] is true. Sends the
+ *  6-digit TOTP from the user's authenticator + the mfaToken issued
+ *  by /auth/login. Returns the same shape as [LoginResponse] except
+ *  mfaPending is always false (or the call fails). */
+@Serializable
+data class MfaVerifyRequest(
+    val mfaToken: String,
+    val code: String,
+)
+
+// ---- Attendees ----
+
+@Serializable
+data class AttendeesResponse(
+    val attendees: List<String>,
+)
+
+@Serializable
+data class AttendeeInviteRequest(val email: String)
+
+@Serializable
+data class AttendeeRevokeRequest(val email: String)
+
 // ---- Edit / create ----
 
 @Serializable

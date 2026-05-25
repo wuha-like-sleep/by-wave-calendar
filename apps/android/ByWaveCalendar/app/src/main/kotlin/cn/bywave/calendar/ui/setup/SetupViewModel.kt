@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.LoginRequest
+import cn.bywave.calendar.data.model.MfaVerifyRequest
 import cn.bywave.calendar.util.ServerUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +27,9 @@ data class SetupUiState(
     val busy: Boolean = false,
     val errorMessage: String? = null,
     val signedIn: Boolean = false,
+    /** Set when /auth/login returned mfaPending=true. Triggers
+     *  MfaDialog in the composable. */
+    val mfaToken: String? = null,
 ) {
     val canSubmit: Boolean
         get() = ServerUrl.looksValid(server) && email.isNotBlank() && password.isNotBlank()
@@ -84,30 +88,20 @@ class SetupViewModel : ViewModel() {
                 val client = ApiClient.forServer(server, tokens)
                 val resp = client.api.login(LoginRequest(email = s.email, password = s.password))
 
-                if (resp.mfaPending == true) {
-                    // MFA flow deferred to v0.2 — for now we tell the
-                    // user to use the web to disable MFA temporarily.
-                    _state.update {
-                        it.copy(
-                            busy = false,
-                            errorMessage = "此账号开启了二次验证，v0.1 暂不支持，请使用网页登录或暂时关闭 MFA。",
-                        )
-                    }
+                if (resp.mfaPending == true && !resp.mfaToken.isNullOrEmpty()) {
+                    // Surface MFA token to the UI — composable shows
+                    // MfaDialog and calls verifyMfa(code) on submit.
+                    // We pre-save serverUrl now so verifyMfa() doesn't
+                    // need to re-normalize.
+                    tokens.serverUrl = server
+                    _state.update { it.copy(busy = false, mfaToken = resp.mfaToken) }
                     return@launch
                 }
 
-                val rt = resp.refreshToken
-                val at = resp.accessToken
-                if (rt.isNullOrEmpty() || at.isNullOrEmpty()) {
+                persistTokens(server, s.email, resp.refreshToken, resp.accessToken) ?: run {
                     _state.update { it.copy(busy = false, errorMessage = "服务器响应缺少 token") }
                     return@launch
                 }
-
-                tokens.serverUrl = server
-                tokens.refreshToken = rt
-                tokens.accessToken = at
-                tokens.userEmail = s.email
-
                 _state.update { it.copy(busy = false, signedIn = true) }
             } catch (e: Exception) {
                 _state.update {
@@ -118,5 +112,58 @@ class SetupViewModel : ViewModel() {
                 }
             }
         }
+    }
+
+    /**
+     * Submit the 6-digit TOTP from the user's authenticator. Called by
+     * MfaDialog. The mfaToken from step-1 binds this code to the same
+     * login attempt server-side — it expires in a few minutes.
+     */
+    fun verifyMfa(code: String) {
+        val token = _state.value.mfaToken ?: return
+        if (code.length != 6 || code.any { !it.isDigit() }) {
+            _state.update { it.copy(errorMessage = "请输入 6 位验证码") }
+            return
+        }
+        _state.update { it.copy(busy = true, errorMessage = null) }
+
+        viewModelScope.launch {
+            try {
+                val server = tokens.serverUrl ?: error("missing server")
+                val client = ApiClient.forServer(server, tokens)
+                val resp = client.api.verifyMfa(MfaVerifyRequest(mfaToken = token, code = code))
+
+                persistTokens(server, _state.value.email, resp.refreshToken, resp.accessToken) ?: run {
+                    _state.update { it.copy(busy = false, errorMessage = "MFA 响应缺少 token") }
+                    return@launch
+                }
+                _state.update { it.copy(busy = false, signedIn = true, mfaToken = null) }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(busy = false, errorMessage = e.localizedMessage ?: "验证码错误")
+                }
+            }
+        }
+    }
+
+    fun dismissMfa() {
+        _state.update { it.copy(mfaToken = null, busy = false) }
+        tokens.serverUrl = null  // back out — clean slate
+    }
+
+    /** Persist tokens + email after a successful login (or MFA verify).
+     *  Returns Unit on success, null when tokens were missing. */
+    private fun persistTokens(
+        server: String,
+        email: String,
+        refreshToken: String?,
+        accessToken: String?,
+    ): Unit? {
+        if (refreshToken.isNullOrEmpty() || accessToken.isNullOrEmpty()) return null
+        tokens.serverUrl = server
+        tokens.refreshToken = refreshToken
+        tokens.accessToken = accessToken
+        tokens.userEmail = email
+        return Unit
     }
 }

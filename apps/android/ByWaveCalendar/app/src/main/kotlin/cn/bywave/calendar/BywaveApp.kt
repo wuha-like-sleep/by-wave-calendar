@@ -7,10 +7,12 @@ package cn.bywave.calendar
 
 import android.app.Application
 import cn.bywave.calendar.data.auth.TokenStore
+import cn.bywave.calendar.data.store.EventRepository
 
 class BywaveApp : Application() {
     /** Initialized lazily so unit-test variants can inject a fake. */
     val tokenStore: TokenStore by lazy { TokenStore(this) }
+    val repository: EventRepository by lazy { EventRepository(this, tokenStore) }
 
     override fun onCreate() {
         super.onCreate()

@@ -58,6 +58,7 @@ fun CalendarScreen(
     onOpenSettings: () -> Unit,
     onCreateEvent: () -> Unit,
     onEditEvent: (EventDTO) -> Unit,
+    onOpenAttendees: (EventDTO) -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -110,6 +111,10 @@ fun CalendarScreen(
             onEdit = {
                 selectedEvent = null
                 onEditEvent(ev)
+            },
+            onOpenAttendees = {
+                selectedEvent = null
+                onOpenAttendees(ev)
             },
         )
     }

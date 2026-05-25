@@ -62,6 +62,16 @@ fun SetupScreen(
             onScanQr = onScanQr,
         )
     }
+
+    // MFA dialog — visible whenever the VM has an mfaToken stashed.
+    if (state.mfaToken != null) {
+        MfaDialog(
+            busy = state.busy,
+            errorMessage = state.errorMessage,
+            onSubmit = vm::verifyMfa,
+            onCancel = vm::dismissMfa,
+        )
+    }
 }
 
 @Composable
