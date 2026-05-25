@@ -430,17 +430,23 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
   app.get("/api/app/android/latest", { config: { rateLimit: false } }, async (req, reply) => {
     const rel = await getLatestRelease();
     if (!rel) return reply.code(404).send({ error: "no_release_published" });
-    // Build absolute URL — the APP can be on a different host (e.g. user
-    // hits server.example.com but the APK is at the same origin) but
-    // some users put a CDN in front, so prefer the request's own origin.
-    const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
-    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
-    const origin = `${proto}://${host}`;
+    // Two cases:
+    // 1) downloadUrl set in manifest → use it verbatim (GitHub Releases).
+    // 2) Only filename set → construct ${origin}/downloads/android/<f>
+    //    (legacy server-hosted path).
+    let url: string;
+    if (rel.downloadUrl) {
+      url = rel.downloadUrl;
+    } else {
+      const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
+      const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+      url = `${proto}://${host}/downloads/android/${encodeURIComponent(rel.filename)}`;
+    }
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
       versionCode: rel.versionCode,
       versionName: rel.versionName,
-      url: `${origin}/downloads/android/${encodeURIComponent(rel.filename)}`,
+      url,
       sha256: rel.sha256,
       sizeBytes: rel.sizeBytes,
       releasedAt: rel.releasedAt,

@@ -1,29 +1,26 @@
 // Android in-app update endpoint backing store.
 //
 // The Android APP polls /api/app/android/latest on resume (6h throttle).
-// We answer with the latest published release manifest. The manifest is
-// stored as a JSON file at <projectRoot>/data/app-android-manifest.json,
-// gitignored, so the deploy admin can drop in a new APK + bump the JSON
-// without touching code. Format:
+// We answer with the latest published release manifest. Two delivery
+// modes are supported, picked per release via the manifest:
 //
-//   {
-//     "versionCode": 8,
-//     "versionName": "0.8.0",
-//     "filename": "bywave-calendar-0.8.0.apk",
-//     "sha256": "<lowercase hex sha256 of the APK>",
-//     "sizeBytes": 15400000,
-//     "releasedAt": "2026-05-25T00:00:00Z",
-//     "notes": "v0.8 — APP 内自动更新...",
-//     "mandatory": false,
-//     "minSupportedVersionCode": 1
-//   }
+// 1. **GitHub Releases (recommended)** — `downloadUrl` is an absolute
+//    URL (e.g. github.com/.../releases/download/...). Server returns
+//    that URL verbatim. APK never touches our disk. This is how we
+//    actually publish — `gh release create` handles upload, the
+//    JSON is committed to git, every server deploy picks it up via
+//    git pull.
 //
-// Files live at <projectRoot>/data/android-apks/<filename>. The server
-// serves them via Fastify static at /downloads/android/<filename>.
+// 2. **Server-hosted (fallback)** — `downloadUrl` absent. Server
+//    constructs ${origin}/downloads/android/<filename> and serves
+//    the APK from data/android-apks/<filename>. Useful for self-
+//    hosted users who don't want their APP relying on GitHub.
 //
-// We deliberately keep this file the single source of truth — the
-// /download web page also reads from it via getLatestRelease() so the
-// version shown there can't drift from what the APP gets.
+// The manifest itself is committed to the repo at
+// apps/android/releases/latest.json — so server-side reads are just
+// a fs read after every `git pull`. The legacy data/ override path
+// is still honored (mtime-cached) so an admin can override locally
+// without a code change.
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -31,7 +28,13 @@ import path from "node:path";
 export interface AndroidRelease {
   versionCode: number;
   versionName: string;
+  /** Filename used in the local /downloads/android/<filename> URL when
+   *  downloadUrl is absent. Optional when downloadUrl is set. */
   filename: string;
+  /** Absolute URL to the APK — typically a GitHub Releases asset URL.
+   *  When set, /api/app/android/latest returns this directly and the
+   *  server doesn't need a local APK copy. */
+  downloadUrl: string;
   sha256: string;
   sizeBytes: number;
   releasedAt: string;
@@ -43,33 +46,35 @@ export interface AndroidRelease {
   minSupportedVersionCode: number;
 }
 
-const MANIFEST_PATH = path.join(process.cwd(), "data", "app-android-manifest.json");
+const COMMITTED_MANIFEST_PATH = path.join(process.cwd(), "apps", "android", "releases", "latest.json");
+const RUNTIME_MANIFEST_PATH = path.join(process.cwd(), "data", "app-android-manifest.json");
 const APK_DIR = path.join(process.cwd(), "data", "android-apks");
 
-let cached: { mtime: number; release: AndroidRelease | null } | null = null;
+interface CacheEntry { mtime: number; release: AndroidRelease | null }
+const fileCache = new Map<string, CacheEntry>();
 
-/** Read the manifest from disk, with a small mtime-based cache so we don't
- *  hit fs every request. Returns null if the manifest is missing or
- *  unparseable — meaning "no release published yet". */
-export async function getLatestRelease(): Promise<AndroidRelease | null> {
+/** Try to read + parse a manifest from a path. Returns null on missing
+ *  file, parse error, or schema mismatch. mtime-cached so a single page
+ *  hitting both /api/app/android/latest AND /download doesn't double-read. */
+async function readManifestAt(p: string): Promise<AndroidRelease | null> {
   try {
-    const st = await stat(MANIFEST_PATH);
+    const st = await stat(p);
+    const cached = fileCache.get(p);
     if (cached && cached.mtime === st.mtimeMs) return cached.release;
-    const text = await readFile(MANIFEST_PATH, "utf8");
+    const text = await readFile(p, "utf8");
     const raw = JSON.parse(text) as Partial<AndroidRelease>;
-    // Defensive: only treat well-formed manifests as published.
     if (
       typeof raw.versionCode !== "number" ||
-      typeof raw.versionName !== "string" ||
-      typeof raw.filename !== "string"
+      typeof raw.versionName !== "string"
     ) {
-      cached = { mtime: st.mtimeMs, release: null };
+      fileCache.set(p, { mtime: st.mtimeMs, release: null });
       return null;
     }
     const release: AndroidRelease = {
       versionCode: raw.versionCode,
       versionName: raw.versionName,
-      filename: raw.filename,
+      filename: String(raw.filename || ""),
+      downloadUrl: String(raw.downloadUrl || ""),
       sha256: String(raw.sha256 || "").toLowerCase(),
       sizeBytes: Number(raw.sizeBytes || 0),
       releasedAt: String(raw.releasedAt || new Date(st.mtimeMs).toISOString()),
@@ -77,12 +82,26 @@ export async function getLatestRelease(): Promise<AndroidRelease | null> {
       mandatory: raw.mandatory === true,
       minSupportedVersionCode: Number(raw.minSupportedVersionCode || 1),
     };
-    cached = { mtime: st.mtimeMs, release };
+    // Reject manifests that have neither hosting mode — there's nowhere
+    // for the APP to download from.
+    if (!release.downloadUrl && !release.filename) {
+      fileCache.set(p, { mtime: st.mtimeMs, release: null });
+      return null;
+    }
+    fileCache.set(p, { mtime: st.mtimeMs, release });
     return release;
   } catch {
-    // No manifest, no published release. Fine — endpoint returns 404.
     return null;
   }
+}
+
+/** Get the active release. Runtime data/ override wins over the
+ *  committed manifest — handy for staging a hotfix without a code
+ *  push. Returns null when nothing is published. */
+export async function getLatestRelease(): Promise<AndroidRelease | null> {
+  const runtime = await readManifestAt(RUNTIME_MANIFEST_PATH);
+  if (runtime) return runtime;
+  return readManifestAt(COMMITTED_MANIFEST_PATH);
 }
 
 /** Absolute path to the APK file that backs a given filename. Returns

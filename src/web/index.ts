@@ -164,9 +164,13 @@ export async function webRoutes(app: FastifyInstance) {
     // Read the Android release manifest so the version + APK link shown on
     // /download stays in sync with what the in-app updater sees. Falls
     // back to "not yet published" placeholders if the manifest is missing.
+    // Prefers the manifest's downloadUrl (typically a GitHub Releases URL)
+    // and falls back to the legacy server-hosted /downloads/android/ path.
     const { getLatestRelease } = await import("../lib/android_release.js");
     const rel = await getLatestRelease();
-    const apkUrl = rel ? `/downloads/android/${encodeURIComponent(rel.filename)}` : "";
+    const apkUrl = rel
+      ? (rel.downloadUrl || `/downloads/android/${encodeURIComponent(rel.filename)}`)
+      : "";
     const apkSize = rel
       ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
       : "~15 MB";
