@@ -62,24 +62,46 @@ cd apps/android/ByWaveCalendar
 # 1. Bump versionCode + versionName in app/build.gradle.kts
 #    versionCode MUST monotonically increase. versionName is human.
 
-# 2. Build the signed APK.
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew :app:assembleRelease
+# 2. (Optional) Write polished release notes for the in-app updater
+#    sheet — Markdown plain text, newlines preserved.
+#    Default note is "v<X.Y.Z> 发布" if you skip this.
+cat > /tmp/v0.9.0-notes.txt <<EOF
+v0.9 — <一句话主题>
 
-# 3. Find the APK + compute checksum + size for the manifest.
-APK=app/build/outputs/apk/release/app-release.apk
-shasum -a 256 "$APK"
-stat -f %z "$APK"   # macOS — size in bytes
+• 第一个亮点
+• 第二个亮点
+• 修复 …
+EOF
 
-# 4. Rename to the convention used by the in-app updater.
-VERSION=$(grep 'versionName =' app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
-cp "$APK" "/tmp/bywave-calendar-${VERSION}.apk"
+# 3. Run the all-in-one release script.
+./scripts/release.sh --notes-from=/tmp/v0.9.0-notes.txt --push
 ```
 
-## Publishing
+What `release.sh` does:
 
-See `../../deploy/android-release.md` for the server-side steps:
-upload APK to `data/android-apks/`, edit `data/app-android-manifest.json`,
-verify with `curl /api/app/android/latest`.
+1. Reads `versionCode` + `versionName` from `app/build.gradle.kts`
+2. Refuses to continue if a GitHub Release with that tag already exists
+3. Runs `assembleRelease`
+4. **Verifies the signing certificate fingerprint matches the canonical
+   keystore** (defense against a recovered backup having a different
+   key — that'd lock every existing user out of in-place updates)
+5. Computes SHA-256 + size
+6. `gh release create` with the APK attached
+7. Updates `apps/android/releases/latest.json` with new values
+8. (with `--push`) commits + pushes to GitHub and Gitee
 
-Installed APPs will pick up the new version within 6 hours on resume.
+Flags:
+
+| Flag | What it does |
+|---|---|
+| `--push` | Commit + push manifest to both remotes. Without this, the manifest changes stay in your working tree for review. |
+| `--mandatory` | Mark this release as forced upgrade (locks the APP until install). For critical bugs. |
+| `--notes-from=FILE` | Use FILE's contents as both GitHub release notes AND the in-app updater notes. |
+
+After the script:
+
+- **Server**: runs `git pull` (or wait for cron) to pick up the manifest.
+- **Installed APPs**: poll within 6 hours of next resume, or force via Settings → 检查更新.
+
+If you skip `--push`, the script still creates the GitHub Release (that
+half is durable). Use `gh release delete <tag> --yes` to undo and rerun.
