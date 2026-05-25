@@ -44,19 +44,34 @@
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Passkey · MFA · 多账号</li>
     </ul>
 
-    <div class="mt-auto">
+    <div class="mt-auto space-y-2">
       <% if (iosAppStoreUrl) { %>
         <a href="<%= iosAppStoreUrl %>" target="_blank" rel="noopener"
            class="block w-full text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-medium shadow-md transition">
           App Store 下载 →
         </a>
+        <% if (iosTestFlightUrl) { %>
+          <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
+             class="block w-full text-center rounded-md border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
+            或加入 TestFlight 内测 (Beta)
+          </a>
+        <% } %>
+      <% } else if (iosTestFlightUrl) { %>
+        <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
+           class="block w-full text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-medium shadow-md transition">
+          通过 TestFlight 加入 (Beta) →
+        </a>
+        <p class="text-xs text-slate-400 mt-2 text-center">
+          App Store 正式版审核中，TestFlight 公测已开放。<br/>
+          点击后用 TestFlight APP 安装即可，正式版上架后自动转为正式版本。
+        </p>
       <% } else { %>
         <button disabled
                 class="block w-full text-center rounded-lg bg-slate-200 text-slate-500 px-5 py-3 text-sm font-medium cursor-not-allowed">
           🍎 App Store 审核中 · 敬请期待
         </button>
         <p class="text-xs text-slate-400 mt-2 text-center">
-          已通过 TestFlight 测试，预计 <%= iosEtaWeek %> 上架
+          预计 <%= iosEtaWeek %> 上架
         </p>
       <% } %>
     </div>

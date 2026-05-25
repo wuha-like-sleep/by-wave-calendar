@@ -11,6 +11,8 @@ import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.sync.Reminders
+import cn.bywave.calendar.sync.SystemCalendarMirror
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -24,6 +26,9 @@ class EventRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val db = AppDatabase.get(context)
+    private val mirror = SystemCalendarMirror(context)
+    private val reminders = Reminders(context)
+    private val prefs = SyncPreferences(context)
 
     data class CacheSnapshot(
         val events: List<EventDTO>,
@@ -70,6 +75,17 @@ class EventRepository(
             profile.id,
             resp.calendars.map { CalendarEntity.from(it, profile.id) },
         )
+
+        // Ambient sync (v0.6) — opt-in via Settings. Each is gated on
+        // its own runtime permission inside the helper, so calling
+        // them unconditionally is safe (no-ops when off / unpermitted).
+        val current = prefs.current()
+        if (current.mirrorToSystemCalendar) {
+            runCatching { mirror.mirror(profile, resp.calendars, resp.events) }
+        }
+        if (current.remindersEnabled) {
+            runCatching { reminders.reschedule(profile, resp.events, current.reminderLeadMinutes) }
+        }
     }
 
     /** Wipe just one profile's cache (used when removing that account). */
