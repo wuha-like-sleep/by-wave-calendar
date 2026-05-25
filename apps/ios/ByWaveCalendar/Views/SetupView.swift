@@ -111,7 +111,11 @@ struct SetupView: View {
                         serverURL: item.serverURL,
                         mfaToken: item.mfaToken,
                         onComplete: { resp in
-                            let expDate = ISO8601DateFormatter().date(from: resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+                            // Lenient parse — server emits Date.toISOString() with
+            // fractional seconds which the default ISO8601DateFormatter
+            // rejects. See AppState.parseIsoLenient comment for the
+            // session-cripping bug that caused.
+            let expDate = AppState.parseIsoLenient(resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
                             state.completePairing(
                                 serverURL: item.serverURL,
                                 refreshToken: resp.refreshToken,
@@ -446,7 +450,7 @@ struct SetupView: View {
             }
             let payloadData = try JSONSerialization.data(withJSONObject: payload)
             let r = try JSONDecoder().decode(PasswordLoginResponse.self, from: payloadData)
-            let expDate = ISO8601DateFormatter().date(from: r.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+            let expDate = AppState.parseIsoLenient(r.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
             state.completePairing(
                 serverURL: url,
                 refreshToken: r.refreshToken,
@@ -508,7 +512,11 @@ struct SetupView: View {
                 label: PairingService.suggestedLabel(),
                 appVersion: PairingService.appVersion,
             )
-            let expDate = ISO8601DateFormatter().date(from: resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+            // Lenient parse — server emits Date.toISOString() with
+            // fractional seconds which the default ISO8601DateFormatter
+            // rejects. See AppState.parseIsoLenient comment for the
+            // session-cripping bug that caused.
+            let expDate = AppState.parseIsoLenient(resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
             state.completePairing(
                 serverURL: serverURL,
                 refreshToken: resp.refreshToken,

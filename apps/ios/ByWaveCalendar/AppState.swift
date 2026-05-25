@@ -416,12 +416,32 @@ final class AppState: ObservableObject {
         let payload = (outer["data"] as? [String: Any]) ?? outer
         guard let token = payload["accessToken"] as? String,
               let expIso = payload["accessTokenExpiresAt"] as? String,
-              let exp = ISO8601DateFormatter().date(from: expIso)
+              let exp = Self.parseIsoLenient(expIso)
         else {
             throw APIError.refreshFailed(status: 200)
         }
         self.accessToken = token
         self.accessTokenExpiresAt = exp
+    }
+
+    /// Parse the server's ISO8601 timestamp. The server emits
+    /// `Date.toISOString()` which includes fractional seconds
+    /// ("2026-05-25T11:30:00.000Z"); default ISO8601DateFormatter()
+    /// rejects those. Try the fractional-seconds variant first, fall
+    /// back to the plain one for safety.
+    ///
+    /// This is THE iOS v1.3.4 critical bug: without `.withFractionalSeconds`
+    /// every /auth/refresh response parsed as nil and threw refreshFailed,
+    /// forcing the user to sign in again every time access token expired
+    /// (1h). The visible symptom was "wake up the next morning, app is
+    /// logged out."
+    static func parseIsoLenient(_ s: String) -> Date? {
+        let withFrac = ISO8601DateFormatter()
+        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = withFrac.date(from: s) { return d }
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        return plain.date(from: s)
     }
 }
 
