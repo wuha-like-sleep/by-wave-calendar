@@ -31,7 +31,7 @@ data class AttendeesUiState(
 )
 
 class AttendeesViewModel : ViewModel() {
-    private val tokens = BywaveApp.instance.tokenStore
+    private val profiles = BywaveApp.instance.profiles
     private val _state = MutableStateFlow(AttendeesUiState())
     val state: StateFlow<AttendeesUiState> = _state.asStateFlow()
 
@@ -103,11 +103,11 @@ class AttendeesViewModel : ViewModel() {
     }
 
     private fun client(): ApiClient? {
-        val server = tokens.serverUrl ?: run {
+        val profile = profiles.active() ?: run {
             _state.update { it.copy(errorMessage = "未登录") }
             return null
         }
-        return ApiClient.forServer(server, tokens)
+        return ApiClient.forProfile(profile, profiles)
     }
 
     private fun isValidEmail(s: String): Boolean =

@@ -1,16 +1,14 @@
-// Single-Activity entry point. All screens live inside Compose
-// navigation, no Fragments.
+// Single-Activity entry point. v0.5 — multi-account aware.
 //
-// v0.3 navigation graph:
-//   setup ─┬─→ scanner (QR scan → fills setup form on return)
-//          └─→ calendar (after successful sign-in)
-//                ├─→ settings (account / about / sign-out → pops back to setup)
-//                ├─→ event_new
-//                └─→ event_edit/{id}
+// Sign-in state is now derived from ProfileStore.activeId being
+// non-null (instead of TokenStore.isSignedIn). The NavHost watches
+// it as a State<String?> so login completion + sign-out + last-
+// account removal all flip start destination without manual handoff.
 //
-// CalendarViewModel is scoped to the "calendar" NavGraph entry so
-// EventEditScreen can read the wide-window event cache when opening
-// for "edit existing" without re-fetching.
+// "Add another account" enters the setup screen WHILE staying signed
+// in to the current account — distinguished from cold-start setup
+// by passing addingExtra=true so the screen knows not to "auto-
+// return to calendar" if the user cancels.
 
 package cn.bywave.calendar
 
@@ -23,9 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -60,26 +56,30 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun AppRoot() {
-    val tokens = remember { BywaveApp.instance.tokenStore }
+    val profiles = remember { BywaveApp.instance.profiles }
+    val activeId by profiles.activeId.collectAsState()
     val nav = rememberNavController()
-    // Use a runtime-mutable start route so signOut() can flip without
-    // rebuilding the NavHost from scratch.
-    var loggedIn by remember { mutableStateOf(tokens.isSignedIn) }
+    val loggedIn = activeId != null
 
     NavHost(
         navController = nav,
         startDestination = if (loggedIn) "calendar" else "setup",
     ) {
         composable("setup") {
-            // Get the shared SetupViewModel scoped to "setup" so the
-            // QR scanner result can flow back through onScanned().
             val setupVm: SetupViewModel = viewModel()
             SetupScreen(
                 vm = setupVm,
                 onSignedIn = {
-                    loggedIn = true
-                    nav.navigate("calendar") {
-                        popUpTo("setup") { inclusive = true }
+                    // If we got here from "add another account", the
+                    // calendar route is already on the back stack; pop
+                    // back to it. Otherwise this was cold-start setup
+                    // and we navigate fresh.
+                    if (nav.previousBackStackEntry?.destination?.route == "calendar") {
+                        nav.popBackStack("calendar", inclusive = false)
+                    } else {
+                        nav.navigate("calendar") {
+                            popUpTo("setup") { inclusive = true }
+                        }
                     }
                 },
                 onScanQr = { nav.navigate("scanner") },
@@ -87,8 +87,6 @@ private fun AppRoot() {
         }
 
         composable("scanner") {
-            // Share the parent route's SetupViewModel so the scanned
-            // pair URL fills the form in the previous screen.
             val parentEntry = remember(nav) { nav.getBackStackEntry("setup") }
             val setupVm: SetupViewModel = viewModel(viewModelStoreOwner = parentEntry)
             ScannerScreen(
@@ -102,7 +100,6 @@ private fun AppRoot() {
 
         composable("calendar") {
             val calVm: CalendarViewModel = viewModel()
-            val state by calVm.state.collectAsState()
             CalendarScreen(
                 vm = calVm,
                 onOpenSettings = { nav.navigate("settings") },
@@ -112,43 +109,22 @@ private fun AppRoot() {
                     val title = java.net.URLEncoder.encode(ev.summary, "UTF-8")
                     nav.navigate("attendees/${ev.id}/$title")
                 },
-            )
-        }
-
-        composable(
-            route = "attendees/{id}/{title}",
-            arguments = listOf(
-                navArgument("id") { type = NavType.StringType },
-                navArgument("title") { type = NavType.StringType },
-            ),
-        ) { entry ->
-            val id = entry.arguments?.getString("id") ?: return@composable
-            val titleRaw = entry.arguments?.getString("title").orEmpty()
-            val title = runCatching {
-                java.net.URLDecoder.decode(titleRaw, "UTF-8")
-            }.getOrDefault(titleRaw)
-            AttendeesScreen(
-                eventId = id,
-                eventTitle = title,
-                onBack = { nav.popBackStack() },
+                onAddAccount = { nav.navigate("setup") },
             )
         }
 
         composable("settings") {
-            // Get the calendar VM scoped to the "calendar" route so we
-            // call its signOut() — which also wipes Room cache. Plain
-            // tokens.signOut() would leave stale events on disk for
-            // the next user to briefly see before refetch.
             val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             SettingsScreen(
                 onBack = { nav.popBackStack() },
                 onSignOut = {
-                    calVm.signOut()
-                    loggedIn = false
-                    nav.navigate("setup") {
-                        popUpTo("calendar") { inclusive = true }
-                    }
+                    calVm.signOutActive()
+                    // If there are still other profiles, stay on calendar
+                    // (ProfileStore will have picked one as active);
+                    // else fall through to setup as the activeId Flow
+                    // flips and start-destination recomputes.
+                    nav.popBackStack("calendar", inclusive = false)
                 },
             )
         }
@@ -176,15 +152,10 @@ private fun AppRoot() {
             val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             val state by calVm.state.collectAsState()
-            // Find the event in the wide-window cache. For recurring
-            // events the same id appears multiple times (one per
-            // occurrence) — first match is the master / earliest.
             val source = remember(id, state.events) {
                 state.events.firstOrNull { it.id == id }
             }
             if (source == null) {
-                // Cache miss (e.g. cold launch deep-link) — pop back;
-                // v0.4 will fetch the single event from the server.
                 androidx.compose.runtime.LaunchedEffect(id) { nav.popBackStack() }
                 return@composable
             }
@@ -196,6 +167,25 @@ private fun AppRoot() {
                     nav.popBackStack()
                     calVm.reload()
                 },
+            )
+        }
+
+        composable(
+            route = "attendees/{id}/{title}",
+            arguments = listOf(
+                navArgument("id") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType },
+            ),
+        ) { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            val titleRaw = entry.arguments?.getString("title").orEmpty()
+            val title = runCatching {
+                java.net.URLDecoder.decode(titleRaw, "UTF-8")
+            }.getOrDefault(titleRaw)
+            AttendeesScreen(
+                eventId = id,
+                eventTitle = title,
+                onBack = { nav.popBackStack() },
             )
         }
     }

@@ -19,9 +19,11 @@ import kotlinx.serialization.json.Json
 
 @Entity(tableName = "events")
 data class EventEntity(
-    @PrimaryKey val rowKey: String,         // "${id}@${startsAt}" — recurring
-                                             // events emit multiple rows per
-                                             // master id, one per occurrence
+    // v0.5 — rowKey now includes profileId so two profiles can hold
+    // the same server-side event id without colliding. Same shape as
+    // before for queries; the primary key just got a profile prefix.
+    @PrimaryKey val rowKey: String,         // "${profileId}@${id}@${startsAt}"
+    val profileId: String,                  // active profile this row belongs to
     val id: String,
     val calendarId: String,
     val summary: String,
@@ -51,8 +53,9 @@ data class EventEntity(
     )
 
     companion object {
-        fun from(dto: EventDTO, json: Json): EventEntity = EventEntity(
-            rowKey = "${dto.id}@${dto.startsAt}",
+        fun from(dto: EventDTO, profileId: String, json: Json): EventEntity = EventEntity(
+            rowKey = "$profileId@${dto.id}@${dto.startsAt}",
+            profileId = profileId,
             id = dto.id,
             calendarId = dto.calendarId,
             summary = dto.summary,
@@ -68,9 +71,10 @@ data class EventEntity(
     }
 }
 
-@Entity(tableName = "calendars")
+@Entity(tableName = "calendars", primaryKeys = ["profileId", "id"])
 data class CalendarEntity(
-    @PrimaryKey val id: String,
+    val profileId: String,
+    val id: String,
     val name: String,
     val color: String,
     val timezone: String?,
@@ -80,8 +84,12 @@ data class CalendarEntity(
     )
 
     companion object {
-        fun from(dto: CalendarMeta): CalendarEntity = CalendarEntity(
-            id = dto.id, name = dto.name, color = dto.color, timezone = dto.timezone,
+        fun from(dto: CalendarMeta, profileId: String): CalendarEntity = CalendarEntity(
+            profileId = profileId,
+            id = dto.id,
+            name = dto.name,
+            color = dto.color,
+            timezone = dto.timezone,
         )
     }
 }

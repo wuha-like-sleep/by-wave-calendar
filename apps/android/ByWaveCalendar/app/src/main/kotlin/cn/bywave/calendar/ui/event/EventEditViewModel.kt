@@ -64,7 +64,7 @@ data class EventEditUiState(
 }
 
 class EventEditViewModel : ViewModel() {
-    private val tokens = BywaveApp.instance.tokenStore
+    private val profiles = BywaveApp.instance.profiles
     private val _state = MutableStateFlow(EventEditUiState())
     val state: StateFlow<EventEditUiState> = _state.asStateFlow()
 
@@ -140,8 +140,8 @@ class EventEditViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val server = tokens.serverUrl ?: error("未登录")
-                val client = ApiClient.forServer(server, tokens)
+                val profile = profiles.active() ?: error("未登录")
+                val client = ApiClient.forProfile(profile, profiles)
 
                 val zone = ZoneId.systemDefault()
                 val startIso = ISO.format(s.start.atZone(zone))
@@ -195,8 +195,8 @@ class EventEditViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val server = tokens.serverUrl ?: error("未登录")
-                val client = ApiClient.forServer(server, tokens)
+                val profile = profiles.active() ?: error("未登录")
+                val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id)
                 _state.update { it.copy(deleting = false, finished = true) }
             } catch (e: Exception) {

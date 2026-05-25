@@ -63,7 +63,8 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    val tokens = remember { BywaveApp.instance.tokenStore }
+    val profiles = remember { BywaveApp.instance.profiles }
+    val active = profiles.active()
     val context = LocalContext.current
     var showSignOutDialog by remember { mutableStateOf(false) }
 
@@ -91,9 +92,9 @@ fun SettingsScreen(
 
             // Account card
             Section(title = stringResource(R.string.settings_account)) {
-                ReadRow(label = stringResource(R.string.settings_email), value = tokens.userEmail ?: "—")
+                ReadRow(label = stringResource(R.string.settings_email), value = active?.email ?: "—")
                 HorizontalDivider()
-                ReadRow(label = stringResource(R.string.settings_server), value = tokens.serverUrl ?: "—")
+                ReadRow(label = stringResource(R.string.settings_server), value = active?.serverUrl ?: "—")
             }
 
             // System

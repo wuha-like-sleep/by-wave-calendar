@@ -1,19 +1,13 @@
-// Retrofit-based API client. Mirrors iOS APIClient.swift.
-//
-// Design:
-//   - Single OkHttpClient with a logging interceptor (gated to BuildConfig.DEBUG)
-//   - AuthInterceptor injects Bearer + handles 401 → refresh → retry once
-//   - JSON via kotlinx.serialization (ignoreUnknownKeys = true so server
-//     can add fields without breaking client; the iOS side likewise
-//     tolerates unknown extras)
-//   - Base URL is dynamic per-server, set via ApiClient(serverUrl).
-//     Retrofit needs a final URL at builder time, so we recreate the
-//     client when the user switches servers.
+// Retrofit-based API client. v0.5: now keyed by (profileId, serverUrl)
+// so we keep a separate OkHttp connection pool per account and don't
+// accidentally cross-contaminate auth between profiles. AuthInterceptor
+// reads the refresh token from the active Profile in ProfileStore.
 
 package cn.bywave.calendar.data.api
 
 import cn.bywave.calendar.BuildConfig
-import cn.bywave.calendar.data.auth.TokenStore
+import cn.bywave.calendar.data.auth.Profile
+import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
@@ -72,7 +66,6 @@ interface BywaveApi {
     @DELETE("api/v1/events/{id}")
     suspend fun deleteEvent(@Path("id") id: String)
 
-    // -- Attendees (v0.4) --
     @GET("api/v1/events/{id}/attendees")
     suspend fun attendees(@Path("id") id: String): AttendeesResponse
 
@@ -95,30 +88,24 @@ interface BywaveApi {
 
 class ApiClient private constructor(
     val baseUrl: String,
-    private val tokens: TokenStore,
+    private val store: ProfileStore,
+    private val profileId: String,
 ) {
     val api: BywaveApi
 
     init {
-        val json = Json {
-            ignoreUnknownKeys = true
-            explicitNulls = false  // Don't serialize nulls — server treats
-                                    // missing key as "leave unchanged" on PATCH.
-        }
-
+        val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC
                     else HttpLoggingInterceptor.Level.NONE
         }
-
         val ok = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(AuthInterceptor(tokens, baseUrl))
+            .addInterceptor(AuthInterceptor(store, profileId, baseUrl))
             .addInterceptor(logging)
             .build()
-
         api = Retrofit.Builder()
             .baseUrl(if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/")
             .client(ok)
@@ -128,66 +115,87 @@ class ApiClient private constructor(
     }
 
     companion object {
-        /** Construct or return the cached client for this server URL.
-         *  We cache so OkHttp's connection pool / DNS cache get reused
-         *  across screens; rebuilding per-request would defeat HTTP/2 keepalive. */
         @Volatile
-        private var cached: ApiClient? = null
+        private var cache: MutableMap<String, ApiClient> = mutableMapOf()
 
-        fun forServer(url: String, tokens: TokenStore): ApiClient {
-            val existing = cached
-            if (existing != null && existing.baseUrl == url) return existing
-            return ApiClient(url, tokens).also { cached = it }
+        /** Return the client for the given profile id, creating a fresh
+         *  one if the cached entry's baseUrl no longer matches (e.g.
+         *  user edited the server URL). */
+        @Synchronized
+        fun forProfile(profile: Profile, store: ProfileStore): ApiClient {
+            val cached = cache[profile.id]
+            if (cached != null && cached.baseUrl == profile.serverUrl) return cached
+            return ApiClient(profile.serverUrl, store, profile.id).also {
+                cache[profile.id] = it
+            }
         }
 
-        fun reset() { cached = null }
+        /** For setup-time login + MFA verify, when we don't yet have
+         *  a Profile to key against. Uses a transient throwaway client
+         *  per call; OkHttp's global pool still reuses connections. */
+        fun forSetup(serverUrl: String): BywaveApi {
+            val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+            val ok = OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .build()
+            return Retrofit.Builder()
+                .baseUrl(if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/")
+                .client(ok)
+                .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+                .build()
+                .create(BywaveApi::class.java)
+        }
+
+        /** Drop the cached client for the given profile (e.g. after
+         *  remove or sign-out). Forces a rebuild on next access. */
+        @Synchronized
+        fun invalidate(profileId: String) {
+            cache.remove(profileId)
+        }
+
+        @Synchronized
+        fun reset() {
+            cache.clear()
+        }
     }
 }
 
-/**
- * Adds `Authorization: Bearer <accessToken>`, transparently refreshes
- * on 401, and retries the original request once. Mirror of the iOS
- * APIClient's chained-request logic.
- */
 private class AuthInterceptor(
-    private val tokens: TokenStore,
+    private val store: ProfileStore,
+    private val profileId: String,
     private val baseUrl: String,
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
-
-        // Skip auth on the login + refresh endpoints themselves — they
-        // don't accept Bearer and would loop forever otherwise.
         val isAuthEndpoint =
             original.url.encodedPath.contains("/auth/login") ||
-            original.url.encodedPath.contains("/auth/refresh")
+            original.url.encodedPath.contains("/auth/refresh") ||
+            original.url.encodedPath.contains("/auth/mfa")
 
         val firstReq = if (isAuthEndpoint) original
-                       else original.withBearer(tokens.accessToken)
+                       else original.withBearer(store.accessToken(profileId))
         val firstResp = chain.proceed(firstReq)
-
         if (firstResp.code != 401 || isAuthEndpoint) return firstResp
         firstResp.close()
 
-        // 401 path: try to mint a fresh access token from the stored
-        // refresh token. If that fails (refresh expired / revoked), we
-        // let the 401 bubble up — the ViewModel layer surfaces "please
-        // sign in again".
-        val rt = tokens.refreshToken ?: return chain.proceed(firstReq)
-        val newAccess = runCatching { blockingRefresh(rt) }.getOrNull() ?: return chain.proceed(firstReq)
-        tokens.accessToken = newAccess.accessToken
-        tokens.refreshToken = newAccess.refreshToken
-
-        return chain.proceed(original.withBearer(newAccess.accessToken))
+        // Refresh path — read the profile's refresh token (might have
+        // been rotated since this client was built), trade for a new
+        // access token, retry once.
+        val profile = store.profiles.value.firstOrNull { it.id == profileId }
+        val rt = profile?.refreshToken ?: return chain.proceed(firstReq)
+        val refreshed = runCatching { blockingRefresh(rt) }.getOrNull() ?: return chain.proceed(firstReq)
+        store.setAccessToken(profileId, refreshed.accessToken)
+        // Server rotates refresh tokens on use — persist the new one.
+        if (refreshed.refreshToken != rt) {
+            store.updateRefreshToken(profileId, refreshed.refreshToken)
+        }
+        return chain.proceed(original.withBearer(refreshed.accessToken))
     }
 
-    /** Synchronous refresh — we're already on OkHttp's dispatcher thread
-     *  in the interceptor, so blocking here is fine. Bypasses Retrofit's
-     *  suspend pipeline to avoid bootstrapping a coroutine inside the
-     *  interceptor. */
     private fun blockingRefresh(refreshToken: String): RefreshResponse {
-        val tempApi = ApiClient.forServer(baseUrl, tokens).api
-        return kotlinx.coroutines.runBlocking { tempApi.refresh(RefreshRequest(refreshToken)) }
+        val api = ApiClient.forSetup(baseUrl)
+        return kotlinx.coroutines.runBlocking { api.refresh(RefreshRequest(refreshToken)) }
     }
 
     private fun Request.withBearer(token: String?): Request {

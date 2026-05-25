@@ -1,26 +1,26 @@
-// EventRepository — the bridge between the network (ApiClient) and the
-// local cache (Room). ViewModels consume this; they never talk to
-// Retrofit or Room directly.
-//
-// Strategy: cache + network, both as Flows. UI observes Room; network
-// fetch writes into Room which auto-propagates. Cold launch instantly
-// shows cached events while the network fetch runs in the background.
+// EventRepository — bridge between the network (ApiClient) and the
+// local cache (Room). v0.5: scopes all observation and writes by the
+// active Profile so switching accounts surfaces a different cache
+// without contaminating either.
 
 package cn.bywave.calendar.data.store
 
 import android.content.Context
 import cn.bywave.calendar.data.api.ApiClient
-import cn.bywave.calendar.data.auth.TokenStore
+import cn.bywave.calendar.data.auth.Profile
+import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.Json
 
 class EventRepository(
     private val context: Context,
-    private val tokens: TokenStore,
+    private val profiles: ProfileStore,
 ) {
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
     private val db = AppDatabase.get(context)
@@ -30,34 +30,55 @@ class EventRepository(
         val calendars: List<CalendarMeta>,
     )
 
-    fun observe(): Flow<CacheSnapshot> = combine(
-        db.eventDao().observeAll(),
-        db.calendarDao().observeAll(),
-    ) { eventRows, calendarRows ->
-        CacheSnapshot(
-            events = eventRows.map { it.toDto(json) },
-            calendars = calendarRows.map { it.toDto() },
-        )
+    /**
+     * Observable cache for the currently active profile. Switches
+     * automatically when the user picks a different profile via
+     * ProfileStore.setActive(...) — Flow re-emits with the new
+     * profile's events and calendars.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observe(): Flow<CacheSnapshot> = profiles.activeId.flatMapLatest { activeId ->
+        if (activeId == null) {
+            flowOf(CacheSnapshot(emptyList(), emptyList()))
+        } else {
+            combine(
+                db.eventDao().observeForProfile(activeId),
+                db.calendarDao().observeForProfile(activeId),
+            ) { eventRows, calendarRows ->
+                CacheSnapshot(
+                    events = eventRows.map { it.toDto(json) },
+                    calendars = calendarRows.map { it.toDto() },
+                )
+            }
+        }
     }
 
     /**
-     * Fetch a window from the server and replace the local cache.
-     * Returns true on success. Errors bubble to the caller so the
-     * ViewModel can surface a banner without blocking the cached UI.
+     * Fetch a window from the server and replace the active profile's
+     * cache. Errors bubble so the ViewModel can surface a banner
+     * without blocking the existing cached UI.
      */
     suspend fun fetchAndCache(fromIso: String, toIso: String) {
-        val server = tokens.serverUrl ?: error("not signed in")
-        val client = ApiClient.forServer(server, tokens)
+        val profile = profiles.active() ?: error("not signed in")
+        val client = ApiClient.forProfile(profile, profiles)
         val resp = client.api.events(from = fromIso, to = toIso)
-
-        // Clear-and-insert is fine because our query is the entire
-        // window we care about. Incremental merge would be safer if
-        // we ever support partial-window fetches (we don't yet).
-        db.eventDao().replaceAll(resp.events.map { EventEntity.from(it, json) })
-        db.calendarDao().replaceAll(resp.calendars.map { CalendarEntity.from(it) })
+        db.eventDao().replaceForProfile(
+            profile.id,
+            resp.events.map { EventEntity.from(it, profile.id, json) },
+        )
+        db.calendarDao().replaceForProfile(
+            profile.id,
+            resp.calendars.map { CalendarEntity.from(it, profile.id) },
+        )
     }
 
-    suspend fun wipe() {
-        AppDatabase.wipe(context)
+    /** Wipe just one profile's cache (used when removing that account). */
+    suspend fun wipeProfile(profileId: String) {
+        AppDatabase.wipeProfile(context, profileId)
+    }
+
+    /** Wipe everything (used by "sign out all"). */
+    suspend fun wipeAll() {
+        AppDatabase.wipeAll(context)
     }
 }

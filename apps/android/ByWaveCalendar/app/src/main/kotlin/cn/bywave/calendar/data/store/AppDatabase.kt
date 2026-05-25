@@ -12,7 +12,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [EventEntity::class, CalendarEntity::class],
-    version = 1,
+    version = 2,  // v2: added profileId column + composite key on calendars
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,12 +33,20 @@ abstract class AppDatabase : RoomDatabase() {
                 .also { instance = it }
         }
 
-        /** Wipe everything. Called on sign-out so the next user starts
-         *  with an empty cache. */
-        suspend fun wipe(context: Context) {
+        /** Wipe everything. Called on "sign out all" so the next user
+         *  starts with an empty cache. */
+        suspend fun wipeAll(context: Context) {
             val db = get(context)
-            db.eventDao().clear()
-            db.calendarDao().clear()
+            db.eventDao().clearAll()
+            db.calendarDao().clearAll()
+        }
+
+        /** Wipe just one profile's cache (sign out from one account
+         *  but keep the others). */
+        suspend fun wipeProfile(context: Context, profileId: String) {
+            val db = get(context)
+            db.eventDao().clearProfile(profileId)
+            db.calendarDao().clearProfile(profileId)
         }
     }
 }

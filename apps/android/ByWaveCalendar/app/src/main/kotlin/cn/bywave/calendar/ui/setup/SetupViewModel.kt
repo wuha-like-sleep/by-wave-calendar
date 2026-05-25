@@ -1,9 +1,7 @@
-// SetupScreen state holder. Mirrors iOS SetupView's signIn(...) flow:
-//   1. Normalize server URL
-//   2. POST /api/v1/auth/login with email + password
-//   3. If response.mfaPending → push MFA sheet (deferred to v0.2)
-//   4. Persist refreshToken + accessToken via TokenStore
-//   5. Emit signedIn=true so the composable navigates away
+// SetupViewModel — v0.5 saves new logins as Profile entries via
+// ProfileStore.upsertAndActivate(). Supports both "first account" and
+// "add another account" flows; the difference is just whether
+// ProfileStore.profiles is empty when we get here.
 
 package cn.bywave.calendar.ui.setup
 
@@ -11,7 +9,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.api.ApiClient
+import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.model.LoginRequest
+import cn.bywave.calendar.data.model.LoginResponse
 import cn.bywave.calendar.data.model.MfaVerifyRequest
 import cn.bywave.calendar.util.ServerUrl
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,8 +27,6 @@ data class SetupUiState(
     val busy: Boolean = false,
     val errorMessage: String? = null,
     val signedIn: Boolean = false,
-    /** Set when /auth/login returned mfaPending=true. Triggers
-     *  MfaDialog in the composable. */
     val mfaToken: String? = null,
 ) {
     val canSubmit: Boolean
@@ -36,7 +34,7 @@ data class SetupUiState(
 }
 
 class SetupViewModel : ViewModel() {
-    private val tokens = BywaveApp.instance.tokenStore
+    private val profiles = BywaveApp.instance.profiles
     private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
 
@@ -44,15 +42,6 @@ class SetupViewModel : ViewModel() {
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
 
-    /**
-     * Consume a `bywave://pair?...` URL scanned from the server's
-     * "Pair new device" QR. We trade the one-time pair code for a
-     * refresh token via /api/v1/devices/pair, then save credentials
-     * exactly like the email/password path.
-     *
-     * v0.3: only fills the server URL + email and asks the user to
-     * type their password. v0.4 will redeem the pair code directly.
-     */
     fun onScanned(raw: String) {
         val parsed = parsePairUrl(raw) ?: run {
             _state.update { it.copy(errorMessage = "二维码格式不正确") }
@@ -85,20 +74,15 @@ class SetupViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val server = ServerUrl.normalize(s.server)
-                val client = ApiClient.forServer(server, tokens)
-                val resp = client.api.login(LoginRequest(email = s.email, password = s.password))
+                val api = ApiClient.forSetup(server)
+                val resp = api.login(LoginRequest(email = s.email, password = s.password))
 
                 if (resp.mfaPending == true && !resp.mfaToken.isNullOrEmpty()) {
-                    // Surface MFA token to the UI — composable shows
-                    // MfaDialog and calls verifyMfa(code) on submit.
-                    // We pre-save serverUrl now so verifyMfa() doesn't
-                    // need to re-normalize.
-                    tokens.serverUrl = server
                     _state.update { it.copy(busy = false, mfaToken = resp.mfaToken) }
                     return@launch
                 }
 
-                persistTokens(server, s.email, resp.refreshToken, resp.accessToken) ?: run {
+                completeLogin(server, s.email, resp) ?: run {
                     _state.update { it.copy(busy = false, errorMessage = "服务器响应缺少 token") }
                     return@launch
                 }
@@ -114,11 +98,6 @@ class SetupViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Submit the 6-digit TOTP from the user's authenticator. Called by
-     * MfaDialog. The mfaToken from step-1 binds this code to the same
-     * login attempt server-side — it expires in a few minutes.
-     */
     fun verifyMfa(code: String) {
         val token = _state.value.mfaToken ?: return
         if (code.length != 6 || code.any { !it.isDigit() }) {
@@ -129,11 +108,10 @@ class SetupViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val server = tokens.serverUrl ?: error("missing server")
-                val client = ApiClient.forServer(server, tokens)
-                val resp = client.api.verifyMfa(MfaVerifyRequest(mfaToken = token, code = code))
-
-                persistTokens(server, _state.value.email, resp.refreshToken, resp.accessToken) ?: run {
+                val server = ServerUrl.normalize(_state.value.server)
+                val api = ApiClient.forSetup(server)
+                val resp = api.verifyMfa(MfaVerifyRequest(mfaToken = token, code = code))
+                completeLogin(server, _state.value.email, resp) ?: run {
                     _state.update { it.copy(busy = false, errorMessage = "MFA 响应缺少 token") }
                     return@launch
                 }
@@ -148,22 +126,25 @@ class SetupViewModel : ViewModel() {
 
     fun dismissMfa() {
         _state.update { it.copy(mfaToken = null, busy = false) }
-        tokens.serverUrl = null  // back out — clean slate
     }
 
-    /** Persist tokens + email after a successful login (or MFA verify).
+    /** Persist a successful login (or MFA verify) as the active profile.
      *  Returns Unit on success, null when tokens were missing. */
-    private fun persistTokens(
+    private fun completeLogin(
         server: String,
         email: String,
-        refreshToken: String?,
-        accessToken: String?,
+        resp: LoginResponse,
     ): Unit? {
-        if (refreshToken.isNullOrEmpty() || accessToken.isNullOrEmpty()) return null
-        tokens.serverUrl = server
-        tokens.refreshToken = refreshToken
-        tokens.accessToken = accessToken
-        tokens.userEmail = email
+        val refresh = resp.refreshToken ?: return null
+        val access = resp.accessToken ?: return null
+        val profile = profiles.upsertAndActivate(
+            Profile(
+                serverUrl = server,
+                email = email,
+                refreshToken = refresh,
+            ),
+        )
+        profiles.setAccessToken(profile.id, access)
         return Unit
     }
 }

@@ -42,7 +42,7 @@ data class CalendarUiState(
 )
 
 class CalendarViewModel : ViewModel() {
-    private val tokens = BywaveApp.instance.tokenStore
+    private val profiles = BywaveApp.instance.profiles
     private val repository = BywaveApp.instance.repository
 
     private val _state = MutableStateFlow(CalendarUiState())
@@ -51,13 +51,22 @@ class CalendarViewModel : ViewModel() {
     init {
         // Observe Room — cold start sees cache instantly, later
         // network fetches update Room which updates state via this flow.
+        // The flow auto-switches when ProfileStore.activeId changes,
+        // so account-switching surfaces the right cache without
+        // recreating the VM.
         repository.observe()
             .onEach { snap ->
                 _state.update { it.copy(events = snap.events, calendars = snap.calendars) }
             }
             .launchIn(viewModelScope)
 
-        load()
+        // Re-fetch when the active profile changes so the new account's
+        // events get pulled from the network too.
+        profiles.activeId
+            .onEach { id ->
+                if (id != null) load()
+            }
+            .launchIn(viewModelScope)
     }
 
     fun setMode(mode: ViewMode) {
@@ -83,11 +92,15 @@ class CalendarViewModel : ViewModel() {
 
     fun reload() = load()
 
-    fun signOut() {
+    /** Sign out the currently active profile only. If there are
+     *  other profiles, ProfileStore picks the next-most-recent as the
+     *  new active; if this was the last one, activeId becomes null. */
+    fun signOutActive() {
         viewModelScope.launch {
-            tokens.signOut()
-            repository.wipe()
-            ApiClient.reset()
+            val active = profiles.active() ?: return@launch
+            repository.wipeProfile(active.id)
+            ApiClient.invalidate(active.id)
+            profiles.remove(active.id)
         }
     }
 
@@ -112,7 +125,7 @@ class CalendarViewModel : ViewModel() {
     // ---- Fetch ----
 
     private fun load() {
-        if (tokens.serverUrl == null) {
+        if (profiles.active() == null) {
             _state.update { it.copy(errorMessage = "未登录") }
             return
         }

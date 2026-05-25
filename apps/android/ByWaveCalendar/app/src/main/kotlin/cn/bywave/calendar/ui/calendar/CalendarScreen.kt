@@ -19,12 +19,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,8 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.event.EventDetailSheet
+import cn.bywave.calendar.ui.profile.ProfileSwitcherDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,10 +66,17 @@ fun CalendarScreen(
     onCreateEvent: () -> Unit,
     onEditEvent: (EventDTO) -> Unit,
     onOpenAttendees: (EventDTO) -> Unit,
+    onAddAccount: () -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
+    val profiles = remember { BywaveApp.instance.profiles }
+    val profilesList by profiles.profiles.collectAsState()
+    val activeId by profiles.activeId.collectAsState()
+    val active = profilesList.firstOrNull { it.id == activeId }
+
     val state by vm.state.collectAsState()
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
+    var showSwitcher by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -76,6 +90,33 @@ fun CalendarScreen(
                 actions = {
                     IconButton(onClick = { vm.reload() }, enabled = !state.loading) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                    }
+                    // Avatar badge — opens the profile switcher. Shows
+                    // a small green dot when there's more than one
+                    // profile to hint the multi-account feature.
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable { showSwitcher = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = active?.initial ?: "?",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        if (profilesList.size > 1) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF22C55E)),
+                            )
+                        }
                     }
                 },
             )
@@ -99,6 +140,22 @@ fun CalendarScreen(
                 vm.setAnchor(day)
             },
             eventsForDay = { vm.eventsForDay(it) },
+        )
+    }
+
+    if (showSwitcher) {
+        ProfileSwitcherDialog(
+            profiles = profilesList,
+            activeId = activeId,
+            onPick = { p ->
+                showSwitcher = false
+                if (p.id != activeId) profiles.setActive(p.id)
+            },
+            onAddAccount = {
+                showSwitcher = false
+                onAddAccount()
+            },
+            onDismiss = { showSwitcher = false },
         )
     }
 
