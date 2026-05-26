@@ -59,22 +59,45 @@ data class CalendarMeta(
 )
 
 // ---- Auth ----
+//
+// IMPORTANT: native APPs do NOT call /auth/login (web cookie path —
+// returns user info, NOT tokens). They call /auth/login-password
+// which is the token-issuing endpoint added in server v0.7.5+.
+// Same protocol the iOS app uses (see ios/Network/Models.swift).
 
+/** POST /api/v1/auth/login-password body. label/kind/appVersion go into
+ *  the server's `devices` table so each phone/tablet shows up as a
+ *  separate session, revocable from the web admin. clientDeviceId is
+ *  a stable per-install UUID — server uses it to dedup re-logins
+ *  (otherwise every login spawns a new device row). */
 @Serializable
 data class LoginRequest(
     val email: String,
     val password: String,
-    /** Set when MFA challenge requires it; nil on first attempt. */
-    val mfaCode: String? = null,
+    val label: String,
+    val kind: String = "android",
+    val appVersion: String,
+    val clientDeviceId: String,
 )
 
+/** /auth/login-password success response. iOS calls the same shape
+ *  `PasswordLoginResponse`. accessTokenExpiresAt is ISO 8601 with
+ *  fractional seconds — parse with the lenient ISO parser, not the
+ *  built-in ISO8601DateFormatter equivalent. */
 @Serializable
 data class LoginResponse(
     val accessToken: String? = null,
+    val accessTokenExpiresAt: String? = null,
     val refreshToken: String? = null,
-    /** When true, client must POST /api/v1/auth/mfa with mfaToken + code. */
+    val deviceId: String? = null,
+    val userId: String? = null,
+    val userEmail: String? = null,
+    val userName: String? = null,
+    /** When true, client must POST /api/v1/auth/login-mfa-verify with
+     *  mfaToken + code. accessToken / refreshToken will be null. */
     val mfaPending: Boolean? = null,
     val mfaToken: String? = null,
+    val mfaExpiresAt: String? = null,
 )
 
 @Serializable
@@ -83,17 +106,45 @@ data class RefreshRequest(val refreshToken: String)
 @Serializable
 data class RefreshResponse(
     val accessToken: String,
-    val refreshToken: String,
+    val accessTokenExpiresAt: String? = null,
+    /** The server-side /auth/refresh response does NOT include a new
+     *  refreshToken (refresh rotation is on the pair-claim / login
+     *  endpoints, not refresh). Kept nullable so older server versions
+     *  that did rotate continue to work. */
+    val refreshToken: String? = null,
 )
 
 /** Second step when [LoginResponse.mfaPending] is true. Sends the
  *  6-digit TOTP from the user's authenticator + the mfaToken issued
- *  by /auth/login. Returns the same shape as [LoginResponse] except
- *  mfaPending is always false (or the call fails). */
+ *  by /auth/login-password. Server endpoint: /auth/login-mfa-verify. */
 @Serializable
 data class MfaVerifyRequest(
     val mfaToken: String,
     val code: String,
+)
+
+// ---- QR pair flow ----
+
+/** What the server's QR code actually encodes. iOS calls this
+ *  `PairingPayload`. The "url" field is the server's public base URL
+ *  (e.g. https://rl.lz-ss.com) — we use it to populate the server URL
+ *  in the setup screen so the user doesn't have to type it. */
+@Serializable
+data class PairPayload(
+    val v: Int,
+    val url: String,
+    val code: String,
+)
+
+/** POST /api/v1/devices/pair-claim body. Anonymous endpoint — the
+ *  6-char `code` from the QR IS the proof of authorization. */
+@Serializable
+data class PairClaimRequest(
+    val code: String,
+    val label: String,
+    val kind: String = "android",
+    val appVersion: String,
+    val clientDeviceId: String,
 )
 
 // ---- Attendees ----

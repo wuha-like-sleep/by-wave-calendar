@@ -85,6 +85,10 @@ fun SettingsScreen(
     val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
     var showSignOutDialog by remember { mutableStateOf(false) }
     var permissionWarning by remember { mutableStateOf<String?>(null) }
+    // Feedback host for "检查更新" — Snackbar is the right grain for a
+    // throwaway "已是最新版" or "检查失败" toast.
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    var checkingForUpdate by remember { mutableStateOf(false) }
 
     // -- Permission launchers --
     val calendarPermLauncher = rememberLauncherForActivityResult(
@@ -103,6 +107,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.settings_title)) },
@@ -248,16 +253,36 @@ fun SettingsScreen(
                 // we ship a fix and don't want them to wait 6h for the
                 // throttle window. Clears the throttle + any prior
                 // dismissal so the next check will surface a new sheet.
-                val updateScope = rememberCoroutineScope()
+                //
+                // Always emits a Snackbar so the user gets feedback —
+                // without it a click on "检查更新" just silently does
+                // nothing when there's no newer version, and people
+                // wonder if their tap registered.
                 ActionRow(
-                    label = "检查更新",
-                    onClick = {
-                        UpdateChecker.resetThrottle()
+                    label = if (checkingForUpdate) "正在检查…" else "检查更新",
+                    onClick = if (checkingForUpdate) ({}) else ({
                         UpdateChecker.clearDismissal()
-                        updateScope.launch {
-                            UpdateChecker.checkIfDue(context.applicationContext, force = true)
+                        checkingForUpdate = true
+                        scope.launch {
+                            try {
+                                val result = UpdateChecker.checkNow(context.applicationContext)
+                                val msg = when (result) {
+                                    is cn.bywave.calendar.update.UserCheckResult.UpToDate ->
+                                        "已是最新版 (v${BuildConfig.VERSION_NAME})"
+                                    is cn.bywave.calendar.update.UserCheckResult.UpdateFound ->
+                                        "发现新版本，已弹出更新提示"
+                                    is cn.bywave.calendar.update.UserCheckResult.NotSignedIn ->
+                                        "请先登录任一账号再检查更新"
+                                    is cn.bywave.calendar.update.UserCheckResult.Failed ->
+                                        "检查失败：${result.message}"
+                                }
+                                snackbarHostState.showSnackbar(msg)
+                            } finally {
+                                checkingForUpdate = false
+                            }
                         }
-                    },
+                        Unit
+                    }),
                     trailingIcon = Icons.Default.ChevronRight,
                 )
                 HorizontalDivider()

@@ -191,12 +191,15 @@ export async function webRoutes(app: FastifyInstance) {
       iosTestFlightUrl: "https://testflight.apple.com/join/rkM3hkpX",
       iosEtaWeek: "本周内",
       // Android — version + APK URL come from the live manifest at
-      // data/app-android-manifest.json (gitignored, deployed separately).
-      // When the manifest is absent we show the GitHub/Gitee Releases
-      // fallback links so users can still find a build.
+      // apps/android/releases/latest.json (committed) or data/app-android-
+      // manifest.json (runtime override). When the manifest is absent we
+      // show the GitHub/Gitee Releases fallback links so users can still
+      // find a build. The notes field, if present, surfaces below the
+      // download button as a collapsible "本版更新内容" disclosure.
       androidVersion: rel?.versionName || "0.8.0",
       androidApkUrl: apkUrl,
       androidApkSize: apkSize,
+      androidNotes: rel?.notes || "",
       androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       androidApkGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
       androidEtaWeek: "本月内",

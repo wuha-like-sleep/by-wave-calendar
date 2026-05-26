@@ -1,24 +1,30 @@
-// SetupViewModel — v0.5 saves new logins as Profile entries via
-// ProfileStore.upsertAndActivate(). Supports both "first account" and
-// "add another account" flows; the difference is just whether
-// ProfileStore.profiles is empty when we get here.
+// SetupViewModel — v0.8.1 rewrite: now uses the native APP login
+// endpoint /auth/login-password (with label/kind/appVersion/clientDeviceId)
+// instead of the web cookie endpoint /auth/login that never returned
+// tokens. QR scans expect the server's actual JSON envelope
+// `{ v: 1, url, code }` and call /devices/pair-claim to redeem the code.
 
 package cn.bywave.calendar.ui.setup
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
 import cn.bywave.calendar.data.model.MfaVerifyRequest
+import cn.bywave.calendar.data.model.PairClaimRequest
+import cn.bywave.calendar.data.model.PairPayload
+import cn.bywave.calendar.util.ClientDeviceId
 import cn.bywave.calendar.util.ServerUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 
 data class SetupUiState(
     val server: String = "",
@@ -37,33 +43,62 @@ class SetupViewModel : ViewModel() {
     private val profiles = BywaveApp.instance.profiles
     private val _state = MutableStateFlow(SetupUiState())
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
+    private val jsonLenient = Json { ignoreUnknownKeys = true }
 
     fun onServerChange(v: String) = _state.update { it.copy(server = v, errorMessage = null) }
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
 
     fun onScanned(raw: String) {
-        val parsed = parsePairUrl(raw) ?: run {
+        // The server's QR encodes a JSON envelope:
+        //   { "v": 1, "url": "https://rl.lz-ss.com", "code": "ABC123" }
+        // Earlier Android builds incorrectly tried to parse a
+        // `bywave://?server=…&email=…` URL that the server never emits,
+        // which is why every QR scan since v0.1 failed with "二维码格式
+        // 不正确". Fixed by mirroring iOS PairingService.parseScanned.
+        val payload = runCatching {
+            jsonLenient.decodeFromString(PairPayload.serializer(), raw)
+        }.getOrNull() ?: run {
             _state.update { it.copy(errorMessage = "二维码格式不正确") }
             return
         }
+        // Pre-fill server URL + start the claim. The QR-pair flow doesn't
+        // require email/password — the 6-char code IS the proof of authz.
         _state.update {
-            it.copy(
-                server = parsed.server,
-                email = parsed.email,
-                errorMessage = null,
-            )
+            it.copy(server = payload.url, errorMessage = null, busy = true)
         }
-    }
-
-    private data class PairPayload(val server: String, val email: String)
-
-    private fun parsePairUrl(raw: String): PairPayload? {
-        if (!raw.startsWith("bywave://", ignoreCase = true)) return null
-        val uri = runCatching { android.net.Uri.parse(raw) }.getOrNull() ?: return null
-        val server = uri.getQueryParameter("server") ?: return null
-        val email = uri.getQueryParameter("email").orEmpty()
-        return PairPayload(server = server, email = email)
+        viewModelScope.launch {
+            try {
+                val ctx = BywaveApp.instance
+                val api = ApiClient.forSetup(payload.url)
+                val resp = api.pairClaim(
+                    PairClaimRequest(
+                        code = payload.code,
+                        label = androidDeviceLabel(),
+                        kind = "android",
+                        appVersion = BuildConfig.VERSION_NAME,
+                        clientDeviceId = ClientDeviceId.get(ctx),
+                    ),
+                )
+                val email = resp.userEmail.orEmpty()
+                completeLogin(payload.url, email, resp) ?: run {
+                    _state.update {
+                        it.copy(busy = false, errorMessage = "服务器响应缺少 token")
+                    }
+                    return@launch
+                }
+                _state.update {
+                    it.copy(busy = false, signedIn = true, email = email)
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        busy = false,
+                        errorMessage = e.localizedMessage ?: "扫码登录失败，请改用账号密码或重新生成二维码",
+                    )
+                }
+            }
+        }
     }
 
     fun signIn() {
@@ -73,9 +108,19 @@ class SetupViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
+                val ctx = BywaveApp.instance
                 val server = ServerUrl.normalize(s.server)
                 val api = ApiClient.forSetup(server)
-                val resp = api.login(LoginRequest(email = s.email, password = s.password))
+                val resp = api.login(
+                    LoginRequest(
+                        email = s.email,
+                        password = s.password,
+                        label = androidDeviceLabel(),
+                        kind = "android",
+                        appVersion = BuildConfig.VERSION_NAME,
+                        clientDeviceId = ClientDeviceId.get(ctx),
+                    ),
+                )
 
                 if (resp.mfaPending == true && !resp.mfaToken.isNullOrEmpty()) {
                     _state.update { it.copy(busy = false, mfaToken = resp.mfaToken) }
@@ -146,5 +191,15 @@ class SetupViewModel : ViewModel() {
         )
         profiles.setAccessToken(profile.id, access)
         return Unit
+    }
+
+    /** Human-readable device label that shows up in the server's
+     *  device management page. iOS uses "iPhone of {name}"; we just use
+     *  the Android model + manufacturer because Android has no clean
+     *  "owner name" API to read. */
+    private fun androidDeviceLabel(): String {
+        val brand = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercaseChar() }
+        val model = android.os.Build.MODEL
+        return "$brand $model".take(60)
     }
 }

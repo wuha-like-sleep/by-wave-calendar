@@ -159,12 +159,53 @@ fun UpdateAvailableSheet(
 
             // Status / action area.
             val s = status
+            // We track the download job separately from the Flow so the
+            // cancel button can interrupt mid-flight. rememberCoroutineScope's
+            // scope is bound to the sheet's lifecycle — dismissing the
+            // sheet cancels the job too (Android best practice).
+            var downloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+            // Throughput tracking — driven by the latest two Downloading
+            // events. Lets us show ETA without averaging the whole download
+            // (which makes the number stale when bandwidth fluctuates).
+            var lastEta by remember { mutableStateOf<String?>(null) }
+            var lastSampleAt by remember { mutableStateOf(0L) }
+            var lastSampleBytes by remember { mutableStateOf(0L) }
+            androidx.compose.runtime.LaunchedEffect(s) {
+                if (s is DownloadProgress.Downloading) {
+                    val now = System.currentTimeMillis()
+                    if (lastSampleAt > 0) {
+                        val dt = (now - lastSampleAt) / 1000.0
+                        val db = s.bytesRead - lastSampleBytes
+                        if (dt > 0.3 && db > 0) {
+                            val rate = db / dt  // bytes per second
+                            val remaining = (s.totalBytes - s.bytesRead).coerceAtLeast(0)
+                            val secs = (remaining / rate).toLong()
+                            lastEta = when {
+                                rate <= 0 -> null
+                                secs >= 60 -> "约还需 ${secs / 60} 分 ${secs % 60} 秒"
+                                else -> "约还需 ${secs} 秒"
+                            }
+                            lastSampleAt = now
+                            lastSampleBytes = s.bytesRead
+                        }
+                    } else {
+                        lastSampleAt = now
+                        lastSampleBytes = s.bytesRead
+                    }
+                } else {
+                    // Reset between sessions so a retry starts fresh.
+                    lastEta = null
+                    lastSampleAt = 0L
+                    lastSampleBytes = 0L
+                }
+            }
+
             when (s) {
                 null -> {
                     // Idle — show download button.
                     Button(
                         onClick = {
-                            scope.launch {
+                            downloadJob = scope.launch {
                                 ApkDownloader.download(context, release).collect { p ->
                                     statusFlow.value = p
                                 }
@@ -189,11 +230,27 @@ fun UpdateAvailableSheet(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "已下载 ${(s.bytesRead / 1024 / 1024)} / ${(s.totalBytes / 1024 / 1024).coerceAtLeast(1)} MB",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val mbDone = (s.bytesRead / 1024 / 1024)
+                        val mbTotal = (s.totalBytes / 1024 / 1024).coerceAtLeast(1)
+                        Text(
+                            text = "已下载 ${mbDone} / ${mbTotal} MB" +
+                                (lastEta?.let { " · $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = {
+                                downloadJob?.cancel()
+                                downloadJob = null
+                                statusFlow.value = null  // back to idle
+                            },
+                        ) { Text("取消") }
+                    }
                 }
                 is DownloadProgress.Done -> {
                     if (unknownSourcesError != null) {

@@ -17,6 +17,8 @@ package cn.bywave.calendar.update
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -79,8 +81,9 @@ object ApkDownloader {
         target.parentFile?.listFiles()?.forEach { if (it != target) it.delete() }
 
         val req = Request.Builder().url(release.url).build()
+        val call = client.newCall(req)
         try {
-            client.newCall(req).execute().use { resp ->
+            call.execute().use { resp ->
                 if (!resp.isSuccessful) {
                     emit(DownloadProgress.Failed("下载失败（HTTP ${resp.code}）"))
                     return@flow
@@ -96,6 +99,11 @@ object ApkDownloader {
                     var totalRead = 0L
                     var emittedAt = 0L
                     while (true) {
+                        // Cooperative cancellation — if the user hit "取消",
+                        // ensureActive() throws CancellationException which
+                        // the outer catch handles (closes the OkHttp call +
+                        // deletes the partial APK).
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
                         val n = source.read(buf)
                         if (n <= 0) break
                         out.write(buf, 0, n)
@@ -125,6 +133,13 @@ object ApkDownloader {
                 }
             }
             emit(DownloadProgress.Done(target))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // User cancelled — close the OkHttp call so the socket doesn't
+            // sit in TIME_WAIT, wipe the partial file, and rethrow so the
+            // surrounding coroutine machinery sees the cancel.
+            call.cancel()
+            target.delete()
+            throw e
         } catch (e: Exception) {
             target.delete()
             emit(DownloadProgress.Failed(e.localizedMessage ?: "下载失败"))

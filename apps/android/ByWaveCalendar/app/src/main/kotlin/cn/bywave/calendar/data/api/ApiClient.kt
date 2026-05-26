@@ -18,9 +18,15 @@ import cn.bywave.calendar.data.model.EventsResponse
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
 import cn.bywave.calendar.data.model.MfaVerifyRequest
+import cn.bywave.calendar.data.model.PairClaimRequest
 import cn.bywave.calendar.data.model.RefreshRequest
 import cn.bywave.calendar.data.model.RefreshResponse
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -42,14 +48,27 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 interface BywaveApi {
-    @POST("api/v1/auth/login")
+    // CRITICAL: this is /auth/login-password, NOT /auth/login.
+    // /auth/login is the WEB cookie endpoint — it returns user info and
+    // sets a session cookie but does NOT mint access/refresh tokens.
+    // Native APPs (iOS + Android) must use the -password variant which
+    // creates a `devices` row and returns the token pair. Hit the wrong
+    // endpoint and login appears to succeed (or return 401 for some
+    // shapes) but every subsequent API call gets 401 because there's no
+    // Bearer token to send.
+    @POST("api/v1/auth/login-password")
     suspend fun login(@Body body: LoginRequest): LoginResponse
 
-    @POST("api/v1/auth/mfa")
+    @POST("api/v1/auth/login-mfa-verify")
     suspend fun verifyMfa(@Body body: MfaVerifyRequest): LoginResponse
 
     @POST("api/v1/auth/refresh")
     suspend fun refresh(@Body body: RefreshRequest): RefreshResponse
+
+    /** Anonymous endpoint — the 6-char code from the QR IS the
+     *  authorization. Returns token pair on success. */
+    @POST("api/v1/devices/pair-claim")
+    suspend fun pairClaim(@Body body: PairClaimRequest): LoginResponse
 
     @GET("api/v1/events")
     suspend fun events(
@@ -106,6 +125,12 @@ class ApiClient private constructor(
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            // Order matters: envelope unwrap BEFORE the auth interceptor
+            // sees the response, because the unwrap turns 200 responses
+            // with `{ok: false, error}` into HTTP errors at the
+            // interceptor level — which keeps the rest of the call
+            // graph reading the natural data shape.
+            .addInterceptor(EnvelopeInterceptor())
             .addInterceptor(AuthInterceptor(store, profileId, baseUrl))
             .addInterceptor(logging)
             .build()
@@ -141,6 +166,10 @@ class ApiClient private constructor(
             val ok = OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
+                // Setup-time client doesn't carry the bearer interceptor
+                // (we don't have a token yet) but the envelope unwrap is
+                // still essential — every /api/v1/* response is wrapped.
+                .addInterceptor(EnvelopeInterceptor())
                 .build()
             return Retrofit.Builder()
                 .baseUrl(if (serverUrl.endsWith("/")) serverUrl else "$serverUrl/")
@@ -171,10 +200,16 @@ private class AuthInterceptor(
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val original = chain.request()
+        // Endpoints that AREN'T behind Bearer auth — we never send an
+        // access token (because we don't have one yet) and never try
+        // refresh on a 401 from them (because their 401 means real
+        // credential failure, not "token expired").
+        val path = original.url.encodedPath
         val isAuthEndpoint =
-            original.url.encodedPath.contains("/auth/login") ||
-            original.url.encodedPath.contains("/auth/refresh") ||
-            original.url.encodedPath.contains("/auth/mfa")
+            path.contains("/auth/login-password") ||
+            path.contains("/auth/login-mfa-verify") ||
+            path.contains("/auth/refresh") ||
+            path.contains("/devices/pair-claim")
 
         val firstReq = if (isAuthEndpoint) original
                        else original.withBearer(store.accessToken(profileId))
@@ -189,9 +224,12 @@ private class AuthInterceptor(
         val rt = profile?.refreshToken ?: return chain.proceed(firstReq)
         val refreshed = runCatching { blockingRefresh(rt) }.getOrNull() ?: return chain.proceed(firstReq)
         store.setAccessToken(profileId, refreshed.accessToken)
-        // Server rotates refresh tokens on use — persist the new one.
-        if (refreshed.refreshToken != rt) {
-            store.updateRefreshToken(profileId, refreshed.refreshToken)
+        // Older server builds rotated the refresh token on use; current
+        // /auth/refresh doesn't (it omits the field). Only persist when
+        // the server actually returned a new one and it's different.
+        val newRt = refreshed.refreshToken
+        if (!newRt.isNullOrBlank() && newRt != rt) {
+            store.updateRefreshToken(profileId, newRt)
         }
         return chain.proceed(original.withBearer(refreshed.accessToken))
     }
@@ -205,4 +243,59 @@ private class AuthInterceptor(
         if (token.isNullOrEmpty()) return this
         return newBuilder().header("Authorization", "Bearer $token").build()
     }
+}
+
+/** Unwraps the server's `/api/v1/`-prefixed JSON envelope so route handlers
+ *  can decode the natural data shape. Server format:
+ *  - success:  `{ "ok": true, "data": <object|array|null|primitive> }`
+ *  - error:    `{ "ok": false, "error": { "code": "...", "message": "..." } }`
+ *
+ *  We only run on `/api/v1/` paths to leave room for raw legacy `/api/`
+ *  responses (e.g. `/api/version`) to pass through. Non-JSON responses
+ *  (downloads, ICS) also pass through untouched.
+ *
+ *  On `ok: false`, we rewrite the response body to surface the error
+ *  shape Retrofit's HttpException will pick up. We also coerce the
+ *  status to 4xx if the server returned 200 with `ok: false`, which
+ *  it does for in-band errors.
+ *
+ *  Avoids `/` `*` adjacency in this doc comment because Kotlin parses
+ *  it as a nested block-comment opener inside KDoc. */
+private class EnvelopeInterceptor : Interceptor {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val resp = chain.proceed(chain.request())
+        if (!resp.request.url.encodedPath.startsWith("/api/v1/")) return resp
+        val contentType = resp.header("Content-Type") ?: return resp
+        if (!contentType.contains("json", ignoreCase = true)) return resp
+        val body = resp.body ?: return resp
+        // Buffer the whole body — fine for our JSON sizes (KB-scale).
+        val raw = body.string()
+        val parsed = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
+            ?: return resp.rebody(raw, contentType)
+        val okVal = parsed["ok"]
+        val okBool = runCatching { okVal?.jsonPrimitive?.boolean }.getOrNull()
+            ?: return resp.rebody(raw, contentType)  // not enveloped — pass through
+        if (okBool) {
+            // Replace body with just the `data` payload (string-serialized).
+            // `data` can be an object, array, primitive, or null — handle each.
+            val data = parsed["data"]
+            val newBody = data?.toString() ?: "null"
+            return resp.rebody(newBody, contentType)
+        }
+        // ok=false. Surface as HTTP 400 with the inner error object so
+        // Retrofit raises HttpException and the caller gets an actionable
+        // status code. If the original status was already an error we
+        // preserve it.
+        val error = parsed["error"]?.toString() ?: """{"code":"unknown","message":""}"""
+        val newCode = if (resp.code in 200..299) 400 else resp.code
+        return resp.newBuilder()
+            .code(newCode)
+            .body(error.toResponseBody(contentType.toMediaTypeOrNull()))
+            .build()
+    }
+
+    private fun Response.rebody(text: String, contentType: String): Response =
+        newBuilder().body(text.toResponseBody(contentType.toMediaTypeOrNull())).build()
 }

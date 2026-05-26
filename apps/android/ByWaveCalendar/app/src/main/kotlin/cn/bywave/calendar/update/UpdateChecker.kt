@@ -26,6 +26,18 @@ sealed class UpdateState {
     data class Dismissed(val versionCode: Int) : UpdateState()
 }
 
+/** Outcome surfaced to UI when the user explicitly hits "检查更新".
+ *  Distinct from UpdateState because the user-initiated path wants
+ *  per-attempt feedback even when the auto-poll state hasn't changed
+ *  (e.g. "no update available" silently leaves state Idle). */
+sealed class UserCheckResult {
+    object UpToDate : UserCheckResult()
+    object UpdateFound : UserCheckResult()
+    data class Failed(val message: String) : UserCheckResult()
+    /** No active profile / no server URL — can't probe anywhere. */
+    object NotSignedIn : UserCheckResult()
+}
+
 object UpdateChecker {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
@@ -44,9 +56,41 @@ object UpdateChecker {
         runCatching { doCheck(context) }
     }
 
-    private suspend fun doCheck(context: Context) {
-        val profile = BywaveApp.instance.profiles.active() ?: return
-        val api = UpdateApiFactory.create(profile.serverUrl)
+    /** Explicit user-initiated check from Settings → 检查更新. Always
+     *  bypasses throttle and ALWAYS returns a result the UI can render
+     *  as feedback ("已是最新" / "发现新版本" / "检查失败 …"). State
+     *  side-effects still happen (Available flips on, etc.) but the
+     *  returned value drives the immediate snackbar. */
+    suspend fun checkNow(context: Context): UserCheckResult {
+        lastCheckMs = System.currentTimeMillis()
+        val profile = BywaveApp.instance.profiles.active()
+            ?: return UserCheckResult.NotSignedIn
+        return try {
+            val newer = doCheck(context, profileServerUrlOverride = profile.serverUrl)
+            if (newer) UserCheckResult.UpdateFound else UserCheckResult.UpToDate
+        } catch (e: retrofit2.HttpException) {
+            if (e.code() == 404) {
+                // 404 = no release published. Treat as up-to-date —
+                // there's nothing newer to install.
+                UserCheckResult.UpToDate
+            } else {
+                UserCheckResult.Failed("服务器返回 ${e.code()}")
+            }
+        } catch (e: Exception) {
+            UserCheckResult.Failed(e.localizedMessage ?: "网络异常")
+        }
+    }
+
+    /** @return true if a newer (or unsupported-blocking) version was
+     *  found and Available state was set, false otherwise. */
+    private suspend fun doCheck(
+        context: Context,
+        profileServerUrlOverride: String? = null,
+    ): Boolean {
+        val baseUrl = profileServerUrlOverride
+            ?: BywaveApp.instance.profiles.active()?.serverUrl
+            ?: return false
+        val api = UpdateApiFactory.create(baseUrl)
         val rel = api.latest()
         val localVersionCode = localVersionCode(context)
 
@@ -55,7 +99,7 @@ object UpdateChecker {
         val unsupported = localVersionCode < rel.minSupportedVersionCode
         if (!newer && !unsupported) {
             _state.value = UpdateState.Idle
-            return
+            return false
         }
 
         // Treat "below minSupported" as a forced upgrade even if the
@@ -67,9 +111,10 @@ object UpdateChecker {
         // in which case we always re-surface.
         val current = _state.value
         if (!mandatory && current is UpdateState.Dismissed && current.versionCode == rel.versionCode) {
-            return
+            return false
         }
         _state.value = UpdateState.Available(rel, mandatory)
+        return true
     }
 
     fun onUserDismissed() {

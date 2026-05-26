@@ -89,12 +89,24 @@
       </div>
     </div>
 
-    <ul class="text-sm text-slate-600 space-y-1 mb-5">
+    <ul class="text-sm text-slate-600 space-y-1 mb-3">
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Android 8.0+ (API 26)</li>
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 当前版本 <%= androidVersion %></li>
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Kotlin + Jetpack Compose 原生</li>
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 仅 APK 直装，不上应用商店</li>
     </ul>
+
+    <% if (typeof androidNotes !== 'undefined' && androidNotes) { %>
+      <details class="text-xs text-slate-600 mb-4 group">
+        <summary class="cursor-pointer text-emerald-700 hover:text-emerald-800 select-none list-none flex items-center gap-1">
+          <span class="transition-transform group-open:rotate-90">▸</span>
+          <span>本版更新内容</span>
+        </summary>
+        <div class="mt-2 pl-4 border-l-2 border-emerald-100 whitespace-pre-line text-slate-600 leading-relaxed">
+<%= androidNotes %>
+        </div>
+      </details>
+    <% } %>
 
     <div class="mt-auto space-y-2">
       <% if (androidApkUrl) { %>
