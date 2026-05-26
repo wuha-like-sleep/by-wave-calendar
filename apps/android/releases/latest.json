@@ -6,7 +6,7 @@
   "sha256": "486c56facdf827babff1819a428633d1c853aa43bb846117bf7c061f37976825",
   "sizeBytes": 36730427,
   "releasedAt": "2026-05-26T04:24:45Z",
-  "notes": "v0.8 — APP 内自动更新\n\n• 检测到新版本自动提示，无需手动检查\n• 内置下载 + 系统安装一气呵成\n• 长按事件菜单：编辑 / 复制 / 邀请人 / 删除\n• 全局事件搜索\n• 深色模式优化",
+  "notes": "v0.8.1 — 紧急修复登录问题\n\n• 修复 v0.1 起一直存在的端点错位：调错了 web cookie 路径而非 native APP token 路径，导致所有手机登录返回 HTTP 401\n• 修复扫码登录「二维码格式不正确」：之前期望的 URL 格式跟服务器实际发的 JSON envelope 完全不同\n• 设置 → 检查更新 现在有反馈了（已是最新 / 检查失败 / 发现新版本）\n• 下载进度新增剩余时间估算 + 取消按钮\n• APK 内容由 35 MB 不变（这次没动 build flags）\n\n⚠️ v0.8.0 已安装用户：因为登录就过不去，APP 内更新通道也走不到。请从 https://rl.lz-ss.com/download 重装一次 v0.8.1，之后所有版本会通过 APP 内通道自动升级。",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }

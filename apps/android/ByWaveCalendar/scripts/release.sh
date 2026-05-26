@@ -94,9 +94,18 @@ SRC_APK=app/build/outputs/apk/release/app-release.apk
 EXPECTED_CERT_FP="e73fbb64ba0af2d3c39472bc12463888ccae9f9601bb71908f97ad60c2c102c7"
 APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner | sort -V | tail -1)
 [ -x "$APKSIGNER" ] || { echo "[release] apksigner not found under $ANDROID_HOME/build-tools"; exit 1; }
+# apksigner has shifted output format between major versions:
+#   build-tools 34.0.0  → "Signer #1 certificate SHA-256 digest: <hex>"
+#   build-tools 37.0.0+ → "V2 Signer: certificate SHA-256 digest: <hex>"
+# Both formats lead with some text and end with the SHA-256 hex digest
+# after the last colon. Grep for the hex (64 lowercase hex chars) on a
+# line that mentions "SHA-256" — survives any future format reshuffle.
 ACTUAL_FP=$("$APKSIGNER" verify --print-certs "$SRC_APK" 2>/dev/null \
-  | awk -F': ' '/Signer #1 certificate SHA-256 digest/{print $2; exit}' \
-  | tr -d ' ' | tr '[:upper:]' '[:lower:]')
+  | grep -i "SHA-256 digest" \
+  | head -1 \
+  | grep -oE '[0-9a-fA-F]{64}' \
+  | head -1 \
+  | tr '[:upper:]' '[:lower:]')
 if [ "$ACTUAL_FP" != "$EXPECTED_CERT_FP" ]; then
   echo "[release] FATAL: signing certificate mismatch."
   echo "[release]   expected: $EXPECTED_CERT_FP"
@@ -158,7 +167,11 @@ else
   MANIFEST_NOTES=$(python3 -c "import json; print(json.dumps('$EXISTING_NOTES' or 'v${VERSION_NAME} 发布'))")
 fi
 
-MANDATORY_BOOL=$([ "$MANDATORY" -eq 1 ] && echo "true" || echo "false")
+# Python case for the JSON-edit heredoc below — the heredoc substitutes
+# this verbatim into a Python literal, so we use Python's True/False
+# casing here. (`false` would crash the heredoc with NameError because
+# Python doesn't recognize bash booleans.)
+MANDATORY_BOOL=$([ "$MANDATORY" -eq 1 ] && echo "True" || echo "False")
 
 python3 - <<PY
 import json, pathlib
@@ -172,6 +185,11 @@ d.update({
     "sha256": "$SHA256",
     "sizeBytes": $SIZE,
     "releasedAt": "$RELEASED_AT",
+    # MANIFEST_NOTES was already JSON-encoded via json.dumps(...) above,
+    # so it's substituted as a raw JSON literal here (no surrounding
+    # quotes — they're inside the value). Without this line the in-app
+    # updater sheet would show whatever the PREVIOUS release's notes were.
+    "notes": $MANIFEST_NOTES,
     "mandatory": $MANDATORY_BOOL,
 })
 # Preserve notes + minSupportedVersionCode unless this script was given
