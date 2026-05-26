@@ -10,6 +10,21 @@ struct CalendarMeta: Codable, Identifiable, Hashable {
     let id: String
     let name: String
     let color: String
+    // Added v1.3.7 to support the calendar property editor — server has
+    // always returned these but iOS didn't decode them. Optional with
+    // default nil so older on-disk caches keep parsing cleanly.
+    let timezone: String?
+    let description: String?
+
+    // Custom init keeps backwards compat with cached records that
+    // predate v1.3.7 and don't carry timezone/description.
+    init(id: String, name: String, color: String, timezone: String? = nil, description: String? = nil) {
+        self.id = id
+        self.name = name
+        self.color = color
+        self.timezone = timezone
+        self.description = description
+    }
 }
 
 struct EventDTO: Codable, Identifiable, Hashable {
@@ -109,6 +124,17 @@ struct EventUpdateInput: Encodable {
 // in src/routes/calendars.ts. color must be #rrggbb hex, timezone IANA.
 struct CalendarCreateInput: Encodable {
     let name: String
+    let description: String?
+    let color: String?
+    let timezone: String?
+}
+
+// Body for PATCH /api/v1/calendars/:id — server's updateSchema is the
+// .partial() of createSchema, so every field is optional. nil fields
+// are dropped by JSONEncoder.iso() (which sets keyEncodingStrategy
+// without explicit nulls), letting us send the smallest patch.
+struct CalendarUpdateInput: Encodable {
+    let name: String?
     let description: String?
     let color: String?
     let timezone: String?

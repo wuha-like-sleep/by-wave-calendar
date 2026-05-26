@@ -61,6 +61,17 @@ struct SettingsView: View {
                                subtitle: "系统日历 · 提醒 · 当前服务器",
                                tint: .blue)
                     }
+                    // Added v1.3.7 — was a long-standing gap that left
+                    // ICS-imported calendars stuck with "导入的日历" as
+                    // their name and no way to change default timezone.
+                    NavigationLink {
+                        ManageCalendarsView()
+                    } label: {
+                        navRow(icon: "calendar",
+                               title: "管理日历",
+                               subtitle: "重命名 · 改色 · 默认时区",
+                               tint: .green)
+                    }
                     NavigationLink {
                         AppearanceSettingsPage()
                     } label: {

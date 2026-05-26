@@ -15,6 +15,43 @@
 
 [在线 Demo](https://rl.lz-ss.com) · [一键部署](#-一键部署到宝塔) · [架构](#-架构) · [Roadmap](#-roadmap)
 
+<br/>
+
+## 📥 下载客户端
+
+<table>
+<tr>
+<th width="33%">📱 iOS</th>
+<th width="33%">🤖 Android</th>
+<th width="33%">🌐 Web / PWA</th>
+</tr>
+<tr>
+<td align="center">
+
+[![TestFlight](https://img.shields.io/badge/TestFlight-Beta-2563eb?logo=apple&logoColor=white&style=for-the-badge)](https://testflight.apple.com/join/rkM3hkpX)
+
+App Store 审核中
+
+</td>
+<td align="center">
+
+[![Download APK](https://img.shields.io/badge/Download-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/latest/download/bywave-calendar.apk)
+
+[历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) · APP 内自动更新
+
+</td>
+<td align="center">
+
+[![Open Web App](https://img.shields.io/badge/Open-rl.lz--ss.com-7c3aed?logo=safari&logoColor=white&style=for-the-badge)](https://rl.lz-ss.com)
+
+PWA 可装到桌面 / 主屏
+
+</td>
+</tr>
+</table>
+
+> Android 用户首次安装需要在系统设置中允许「来自此应用的未知应用」，开一次终身有效。后续升级走 APP 内通道，无需重新下载。
+
 </div>
 
 ---

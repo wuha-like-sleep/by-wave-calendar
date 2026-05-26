@@ -137,8 +137,29 @@ else
 fi
 
 # ---- create GitHub Release ----
+# We upload two copies of the APK with different names:
+#
+#   bywave-calendar-X.Y.Z.apk   ← versioned, immutable, what /api/app/
+#                                 android/latest hands to the in-app
+#                                 updater. Asset URL stays unique
+#                                 per release.
+#   bywave-calendar.apk         ← stable filename, lives at the special
+#                                 GitHub URL /releases/latest/download/
+#                                 bywave-calendar.apk that always
+#                                 points at the most recent release.
+#                                 This is what the README's "Download
+#                                 APK" badge links to — without it the
+#                                 README would need a manual edit on
+#                                 every release.
+#
+# Both files are byte-identical (same SHA-256 → in-app updater's check
+# passes for the latest URL too), they just serve different lookup
+# patterns.
+STAGE_APK_STABLE="${STAGE}/bywave-calendar.apk"
+cp "$STAGE_APK" "$STAGE_APK_STABLE"
+
 echo "[release] gh release create $TAG ..."
-gh release create "$TAG" "$STAGE_APK" \
+gh release create "$TAG" "$STAGE_APK" "$STAGE_APK_STABLE" \
   --title "Android v${VERSION_NAME}" \
   --notes "$NOTES" \
   >/dev/null
