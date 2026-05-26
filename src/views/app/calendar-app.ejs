@@ -601,6 +601,48 @@
       </button>
     </div>
     <div class="p-5 space-y-5">
+      <!-- Edit calendar properties — added in v1.3.6 because users with
+           imported calendars were stuck with the auto-generated "导入的
+           日历" name forever, and there was no way to change the default
+           timezone after creation. The server's PATCH /calendars/:id has
+           supported all these fields since day one; only the UI was
+           missing. -->
+      <section>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3">日历属性</h4>
+        <form id="form-edit-calendar" class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">名称<span class="text-red-500 ml-0.5">*</span></label>
+            <input type="text" name="name" required maxlength="200"
+                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">描述</label>
+            <textarea name="description" maxlength="2000" rows="2" placeholder="可选"
+                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-2">颜色</label>
+            <div class="flex flex-wrap gap-1.5" data-color-picker="form-edit-calendar"></div>
+            <input type="hidden" name="color" value="#6366f1" />
+          </div>
+          <div data-tz-picker>
+            <label class="block text-xs font-medium text-slate-600 mb-1">默认时区</label>
+            <input type="hidden" name="timezone" value="" />
+            <button type="button" data-tz-trigger
+                    class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+              <span data-tz-label class="truncate text-slate-900">—</span>
+              <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
+            </button>
+            <p class="mt-1 text-xs text-slate-400">新建事件时的默认时区；已有事件保留各自的时区</p>
+          </div>
+          <div class="flex justify-end gap-2 pt-1">
+            <button type="submit" id="btn-save-calendar" disabled
+                    class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
+              保存
+            </button>
+          </div>
+        </form>
+      </section>
       <section>
         <h4 class="text-sm font-semibold text-slate-800 mb-3">订阅链接</h4>
         <form id="form-new-share-token" class="flex gap-2 mb-3">
@@ -622,7 +664,16 @@
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   window.__bwc = <%- JSON.stringify({
-    calendars: calendars.map(c => ({ id: c.id, name: c.name, color: c.color, timezone: c.timezone })),
+    calendars: calendars.map(c => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      timezone: c.timezone,
+      // Needed by the "日历属性" editor in #modal-cal-menu — without it
+      // the description field would always reload empty even if the
+      // calendar had one. Added v1.3.6.
+      description: c.description,
+    })),
     publicBaseUrl: publicBaseUrl,
     csrfToken: csrfToken,
   }) %>;

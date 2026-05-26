@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
+    onManageCalendars: () -> Unit = {},
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
     val active = profiles.active()
@@ -202,6 +203,17 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(horizontal = 4.dp),
+                )
+            }
+
+            // Calendars (v0.8.2) — rename / change timezone. Server's
+            // PATCH /calendars/:id supported this all along; the missing
+            // UI was the only reason "导入的日历" names were stuck.
+            Section(title = "日历") {
+                ActionRow(
+                    label = "管理日历",
+                    onClick = onManageCalendars,
+                    trailingIcon = Icons.Default.ChevronRight,
                 )
             }
 

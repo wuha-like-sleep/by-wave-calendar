@@ -36,6 +36,7 @@ import cn.bywave.calendar.ui.event.AttendeesScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.search.SearchScreen
+import cn.bywave.calendar.ui.settings.CalendarListScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
 import cn.bywave.calendar.ui.setup.ScannerScreen
 import cn.bywave.calendar.ui.setup.SetupScreen
@@ -187,6 +188,20 @@ private fun AppRoot() {
                     // flips and start-destination recomputes.
                     nav.popBackStack("calendar", inclusive = false)
                 },
+                onManageCalendars = { nav.navigate("calendars") },
+            )
+        }
+
+        composable("calendars") {
+            // Reuse the calendar-VM from the calendar back-stack entry —
+            // its state.calendars is the same list we want to manage.
+            // Saving an edit also calls vm.reload() so the calendar
+            // pickers / sidebar pick up the new name/color/timezone.
+            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
+            CalendarListScreen(
+                onBack = { nav.popBackStack() },
+                vm = calVm,
             )
         }
 

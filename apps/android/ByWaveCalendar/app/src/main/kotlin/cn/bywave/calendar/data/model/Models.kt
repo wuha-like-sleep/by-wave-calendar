@@ -56,6 +56,20 @@ data class CalendarMeta(
     val name: String,
     val color: String,           // "#rrggbb" hex; Color(hex:) helper parses.
     val timezone: String? = null,
+    val description: String? = null,
+)
+
+/** PATCH /api/v1/calendars/:id body. Server's updateSchema is
+ *  createSchema.partial() — every field optional, only those present
+ *  get updated. Null differs from absent in JSON serialization, so we
+ *  use `explicitNulls = false` (set on the Json instance) to drop
+ *  nulls from the wire and rely on Kotlin defaults instead. */
+@Serializable
+data class CalendarUpdateInput(
+    val name: String? = null,
+    val description: String? = null,
+    val color: String? = null,
+    val timezone: String? = null,
 )
 
 // ---- Auth ----

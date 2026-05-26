@@ -11,6 +11,8 @@ import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
+import cn.bywave.calendar.data.model.CalendarMeta
+import cn.bywave.calendar.data.model.CalendarUpdateInput
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventUpdateInput
@@ -69,6 +71,14 @@ interface BywaveApi {
      *  authorization. Returns token pair on success. */
     @POST("api/v1/devices/pair-claim")
     suspend fun pairClaim(@Body body: PairClaimRequest): LoginResponse
+
+    /** Edit a calendar — name / color / timezone / description.
+     *  All fields optional; only those passed get changed. */
+    @PATCH("api/v1/calendars/{id}")
+    suspend fun updateCalendar(
+        @Path("id") id: String,
+        @Body body: CalendarUpdateInput,
+    ): CalendarMeta
 
     @GET("api/v1/events")
     suspend fun events(

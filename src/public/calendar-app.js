@@ -1603,6 +1603,11 @@
 
   // ---------- Calendar context menu ----------
   let currentMenuCalId = null;
+  // Snapshot of the calendar's original values for dirty-tracking. We
+  // only enable the Save button when something actually changed so users
+  // get clear feedback that "this form does something" without the noise
+  // of saving the same data back.
+  let editCalOriginal = null;
   $$("[data-cal-menu]").forEach((btn) => btn.addEventListener("click", async (e) => {
     e.preventDefault(); e.stopPropagation();
     const id = btn.dataset.calMenu;
@@ -1611,9 +1616,100 @@
     currentMenuCalId = id;
     $("#cal-menu-color").style.background = c.color;
     $("#cal-menu-name").textContent = c.name;
+    populateEditCalendarForm(c);
     await loadShareTokens(id);
     openModal("#modal-cal-menu");
   }));
+
+  // Hydrate the edit form from a calendar's current values. Re-builds the
+  // color picker with the calendar's color pre-selected, sets the tz
+  // picker's hidden input + label, and resets dirty state.
+  function populateEditCalendarForm(c) {
+    const form = $("#form-edit-calendar");
+    if (!form) return;
+    form.elements.name.value = c.name || "";
+    form.elements.description.value = c.description || "";
+    form.elements.color.value = c.color || "#6366f1";
+    form.elements.timezone.value = c.timezone || "";
+    // Rebuild the color swatch row so the matching swatch is checked.
+    buildColorPicker(
+      form.querySelector('[data-color-picker="form-edit-calendar"]'),
+      "color",
+      c.color || "#6366f1",
+    );
+    // Sync timezone picker label — `bwcSyncTzPicker` is exposed by the
+    // timezone-picker init code; it reads the hidden input and updates
+    // the visible "上海（UTC+8）"-style label.
+    const tzPicker = form.querySelector("[data-tz-picker]");
+    if (tzPicker && typeof window.bwcSyncTzPicker === "function") {
+      window.bwcSyncTzPicker(tzPicker);
+    }
+    editCalOriginal = {
+      name: form.elements.name.value,
+      description: form.elements.description.value,
+      color: form.elements.color.value,
+      timezone: form.elements.timezone.value,
+    };
+    updateEditCalDirty();
+  }
+
+  // Diff form values against the snapshot taken when the modal opened.
+  // Toggles the Save button's `disabled` attribute — empty name also
+  // counts as not-saveable since the server requires it (`min(1)`).
+  function updateEditCalDirty() {
+    const form = $("#form-edit-calendar");
+    if (!form || !editCalOriginal) return;
+    const cur = {
+      name: form.elements.name.value.trim(),
+      description: form.elements.description.value,
+      color: form.elements.color.value,
+      timezone: form.elements.timezone.value,
+    };
+    const changed =
+      cur.name !== (editCalOriginal.name || "").trim() ||
+      cur.description !== (editCalOriginal.description || "") ||
+      cur.color !== editCalOriginal.color ||
+      cur.timezone !== editCalOriginal.timezone;
+    $("#btn-save-calendar").disabled = !cur.name || !changed;
+  }
+
+  // Wire dirty-checking on every input + color swatch click + tz pick.
+  // The color picker rewrites the hidden input value via change-event
+  // dispatch, the tz picker writes the hidden input + dispatches input
+  // — both flow through here without needing per-control listeners.
+  $("#form-edit-calendar")?.addEventListener("input", updateEditCalDirty);
+  $("#form-edit-calendar")?.addEventListener("change", updateEditCalDirty);
+
+  $("#form-edit-calendar")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!currentMenuCalId) return;
+    const form = e.target;
+    const body = {
+      name: form.elements.name.value.trim(),
+      description: form.elements.description.value,
+      color: form.elements.color.value,
+      timezone: form.elements.timezone.value,
+    };
+    // Skip empty optional fields so we never overwrite with the empty
+    // string — the server treats "" and absent the same for description,
+    // but timezone "" would change the calendar default and isn't what
+    // the user means.
+    if (!body.description) delete body.description;
+    if (!body.timezone) delete body.timezone;
+    try {
+      const resp = await fetch(`/api/calendars/${currentMenuCalId}`,
+        fetchOpts({ method: "PATCH", body: JSON.stringify(body) }));
+      if (!resp.ok) throw new Error(await resp.text());
+      window.bwc && window.bwc.toast("已保存", "success");
+      // Reload so the calendar name in the sidebar, event colors, and
+      // calendar pickers everywhere pick up the new values. Could be
+      // surgical with ctx.calendars updates but reload is bulletproof.
+      setTimeout(() => window.location.reload(), 400);
+    } catch (err) {
+      console.error(err);
+      window.bwc && window.bwc.toast("保存失败", "error");
+    }
+  });
 
   async function loadShareTokens(calId) {
     const list = $("#share-tokens-list");
