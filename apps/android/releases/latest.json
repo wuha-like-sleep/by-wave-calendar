@@ -1,11 +1,11 @@
 {
-  "versionCode": 8,
-  "versionName": "0.8.0",
-  "filename": "bywave-calendar-0.8.0.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.0/bywave-calendar-0.8.0.apk",
-  "sha256": "8a09ca3761703adfd13cdab06438296d6012147c8f8062b190dd77d87265df1b",
-  "sizeBytes": 36714043,
-  "releasedAt": "2026-05-25T05:44:00Z",
+  "versionCode": 9,
+  "versionName": "0.8.1",
+  "filename": "bywave-calendar-0.8.1.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.1/bywave-calendar-0.8.1.apk",
+  "sha256": "486c56facdf827babff1819a428633d1c853aa43bb846117bf7c061f37976825",
+  "sizeBytes": 36730427,
+  "releasedAt": "2026-05-26T04:24:45Z",
   "notes": "v0.8 — APP 内自动更新\n\n• 检测到新版本自动提示，无需手动检查\n• 内置下载 + 系统安装一气呵成\n• 长按事件菜单：编辑 / 复制 / 邀请人 / 删除\n• 全局事件搜索\n• 深色模式优化",
   "mandatory": false,
   "minSupportedVersionCode": 1
