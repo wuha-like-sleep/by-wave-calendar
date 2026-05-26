@@ -1,12 +1,12 @@
 {
-  "versionCode": 9,
-  "versionName": "0.8.1",
-  "filename": "bywave-calendar-0.8.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.1/bywave-calendar-0.8.1.apk",
-  "sha256": "486c56facdf827babff1819a428633d1c853aa43bb846117bf7c061f37976825",
+  "versionCode": 10,
+  "versionName": "0.8.2",
+  "filename": "bywave-calendar-0.8.2.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.2/bywave-calendar-0.8.2.apk",
+  "sha256": "8aa5ce8c2e68b88ee59505ee8a6ef6a1cac2f9cb25245d8c6010e3f4afabd138",
   "sizeBytes": 36730427,
-  "releasedAt": "2026-05-26T04:24:45Z",
-  "notes": "v0.8.1 — 紧急修复登录问题\n\n• 修复 v0.1 起一直存在的端点错位：调错了 web cookie 路径而非 native APP token 路径，导致所有手机登录返回 HTTP 401\n• 修复扫码登录「二维码格式不正确」：之前期望的 URL 格式跟服务器实际发的 JSON envelope 完全不同\n• 设置 → 检查更新 现在有反馈了（已是最新 / 检查失败 / 发现新版本）\n• 下载进度新增剩余时间估算 + 取消按钮\n• APK 内容由 35 MB 不变（这次没动 build flags）\n\n⚠️ v0.8.0 已安装用户：因为登录就过不去，APP 内更新通道也走不到。请从 https://rl.lz-ss.com/download 重装一次 v0.8.1，之后所有版本会通过 APP 内通道自动升级。",
+  "releasedAt": "2026-05-26T04:48:52Z",
+  "notes": "v0.8.2 — 日历属性编辑\n\n• 新增「设置 → 日历 → 管理日历」入口\n• 点任意日历可编辑名称 + 默认时区（之前从 ICS 导入的日历永远叫「导入的日历」、时区也改不了的问题）\n• 颜色编辑暂时只在 web 端支持，Android 下版本补上\n\nbug 修复\n• 多个小修，跟 v0.8.1 一起 ship\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
