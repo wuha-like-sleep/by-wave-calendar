@@ -787,6 +787,18 @@ logApnsStartup({ info: (m) => app.log.info(m) });
   }
 }
 
+// Apply any pending DB migrations BEFORE we start listening. install.sh
+// runs migrate during full deploys, but in-place `git pull && pm2 reload`
+// skips that step — which silently broke /app/booking-links the moment
+// the v1.3.10 release added the `notify_email` column. Auto-migrating
+// on boot makes that failure class impossible to hit. drizzle's
+// migrator is a no-op when nothing's pending, so normal restarts stay
+// fast (one SELECT on __drizzle_migrations).
+{
+  const { runPendingMigrations } = await import("./lib/auto_migrate.js");
+  await runPendingMigrations();
+}
+
 try {
   if (env.USE_HTTPS) {
     await app.listen({ host: "0.0.0.0", port: env.HTTPS_PORT });
