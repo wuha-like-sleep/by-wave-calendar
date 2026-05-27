@@ -28,9 +28,9 @@
 <tr>
 <td align="center">
 
-[![TestFlight](https://img.shields.io/badge/TestFlight-Beta-2563eb?logo=apple&logoColor=white&style=for-the-badge)](https://testflight.apple.com/join/rkM3hkpX)
+[![App Store](https://img.shields.io/badge/App%20Store-下载-000000?logo=apple&logoColor=white&style=for-the-badge)](https://apps.apple.com/us/app/bywavecalendar/id6772655143)
 
-App Store 审核中
+或 [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX)
 
 </td>
 <td align="center">

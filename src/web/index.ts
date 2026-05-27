@@ -180,14 +180,15 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      // iOS — TestFlight public beta is live (v1.3.4 build 14).
-      // Apple App Store proper still under review; when it approves,
-      // fill iosAppStoreUrl with https://apps.apple.com/cn/app/…/idNNNN
-      // and the download page promotes App Store to primary
-      // automatically, demoting TestFlight to a "Beta channel"
-      // secondary link.
-      iosVersion: "1.3.4",
-      iosAppStoreUrl: "",
+      // iOS — App Store proper is now live as of 2026-05-26 (app id
+      // 6772655143). TestFlight public beta also stays open as the
+      // pre-release channel for v1.3.7+ builds we want to ship faster
+      // than App Store's review cadence. The download template promotes
+      // App Store to primary CTA when iosAppStoreUrl is non-empty and
+      // automatically demotes TestFlight to a small secondary "Beta"
+      // link below — no template change needed.
+      iosVersion: "1.3.7",
+      iosAppStoreUrl: "https://apps.apple.com/us/app/bywavecalendar/id6772655143",
       iosTestFlightUrl: "https://testflight.apple.com/join/rkM3hkpX",
       iosEtaWeek: "本周内",
       // Android — version + APK URL come from the live manifest at
