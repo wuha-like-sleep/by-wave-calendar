@@ -23,6 +23,7 @@
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
+import { sql } from "drizzle-orm";
 import { env } from "../env.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,22 +50,46 @@ export async function runPendingMigrations(): Promise<void> {
   );
   const migrationsFolder = path.join(projectRoot, "drizzle", "migrations");
 
+  // Try drizzle's normal migrator first. May fail if production's
+  // __drizzle_migrations table is out of sync with our committed
+  // _journal.json (which happens any time someone runs `db:push` or
+  // a hand ALTER TABLE without going through migrate). Failures here
+  // shouldn't block startup — defensiveSchemaPatches() below catches
+  // the columns we care about regardless.
   try {
     const t0 = Date.now();
     await migrate(db, { migrationsFolder });
     const elapsed = Date.now() - t0;
-    // Only log when something actually happened — drizzle is silent on
-    // no-op runs, so seeing the line in logs is a signal of activity.
-    // 50ms is a reasonable "nothing to apply" threshold; real migrations
-    // typically take 200ms+ for any ADD COLUMN against a non-trivial table.
     if (elapsed > 50) {
       console.log(`[auto-migrate] applied pending migrations in ${elapsed}ms`);
     }
   } catch (err) {
-    // Don't fatally crash the server. Logging here goes to pm2's log
-    // file where the admin can find + recover (drop column manually,
-    // hand-edit __drizzle_migrations, re-run migrate, etc).
-    console.error("[auto-migrate] failed — continuing startup anyway:", err);
+    console.error("[auto-migrate] drizzle migrator failed — falling through to defensive patches:", err);
+  }
+
+  // Defensive schema patches. Pure raw SQL with `IF NOT EXISTS` clauses
+  // — fully idempotent, runs on every boot, costs ~5ms total. This is
+  // the safety net for the class of bugs where drizzle's migrator state
+  // disagrees with the actual DB schema (because of historical db:push
+  // usage, manual hotfixes, lost _journal.json snapshots, etc).
+  //
+  // Add a line here whenever a release adds a column the runtime code
+  // depends on. The migration file is still the canonical record for
+  // fresh installs; this is just the "fix the broken-deploy case"
+  // safety net. Remove entries once they've been live long enough that
+  // no surviving production DB could still be missing the column.
+  try {
+    const t0 = Date.now();
+    await db.execute(sql`
+      ALTER TABLE booking_links
+        ADD COLUMN IF NOT EXISTS notify_email boolean NOT NULL DEFAULT true
+    `);
+    const elapsed = Date.now() - t0;
+    if (elapsed > 50) {
+      console.log(`[auto-migrate] defensive schema patches applied in ${elapsed}ms`);
+    }
+  } catch (err) {
+    console.error("[auto-migrate] defensive patches FAILED — /app/booking-links may 500:", err);
   } finally {
     await client.end({ timeout: 5 });
   }
