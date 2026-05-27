@@ -119,16 +119,17 @@ struct CalendarCreateView: View {
                 TextField("例如：工作 / 家庭 / 学习", text: $name)
             }
             Section("颜色") {
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(36), spacing: 12), count: 6), spacing: 12) {
+                // Inline swatch grid hit a Swift 5.10 type-checker
+                // timeout in the sibling ManageCalendarsView. Same
+                // pattern here — refactor preemptively so a future
+                // Swift update doesn't crank up inference cost and
+                // break the build again.
+                LazyVGrid(
+                    columns: Array(repeating: GridItem(.fixed(36), spacing: 12), count: 6),
+                    spacing: 12,
+                ) {
                     ForEach(Self.swatches, id: \.self) { hex in
-                        Circle()
-                            .fill(Color(hex: hex) ?? .accentColor)
-                            .frame(width: 32, height: 32)
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(color == hex ? Color.primary : .clear, lineWidth: 3),
-                            )
-                            .onTapGesture { color = hex }
+                        swatchCircle(hex: hex)
                     }
                 }
                 .padding(.vertical, 4)
@@ -173,6 +174,22 @@ struct CalendarCreateView: View {
                 .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+    }
+
+    /// One color swatch. Extracted from the LazyVGrid body to keep
+    /// Swift's type-checker happy — the inline chain
+    ///   Circle().fill().frame().overlay(Circle().strokeBorder()).onTapGesture()
+    /// caused a "unable to type-check this expression in reasonable
+    /// time" error in the sibling ManageCalendarsView.
+    @ViewBuilder
+    private func swatchCircle(hex: String) -> some View {
+        let fillColor: Color = Color(hex: hex) ?? .accentColor
+        let strokeColor: Color = color == hex ? .primary : .clear
+        Circle()
+            .fill(fillColor)
+            .frame(width: 32, height: 32)
+            .overlay(Circle().strokeBorder(strokeColor, lineWidth: 3))
+            .onTapGesture { color = hex }
     }
 
     private func save() async {
