@@ -1,12 +1,12 @@
 {
-  "versionCode": 11,
-  "versionName": "0.8.3",
-  "filename": "bywave-calendar-0.8.3.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.3/bywave-calendar-0.8.3.apk",
-  "sha256": "7e4723ccf78d2c04875cdfe9d222a61c4ddc388f40de6a1b3b19ecbc9779f940",
-  "sizeBytes": 36746811,
-  "releasedAt": "2026-05-27T10:11:03Z",
-  "notes": "v0.8.3 — 修复重复事件 silent-data-loss bug\n\n之前编辑或删除一个重复事件时，APP 直接把整个系列改/删了，没有任何提示。比如想删一次发生的会议结果所有周的同名会议都没了。这是 v0.1 起就在的 bug。\n\n修复后跟 iOS / web 完全一致：\n• 编辑/删除重复事件 → 弹底部三选一：\n  - 仅此事件（只修改/删除这一次）\n  - 此事件及后续（修改/删除此次及之后）\n  - 整个系列（影响全部）\n• 非重复事件维持原来的二次确认对话框\n",
+  "versionCode": 12,
+  "versionName": "0.9.0",
+  "filename": "bywave-calendar-0.9.0.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.0/bywave-calendar-0.9.0.apk",
+  "sha256": "58d7ad433b4420a86f95b79127519e5fb0c782553cbcad35318e19c55354970c",
+  "sizeBytes": 36746815,
+  "releasedAt": "2026-05-27T16:24:48Z",
+  "notes": "v0.9.0 — Settings 美观度向 iOS 靠拢\n\n• 设置页分组卡片改成白底 + 圆角 + 细边框，告别磨砂玻璃感\n• 分组标题换成跟 iOS 同款的小字 + 字距\n• 行高、字号、图标尺寸全面对齐 iOS 视觉密度\n• Chevron 颜色更淡，让点击提示而不抢戏\n• 图标染主题色（紫），不再是中性灰\n\n后续版本会把同款风格扩展到事件详情 / 事件编辑 / 管理日历等页面。\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
