@@ -52,6 +52,43 @@ PWA 可装到桌面 / 主屏
 
 > Android 用户首次安装需要在系统设置中允许「来自此应用的未知应用」，开一次终身有效。后续升级走 APP 内通道，无需重新下载。
 
+<br/>
+
+### 桌面端（开发中）
+
+<table>
+<tr>
+<th width="33%">🍎 macOS</th>
+<th width="33%">🪟 Windows</th>
+<th width="33%">🐧 Linux</th>
+</tr>
+<tr>
+<td align="center">
+
+![Coming soon](https://img.shields.io/badge/macOS-DMG_即将发布-94a3b8?logo=apple&logoColor=white&style=for-the-badge)
+
+Compose Multiplatform + Skia 原生渲染
+
+</td>
+<td align="center">
+
+![Coming soon](https://img.shields.io/badge/Windows-MSI_即将发布-94a3b8?logo=windows&logoColor=white&style=for-the-badge)
+
+跟 macOS 同一份 Kotlin 代码
+
+</td>
+<td align="center">
+
+![Coming soon](https://img.shields.io/badge/Linux-DEB_即将发布-94a3b8?logo=linux&logoColor=white&style=for-the-badge)
+
+桌面端三平台同步发布
+
+</td>
+</tr>
+</table>
+
+> 桌面端用 Compose Multiplatform 实现，**不是浏览器套壳**。Skia 原生渲染，Mac/Win/Linux 一份代码出三平台。详见 [apps/desktop/README.md](apps/desktop/README.md)。
+
 </div>
 
 ---

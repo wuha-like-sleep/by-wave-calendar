@@ -1,0 +1,23 @@
+# Gradle build artifacts
+build/
+.gradle/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+local.properties
+
+# Wrapper jar is bootstrapped on first sync; properties file is enough
+# to recreate it. We don't commit the .jar to keep the repo binary-free.
+gradle/wrapper/gradle-wrapper.jar
+gradlew
+gradlew.bat
+
+# macOS noise
+.DS_Store
+
+# Signing artifacts — never commit
+*.p12
+*.cer
+*.mobileprovision
