@@ -1,0 +1,95 @@
+<%# Desktop QR-pair approve page. The phone scans a QR code displayed
+    on the desktop app and lands here. Three states:
+
+      pending           — desktop is waiting; show approve/deny buttons
+      already_approved  — code was already used; tell user "OK, head back
+                          to your computer"
+      denied            — user denied earlier; explain it can't be undone
+      expired           — > 5min since generation; tell them to regenerate
+
+    The user is always already authenticated (the route redirects to
+    /login first if not), so we can safely show approve/deny without
+    re-confirming credentials.
+
+    Mobile-first layout: this is only ever opened on a phone browser
+    via QR scan, so single-column with big tap targets. %>
+
+<section class="max-w-md mx-auto mt-4 sm:mt-8">
+  <% if (state === "pending") { %>
+    <div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="h-12 w-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-semibold text-slate-900">登录桌面端</h1>
+          <p class="text-xs text-slate-500">你即将在 <%= siteName %> 的桌面 APP 上登录</p>
+        </div>
+      </div>
+
+      <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 mb-4 text-sm text-slate-700">
+        <div class="font-medium text-slate-900 mb-0.5">将以这个账号登录：</div>
+        <div class="text-slate-600 truncate"><%= user.email %></div>
+      </div>
+
+      <div class="rounded-lg bg-amber-50 border border-amber-200 p-3 mb-5 text-xs text-amber-900 leading-relaxed">
+        ⚠️ 只有你认得屏幕上这台电脑的时候才点「批准」。批准后这台电脑可以读写你的日历、删事件、改设置 —— 跟你手机里的 APP 一样的权限。
+      </div>
+
+      <form method="post" action="/desktop-pair/<%= code %>/approve" class="mb-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit"
+                class="w-full rounded-lg bg-brand-600 hover:bg-brand-700 text-white px-5 py-3 text-base font-medium shadow-md transition">
+          ✓ 批准登录
+        </button>
+      </form>
+
+      <form method="post" action="/desktop-pair/<%= code %>/deny">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit"
+                class="w-full rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-5 py-3 text-base font-medium transition">
+          拒绝
+        </button>
+      </form>
+
+      <p class="text-xs text-slate-400 mt-4 text-center">
+        授权码 <code class="font-mono"><%= code %></code> · 5 分钟内有效
+      </p>
+    </div>
+  <% } else if (state === "already_approved") { %>
+    <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+      <div class="h-14 w-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <h1 class="text-lg font-semibold text-emerald-900 mb-1">已批准登录</h1>
+      <p class="text-sm text-emerald-800">回到你的桌面端，它应该已经登录了。</p>
+      <p class="text-xs text-emerald-700 mt-4">可以关闭这个页面。</p>
+    </div>
+  <% } else if (state === "denied") { %>
+    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center">
+      <div class="h-14 w-14 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </div>
+      <h1 class="text-lg font-semibold text-slate-900 mb-1">已拒绝</h1>
+      <p class="text-sm text-slate-600">桌面端不会登录这个账号。</p>
+    </div>
+  <% } else { %>
+    <%# expired %>
+    <div class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">
+      <div class="h-14 w-14 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </div>
+      <h1 class="text-lg font-semibold text-amber-900 mb-1">二维码已过期</h1>
+      <p class="text-sm text-amber-800">回到桌面端重新生成一个二维码。</p>
+      <p class="text-xs text-amber-700 mt-3">每个二维码有效期 5 分钟。</p>
+    </div>
+  <% } %>
+</section>

@@ -61,7 +61,8 @@ import { z } from "zod";
 import QRCode from "qrcode";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUser, loadUserFromRequest } from "../lib/session.js";
+import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
 import { verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
@@ -631,5 +632,213 @@ export async function deviceRoutes(app: FastifyInstance) {
     const ok = await revokeDevice(user.id, id.data);
     if (!ok) return reply.code(404).send({ error: "not_found" });
     return reply.send({ ok: true });
+  });
+
+  // ============================================================
+  // Desktop QR-pair (scan-to-login from desktop). Mirror image of
+  // the mobile pair flow: instead of the logged-in user generating
+  // a code for an unauthenticated phone, the unauthenticated
+  // DESKTOP generates a code, displays it as a QR, and the
+  // already-logged-in PHONE scans + approves.
+  //
+  // Why in-memory instead of a DB table:
+  //   pair codes are valid for 5 minutes and consumed once. Losing
+  //   them on server restart is fine — user just regenerates. The
+  //   DB-backed mobile pair-init exists because a phone's claim can
+  //   arrive minutes apart from generation; here the desktop is
+  //   actively polling so we don't need persistence.
+  //
+  // Flow:
+  //   1. Desktop:  POST  /api/v1/devices/desktop-pair-init    →  { code }
+  //   2. Desktop:  show QR encoding https://<host>/desktop-pair/<code>
+  //   3. Phone:    scans, opens that URL in browser (cookie auth)
+  //   4. Phone:    server renders an approve/deny page
+  //   5. Phone:    POST /desktop-pair/<code>/approve            (cookie auth, CSRF)
+  //   6. Server:   mints tokens, attaches to in-memory record
+  //   7. Desktop:  GET  /api/v1/devices/desktop-pair-status?code=...
+  //                → 200 + tokens if approved
+  //                → 202 if still pending
+  //                → 404 if expired/unknown
+  //                → 410 if denied
+  //   8. Desktop:  stores tokens, transitions to logged-in state.
+
+  type DesktopPair = {
+    code: string;
+    status: "pending" | "approved" | "denied";
+    createdAt: number;
+    expiresAt: number;
+    userId?: string;
+    accessToken?: string;
+    accessTokenExpiresAt?: Date;
+    refreshToken?: string;
+    deviceId?: string;
+    userEmail?: string;
+    userName?: string | null;
+  };
+  const desktopPairs = new Map<string, DesktopPair>();
+  const DESKTOP_PAIR_TTL_MS = 5 * 60 * 1000;
+
+  function _purgeExpiredDesktopPairs() {
+    const now = Date.now();
+    for (const [code, p] of desktopPairs.entries()) {
+      if (p.expiresAt < now) desktopPairs.delete(code);
+    }
+  }
+
+  // -------- desktop-pair-init (anonymous) --------
+  app.post("/devices/desktop-pair-init", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    _purgeExpiredDesktopPairs();
+    // 8 uppercase-alphanumeric chars (~40 bits entropy) — enough for
+    // a 5-minute window with rate limit. Skip I/O/L/0/1 for visual
+    // unambiguity (in case anyone reads + types it manually).
+    const { randomBytes } = await import("node:crypto");
+    const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    const bytes = randomBytes(8);
+    let code = "";
+    for (const b of bytes) code += ALPHABET[b % ALPHABET.length];
+    const now = Date.now();
+    desktopPairs.set(code, {
+      code,
+      status: "pending",
+      createdAt: now,
+      expiresAt: now + DESKTOP_PAIR_TTL_MS,
+    });
+    const serverUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    return reply.send({
+      code,
+      approveUrl: `${serverUrl}/desktop-pair/${code}`,
+      expiresAt: new Date(now + DESKTOP_PAIR_TTL_MS).toISOString(),
+    });
+  });
+
+  // -------- desktop-pair-status (anonymous, polled by desktop) --------
+  app.get<{ Querystring: { code?: string } }>("/devices/desktop-pair-status", {
+    config: { rateLimit: { max: 600, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    _purgeExpiredDesktopPairs();
+    const code = (req.query?.code ?? "").toString().trim().toUpperCase();
+    if (!code) return reply.code(400).send({ error: "missing_code" });
+    const p = desktopPairs.get(code);
+    if (!p) return reply.code(404).send({ status: "expired" });
+    if (p.status === "denied") {
+      desktopPairs.delete(code);
+      return reply.code(410).send({ status: "denied" });
+    }
+    if (p.status === "pending") {
+      return reply.code(202).send({ status: "pending" });
+    }
+    // Approved — return tokens ONCE then delete (single use).
+    const out = {
+      status: "approved",
+      accessToken: p.accessToken!,
+      accessTokenExpiresAt: p.accessTokenExpiresAt?.toISOString(),
+      refreshToken: p.refreshToken!,
+      deviceId: p.deviceId!,
+      userId: p.userId!,
+      userEmail: p.userEmail,
+      userName: p.userName,
+    };
+    desktopPairs.delete(code);
+    return reply.send(out);
+  });
+
+  // -------- desktop-pair approve page (rendered for phone browser) --------
+  // The phone scans the QR, lands on this URL. We use the same cookie
+  // session the user already has from the web app to identify them.
+  // If they're not logged in we redirect to /login with a return_to so
+  // they end up back here after auth.
+  app.get<{ Params: { code: string } }>("/desktop-pair/:code", async (req, reply) => {
+    _purgeExpiredDesktopPairs();
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    const user = await loadUserFromRequest(req);
+    if (!user) {
+      const back = encodeURIComponent(`/desktop-pair/${code}`);
+      return reply.redirect(`/login?return_to=${back}`);
+    }
+    if (!p) {
+      return reply.view("desktop-pair", {
+        title: "桌面端登录",
+        state: "expired",
+        user,
+        csrfToken: csrfTokenFor(req),
+        siteName: (await getSettings()).siteName || "ByWave Calendar",
+      });
+    }
+    if (p.status !== "pending") {
+      return reply.view("desktop-pair", {
+        title: "桌面端登录",
+        state: p.status === "approved" ? "already_approved" : "denied",
+        user,
+        csrfToken: csrfTokenFor(req),
+        siteName: (await getSettings()).siteName || "ByWave Calendar",
+      });
+    }
+    return reply.view("desktop-pair", {
+      title: "桌面端登录",
+      state: "pending",
+      code,
+      user,
+      csrfToken: csrfTokenFor(req),
+      siteName: (await getSettings()).siteName || "ByWave Calendar",
+    });
+  });
+
+  // -------- desktop-pair approve / deny (cookie auth + CSRF) --------
+  app.post<{ Params: { code: string } }>("/desktop-pair/:code/approve", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    _purgeExpiredDesktopPairs();
+    const user = await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    if (!p) return reply.redirect(`/desktop-pair/${code}`);  // -> expired view
+    if (p.status !== "pending") return reply.redirect(`/desktop-pair/${code}`);
+
+    // Mint tokens. Same shape as pair-claim — server treats desktop
+    // as just another device. Label includes user-agent so user can
+    // identify it in /app/settings/devices later.
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+    const refresh = await issueRefreshToken();
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
+      userId: user.id,
+      label: "Desktop (Mac/Windows)",
+      kind: "desktop",
+      appVersion: null,
+      clientDeviceId: code,  // desktop's per-pair id; v1.x adds real install UUID
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: req.ip,
+      userAgent: ua,
+    });
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+
+    p.status = "approved";
+    p.userId = user.id;
+    p.accessToken = access.token;
+    p.accessTokenExpiresAt = access.expiresAt;
+    p.refreshToken = refresh.plain;
+    p.deviceId = device.id;
+    p.userEmail = user.email;
+    p.userName = user.displayName;
+
+    return reply.redirect(`/desktop-pair/${code}`);  // -> already_approved view
+  });
+
+  app.post<{ Params: { code: string } }>("/desktop-pair/:code/deny", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredDesktopPairs();
+    await requireUser(req, reply);  // must be authed to deny (anti-DoS)
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    if (p && p.status === "pending") {
+      p.status = "denied";
+    }
+    return reply.redirect(`/desktop-pair/${code}`);
   });
 }
