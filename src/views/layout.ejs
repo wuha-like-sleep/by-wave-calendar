@@ -96,6 +96,38 @@
       <div class="bwc-boot-splash__name"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></div>
       <div class="bwc-boot-splash__msg" id="bwc-boot-splash-msg"></div>
     </div>
+    <%# Splash auto-hide. Inlined here (not in app.js) so the splash
+        can never get permanently stuck: even if app.js fails to load
+        (CSP block / 404 / network drop), this script still runs and
+        kills the overlay. Without it, ANY page where app.js doesn't
+        execute would leave the user staring at a gradient mask. %>
+    <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+      (function () {
+        function bootDone() {
+          if (!document.body.classList.contains("bwc-booted")) {
+            document.body.classList.add("bwc-booted");
+          }
+        }
+        // Primary path: hide as soon as DOM is ready. Double rAF so the
+        // initial paint has a chance to commit, otherwise the fade
+        // transition skips entirely on cold loads.
+        function scheduleHide() {
+          requestAnimationFrame(function () {
+            requestAnimationFrame(bootDone);
+          });
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", scheduleHide, { once: true });
+        } else {
+          scheduleHide();
+        }
+        // Hard fallback. If something weird happens to rAF (background
+        // tab throttling, etc.) we still hide after 2s — the splash is
+        // never supposed to be the user's destination, and a broken
+        // page underneath is strictly better than an infinite spinner.
+        setTimeout(bootDone, 2000);
+      })();
+    </script>
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>
       <main class="flex-1 min-h-0 flex flex-col">

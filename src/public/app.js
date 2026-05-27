@@ -201,37 +201,9 @@
   );
 
   // ---------- Boot splash ----------
-  // The splash element is rendered inline at the top of <body> by
-  // layout.ejs. It's visible by default; we hide it once the DOM is
-  // parsed + first paint is committed. Body class drives the CSS fade.
-  //
-  // Why double-rAF? Adding the class on DOMContentLoaded sometimes
-  // races the first layout; one rAF guarantees the browser has painted
-  // the rest of the page, the second guarantees the fade starts on a
-  // separate frame so the transition actually runs (instead of jumping).
-  function hideBootSplash() {
-    if (document.body.classList.contains("bwc-booted")) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        document.body.classList.add("bwc-booted");
-      });
-    });
-  }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", hideBootSplash, { once: true });
-  } else {
-    hideBootSplash();
-  }
-
-  // Safety net: even if some script throws during boot, never leave
-  // the user stuck on the splash. Force-hide after 5 seconds no
-  // matter what — they'll get the broken page underneath, which is
-  // still better than an infinite spinner.
-  setTimeout(() => {
-    if (!document.body.classList.contains("bwc-booted")) {
-      document.body.classList.add("bwc-booted");
-    }
-  }, 5000);
+  // Auto-hide-on-DOMContentLoaded is now handled by an inline script in
+  // layout.ejs (so it works even if this file fails to load — CSP
+  // blocks, 404s, etc). We only keep the programmatic loader here.
 
   // Programmatic loader: same splash, used for long async operations
   // (route navigation in /app/, heavy imports, network-slow saves).
@@ -252,38 +224,18 @@
     document.body.classList.add("bwc-booted");
   }
 
-  // Show the splash on outbound link clicks (same-origin only) so the
-  // brief delay before the next page paints feels intentional rather
-  // than frozen. The new page's own splash takes over once HTML lands.
-  // Skip when the View Transitions API is doing the cross-fade — its
-  // animation is smoother than ours.
-  document.addEventListener(
-    "click",
-    function (e) {
-      // Only handle plain left clicks without modifier keys.
-      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      const a = e.target.closest && e.target.closest("a[href]");
-      if (!a) return;
-      if (a.target && a.target !== "_self") return;
-      if (a.hasAttribute("download")) return;
-      // Skip mailto:/tel:/javascript:/anchor#.
-      const href = a.getAttribute("href") || "";
-      if (!href || href.startsWith("#") || href.startsWith("javascript:") || /^[a-z]+:/i.test(href) && !href.startsWith(location.origin) && !href.startsWith("/")) return;
-      // Skip when host differs (external link).
-      try {
-        const url = new URL(href, location.href);
-        if (url.origin !== location.origin) return;
-      } catch (_e) { return; }
-      // If the browser supports View Transitions API, it will handle
-      // the cross-fade itself — don't double up with our splash.
-      if ("startViewTransition" in document) return;
-      loadingShow();
-      // If for some reason the navigation never happens (e.g. blocked
-      // by beforeunload), restore the page after a beat.
-      setTimeout(loadingHide, 1500);
-    },
-    true,
-  );
+  // PREVIOUSLY: we showed the splash on every same-origin link click
+  // to "make slow navigations feel intentional". In practice this just
+  // flashed a gradient mask over the page for every click that fired
+  // faster than the 1.5s safety timeout — which is ~all of them on
+  // cached pages. Users reported it as an unwanted overlay (有遮罩).
+  //
+  // Removed in v1.3.8. The browser's own tab-icon spinner / progress
+  // bar already covers the "still loading" affordance. The splash now
+  // only fires:
+  //   - on initial page load (the original purpose)
+  //   - when code explicitly calls `bwc.loading.show("正在导入…")`
+  //     for genuinely long operations (ICS import, big saves)
 
   window.bwc = { toast, copy, confirm: confirmDialog, loading: { show: loadingShow, hide: loadingHide } };
 })();
