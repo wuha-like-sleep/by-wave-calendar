@@ -488,6 +488,83 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
   );
 }
 
+// ---- Desktop in-app update + binary serving ----
+// Mirrors the android section above. Desktop binaries are self-hosted only
+// (no GitHub Releases mirror) because the desktop client hardcodes
+// rl.lz-ss.com as the default server, making the binary inherently
+// rl.lz-ss.com-specific. /api/app/desktop/latest serves the per-platform
+// manifest; /downloads/desktop/<filename> streams the DMG/MSI/DEB itself
+// from data/desktop-binaries/. Anonymous to mirror the android equivalent.
+{
+  const { getLatestRelease, binaryPathFor } = await import("./lib/desktop_release.js");
+  app.get("/api/app/desktop/latest", { config: { rateLimit: false } }, async (req, reply) => {
+    const rel = await getLatestRelease();
+    if (!rel) return reply.code(404).send({ error: "no_release_published" });
+    // Resolve each platform asset to an absolute URL so the desktop
+    // updater can fetch it directly (mirrors how android does urls).
+    const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
+    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+    const origin = `${proto}://${host}`;
+    const assets: Record<string, { url: string; sha256: string; sizeBytes: number }> = {};
+    for (const [platform, a] of Object.entries(rel.assets)) {
+      if (!a) continue;
+      assets[platform] = {
+        url: `${origin}/downloads/desktop/${encodeURIComponent(a.filename)}`,
+        sha256: a.sha256,
+        sizeBytes: a.sizeBytes,
+      };
+    }
+    reply.header("Cache-Control", "public, max-age=60");
+    return reply.send({
+      versionCode: rel.versionCode,
+      versionName: rel.versionName,
+      releasedAt: rel.releasedAt,
+      notes: rel.notes,
+      mandatory: rel.mandatory,
+      assets,
+    });
+  });
+
+  // Serve the DMG/MSI/DEB. Same hardening as /downloads/android/: filename
+  // is whitelisted by extension+chars, path is resolved within BINARY_DIR.
+  app.get<{ Params: { filename: string } }>(
+    "/downloads/desktop/:filename",
+    { config: { rateLimit: false } },
+    async (req, reply) => {
+      const filename = req.params.filename;
+      // Allow only the three native installer extensions we ship.
+      if (!/^[\w.\-]+\.(dmg|msi|deb)$/i.test(filename)) {
+        return reply.code(400).send({ error: "invalid_filename" });
+      }
+      const full = binaryPathFor(filename);
+      if (!full) return reply.code(400).send({ error: "invalid_filename" });
+      const fs = await import("node:fs");
+      const fsp = await import("node:fs/promises");
+      try {
+        const st = await fsp.stat(full);
+        // Content-Type per extension. Browsers don't really care for
+        // installers (they just prompt to save), but proper MIME helps
+        // CDNs route correctly.
+        const ext = filename.toLowerCase().split(".").pop();
+        const ct =
+          ext === "dmg" ? "application/x-apple-diskimage" :
+          ext === "msi" ? "application/x-msi" :
+          ext === "deb" ? "application/vnd.debian.binary-package" :
+          "application/octet-stream";
+        reply.header("Content-Type", ct);
+        reply.header("Content-Length", String(st.size));
+        reply.header("Content-Disposition", `attachment; filename="${filename}"`);
+        // Each desktop installer filename embeds its version, so the file
+        // is immutable per name — cache hard like we do for APKs.
+        reply.header("Cache-Control", "public, max-age=2592000, immutable");
+        return reply.send(fs.createReadStream(full));
+      } catch {
+        return reply.code(404).send({ error: "binary_not_found" });
+      }
+    },
+  );
+}
+
 // ---- Routes ----
 // Each route plugin uses paths relative to the API prefix (e.g.
 // "/events" rather than "/api/events"). We mount the same plugin twice:

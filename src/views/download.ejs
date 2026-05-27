@@ -77,6 +77,88 @@
     </div>
   </div>
 
+  <!-- Desktop — macOS / Windows / Linux. Self-hosted only, NOT on
+       GitHub/Gitee Releases, because the desktop client hardcodes
+       rl.lz-ss.com as its default server URL. Each platform shows its
+       own download button when its manifest entry is present, or a
+       greyed "coming soon" branch otherwise. -->
+  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col sm:col-span-2">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="h-12 w-12 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="text-left">
+        <h2 class="text-xl font-semibold text-slate-900">Desktop</h2>
+        <p class="text-xs text-slate-500">macOS · Windows · Linux</p>
+      </div>
+      <span class="ml-auto text-xs px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-100">
+        <%= desktopVersion %>
+      </span>
+    </div>
+
+    <ul class="text-sm text-slate-600 space-y-1 mb-3">
+      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Kotlin + Compose Multiplatform 原生</li>
+      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 手机扫码登录 · 本地存放令牌</li>
+      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 仅本服务器分发，不上 GitHub / Gitee</li>
+    </ul>
+
+    <% if (desktopNotes) { %>
+      <details class="text-xs text-slate-600 mb-4 group">
+        <summary class="cursor-pointer text-brand-700 hover:text-brand-800 select-none list-none flex items-center gap-1">
+          <span class="transition-transform group-open:rotate-90">▸</span>
+          <span>本版更新内容</span>
+        </summary>
+        <div class="mt-2 pl-4 border-l-2 border-brand-100 whitespace-pre-line text-slate-600 leading-relaxed">
+<%= desktopNotes %>
+        </div>
+      </details>
+    <% } %>
+
+    <div class="mt-auto grid gap-2 sm:grid-cols-3">
+      <!-- macOS -->
+      <% if (desktopMacUrl) { %>
+        <a href="<%= desktopMacUrl %>"
+           class="block text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-4 py-3 text-sm font-medium shadow-md transition">
+          🍎 macOS .dmg<% if (desktopMacSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopMacSize %></span><% } %>
+        </a>
+      <% } else { %>
+        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
+          🍎 macOS · 即将发布
+        </button>
+      <% } %>
+
+      <!-- Windows -->
+      <% if (desktopWinUrl) { %>
+        <a href="<%= desktopWinUrl %>"
+           class="block text-center rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 text-sm font-medium shadow-md transition">
+          🪟 Windows .msi<% if (desktopWinSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopWinSize %></span><% } %>
+        </a>
+      <% } else { %>
+        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
+          🪟 Windows · 即将发布
+        </button>
+      <% } %>
+
+      <!-- Linux -->
+      <% if (desktopLinuxUrl) { %>
+        <a href="<%= desktopLinuxUrl %>"
+           class="block text-center rounded-lg bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 text-sm font-medium shadow-md transition">
+          🐧 Linux .deb<% if (desktopLinuxSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopLinuxSize %></span><% } %>
+        </a>
+      <% } else { %>
+        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
+          🐧 Linux · 即将发布
+        </button>
+      <% } %>
+    </div>
+
+    <% if (!desktopMacUrl && !desktopWinUrl && !desktopLinuxUrl) { %>
+      <p class="text-xs text-slate-400 mt-3 text-center">
+        首版预计 <%= desktopEtaWeek %> 发布，登录后扫码即可与手机互通。
+      </p>
+    <% } %>
+  </div>
+
   <!-- Android -->
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col">
     <div class="flex items-center gap-3 mb-4">
