@@ -192,7 +192,10 @@ struct MfaSettingsPage: View {
             otpauthUri = resp.otpauthUri
             phase = .setupShowingQR
         } catch let e as APIError {
-            if case .server(let status, let body) = e, status == 409 {
+            // Only the status matters here — the body is unused (we
+            // already know it's the "already_enabled" code from 409).
+            // Bind it with `_` to silence the unused-value warning.
+            if case .server(let status, _) = e, status == 409 {
                 // "already_enabled" — show disable form instead.
                 phase = .alreadyEnabled
                 return

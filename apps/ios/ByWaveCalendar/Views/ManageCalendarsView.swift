@@ -132,13 +132,19 @@ struct EditCalendarView: View {
                 }
                 .padding(.vertical, 4)
             }
-            Section("默认时区") {
+            // SwiftUI doesn't have a Section(_:content:footer:) overload —
+            // mixing a String header with a footer closure crashes the
+            // overload resolver ("Generic parameter 'Content' could not
+            // be inferred"). Use the full header-closure form instead.
+            Section {
                 Picker("时区", selection: $timezone) {
                     ForEach(EventEditView.commonTimezones, id: \.self) { tz in
                         Text(tz).tag(tz)
                     }
                 }
                 .pickerStyle(.menu)
+            } header: {
+                Text("默认时区")
             } footer: {
                 Text("新建事件时的默认时区；已有事件保留各自的时区。")
                     .font(.footnote)

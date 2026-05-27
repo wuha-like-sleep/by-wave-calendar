@@ -1050,7 +1050,12 @@ struct SafariWebView: UIViewControllerRepresentable {
 }
 
 // URL needs Identifiable conformance for sheet(item:) to bind cleanly.
-// absoluteString is unique enough for our usage.
-extension URL: Identifiable {
+// absoluteString is unique enough for our usage. The `@retroactive`
+// annotation is Swift 6's way of saying "I know I'm extending a stdlib
+// type with a stdlib protocol and accept the risk if Foundation later
+// declares this themselves" — silences the warning without changing
+// behavior. Pre-Swift 5.10 the keyword didn't exist; we're already on
+// Xcode 16+ everywhere we build so this is safe.
+extension URL: @retroactive Identifiable {
     public var id: String { absoluteString }
 }
