@@ -536,6 +536,13 @@ export const bookingLinks = pgTable("booking_links", {
   bufferBeforeMin: integer("buffer_before_min").notNull().default(0),
   bufferAfterMin: integer("buffer_after_min").notNull().default(0),
   enabled: boolean("enabled").notNull().default(true),
+  // Whether the link owner gets an email each time someone books a slot.
+  // Default true preserves the v1.3.9-and-prior behavior for all existing
+  // links. Owners can toggle this on the booking-links admin page after
+  // creation, or set it explicitly at create time.
+  // (The guest's own confirmation email is unrelated — that one always
+  // sends because the guest needs the cancel link.)
+  notifyEmail: boolean("notify_email").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

@@ -1930,6 +1930,11 @@ export async function webRoutes(app: FastifyInstance) {
       maxDaysAhead: z.coerce.number().int().min(1).max(90),
       bufferBeforeMin: z.coerce.number().int().min(0).max(240).default(0),
       bufferAfterMin: z.coerce.number().int().min(0).max(240).default(0),
+      // HTML checkbox sends "on" when checked, omits the key entirely
+      // when unchecked. Map both to a boolean — default true so the
+      // checkbox starts checked and unchecking it explicitly opts out.
+      notifyEmail: z.union([z.literal("on"), z.literal("off"), z.undefined()])
+        .transform((v) => v !== "off" && v !== undefined),
     }).safeParse(req.body);
     if (!body.success) return redirectWith(reply, "/app/booking-links", { error: "参数无效：" + (body.error.errors[0]?.message ?? "") });
     if (!(await ownsCalendar(body.data.calendarId, user.id))) {
@@ -1948,6 +1953,7 @@ export async function webRoutes(app: FastifyInstance) {
         maxDaysAhead: body.data.maxDaysAhead,
         bufferBeforeMin: body.data.bufferBeforeMin,
         bufferAfterMin: body.data.bufferAfterMin,
+        notifyEmail: body.data.notifyEmail,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "未知错误";
@@ -1976,6 +1982,28 @@ export async function webRoutes(app: FastifyInstance) {
     if (!id.success) return reply.redirect("/app/booking-links");
     await db.delete(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id)));
     return redirectWith(reply, "/app/booking-links", { success: "已删除" });
+  });
+
+  // Toggle whether the owner receives an email when someone books a
+  // slot. Separate from /toggle (which turns the whole link on/off)
+  // because users want fine control — "link is live AND I don't need
+  // an email for every booking" is a common case.
+  app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle-notify", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/booking-links");
+    const [link] = await db.select().from(schema.bookingLinks)
+      .where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id)))
+      .limit(1);
+    if (!link) return reply.redirect("/app/booking-links");
+    await db.update(schema.bookingLinks)
+      .set({ notifyEmail: !link.notifyEmail, updatedAt: new Date() })
+      .where(eq(schema.bookingLinks.id, id.data));
+    return redirectWith(reply, "/app/booking-links", {
+      success: link.notifyEmail ? "已关闭邮件通知" : "已开启邮件通知",
+    });
   });
 
   // -------- Public booking pages --------
@@ -2048,7 +2076,11 @@ export async function webRoutes(app: FastifyInstance) {
         text: `你的预约已确认。\n\n${lines}`,
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">✓ 预约已确认</h1><p style="font-size:15px;color:#0f172a;font-weight:600;margin:0 0 6px;">${link.title}</p><p style="font-size:14px;color:#475569;margin:0 0 14px;">与 ${(owner?.displayName || owner?.email || "").replace(/[<>&]/g, "")} 的预约</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}<p style="margin:16px 0 6px;font-size:13px;color:#64748b;">需要取消？<a href="${cancelUrl}" style="color:#dc2626;">点这里</a>。</p></div></div>`,
       }).catch(() => undefined);
-      if (owner) {
+      // Guest's confirmation email above is unconditional — they need
+      // the cancel link. The OWNER notification respects link.notifyEmail
+      // (opt-out toggle, default on). Lets the owner avoid inbox noise
+      // for high-traffic links while still letting guests get their copy.
+      if (owner && link.notifyEmail) {
         sendMail({
           to: owner.email,
           subject: `📅 新预约：${body.data.guestName} — ${link.title}`,

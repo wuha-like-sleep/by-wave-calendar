@@ -27,6 +27,20 @@
                       onclick="window.bwc && window.bwc.copy('<%= l.publicUrl %>')">复制</button>
             </div>
             <% if (l.description) { %><div class="mt-1 text-xs text-slate-500"><%= l.description %></div><% } %>
+            <%# Notification status — small inline indicator + toggle.
+                The button is wrapped in its own form so it can submit
+                without intercepting the global "确定删除" handler. %>
+            <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+              <% if (l.notifyEmail) { %>
+                <span class="inline-flex items-center gap-1 text-emerald-600">📧 新预约会邮件通知你</span>
+              <% } else { %>
+                <span class="inline-flex items-center gap-1 text-slate-400">🔕 邮件通知已关闭</span>
+              <% } %>
+              <form method="post" action="/app/booking-links/<%= l.id %>/toggle-notify" class="m-0 inline">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline">切换</button>
+              </form>
+            </div>
           </div>
           <div class="flex gap-2 flex-shrink-0">
             <form method="post" action="/app/booking-links/<%= l.id %>/toggle" class="m-0">
@@ -102,6 +116,20 @@
       <input type="number" name="bufferAfterMin" value="0" min="0" max="240"
              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
+    <div class="sm:col-span-2 mt-2">
+      <%# Notification opt-in. Default checked → preserves prior
+          behavior for users who don't touch the box. Unchecked
+          links are silent for the owner; the GUEST always gets a
+          confirmation email regardless (they need the cancel link). %>
+      <label class="inline-flex items-start gap-2 text-sm cursor-pointer">
+        <input type="checkbox" name="notifyEmail" value="on" checked
+               class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+        <span>
+          <span class="font-medium text-slate-700">新预约时邮件通知我</span>
+          <span class="block text-xs text-slate-500 mt-0.5">每次有人通过这个链接预约时给你发邮件。访客自己的确认邮件不受影响。</span>
+        </span>
+      </label>
+    </div>
     <div class="sm:col-span-2 flex justify-end">
       <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">创建链接</button>
     </div>

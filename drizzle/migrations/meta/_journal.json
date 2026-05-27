@@ -253,6 +253,13 @@
       "when": 1779950000000,
       "tag": "0035_mfa_pending_secret",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1779877073683,
+      "tag": "0036_familiar_vance_astro",
+      "breakpoints": true
     }
   ]
 }
