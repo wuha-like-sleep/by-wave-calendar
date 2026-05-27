@@ -19,6 +19,10 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("jvm") version "2.0.20"
+    // kotlinx.serialization plugin codegens .serializer() helpers for
+    // @Serializable classes. Without this plugin the @Serializable
+    // annotation is purely informational and the helpers don't exist.
+    kotlin("plugin.serialization") version "2.0.20"
     id("org.jetbrains.compose") version "1.7.0"
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.20"
 }
@@ -54,6 +58,13 @@ dependencies {
 
     // JSON serialization — same as Android.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // QR code generation — desktop displays a QR encoding the
+    // approveUrl returned by /devices/desktop-pair-init. zxing-core is
+    // pure-Java (no native deps), produces a BufferedImage we paint
+    // straight into Compose via toComposeImageBitmap().
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:javase:3.5.3")
 }
 
 kotlin {
