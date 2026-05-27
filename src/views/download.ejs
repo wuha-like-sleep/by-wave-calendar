@@ -77,11 +77,12 @@
     </div>
   </div>
 
-  <!-- Desktop — macOS / Windows / Linux. Self-hosted only, NOT on
-       GitHub/Gitee Releases, because the desktop client hardcodes
-       rl.lz-ss.com as its default server URL. Each platform shows its
-       own download button when its manifest entry is present, or a
-       greyed "coming soon" branch otherwise. -->
+  <!-- Desktop — macOS / Windows / Linux. Single Kotlin codebase, three
+       native installers. Each platform shows its own download button
+       when its manifest asset is present, or a "coming soon" branch
+       otherwise. Per-asset URL is either an external GitHub Releases
+       URL (preferred) or a server-hosted /downloads/desktop/<filename>
+       path (self-hoster fallback) — resolved by the route handler. -->
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col sm:col-span-2">
     <div class="flex items-center gap-3 mb-4">
       <div class="h-12 w-12 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
@@ -99,7 +100,7 @@
     <ul class="text-sm text-slate-600 space-y-1 mb-3">
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Kotlin + Compose Multiplatform 原生</li>
       <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 手机扫码登录 · 本地存放令牌</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 仅本服务器分发，不上 GitHub / Gitee</li>
+      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 支持任意 ByWave 服务器（输入你的服务器地址）</li>
     </ul>
 
     <% if (desktopNotes) { %>
@@ -152,9 +153,20 @@
       <% } %>
     </div>
 
-    <% if (!desktopMacUrl && !desktopWinUrl && !desktopLinuxUrl) { %>
+    <% if (desktopMacUrl || desktopWinUrl || desktopLinuxUrl) { %>
+      <div class="flex gap-2 text-xs mt-3">
+        <a href="<%= desktopGitHub %>" target="_blank" rel="noopener"
+           class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
+          GitHub Releases
+        </a>
+        <a href="<%= desktopGitee %>" target="_blank" rel="noopener"
+           class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
+          Gitee Releases
+        </a>
+      </div>
+    <% } else { %>
       <p class="text-xs text-slate-400 mt-3 text-center">
-        首版预计 <%= desktopEtaWeek %> 发布，登录后扫码即可与手机互通。
+        首版预计 <%= desktopEtaWeek %> 发布，关注 GitHub Releases 接收通知。
       </p>
     <% } %>
   </div>

@@ -489,27 +489,28 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
 }
 
 // ---- Desktop in-app update + binary serving ----
-// Mirrors the android section above. Desktop binaries are self-hosted only
-// (no GitHub Releases mirror) because the desktop client hardcodes
-// rl.lz-ss.com as the default server, making the binary inherently
-// rl.lz-ss.com-specific. /api/app/desktop/latest serves the per-platform
-// manifest; /downloads/desktop/<filename> streams the DMG/MSI/DEB itself
-// from data/desktop-binaries/. Anonymous to mirror the android equivalent.
+// Mirrors the android section above. Per-asset, the manifest either points
+// at an external URL (GitHub Releases — preferred, no disk footprint) or
+// supplies a local filename which we serve from data/desktop-binaries/
+// via /downloads/desktop/<filename>. Self-hosters can pick whichever
+// makes sense for them.
 {
   const { getLatestRelease, binaryPathFor } = await import("./lib/desktop_release.js");
   app.get("/api/app/desktop/latest", { config: { rateLimit: false } }, async (req, reply) => {
     const rel = await getLatestRelease();
     if (!rel) return reply.code(404).send({ error: "no_release_published" });
-    // Resolve each platform asset to an absolute URL so the desktop
-    // updater can fetch it directly (mirrors how android does urls).
+    // Resolve each platform asset to an absolute URL — verbatim downloadUrl
+    // when set, otherwise construct ${origin}/downloads/desktop/<filename>.
+    // Matches how /api/app/android/latest handles the same fork.
     const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
     const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
     const origin = `${proto}://${host}`;
     const assets: Record<string, { url: string; sha256: string; sizeBytes: number }> = {};
     for (const [platform, a] of Object.entries(rel.assets)) {
       if (!a) continue;
+      const url = a.downloadUrl || `${origin}/downloads/desktop/${encodeURIComponent(a.filename)}`;
       assets[platform] = {
-        url: `${origin}/downloads/desktop/${encodeURIComponent(a.filename)}`,
+        url,
         sha256: a.sha256,
         sizeBytes: a.sizeBytes,
       };

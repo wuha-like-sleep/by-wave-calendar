@@ -175,22 +175,23 @@ export async function webRoutes(app: FastifyInstance) {
       ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
       : "~15 MB";
 
-    // Desktop release (DMG / MSI / DEB) — self-hosted only on this server,
-    // never mirrored to GitHub/Gitee Releases because the desktop binary
-    // hardcodes rl.lz-ss.com as the default server URL. Manifest is
-    // optional; absence renders "coming soon" placeholders.
+    // Desktop release (DMG / MSI / DEB). Per-asset, prefer the manifest's
+    // `downloadUrl` (typically a GitHub Releases asset) so users get the
+    // canonical, world-mirrored binary; fall back to server-hosted
+    // /downloads/desktop/<filename> when the manifest only supplies a
+    // filename (self-hoster mode). Manifest is optional; absence renders
+    // "coming soon" placeholders.
     const { getLatestRelease: getDesktopRelease } = await import("../lib/desktop_release.js");
     const desktop = await getDesktopRelease();
     const fmtSize = (n?: number) => n && n > 0 ? `${(n / 1024 / 1024).toFixed(1)} MB` : "";
-    const desktopMacUrl = desktop?.assets.mac
-      ? `/downloads/desktop/${encodeURIComponent(desktop.assets.mac.filename)}`
-      : "";
-    const desktopWinUrl = desktop?.assets.win
-      ? `/downloads/desktop/${encodeURIComponent(desktop.assets.win.filename)}`
-      : "";
-    const desktopLinuxUrl = desktop?.assets.linux
-      ? `/downloads/desktop/${encodeURIComponent(desktop.assets.linux.filename)}`
-      : "";
+    const assetUrl = (a?: { downloadUrl: string; filename: string }) => {
+      if (!a) return "";
+      if (a.downloadUrl) return a.downloadUrl;
+      return a.filename ? `/downloads/desktop/${encodeURIComponent(a.filename)}` : "";
+    };
+    const desktopMacUrl = assetUrl(desktop?.assets.mac);
+    const desktopWinUrl = assetUrl(desktop?.assets.win);
+    const desktopLinuxUrl = assetUrl(desktop?.assets.linux);
     return reply.view("download", {
       title: "下载",
       user: await loadUserFromRequest(req),
@@ -235,6 +236,8 @@ export async function webRoutes(app: FastifyInstance) {
       desktopWinSize: fmtSize(desktop?.assets.win?.sizeBytes),
       desktopLinuxUrl,
       desktopLinuxSize: fmtSize(desktop?.assets.linux?.sizeBytes),
+      desktopGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
+      desktopGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
       desktopEtaWeek: "本月内",
     });
   });

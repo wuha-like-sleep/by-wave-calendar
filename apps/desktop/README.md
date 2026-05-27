@@ -3,25 +3,20 @@
 Compose Multiplatform Desktop 桌面端。Mac DMG + Win MSI + Linux DEB
 一份 Kotlin 代码出三平台原生 app（Skia 渲染，不是 WebView 套壳）。
 
-## 分发策略 — 仅 rl.lz-ss.com 自托管
+## 分发策略
 
-本桌面端**不**上架 GitHub Releases / Gitee Releases。原因：
-`SetupScreen.kt` 把默认服务器地址硬编码为 `https://rl.lz-ss.com`，
-意味着这个二进制是 rl.lz-ss.com 专属构建，公开发布到第三方平台会
-误导用户以为它能连任意自建服务器。
+桌面端是 **server-agnostic** 的开源客户端 —— 默认输入框是空的，
+用户填自己的 ByWave 服务器地址。所以分发跟 Android 完全一样：
 
-分发流程：
+- **主路径：GitHub Releases**（也镜像到 Gitee）。一份 .dmg / .msi /
+  .deb 走天下，谁自建 ByWave 都能拿来连自己的服务器。
+- **服务器自托管 fallback**：如果你的部署不想让用户依赖 GitHub，
+  manifest 的 `downloadUrl` 留空，把二进制放在
+  `data/desktop-binaries/<filename>`，服务器从
+  `/downloads/desktop/<filename>` 串流。
 
-1. 在 macOS / Windows 各跑一次 `./gradlew packageDmg` / `packageMsi`，
-   产物在 `build/compose/binaries/main/{dmg,msi}/`
-2. 把产物（连同 SHA256）上传到生产服务器 `data/desktop-binaries/`
-3. 编辑 `apps/desktop/releases/latest.json`（manifest 见下），
-   `git commit && git push && pm2 reload`
-4. 用户从 https://rl.lz-ss.com/download 下载，APP 内更新走
-   `/api/app/desktop/latest`
-
-如果以后想做完全开源的「自带服务器地址」版本，把 SetupScreen 的
-硬编码默认改成空串（或开发期默认），再考虑公开发布。
+任何 ByWave 部署都可以二选一或两个一起暴露 —— `/download` 页面会
+按当前 manifest 渲染。
 
 ## 状态
 
@@ -53,8 +48,9 @@ Compose Multiplatform Desktop 桌面端。Mac DMG + Win MSI + Linux DEB
   ```
   日常 `./gradlew compileKotlin` / `./gradlew run` 用 Android Studio JBR
   也行（不需要 jpackage），所以只有正式打包时切到 Temurin。
-- 服务器 SSH 访问（产物 scp 到 `data/desktop-binaries/`，详见
-  「分发策略」一节；**不用** `gh release create`）
+- gh CLI 登录（推荐路径：把产物 `gh release create` 到 GitHub
+  Releases；或者 scp 到生产服 `data/desktop-binaries/` 自托管，
+  详见「发布」一节）
 
 ### 跑起来
 
@@ -113,10 +109,12 @@ export APPLE_NOTARY_TEAM_ID="XXXXXXXXXX"             # 10-char Team ID
 用户点「仍要运行」就过。要完全去掉警告需要购买 EV Code Signing 证书
 （DigiCert / Sectigo 等，~$400/年），通常 v1.0 才上。v0.x 先跳过。
 
-## 发布到 rl.lz-ss.com
+## 发布
 
 发版 manifest 在 `apps/desktop/releases/latest.json`（committed），
-schema 见 `src/lib/desktop_release.ts`：
+schema 见 `src/lib/desktop_release.ts`。每个 asset 二选一：
+`downloadUrl` 走 GitHub Releases（推荐），或者 `filename` 走服务器
+自托管（不要 GitHub 时用）。
 
 ```json
 {
@@ -126,34 +124,54 @@ schema 见 `src/lib/desktop_release.ts`：
   "notes": "首版扫码登录上线",
   "mandatory": false,
   "assets": {
-    "mac":   { "filename": "ByWaveCalendar-0.2.0.dmg", "sha256": "...", "sizeBytes": 81234567 },
-    "win":   { "filename": "ByWaveCalendar-0.2.0.msi", "sha256": "...", "sizeBytes": 84567890 },
-    "linux": { "filename": "bywave-calendar_0.2.0-1_amd64.deb", "sha256": "...", "sizeBytes": 79123456 }
+    "mac": {
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.2.0/ByWaveCalendar-0.2.0.dmg",
+      "sha256": "...",
+      "sizeBytes": 81234567
+    },
+    "win": {
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.2.0/ByWaveCalendar-0.2.0.msi",
+      "sha256": "...",
+      "sizeBytes": 84567890
+    },
+    "linux": {
+      "filename": "bywave-calendar_0.2.0-1_amd64.deb",
+      "sha256": "...",
+      "sizeBytes": 79123456
+    }
   }
 }
 ```
 
-发布步骤：
+发布步骤（GitHub Releases 路径）：
 
 ```bash
-# 1. Mac 上打 + 公证
+# 1. Mac 上打 + 公证（需要 APPLE_* 环境变量，详见上面 macOS 签名）
 ./gradlew packageDmg
 shasum -a 256 build/compose/binaries/main/dmg/ByWaveCalendar-0.2.0.dmg
 
 # 2. Windows 上打
 ./gradlew packageMsi
 
-# 3. 把两个产物 scp 到服务器
-scp build/compose/binaries/main/dmg/*.dmg \
-  user@rl.lz-ss.com:~/by-wave-calendar/data/desktop-binaries/
-# (Windows 上同样 scp .msi)
+# 3. 收齐两台机器的产物，gh release create 一次性传上去
+gh release create desktop-v0.2.0 \
+  --title "Desktop v0.2.0" --notes "首版扫码登录上线" \
+  ByWaveCalendar-0.2.0.dmg ByWaveCalendar-0.2.0.msi
 
-# 4. 本地编辑 apps/desktop/releases/latest.json 填好 sha256 + sizeBytes
-#    git commit && git push && pm2 reload by-wave-calendar
+# 4. 编辑 apps/desktop/releases/latest.json 填好 downloadUrl + sha256
+#    git commit && git push
 ```
 
-下载页 https://rl.lz-ss.com/download 会自动从 manifest 渲染当前
-可下载平台的按钮；缺少哪个平台的 asset，那个按钮显示「即将发布」。
+自托管 fallback（不上 GitHub 时）：
+
+```bash
+scp build/compose/binaries/main/dmg/*.dmg \
+  user@your-server:~/by-wave-calendar/data/desktop-binaries/
+# manifest 用 "filename" 而不是 "downloadUrl"
+```
+
+任何 ByWave 部署的 `/download` 页都会按 manifest 渲染当前可下载
+平台的按钮；缺哪个平台的 asset，那个按钮显示「即将发布」。
 
 ## 项目结构
 

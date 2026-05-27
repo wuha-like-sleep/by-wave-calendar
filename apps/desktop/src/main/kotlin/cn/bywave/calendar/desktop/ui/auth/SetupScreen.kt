@@ -1,8 +1,10 @@
 // Setup / sign-in screen for the desktop app. Two phases:
 //
-//   1. Server URL form. User types https://rl.lz-ss.com (or their own
-//      ByWave deployment). On submit we POST /desktop-pair-init to
-//      generate a one-time code.
+//   1. Server URL form. User types their own ByWave deployment URL
+//      (e.g. https://example.com). On submit we POST /desktop-pair-init
+//      to generate a one-time code. Empty default — the desktop client
+//      is server-agnostic so other people who self-host ByWave Calendar
+//      can use the same binary against their own server.
 //
 //   2. QR + polling. We render the approveUrl as a QR code; the user
 //      scans with their phone (any phone — opens approveUrl in a
@@ -65,7 +67,11 @@ fun SetupScreen(
     onSignedIn: () -> Unit,
 ) {
     var phase by remember { mutableStateOf(Phase.ServerUrl) }
-    var serverUrl by remember { mutableStateOf("https://rl.lz-ss.com") }
+    // Empty default. We're a generic open-source desktop client — never
+    // hardcode the maintainer's own deployment as the default, that
+    // would break self-hosters and falsely imply the app is tied to one
+    // server. Android does the same (placeholder = "https://example.com").
+    var serverUrl by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var pollMessage by remember { mutableStateOf("等待手机扫码…") }
     var code by remember { mutableStateOf<String?>(null) }
@@ -75,10 +81,16 @@ fun SetupScreen(
 
     fun beginPairing() {
         errorMessage = null
-        val normalized = serverUrl.trim().removeSuffix("/")
-        if (!normalized.startsWith("http")) {
-            errorMessage = "服务器地址要以 https:// 开头"
+        // Auto-prepend https:// when the user types a bare hostname. Mirrors
+        // Android v0.9.1's behavior — common UX win because most users type
+        // "example.com" not "https://example.com".
+        var normalized = serverUrl.trim().removeSuffix("/")
+        if (normalized.isEmpty()) {
+            errorMessage = "请填写你的 ByWave 服务器地址"
             return
+        }
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            normalized = "https://$normalized"
         }
         phase = Phase.GeneratingCode
         val c = ApiClient(normalized)
@@ -205,7 +217,7 @@ private fun ServerUrlPanel(
             value = serverUrl,
             onValueChange = onServerUrlChange,
             label = { Text("服务器地址") },
-            placeholder = { Text("https://rl.lz-ss.com") },
+            placeholder = { Text("https://example.com 或 example.com") },
             singleLine = true,
             isError = errorMessage != null,
             supportingText = errorMessage?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },

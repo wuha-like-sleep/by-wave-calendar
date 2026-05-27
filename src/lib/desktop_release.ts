@@ -1,17 +1,22 @@
-// Desktop in-app update endpoint backing store. Mirrors the android_release
+// Desktop in-app update endpoint backing store. Mirrors android_release.ts
 // shape but covers macOS (.dmg) + Windows (.msi) + Linux (.deb), each as a
-// separate channel in the same manifest.
+// separate asset in the same manifest.
 //
-// Distribution policy: because the desktop client hardcodes
-// `https://rl.lz-ss.com` as the default server URL (apps/desktop/.../
-// SetupScreen.kt), the binaries are NOT published to GitHub/Gitee
-// Releases — only self-hosted on rl.lz-ss.com. So unlike android_release.ts
-// there is intentionally no `downloadUrl` (external URL) path; every
-// release entry has a local `filename` and is served from
-// data/desktop-binaries/<filename> via /downloads/desktop/<filename>.
+// Two delivery modes per asset (same as android):
 //
-// The manifest itself lives at apps/desktop/releases/latest.json (committed)
-// with the standard data/ runtime override at data/app-desktop-manifest.json.
+// 1. **GitHub Releases (recommended)** — `downloadUrl` is an absolute
+//    URL. Server returns that URL verbatim, binary never touches our disk.
+//    This is the canonical path: `gh release create` handles upload,
+//    latest.json is committed to git, every server deploy picks it up.
+//
+// 2. **Server-hosted (fallback)** — `downloadUrl` absent. Server constructs
+//    ${origin}/downloads/desktop/<filename> and serves from
+//    data/desktop-binaries/<filename>. Useful for self-hosters who don't
+//    want their users relying on GitHub.
+//
+// Manifest committed at apps/desktop/releases/latest.json. The legacy
+// data/ override at data/app-desktop-manifest.json is honored (mtime-cached)
+// for hotfix staging without a code change.
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -19,8 +24,12 @@ import path from "node:path";
 export type DesktopPlatform = "mac" | "win" | "linux";
 
 export interface DesktopReleaseAsset {
-  /** Filename used in the local /downloads/desktop/<filename> URL. */
+  /** Filename used in the local /downloads/desktop/<filename> URL when
+   *  downloadUrl is absent. Optional when downloadUrl is set. */
   filename: string;
+  /** Absolute URL — typically a GitHub Releases asset URL. When set,
+   *  the API returns this directly; no local binary copy needed. */
+  downloadUrl: string;
   sha256: string;
   sizeBytes: number;
 }
@@ -31,8 +40,8 @@ export interface DesktopRelease {
   releasedAt: string;
   notes: string;
   mandatory: boolean;
-  /** Per-platform assets. Any platform missing here is treated as "not yet
-   *  released for that OS" by the download page + in-app updater. */
+  /** Per-platform assets. Any platform missing → "not yet released for
+   *  that OS" branch in the download page + in-app updater. */
   assets: Partial<Record<DesktopPlatform, DesktopReleaseAsset>>;
 }
 
@@ -58,13 +67,17 @@ async function readManifestAt(p: string): Promise<DesktopRelease | null> {
       fileCache.set(p, { mtime: st.mtimeMs, release: null });
       return null;
     }
-    // Normalize each asset; drop entries with missing filename.
     const assets: DesktopRelease["assets"] = {};
     for (const platform of ["mac", "win", "linux"] as const) {
       const a = raw.assets[platform] as Partial<DesktopReleaseAsset> | undefined;
-      if (!a || typeof a.filename !== "string" || !a.filename) continue;
+      if (!a) continue;
+      const filename = String(a.filename || "");
+      const downloadUrl = String(a.downloadUrl || "");
+      // Reject entries with neither hosting mode — nowhere to fetch from.
+      if (!filename && !downloadUrl) continue;
       assets[platform] = {
-        filename: a.filename,
+        filename,
+        downloadUrl,
         sha256: String(a.sha256 || "").toLowerCase(),
         sizeBytes: Number(a.sizeBytes || 0),
       };
@@ -94,8 +107,8 @@ export async function getLatestRelease(): Promise<DesktopRelease | null> {
   return readManifestAt(COMMITTED_MANIFEST_PATH);
 }
 
-/** Absolute path to a binary file, or null if the filename escapes BINARY_DIR.
- *  Defense-in-depth against a manifest edited to point at /etc/passwd. */
+/** Absolute path to a local binary, or null if the filename escapes
+ *  BINARY_DIR. Defense-in-depth against a manifest pointing at /etc/passwd. */
 export function binaryPathFor(filename: string): string | null {
   const resolved = path.resolve(BINARY_DIR, filename);
   if (!resolved.startsWith(BINARY_DIR + path.sep) && resolved !== BINARY_DIR) return null;
