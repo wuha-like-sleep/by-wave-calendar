@@ -1,12 +1,12 @@
 {
-  "versionCode": 10,
-  "versionName": "0.8.2",
-  "filename": "bywave-calendar-0.8.2.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.2/bywave-calendar-0.8.2.apk",
-  "sha256": "8aa5ce8c2e68b88ee59505ee8a6ef6a1cac2f9cb25245d8c6010e3f4afabd138",
-  "sizeBytes": 36730427,
-  "releasedAt": "2026-05-26T04:48:52Z",
-  "notes": "v0.8.2 — 日历属性编辑\n\n• 新增「设置 → 日历 → 管理日历」入口\n• 点任意日历可编辑名称 + 默认时区（之前从 ICS 导入的日历永远叫「导入的日历」、时区也改不了的问题）\n• 颜色编辑暂时只在 web 端支持，Android 下版本补上\n\nbug 修复\n• 多个小修，跟 v0.8.1 一起 ship\n",
+  "versionCode": 11,
+  "versionName": "0.8.3",
+  "filename": "bywave-calendar-0.8.3.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.8.3/bywave-calendar-0.8.3.apk",
+  "sha256": "7e4723ccf78d2c04875cdfe9d222a61c4ddc388f40de6a1b3b19ecbc9779f940",
+  "sizeBytes": 36746811,
+  "releasedAt": "2026-05-27T10:11:03Z",
+  "notes": "v0.8.3 — 修复重复事件 silent-data-loss bug\n\n之前编辑或删除一个重复事件时，APP 直接把整个系列改/删了，没有任何提示。比如想删一次发生的会议结果所有周的同名会议都没了。这是 v0.1 起就在的 bug。\n\n修复后跟 iOS / web 完全一致：\n• 编辑/删除重复事件 → 弹底部三选一：\n  - 仅此事件（只修改/删除这一次）\n  - 此事件及后续（修改/删除此次及之后）\n  - 整个系列（影响全部）\n• 非重复事件维持原来的二次确认对话框\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
