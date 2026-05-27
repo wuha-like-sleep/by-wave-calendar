@@ -95,8 +95,18 @@ interface BywaveApi {
         @Body body: EventUpdateInput,
     ): EventDTO
 
+    /** Delete with optional scope + recurrenceId for recurring events.
+     *  Server interprets a missing scope as "series" (delete the whole
+     *  recurring series). When the user picks "仅此次" or "此后", we
+     *  send the picked scope + the original occurrence's startsAt as
+     *  recurrenceId so the server knows which instance is meant.
+     *  DELETE has no body, so these go on the query string. */
     @DELETE("api/v1/events/{id}")
-    suspend fun deleteEvent(@Path("id") id: String)
+    suspend fun deleteEvent(
+        @Path("id") id: String,
+        @Query("scope") scope: String? = null,
+        @Query("recurrenceId") recurrenceId: String? = null,
+    )
 
     @GET("api/v1/events/{id}/attendees")
     suspend fun attendees(@Path("id") id: String): AttendeesResponse

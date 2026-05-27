@@ -92,14 +92,18 @@ class CalendarViewModel : ViewModel() {
 
     fun reload() = load()
 
-    /** Delete an event by id from the server, then reload to refresh
-     *  the local cache. Used by the long-press action sheet. */
-    fun deleteEvent(id: String) {
+    /** Delete an event by id. For non-recurring events the extra args
+     *  stay null. For recurring events the caller MUST pop the
+     *  RecurringScopePicker first and pass through the picked scope +
+     *  the occurrence's startsAt as recurrenceId — server defaults a
+     *  missing scope to "series", which would silently nuke the whole
+     *  recurring set. (Was the v0.8.2 silent-data-loss bug.) */
+    fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
         viewModelScope.launch {
             try {
                 val profile = profiles.active() ?: return@launch
                 val client = ApiClient.forProfile(profile, profiles)
-                client.api.deleteEvent(id)
+                client.api.deleteEvent(id, scope, recurrenceId)
                 load()
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = e.localizedMessage ?: "删除失败") }

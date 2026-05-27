@@ -61,6 +61,9 @@ import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.event.EventActionsSheet
 import cn.bywave.calendar.ui.event.EventDetailSheet
+import cn.bywave.calendar.ui.event.RecurringAction
+import cn.bywave.calendar.ui.event.RecurringScope
+import cn.bywave.calendar.ui.event.RecurringScopePicker
 import cn.bywave.calendar.ui.profile.ProfileSwitcherDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +87,12 @@ fun CalendarScreen(
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
     var actionsForEvent by remember { mutableStateOf<EventDTO?>(null) }
     var pendingDelete by remember { mutableStateOf<EventDTO?>(null) }
+    // Separate state for "delete confirmed, but it's a recurring event,
+    // need to ask which scope". The AlertDialog is intentionally still
+    // shown for non-recurring events as a safety net; recurring events
+    // skip the dialog and go straight to the scope picker since picking
+    // a scope IS the confirmation.
+    var pendingRecurringDelete by remember { mutableStateOf<EventDTO?>(null) }
     var showSwitcher by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -203,7 +212,15 @@ fun CalendarScreen(
             },
             onDelete = {
                 actionsForEvent = null
-                pendingDelete = actionsEv      // pop confirm dialog
+                // Recurring events route to the scope picker — without
+                // it, the server defaults to "series" and wipes the
+                // entire repeating set. Non-recurring events use the
+                // simple confirm dialog.
+                if (!actionsEv.rrule.isNullOrBlank()) {
+                    pendingRecurringDelete = actionsEv
+                } else {
+                    pendingDelete = actionsEv
+                }
             },
             onOpenAttendees = {
                 actionsForEvent = null
@@ -228,6 +245,30 @@ fun CalendarScreen(
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text("取消") }
             },
+        )
+    }
+
+    // Recurring-event delete: bottom sheet with 仅此次 / 此后 / 整个系列.
+    // The user's pick IS the confirmation — no separate AlertDialog
+    // needed (the choice is destructive but explicit). Mirrors iOS
+    // RecurringScopePicker + the web modal.
+    val pdr = pendingRecurringDelete
+    if (pdr != null) {
+        RecurringScopePicker(
+            action = RecurringAction.Delete,
+            onPick = { scope ->
+                // Server's `recurrenceId` is the original occurrence's
+                // ISO startsAt — that's what the row carries. For
+                // scope=series we still pass it (server ignores) so
+                // the call site stays one shape.
+                pendingRecurringDelete = null
+                vm.deleteEvent(
+                    id = pdr.id,
+                    scope = scope.wire,
+                    recurrenceId = pdr.startsAt,
+                )
+            },
+            onDismiss = { pendingRecurringDelete = null },
         )
     }
 }

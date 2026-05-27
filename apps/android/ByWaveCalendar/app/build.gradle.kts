@@ -23,8 +23,8 @@ android {
         // string we show in About. We keep these in sync with iOS:
         //   MARKETING_VERSION 1.3.3   ↔   versionName "1.3.3"
         //   CURRENT_PROJECT_VERSION 1 ↔   versionCode 1  (Android starts fresh)
-        versionCode = 10
-        versionName = "0.8.2"
+        versionCode = 11
+        versionName = "0.8.3"
         // The setup screen URL scheme — server's QR-pair flow sends an
         // intent back to the APP via this scheme. iOS counterpart uses
         // `bywave://` too, so the server only needs one redirect target.

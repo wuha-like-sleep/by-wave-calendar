@@ -48,6 +48,14 @@ sealed class EventEditMode {
 data class EventEditUiState(
     val isEdit: Boolean = false,
     val sourceId: String? = null,
+    /** Source event's RRULE — non-null when editing a recurring event.
+     *  Used by EventEditScreen to decide whether to pop the
+     *  RecurringScopePicker before save. */
+    val sourceRrule: String? = null,
+    /** Source event's startsAt — passed to the server as recurrenceId
+     *  when scope is "instance" or "future" so it knows WHICH occurrence
+     *  the user is editing. */
+    val sourceStartsAt: String? = null,
     val calendars: List<CalendarMeta> = emptyList(),
     val calendarId: String = "",
     val summary: String = "",
@@ -91,6 +99,8 @@ class EventEditViewModel : ViewModel() {
                 _state.value = EventEditUiState(
                     isEdit = true,
                     sourceId = s.id,
+                    sourceRrule = s.rrule,
+                    sourceStartsAt = s.startsAt,
                     calendars = calendars,
                     calendarId = s.calendarId,
                     summary = s.summary,
@@ -161,7 +171,12 @@ class EventEditViewModel : ViewModel() {
         it.copy(end = newEnd)
     }
 
-    fun save() {
+    /** Save the in-progress edit. For recurring events (state.sourceRrule
+     *  is non-null) the caller MUST first pop the RecurringScopePicker
+     *  and pass scope + recurrenceId, otherwise the server defaults to
+     *  "series" and the user's "edit just this one occurrence" silently
+     *  rewrites the whole repeating set. */
+    fun save(scope: String? = null, recurrenceId: String? = null) {
         val s = _state.value
         if (!s.canSubmit) return
         _state.update { it.copy(saving = true, errorMessage = null) }
@@ -192,6 +207,8 @@ class EventEditViewModel : ViewModel() {
                         endsAt = endIso,
                         allDay = s.allDay,
                         extra = extra,
+                        scope = scope,
+                        recurrenceId = recurrenceId,
                     )
                     client.api.updateEvent(s.sourceId!!, body)
                 } else {
@@ -216,7 +233,7 @@ class EventEditViewModel : ViewModel() {
         }
     }
 
-    fun delete() {
+    fun delete(scope: String? = null, recurrenceId: String? = null) {
         val s = _state.value
         val id = s.sourceId ?: return
         _state.update { it.copy(deleting = true, errorMessage = null) }
@@ -225,7 +242,7 @@ class EventEditViewModel : ViewModel() {
             try {
                 val profile = profiles.active() ?: error("未登录")
                 val client = ApiClient.forProfile(profile, profiles)
-                client.api.deleteEvent(id)
+                client.api.deleteEvent(id, scope, recurrenceId)
                 _state.update { it.copy(deleting = false, finished = true) }
             } catch (e: Exception) {
                 _state.update {

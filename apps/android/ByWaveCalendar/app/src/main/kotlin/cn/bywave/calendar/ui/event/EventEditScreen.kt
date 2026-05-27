@@ -94,6 +94,17 @@ fun EventEditScreen(
     LaunchedEffect(state.finished) { if (state.finished) onSaved() }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // Pop the scope picker before save when editing a recurring event.
+    // Non-recurring events save directly (sourceRrule is null).
+    var showScopePicker by remember { mutableStateOf(false) }
+
+    fun attemptSave() {
+        if (state.isEdit && !state.sourceRrule.isNullOrBlank()) {
+            showScopePicker = true
+        } else {
+            vm.save()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -108,7 +119,7 @@ fun EventEditScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { vm.save() },
+                        onClick = { attemptSave() },
                         enabled = state.canSubmit,
                     ) {
                         if (state.saving) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -232,22 +243,62 @@ fun EventEditScreen(
         }
     }
 
+    // Two distinct destruction paths:
+    //   - non-recurring: plain AlertDialog confirm
+    //   - recurring:    skip the AlertDialog (the picker IS the
+    //                   confirmation since it forces a deliberate
+    //                   choice) and pop the scope picker directly
+    var showDeleteScopePicker by remember { mutableStateOf(false) }
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text(stringResource(R.string.event_delete_confirm_title)) },
-            text = { Text(stringResource(R.string.event_delete_confirm_message)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeleteDialog = false
-                    vm.delete()
-                }) { Text(stringResource(R.string.action_delete)) }
+        if (!state.sourceRrule.isNullOrBlank()) {
+            // First time through for a recurring event: jump straight
+            // to the scope picker. We use the dialog flag as the trigger
+            // but never actually show the dialog itself.
+            LaunchedEffect(Unit) {
+                showDeleteDialog = false
+                showDeleteScopePicker = true
+            }
+        } else {
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = false },
+                title = { Text(stringResource(R.string.event_delete_confirm_title)) },
+                text = { Text(stringResource(R.string.event_delete_confirm_message)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showDeleteDialog = false
+                        vm.delete()
+                    }) { Text(stringResource(R.string.action_delete)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
+    }
+
+    // Recurring-event scope picker for SAVE.
+    if (showScopePicker) {
+        RecurringScopePicker(
+            action = RecurringAction.Edit,
+            onPick = { scope ->
+                showScopePicker = false
+                vm.save(scope = scope.wire, recurrenceId = state.sourceStartsAt)
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.action_cancel))
-                }
+            onDismiss = { showScopePicker = false },
+        )
+    }
+
+    // Recurring-event scope picker for DELETE.
+    if (showDeleteScopePicker) {
+        RecurringScopePicker(
+            action = RecurringAction.Delete,
+            onPick = { scope ->
+                showDeleteScopePicker = false
+                vm.delete(scope = scope.wire, recurrenceId = state.sourceStartsAt)
             },
+            onDismiss = { showDeleteScopePicker = false },
         )
     }
 }
