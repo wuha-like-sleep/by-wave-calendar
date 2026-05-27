@@ -201,41 +201,14 @@
   );
 
   // ---------- Boot splash ----------
-  // Auto-hide-on-DOMContentLoaded is now handled by an inline script in
-  // layout.ejs (so it works even if this file fails to load — CSP
-  // blocks, 404s, etc). We only keep the programmatic loader here.
-
-  // Programmatic loader: same splash, used for long async operations
-  // (route navigation in /app/, heavy imports, network-slow saves).
-  // Usage:
-  //   bwc.loading.show("正在导入…");
-  //   await heavyWork();
-  //   bwc.loading.hide();
-  function loadingShow(message) {
-    const splash = document.getElementById("bwc-boot-splash");
-    const msg = document.getElementById("bwc-boot-splash-msg");
-    if (!splash) return;
-    if (msg) msg.textContent = message || "";
-    document.body.classList.remove("bwc-booted");
-  }
-  function loadingHide() {
-    const msg = document.getElementById("bwc-boot-splash-msg");
-    if (msg) msg.textContent = "";
-    document.body.classList.add("bwc-booted");
-  }
-
-  // PREVIOUSLY: we showed the splash on every same-origin link click
-  // to "make slow navigations feel intentional". In practice this just
-  // flashed a gradient mask over the page for every click that fired
-  // faster than the 1.5s safety timeout — which is ~all of them on
-  // cached pages. Users reported it as an unwanted overlay (有遮罩).
+  // Auto-hide is handled by an inline script in layout.ejs (so it works
+  // even if this file fails to load — CSP blocks, 404s, etc).
   //
-  // Removed in v1.3.8. The browser's own tab-icon spinner / progress
-  // bar already covers the "still loading" affordance. The splash now
-  // only fires:
-  //   - on initial page load (the original purpose)
-  //   - when code explicitly calls `bwc.loading.show("正在导入…")`
-  //     for genuinely long operations (ICS import, big saves)
+  // We used to expose `bwc.loading.show/hide()` as a programmatic
+  // loader API that re-used the splash element. v1.3.9 audit found
+  // zero callers in the codebase. Removed — anything that needs a
+  // long-operation overlay should use a dedicated component (toast
+  // for short, modal for blocking), not hijack the boot splash.
 
-  window.bwc = { toast, copy, confirm: confirmDialog, loading: { show: loadingShow, hide: loadingHide } };
+  window.bwc = { toast, copy, confirm: confirmDialog };
 })();

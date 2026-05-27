@@ -120,6 +120,22 @@
 
   // ---- public API ----
 
+  // IndexedDB-only read. No network, no merge. Returns whatever
+  // overlaps the window from the local mirror. Used by callers that
+  // want stale-while-revalidate behavior — read this first to paint
+  // instantly, then call getAll() to refresh from server in the
+  // background. Added v1.3.9 to make prev/next/today navigation
+  // feel instant instead of waiting on the network round-trip.
+  async function getCached({ from, to, calendarIds }) {
+    const fromMs = +new Date(from);
+    const toMs = +new Date(to);
+    const local = await readLocalRange(fromMs, toMs);
+    const filtered = calendarIds
+      ? local.filter((e) => calendarIds.split(",").includes(e.calendarId))
+      : local;
+    return { events: filtered, calendars: null, offline: !serverReachable };
+  }
+
   // Pull events for a date range from server + merge into local mirror.
   // On network failure, return whatever's in the local mirror that
   // overlaps the window. Caller doesn't need to know whether it came
@@ -411,7 +427,7 @@
   }
 
   window.bwcStore = {
-    getAll, put, remove,
+    getAll, getCached, put, remove,
     syncOutbox, pendingCount, listOutbox, listConflicts,
     retryItem, discardItem,
     isOnline: () => serverReachable,

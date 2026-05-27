@@ -284,6 +284,74 @@
   }
   let hasEverLoadedEvents = false;
 
+  // Mount the supplied event list into Toast UI Calendar. Pure render —
+  // no fetching. Called twice from loadEvents() when stale-while-
+  // revalidate is in play (first with cached data, then with fresh).
+  function renderEventsToCalendar(rawEvents) {
+    cal.clear();
+    const now = Date.now();
+    const events = rawEvents.map((e) => {
+      // For all-day events the server stores UTC midnight (≈ pure date);
+      // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
+      // the user's local timezone boundary.
+      const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
+      const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
+      // Past-event styling: events whose end is already in the past get
+      // muted colors so the user's eye is drawn to upcoming + in-progress.
+      // We don't move them out of the grid (still browsable in history),
+      // just dim them.
+      const endMs = +new Date(e.endsAt);
+      const isPast = endMs < now;
+      const style = isPast
+        ? {
+            backgroundColor: "#e2e8f0",
+            borderColor: "#cbd5e1",
+            dragBackgroundColor: "#cbd5e1",
+            color: "#64748b",
+          }
+        : {};
+      return {
+        id: e.id,
+        calendarId: e.calendarId,
+        title: e.summary,
+        location: e.location || undefined,
+        body: e.description || undefined,
+        start,
+        end,
+        isAllday: !!e.allDay,
+        category: e.allDay ? "allday" : "time",
+        // Stash the master's RRULE so beforeUpdateEvent (drag/resize)
+        // and clickEvent can detect "this is a recurring instance" and
+        // prompt 仅此次/此后/系列 instead of silently editing the
+        // whole series.
+        raw: { rrule: e.rrule || null, isOccurrence: !!e.isOccurrence },
+        ...style,
+      };
+    });
+    cal.createEvents(events);
+    // Force a render so the red now-line redraws after we just cleared.
+    try { cal.render(); } catch (_e) {}
+    // Update the "下一个事件" banner from the same data.
+    updateNextEventBanner(rawEvents, now);
+    syncEmptyState(rawEvents.length);
+  }
+
+  // Cheap fingerprint of an event list — used to decide whether stage 2
+  // (fresh network data) differs from stage 1 (local cache). If the
+  // server returned the same set of events with the same updatedAt
+  // timestamps, skip the second render to avoid the cal.clear() jitter.
+  function eventsFingerprint(list) {
+    if (!list || list.length === 0) return "";
+    // Sort by id so order changes don't trigger a re-render. Concat
+    // id + startsAt + endsAt + (server-side updatedAt if present) to
+    // catch edits while remaining fast on 3000-event lists.
+    return list
+      .map((e) => `${e.id}|${e.startsAt}|${e.endsAt}|${e.updatedAt || ""}`)
+      .sort()
+      .join("\n");
+  }
+  let lastRenderedFingerprint = "";
+
   async function loadEvents() {
     const startRaw = cal.getDateRangeStart().toDate();
     const endRaw = cal.getDateRangeEnd().toDate();
@@ -298,11 +366,32 @@
     start.setHours(0, 0, 0, 0);
     const end = new Date(endRaw);
     end.setHours(23, 59, 59, 999);
-    showLoadingSkeleton();
+
+    // Stage 1: paint instantly from IndexedDB cache if available.
+    // Skipped on cold first load (no cache yet) and when bwcStore isn't
+    // loaded (older client / no IndexedDB). When stage 1 paints, we
+    // hide the skeleton immediately so nav feels instant; the skeleton
+    // only flashes for cold loads.
+    let stageOneEvents = null;
+    if (window.bwcStore && window.bwcStore.getCached) {
+      try {
+        const cached = await window.bwcStore.getCached({
+          from: start.toISOString(),
+          to: end.toISOString(),
+        });
+        const filtered = (cached.events || []).filter((e) => visibleCalIds.has(e.calendarId));
+        if (filtered.length > 0) {
+          stageOneEvents = filtered;
+          renderEventsToCalendar(filtered);
+          lastRenderedFingerprint = eventsFingerprint(filtered);
+          hideLoadingSkeleton();
+        }
+      } catch (_e) { /* fall through to network */ }
+    }
+    if (!stageOneEvents) showLoadingSkeleton();
+
+    // Stage 2: fetch fresh from server in background.
     try {
-      // Go through bwcStore if available — gives us offline cache + outbox
-      // optimistic edits. Falls back to plain fetch if event-store.js
-      // didn't load (e.g. older client without IndexedDB).
       let data;
       if (window.bwcStore) {
         data = await window.bwcStore.getAll({
@@ -315,58 +404,22 @@
         if (!resp.ok) throw new Error("load_failed");
         data = await resp.json();
       }
-      cal.clear();
-      const now = Date.now();
-      // Track raw events (with parsed Date) so we can pick the "next up" event
-      // for the banner without re-parsing.
       const rawEvents = (data.events || []).filter((e) => visibleCalIds.has(e.calendarId));
-      const events = rawEvents.map((e) => {
-        // For all-day events the server stores UTC midnight (≈ pure date);
-        // pass the YYYY-MM-DD string to Toast UI so it doesn't shift around
-        // the user's local timezone boundary.
-        const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
-        const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
-        // Past-event styling: events whose end is already in the past get
-        // muted colors so the user's eye is drawn to upcoming + in-progress.
-        // We don't move them out of the grid (still browsable in history),
-        // just dim them.
-        const endMs = +new Date(e.endsAt);
-        const isPast = endMs < now;
-        const style = isPast
-          ? {
-              backgroundColor: "#e2e8f0",
-              borderColor: "#cbd5e1",
-              dragBackgroundColor: "#cbd5e1",
-              color: "#64748b",
-            }
-          : {};
-        return {
-          id: e.id,
-          calendarId: e.calendarId,
-          title: e.summary,
-          location: e.location || undefined,
-          body: e.description || undefined,
-          start,
-          end,
-          isAllday: !!e.allDay,
-          category: e.allDay ? "allday" : "time",
-          // Stash the master's RRULE so beforeUpdateEvent (drag/resize)
-          // and clickEvent can detect "this is a recurring instance" and
-          // prompt 仅此次/此后/系列 instead of silently editing the
-          // whole series.
-          raw: { rrule: e.rrule || null, isOccurrence: !!e.isOccurrence },
-          ...style,
-        };
-      });
-      cal.createEvents(events);
-      // Force a render so the red now-line redraws after we just cleared.
-      try { cal.render(); } catch (_e) {}
-      // Update the "下一个事件" banner from the same data.
-      updateNextEventBanner(rawEvents, now);
-      syncEmptyState(rawEvents.length);
+      const freshFp = eventsFingerprint(rawEvents);
+      // Only re-render if data actually changed from what's on screen.
+      // No-op skip avoids the cal.clear() → DOM teardown jitter every
+      // 30s on the poll path.
+      if (freshFp !== lastRenderedFingerprint) {
+        renderEventsToCalendar(rawEvents);
+        lastRenderedFingerprint = freshFp;
+      }
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast("加载事件失败", "error");
+      // Only toast if stage 1 didn't paint — otherwise user already
+      // sees their (cached) calendar, no need to alarm them.
+      if (!stageOneEvents) {
+        window.bwc && window.bwc.toast("加载事件失败", "error");
+      }
     } finally {
       hideLoadingSkeleton();
     }

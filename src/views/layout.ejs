@@ -76,10 +76,8 @@
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">
     <%# Boot splash — shows immediately on every page load + every time
         the PWA cold-launches from the home-screen icon (iOS clears the
-        app state when killed). app.js adds `.bwc-booted` to <body> on
-        DOMContentLoaded which fades it out. Also programmatically
-        controllable via window.bwc.loading.show() / .hide() for long
-        in-page operations (route changes, big imports, etc). %>
+        app state when killed). The inline script below adds `.bwc-booted`
+        to <body> on DOMContentLoaded which fades it out. %>
     <div class="bwc-boot-splash" id="bwc-boot-splash" role="status" aria-live="polite">
       <div class="bwc-boot-splash__logo">
         <%# 12px white inner mark — keeps splash recognizable without
