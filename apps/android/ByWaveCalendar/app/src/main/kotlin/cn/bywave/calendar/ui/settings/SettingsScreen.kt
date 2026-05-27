@@ -12,7 +12,9 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -62,6 +64,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
@@ -344,15 +347,36 @@ fun SettingsScreen(
     }
 }
 
+// v0.9.0 UX refactor — Section/ActionRow/ReadRow tuned to match iOS
+// Form/Section visual rhythm. Specifically:
+//   - Section title: small caps, secondary color, indented to align
+//     with iOS UITableView grouped style ("ABOUT", "ACCOUNT", etc).
+//   - Section body: plain surface + 1dp border instead of translucent
+//     overlay. iOS Form sections are clean white-on-light-gray, not
+//     blurry frosted glass.
+//   - Rows: bodyLarge (17sp ≈ iOS 17pt body), 12dp vertical (slightly
+//     tighter than Material 3 default 16dp; iOS rows are visually
+//     denser without feeling cramped).
+//   - Chevron: lightened to outlineVariant (≈ iOS tertiaryLabel) so
+//     it reads as "tappable hint" rather than "primary action".
+//
+// Implementation note: kept the @Composable signatures identical so
+// the rest of SettingsScreen needs zero edits. Pure visual tweak.
+
 @Composable
 private fun Section(title: String, content: @Composable () -> Unit) {
     Column {
         if (title.isNotEmpty()) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium,
+                // iOS Form section headers are uppercase + small + secondary.
+                // labelSmall is 11sp Material — bump slightly via letterSpacing
+                // to feel like SF Pro's section-header rendering.
+                style = MaterialTheme.typography.labelSmall.copy(
+                    letterSpacing = 0.5.sp,
+                ),
                 color = mutedTextColor(),
-                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp),
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 6.dp),
                 fontWeight = FontWeight.SemiBold,
             )
         }
@@ -360,7 +384,11 @@ private fun Section(title: String, content: @Composable () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                .background(MaterialTheme.colorScheme.surface)
+                .border(
+                    BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                    RoundedCornerShape(12.dp),
+                ),
         ) { content() }
     }
 }
@@ -371,8 +399,17 @@ private fun ReadRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, modifier = Modifier.weight(1f))
-        Text(text = value, color = mutedTextColor(), maxLines = 1)
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        Text(
+            text = value,
+            color = mutedTextColor(),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+        )
     }
 }
 
@@ -389,7 +426,7 @@ private fun ActionRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
@@ -397,21 +434,34 @@ private fun ActionRow(
                 icon,
                 contentDescription = null,
                 tint = if (danger) MaterialTheme.colorScheme.error
-                       else MaterialTheme.colorScheme.onSurface,
+                       else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
             )
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(14.dp))
         }
         Text(
             label,
             modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
             color = if (danger) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurface,
         )
         if (trailing != null) {
-            Text(text = trailing, color = mutedTextColor(), style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.size(8.dp))
+            Text(
+                text = trailing,
+                color = mutedTextColor(),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.size(6.dp))
         }
-        Icon(trailingIcon, contentDescription = null, tint = mutedTextColor())
+        // Lighter chevron — outlineVariant is closer to iOS's
+        // tertiaryLabel than the medium-gray onSurfaceVariant we had.
+        Icon(
+            trailingIcon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 

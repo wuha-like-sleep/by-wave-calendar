@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <!--
-    Empty entitlements — APNs push capability removed for v1.3.3 App
-    Store submission because the server isn't actually sending pushes
-    (no APNs cert configured) and an unused capability invites reviewer
+    APNs note: push capability is intentionally not declared. v1.3.3
+    removed it because the server isn't actually sending pushes (no
+    APNs cert configured) and an unused capability invites reviewer
     questions. PushService.swift stays in place but its
-    registerForRemoteNotifications call will now no-op via
+    registerForRemoteNotifications call no-ops via
     didFailToRegisterForRemoteNotificationsWithError — graceful.
 
     To re-enable later:
@@ -15,6 +15,22 @@
       - re-tick "Push Notifications" on the App ID at
         developer.apple.com → Identifiers
       - restore UIBackgroundModes remote-notification in Info.plist
+
+    The App Sandbox + capability keys below are REQUIRED for the Mac
+    Catalyst variant (v1.4.0+). iOS ignores them — the iOS sandbox is
+    managed separately. Adding them here keeps a single entitlements
+    file across both platforms.
     -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- HTTP/HTTPS calls to the user's ByWave server. -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- EventKit mirror — read/write the user's local calendars. -->
+    <key>com.apple.security.personal-information.calendars</key>
+    <true/>
+    <!-- AVFoundation QR scanner — camera access on Catalyst. -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
 </dict>
 </plist>
