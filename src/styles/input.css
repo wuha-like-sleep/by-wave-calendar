@@ -134,30 +134,13 @@
   font-weight: 500;
 }
 
-/* ---------- Working hours overlay ----------
-   Highlight 09:00-18:00 (default) on the week/day time grid by tinting
-   the non-working hours with a faint grey wash. Toast UI Calendar's
-   time-grid is a single absolutely-positioned column per day; we use
-   linear-gradient stops at exactly the working-hour boundaries so the
-   wash sits behind the events without intercepting clicks.
-
-   The percentages assume a 24-hour visible range:
-     9 / 24 * 100 = 37.5%
-    18 / 24 * 100 = 75%
-   If a user later customizes hourStart/hourEnd we'd need to recompute
-   these in JS, but for now we just render the full day. */
-.toastui-calendar-week-view .toastui-calendar-time,
-.toastui-calendar-week-view .toastui-calendar-day-grid-row {
-  background-image: linear-gradient(
-    to bottom,
-    rgba(148, 163, 184, 0.08) 0%,
-    rgba(148, 163, 184, 0.08) 37.5%,    /* up to 09:00 */
-    transparent 37.5%,
-    transparent 75%,                     /* 09:00–18:00 = working */
-    rgba(148, 163, 184, 0.08) 75%,
-    rgba(148, 163, 184, 0.08) 100%
-  );
-}
+/* ---------- Working hours overlay (REMOVED v1.3.8) ----------
+   We used to paint a faint grey wash on the time grid for 0:00-9:00
+   and 18:00-24:00 to mimic Google Calendar's "out of working hours"
+   visual cue. Users perceived the top/bottom tinting as a stuck
+   overlay/mask rather than a working-hours hint, and asked for a
+   uniform white grid. Empty rule kept as a marker so future "do we
+   want this back as a setting?" discussions land here. */
 
 /* ---------- Print stylesheet ----------
    When the user picks "Print" (Ctrl/Cmd-P) we want a clean, paper-friendly
