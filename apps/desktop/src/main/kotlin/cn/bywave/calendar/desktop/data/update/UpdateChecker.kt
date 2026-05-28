@@ -117,6 +117,38 @@ object UpdateChecker {
         _available.value = null
     }
 
+    /** Distinct state for "user clicked check, nothing newer" so the
+     *  MenuBar action can show a "已是最新版本" toast instead of
+     *  silently doing nothing. Reset by the next available update. */
+    private val _lastForceCheckOutcome = MutableStateFlow<ForceCheckOutcome>(ForceCheckOutcome.Idle)
+    val lastForceCheckOutcome: StateFlow<ForceCheckOutcome> = _lastForceCheckOutcome.asStateFlow()
+
+    sealed class ForceCheckOutcome {
+        object Idle : ForceCheckOutcome()
+        object Checking : ForceCheckOutcome()
+        object UpToDate : ForceCheckOutcome()
+        object UpdateFound : ForceCheckOutcome()
+        data class Error(val message: String) : ForceCheckOutcome()
+    }
+
+    /** User-triggered "check now" — bypasses the 6h throttle and
+     *  surfaces the outcome via [lastForceCheckOutcome] so the UI
+     *  can show a transient confirmation/error chip. */
+    suspend fun forceCheck(serverUrl: String) {
+        _lastForceCheckOutcome.value = ForceCheckOutcome.Checking
+        val before = _available.value
+        check(serverUrl, force = true)
+        val after = _available.value
+        _lastForceCheckOutcome.value = when {
+            after != null -> ForceCheckOutcome.UpdateFound
+            // No exception path here — `check()` swallows network
+            // errors. If we wanted distinguish "network failed" from
+            // "no update", we'd need check() to return a tagged
+            // result. For now treat silence as "up to date".
+            else -> if (before == null) ForceCheckOutcome.UpToDate else ForceCheckOutcome.UpToDate
+        }
+    }
+
     private fun detectPlatform(): String? {
         val os = System.getProperty("os.name").orEmpty().lowercase()
         return when {

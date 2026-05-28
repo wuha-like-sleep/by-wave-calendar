@@ -26,6 +26,7 @@ import androidx.compose.ui.window.rememberWindowState
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.ui.auth.SetupScreen
 import cn.bywave.calendar.desktop.ui.main.MainScreen
+import cn.bywave.calendar.desktop.ui.main.ShortcutAction
 import cn.bywave.calendar.desktop.ui.main.ShortcutBus
 import cn.bywave.calendar.desktop.ui.main.keyEventToShortcut
 
@@ -80,6 +81,14 @@ fun main() = application {
         MenuBar {
             Menu("ByWave Calendar", mnemonic = 'B') {
                 Item("显示窗口", onClick = { visible = true })
+                Item(
+                    "检查更新…",
+                    onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.CheckUpdate) },
+                    shortcut = androidx.compose.ui.input.key.KeyShortcut(
+                        androidx.compose.ui.input.key.Key.U,
+                        meta = true,
+                    ),
+                )
                 Separator()
                 Item("退出 ByWave Calendar", onClick = ::exitApplication, shortcut = androidx.compose.ui.input.key.KeyShortcut(
                     androidx.compose.ui.input.key.Key.Q,

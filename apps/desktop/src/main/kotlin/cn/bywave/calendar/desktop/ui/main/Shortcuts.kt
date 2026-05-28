@@ -33,6 +33,9 @@ enum class ShortcutAction {
      *  safe because text fields don't navigate with it and dialogs
      *  intercepting Esc to close is expected behavior). */
     Escape,
+    /** Force-check for an APP update. Cmd/Ctrl + U. Also surfaced as
+     *  a MenuBar item. */
+    CheckUpdate,
 }
 
 object ShortcutBus {
@@ -58,6 +61,7 @@ fun keyEventToShortcut(e: KeyEvent): ShortcutAction? {
         mod && e.key == Key.T -> ShortcutAction.Today
         mod && e.key == Key.DirectionLeft -> ShortcutAction.Previous
         mod && e.key == Key.DirectionRight -> ShortcutAction.Next
+        mod && e.key == Key.U -> ShortcutAction.CheckUpdate
         !mod && e.key == Key.Escape -> ShortcutAction.Escape
         else -> null
     }

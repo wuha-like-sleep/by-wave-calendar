@@ -47,8 +47,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +99,18 @@ fun MainScreen(
         p?.serverUrl?.let { UpdateChecker.check(it) }
     }
     val updateInfo by UpdateChecker.available.collectAsState()
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    // When MenuBar's "检查更新" fires, ShortcutAction.CheckUpdate
+    // arrives here; we kick the force-check then auto-pop the dialog
+    // if something new was found. forceCheckOutcome lets us show a
+    // light snackbar-ish indicator on "already latest" too.
+    val forceOutcome by UpdateChecker.lastForceCheckOutcome.collectAsState()
+    LaunchedEffect(updateInfo) {
+        // Auto-open dialog when a new manifest lands — replaces the old
+        // banner behaviour where users had to click to act. They can
+        // still dismiss for the session.
+        if (updateInfo != null) showUpdateDialog = true
+    }
 
     // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
     // Re-attaches when CalendarState rebuilds on profile switch. Escape
@@ -112,6 +126,15 @@ fun MainScreen(
                 ShortcutAction.Previous -> s.previous()
                 ShortcutAction.Next -> s.next()
                 ShortcutAction.Escape -> s.closeSheet()
+                ShortcutAction.CheckUpdate -> {
+                    val url = p?.serverUrl ?: return@collect
+                    UpdateChecker.forceCheck(url)
+                    // Open the dialog regardless of outcome — if update
+                    // was found the LaunchedEffect already flipped
+                    // showUpdateDialog=true; if not, we still want to
+                    // give the user feedback via a small dialog.
+                    showUpdateDialog = true
+                }
             }
         }
     }
@@ -143,9 +166,9 @@ fun MainScreen(
         )
         HorizontalDivider()
 
-        // Update banner — only visible when UpdateChecker has spotted
-        // a manifest with versionCode > BuildInfo.VERSION_CODE.
-        updateInfo?.let { UpdateBanner(it) }
+        // Update banner removed in v0.7.3 — dialog (UpdateDialog) is
+        // the new entry point and auto-opens when UpdateChecker spots
+        // a new manifest. See LaunchedEffect(updateInfo) above.
 
         Row(modifier = Modifier.fillMaxSize()) {
             Sidebar(
@@ -259,6 +282,41 @@ fun MainScreen(
             action = RecurringAction.Delete,
             onPick = { state.resolveScopeDelete(it.wire) },
             onDismiss = { state.resolveScopeDelete(null) },
+        )
+    }
+
+    // In-app updater. Auto-opens when a new manifest is spotted; user
+    // can also open it via MenuBar "检查更新" / Cmd+U. We render it
+    // outside the main Column so the AlertDialog floats above
+    // everything (including the Sidebar / view content).
+    if (showUpdateDialog && updateInfo != null) {
+        UpdateDialog(onDismiss = {
+            showUpdateDialog = false
+            UpdateChecker.dismiss()
+        })
+    } else if (showUpdateDialog && updateInfo == null) {
+        // Force-check returned "up to date" — show a slim confirmation
+        // dialog so the user knows the check happened. forceOutcome
+        // is observed for the Checking state too (rare; usually
+        // network call completes before the user can read the dialog).
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showUpdateDialog = false },
+            title = { androidx.compose.material3.Text("已是最新版本") },
+            text = {
+                androidx.compose.material3.Text(
+                    when (forceOutcome) {
+                        UpdateChecker.ForceCheckOutcome.Checking -> "正在检查更新…"
+                        is UpdateChecker.ForceCheckOutcome.Error ->
+                            (forceOutcome as UpdateChecker.ForceCheckOutcome.Error).message
+                        else -> "当前已经是最新的 v${cn.bywave.calendar.desktop.BuildInfo.VERSION_NAME}。"
+                    },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showUpdateDialog = false }) {
+                    androidx.compose.material3.Text("好的")
+                }
+            },
         )
     }
 }
