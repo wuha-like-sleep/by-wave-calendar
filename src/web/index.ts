@@ -292,11 +292,16 @@ export async function webRoutes(app: FastifyInstance) {
         // mixed case that bypassed disabled-account checks keyed on lowercase.
         email: z.string().email().transform((s) => s.toLowerCase().trim()),
         password: z.string().min(1).max(200),
+        // "记住我" checkbox. Browsers submit the literal "on" when a
+        // checkbox is checked; omit the field entirely when not. So
+        // anything other than "on" means transient (one-time) session.
+        remember: z.string().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/login", { error: "邮箱或密码格式不正确" });
     }
+    const rememberMe = body.data.remember === "on";
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
     if (!user) {
       // Burn the same ~250ms of CPU as a real bcrypt verify so the
@@ -344,10 +349,19 @@ export async function webRoutes(app: FastifyInstance) {
       reply.setCookie("bwc_login_chall", issued.token, {
         httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 10 * 60,
       });
+      // Carry the 「记住我」 choice through the challenge → create-session
+      // hop. Stored as a tiny separate cookie so the challenge token's
+      // server-side row stays unchanged. 10-min lifetime matches the
+      // challenge code; cleared in /login/challenge POST below.
+      if (rememberMe) {
+        reply.setCookie("bwc_login_remember", "1", {
+          httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 10 * 60,
+        });
+      }
       return reply.redirect("/login/challenge");
     }
 
-    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
+    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled, rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
@@ -389,9 +403,14 @@ export async function webRoutes(app: FastifyInstance) {
       });
     }
     reply.clearCookie("bwc_login_chall", { path: "/" });
+    // Pick up the「记住我」choice the user made on /login (stashed in
+    // a parallel cookie before the redirect to challenge). Clear it
+    // either way so the next login session starts fresh.
+    const rememberMe = req.cookies["bwc_login_remember"] === "1";
+    reply.clearCookie("bwc_login_remember", { path: "/" });
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, result.userId)).limit(1);
     if (!user) return redirectWith(reply, "/login", { error: "用户不存在" });
-    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled });
+    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled, rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));

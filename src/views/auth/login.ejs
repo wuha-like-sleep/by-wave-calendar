@@ -62,6 +62,16 @@
           <input type="password" name="password" required autocomplete="current-password"
                  class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
+        <%# 「记住我」 checkbox. Unchecked by default — user has to
+            consciously opt into 30-day persistence. The same checkbox
+            controls Passkey login (its JS handler reads the state
+            below and includes it in /webauthn/auth/verify). %>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" name="remember" id="remember-me" value="on"
+                 class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+          <span class="text-sm text-slate-700">保持登录（30 天）</span>
+          <span class="text-xs text-slate-400">· 不勾选则关闭浏览器即退出</span>
+        </label>
         <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">登录</button>
       </form>
 
@@ -131,11 +141,15 @@
       if (!optsResp.ok) throw new Error("auth_options_failed");
       const opts = await optsResp.json();
       const assertion = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON: opts });
+      // 「记住我」 — same checkbox as the password form. Passes through
+      // to createSession's rememberMe, controlling whether the cookie
+      // is persistent (30d) or a session cookie (deleted on close).
+      const remember = document.getElementById("remember-me")?.checked === true;
       const verifyResp = await fetch("/webauthn/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
         credentials: "same-origin",
-        body: JSON.stringify({ response: assertion })
+        body: JSON.stringify({ response: assertion, remember })
       });
       if (!verifyResp.ok) throw new Error("verify_failed");
       const data = await verifyResp.json();

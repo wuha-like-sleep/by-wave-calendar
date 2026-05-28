@@ -6,29 +6,47 @@ import { env } from "../env.js";
 
 const COOKIE_NAME = "bwc_sid";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+// "Remember me" sessions stick for 30 days.
 const SESSION_TTL_MS = 30 * ONE_DAY_MS;
+// Transient ("one-time") sessions get a 1-day server-side backstop so
+// abandoned rows get pruned, but the browser cookie itself is a session
+// cookie (no expires attribute) so most browsers drop it on close. The
+// 1-day DB TTL is the safety net for browsers that "restore last session"
+// across restarts and for tab/browser variants that hold cookies longer.
+const SESSION_TRANSIENT_TTL_MS = 1 * ONE_DAY_MS;
 
 export async function createSession(
   reply: FastifyReply,
   userId: string,
-  opts: { mfaSatisfied?: boolean } = {},
+  opts: { mfaSatisfied?: boolean; rememberMe?: boolean } = {},
 ): Promise<string> {
   const id = newSessionId();
-  const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  // Default rememberMe=true preserves the pre-checkbox behavior for all
+  // call sites we haven't audited (SSO, register, native-bridge, etc.).
+  // Web /login form passes false when the user leaves the box unchecked.
+  const rememberMe = opts.rememberMe ?? true;
+  const ttl = rememberMe ? SESSION_TTL_MS : SESSION_TRANSIENT_TTL_MS;
+  const expiresAt = new Date(Date.now() + ttl);
   await db.insert(schema.sessions).values({
     id,
     userId,
     expiresAt,
     mfaSatisfied: opts.mfaSatisfied ?? true,
   });
-  reply.setCookie(COOKIE_NAME, id, {
+  // Cookie shape:
+  //   rememberMe=true  → persistent cookie with expires=<30d>
+  //   rememberMe=false → session cookie (no expires/maxAge), deleted on
+  //                      browser close per the cookie spec. We still
+  //                      flag httpOnly + secure + sameSite=lax + signed.
+  const cookieOpts: Parameters<FastifyReply["setCookie"]>[2] = {
     httpOnly: true,
     sameSite: "lax",
     secure: env.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
     signed: true,
-  });
+  };
+  if (rememberMe) cookieOpts.expires = expiresAt;
+  reply.setCookie(COOKIE_NAME, id, cookieOpts);
   return id;
 }
 

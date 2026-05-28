@@ -132,8 +132,15 @@ export async function webauthnRoutes(app: FastifyInstance) {
     if (!challenge || challenge.intent !== "authenticate") {
       return reply.code(400).send({ error: "challenge_mismatch" });
     }
-    const parsed = z.object({ response: z.any() }).safeParse(req.body);
+    const parsed = z.object({
+      response: z.any(),
+      // 「记住我」 from the login page checkbox. Optional + defaults to
+      // false so a missing/old client (or any non-/login caller) gets a
+      // transient session, matching the password form's contract.
+      remember: z.boolean().optional(),
+    }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "bad_request" });
+    const rememberMe = parsed.data.remember === true;
 
     const credId = parsed.data.response?.id;
     if (!credId || typeof credId !== "string") return reply.code(400).send({ error: "bad_request" });
@@ -184,8 +191,9 @@ export async function webauthnRoutes(app: FastifyInstance) {
       .set({ counter: verification.authenticationInfo.newCounter, lastUsedAt: new Date() })
       .where(eq(schema.webauthnCredentials.id, credRow.id));
 
-    // Passkey login = both factors satisfied (something-you-have + verification)
-    await createSession(reply, credRow.userId, { mfaSatisfied: true });
+    // Passkey login = both factors satisfied (something-you-have + verification).
+    // rememberMe honors the「记住我」checkbox on the /login page.
+    await createSession(reply, credRow.userId, { mfaSatisfied: true, rememberMe });
     if (usr) {
       void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);
