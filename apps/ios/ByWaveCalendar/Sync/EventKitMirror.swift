@@ -8,7 +8,14 @@
 // Design:
 //   - One EventKit calendar per APP install ("ByWave Calendar"),
 //     not per-ByWave-calendar. Simpler. Color = brand purple.
-//   - Source = local store (so it works without iCloud sync turned on).
+//   - Source = LOCAL only (sourceType == .local). We explicitly
+//     refuse to fall back to iCloud / Exchange / CalDAV sources
+//     even if .local is somehow missing — users complained that
+//     creating a calendar on a remote source meant their data was
+//     getting synced through iCloud Calendar to all other devices,
+//     defeating the whole point of self-hosting. If no local source
+//     exists on this device, mirror is a no-op and the toggle in
+//     SettingsView shows a hint.
 //   - Mapping: serverEventId → EKEvent.eventIdentifier in UserDefaults.
 //   - Delete-then-create on each upsert is simpler than diffing fields;
 //     we'll revisit if it becomes a perf issue.
@@ -174,20 +181,49 @@ final class EventKitMirror {
     }
 
     private func findOrCreateCalendar() -> EKCalendar? {
+        // Migration (v1.7+): if a previously-saved calendar ID points to
+        // a calendar on a REMOTE source (iCloud / Exchange / CalDAV /
+        // Subscribed), wipe the stored ID + mapping so we recreate on
+        // the local source. Older builds had a buggy fallback that put
+        // the calendar on iCloud whenever the local source wasn't the
+        // user's default — meaning their data was actually syncing
+        // through iCloud Calendar across devices. We don't delete the
+        // remote calendar (could contain user-edited events) — the
+        // user can clean it up in the iOS Calendar app at their
+        // convenience.
         if let calId = UserDefaults.standard.string(forKey: Self.calendarIdKey),
            let cal = store.calendar(withIdentifier: calId) {
-            return cal
+            if cal.source.sourceType == .local {
+                return cal
+            }
+            // Remote-sourced calendar — orphan it and start fresh local.
+            NSLog("[ByWave EventKitMirror] dropping stale calendarId on non-local source (was %@) — will create a fresh local one", cal.source.title)
+            UserDefaults.standard.removeObject(forKey: Self.calendarIdKey)
+            // Also wipe the serverEventId → EKEvent mapping so we don't
+            // try to update events in the orphaned remote calendar.
+            UserDefaults.standard.removeObject(forKey: Self.mappingKey)
         }
         // Find by title (in case the stored ID was lost across reinstall).
+        // ONLY local-source matches; we won't reuse an existing iCloud /
+        // Exchange / CalDAV calendar even if it has our title.
         if let existing = store.calendars(for: .event).first(where: { $0.title == calendarTitle && $0.source.sourceType == .local }) {
             UserDefaults.standard.set(existing.calendarIdentifier, forKey: Self.calendarIdKey)
             return existing
         }
-        // Create fresh — prefer .local source so users without iCloud
-        // can still mirror, and iCloud users don't get duplicated rows.
+        // Create fresh — ONLY on the local source. No iCloud fallback;
+        // if .local doesn't exist on this device, the mirror is a
+        // no-op for this session. See file header for rationale.
         guard let localSource = store.sources.first(where: { $0.sourceType == .local })
-            ?? store.defaultCalendarForNewEvents?.source
-        else { return nil }
+        else {
+            // EKEventStore.sources doesn't expose .local on every device
+            // configuration (e.g. macOS Catalyst with all iCloud Calendar
+            // off; rare iOS configurations). When this happens we'd rather
+            // bail than silently fall through to a remote source — that's
+            // the entire bug we're guarding against. Surface user-facing
+            // copy on both platforms.
+            NSLog("[ByWave EventKitMirror] no local EKSource available — mirror disabled. iOS: enable 「On My iPhone」calendars in 设置 → 日历 → 账户. macOS: enable 「On My Mac」 in System Settings → Internet Accounts.")
+            return nil
+        }
         let cal = EKCalendar(for: .event, eventStore: store)
         cal.title = calendarTitle
         cal.cgColor = calendarColor
