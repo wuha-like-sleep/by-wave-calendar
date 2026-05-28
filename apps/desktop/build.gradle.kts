@@ -85,8 +85,15 @@ compose.desktop {
             packageName = "ByWaveCalendar"
             packageVersion = "1.0.0"  // installer version — must be ≥ 1.0
             vendor = "ByWave"
-            description = "ByWave Calendar — 日历共享平台桌面端"
-            copyright = "© 2026 ByWave"
+            // ASCII-only for installer-level metadata. WiX 3.11 light.exe
+            // (the linker jpackage uses for MSI) exits 311 when
+            // description or copyright contain non-ASCII chars —
+            // JDK-8333277. Mac DMG / Linux DEB don't care, but to keep
+            // one source of truth across platforms we keep this clean.
+            // The user-visible APP UI is unaffected (strings live in
+            // Kotlin code, not installer metadata).
+            description = "ByWave Calendar - self-hosted calendar desktop client"
+            copyright = "(c) 2026 ByWave"
             licenseFile.set(project.rootProject.file("../../LICENSE"))
 
             // App icon for the OS-native installer. Each platform needs
