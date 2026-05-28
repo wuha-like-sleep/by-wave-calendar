@@ -75,9 +75,10 @@ import cn.bywave.calendar.desktop.ui.event.RecurringScopePicker
 
 @Composable
 fun MainScreen(
-    onSignedOut: () -> Unit,
+    onAddAccount: () -> Unit,
 ) {
     val profile by ProfileStore.profile.collectAsState()
+    val profiles by ProfileStore.profiles.collectAsState()
     val p = profile
 
     val scope = rememberCoroutineScope()
@@ -125,18 +126,21 @@ fun MainScreen(
             onNext = { state.next() },
             onRefresh = { state.load() },
             onNew = { state.openCreate() },
-            onSignOut = {
-                ProfileStore.clear()
-                onSignedOut()
-            },
+            // Sign-out removes the active profile. ProfileStore promotes
+            // the next remaining one (or null when the list empties);
+            // Root reacts naturally — no need for an event back up.
+            onSignOut = { ProfileStore.clear() },
         )
         HorizontalDivider()
 
         Row(modifier = Modifier.fillMaxSize()) {
             Sidebar(
-                email = p.email,
-                serverUrl = p.serverUrl,
+                active = p,
+                profiles = profiles,
                 calendars = ui.calendars,
+                onProfileSelect = { ProfileStore.setActive(it) },
+                onAddAccount = onAddAccount,
+                onProfileRemove = { ProfileStore.remove(it) },
             )
             VerticalDivider()
             Box(modifier = Modifier.fillMaxSize()) {
@@ -341,9 +345,12 @@ private fun nextLabel(mode: ViewMode): String = when (mode) {
 
 @Composable
 private fun Sidebar(
-    email: String,
-    serverUrl: String,
+    active: cn.bywave.calendar.desktop.data.model.Profile,
+    profiles: List<cn.bywave.calendar.desktop.data.model.Profile>,
     calendars: List<cn.bywave.calendar.desktop.data.model.CalendarMeta>,
+    onProfileSelect: (String) -> Unit,
+    onAddAccount: () -> Unit,
+    onProfileRemove: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -351,24 +358,22 @@ private fun Sidebar(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(12.dp),
     ) {
-        Text(
-            email,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+        ProfileSwitcher(
+            active = active,
+            profiles = profiles,
+            onSelect = onProfileSelect,
+            onAddAccount = onAddAccount,
+            onRemove = onProfileRemove,
         )
-        Text(
-            serverUrl,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.outline,
-        )
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
         Text(
             "我的日历",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 10.dp),
         )
         Spacer(Modifier.height(8.dp))
 
@@ -377,9 +382,13 @@ private fun Sidebar(
                 "暂无日历",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(start = 10.dp),
             )
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 10.dp),
+            ) {
                 for (cal in calendars) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(

@@ -75,23 +75,29 @@ fun main() = application {
     }
 }
 
-/** Top-level router. v0.2 has exactly two destinations: Setup (sign-in
- *  via QR) and Main (logged-in placeholder). Driven by ProfileStore's
- *  StateFlow — when we save a profile, this auto-recomposes into Main.
- *  Sign-out clears the profile and we slide back to Setup. */
+/** Top-level router. Two destinations:
+ *    SetupScreen — when no profile is active, OR when the user
+ *      explicitly clicks "添加账号" while logged in (forceSetup=true).
+ *    MainScreen — when at least one profile is active.
+ *  Driven by ProfileStore's StateFlow + a local forceSetup latch.
+ *  Sign-out is owned by ProfileStore.clear() which removes the active
+ *  profile and promotes the next one (or null when the list empties),
+ *  so Root recomposes naturally without needing an onSignedOut event. */
 @Composable
 private fun Root() {
     val profile by ProfileStore.profile.collectAsState()
-    // forceSetup overrides the StateFlow during the brief moment between
-    // "user clicked logout" and "profile is cleared", to avoid a single-
-    // frame flicker into the post-login screen.
+    // forceSetup is set when the user picks "添加账号" from the switcher
+    // — we want SetupScreen even though a profile is already active.
+    // The new pair-claim's save() makes the new profile active and
+    // onSignedIn() flips this back off, bringing MainScreen back with
+    // the freshly-paired account selected.
     var forceSetup by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         if (profile == null || forceSetup) {
             SetupScreen(onSignedIn = { forceSetup = false })
         } else {
-            MainScreen(onSignedOut = { forceSetup = true })
+            MainScreen(onAddAccount = { forceSetup = true })
         }
     }
 }
