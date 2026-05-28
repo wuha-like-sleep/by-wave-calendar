@@ -25,6 +25,8 @@ import androidx.compose.ui.window.rememberWindowState
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.ui.auth.SetupScreen
 import cn.bywave.calendar.desktop.ui.main.MainScreen
+import cn.bywave.calendar.desktop.ui.main.ShortcutBus
+import cn.bywave.calendar.desktop.ui.main.keyEventToShortcut
 
 // Brand palette mirrors Android Theme.kt — Mac+Win windows feel like
 // the same product as mobile clients.
@@ -50,6 +52,19 @@ fun main() = application {
         onCloseRequest = ::exitApplication,
         state = state,
         title = "ByWave Calendar",
+        // Translate global key events to ShortcutBus emissions. We
+        // return false (don't consume) so text fields still receive
+        // the keystroke when relevant — e.g. typing "T" in the title
+        // field shouldn't trigger "jump to today". The ShortcutBus
+        // collector in MainScreen ignores Escape / arrows etc. when a
+        // dialog has focus by virtue of the dialog being the topmost
+        // composable; for letter keys we rely on the modifier check
+        // in keyEventToShortcut to avoid stealing typing.
+        onPreviewKeyEvent = { e ->
+            val action = keyEventToShortcut(e)
+            if (action != null) ShortcutBus.flow.tryEmit(action)
+            false
+        },
     ) {
         // v0.2 stays light-only; v0.3 reads OS dark-mode pref via
         // currentSystemTheme(). The brand palette stays identical

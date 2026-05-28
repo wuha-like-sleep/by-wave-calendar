@@ -87,6 +87,24 @@ fun MainScreen(
 
     LaunchedEffect(state) { state?.load() }
 
+    // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
+    // Re-attaches when CalendarState rebuilds on profile switch. Escape
+    // closes any open sheet (dialog focus consumes letter keys but Esc
+    // reaches us via Window's onPreviewKeyEvent regardless).
+    LaunchedEffect(state) {
+        val s = state ?: return@LaunchedEffect
+        ShortcutBus.flow.collect { action ->
+            when (action) {
+                ShortcutAction.New -> s.openCreate()
+                ShortcutAction.Refresh -> s.load()
+                ShortcutAction.Today -> s.today()
+                ShortcutAction.Previous -> s.previous()
+                ShortcutAction.Next -> s.next()
+                ShortcutAction.Escape -> s.closeSheet()
+            }
+        }
+    }
+
     if (p == null || state == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
@@ -142,6 +160,7 @@ fun MainScreen(
                         onEventDelete = { state.delete(it) },
                         onEventMove = { ev, dm, dd -> state.applyMove(ev, dm, dd) },
                         onEventResize = { ev, dm -> state.applyResize(ev, dm) },
+                        onEmptySlotClick = { seedTime -> state.openCreate(seedTime) },
                     )
                     ViewMode.Month -> MonthView(
                         anchor = ui.anchor,

@@ -18,6 +18,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -82,6 +83,9 @@ fun WeekView(
     onEventMove: (EventDTO, Int, Int) -> Unit = { _, _, _ -> },
     /** Bottom-edge drag-released: stretch event end by deltaMinutes. */
     onEventResize: (EventDTO, Int) -> Unit = { _, _ -> },
+    /** Tap on an empty time slot → caller opens the create dialog
+     *  pre-filled with this start time. */
+    onEmptySlotClick: (LocalDateTime) -> Unit = {},
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
@@ -112,6 +116,18 @@ fun WeekView(
                 HourLines()
                 ColumnSeparators(columnWidth = columnWidth)
                 NowLine(dayStarts = dayStarts, columnWidth = columnWidth)
+
+                // Tap layer for empty time-slot clicks. Placed BEFORE
+                // chips in the draw order so chips intercept their own
+                // taps first (Compose hit-testing is top-down). The
+                // layer fills the gridded area only — the gutter stays
+                // tap-inert so users don't accidentally trigger create
+                // by clicking the hour labels.
+                EmptySlotTapLayer(
+                    dayStarts = dayStarts,
+                    columnWidth = columnWidth,
+                    onTap = onEmptySlotClick,
+                )
 
                 for ((dayIdx, day) in dayStarts.withIndex()) {
                     val onDay = remember(timedEvents, day) {
@@ -221,6 +237,42 @@ private fun ColumnSeparators(columnWidth: Dp) {
             }
         }
     }
+}
+
+@Composable
+private fun EmptySlotTapLayer(
+    dayStarts: List<LocalDate>,
+    columnWidth: Dp,
+    onTap: (LocalDateTime) -> Unit,
+) {
+    val density = LocalDensity.current
+    val gutterPx = with(density) { TIME_GUTTER.toPx() }
+    val colPx = with(density) { columnWidth.toPx() }
+    val hourPx = with(density) { HOUR_HEIGHT.toPx() }
+
+    // Offset by TIME_GUTTER so taps in the hour-label column don't
+    // count. We size the layer to match the data area (cols * 7 wide,
+    // hourHeight * 24 tall) so we can't tap outside the grid.
+    Box(
+        modifier = Modifier
+            .offset(x = TIME_GUTTER, y = 0.dp)
+            .width(columnWidth * 7)
+            .height(HOUR_HEIGHT * 24)
+            .pointerInput(dayStarts) {
+                detectTapGestures { offset ->
+                    val col = (offset.x / colPx).toInt().coerceIn(0, 6)
+                    val minutes = (offset.y / hourPx * 60f).toInt()
+                    // Snap to 15-min grid so the seed time is tidy.
+                    val snapped = (minutes / 15) * 15
+                    val day = dayStarts[col]
+                    val time = LocalTime.of(
+                        (snapped / 60).coerceIn(0, 23),
+                        (snapped % 60).coerceIn(0, 59),
+                    )
+                    onTap(LocalDateTime.of(day, time))
+                }
+            },
+    )
 }
 
 @Composable
