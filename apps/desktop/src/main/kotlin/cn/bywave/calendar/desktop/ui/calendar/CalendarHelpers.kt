@@ -17,8 +17,10 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.TemporalAdjusters
 
 internal val FALLBACK_COLOR = Color(0xFF6640E9)
 
@@ -37,6 +39,9 @@ internal fun parseHex(hex: String?): Color {
 
 internal fun calendarColor(event: EventDTO, calendars: List<CalendarMeta>): Color =
     parseHex(calendars.firstOrNull { it.id == event.calendarId }?.color)
+
+internal fun calendarName(event: EventDTO, calendars: List<CalendarMeta>): String? =
+    calendars.firstOrNull { it.id == event.calendarId }?.name
 
 internal fun parseInstant(iso: String?): Instant? =
     iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
@@ -86,6 +91,33 @@ internal fun formatWeekAnchor(weekStart: LocalDate): String {
 
 internal fun formatMonthAnchor(date: LocalDate): String =
     MONTH_ANCHOR_FMT.format(date)
+
+private val DAY_ANCHOR_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日 EEEE")
+
+internal fun formatDayAnchor(date: LocalDate): String =
+    DAY_ANCHOR_FMT.format(date)
+
+// ---- Month grid ----
+
+/** Mon-anchored grid start — the Monday on or before the 1st of the month. */
+internal fun monthGridStart(month: YearMonth): LocalDate {
+    val first = month.atDay(1)
+    return first.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+}
+
+/** 42 cells (6 weeks × 7 days) starting at monthGridStart. */
+internal fun monthGridDays(month: YearMonth): List<LocalDate> {
+    val start = monthGridStart(month)
+    return (0L until 42L).map { start.plusDays(it) }
+}
+
+// ---- View modes ----
+
+enum class ViewMode(val label: String) {
+    Day("日"),
+    Week("周"),
+    Month("月"),
+}
 
 @Composable
 internal fun mutedTextColor() = MaterialTheme.colorScheme.onSurfaceVariant

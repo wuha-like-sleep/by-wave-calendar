@@ -1,11 +1,11 @@
-// Main calendar screen — top toolbar (prev / today / next + week label),
-// sidebar with the user's calendar list (color swatches), week grid
-// taking the rest of the window. v0.3 is read-only; v0.4 adds the
-// EventDetailSheet / edit / create flow.
+// Main calendar screen — top toolbar + sidebar + current view.
 //
-// Layout: Column { TopBar; Row { Sidebar (260dp); WeekView (fillMaxSize) } }
-// — same shell shape iOS / Android use, just with a real sidebar on
-// desktop because we have the screen real estate.
+// v0.4 adds a Day / Week / Month segmented switcher to the top bar.
+// Clicking a date cell in Month view jumps to Day view at that date;
+// clicking any event opens the EventDetailDialog (read-only, v0.5 adds
+// edit + delete).
+//
+// Layout: Column { TopBar; Row { Sidebar (260dp); ActiveView (fillMax) } }
 
 package cn.bywave.calendar.desktop.ui.main
 
@@ -36,6 +36,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -52,9 +55,16 @@ import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.ui.calendar.CalendarState
+import cn.bywave.calendar.desktop.ui.calendar.DayView
+import cn.bywave.calendar.desktop.ui.calendar.MonthView
+import cn.bywave.calendar.desktop.ui.calendar.ViewMode
 import cn.bywave.calendar.desktop.ui.calendar.WeekView
+import cn.bywave.calendar.desktop.ui.calendar.formatDayAnchor
+import cn.bywave.calendar.desktop.ui.calendar.formatMonthAnchor
 import cn.bywave.calendar.desktop.ui.calendar.formatWeekAnchor
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
+import cn.bywave.calendar.desktop.ui.calendar.startOfWeek
+import cn.bywave.calendar.desktop.ui.event.EventDetailDialog
 
 @Composable
 fun MainScreen(
@@ -63,9 +73,6 @@ fun MainScreen(
     val profile by ProfileStore.profile.collectAsState()
     val p = profile
 
-    // Build the API client + state once per profile. If profile flips
-    // (sign-out clears it; we'd already have unmounted by then), the
-    // key change forces a rebuild.
     val scope = rememberCoroutineScope()
     val state = remember(p?.serverUrl, p?.userId) {
         if (p == null) null else CalendarState(ApiClient(p.serverUrl), scope)
@@ -74,8 +81,6 @@ fun MainScreen(
     LaunchedEffect(state) { state?.load() }
 
     if (p == null || state == null) {
-        // Brief flicker window between sign-out and Root's recomposition;
-        // showing a tiny spinner avoids a flash of empty content.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
@@ -86,11 +91,13 @@ fun MainScreen(
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopBar(
-            weekLabel = formatWeekAnchor(ui.weekStart),
+            mode = ui.mode,
+            anchorLabel = anchorLabelFor(ui.mode, ui.anchor),
             loading = ui.loading,
-            onPrev = { state.previousWeek() },
+            onModeChange = { state.setMode(it) },
+            onPrev = { state.previous() },
             onToday = { state.today() },
-            onNext = { state.nextWeek() },
+            onNext = { state.next() },
             onRefresh = { state.load() },
             onSignOut = {
                 ProfileStore.clear()
@@ -107,23 +114,55 @@ fun MainScreen(
             )
             VerticalDivider()
             Box(modifier = Modifier.fillMaxSize()) {
-                WeekView(
-                    weekStart = ui.weekStart,
-                    events = ui.events,
-                    calendars = ui.calendars,
-                )
+                when (ui.mode) {
+                    ViewMode.Day -> DayView(
+                        anchor = ui.anchor,
+                        events = ui.events,
+                        calendars = ui.calendars,
+                        onEventClick = { state.openEvent(it) },
+                    )
+                    ViewMode.Week -> WeekView(
+                        weekStart = startOfWeek(ui.anchor),
+                        events = ui.events,
+                        calendars = ui.calendars,
+                        onEventClick = { state.openEvent(it) },
+                    )
+                    ViewMode.Month -> MonthView(
+                        anchor = ui.anchor,
+                        events = ui.events,
+                        calendars = ui.calendars,
+                        onDayClick = { state.jumpToDay(it) },
+                        onEventClick = { state.openEvent(it) },
+                    )
+                }
                 if (ui.error != null) {
                     ErrorBanner(message = ui.error!!, onRetry = { state.load() })
                 }
             }
         }
     }
+
+    ui.selectedEvent?.let { ev ->
+        EventDetailDialog(
+            event = ev,
+            calendars = ui.calendars,
+            onDismiss = { state.closeEvent() },
+        )
+    }
+}
+
+private fun anchorLabelFor(mode: ViewMode, anchor: java.time.LocalDate): String = when (mode) {
+    ViewMode.Day -> formatDayAnchor(anchor)
+    ViewMode.Week -> formatWeekAnchor(startOfWeek(anchor))
+    ViewMode.Month -> formatMonthAnchor(anchor)
 }
 
 @Composable
 private fun TopBar(
-    weekLabel: String,
+    mode: ViewMode,
+    anchorLabel: String,
     loading: Boolean,
+    onModeChange: (ViewMode) -> Unit,
     onPrev: () -> Unit,
     onToday: () -> Unit,
     onNext: () -> Unit,
@@ -133,7 +172,7 @@ private fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(64.dp)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -142,20 +181,34 @@ private fun TopBar(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        Spacer(Modifier.width(24.dp))
+        Spacer(Modifier.width(20.dp))
 
         IconButton(onClick = onPrev) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "上一周")
+            Icon(Icons.Default.ChevronLeft, contentDescription = prevLabel(mode))
         }
         OutlinedButton(onClick = onToday) { Text("今天") }
         IconButton(onClick = onNext) {
-            Icon(Icons.Default.ChevronRight, contentDescription = "下一周")
+            Icon(Icons.Default.ChevronRight, contentDescription = nextLabel(mode))
+        }
+
+        Spacer(Modifier.width(12.dp))
+        Text(anchorLabel, style = MaterialTheme.typography.titleSmall)
+
+        Spacer(Modifier.weight(1f))
+
+        // Day / Week / Month segmented switcher
+        SingleChoiceSegmentedButtonRow {
+            val options = ViewMode.entries
+            options.forEachIndexed { idx, m ->
+                SegmentedButton(
+                    selected = mode == m,
+                    onClick = { onModeChange(m) },
+                    shape = SegmentedButtonDefaults.itemShape(index = idx, count = options.size),
+                ) { Text(m.label) }
+            }
         }
 
         Spacer(Modifier.width(16.dp))
-        Text(weekLabel, style = MaterialTheme.typography.titleSmall)
-
-        Spacer(Modifier.weight(1f))
 
         if (loading) {
             CircularProgressIndicator(
@@ -171,6 +224,18 @@ private fun TopBar(
             Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出登录")
         }
     }
+}
+
+private fun prevLabel(mode: ViewMode): String = when (mode) {
+    ViewMode.Day -> "前一天"
+    ViewMode.Week -> "上一周"
+    ViewMode.Month -> "上一月"
+}
+
+private fun nextLabel(mode: ViewMode): String = when (mode) {
+    ViewMode.Day -> "后一天"
+    ViewMode.Week -> "下一周"
+    ViewMode.Month -> "下一月"
 }
 
 @Composable
