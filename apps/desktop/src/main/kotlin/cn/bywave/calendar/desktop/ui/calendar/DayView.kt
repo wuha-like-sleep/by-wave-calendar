@@ -7,6 +7,7 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,17 +22,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.onClick
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import java.time.LocalDate
@@ -42,6 +49,9 @@ fun DayView(
     events: List<EventDTO>,
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit,
+    onEventEdit: (EventDTO) -> Unit = {},
+    onEventDuplicate: (EventDTO) -> Unit = {},
+    onEventDelete: (EventDTO) -> Unit = {},
 ) {
     // Filter to the anchored day (parent passes the whole loaded window,
     // not a per-day slice, so we re-filter here).
@@ -69,30 +79,56 @@ fun DayView(
                 event = ev,
                 calendars = calendars,
                 onClick = { onEventClick(ev) },
+                onView = onEventClick,
+                onEdit = onEventEdit,
+                onDuplicate = onEventDuplicate,
+                onDelete = onEventDelete,
             )
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventRow(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onClick: () -> Unit,
+    onView: (EventDTO) -> Unit,
+    onEdit: (EventDTO) -> Unit,
+    onDuplicate: (EventDTO) -> Unit,
+    onDelete: (EventDTO) -> Unit,
 ) {
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
+    var menuOpen by remember { mutableStateOf(false) }
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            // Two-button click: primary opens detail, secondary opens
+            // context menu. `Modifier.onClick` is the desktop-only
+            // foundation helper that exposes the PointerButton.
+            .onClick(
+                matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
+                onClick = { menuOpen = true },
+            )
             .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        EventContextMenu(
+            expanded = menuOpen,
+            event = event,
+            onDismiss = { menuOpen = false },
+            onView = onView,
+            onEdit = onEdit,
+            onDuplicate = onDuplicate,
+            onDelete = onDelete,
+        )
         Box(
             modifier = Modifier
                 .size(10.dp)

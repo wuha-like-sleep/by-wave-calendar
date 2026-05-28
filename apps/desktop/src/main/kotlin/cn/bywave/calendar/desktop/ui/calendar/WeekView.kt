@@ -14,8 +14,10 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.onClick
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -38,11 +40,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -51,6 +57,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -65,6 +72,9 @@ fun WeekView(
     events: List<EventDTO>,
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit = {},
+    onEventEdit: (EventDTO) -> Unit = {},
+    onEventDuplicate: (EventDTO) -> Unit = {},
+    onEventDelete: (EventDTO) -> Unit = {},
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
@@ -116,6 +126,10 @@ fun WeekView(
                                 slotWidth = slotW,
                                 columnWidth = columnWidth,
                                 onClick = { onEventClick(ev) },
+                                onView = onEventClick,
+                                onEdit = onEventEdit,
+                                onDuplicate = onEventDuplicate,
+                                onDelete = onEventDelete,
                             )
                         }
                     }
@@ -228,6 +242,7 @@ private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventChip(
     event: EventDTO,
@@ -238,7 +253,12 @@ private fun EventChip(
     slotWidth: Dp,
     columnWidth: Dp,
     onClick: () -> Unit,
+    onView: (EventDTO) -> Unit,
+    onEdit: (EventDTO) -> Unit,
+    onDuplicate: (EventDTO) -> Unit,
+    onDelete: (EventDTO) -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     val zone = ZoneId.systemDefault()
     val dayStart = day.atStartOfDay(zone)
     val dayEnd = day.plusDays(1).atStartOfDay(zone)
@@ -267,6 +287,10 @@ private fun EventChip(
             .height(h)
             .clip(RoundedCornerShape(4.dp))
             .background(color.copy(alpha = 0.95f))
+            .onClick(
+                matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
+                onClick = { menuOpen = true },
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 5.dp, vertical = 3.dp),
     ) {
@@ -277,6 +301,15 @@ private fun EventChip(
             fontWeight = FontWeight.SemiBold,
             maxLines = if (h > 36.dp) 2 else 1,
             overflow = TextOverflow.Ellipsis,
+        )
+        EventContextMenu(
+            expanded = menuOpen,
+            event = event,
+            onDismiss = { menuOpen = false },
+            onView = onView,
+            onEdit = onEdit,
+            onDuplicate = onDuplicate,
+            onDelete = onDelete,
         )
     }
 }

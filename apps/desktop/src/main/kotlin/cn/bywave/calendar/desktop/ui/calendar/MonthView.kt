@@ -9,6 +9,7 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,22 +22,28 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.onClick
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -47,6 +54,9 @@ fun MonthView(
     calendars: List<CalendarMeta>,
     onDayClick: (LocalDate) -> Unit,
     onEventClick: (EventDTO) -> Unit,
+    onEventEdit: (EventDTO) -> Unit = {},
+    onEventDuplicate: (EventDTO) -> Unit = {},
+    onEventDelete: (EventDTO) -> Unit = {},
 ) {
     val month = remember(anchor) { YearMonth.from(anchor) }
     val cells = remember(month) { monthGridDays(month) }
@@ -79,6 +89,9 @@ fun MonthView(
                         calendars = calendars,
                         onDayClick = { onDayClick(day) },
                         onEventClick = onEventClick,
+                        onEventEdit = onEventEdit,
+                        onEventDuplicate = onEventDuplicate,
+                        onEventDelete = onEventDelete,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -105,6 +118,7 @@ private fun WeekdayHeader() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DayCell(
     day: LocalDate,
@@ -113,10 +127,14 @@ private fun DayCell(
     calendars: List<CalendarMeta>,
     onDayClick: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
+    onEventEdit: (EventDTO) -> Unit,
+    onEventDuplicate: (EventDTO) -> Unit,
+    onEventDelete: (EventDTO) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isToday = day == LocalDate.now()
     val isInMonth = YearMonth.from(day) == monthAnchor
+    var menuFor by remember { mutableStateOf<EventDTO?>(null) }
 
     Column(
         modifier = modifier
@@ -144,24 +162,42 @@ private fun DayCell(
             )
         }
 
-        // Up to 2 colored chips
+        // Up to 2 colored chips. Secondary click anywhere on the chip
+        // opens the per-event context menu (popup anchored to the chip).
         val visible = eventsOnDay.take(2)
         for (ev in visible) {
             val color = calendarColor(ev, calendars)
-            Text(
-                text = ev.summary,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(color.copy(alpha = 0.9f))
-                    .clickable { onEventClick(ev) }
-                    .padding(horizontal = 4.dp, vertical = 1.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Box {
+                Text(
+                    text = ev.summary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(color.copy(alpha = 0.9f))
+                        .onClick(
+                            matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
+                            onClick = { menuFor = ev },
+                        )
+                        .clickable { onEventClick(ev) }
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (menuFor?.id == ev.id && menuFor?.startsAt == ev.startsAt) {
+                    EventContextMenu(
+                        expanded = true,
+                        event = ev,
+                        onDismiss = { menuFor = null },
+                        onView = onEventClick,
+                        onEdit = onEventEdit,
+                        onDuplicate = onEventDuplicate,
+                        onDelete = onEventDelete,
+                    )
+                }
+            }
         }
         if (eventsOnDay.size > 2) {
             Text(

@@ -20,6 +20,9 @@
 package cn.bywave.calendar.desktop.data.api
 
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.AttendeeInviteRequest
+import cn.bywave.calendar.desktop.data.model.AttendeeRevokeRequest
+import cn.bywave.calendar.desktop.data.model.AttendeesResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
@@ -40,6 +43,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.post
+import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
@@ -177,6 +181,55 @@ class ApiClient(val serverUrl: String) {
         if (!resp.status.isSuccess()) {
             val body = runCatching { resp.bodyAsText() }.getOrDefault("")
             throw ApiException(resp.status.value, "delete failed: ${resp.status} $body")
+        }
+    }
+
+    // ---- Attendees ----
+
+    suspend fun attendees(eventId: String): AttendeesResponse {
+        return getAuthed("/api/v1/events/$eventId/attendees", AttendeesResponse.serializer())
+    }
+
+    suspend fun inviteAttendee(eventId: String, email: String) {
+        // Server returns the updated AttendeesResponse, but we don't need
+        // it — the caller will re-list. Use a discard-result helper.
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            val jsonBody = jsonCfg.encodeToString(
+                AttendeeInviteRequest.serializer(), AttendeeInviteRequest(email),
+            )
+            client.post("$baseUrl/api/v1/events/$eventId/attendees") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "invite failed: ${resp.status} $body")
+        }
+    }
+
+    /** DELETE with a body — Ktor's `client.delete` doesn't support body
+     *  directly in a fluent way, so we use request {} with method =
+     *  HttpMethod.Delete. The server's revoke route uses HTTP DELETE +
+     *  body for parity with iOS/Android. */
+    suspend fun revokeAttendee(eventId: String, email: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            val jsonBody = jsonCfg.encodeToString(
+                AttendeeRevokeRequest.serializer(), AttendeeRevokeRequest(email),
+            )
+            client.request("$baseUrl/api/v1/events/$eventId/attendees") {
+                method = io.ktor.http.HttpMethod.Delete
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "revoke failed: ${resp.status} $body")
         }
     }
 

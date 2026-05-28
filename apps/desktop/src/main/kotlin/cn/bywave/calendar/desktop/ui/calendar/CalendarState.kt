@@ -35,6 +35,8 @@ sealed class ActiveSheet {
     data class Create(val seedStart: java.time.LocalDateTime? = null) : ActiveSheet()
     /** Edit an existing event. */
     data class Edit(val event: EventDTO) : ActiveSheet()
+    /** "Copy as new" — same shape as Create but pre-filled from source. */
+    data class Duplicate(val source: EventDTO) : ActiveSheet()
 }
 
 /** When the user pressed "Save" on the edit form of a recurring event,
@@ -147,6 +149,10 @@ class CalendarState(
 
     fun openEdit(event: EventDTO) {
         _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Edit(event), formError = null)
+    }
+
+    fun openDuplicate(event: EventDTO) {
+        _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Duplicate(event), formError = null)
     }
 
     fun closeSheet() {

@@ -94,6 +94,17 @@ data class EventExtra(
     val url: String? = null,
 )
 
+// ---- Attendees ----
+
+@Serializable
+data class AttendeesResponse(val attendees: List<String>)
+
+@Serializable
+data class AttendeeInviteRequest(val email: String)
+
+@Serializable
+data class AttendeeRevokeRequest(val email: String)
+
 // ---- Auth refresh ----
 
 @Serializable

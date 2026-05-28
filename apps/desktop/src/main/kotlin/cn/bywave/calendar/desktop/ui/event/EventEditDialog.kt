@@ -73,6 +73,9 @@ import java.time.format.DateTimeFormatter
 sealed class EventEditMode {
     data class Create(val seedStart: LocalDateTime? = null) : EventEditMode()
     data class Edit(val source: EventDTO) : EventEditMode()
+    /** "Copy as new event" — same fields as source but a fresh start
+     *  time + brand new id (server-side). Lands as a POST. */
+    data class Duplicate(val source: EventDTO) : EventEditMode()
 }
 
 private data class FormState(
@@ -88,6 +91,8 @@ private data class FormState(
     val start: LocalDateTime,
     val end: LocalDateTime,
     val allDay: Boolean,
+    val rrule: RruleState,
+    val attendees: List<String>,
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank()
@@ -202,13 +207,20 @@ fun EventEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                if (form.sourceRrule != null) {
-                    Text(
-                        "重复规则：${form.sourceRrule}（重复规则编辑器在 v0.5 提供）",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-                }
+                RruleEditor(state = form.rrule, onChange = { form = form.copy(rrule = it) })
+
+                AttendeesSection(
+                    attendees = form.attendees,
+                    onAdd = { email ->
+                        val trimmed = email.trim()
+                        if (trimmed.isNotEmpty() && trimmed !in form.attendees) {
+                            form = form.copy(attendees = form.attendees + trimmed)
+                        }
+                    },
+                    onRemove = { email ->
+                        form = form.copy(attendees = form.attendees - email)
+                    },
+                )
 
                 if (errorMessage != null) {
                     Text(
@@ -366,6 +378,49 @@ private fun DateTimePickerRow(
     }
 }
 
+@Composable
+private fun AttendeesSection(
+    attendees: List<String>,
+    onAdd: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    var newEmail by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "邀请人",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        if (attendees.isNotEmpty()) {
+            for (email in attendees) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(email, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { onRemove(email) }) {
+                        Text("移除", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newEmail,
+                onValueChange = { newEmail = it },
+                placeholder = { Text("邮箱地址") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = {
+                    onAdd(newEmail)
+                    newEmail = ""
+                },
+                enabled = newEmail.isNotBlank(),
+            ) { Text("添加") }
+        }
+    }
+}
+
 // ---- Helpers ----
 
 private val ISO_OFFSET: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
@@ -389,6 +444,8 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 start = start,
                 end = start.plusHours(1),
                 allDay = false,
+                rrule = RruleState.fromRrule(null),
+                attendees = emptyList(),
             )
         }
         is EventEditMode.Edit -> {
@@ -409,6 +466,36 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
                 end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
                 allDay = s.allDay,
+                rrule = RruleState.fromRrule(s.rrule),
+                attendees = s.extra?.attendees.orEmpty(),
+            )
+        }
+        is EventEditMode.Duplicate -> {
+            val s = mode.source
+            val zone = ZoneId.systemDefault()
+            // Keep duration but shift start to next half-hour so we don't
+            // post in the past. Mirrors Android EventEditViewModel.
+            val origStart = runCatching { Instant.parse(s.startsAt) }.getOrNull()
+            val origEnd = runCatching { Instant.parse(s.endsAt) }.getOrNull()
+            val durationMin = if (origStart != null && origEnd != null) {
+                java.time.Duration.between(origStart, origEnd).toMinutes().coerceAtLeast(15L)
+            } else 60L
+            val newStart = nextHalfHour()
+            FormState(
+                isEdit = false,                       // POST, not PATCH
+                sourceId = null,
+                sourceRrule = null,                   // duplicate dropped recurrence
+                sourceStartsAt = null,
+                calendarId = s.calendarId,
+                summary = s.summary,
+                location = s.location.orEmpty(),
+                description = s.description.orEmpty(),
+                url = s.extra?.url.orEmpty(),
+                start = newStart,
+                end = newStart.plusMinutes(durationMin),
+                allDay = s.allDay,
+                rrule = RruleState.fromRrule(null),   // intentionally clear
+                attendees = s.extra?.attendees.orEmpty(),
             )
         }
     }
@@ -420,11 +507,21 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
     val endIso = ISO_OFFSET.format(form.end.atZone(zone))
 
     val urlTrim = form.url.trim()
+    val attendees = form.attendees.takeIf { it.isNotEmpty() }
+    // Always emit timezone for timed events; emit url + attendees when
+    // present. allDay events skip the timezone field (it's irrelevant
+    // and the server stores allDay times as date-only).
     val extra = when {
-        urlTrim.isNotEmpty() -> EventExtra(timezone = zone.id, url = urlTrim)
+        urlTrim.isNotEmpty() || attendees != null -> EventExtra(
+            timezone = if (!form.allDay) zone.id else null,
+            attendees = attendees,
+            url = urlTrim.ifEmpty { null },
+        )
         !form.allDay -> EventExtra(timezone = zone.id)
         else -> null
     }
+
+    val rrule = form.rrule.toRrule()
 
     return if (form.isEdit) {
         null to EventUpdateInput(
@@ -435,6 +532,7 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
             startsAt = startIso,
             endsAt = endIso,
             allDay = form.allDay,
+            rrule = rrule,
             extra = extra,
         )
     } else {
@@ -446,6 +544,7 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
             startsAt = startIso,
             endsAt = endIso,
             allDay = if (form.allDay) true else null,
+            rrule = rrule,
             extra = extra,
         ) to null
     }

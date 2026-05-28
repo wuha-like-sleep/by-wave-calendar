@@ -128,12 +128,18 @@ fun MainScreen(
                         events = ui.events,
                         calendars = ui.calendars,
                         onEventClick = { state.openDetail(it) },
+                        onEventEdit = { state.openEdit(it) },
+                        onEventDuplicate = { state.openDuplicate(it) },
+                        onEventDelete = { state.delete(it) },
                     )
                     ViewMode.Week -> WeekView(
                         weekStart = startOfWeek(ui.anchor),
                         events = ui.events,
                         calendars = ui.calendars,
                         onEventClick = { state.openDetail(it) },
+                        onEventEdit = { state.openEdit(it) },
+                        onEventDuplicate = { state.openDuplicate(it) },
+                        onEventDelete = { state.delete(it) },
                     )
                     ViewMode.Month -> MonthView(
                         anchor = ui.anchor,
@@ -141,6 +147,9 @@ fun MainScreen(
                         calendars = ui.calendars,
                         onDayClick = { state.jumpToDay(it) },
                         onEventClick = { state.openDetail(it) },
+                        onEventEdit = { state.openEdit(it) },
+                        onEventDuplicate = { state.openDuplicate(it) },
+                        onEventDelete = { state.delete(it) },
                     )
                 }
                 if (ui.error != null) {
@@ -164,6 +173,16 @@ fun MainScreen(
         )
         is ActiveSheet.Create -> EventEditDialog(
             mode = EventEditMode.Create(sheet.seedStart),
+            calendars = ui.calendars,
+            saving = ui.saving,
+            errorMessage = ui.formError,
+            onSave = { _, _, _, _, create, _ ->
+                if (create != null) state.create(create)
+            },
+            onDismiss = { state.closeSheet() },
+        )
+        is ActiveSheet.Duplicate -> EventEditDialog(
+            mode = EventEditMode.Duplicate(sheet.source),
             calendars = ui.calendars,
             saving = ui.saving,
             errorMessage = ui.formError,
