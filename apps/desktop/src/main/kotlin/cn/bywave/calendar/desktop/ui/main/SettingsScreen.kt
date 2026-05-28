@@ -173,7 +173,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 28.dp, vertical = 20.dp),
+                        .padding(horizontal = 32.dp, vertical = 24.dp),
                 ) {
                     when (tab) {
                         SettingsTab.Account -> AccountSection(
@@ -494,15 +494,24 @@ private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
 }
 
 // ---- Shared widgets ----
+//
+// v0.7.6 spacing pass — user feedback was「字全部挤在一起了」. The
+// previous values (8dp section gap, 8dp card vertical padding, 96dp
+// label column) felt cramped against the surrounding Surface. Targets:
+//   - section title → body description: 12dp
+//   - section title → card: 14dp
+//   - inside cards: 14dp vertical padding; 12dp per InfoRow
+//   - between major rows: 16dp via Spacer where applicable
 
 @Composable
 private fun SectionTitle(text: String, danger: Boolean = false) {
     Text(
         text,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
+        fontSize = 17.sp,
+        lineHeight = 24.sp,
         color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(bottom = 8.dp),
+        modifier = Modifier.padding(bottom = 12.dp),
     )
 }
 
@@ -516,7 +525,7 @@ private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
             content()
         }
     }
@@ -527,14 +536,14 @@ private fun InfoRow(label: String, value: String, mono: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             label,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(96.dp),
+            modifier = Modifier.width(110.dp),
         )
         Text(
             value,

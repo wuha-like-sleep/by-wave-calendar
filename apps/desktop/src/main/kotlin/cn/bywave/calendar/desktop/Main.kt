@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,32 @@ fun main() = application {
     // it) instead of quitting outright. Real quit goes through the
     // File menu's "退出" item or Cmd+Q.
     var visible by remember { mutableStateOf(true) }
+
+    // macOS Dock-icon re-open handler. When the user X-es the window
+    // it just hides (visible=false); clicking the dock icon afterwards
+    // SHOULD bring the window back without forcing them up to the
+    // menu bar's 「显示窗口」item. AppReopenedListener (java.awt.desktop,
+    // JDK 9+) fires for the NSApplicationDelegate's
+    // applicationShouldHandleReopen event. We register once at app
+    // launch — DisposableEffect would be over-engineering since the
+    // listener lives for the whole process life.
+    //
+    // Wrapped in runCatching because non-macOS JREs can throw
+    // UnsupportedOperationException when calling Desktop.getDesktop()
+    // or addAppEventListener — silently degrade to "user opens via
+    // menu bar" on those platforms.
+    LaunchedEffect(Unit) {
+        runCatching {
+            val desktop = java.awt.Desktop.getDesktop()
+            if (desktop.isSupported(java.awt.Desktop.Action.APP_EVENT_REOPENED)) {
+                desktop.addAppEventListener(object : java.awt.desktop.AppReopenedListener {
+                    override fun appReopened(e: java.awt.desktop.AppReopenedEvent?) {
+                        visible = true
+                    }
+                })
+            }
+        }
+    }
     Window(
         onCloseRequest = { visible = false },
         visible = visible,
