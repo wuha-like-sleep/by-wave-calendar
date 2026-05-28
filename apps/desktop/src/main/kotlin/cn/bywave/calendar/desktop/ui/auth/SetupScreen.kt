@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,11 +68,12 @@ fun SetupScreen(
     onSignedIn: () -> Unit,
 ) {
     var phase by remember { mutableStateOf(Phase.ServerUrl) }
-    // Empty default. We're a generic open-source desktop client — never
-    // hardcode the maintainer's own deployment as the default, that
-    // would break self-hosters and falsely imply the app is tied to one
-    // server. Android does the same (placeholder = "https://example.com").
-    var serverUrl by remember { mutableStateOf("") }
+    // Pre-fill from ProfileStore.lastServerUrl — the last URL the user
+    // successfully paired with (or typed before crash). Empty on first
+    // launch ever (per the open-source / server-agnostic policy: we
+    // never hardcode the maintainer's own deployment).
+    val lastUrl by ProfileStore.lastServerUrl.collectAsState()
+    var serverUrl by remember(lastUrl) { mutableStateOf(lastUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var pollMessage by remember { mutableStateOf("等待手机扫码…") }
     var code by remember { mutableStateOf<String?>(null) }
@@ -92,6 +94,9 @@ fun SetupScreen(
         if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
             normalized = "https://$normalized"
         }
+        // Persist immediately — even if pair-init fails the URL is still
+        // pre-filled on next launch (saves users from re-typing).
+        ProfileStore.rememberServerUrl(normalized)
         phase = Phase.GeneratingCode
         val c = ApiClient(normalized)
         client = c

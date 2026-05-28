@@ -34,6 +34,10 @@ import java.nio.file.attribute.PosixFilePermissions
 private data class ProfilesFile(
     val activeId: String? = null,
     val profiles: List<Profile> = emptyList(),
+    /** Last server URL the user typed into SetupScreen — persisted
+     *  separately so even after sign-out (which drops the profile)
+     *  the next setup pre-fills it. */
+    val lastServerUrl: String = "",
 )
 
 object ProfileStore {
@@ -48,8 +52,12 @@ object ProfileStore {
 
     private val _profiles = MutableStateFlow(emptyList<Profile>())
     private val _activeId = MutableStateFlow<String?>(null)
+    private val _lastServerUrl = MutableStateFlow("")
     val profiles: StateFlow<List<Profile>> = _profiles.asStateFlow()
     val activeId: StateFlow<String?> = _activeId.asStateFlow()
+    /** Empty when never set; SetupScreen reads this to pre-fill the
+     *  server URL field after sign-out so users don't re-type. */
+    val lastServerUrl: StateFlow<String> = _lastServerUrl.asStateFlow()
 
     /** Convenience StateFlow combining profiles + activeId into the
      *  currently-active Profile (or null). Updated on every mutation;
@@ -91,7 +99,19 @@ object ProfileStore {
                       else list + profile
         _profiles.value = newList
         _activeId.value = profile.deviceId
+        _lastServerUrl.value = profile.serverUrl
         recomputeActive()
+        persist()
+    }
+
+    /** Remember a server URL the user typed in SetupScreen even before
+     *  the pair-claim completes — so a crashed pair flow still leaves
+     *  the URL pre-filled on next launch. */
+    fun rememberServerUrl(url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isEmpty()) return
+        if (_lastServerUrl.value == trimmed) return
+        _lastServerUrl.value = trimmed
         persist()
     }
 
@@ -105,11 +125,17 @@ object ProfileStore {
     }
 
     /** Remove the given profile. If it was active, fall back to the
-     *  first remaining profile (or null when the list empties). */
+     *  first remaining profile (or null when the list empties).
+     *  Also wipes the event cache so removed-then-re-added accounts
+     *  don't see ghost events from before. */
     fun remove(id: String) {
         val list = _profiles.value
         val newList = list.filterNot { it.deviceId == id }
         accessTokens.remove(id)
+        // Cache cleanup is best-effort; don't block sign-out on it.
+        try {
+            cn.bywave.calendar.desktop.data.cache.EventCache.clear(id)
+        } catch (_: Exception) { /* swallow */ }
         _profiles.value = newList
         if (_activeId.value == id) {
             _activeId.value = newList.firstOrNull()?.deviceId
@@ -152,6 +178,13 @@ object ProfileStore {
                 _profiles.value = parsed.profiles
                 _activeId.value = parsed.activeId?.takeIf { id -> parsed.profiles.any { it.deviceId == id } }
                     ?: parsed.profiles.firstOrNull()?.deviceId
+                _lastServerUrl.value = parsed.lastServerUrl.ifEmpty {
+                    // Fallback for stores written before lastServerUrl existed:
+                    // derive from the active (or first) profile's URL.
+                    val activeP = parsed.profiles.firstOrNull { it.deviceId == parsed.activeId }
+                        ?: parsed.profiles.firstOrNull()
+                    activeP?.serverUrl.orEmpty()
+                }
                 recomputeActive()
                 return
             }.onFailure {
@@ -188,7 +221,11 @@ object ProfileStore {
         } catch (_: UnsupportedOperationException) {
             // Windows / non-POSIX — NTFS ACLs handle it.
         } catch (_: Exception) { /* fs perms are nice-to-have */ }
-        val body = ProfilesFile(activeId = _activeId.value, profiles = _profiles.value)
+        val body = ProfilesFile(
+            activeId = _activeId.value,
+            profiles = _profiles.value,
+            lastServerUrl = _lastServerUrl.value,
+        )
         Files.writeString(storeFile, json.encodeToString(ProfilesFile.serializer(), body))
     }
 }

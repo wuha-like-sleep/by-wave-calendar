@@ -406,14 +406,34 @@ private fun EventChip(
             }
             .padding(horizontal = 5.dp, vertical = 3.dp),
     ) {
-        Text(
-            text = event.summary,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = if (h > 36.dp) 2 else 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // Show as many lines as the chip can fit (16dp/line, 4dp top
+        // padding). Previously capped at 2 even when the chip was 200dp
+        // tall, leaving most events showing "INFO & COMM TECHNOLOGY ..."
+        // and forcing users to click to read. We also tweak the time
+        // range to render as a tiny second line so users see what time
+        // the event starts without opening detail.
+        val lineCountHint = ((h - 8.dp).value / 14f).toInt().coerceIn(1, 6)
+        Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp)) {
+            Text(
+                text = event.summary,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = lineCountHint,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Time range — only render when chip is tall enough that
+            // the title + a second line fits without truncation pressure.
+            if (h > 38.dp) {
+                Text(
+                    text = formatTimeRange(event),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         EventContextMenu(
             expanded = menuOpen,
             event = event,

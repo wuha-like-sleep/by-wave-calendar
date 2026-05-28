@@ -12,10 +12,13 @@
 package cn.bywave.calendar.desktop.ui.calendar
 
 import cn.bywave.calendar.desktop.data.api.ApiClient
+import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,23 +81,54 @@ class CalendarState(
 
     private var loadJob: Job? = null
 
-    /** Refetch the active window. Cancels any in-flight fetch first. */
+    /** Refetch the active window. Stale-while-revalidate: if a fresh
+     *  cache entry exists for the current (deviceId, window), we paint
+     *  it immediately so the user sees data the moment they open the
+     *  APP / navigate; the network call happens in the background and
+     *  replaces the in-memory state when it lands. */
     fun load() {
         loadJob?.cancel()
         loadJob = scope.launch {
             val s = _ui.value
-            _ui.value = s.copy(loading = true, error = null)
             val (from, to) = windowFor(s.mode, s.anchor)
-            try {
-                val resp = client.events(
-                    from = ISO_INSTANT.format(from),
-                    to = ISO_INSTANT.format(to),
+            val fromIso = ISO_INSTANT.format(from)
+            val toIso = ISO_INSTANT.format(to)
+
+            // 1. Paint cache instantly (no spinner) if we have one for
+            //    this exact (profile, window) tuple. Cache miss → leave
+            //    current state alone but flip `loading=true` so the
+            //    user sees the network spinner.
+            val deviceId = ProfileStore.profile.value?.deviceId
+            val cached = deviceId?.let { EventCache.read(it, fromIso, toIso) }
+            if (cached != null) {
+                _ui.value = _ui.value.copy(
+                    events = cached.events,
+                    calendars = cached.calendars,
+                    loading = true,   // still revalidating
+                    error = null,
                 )
+            } else {
+                _ui.value = _ui.value.copy(loading = true, error = null)
+            }
+
+            // 2. Hit the network. On success: replace + persist. On
+            //    failure: keep whatever we showed (cache or empty), set
+            //    error message. CancellationException is NOT an error
+            //    — it just means the user navigated away mid-fetch
+            //    (e.g. clicked prev/next twice quickly), so the next
+            //    load() call wins and we don't surface the cancellation.
+            try {
+                val resp = client.events(from = fromIso, to = toIso)
                 _ui.value = _ui.value.copy(
                     events = resp.events,
                     calendars = resp.calendars,
                     loading = false,
                 )
+                if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp)
+            } catch (e: CancellationException) {
+                // Re-throw so the coroutine machinery sees it correctly.
+                // DON'T flip to error state — this is a benign cancellation.
+                throw e
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(
                     loading = false,

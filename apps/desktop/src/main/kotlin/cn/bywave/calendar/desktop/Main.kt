@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.MenuBar
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -48,8 +49,14 @@ private val DarkColors = darkColorScheme(
 
 fun main() = application {
     val state = rememberWindowState(width = 1100.dp, height = 720.dp)
+    // Track visibility separately so the close button hides the window
+    // (macOS standard behavior — app stays in dock, Cmd+Tab still finds
+    // it) instead of quitting outright. Real quit goes through the
+    // File menu's "退出" item or Cmd+Q.
+    var visible by remember { mutableStateOf(true) }
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = { visible = false },
+        visible = visible,
         state = state,
         title = "ByWave Calendar",
         // Translate global key events to ShortcutBus emissions. We
@@ -66,6 +73,20 @@ fun main() = application {
             false
         },
     ) {
+        // Menu bar — gives the user explicit way to re-show the window
+        // (if they closed it and the dock icon isn't around) and a
+        // clean "退出" path that maps to Cmd+Q. Without this, hiding
+        // the window would feel like the app died.
+        MenuBar {
+            Menu("ByWave Calendar", mnemonic = 'B') {
+                Item("显示窗口", onClick = { visible = true })
+                Separator()
+                Item("退出 ByWave Calendar", onClick = ::exitApplication, shortcut = androidx.compose.ui.input.key.KeyShortcut(
+                    androidx.compose.ui.input.key.Key.Q,
+                    meta = true,
+                ))
+            }
+        }
         // v0.2 stays light-only; v0.3 reads OS dark-mode pref via
         // currentSystemTheme(). The brand palette stays identical
         // between modes — only neutral surfaces flip.
