@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1F0001000000000000000001 /* ByWaveCalendarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000001 /* ByWaveCalendarApp.swift */; };
 		1F0001000000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000002 /* AppState.swift */; };
+		1F000100000000000000002C /* LocaleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002C /* LocaleManager.swift */; };
 		1F0001000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000003 /* APIClient.swift */; };
 		1F0001000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000004 /* Models.swift */; };
 		1F0001000000000000000005 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000005 /* Keychain.swift */; };
@@ -52,6 +53,7 @@
 		1B0000000000000000000001 /* ByWaveCalendar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ByWaveCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B0001000000000000000001 /* ByWaveCalendarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ByWaveCalendarApp.swift; sourceTree = "<group>"; };
 		1B0001000000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		1B000100000000000000002C /* LocaleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocaleManager.swift; sourceTree = "<group>"; };
 		1B0001000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		1B0001000000000000000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		1B0001000000000000000005 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
@@ -117,6 +119,7 @@
 			children = (
 				1B0001000000000000000001 /* ByWaveCalendarApp.swift */,
 				1B0001000000000000000002 /* AppState.swift */,
+				1B000100000000000000002C /* LocaleManager.swift */,
 				1B000100000000000000001E /* Profile.swift */,
 				1B0001000000000000000023 /* ServerCapabilities.swift */,
 				1B0001000000000000000025 /* DateFormatters.swift */,
@@ -280,6 +283,7 @@
 			files = (
 				1F0001000000000000000001 /* ByWaveCalendarApp.swift in Sources */,
 				1F0001000000000000000002 /* AppState.swift in Sources */,
+				1F000100000000000000002C /* LocaleManager.swift in Sources */,
 				1F0001000000000000000003 /* APIClient.swift in Sources */,
 				1F0001000000000000000004 /* Models.swift in Sources */,
 				1F0001000000000000000005 /* Keychain.swift in Sources */,
@@ -466,7 +470,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -483,7 +487,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
@@ -501,7 +505,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -518,7 +522,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;

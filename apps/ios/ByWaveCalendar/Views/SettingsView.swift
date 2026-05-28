@@ -79,6 +79,13 @@ struct SettingsView: View {
                                subtitle: state.appearance.label,
                                tint: .purple)
                     }
+                    NavigationLink {
+                        LanguageSettingsPage()
+                    } label: {
+                        navRow(icon: "globe", title: "语言",
+                               subtitle: LocaleManager.shared.currentLabel,
+                               tint: .blue)
+                    }
                     // Scan a desktop's pair-init QR to approve it from
                     // the logged-in APP — no browser bounce required.
                     // The phone reads <server>/desktop-pair/<CODE> from
@@ -791,6 +798,82 @@ struct AppearanceSettingsPage: View {
         case let s where s.hasPrefix("zh"): return "简体中文"
         case let s where s.hasPrefix("en"): return "English"
         default: return preferred
+        }
+    }
+}
+
+// MARK: - 语言 sub-page
+
+/// APP-level language override. Sets `UserDefaults["AppleLanguages"]`
+/// to the chosen tag so the next launch loads from the matching
+/// .lproj/Localizable.strings bundle. We can't swap the bundle locale
+/// mid-process safely, so we prompt the user to fully relaunch the
+/// APP (system Settings has the same UX trade-off).
+struct LanguageSettingsPage: View {
+    @ObservedObject private var loc = LocaleManager.shared
+    @State private var showRestartAlert = false
+    @State private var pendingPick: String? = nil
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(LocaleManager.supported, id: \.code) { item in
+                    Button {
+                        guard item.code != loc.current else { return }
+                        pendingPick = item.code
+                        showRestartAlert = true
+                    } label: {
+                        HStack {
+                            Text(item.label).foregroundStyle(.primary)
+                            Spacer()
+                            if item.code == loc.current {
+                                Image(systemName: "checkmark").foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("APP 显示语言")
+            } footer: {
+                Text("「跟随系统」会跟着设备语言走；选具体语言会覆盖系统。切换语言后需要完全关闭并重新打开 APP 才生效（iOS 限制）。")
+            }
+
+            // iOS 16+ also exposes a per-app language picker in system
+            // Settings. Keep the deep-link as an escape hatch — useful
+            // when our bundled list misses what the user wants.
+            Section {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack {
+                        Label("在系统设置里选", systemImage: "arrow.up.right.square")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                }
+            } footer: {
+                Text("跳到 iOS 系统设置 → ByWave Calendar → 语言。系统提供的列表更全。")
+            }
+        }
+        .navigationTitle("语言")
+        .navigationBarTitleDisplayMode(.inline)
+        .alert("需要重启 APP", isPresented: $showRestartAlert) {
+            Button("取消", role: .cancel) { pendingPick = nil }
+            Button("立即切换") {
+                if let pick = pendingPick {
+                    loc.setLocale(pick)
+                }
+                pendingPick = nil
+                // We don't programmatically kill the APP — that lands you
+                // back at the home screen which is jarring. Let the user
+                // swipe-up + reopen at their convenience; the next launch
+                // honors the new AppleLanguages value via LocaleManager
+                // .applyEarly().
+            }
+        } message: {
+            Text("已保存语言选择。请完全关闭 ByWave Calendar（从应用切换器里向上滑掉），再重新打开，新语言就生效了。")
         }
     }
 }

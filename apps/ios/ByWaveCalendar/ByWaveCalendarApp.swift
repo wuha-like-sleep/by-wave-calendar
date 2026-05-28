@@ -15,6 +15,15 @@ struct ByWaveCalendarApp: App {
     // pure SwiftUI.
     @UIApplicationDelegateAdaptor(PushService.self) var pushService
 
+    init() {
+        // Honor the user's APP-level language override (set in
+        // SettingsView → 语言). Must run BEFORE the SwiftUI tree
+        // first reads any Localizable.strings, so we do it from the
+        // App's init — earlier than `body` first evaluates.
+        // See LocaleManager.swift for why we use AppleLanguages.
+        LocaleManager.applyEarly()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
