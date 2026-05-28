@@ -42,9 +42,9 @@
 </td>
 <td align="center">
 
-[![Open Web App](https://img.shields.io/badge/Open-rl.lz--ss.com-7c3aed?logo=safari&logoColor=white&style=for-the-badge)](https://rl.lz-ss.com)
+![Web PWA](https://img.shields.io/badge/Web-PWA_支持-7c3aed?logo=safari&logoColor=white&style=for-the-badge)
 
-PWA 可装到桌面 / 主屏
+直接在浏览器打开你的 ByWave 服务器即可 · 支持 PWA 装到桌面 / 主屏
 
 </td>
 </tr>
@@ -65,9 +65,9 @@ PWA 可装到桌面 / 主屏
 <tr>
 <td align="center">
 
-![Coming soon](https://img.shields.io/badge/macOS-DMG_即将发布-94a3b8?logo=apple&logoColor=white&style=for-the-badge)
+[![Download DMG](https://img.shields.io/badge/macOS-DMG_下载-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/latest/download/ByWaveCalendar-0.7.0-arm64.dmg)
 
-Compose Multiplatform + Skia 原生渲染
+Apple Silicon · 已 Apple 公证
 
 </td>
 <td align="center">

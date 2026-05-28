@@ -38,6 +38,7 @@ import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.search.SearchScreen
 import cn.bywave.calendar.ui.settings.CalendarListScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
+import cn.bywave.calendar.ui.setup.DesktopPairScannerScreen
 import cn.bywave.calendar.ui.setup.ScannerScreen
 import cn.bywave.calendar.ui.setup.SetupScreen
 import cn.bywave.calendar.ui.setup.SetupViewModel
@@ -129,6 +130,15 @@ private fun AppRoot() {
             )
         }
 
+        // Scan a desktop's pair-init QR to approve it from the logged-in
+        // APP, instead of bouncing through the browser. Launched from
+        // Settings → "扫码登录电脑".
+        composable("desktop_pair_scanner") {
+            DesktopPairScannerScreen(
+                onClose = { nav.popBackStack() },
+            )
+        }
+
         composable("calendar") {
             val calVm: CalendarViewModel = viewModel()
             CalendarScreen(
@@ -189,6 +199,7 @@ private fun AppRoot() {
                     nav.popBackStack("calendar", inclusive = false)
                 },
                 onManageCalendars = { nav.navigate("calendars") },
+                onScanDesktopPair = { nav.navigate("desktop_pair_scanner") },
             )
         }
 

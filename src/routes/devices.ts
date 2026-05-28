@@ -841,4 +841,57 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     return reply.redirect(`/desktop-pair/${code}`);
   });
+
+  // -------- desktop-pair approve via native APP (Bearer auth) --------
+  // Phone APP scans desktop's QR — which encodes
+  // https://<server>/desktop-pair/<CODE> — extracts CODE, posts here
+  // with its Bearer access token. We approve on behalf of the APP user
+  // without needing them to log in via web again.
+  //
+  // Same token mint as the cookie-auth /desktop-pair/<code>/approve
+  // route; just a different auth method on the way in. Anonymous
+  // status poll on the desktop side picks up the approval the same way.
+  app.post<{ Body: { code?: string } }>("/devices/desktop-pair-approve", async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    _purgeExpiredDesktopPairs();
+    const user = await requireUser(req, reply);
+    if (!user) return;
+
+    const code = String(req.body?.code ?? "").toUpperCase().trim();
+    if (!code) return reply.code(400).send({ error: "missing_code" });
+
+    const p = desktopPairs.get(code);
+    if (!p) return reply.code(404).send({ error: "expired_or_unknown" });
+    if (p.status !== "pending") {
+      return reply.code(409).send({ error: "not_pending", status: p.status });
+    }
+
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+    const refresh = await issueRefreshToken();
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
+      userId: user.id,
+      label: "Desktop (Mac/Windows)",
+      kind: "desktop",
+      appVersion: null,
+      clientDeviceId: code,
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: req.ip,
+      userAgent: ua,
+    });
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+
+    p.status = "approved";
+    p.userId = user.id;
+    p.accessToken = access.token;
+    p.accessTokenExpiresAt = access.expiresAt;
+    p.refreshToken = refresh.plain;
+    p.deviceId = device.id;
+    p.userEmail = user.email;
+    p.userName = user.displayName;
+
+    return reply.send({ ok: true });
+  });
 }

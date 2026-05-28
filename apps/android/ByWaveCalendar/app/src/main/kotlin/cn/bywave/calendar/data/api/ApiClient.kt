@@ -13,6 +13,7 @@ import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.CalendarUpdateInput
+import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventUpdateInput
@@ -71,6 +72,13 @@ interface BywaveApi {
      *  authorization. Returns token pair on success. */
     @POST("api/v1/devices/pair-claim")
     suspend fun pairClaim(@Body body: PairClaimRequest): LoginResponse
+
+    /** Bearer-auth endpoint: phone scans a desktop's pair-init QR
+     *  (https://server/desktop-pair/<code>), extracts the 8-char code,
+     *  posts here with its access token. Desktop's polling picks up
+     *  the approval. No response body — 200 means OK. */
+    @POST("api/v1/devices/desktop-pair-approve")
+    suspend fun desktopPairApprove(@Body body: DesktopPairApproveRequest)
 
     /** Edit a calendar — name / color / timezone / description.
      *  All fields optional; only those passed get changed. */

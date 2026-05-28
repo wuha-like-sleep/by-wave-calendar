@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -80,6 +81,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     onManageCalendars: () -> Unit = {},
+    onScanDesktopPair: () -> Unit = {},
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
     val active = profiles.active()
@@ -216,6 +218,20 @@ fun SettingsScreen(
                 ActionRow(
                     label = "管理日历",
                     onClick = onManageCalendars,
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
+            }
+
+            // Cross-device pairing — only the desktop direction has a
+            // dedicated APP entry. Phone-to-phone pairing happens during
+            // initial setup (the SetupScreen), which logged-in users can
+            // also reach via "添加账号" in the profile switcher.
+            Section(title = "桌面端") {
+                ActionRow(
+                    icon = Icons.Default.QrCodeScanner,
+                    label = "扫码登录电脑",
+                    trailing = "扫描电脑端二维码",
+                    onClick = onScanDesktopPair,
                     trailingIcon = Icons.Default.ChevronRight,
                 )
             }

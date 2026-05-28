@@ -161,6 +161,14 @@ data class PairClaimRequest(
     val clientDeviceId: String,
 )
 
+/** POST /api/v1/devices/desktop-pair-approve body. Bearer-auth endpoint
+ *  for the phone-side approval of a desktop pair-init — the phone scans
+ *  the desktop's QR (encoded as a URL `<server>/desktop-pair/<code>`),
+ *  extracts <code>, and posts here with its access token. Server flips
+ *  the pending pair to "approved" using the phone user's identity. */
+@Serializable
+data class DesktopPairApproveRequest(val code: String)
+
 // ---- Attendees ----
 
 @Serializable
