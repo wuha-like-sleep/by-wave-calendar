@@ -19,7 +19,9 @@ src/public/uploads/
 # Runtime data — Android release manifest + APK files served by
 # /api/app/android/latest and /downloads/android/*.apk. Deploy admin
 # drops files into <projectRoot>/data/ ; never committed.
-data/
+# Anchored to repo root (leading slash) — otherwise this would also
+# eat apps/desktop/src/.../data/ which is Kotlin source code.
+/data/
 
 # Native APP starter source. Android + desktop kept local until they
 # reach the same maturity as iOS; uncomment when they're ready to push.
