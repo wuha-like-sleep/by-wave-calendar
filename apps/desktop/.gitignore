@@ -8,11 +8,10 @@ build/
 *.iml
 local.properties
 
-# Wrapper jar is bootstrapped on first sync; properties file is enough
-# to recreate it. We don't commit the .jar to keep the repo binary-free.
-gradle/wrapper/gradle-wrapper.jar
-gradlew
-gradlew.bat
+# Gradle wrapper IS committed so CI runners (which check out a clean
+# tree) can invoke ./gradlew without bootstrapping. The .jar is ~60KB
+# binary but the trade-off is worth it: workflow runs that need
+# packageDmg / packageMsi need a runnable wrapper from minute zero.
 
 # macOS noise
 .DS_Store
