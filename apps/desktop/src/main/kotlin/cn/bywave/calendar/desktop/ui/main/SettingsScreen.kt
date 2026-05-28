@@ -93,13 +93,15 @@ import kotlinx.coroutines.launch
 import java.awt.Desktop
 import java.net.URI
 
-/** Which left-rail tab is active. Order here = order in the nav rail. */
-private enum class SettingsTab(val label: String, val icon: ImageVector) {
-    Account("账户", Icons.Default.AccountCircle),
-    Calendars("日历", Icons.Default.CalendarMonth),
-    Security("安全", Icons.Default.Security),
-    Appearance("外观", Icons.Default.Brush),
-    About("关于", Icons.Default.Info),
+/** Which left-rail tab is active. Order here = order in the nav rail.
+ *  Labels are I18n keys, resolved at render time so switching language
+ *  in the Appearance section instantly updates the tab labels. */
+private enum class SettingsTab(val labelKey: String, val icon: ImageVector) {
+    Account("settings.tabAccount", Icons.Default.AccountCircle),
+    Calendars("settings.tabCalendars", Icons.Default.CalendarMonth),
+    Security("settings.tabSecurity", Icons.Default.Security),
+    Appearance("settings.tabAppearance", Icons.Default.Brush),
+    About("settings.tabAbout", Icons.Default.Info),
 }
 
 @Composable
@@ -200,6 +202,8 @@ fun SettingsScreen(
 private fun NavRow(tab: SettingsTab, active: Boolean, onClick: () -> Unit) {
     val bg = if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
     val fg = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val label = remember(locale, tab) { cn.bywave.calendar.desktop.i18n.I18n.t(tab.labelKey) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -211,7 +215,7 @@ private fun NavRow(tab: SettingsTab, active: Boolean, onClick: () -> Unit) {
     ) {
         Icon(tab.icon, contentDescription = null, modifier = Modifier.size(18.dp), tint = fg)
         Spacer(Modifier.width(10.dp))
-        Text(tab.label, color = fg, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
+        Text(label, color = fg, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
     }
 }
 
@@ -397,14 +401,58 @@ private fun SecuritySection(profile: Profile) {
 
 @Composable
 private fun AppearanceSection(profile: Profile) {
-    SectionTitle("外观")
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    // -- Language picker (per-install; persisted to ~/.bywave-calendar/locale)
+    SectionTitle(t("settings.language.title"))
     Text(
-        "主题 / 配色 / 密度的偏好绑定到你的账号 —— 在网页设置一次，下次桌面端登录同步生效。",
+        t("settings.language.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    SectionCard {
+        cn.bywave.calendar.desktop.i18n.I18n.all.forEach { loc ->
+            val active = loc == locale
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { cn.bywave.calendar.desktop.i18n.I18n.setLocale(loc) }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (active) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                        ),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    loc.label,
+                    fontWeight = if (active) FontWeight.Medium else FontWeight.Normal,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            if (loc != cn.bywave.calendar.desktop.i18n.I18n.all.last()) HorizontalDivider()
+        }
+    }
+
+    Spacer(Modifier.height(28.dp))
+
+    // -- Theme / palette (web deep-link)
+    SectionTitle(t("settings.appearance.title"))
+    Text(
+        t("settings.appearance.desc"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 16.dp),
     )
-    OpenInWebButton(profile = profile, next = "/app/settings#theme", label = "在网页选择主题 / 密度")
+    OpenInWebButton(profile = profile, next = "/app/settings#theme", label = t("settings.appearance.openOnWeb"))
 }
 
 // -------- About --------

@@ -385,6 +385,10 @@ private fun TopBar(
     onNew: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    // Collect locale so this whole TopBar re-renders when the user
+    // switches language in Settings. Cheap; rebuilds the (small) row.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -393,18 +397,18 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            "ByWave Calendar",
+            t("app.name"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.width(20.dp))
 
         IconButton(onClick = onPrev) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = prevLabel(mode))
+            Icon(Icons.Default.ChevronLeft, contentDescription = prevLabel(mode, t))
         }
-        OutlinedButton(onClick = onToday) { Text("今天") }
+        OutlinedButton(onClick = onToday) { Text(t("topbar.today")) }
         IconButton(onClick = onNext) {
-            Icon(Icons.Default.ChevronRight, contentDescription = nextLabel(mode))
+            Icon(Icons.Default.ChevronRight, contentDescription = nextLabel(mode, t))
         }
 
         Spacer(Modifier.width(12.dp))
@@ -420,7 +424,7 @@ private fun TopBar(
                     selected = mode == m,
                     onClick = { onModeChange(m) },
                     shape = SegmentedButtonDefaults.itemShape(index = idx, count = options.size),
-                ) { Text(m.label) }
+                ) { Text(t(viewModeKey(m))) }
             }
         }
 
@@ -436,31 +440,40 @@ private fun TopBar(
         Button(onClick = onNew) {
             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("新建")
+            Text(t("topbar.new"))
         }
         Spacer(Modifier.width(4.dp))
         IconButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, contentDescription = "刷新")
+            Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
         }
         // Settings (Cmd+,) — primary entry to the Settings page. Logout
         // is still accessible there but no longer pollutes the toolbar
         // (a misclick used to drop the active profile with no confirm).
         IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Default.Settings, contentDescription = "设置")
+            Icon(Icons.Default.Settings, contentDescription = t("topbar.settings"))
         }
     }
 }
 
-private fun prevLabel(mode: ViewMode): String = when (mode) {
-    ViewMode.Day -> "前一天"
-    ViewMode.Week -> "上一周"
-    ViewMode.Month -> "上一月"
+/** ViewMode → I18n key. Kept separate from prev/next labels so the
+ *  segmented switcher can show short labels (日 / 周 / 月) while the
+ *  arrow buttons get the longer aria description (前一天 / 上一周 / …). */
+private fun viewModeKey(mode: ViewMode): String = when (mode) {
+    ViewMode.Day -> "viewmode.day"
+    ViewMode.Week -> "viewmode.week"
+    ViewMode.Month -> "viewmode.month"
 }
 
-private fun nextLabel(mode: ViewMode): String = when (mode) {
-    ViewMode.Day -> "后一天"
-    ViewMode.Week -> "下一周"
-    ViewMode.Month -> "下一月"
+private fun prevLabel(mode: ViewMode, t: (String) -> String): String = when (mode) {
+    ViewMode.Day -> t("topbar.prevDay")
+    ViewMode.Week -> t("topbar.prevWeek")
+    ViewMode.Month -> t("topbar.prevMonth")
+}
+
+private fun nextLabel(mode: ViewMode, t: (String) -> String): String = when (mode) {
+    ViewMode.Day -> t("topbar.nextDay")
+    ViewMode.Week -> t("topbar.nextWeek")
+    ViewMode.Month -> t("topbar.nextMonth")
 }
 
 @Composable

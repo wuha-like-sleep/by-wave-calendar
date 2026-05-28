@@ -34,7 +34,7 @@ group = "cn.bywave.calendar.desktop"
 // and surface the real marketing version via BuildInfo.VERSION_NAME.
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
-version = "1.0.9"
+version = "1.0.10"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.

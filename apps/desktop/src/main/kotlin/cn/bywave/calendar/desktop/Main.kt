@@ -49,6 +49,10 @@ private val DarkColors = darkColorScheme(
 )
 
 fun main() = application {
+    // Initialize i18n before the first @Composable mounts so the initial
+    // tree renders in the user's chosen language (no flash of English).
+    cn.bywave.calendar.desktop.i18n.I18n.init()
+
     val state = rememberWindowState(width = 1100.dp, height = 720.dp)
     // Track visibility separately so the close button hides the window
     // (macOS standard behavior — app stays in dock, Cmd+Tab still finds
@@ -78,11 +82,17 @@ fun main() = application {
         // (if they closed it and the dock icon isn't around) and a
         // clean "退出" path that maps to Cmd+Q. Without this, hiding
         // the window would feel like the app died.
+        // MenuBar items can't reactively re-render based on I18n.current
+        // (they're plain JVM Swing menus on macOS, not Compose nodes)
+        // — but they re-collect labels each application() recomposition.
+        // Switching language in-app updates them on the next paint cycle.
+        val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+        val tr = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
         MenuBar {
-            Menu("ByWave Calendar", mnemonic = 'B') {
-                Item("显示窗口", onClick = { visible = true })
+            Menu(tr("menu.appGroup"), mnemonic = 'B') {
+                Item(tr("menu.showWindow"), onClick = { visible = true })
                 Item(
-                    "设置…",
+                    tr("menu.settings"),
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.OpenSettings) },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(
                         androidx.compose.ui.input.key.Key.Comma,
@@ -90,7 +100,7 @@ fun main() = application {
                     ),
                 )
                 Item(
-                    "检查更新…",
+                    tr("menu.checkUpdate"),
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.CheckUpdate) },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(
                         androidx.compose.ui.input.key.Key.U,
@@ -98,7 +108,7 @@ fun main() = application {
                     ),
                 )
                 Separator()
-                Item("退出 ByWave Calendar", onClick = ::exitApplication, shortcut = androidx.compose.ui.input.key.KeyShortcut(
+                Item(tr("menu.quit"), onClick = ::exitApplication, shortcut = androidx.compose.ui.input.key.KeyShortcut(
                     androidx.compose.ui.input.key.Key.Q,
                     meta = true,
                 ))
