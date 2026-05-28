@@ -36,6 +36,72 @@ import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES,
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
+// Round-trip cookie for "send the user back to the page they tried to
+// open before being bounced to /login." Lifetime is 15 min — long enough
+// for password + MFA + risk-challenge but short enough that a stale
+// value can't outlive the login session it belongs to.
+const RETURN_TO_COOKIE = "bwc_return_to";
+const RETURN_TO_TTL_S = 15 * 60;
+
+/**
+ * Validate an absolute path before redirecting to it. Defends against:
+ *   - Open redirects to other domains  (//evil.com, https://evil.com)
+ *   - Backslash tricks                  (/\\evil.com)
+ *   - Arbitrary protocol schemes        (javascript:alert(1))
+ *   - Overly long values                (DOS the cookie store)
+ *
+ * Only paths under our known authenticated surface area are allowed:
+ * /app, /admin, /web-pair, /desktop-pair. Everything else (including
+ * unsanitized inputs and external URLs) returns null and the caller
+ * falls back to /app.
+ */
+export function sanitizeReturnTo(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  if (raw.length === 0 || raw.length > 200) return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return null;
+  // Match the path prefix only; query string + fragment are allowed after.
+  if (!/^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(raw)) return null;
+  // Strip fragment — we re-add on the client side anyway. Server-side
+  // redirects don't carry fragments.
+  return raw.split("#")[0] ?? null;
+}
+
+/** The path the unauth'd request was trying to reach. Used by the
+ *  auth-gate helpers below to populate bwc_return_to before bouncing
+ *  to /login. */
+function currentPathFor(req: FastifyRequest): string | null {
+  return sanitizeReturnTo(req.raw.url ?? "");
+}
+
+/** Persist the return-to in a signed cookie + redirect to /login. The
+ *  cookie is read back at the end of the auth flow (password,
+ *  challenge, MFA, Passkey, or SSO) and the user lands on the page
+ *  they originally tried to reach. */
+function bounceToLogin(req: FastifyRequest, reply: FastifyReply, flash?: Flash): null {
+  const back = currentPathFor(req);
+  if (back) {
+    reply.setCookie(RETURN_TO_COOKIE, back, {
+      httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production",
+      path: "/", maxAge: RETURN_TO_TTL_S, signed: true,
+    });
+  }
+  redirectWith(reply, "/login", flash ?? { error: "请先登录" });
+  return null;
+}
+
+/** Read + clear the return-to cookie. Returns a sanitized path or null.
+ *  Call at the end of any successful login path; the redirect target is
+ *  the returned value or "/app" if absent. */
+function consumeReturnTo(req: FastifyRequest, reply: FastifyReply): string | null {
+  const raw = req.cookies[RETURN_TO_COOKIE];
+  reply.clearCookie(RETURN_TO_COOKIE, { path: "/" });
+  if (!raw) return null;
+  const unsigned = req.unsignCookie(raw);
+  if (!unsigned.valid || !unsigned.value) return null;
+  return sanitizeReturnTo(unsigned.value);
+}
+
 type Flash = { error?: string; success?: string };
 
 function flashFromQuery(req: FastifyRequest): Flash {
@@ -75,10 +141,20 @@ function localTime(d: Date, timezone = "Asia/Shanghai", style: "datetime" | "dat
 async function loadAuthedUser(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
   if (!s) {
-    redirectWith(reply, "/login", { error: "请先登录" });
-    return null;
+    // Stash the page they were trying to reach so they bounce back
+    // here after re-auth (return_to cookie, signed, 15min TTL).
+    return bounceToLogin(req, reply);
   }
   if (s.user.mfaEnabled && !s.mfaSatisfied) {
+    // MFA-pending session — capture return_to too so the post-MFA
+    // landing matches the page they were trying to open.
+    const back = currentPathFor(req);
+    if (back) {
+      reply.setCookie(RETURN_TO_COOKIE, back, {
+        httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production",
+        path: "/", maxAge: RETURN_TO_TTL_S, signed: true,
+      });
+    }
     reply.redirect("/login/mfa");
     return null;
   }
@@ -261,7 +337,29 @@ export async function webRoutes(app: FastifyInstance) {
   // -------- Auth pages --------
   app.get("/login", async (req, reply) => {
     const user = await loadUserFromRequest(req);
-    if (user) return reply.redirect("/app");
+    if (user) {
+      // Already logged in — if they got here via /login?return_to=...
+      // honor the redirect so 「打开链接 → 登录 → 跳回」flows for
+      // already-signed-in users still work.
+      const q = (req.query ?? {}) as { return_to?: unknown };
+      const r = sanitizeReturnTo(q.return_to);
+      return reply.redirect(r ?? "/app");
+    }
+    // If /login was opened with an explicit `?return_to=...` (e.g. a
+    // shared link to a private page that requires auth, or the QR-pair
+    // approve page redirecting unauth'd users) — promote that into the
+    // signed cookie so the POST handler picks it up just like the
+    // loadAuthedUser → bounceToLogin path does.
+    {
+      const q = (req.query ?? {}) as { return_to?: unknown };
+      const r = sanitizeReturnTo(q.return_to);
+      if (r) {
+        reply.setCookie(RETURN_TO_COOKIE, r, {
+          httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production",
+          path: "/", maxAge: RETURN_TO_TTL_S, signed: true,
+        });
+      }
+    }
     // QR scan-login requires BOTH the master APP feature AND the
     // qrLoginEnabled toggle. Render-time check keeps the tab hidden
     // when admin disabled it — better UX than letting the user click
@@ -366,7 +464,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
-    return reply.redirect("/app");
+    // 返回到失效前的页面 —— bwc_return_to 是登录前由 loadAuthedUser
+    // 写入的。如果没有就回到 /app。
+    return reply.redirect(consumeReturnTo(req, reply) ?? "/app");
   });
 
   // -------- Login challenge (new-device email code) --------
@@ -415,7 +515,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
-    return reply.redirect("/app");
+    return reply.redirect(consumeReturnTo(req, reply) ?? "/app");
   });
 
   // -------- Forgot / reset password --------

@@ -61,12 +61,30 @@ export async function mfaRoutes(app: FastifyInstance) {
     const secret = s.user.mfaTotpSecret;
     if (!secret) return reply.redirect("/login?error=" + encodeURIComponent("MFA 配置异常"));
 
+    // Helper: consume bwc_return_to cookie and return the path, or
+    // fall back to /app. Mirrors the consumeReturnTo helper in web/
+    // index.ts — duplicated here to avoid a circular import for one
+    // 12-line function. Keep both in sync.
+    const consumeMfaReturnTo = (): string => {
+      const raw = req.cookies["bwc_return_to"];
+      reply.clearCookie("bwc_return_to", { path: "/" });
+      if (!raw) return "/app";
+      const unsigned = req.unsignCookie(raw);
+      if (!unsigned.valid || !unsigned.value) return "/app";
+      const v = unsigned.value;
+      // Same sanitization gate as src/web/index.ts:sanitizeReturnTo
+      if (v.length === 0 || v.length > 200) return "/app";
+      if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return "/app";
+      if (!/^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(v)) return "/app";
+      return v.split("#")[0] ?? "/app";
+    };
+
     if (verifyTotpCode(secret, code)) {
       await markSessionMfaSatisfied(req);
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       setThemeCookies(reply, s.user.themePalette, s.user.themeDensity);
-      return reply.redirect("/app");
+      return reply.redirect(consumeMfaReturnTo());
     }
 
     // Try as backup code
@@ -81,7 +99,12 @@ export async function mfaRoutes(app: FastifyInstance) {
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       setThemeCookies(reply, s.user.themePalette, s.user.themeDensity);
-      return reply.redirect("/app?success=" + encodeURIComponent("已使用备用码登录，请重新生成"));
+      // Backup-code login: still honor return_to but tack on the
+      // success message via query string so the user sees「已使用备用码」
+      // banner on their original page.
+      const target = consumeMfaReturnTo();
+      const sep = target.includes("?") ? "&" : "?";
+      return reply.redirect(target + sep + "success=" + encodeURIComponent("已使用备用码登录，请重新生成"));
     }
 
     req.log.warn({ userId: s.user.id, ip: req.ip }, "mfa_failed");

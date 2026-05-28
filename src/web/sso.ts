@@ -171,7 +171,23 @@ export async function ssoRoutes(app: FastifyInstance) {
         setThemeCookies(reply, user.themePalette, user.themeDensity);
         void notifyLoginSuccess(req, user, "sso").catch((err) => req.log.warn({ err }, "login_alert_failed"));
         void recordLoginEvent(req, user.id, "sso").catch((err) => req.log.warn({ err }, "login_event_failed"));
-        return reply.redirect("/app");
+        // 返回到失效前的页面 —— bwc_return_to cookie 写在 /login 入口
+        // 或鉴权失败时。SSO 跳转期间 cookie 一直在浏览器里，回来读得到。
+        let redirect = "/app";
+        const raw = req.cookies["bwc_return_to"];
+        if (raw) {
+          const unsigned = req.unsignCookie(raw);
+          if (unsigned.valid && unsigned.value) {
+            const v = unsigned.value;
+            if (v.length > 0 && v.length <= 200 &&
+                v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") &&
+                /^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(v)) {
+              redirect = v.split("#")[0] ?? "/app";
+            }
+          }
+          reply.clearCookie("bwc_return_to", { path: "/" });
+        }
+        return reply.redirect(redirect);
       } catch (err) {
         req.log.warn({ err, slug: parsed.slug }, "sso_callback_failed");
         return reply.redirect("/login?error=" + encodeURIComponent("SSO 登录失败：" + (err instanceof Error ? err.message : "未知错误")));

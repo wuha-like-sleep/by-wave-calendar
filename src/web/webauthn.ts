@@ -199,6 +199,23 @@ export async function webauthnRoutes(app: FastifyInstance) {
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);
     }
     void recordLoginEvent(req, credRow.userId, "passkey").catch((err) => req.log.warn({ err }, "login_event_failed"));
-    return reply.send({ ok: true, redirect: "/app" });
+    // 返回到失效前的页面 —— 同 password / MFA 走的是同一个 bwc_return_to
+    // cookie。读+清+回，没有就回 /app。inline so this module doesn't
+    // pull in src/web/index.ts (the helper is duplicated there).
+    let redirect = "/app";
+    const raw = req.cookies["bwc_return_to"];
+    if (raw) {
+      const unsigned = req.unsignCookie(raw);
+      if (unsigned.valid && unsigned.value) {
+        const v = unsigned.value;
+        if (v.length > 0 && v.length <= 200 &&
+            v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") &&
+            /^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(v)) {
+          redirect = v.split("#")[0] ?? "/app";
+        }
+      }
+      reply.clearCookie("bwc_return_to", { path: "/" });
+    }
+    return reply.send({ ok: true, redirect });
   });
 }

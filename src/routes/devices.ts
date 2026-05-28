@@ -820,39 +820,57 @@ export async function deviceRoutes(app: FastifyInstance) {
     const code = String(req.body?.code ?? "").toUpperCase().trim();
     if (!code) return reply.code(400).send({ error: "missing_code" });
 
-    const p = desktopPairs.get(code);
-    if (!p) return reply.code(404).send({ error: "expired_or_unknown" });
-    if (p.status !== "pending") {
-      return reply.code(409).send({ error: "not_pending", status: p.status });
+    // Try desktopPairs first (normal path). Fall back to webPairs so
+    // old iOS / Android APP builds — whose scanner regex only matches
+    // /desktop-pair/<CODE> — can also approve web 扫码登录 sessions
+    // without needing a new APP release. Web QR encodes its URL with
+    // the /desktop-pair/ prefix; the code-namespace is shared.
+    const desktopP = desktopPairs.get(code);
+    if (desktopP) {
+      if (desktopP.status !== "pending") {
+        return reply.code(409).send({ error: "not_pending", status: desktopP.status });
+      }
+      const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+      const refresh = await issueRefreshToken();
+      const { upsertDeviceForUser } = await import("../lib/devices.js");
+      const device = await upsertDeviceForUser({
+        userId: user.id,
+        label: "Desktop (Mac/Windows)",
+        kind: "desktop",
+        appVersion: null,
+        clientDeviceId: code,
+        refreshHash: refresh.hash,
+        refreshPrefix: refresh.prefix,
+        ip: req.ip,
+        userAgent: ua,
+      });
+      if (!device) return reply.code(500).send({ error: "device_create_failed" });
+      const access = signAccessToken(user.id, device.id);
+      desktopP.status = "approved";
+      desktopP.userId = user.id;
+      desktopP.accessToken = access.token;
+      desktopP.accessTokenExpiresAt = access.expiresAt;
+      desktopP.refreshToken = refresh.plain;
+      desktopP.deviceId = device.id;
+      desktopP.userEmail = user.email;
+      desktopP.userName = user.displayName;
+      return reply.send({ ok: true });
     }
-
-    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
-    const refresh = await issueRefreshToken();
-    const { upsertDeviceForUser } = await import("../lib/devices.js");
-    const device = await upsertDeviceForUser({
-      userId: user.id,
-      label: "Desktop (Mac/Windows)",
-      kind: "desktop",
-      appVersion: null,
-      clientDeviceId: code,
-      refreshHash: refresh.hash,
-      refreshPrefix: refresh.prefix,
-      ip: req.ip,
-      userAgent: ua,
-    });
-    if (!device) return reply.code(500).send({ error: "device_create_failed" });
-    const access = signAccessToken(user.id, device.id);
-
-    p.status = "approved";
-    p.userId = user.id;
-    p.accessToken = access.token;
-    p.accessTokenExpiresAt = access.expiresAt;
-    p.refreshToken = refresh.plain;
-    p.deviceId = device.id;
-    p.userEmail = user.email;
-    p.userName = user.displayName;
-
-    return reply.send({ ok: true });
+    // webPairs fallback. Same approval semantics as POST /devices/
+    // web-pair-approve below — just mark the entry approved with the
+    // bearer-authenticated user; the browser polling web-pair-status
+    // picks it up and plants the cookie session.
+    const webP = webPairs.get(code);
+    if (webP) {
+      if (webP.status !== "pending") {
+        return reply.code(409).send({ error: "not_pending", status: webP.status });
+      }
+      if (!(await ensureQrLoginEnabled(reply, req))) return;
+      webP.status = "approved";
+      webP.userId = user.id;
+      return reply.send({ ok: true });
+    }
+    return reply.code(404).send({ error: "expired_or_unknown" });
   });
 
   // ============================================================
@@ -927,7 +945,15 @@ export async function deviceRoutes(app: FastifyInstance) {
       expiresAt: now + WEB_PAIR_TTL_MS,
     });
     const serverUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-    const approveUrl = `${serverUrl}/web-pair/${code}`;
+    // QR-encoded URL uses the /desktop-pair/ prefix instead of /web-pair/
+    // — this lets the OLD iOS / Android APP scanner regex (which only
+    // matches /desktop-pair/<CODE>) recognize the QR. New APP builds also
+    // accept both prefixes; phone-camera browser scans still resolve
+    // because /desktop-pair/:code page route dispatches webPairs lookups
+    // when the code isn't in desktopPairs (see the page handler below).
+    // Trade-off: code namespace is shared between desktop and web pairs,
+    // but collisions are astronomically rare with 8-char [A-Z0-9] codes.
+    const approveUrl = `${serverUrl}/desktop-pair/${code}`;
     // Pre-render the QR server-side as SVG so the login page doesn't
     // need a JS QR library bundled. Margin 1 for tight quiet zone;
     // EC level M is enough — short URL, low chance of scan artifacts.
@@ -1058,7 +1084,17 @@ export async function pairPageRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { code: string } }>("/desktop-pair/:code", async (req, reply) => {
     _purgeExpiredDesktopPairs();
+    _purgeExpiredWebPairs();
     const code = req.params.code.toUpperCase();
+    // The QR-encoded URL for both flows is /desktop-pair/<CODE> (so
+    // old APP regexes match — see web-pair-init for rationale). Dispatch
+    // here: desktopPairs lookup first; if absent, try webPairs and
+    // forward to the web-pair page (which renders the proper template
+    // + posts to /web-pair/:code/approve so the bearer-less cookie
+    // flow works correctly).
+    if (!desktopPairs.has(code) && webPairs.has(code)) {
+      return reply.redirect(`/web-pair/${code}`);
+    }
     const p = desktopPairs.get(code);
     const user = await loadAuthedUser(req);
     if (!user) {
