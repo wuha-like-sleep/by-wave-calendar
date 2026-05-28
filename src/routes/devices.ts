@@ -56,7 +56,79 @@ export function consumeWebSessionToken(token: string): string | null {
   return v.userId;
 }
 
-import type { FastifyInstance, FastifyReply } from "fastify";
+// ---- Pair-code in-memory state (module scope) ----
+//
+// CRITICAL: lives at module scope, not inside deviceRoutes()'s closure,
+// because two registrations are involved:
+//
+//   1. deviceRoutes (registered TWICE — once at /api, once at /api/v1)
+//      hosts the API endpoints (pair-init / pair-status / pair-approve).
+//
+//   2. pairPageRoutes (registered ONCE, at root) hosts the HTML approve
+//      page the phone browser opens after scanning the QR — paths like
+//      GET /desktop-pair/:code and POST /desktop-pair/:code/approve.
+//      These MUST live at root because the QR encodes the URL without
+//      any /api prefix (no phone camera puts that prefix in for you).
+//
+// If the Maps lived inside each function's closure, /api/v1/devices/
+// desktop-pair-init would write to Map A and the phone's GET /desktop-
+// pair/:code would read Map B (different closure) — the code would
+// always look "expired." Hoisting fixes both the prefix-mismatch and
+// the cross-registration consistency issue.
+
+type DesktopPair = {
+  code: string;
+  status: "pending" | "approved" | "denied";
+  createdAt: number;
+  expiresAt: number;
+  userId?: string;
+  accessToken?: string;
+  accessTokenExpiresAt?: Date;
+  refreshToken?: string;
+  deviceId?: string;
+  userEmail?: string;
+  userName?: string | null;
+};
+const desktopPairs = new Map<string, DesktopPair>();
+const DESKTOP_PAIR_TTL_MS = 5 * 60 * 1000;
+
+function _purgeExpiredDesktopPairs() {
+  const now = Date.now();
+  for (const [code, p] of desktopPairs.entries()) {
+    if (p.expiresAt < now) desktopPairs.delete(code);
+  }
+}
+
+type WebPair = {
+  code: string;
+  status: "pending" | "approved" | "denied";
+  createdAt: number;
+  expiresAt: number;
+  userId?: string;
+};
+const webPairs = new Map<string, WebPair>();
+const WEB_PAIR_TTL_MS = 5 * 60 * 1000;
+
+function _purgeExpiredWebPairs() {
+  const now = Date.now();
+  for (const [code, p] of webPairs.entries()) {
+    if (p.expiresAt < now) webPairs.delete(code);
+  }
+}
+
+// Shared site-settings gates for the page routes. Mirrored helpers
+// inside deviceRoutes() use the same checks but write differently-
+// shaped JSON errors; the page routes redirect/render instead.
+async function siteAppsEnabled(): Promise<boolean> {
+  const s = await getSettings();
+  return s.appsEnabled;
+}
+async function siteQrLoginEnabled(): Promise<boolean> {
+  const s = await getSettings();
+  return s.qrLoginEnabled;
+}
+
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { and, eq } from "drizzle-orm";
@@ -661,29 +733,9 @@ export async function deviceRoutes(app: FastifyInstance) {
   //                → 404 if expired/unknown
   //                → 410 if denied
   //   8. Desktop:  stores tokens, transitions to logged-in state.
-
-  type DesktopPair = {
-    code: string;
-    status: "pending" | "approved" | "denied";
-    createdAt: number;
-    expiresAt: number;
-    userId?: string;
-    accessToken?: string;
-    accessTokenExpiresAt?: Date;
-    refreshToken?: string;
-    deviceId?: string;
-    userEmail?: string;
-    userName?: string | null;
-  };
-  const desktopPairs = new Map<string, DesktopPair>();
-  const DESKTOP_PAIR_TTL_MS = 5 * 60 * 1000;
-
-  function _purgeExpiredDesktopPairs() {
-    const now = Date.now();
-    for (const [code, p] of desktopPairs.entries()) {
-      if (p.expiresAt < now) desktopPairs.delete(code);
-    }
-  }
+  //
+  // The DesktopPair type + Map + purge helper live at module scope —
+  // see the comment block at the top of the file. Same for WebPair.
 
   // -------- desktop-pair-init (anonymous) --------
   app.post("/devices/desktop-pair-init", {
@@ -745,102 +797,10 @@ export async function deviceRoutes(app: FastifyInstance) {
     return reply.send(out);
   });
 
-  // -------- desktop-pair approve page (rendered for phone browser) --------
-  // The phone scans the QR, lands on this URL. We use the same cookie
-  // session the user already has from the web app to identify them.
-  // If they're not logged in we redirect to /login with a return_to so
-  // they end up back here after auth.
-  app.get<{ Params: { code: string } }>("/desktop-pair/:code", async (req, reply) => {
-    _purgeExpiredDesktopPairs();
-    const code = req.params.code.toUpperCase();
-    const p = desktopPairs.get(code);
-    const user = await loadUserFromRequest(req);
-    if (!user) {
-      const back = encodeURIComponent(`/desktop-pair/${code}`);
-      return reply.redirect(`/login?return_to=${back}`);
-    }
-    if (!p) {
-      return reply.view("desktop-pair", {
-        title: "桌面端登录",
-        state: "expired",
-        user,
-        csrfToken: csrfTokenFor(req),
-        siteName: (await getSettings()).siteName || "ByWave Calendar",
-      });
-    }
-    if (p.status !== "pending") {
-      return reply.view("desktop-pair", {
-        title: "桌面端登录",
-        state: p.status === "approved" ? "already_approved" : "denied",
-        user,
-        csrfToken: csrfTokenFor(req),
-        siteName: (await getSettings()).siteName || "ByWave Calendar",
-      });
-    }
-    return reply.view("desktop-pair", {
-      title: "桌面端登录",
-      state: "pending",
-      code,
-      user,
-      csrfToken: csrfTokenFor(req),
-      siteName: (await getSettings()).siteName || "ByWave Calendar",
-    });
-  });
-
-  // -------- desktop-pair approve / deny (cookie auth + CSRF) --------
-  app.post<{ Params: { code: string } }>("/desktop-pair/:code/approve", async (req, reply) => {
-    if (!verifyCsrf(req, reply)) return;
-    if (!(await ensureAppsEnabled(reply, req))) return;
-    _purgeExpiredDesktopPairs();
-    const user = await requireUser(req, reply);
-    const code = req.params.code.toUpperCase();
-    const p = desktopPairs.get(code);
-    if (!p) return reply.redirect(`/desktop-pair/${code}`);  // -> expired view
-    if (p.status !== "pending") return reply.redirect(`/desktop-pair/${code}`);
-
-    // Mint tokens. Same shape as pair-claim — server treats desktop
-    // as just another device. Label includes user-agent so user can
-    // identify it in /app/settings/devices later.
-    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
-    const refresh = await issueRefreshToken();
-    const { upsertDeviceForUser } = await import("../lib/devices.js");
-    const device = await upsertDeviceForUser({
-      userId: user.id,
-      label: "Desktop (Mac/Windows)",
-      kind: "desktop",
-      appVersion: null,
-      clientDeviceId: code,  // desktop's per-pair id; v1.x adds real install UUID
-      refreshHash: refresh.hash,
-      refreshPrefix: refresh.prefix,
-      ip: req.ip,
-      userAgent: ua,
-    });
-    if (!device) return reply.code(500).send({ error: "device_create_failed" });
-    const access = signAccessToken(user.id, device.id);
-
-    p.status = "approved";
-    p.userId = user.id;
-    p.accessToken = access.token;
-    p.accessTokenExpiresAt = access.expiresAt;
-    p.refreshToken = refresh.plain;
-    p.deviceId = device.id;
-    p.userEmail = user.email;
-    p.userName = user.displayName;
-
-    return reply.redirect(`/desktop-pair/${code}`);  // -> already_approved view
-  });
-
-  app.post<{ Params: { code: string } }>("/desktop-pair/:code/deny", async (req, reply) => {
-    if (!verifyCsrf(req, reply)) return;
-    _purgeExpiredDesktopPairs();
-    await requireUser(req, reply);  // must be authed to deny (anti-DoS)
-    const code = req.params.code.toUpperCase();
-    const p = desktopPairs.get(code);
-    if (p && p.status === "pending") {
-      p.status = "denied";
-    }
-    return reply.redirect(`/desktop-pair/${code}`);
-  });
+  // -------- desktop-pair browser-side approve page --------
+  // GET /desktop-pair/:code + POST .../approve + POST .../deny live in
+  // pairPageRoutes() below (registered at root, NOT under /api/v1) so a
+  // phone camera scanning the QR-encoded URL actually resolves them.
 
   // -------- desktop-pair approve via native APP (Bearer auth) --------
   // Phone APP scans desktop's QR — which encodes
@@ -918,23 +878,9 @@ export async function deviceRoutes(app: FastifyInstance) {
   //                → 404 if expired/unknown
   //                → 410 if denied
   //   8. Browser:  follows redirect, lands signed-in.
-
-  type WebPair = {
-    code: string;
-    status: "pending" | "approved" | "denied";
-    createdAt: number;
-    expiresAt: number;
-    userId?: string;
-  };
-  const webPairs = new Map<string, WebPair>();
-  const WEB_PAIR_TTL_MS = 5 * 60 * 1000;
-
-  function _purgeExpiredWebPairs() {
-    const now = Date.now();
-    for (const [code, p] of webPairs.entries()) {
-      if (p.expiresAt < now) webPairs.delete(code);
-    }
-  }
+  //
+  // WebPair type + Map + purge helper live at module scope —
+  // see the comment block at the top of the file.
 
   // Master switch for the web 扫码登录 flow. Distinct from
   // ensureAppsEnabled so admins can keep native APPs working while
@@ -1057,72 +1003,10 @@ export async function deviceRoutes(app: FastifyInstance) {
     return reply.send({ status: "approved", redirectTo: "/app" });
   });
 
-  // -------- web-pair approve page (rendered for phone browser) --------
-  // The phone scans the QR, lands here. Same cookie-session pattern as
-  // /desktop-pair/:code. If not logged in, bounce to /login with return_to.
-  app.get<{ Params: { code: string } }>("/web-pair/:code", async (req, reply) => {
-    if (!(await ensureQrLoginEnabled(reply, req))) return;
-    _purgeExpiredWebPairs();
-    const code = req.params.code.toUpperCase();
-    const p = webPairs.get(code);
-    const user = await loadUserFromRequest(req);
-    if (!user) {
-      const back = encodeURIComponent(`/web-pair/${code}`);
-      return reply.redirect(`/login?return_to=${back}`);
-    }
-    if (!p) {
-      return reply.view("web-pair", {
-        title: "网页扫码登录",
-        state: "expired",
-        user,
-        csrfToken: csrfTokenFor(req),
-        siteName: (await getSettings()).siteName || "ByWave Calendar",
-      });
-    }
-    if (p.status !== "pending") {
-      return reply.view("web-pair", {
-        title: "网页扫码登录",
-        state: p.status === "approved" ? "already_approved" : "denied",
-        user,
-        csrfToken: csrfTokenFor(req),
-        siteName: (await getSettings()).siteName || "ByWave Calendar",
-      });
-    }
-    return reply.view("web-pair", {
-      title: "网页扫码登录",
-      state: "pending",
-      code,
-      user,
-      csrfToken: csrfTokenFor(req),
-      siteName: (await getSettings()).siteName || "ByWave Calendar",
-    });
-  });
-
-  // -------- web-pair approve / deny (cookie auth + CSRF) --------
-  app.post<{ Params: { code: string } }>("/web-pair/:code/approve", async (req, reply) => {
-    if (!verifyCsrf(req, reply)) return;
-    _purgeExpiredWebPairs();
-    const user = await requireUser(req, reply);
-    const code = req.params.code.toUpperCase();
-    const p = webPairs.get(code);
-    if (!p) return reply.redirect(`/web-pair/${code}`);
-    if (p.status !== "pending") return reply.redirect(`/web-pair/${code}`);
-    p.status = "approved";
-    p.userId = user.id;
-    return reply.redirect(`/web-pair/${code}`);
-  });
-
-  app.post<{ Params: { code: string } }>("/web-pair/:code/deny", async (req, reply) => {
-    if (!verifyCsrf(req, reply)) return;
-    _purgeExpiredWebPairs();
-    await requireUser(req, reply);
-    const code = req.params.code.toUpperCase();
-    const p = webPairs.get(code);
-    if (p && p.status === "pending") {
-      p.status = "denied";
-    }
-    return reply.redirect(`/web-pair/${code}`);
-  });
+  // -------- web-pair browser-side approve page --------
+  // GET /web-pair/:code + POST .../approve + POST .../deny live in
+  // pairPageRoutes() below (registered at root, NOT under /api/v1) so a
+  // phone camera scanning the QR-encoded URL actually resolves them.
 
   // -------- web-pair approve via native APP (Bearer auth) --------
   // Phone APP scans the browser's QR — encoding https://<host>/web-pair/<CODE>
@@ -1146,5 +1030,174 @@ export async function deviceRoutes(app: FastifyInstance) {
     p.status = "approved";
     p.userId = user.id;
     return reply.send({ ok: true });
+  });
+}
+
+/**
+ * Page routes for the QR scan-login approve flows. Registered ONCE at
+ * the root prefix (NOT under /api or /api/v1) — the QR code on the
+ * desktop / browser encodes a bare URL like https://<host>/desktop-pair/
+ * <CODE>, and that's what a phone camera (with no app installed) will
+ * try to open. If we only registered these under /api/v1, every camera
+ * scan got a 404.
+ *
+ * The route handlers read/write the same module-level `desktopPairs`
+ * and `webPairs` Maps that deviceRoutes()'s API endpoints use, so the
+ * code created by POST /api/v1/devices/{desktop,web}-pair-init is the
+ * same code these page handlers look up.
+ */
+export async function pairPageRoutes(app: FastifyInstance) {
+  // ---- Reusable helper for the「未登录」→ /login redirect chain ----
+  async function loadAuthedUser(req: FastifyRequest): Promise<schema.User | null> {
+    return loadUserFromRequest(req);
+  }
+
+  // ============================================================
+  // Desktop QR-pair browser-side approve page
+  // ============================================================
+
+  app.get<{ Params: { code: string } }>("/desktop-pair/:code", async (req, reply) => {
+    _purgeExpiredDesktopPairs();
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    const user = await loadAuthedUser(req);
+    if (!user) {
+      const back = encodeURIComponent(`/desktop-pair/${code}`);
+      return reply.redirect(`/login?return_to=${back}`);
+    }
+    const siteName = (await getSettings()).siteName || "ByWave Calendar";
+    if (!p) {
+      return reply.view("desktop-pair", {
+        title: "桌面端登录", state: "expired", user,
+        csrfToken: csrfTokenFor(req), siteName,
+      });
+    }
+    if (p.status !== "pending") {
+      return reply.view("desktop-pair", {
+        title: "桌面端登录",
+        state: p.status === "approved" ? "already_approved" : "denied",
+        user, csrfToken: csrfTokenFor(req), siteName,
+      });
+    }
+    return reply.view("desktop-pair", {
+      title: "桌面端登录", state: "pending", code, user,
+      csrfToken: csrfTokenFor(req), siteName,
+    });
+  });
+
+  app.post<{ Params: { code: string } }>("/desktop-pair/:code/approve", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    if (!(await siteAppsEnabled())) {
+      return reply.code(403).type("text/html").send(
+        "<p>管理员已停用 APP 同步。请联系管理员后再试。</p>",
+      );
+    }
+    _purgeExpiredDesktopPairs();
+    const user = await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    if (!p) return reply.redirect(`/desktop-pair/${code}`);
+    if (p.status !== "pending") return reply.redirect(`/desktop-pair/${code}`);
+
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+    const refresh = await issueRefreshToken();
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
+      userId: user.id,
+      label: "Desktop (Mac/Windows)",
+      kind: "desktop",
+      appVersion: null,
+      clientDeviceId: code,
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: req.ip,
+      userAgent: ua,
+    });
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+
+    p.status = "approved";
+    p.userId = user.id;
+    p.accessToken = access.token;
+    p.accessTokenExpiresAt = access.expiresAt;
+    p.refreshToken = refresh.plain;
+    p.deviceId = device.id;
+    p.userEmail = user.email;
+    p.userName = user.displayName;
+
+    return reply.redirect(`/desktop-pair/${code}`);
+  });
+
+  app.post<{ Params: { code: string } }>("/desktop-pair/:code/deny", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredDesktopPairs();
+    await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = desktopPairs.get(code);
+    if (p && p.status === "pending") p.status = "denied";
+    return reply.redirect(`/desktop-pair/${code}`);
+  });
+
+  // ============================================================
+  // Web QR-pair browser-side approve page
+  // ============================================================
+
+  app.get<{ Params: { code: string } }>("/web-pair/:code", async (req, reply) => {
+    // ensureQrLoginEnabled lives inside deviceRoutes(); here we inline
+    // the same check using the shared site-settings helper.
+    if (!(await siteQrLoginEnabled())) {
+      return reply.code(403).type("text/html").send(
+        "<p>管理员已停用网页扫码登录功能。请用密码或 Passkey 登录。</p>",
+      );
+    }
+    _purgeExpiredWebPairs();
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    const user = await loadAuthedUser(req);
+    if (!user) {
+      const back = encodeURIComponent(`/web-pair/${code}`);
+      return reply.redirect(`/login?return_to=${back}`);
+    }
+    const siteName = (await getSettings()).siteName || "ByWave Calendar";
+    if (!p) {
+      return reply.view("web-pair", {
+        title: "网页扫码登录", state: "expired", user,
+        csrfToken: csrfTokenFor(req), siteName,
+      });
+    }
+    if (p.status !== "pending") {
+      return reply.view("web-pair", {
+        title: "网页扫码登录",
+        state: p.status === "approved" ? "already_approved" : "denied",
+        user, csrfToken: csrfTokenFor(req), siteName,
+      });
+    }
+    return reply.view("web-pair", {
+      title: "网页扫码登录", state: "pending", code, user,
+      csrfToken: csrfTokenFor(req), siteName,
+    });
+  });
+
+  app.post<{ Params: { code: string } }>("/web-pair/:code/approve", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredWebPairs();
+    const user = await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    if (!p) return reply.redirect(`/web-pair/${code}`);
+    if (p.status !== "pending") return reply.redirect(`/web-pair/${code}`);
+    p.status = "approved";
+    p.userId = user.id;
+    return reply.redirect(`/web-pair/${code}`);
+  });
+
+  app.post<{ Params: { code: string } }>("/web-pair/:code/deny", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredWebPairs();
+    await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    if (p && p.status === "pending") p.status = "denied";
+    return reply.redirect(`/web-pair/${code}`);
   });
 }

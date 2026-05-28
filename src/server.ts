@@ -16,7 +16,7 @@ import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
-import { deviceRoutes } from "./routes/devices.js";
+import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
 import { oauthServerRoutes } from "./web/oauth_server.js";
 import { icsRoutes } from "./routes/ics.js";
@@ -582,6 +582,11 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
 }
+// QR scan-login approve pages (/desktop-pair/:code and /web-pair/:code)
+// MUST be at root — phone cameras open the QR-encoded URL verbatim and
+// won't prepend /api/v1. Registered once, shares in-memory pair state
+// with deviceRoutes()'s API endpoints (the Maps live at module scope).
+await app.register(pairPageRoutes);
 await app.register(icsRoutes);
 await app.register(oauthServerRoutes);
 
