@@ -16,6 +16,7 @@
 		1F0001000000000000000007 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000007 /* RootView.swift */; };
 		1F0001000000000000000008 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000008 /* SetupView.swift */; };
 		1F0001000000000000000009 /* ScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000009 /* ScannerView.swift */; };
+		1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002B /* DesktopPairScannerView.swift */; };
 		1F000100000000000000000A /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000A /* CalendarView.swift */; };
 		1F000100000000000000000B /* EventDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000B /* EventDetailView.swift */; };
 		1F000100000000000000000C /* EventEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000C /* EventEditView.swift */; };
@@ -58,6 +59,7 @@
 		1B0001000000000000000007 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000008 /* SetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000009 /* ScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScannerView.swift; sourceTree = "<group>"; };
+		1B000100000000000000002B /* DesktopPairScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPairScannerView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000A /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000B /* EventDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventDetailView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000C /* EventEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditView.swift; sourceTree = "<group>"; };
@@ -155,6 +157,7 @@
 				1B0001000000000000000007 /* RootView.swift */,
 				1B0001000000000000000008 /* SetupView.swift */,
 				1B0001000000000000000009 /* ScannerView.swift */,
+				1B000100000000000000002B /* DesktopPairScannerView.swift */,
 				1B000100000000000000000A /* CalendarView.swift */,
 				1B000100000000000000000B /* EventDetailView.swift */,
 				1B000100000000000000000C /* EventEditView.swift */,
@@ -284,6 +287,7 @@
 				1F0001000000000000000007 /* RootView.swift in Sources */,
 				1F0001000000000000000008 /* SetupView.swift in Sources */,
 				1F0001000000000000000009 /* ScannerView.swift in Sources */,
+				1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */,
 				1F000100000000000000000A /* CalendarView.swift in Sources */,
 				1F000100000000000000000B /* EventDetailView.swift in Sources */,
 				1F000100000000000000000C /* EventEditView.swift in Sources */,

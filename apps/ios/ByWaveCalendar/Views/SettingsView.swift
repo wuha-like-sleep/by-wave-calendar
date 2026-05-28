@@ -79,6 +79,17 @@ struct SettingsView: View {
                                subtitle: state.appearance.label,
                                tint: .purple)
                     }
+                    // Scan a desktop's pair-init QR to approve it from
+                    // the logged-in APP — no browser bounce required.
+                    // The phone reads <server>/desktop-pair/<CODE> from
+                    // the QR and POSTs to the Bearer-auth approve route.
+                    NavigationLink {
+                        DesktopPairScannerView()
+                    } label: {
+                        navRow(icon: "qrcode.viewfinder", title: "扫码登录电脑",
+                               subtitle: "扫描电脑端二维码",
+                               tint: .orange)
+                    }
                     NavigationLink {
                         AboutSettingsPage(webURL: $webURL)
                     } label: {
