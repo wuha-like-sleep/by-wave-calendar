@@ -1,14 +1,14 @@
 {
-  "versionCode": 9,
-  "versionName": "0.7.3",
-  "releasedAt": "2026-05-28T14:30:00Z",
-  "notes": "新：在 APP 内更新（Cmd+U / 菜单「检查更新…」一键下载并打开）· 本地事件缓存（断网/秒画）· 关窗口不退出（红 × 隐藏，Cmd+Q 真退出）· 记住服务器域名。修：StandaloneCoroutine 取消异常误报；事件 chip 多行 + 显示时间。",
+  "versionCode": 11,
+  "versionName": "0.7.5",
+  "releasedAt": "2026-05-29T01:00:00Z",
+  "notes": "新：APP 内语言切换（简体中文 / English），在「设置 → 外观 → 语言」一键切。MenuBar / TopBar / Settings 标签全部多语言。继承 v0.7.4 的设置页（账户/日历/安全/外观/关于）+ 已签名公证。沿用 APP 内自动更新 + 跨午夜事件/短事件 chip 修复。",
   "mandatory": false,
   "assets": {
     "mac": {
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.3/ByWaveCalendar-0.7.3-arm64.dmg",
-      "sha256": "3ecc363019b16e7d9d09431d9e216f6a46820942994c8f83709e836feb45df18",
-      "sizeBytes": 114045610
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.5/ByWaveCalendar-0.7.5-arm64.dmg",
+      "sha256": "93b85f01cc19ab37115181500849d8d7d66cbe6fe4f5c7a8af187dcf888638c2",
+      "sizeBytes": 114113869
     }
   }
 }
