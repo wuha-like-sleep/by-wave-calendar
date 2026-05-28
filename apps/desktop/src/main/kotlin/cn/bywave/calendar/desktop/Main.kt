@@ -59,6 +59,15 @@ fun main() = application {
     // (macOS standard behavior — app stays in dock, Cmd+Tab still finds
     // it) instead of quitting outright. Real quit goes through the
     // File menu's "退出" item or Cmd+Q.
+    //
+    // v0.7.6 reliability: ALSO minimize when hiding. On some macOS / JDK
+    // combos `AppReopenedListener` doesn't fire for a visible=false
+    // (hidden but not minimized) window — leaving users with no way to
+    // get the window back short of menu bar. Setting both
+    // (isMinimized=true + visible=false → on close) means clicking the
+    // dock icon reliably brings the window back via the standard macOS
+    // window-restore flow, AppReopened listener still fires as a
+    // fallback for older JDKs.
     var visible by remember { mutableStateOf(true) }
 
     // macOS Dock-icon re-open handler. When the user X-es the window
@@ -80,14 +89,37 @@ fun main() = application {
             if (desktop.isSupported(java.awt.Desktop.Action.APP_EVENT_REOPENED)) {
                 desktop.addAppEventListener(object : java.awt.desktop.AppReopenedListener {
                     override fun appReopened(e: java.awt.desktop.AppReopenedEvent?) {
+                        // Un-minimize AND show. onCloseRequest sets BOTH
+                        // (see comment there); clear both on reopen so
+                        // the window comes back to the same position
+                        // it was closed from.
+                        state.isMinimized = false
                         visible = true
+                        System.err.println("[ByWave] dock click → window restored")
                     }
                 })
+                System.err.println("[ByWave] AppReopenedListener registered")
+            } else {
+                System.err.println("[ByWave] APP_EVENT_REOPENED not supported on this JDK/OS")
             }
+        }.onFailure {
+            System.err.println("[ByWave] AppReopenedListener registration failed: ${it.message}")
         }
     }
     Window(
-        onCloseRequest = { visible = false },
+        onCloseRequest = {
+            // Hide AND minimize so:
+            //   - On macOS dock click after close, applicationShouldHandle-
+            //     Reopen fires reliably (the window is genuinely "not
+            //     visible" in NSApp's window-list bookkeeping when
+            //     both flags are set).
+            //   - If AppReopenedListener doesn't fire for some reason,
+            //     the minimized state means the user can still click the
+            //     dock icon and get the standard macOS un-minimize behavior.
+            //   - On Win/Linux this is just minimize-to-taskbar.
+            state.isMinimized = true
+            visible = false
+        },
         visible = visible,
         state = state,
         title = "ByWave Calendar",

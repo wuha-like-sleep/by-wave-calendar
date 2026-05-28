@@ -239,7 +239,7 @@ private fun AccountSection(
         InfoRow("设备 ID", profile.deviceId, mono = true)
     }
 
-    Spacer(Modifier.height(20.dp))
+    Spacer(Modifier.height(32.dp))
     SectionTitle("账号管理")
     Text(
         "切换 / 添加 / 移除 ByWave 服务器。每个账号是独立的服务器+用户组合。",
@@ -291,7 +291,7 @@ private fun AccountSection(
         Text("+ 添加服务器")
     }
 
-    Spacer(Modifier.height(28.dp))
+    Spacer(Modifier.height(36.dp))
     SectionTitle("退出当前账号", danger = true)
     Text(
         "退出会保留本地缓存的事件数据。重新登录同一账号可以接着用。",
@@ -390,7 +390,7 @@ private fun SecuritySection(profile: Profile) {
         OpenInWebRow(profile = profile, next = "/app/logins", title = "登录历史", subtitle = "最近 100 条登录记录")
     }
 
-    Spacer(Modifier.height(20.dp))
+    Spacer(Modifier.height(32.dp))
     SectionTitle("危险操作", danger = true)
     SectionCard(danger = true) {
         OpenInWebRow(profile = profile, next = "/app/settings#danger", title = "删除账号", subtitle = "永久删除，请谨慎", danger = true)
@@ -442,7 +442,7 @@ private fun AppearanceSection(profile: Profile) {
         }
     }
 
-    Spacer(Modifier.height(28.dp))
+    Spacer(Modifier.height(36.dp))
 
     // -- Theme / palette (web deep-link)
     SectionTitle(t("settings.appearance.title"))
@@ -505,13 +505,17 @@ private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
 
 @Composable
 private fun SectionTitle(text: String, danger: Boolean = false) {
+    // v0.7.6: bumped fontSize 17→18 and lineHeight 24→26 and bottom
+    // padding 12→16 — user feedback was that Settings text looked
+    // cramped, especially with Chinese characters where the default
+    // tight Compose lineHeight cuts decorations close to ascenders.
     Text(
         text,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 24.sp,
+        fontSize = 18.sp,
+        lineHeight = 26.sp,
         color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(bottom = 12.dp),
+        modifier = Modifier.padding(bottom = 16.dp),
     )
 }
 
@@ -525,7 +529,11 @@ private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+        // v0.7.6: bumped padding horizontal 18→20, vertical 14→18 so
+        // rows inside the card don't hug the edges. Combined with the
+        // bumped InfoRow vertical-10→14 below this gives breathing room
+        // between adjacent rows without an explicit Divider every time.
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp)) {
             content()
         }
     }
@@ -533,21 +541,26 @@ private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit
 
 @Composable
 private fun InfoRow(label: String, value: String, mono: Boolean = false) {
+    // v0.7.6: vertical padding 10→14, label width 110→120 (Chinese
+    // 「显示名」barely fit before).
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 10.dp),
+            .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(110.dp),
+            modifier = Modifier.width(120.dp),
         )
         Text(
             value,
             modifier = Modifier.weight(1f),
+            // Wider lineHeight so wrapped URLs don't pile on top of
+            // each other.
+            lineHeight = 22.sp,
             fontFamily = if (mono) androidx.compose.ui.text.font.FontFamily.Monospace else null,
         )
     }

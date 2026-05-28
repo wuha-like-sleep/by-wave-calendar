@@ -79,35 +79,81 @@ object UpdateChecker {
         }
     }
 
-    /** Hit /api/app/desktop/latest and compare versionCode. Throttled
-     *  to once per 6 hours; pass force=true to override (e.g. user
-     *  clicked "check for updates" in settings). */
+    /** Stable GitHub raw URL for the canonical manifest. Used as a
+     *  fallback when the user's server endpoint fails or returns no
+     *  newer version. Without this, a user whose server hasn't been
+     *  re-deployed lately (or whose proxy / TLS chain is misbehaving)
+     *  has no path to an update — they'd have to manually visit the
+     *  GitHub Releases page. v0.7.6+ silently falls through here.
+     *
+     *  Gitee mirror is a future-friendly option for users behind GFW;
+     *  for now GitHub's raw.githubusercontent.com is reliable enough. */
+    private const val GITHUB_MANIFEST_URL =
+        "https://raw.githubusercontent.com/wuha-like-sleep/by-wave-calendar/main/apps/desktop/releases/latest.json"
+
+    /** Hit /api/app/desktop/latest and compare versionCode. If the
+     *  user's server check fails OR returns a versionCode that's not
+     *  newer than the running build, ALSO try the canonical GitHub raw
+     *  manifest as a fallback. Throttled to once per 6 hours; pass
+     *  force=true to override (e.g. user clicked "check for updates"
+     *  in settings). */
     suspend fun check(serverUrl: String, force: Boolean = false) {
         val now = System.currentTimeMillis()
         if (!force && now - lastCheckAt < THROTTLE_MS) return
         lastCheckAt = now
 
-        val base = serverUrl.trimEnd('/')
-        val resp = try {
-            client.get("$base/api/app/desktop/latest")
-        } catch (e: Exception) {
-            // Network blip; try again next launch. Don't surface to
-            // the user — the updater is a background nicety, not a
-            // critical path.
+        // 1) Primary: user's own ByWave server.
+        val fromServer = fetchManifest("${serverUrl.trimEnd('/')}/api/app/desktop/latest", "server")
+        if (fromServer != null && fromServer.versionCode > BuildInfo.VERSION_CODE) {
+            _available.value = fromServer
+            System.err.println("[ByWave Updater] update found via server: v${fromServer.versionName} (code ${fromServer.versionCode})")
             return
+        }
+
+        // 2) Fallback: GitHub raw manifest. We try this on EVERY check
+        //    (not just when server returns nothing) because a stale
+        //    server can hand back an older manifest and lock users out
+        //    of newer releases. The fallback is well-behaved when the
+        //    user is offline — fetchManifest returns null silently.
+        val fromGithub = fetchManifest(GITHUB_MANIFEST_URL, "github")
+        if (fromGithub != null && fromGithub.versionCode > BuildInfo.VERSION_CODE) {
+            _available.value = fromGithub
+            System.err.println("[ByWave Updater] update found via github fallback: v${fromGithub.versionName} (code ${fromGithub.versionCode})")
+            return
+        }
+
+        // No newer version anywhere — clear whatever was previously
+        // surfaced (e.g. a stale "0.7.3 → 0.7.4" prompt when the user
+        // is now running 0.7.4).
+        _available.value = null
+        System.err.println("[ByWave Updater] up to date — server returned ${fromServer?.versionCode ?: "null"}, github returned ${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}")
+    }
+
+    /** Fetch + parse manifest from one source. Returns null on network
+     *  error / non-2xx / JSON parse fail. Logs the failure reason for
+     *  debugging (visible in Console.app on macOS, stderr elsewhere). */
+    private suspend fun fetchManifest(url: String, sourceTag: String): DesktopUpdateInfo? {
+        val resp = try {
+            client.get(url)
+        } catch (e: Exception) {
+            System.err.println("[ByWave Updater] $sourceTag fetch failed: ${e::class.simpleName}: ${e.message}")
+            return null
         }
         if (resp.status == HttpStatusCode.NotFound) {
-            // Server hasn't published a release yet — totally fine,
-            // just means there's nothing newer to offer.
-            _available.value = null
-            return
+            // 404 is a legitimate "no release yet" answer from the
+            // user's server. We don't log it (would spam stderr on
+            // every check) but still try the next source.
+            return null
         }
-        if (!resp.status.isSuccess()) return
-        val info: DesktopUpdateInfo = try { resp.body() } catch (_: Exception) { return }
-        if (info.versionCode > BuildInfo.VERSION_CODE) {
-            _available.value = info
-        } else {
-            _available.value = null
+        if (!resp.status.isSuccess()) {
+            System.err.println("[ByWave Updater] $sourceTag returned ${resp.status}")
+            return null
+        }
+        return try {
+            resp.body<DesktopUpdateInfo>()
+        } catch (e: Exception) {
+            System.err.println("[ByWave Updater] $sourceTag JSON parse failed: ${e::class.simpleName}: ${e.message}")
+            null
         }
     }
 
