@@ -713,6 +713,13 @@ const CSRF_EXEMPT_PATHS = new Set([
   "/api/v1/devices/pair-claim",
   "/api/v1/auth/login-password",
   "/api/v1/auth/refresh",
+  // Desktop scan-login pair flow — first call is anonymous (the
+  // desktop has no account yet, the QR code IS the proof of
+  // authorization once the phone scans + approves). Status polling
+  // is GET so it's already exempt; approve is POST but goes via
+  // Bearer (matched by the Bearer check below), so only init needs
+  // an explicit entry here.
+  "/api/v1/devices/desktop-pair-init",
   // CSP violation reports are POSTed by the browser itself with no
   // cookies (per spec credentials are omitted). No session = no CSRF
   // surface; the endpoint just logs the report and returns 204.
