@@ -342,7 +342,15 @@ private fun EventChip(
     val eLocal: LocalDateTime = e.toLocalDateTime()
 
     val startMin = sLocal.hour * 60 + sLocal.minute
-    val durMin = ((eLocal.hour * 60 + eLocal.minute) - startMin).coerceAtLeast(15)
+    // When event spans past midnight into the next day, eLocal is on
+    // day+1 (typically 00:00 next day after dayEnd clipping). Naive
+    // `(eLocal.hour*60+eLocal.minute) - startMin` would give a huge
+    // negative number → coerceAtLeast(15) collapses the chip to 15min.
+    // Real fix: detect day overflow and use end-of-day (1440 min) as
+    // the effective end. Events fully inside today: same-day math.
+    val endMin = if (eLocal.toLocalDate().isAfter(day)) 24 * 60
+                 else eLocal.hour * 60 + eLocal.minute
+    val durMin = (endMin - startMin).coerceAtLeast(15)
     val y = HOUR_HEIGHT * (startMin / 60f)
     // Visual chip must be tall enough to render at least one line of
     // text. 15-min events compute to 12dp height; after 6dp vertical
