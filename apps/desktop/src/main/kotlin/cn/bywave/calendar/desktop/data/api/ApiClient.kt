@@ -22,6 +22,9 @@ package cn.bywave.calendar.desktop.data.api
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
+import cn.bywave.calendar.desktop.data.model.EventCreateInput
+import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.EventsResponse
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
@@ -32,8 +35,10 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -130,7 +135,54 @@ class ApiClient(val serverUrl: String) {
         }
     }
 
+    /** POST /api/v1/events — create a new event. */
+    suspend fun createEvent(body: EventCreateInput): EventDTO {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/events",
+            body = body,
+            bodySerializer = EventCreateInput.serializer(),
+            respSerializer = EventDTO.serializer(),
+        )
+    }
+
+    /** PATCH /api/v1/events/{id} — update an existing event. For recurring
+     *  events the body's `scope` + `recurrenceId` fields disambiguate
+     *  which occurrence(s) the edit applies to. */
+    suspend fun updateEvent(id: String, body: EventUpdateInput): EventDTO {
+        return withBodyAuthed(
+            method = HttpMethod.PATCH,
+            path = "/api/v1/events/$id",
+            body = body,
+            bodySerializer = EventUpdateInput.serializer(),
+            respSerializer = EventDTO.serializer(),
+        )
+    }
+
+    /** DELETE /api/v1/events/{id}?scope=...&recurrenceId=... — delete an
+     *  event. For recurring events the caller MUST pass an explicit
+     *  scope; absence makes the server default to "series" (silent
+     *  data loss for the user who only meant "this occurrence"). */
+    suspend fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            client.delete("$baseUrl/api/v1/events/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                if (scope != null) parameter("scope", scope)
+                if (recurrenceId != null) parameter("recurrenceId", recurrenceId)
+            }
+        }
+        // Server returns 204 No Content on success; envelope unwrap on
+        // an empty body would fail, so handle DELETE separately.
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "delete failed: ${resp.status} $body")
+        }
+    }
+
     // ---- Internals ----
+
+    private enum class HttpMethod { POST, PATCH }
 
     /** Authenticated GET with envelope unwrap + automatic refresh-on-401. */
     private suspend fun <T> getAuthed(
@@ -138,23 +190,55 @@ class ApiClient(val serverUrl: String) {
         serializer: KSerializer<T>,
         configure: HttpRequestBuilder.() -> Unit = {},
     ): T {
-        suspend fun attempt(): HttpResponse {
+        val resp = withRefresh {
             val token = ProfileStore.accessToken()
-            return client.get("$baseUrl$path") {
+            client.get("$baseUrl$path") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
                 configure()
             }
         }
-
-        var resp = attempt()
-        if (resp.status == HttpStatusCode.Unauthorized) {
-            // Drop the body to free the connection BEFORE we kick off
-            // refresh — Ktor's CIO engine pools connections aggressively
-            // and an unread 401 body can pin a connection.
-            runCatching { resp.bodyAsText() }
-            if (tryRefresh()) resp = attempt()
-        }
         return unwrap(resp, serializer)
+    }
+
+    /** Authenticated POST or PATCH with a JSON body. Envelope-unwraps the
+     *  response. Shared by createEvent / updateEvent so they don't repeat
+     *  the refresh-on-401 dance. */
+    private suspend fun <B, R> withBodyAuthed(
+        method: HttpMethod,
+        path: String,
+        body: B,
+        bodySerializer: KSerializer<B>,
+        respSerializer: KSerializer<R>,
+    ): R {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            val jsonBody = jsonCfg.encodeToString(bodySerializer, body)
+            val builder: HttpRequestBuilder.() -> Unit = {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+            when (method) {
+                HttpMethod.POST -> client.post("$baseUrl$path", builder)
+                HttpMethod.PATCH -> client.patch("$baseUrl$path", builder)
+            }
+        }
+        return unwrap(resp, respSerializer)
+    }
+
+    /** Run `block` (an HTTP call), and if it returns 401, refresh and
+     *  retry once. Centralizes the auth-retry pattern so each verb
+     *  doesn't reimplement it. */
+    private suspend fun withRefresh(block: suspend () -> HttpResponse): HttpResponse {
+        var resp = block()
+        if (resp.status == HttpStatusCode.Unauthorized) {
+            // Drain the body BEFORE kicking off refresh — Ktor's CIO
+            // engine pools connections aggressively and an unread 401
+            // body can pin a connection.
+            runCatching { resp.bodyAsText() }
+            if (tryRefresh()) resp = block()
+        }
+        return resp
     }
 
     /** Single-flight refresh. Returns true on success; saves the new

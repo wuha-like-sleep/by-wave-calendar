@@ -13,7 +13,9 @@ package cn.bywave.calendar.desktop.ui.calendar
 
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,6 +27,32 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/** Which secondary modal/dialog is currently open. At most one. */
+sealed class ActiveSheet {
+    /** Read-only details for an event. */
+    data class Detail(val event: EventDTO) : ActiveSheet()
+    /** Create new event (optionally seeded with a start time). */
+    data class Create(val seedStart: java.time.LocalDateTime? = null) : ActiveSheet()
+    /** Edit an existing event. */
+    data class Edit(val event: EventDTO) : ActiveSheet()
+}
+
+/** When the user pressed "Save" on the edit form of a recurring event,
+ *  we park the pending update here while the scope picker is up. Once
+ *  they pick, we issue the actual PATCH with the chosen scope. */
+data class PendingEdit(
+    val sourceId: String,
+    val sourceStartsAt: String,
+    val body: EventUpdateInput,
+)
+
+/** Same shape for delete — we park the source while the scope picker
+ *  asks for the scope. */
+data class PendingDelete(
+    val sourceId: String,
+    val sourceStartsAt: String,
+)
+
 data class CalendarUiState(
     val mode: ViewMode = ViewMode.Week,
     val anchor: LocalDate = LocalDate.now(),
@@ -32,8 +60,11 @@ data class CalendarUiState(
     val calendars: List<CalendarMeta> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
-    /** Event the user tapped to inspect. Null = no dialog open. */
-    val selectedEvent: EventDTO? = null,
+    val activeSheet: ActiveSheet? = null,
+    val saving: Boolean = false,
+    val formError: String? = null,
+    val pendingScopeEdit: PendingEdit? = null,
+    val pendingScopeDelete: PendingDelete? = null,
 )
 
 class CalendarState(
@@ -104,12 +135,116 @@ class CalendarState(
         load()
     }
 
-    fun openEvent(event: EventDTO) {
-        _ui.value = _ui.value.copy(selectedEvent = event)
+    // ---- Sheet routing ----
+
+    fun openDetail(event: EventDTO) {
+        _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(event), formError = null)
     }
 
-    fun closeEvent() {
-        _ui.value = _ui.value.copy(selectedEvent = null)
+    fun openCreate(seedStart: java.time.LocalDateTime? = null) {
+        _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Create(seedStart), formError = null)
+    }
+
+    fun openEdit(event: EventDTO) {
+        _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Edit(event), formError = null)
+    }
+
+    fun closeSheet() {
+        _ui.value = _ui.value.copy(activeSheet = null, formError = null)
+    }
+
+    // ---- Create / update / delete ----
+
+    /** Create a new event. Closes the sheet + reloads on success. */
+    fun create(body: EventCreateInput) {
+        scope.launch {
+            _ui.value = _ui.value.copy(saving = true, formError = null)
+            try {
+                client.createEvent(body)
+                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                load()
+            } catch (e: Exception) {
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "保存失败")
+            }
+        }
+    }
+
+    /** Update an event. If `sourceRrule` is non-null we park the update
+     *  and open the scope picker; the caller resumes via [resolveScopeEdit]. */
+    fun update(
+        sourceId: String,
+        sourceRrule: String?,
+        sourceStartsAt: String,
+        body: EventUpdateInput,
+    ) {
+        if (sourceRrule != null) {
+            _ui.value = _ui.value.copy(
+                pendingScopeEdit = PendingEdit(sourceId, sourceStartsAt, body),
+            )
+            return
+        }
+        sendUpdate(sourceId, body)
+    }
+
+    /** Scope picker callback for edits. scope=null means "user cancelled". */
+    fun resolveScopeEdit(scope: String?) {
+        val pending = _ui.value.pendingScopeEdit ?: return
+        _ui.value = _ui.value.copy(pendingScopeEdit = null)
+        if (scope == null) return
+        val body = pending.body.copy(
+            scope = scope,
+            recurrenceId = if (scope == "series") null else pending.sourceStartsAt,
+        )
+        sendUpdate(pending.sourceId, body)
+    }
+
+    private fun sendUpdate(sourceId: String, body: EventUpdateInput) {
+        scope.launch {
+            _ui.value = _ui.value.copy(saving = true, formError = null)
+            try {
+                client.updateEvent(sourceId, body)
+                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                load()
+            } catch (e: Exception) {
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "保存失败")
+            }
+        }
+    }
+
+    /** Initiate delete. For recurring events we open the scope picker;
+     *  for non-recurring we delete immediately. */
+    fun delete(event: EventDTO) {
+        if (event.rrule != null) {
+            _ui.value = _ui.value.copy(
+                pendingScopeDelete = PendingDelete(event.id, event.startsAt),
+            )
+            return
+        }
+        sendDelete(event.id, scope = null, recurrenceId = null)
+    }
+
+    fun resolveScopeDelete(scope: String?) {
+        val pending = _ui.value.pendingScopeDelete ?: return
+        _ui.value = _ui.value.copy(pendingScopeDelete = null)
+        if (scope == null) return
+        sendDelete(
+            id = pending.sourceId,
+            scope = scope,
+            recurrenceId = if (scope == "series") null else pending.sourceStartsAt,
+        )
+    }
+
+    private fun sendDelete(id: String, scope: String?, recurrenceId: String?) {
+        this.scope.launch {
+            _ui.value = _ui.value.copy(saving = true, formError = null)
+            try {
+                client.deleteEvent(id, scope, recurrenceId)
+                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                load()
+            } catch (e: Exception) {
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "删除失败")
+            }
+        }
     }
 
     private fun step(mode: ViewMode, from: LocalDate, forward: Boolean): LocalDate {

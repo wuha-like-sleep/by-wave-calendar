@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
@@ -35,6 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.ui.calendar.ActiveSheet
 import cn.bywave.calendar.desktop.ui.calendar.CalendarState
 import cn.bywave.calendar.desktop.ui.calendar.DayView
 import cn.bywave.calendar.desktop.ui.calendar.MonthView
@@ -65,6 +68,10 @@ import cn.bywave.calendar.desktop.ui.calendar.formatWeekAnchor
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import cn.bywave.calendar.desktop.ui.calendar.startOfWeek
 import cn.bywave.calendar.desktop.ui.event.EventDetailDialog
+import cn.bywave.calendar.desktop.ui.event.EventEditDialog
+import cn.bywave.calendar.desktop.ui.event.EventEditMode
+import cn.bywave.calendar.desktop.ui.event.RecurringAction
+import cn.bywave.calendar.desktop.ui.event.RecurringScopePicker
 
 @Composable
 fun MainScreen(
@@ -99,6 +106,7 @@ fun MainScreen(
             onToday = { state.today() },
             onNext = { state.next() },
             onRefresh = { state.load() },
+            onNew = { state.openCreate() },
             onSignOut = {
                 ProfileStore.clear()
                 onSignedOut()
@@ -119,20 +127,20 @@ fun MainScreen(
                         anchor = ui.anchor,
                         events = ui.events,
                         calendars = ui.calendars,
-                        onEventClick = { state.openEvent(it) },
+                        onEventClick = { state.openDetail(it) },
                     )
                     ViewMode.Week -> WeekView(
                         weekStart = startOfWeek(ui.anchor),
                         events = ui.events,
                         calendars = ui.calendars,
-                        onEventClick = { state.openEvent(it) },
+                        onEventClick = { state.openDetail(it) },
                     )
                     ViewMode.Month -> MonthView(
                         anchor = ui.anchor,
                         events = ui.events,
                         calendars = ui.calendars,
                         onDayClick = { state.jumpToDay(it) },
-                        onEventClick = { state.openEvent(it) },
+                        onEventClick = { state.openDetail(it) },
                     )
                 }
                 if (ui.error != null) {
@@ -142,11 +150,57 @@ fun MainScreen(
         }
     }
 
-    ui.selectedEvent?.let { ev ->
-        EventDetailDialog(
-            event = ev,
+    // ---- Sheets / dialogs ----
+    when (val sheet = ui.activeSheet) {
+        is ActiveSheet.Detail -> EventDetailDialog(
+            event = sheet.event,
             calendars = ui.calendars,
-            onDismiss = { state.closeEvent() },
+            onDismiss = { state.closeSheet() },
+            onEdit = { state.openEdit(it) },
+            onDelete = { ev ->
+                state.closeSheet()
+                state.delete(ev)
+            },
+        )
+        is ActiveSheet.Create -> EventEditDialog(
+            mode = EventEditMode.Create(sheet.seedStart),
+            calendars = ui.calendars,
+            saving = ui.saving,
+            errorMessage = ui.formError,
+            onSave = { _, _, _, _, create, _ ->
+                if (create != null) state.create(create)
+            },
+            onDismiss = { state.closeSheet() },
+        )
+        is ActiveSheet.Edit -> EventEditDialog(
+            mode = EventEditMode.Edit(sheet.event),
+            calendars = ui.calendars,
+            saving = ui.saving,
+            errorMessage = ui.formError,
+            onSave = { _, sourceId, sourceRrule, sourceStartsAt, _, update ->
+                if (update != null && sourceId != null && sourceStartsAt != null) {
+                    state.update(sourceId, sourceRrule, sourceStartsAt, update)
+                }
+            },
+            onDismiss = { state.closeSheet() },
+        )
+        null -> Unit
+    }
+
+    // Scope picker for recurring edits
+    if (ui.pendingScopeEdit != null) {
+        RecurringScopePicker(
+            action = RecurringAction.Edit,
+            onPick = { state.resolveScopeEdit(it.wire) },
+            onDismiss = { state.resolveScopeEdit(null) },
+        )
+    }
+    // Scope picker for recurring deletes
+    if (ui.pendingScopeDelete != null) {
+        RecurringScopePicker(
+            action = RecurringAction.Delete,
+            onPick = { state.resolveScopeDelete(it.wire) },
+            onDismiss = { state.resolveScopeDelete(null) },
         )
     }
 }
@@ -167,6 +221,7 @@ private fun TopBar(
     onToday: () -> Unit,
     onNext: () -> Unit,
     onRefresh: () -> Unit,
+    onNew: () -> Unit,
     onSignOut: () -> Unit,
 ) {
     Row(
@@ -217,6 +272,12 @@ private fun TopBar(
             )
             Spacer(Modifier.width(8.dp))
         }
+        Button(onClick = onNew) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("新建")
+        }
+        Spacer(Modifier.width(4.dp))
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.Refresh, contentDescription = "刷新")
         }

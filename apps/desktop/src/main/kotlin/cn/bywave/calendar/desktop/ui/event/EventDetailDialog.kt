@@ -45,6 +45,8 @@ fun EventDetailDialog(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
+    onEdit: (EventDTO) -> Unit = {},
+    onDelete: (EventDTO) -> Unit = {},
 ) {
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
@@ -93,8 +95,22 @@ fun EventDetailDialog(
                 }
             }
         },
+        // Three actions in the bottom bar: 编辑 (primary), 删除 (text/error
+        // tint), 关闭 (text). AlertDialog only gives us confirm + dismiss
+        // slots, so we render the primary action on the right and pack
+        // delete/close into dismiss as a single Row.
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = { onEdit(event) }) { Text("编辑") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = { onDelete(event) },
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
         },
     )
 }

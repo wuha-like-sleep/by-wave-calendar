@@ -54,6 +54,46 @@ data class CalendarMeta(
     val description: String? = null,
 )
 
+// ---- Event create / update / delete ----
+
+@Serializable
+data class EventCreateInput(
+    val calendarId: String,
+    val summary: String,
+    val description: String? = null,
+    val location: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+    val allDay: Boolean? = null,
+    val rrule: String? = null,
+    val extra: EventExtra? = null,
+)
+
+@Serializable
+data class EventUpdateInput(
+    val calendarId: String? = null,
+    val summary: String? = null,
+    val description: String? = null,
+    val location: String? = null,
+    val startsAt: String? = null,
+    val endsAt: String? = null,
+    val allDay: Boolean? = null,
+    val rrule: String? = null,
+    val extra: EventExtra? = null,
+    /** "instance" | "future" | "series" | null. Sent as query param on
+     *  PATCH for recurring events to disambiguate scope. */
+    val scope: String? = null,
+    val recurrenceId: String? = null,
+)
+
+@Serializable
+data class EventExtra(
+    val timezone: String? = null,
+    val attendees: List<String>? = null,
+    val category: String? = null,
+    val url: String? = null,
+)
+
 // ---- Auth refresh ----
 
 @Serializable
