@@ -140,6 +140,8 @@ fun MainScreen(
                         onEventEdit = { state.openEdit(it) },
                         onEventDuplicate = { state.openDuplicate(it) },
                         onEventDelete = { state.delete(it) },
+                        onEventMove = { ev, dm, dd -> state.applyMove(ev, dm, dd) },
+                        onEventResize = { ev, dm -> state.applyResize(ev, dm) },
                     )
                     ViewMode.Month -> MonthView(
                         anchor = ui.anchor,

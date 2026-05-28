@@ -17,6 +17,7 @@ package cn.bywave.calendar.desktop.ui.calendar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -49,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,6 +77,11 @@ fun WeekView(
     onEventEdit: (EventDTO) -> Unit = {},
     onEventDuplicate: (EventDTO) -> Unit = {},
     onEventDelete: (EventDTO) -> Unit = {},
+    /** Drag-released: shift event by (deltaMinutes, deltaDays). Caller
+     *  is responsible for the PATCH + scope picker plumbing. */
+    onEventMove: (EventDTO, Int, Int) -> Unit = { _, _, _ -> },
+    /** Bottom-edge drag-released: stretch event end by deltaMinutes. */
+    onEventResize: (EventDTO, Int) -> Unit = { _, _ -> },
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
@@ -130,6 +137,8 @@ fun WeekView(
                                 onEdit = onEventEdit,
                                 onDuplicate = onEventDuplicate,
                                 onDelete = onEventDelete,
+                                onMove = onEventMove,
+                                onResize = onEventResize,
                             )
                         }
                     }
@@ -257,8 +266,17 @@ private fun EventChip(
     onEdit: (EventDTO) -> Unit,
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
+    onMove: (EventDTO, Int, Int) -> Unit,
+    onResize: (EventDTO, Int) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Live drag offsets in px. We keep px because detectDragGestures
+    // gives px deltas — converting to dp every tick is wasteful. We
+    // only round to minutes/days once on drag-end.
+    var dragOffsetX by remember(event.id, event.startsAt) { mutableStateOf(0f) }
+    var dragOffsetY by remember(event.id, event.startsAt) { mutableStateOf(0f) }
+    var resizeOffsetY by remember(event.id, event.startsAt) { mutableStateOf(0f) }
+    val density = LocalDensity.current
     val zone = ZoneId.systemDefault()
     val dayStart = day.atStartOfDay(zone)
     val dayEnd = day.plusDays(1).atStartOfDay(zone)
@@ -279,19 +297,61 @@ private fun EventChip(
     val w = slotWidth - 2.dp
 
     val color = calendarColor(event, calendars)
+    val isDragging = dragOffsetX != 0f || dragOffsetY != 0f
+    val isResizing = resizeOffsetY != 0f
+    val livePxToDp: (Float) -> Dp = { with(density) { it.toDp() } }
+
+    // Drag visualisation: the chip's offset includes the live drag/resize
+    // delta. height too, so a resize stretches it visibly. We don't grid-
+    // snap during the gesture — feels jankier than continuous follow.
+    val liveX = x + livePxToDp(dragOffsetX)
+    val liveY = y + livePxToDp(dragOffsetY)
+    val liveH = (h + livePxToDp(resizeOffsetY)).coerceAtLeast(12.dp)
 
     Box(
         modifier = Modifier
-            .offset(x = x, y = y)
+            .offset(x = liveX, y = liveY)
             .width(w)
-            .height(h)
+            .height(liveH)
             .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.95f))
+            .background(color.copy(alpha = if (isDragging || isResizing) 0.7f else 0.95f))
             .onClick(
                 matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
                 onClick = { menuOpen = true },
             )
             .clickable(onClick = onClick)
+            // Primary-button drag moves the event. Compose's
+            // detectDragGestures has a touch-slop on the first move
+            // (~3dp) so a plain click doesn't trigger it — both
+            // gestures coexist cleanly.
+            .pointerInput(event.id, event.startsAt) {
+                detectDragGestures(
+                    onDrag = { _, drag ->
+                        dragOffsetX += drag.x
+                        dragOffsetY += drag.y
+                    },
+                    onDragEnd = {
+                        val hourPx = with(density) { HOUR_HEIGHT.toPx() }
+                        val colPx = with(density) { columnWidth.toPx() }
+                        // Snap minute delta to 15-min grid.
+                        val rawMin = (dragOffsetY / hourPx) * 60f
+                        val minuteDelta = ((rawMin / 15f).toInt()) * 15
+                        // Day delta: round to nearest whole column.
+                        val dayDelta = (dragOffsetX / colPx)
+                            .let { if (it >= 0f) (it + 0.5f).toInt() else (it - 0.5f).toInt() }
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                        // Ignore micro-drags (< ~5 minutes, same day) so a
+                        // missed click doesn't quietly nudge time.
+                        if (kotlin.math.abs(minuteDelta) < 5 && dayDelta == 0) return@detectDragGestures
+                        onMove(event, minuteDelta, dayDelta)
+                    },
+                    onDragCancel = {
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                    },
+                )
+            }
             .padding(horizontal = 5.dp, vertical = 3.dp),
     ) {
         Text(
@@ -310,6 +370,34 @@ private fun EventChip(
             onEdit = onEdit,
             onDuplicate = onDuplicate,
             onDelete = onDelete,
+        )
+    }
+
+    // Bottom-edge resize handle — a thin strip across the chip's
+    // bottom that picks up vertical drags. We render it in a sibling
+    // Box positioned at the chip's bottom edge so its pointerInput
+    // doesn't fight the chip's drag handler. Only shown when the chip
+    // is tall enough to host it comfortably.
+    if (liveH > 24.dp) {
+        Box(
+            modifier = Modifier
+                .offset(x = liveX, y = liveY + liveH - 6.dp)
+                .width(w)
+                .height(8.dp)
+                .pointerInput(event.id, event.startsAt) {
+                    detectDragGestures(
+                        onDrag = { _, drag -> resizeOffsetY += drag.y },
+                        onDragEnd = {
+                            val hourPx = with(density) { HOUR_HEIGHT.toPx() }
+                            val rawMin = (resizeOffsetY / hourPx) * 60f
+                            val minuteDelta = ((rawMin / 15f).toInt()) * 15
+                            resizeOffsetY = 0f
+                            if (kotlin.math.abs(minuteDelta) < 5) return@detectDragGestures
+                            onResize(event, minuteDelta)
+                        },
+                        onDragCancel = { resizeOffsetY = 0f },
+                    )
+                },
         )
     }
 }

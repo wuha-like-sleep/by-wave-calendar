@@ -240,6 +240,48 @@ class CalendarState(
         )
     }
 
+    /** Drag-released: shift an event by `deltaMinutes` (in time) and
+     *  `deltaDays` (across columns) and PATCH startsAt/endsAt. The
+     *  delta is what the WeekView already snapped to 15-minute boundaries
+     *  + whole-day columns, so we don't need to re-snap here.
+     *
+     *  Recurring events reuse the existing scope-picker flow via
+     *  [update] — pickerless edits would silently rewrite the whole
+     *  series, the same data-loss bug we already fix for save+delete. */
+    fun applyMove(event: EventDTO, deltaMinutes: Int, deltaDays: Int) {
+        if (deltaMinutes == 0 && deltaDays == 0) return
+        val origStart = runCatching { java.time.Instant.parse(event.startsAt) }.getOrNull() ?: return
+        val origEnd = runCatching { java.time.Instant.parse(event.endsAt) }.getOrNull() ?: return
+        val totalMin = deltaMinutes.toLong() + deltaDays.toLong() * 24L * 60L
+        val newStart = origStart.plus(totalMin, java.time.temporal.ChronoUnit.MINUTES)
+        val newEnd = origEnd.plus(totalMin, java.time.temporal.ChronoUnit.MINUTES)
+        val zone = ZoneId.systemDefault()
+        val iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val body = cn.bywave.calendar.desktop.data.model.EventUpdateInput(
+            startsAt = iso.format(newStart.atZone(zone)),
+            endsAt = iso.format(newEnd.atZone(zone)),
+        )
+        update(event.id, event.rrule, event.startsAt, body)
+    }
+
+    /** Drag-released on the bottom-edge resize handle: stretch the
+     *  event to end at a new time, keeping start unchanged. */
+    fun applyResize(event: EventDTO, deltaMinutes: Int) {
+        if (deltaMinutes == 0) return
+        val origStart = runCatching { java.time.Instant.parse(event.startsAt) }.getOrNull() ?: return
+        val origEnd = runCatching { java.time.Instant.parse(event.endsAt) }.getOrNull() ?: return
+        // Clamp: end must stay at least 15 min after start.
+        val candidate = origEnd.plus(deltaMinutes.toLong(), java.time.temporal.ChronoUnit.MINUTES)
+        val minEnd = origStart.plus(15L, java.time.temporal.ChronoUnit.MINUTES)
+        val finalEnd = if (candidate.isBefore(minEnd)) minEnd else candidate
+        val zone = ZoneId.systemDefault()
+        val iso = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val body = cn.bywave.calendar.desktop.data.model.EventUpdateInput(
+            endsAt = iso.format(finalEnd.atZone(zone)),
+        )
+        update(event.id, event.rrule, event.startsAt, body)
+    }
+
     private fun sendDelete(id: String, scope: String?, recurrenceId: String?) {
         this.scope.launch {
             _ui.value = _ui.value.copy(saving = true, formError = null)
