@@ -34,6 +34,48 @@
   </div>
 </section>
 
+<!-- ============ 更新源选择 ============ -->
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-4">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+    <div>
+      <h2 class="text-base font-semibold text-slate-900">更新源</h2>
+      <p class="text-xs text-slate-500 mt-0.5">国内访问 GitHub 慢可以切到 Gitee 镜像</p>
+    </div>
+    <% if (!hasGitee) { %>
+      <button type="button" id="btn-add-gitee"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        添加 Gitee 镜像
+      </button>
+    <% } %>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="remote-selector">
+    <% remotes.forEach(function (r, idx) { %>
+      <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-2.5 cursor-pointer hover:bg-slate-50 has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/40">
+        <input type="radio" name="remote" value="<%= r.name %>" <% if (r.name === remote) { %>checked<% } %>
+               class="mt-0.5 accent-brand-600"/>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-sm font-semibold text-slate-900"><%= r.name %></span>
+            <% if (r.name === "origin") { %>
+              <span class="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded">GitHub</span>
+            <% } else if (r.name === "gitee") { %>
+              <span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded">Gitee · 国内快</span>
+            <% } %>
+          </div>
+          <code class="text-[11px] text-slate-500 break-all"><%= r.url %></code>
+        </div>
+      </label>
+    <% }); %>
+    <% if (!remotes.length) { %>
+      <div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+        没有检测到任何 git remote。请先 ssh 到服务器执行 `git remote add origin &lt;url&gt;`。
+      </div>
+    <% } %>
+  </div>
+</section>
+
 <!-- ============ 主要操作：检查 + 更新 ============ -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -168,15 +210,54 @@
     setInterval(() => { secs++; render(); }, 1000);
   })();
 
-  async function postJson(url) {
+  // Read the currently-selected remote from the radio group. Falls back
+  // to whatever the server picked (UPDATE_REMOTE env or "origin") if no
+  // selection — shouldn't happen because we always preselect, but
+  // defensive against the user un-checking everything.
+  function selectedRemote() {
+    const r = document.querySelector('input[name="remote"]:checked');
+    return r ? r.value : '';
+  }
+
+  async function postJson(url, extra) {
     const fd = new URLSearchParams();
     fd.set('_csrf', csrf);
+    const remote = selectedRemote();
+    if (remote) fd.set('remote', remote);
+    if (extra) for (const [k, v] of Object.entries(extra)) fd.set(k, v);
     const resp = await fetch(url, {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: fd.toString(),
     });
     return resp.json();
+  }
+
+  // "添加 Gitee 镜像" button — calls /admin/update/add-remote with
+  // name=gitee, server fills in the default Gitee URL.
+  const addGiteeBtn = document.getElementById('btn-add-gitee');
+  if (addGiteeBtn) {
+    addGiteeBtn.addEventListener('click', async () => {
+      addGiteeBtn.disabled = true;
+      addGiteeBtn.textContent = '添加中…';
+      try {
+        const r = await postJson('/admin/update/add-remote', { name: 'gitee' });
+        if (r.ok) {
+          // Reload so the remote list + radio group repopulate from the
+          // server-rendered template (don't try to insert it in place —
+          // the EJS surface is the source of truth).
+          window.location.reload();
+        } else {
+          alert('添加失败：' + (r.error || '未知错误'));
+          addGiteeBtn.disabled = false;
+          addGiteeBtn.textContent = '添加 Gitee 镜像';
+        }
+      } catch (e) {
+        alert('添加失败：' + (e?.message || e));
+        addGiteeBtn.disabled = false;
+        addGiteeBtn.textContent = '添加 Gitee 镜像';
+      }
+    });
   }
 
   async function autoRestartAndReload() {
@@ -310,6 +391,10 @@
     try {
       const fd = new URLSearchParams();
       fd.set('_csrf', csrf);
+      // Thread the selected remote (radio) into the body too so apply
+      // pulls from the same source as the most recent check.
+      const remote = selectedRemote();
+      if (remote) fd.set('remote', remote);
       const resp = await fetch('/admin/update/apply-stream', {
         method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },

@@ -17,7 +17,7 @@ import {
   verificationCodeMail,
   welcomeMail,
 } from "../lib/email_templates.js";
-import { applyUpdate, applyUpdateStream, checkForUpdates, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
+import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/api_token.js";
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
@@ -870,6 +870,7 @@ export async function adminRoutes(app: FastifyInstance) {
       const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
       pkgVersion = pkg.version || "0.0.0";
     } catch { /* fallthrough */ }
+    const remotes = await listRemotes();
     return reply.view("admin/update", {
       title: "系统更新",
       user,
@@ -877,6 +878,8 @@ export async function adminRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       activeNav: "/admin/update",
       remote: pickRemote(),
+      remotes,
+      hasGitee: remotes.some((r) => r.name === "gitee"),
       branch: pickBranch(),
       pm2Name: process.env.PM2_PROCESS_NAME || "by-wave-calendar",
       pkgVersion,
@@ -885,16 +888,56 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
+  // Accept an optional `remote` body field on check + apply so the UI
+  // can let admins pick GitHub origin vs Gitee mirror per-update. We
+  // restrict to remotes that actually exist in the working tree so a
+  // malicious admin can't smuggle in arbitrary URLs via this surface.
+  async function resolveRemoteParam(req: FastifyRequest): Promise<string> {
+    const want = String((req.body as { remote?: string } | undefined)?.remote || "").trim();
+    if (!want) return pickRemote();
+    const all = await listRemotes();
+    if (!all.some((r) => r.name === want)) return pickRemote();
+    return want;
+  }
+
   app.post("/admin/update/check", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     try {
-      const status = await checkForUpdates();
+      const status = await checkForUpdates(await resolveRemoteParam(req));
       return reply.send({ ok: true, status });
     } catch (err) {
       return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
     }
+  });
+
+  // Add (or update URL of) a remote. The UI calls this with `name=gitee`
+  // when the server doesn't yet have a `gitee` remote configured —
+  // server uses the maintained default URL from self_update.ts. Custom
+  // URLs are accepted too but locked down to https?:// schemes so we
+  // can't be tricked into adding a `file://` remote that escapes the
+  // working tree.
+  app.post<{ Body: { name?: string; url?: string } }>("/admin/update/add-remote", {
+    config: { rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const name = String(req.body?.name || "").trim();
+    const url = String(req.body?.url || "").trim();
+    if (!/^[a-zA-Z0-9_-]{1,32}$/.test(name)) {
+      return reply.code(400).send({ ok: false, error: "remote 名称不合法（只允许字母/数字/-/_，1-32 字符）" });
+    }
+    if (url && !/^https?:\/\//i.test(url)) {
+      return reply.code(400).send({ ok: false, error: "URL 必须以 http(s):// 开头" });
+    }
+    const result = await addRemote(name, url || undefined);
+    if (!result.ok) {
+      return reply.code(500).send({ ok: false, error: result.error || "git remote 操作失败" });
+    }
+    await audit(req, user.id, "update.add_remote", { details: { name, url: result.url } });
+    return reply.send({ ok: true, name, url: result.url });
   });
 
   // In-memory lock: prevents two admin clicks from running concurrent
@@ -914,10 +957,11 @@ export async function adminRoutes(app: FastifyInstance) {
       return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 于 ${updateInFlight.startedAt.toISOString()} 启动）` });
     }
     updateInFlight = { startedAt: new Date(), actorEmail: user.email };
-    await audit(req, user.id, "update.apply_start");
+    const remote = await resolveRemoteParam(req);
+    await audit(req, user.id, "update.apply_start", { details: { remote } });
     try {
-      const result = await applyUpdate();
-      await audit(req, user.id, "update.apply_done", { details: { ok: result.ok, steps: result.logs.length } });
+      const result = await applyUpdate(remote);
+      await audit(req, user.id, "update.apply_done", { details: { ok: result.ok, steps: result.logs.length, remote } });
       return reply.send(result);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -938,7 +982,8 @@ export async function adminRoutes(app: FastifyInstance) {
       return;
     }
     updateInFlight = { startedAt: new Date(), actorEmail: user.email };
-    await audit(req, user.id, "update.apply_start_stream");
+    const remote = await resolveRemoteParam(req);
+    await audit(req, user.id, "update.apply_start_stream", { details: { remote } });
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-store, must-revalidate",
