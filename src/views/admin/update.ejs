@@ -41,13 +41,22 @@
       <h2 class="text-base font-semibold text-slate-900">更新源</h2>
       <p class="text-xs text-slate-500 mt-0.5">国内访问 GitHub 慢可以切到 Gitee 镜像</p>
     </div>
-    <% if (!hasGitee) { %>
-      <button type="button" id="btn-add-gitee"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        添加 Gitee 镜像
-      </button>
-    <% } %>
+    <div class="flex gap-2 flex-wrap">
+      <% if (!hasGithub) { %>
+        <button type="button" id="btn-add-github"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          添加 GitHub
+        </button>
+      <% } %>
+      <% if (!hasGitee) { %>
+        <button type="button" id="btn-add-gitee"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          添加 Gitee 镜像
+        </button>
+      <% } %>
+    </div>
   </div>
 
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="remote-selector">
@@ -58,9 +67,9 @@
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
             <span class="font-mono text-sm font-semibold text-slate-900"><%= r.name %></span>
-            <% if (r.name === "origin") { %>
+            <% if (r.url.includes("github.com")) { %>
               <span class="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded">GitHub</span>
-            <% } else if (r.name === "gitee") { %>
+            <% } else if (r.url.includes("gitee.com")) { %>
               <span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded">Gitee · 国内快</span>
             <% } %>
           </div>
@@ -233,32 +242,36 @@
     return resp.json();
   }
 
-  // "添加 Gitee 镜像" button — calls /admin/update/add-remote with
-  // name=gitee, server fills in the default Gitee URL.
-  const addGiteeBtn = document.getElementById('btn-add-gitee');
-  if (addGiteeBtn) {
-    addGiteeBtn.addEventListener('click', async () => {
-      addGiteeBtn.disabled = true;
-      addGiteeBtn.textContent = '添加中…';
+  // Shared handler for "添加 GitHub / Gitee" buttons. The server has
+  // the default URL hard-coded per remote name (see self_update.ts's
+  // DEFAULT_GITHUB_URL / DEFAULT_GITEE_URL); we just send the name.
+  function wireAddRemoteBtn(id, name, label) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      const orig = btn.innerHTML;
+      btn.textContent = '添加中…';
       try {
-        const r = await postJson('/admin/update/add-remote', { name: 'gitee' });
+        const r = await postJson('/admin/update/add-remote', { name });
         if (r.ok) {
-          // Reload so the remote list + radio group repopulate from the
-          // server-rendered template (don't try to insert it in place —
-          // the EJS surface is the source of truth).
+          // Reload so the radio group repopulates from the server-
+          // rendered template — the EJS surface is the source of truth.
           window.location.reload();
         } else {
-          alert('添加失败：' + (r.error || '未知错误'));
-          addGiteeBtn.disabled = false;
-          addGiteeBtn.textContent = '添加 Gitee 镜像';
+          alert(label + '添加失败：' + (r.error || '未知错误'));
+          btn.disabled = false;
+          btn.innerHTML = orig;
         }
       } catch (e) {
-        alert('添加失败：' + (e?.message || e));
-        addGiteeBtn.disabled = false;
-        addGiteeBtn.textContent = '添加 Gitee 镜像';
+        alert(label + '添加失败：' + (e?.message || e));
+        btn.disabled = false;
+        btn.innerHTML = orig;
       }
     });
   }
+  wireAddRemoteBtn('btn-add-github', 'github', 'GitHub');
+  wireAddRemoteBtn('btn-add-gitee', 'gitee', 'Gitee 镜像');
 
   async function autoRestartAndReload() {
     const finalEl = document.getElementById('apply-final');

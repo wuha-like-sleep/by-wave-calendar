@@ -871,6 +871,12 @@ export async function adminRoutes(app: FastifyInstance) {
       pkgVersion = pkg.version || "0.0.0";
     } catch { /* fallthrough */ }
     const remotes = await listRemotes();
+    // Detect by host (not just by remote name) — install.sh from Gitee
+    // leaves the server with `origin` pointing to gitee.com, not github,
+    // so checking `name === "gitee"` would miss it. We want to know
+    // "is there any remote pointing at gitee.com / github.com?".
+    const hasGitee = remotes.some((r) => r.url.includes("gitee.com"));
+    const hasGithub = remotes.some((r) => r.url.includes("github.com"));
     return reply.view("admin/update", {
       title: "系统更新",
       user,
@@ -879,7 +885,8 @@ export async function adminRoutes(app: FastifyInstance) {
       activeNav: "/admin/update",
       remote: pickRemote(),
       remotes,
-      hasGitee: remotes.some((r) => r.name === "gitee"),
+      hasGitee,
+      hasGithub,
       branch: pickBranch(),
       pm2Name: process.env.PM2_PROCESS_NAME || "by-wave-calendar",
       pkgVersion,

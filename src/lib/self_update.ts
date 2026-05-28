@@ -71,16 +71,24 @@ export async function listRemotes(): Promise<RemoteEntry[]> {
   }
 }
 
-// Default URL for the maintained Gitee mirror — admin UI uses this when
-// the server doesn't yet have a `gitee` remote configured and the user
-// clicks "添加 Gitee 镜像". Keep in sync with README's Gitee link.
+// Default URLs for the maintained mirrors — admin UI uses these when
+// the server doesn't yet have the corresponding remote configured and
+// the user clicks "添加 GitHub / Gitee 镜像". Keep in sync with README.
+//
+// Both are checked-out parts of the same source tree; admins can pick
+// whichever is faster from their network. Servers that install.sh from
+// Gitee end up with `origin` pointing at Gitee, so adding the GitHub
+// URL as a separate `github` remote is how they get the choice back.
 const DEFAULT_GITEE_URL = "https://gitee.com/zhaorunsen/by-wave-calendar.git";
+const DEFAULT_GITHUB_URL = "https://github.com/wuha-like-sleep/by-wave-calendar.git";
 
-/** Add a new remote (idempotent: if the name already exists, succeeds
- *  silently). Used by the admin UI's "添加 Gitee 镜像" button so admins
- *  can switch between GitHub + Gitee without SSH-ing in. */
+/** Add a new remote (idempotent: if the name already exists, set-url
+ *  to the new value). Used by the admin UI's "添加 GitHub / Gitee 镜像"
+ *  buttons so admins can switch between sources without SSH-ing in. */
 export async function addRemote(name: string, url?: string): Promise<{ ok: boolean; url: string; error?: string }> {
-  const target = url || (name === "gitee" ? DEFAULT_GITEE_URL : "");
+  const target = url ||
+    (name === "gitee" ? DEFAULT_GITEE_URL :
+     name === "github" ? DEFAULT_GITHUB_URL : "");
   if (!target) return { ok: false, url: "", error: "未提供仓库 URL" };
   try {
     // Idempotent: if remote exists, just set-url. If not, add.
