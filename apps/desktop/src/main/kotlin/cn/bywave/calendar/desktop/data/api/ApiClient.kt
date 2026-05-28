@@ -31,6 +31,8 @@ import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.EventsResponse
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
+import cn.bywave.calendar.desktop.data.model.WebSessionRequest
+import cn.bywave.calendar.desktop.data.model.WebSessionResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -192,6 +194,21 @@ class ApiClient(val serverUrl: String) {
     }
 
     // ---- Attendees ----
+
+    /** POST /api/v1/auth/web-session — mint a 5-minute one-shot token
+     *  that opens a browser tab signed in as the current user. Used by
+     *  the Settings page to deep-link into web pages (修改密码 /
+     *  Passkey / MFA / 删除账号 / 外观偏好) that the desktop UI doesn't
+     *  cover natively. The phone APPs do the same trick. */
+    suspend fun webSession(next: String): WebSessionResponse {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/auth/web-session",
+            body = WebSessionRequest(next = next),
+            bodySerializer = WebSessionRequest.serializer(),
+            respSerializer = WebSessionResponse.serializer(),
+        )
+    }
 
     suspend fun attendees(eventId: String): AttendeesResponse {
         return getAuthed("/api/v1/events/$eventId/attendees", AttendeesResponse.serializer())

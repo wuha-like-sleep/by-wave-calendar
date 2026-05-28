@@ -36,6 +36,9 @@ enum class ShortcutAction {
     /** Force-check for an APP update. Cmd/Ctrl + U. Also surfaced as
      *  a MenuBar item. */
     CheckUpdate,
+    /** Open the Settings page. Cmd/Ctrl + , — same shortcut as macOS
+     *  app settings convention (System Settings, Safari, etc.). */
+    OpenSettings,
 }
 
 object ShortcutBus {
@@ -62,6 +65,7 @@ fun keyEventToShortcut(e: KeyEvent): ShortcutAction? {
         mod && e.key == Key.DirectionLeft -> ShortcutAction.Previous
         mod && e.key == Key.DirectionRight -> ShortcutAction.Next
         mod && e.key == Key.U -> ShortcutAction.CheckUpdate
+        mod && e.key == Key.Comma -> ShortcutAction.OpenSettings
         !mod && e.key == Key.Escape -> ShortcutAction.Escape
         else -> null
     }

@@ -82,6 +82,14 @@ fun main() = application {
             Menu("ByWave Calendar", mnemonic = 'B') {
                 Item("显示窗口", onClick = { visible = true })
                 Item(
+                    "设置…",
+                    onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.OpenSettings) },
+                    shortcut = androidx.compose.ui.input.key.KeyShortcut(
+                        androidx.compose.ui.input.key.Key.Comma,
+                        meta = true,
+                    ),
+                )
+                Item(
                     "检查更新…",
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.CheckUpdate) },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(

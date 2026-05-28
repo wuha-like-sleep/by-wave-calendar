@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -75,6 +76,7 @@ import cn.bywave.calendar.desktop.ui.event.EventEditDialog
 import cn.bywave.calendar.desktop.ui.event.EventEditMode
 import cn.bywave.calendar.desktop.ui.event.RecurringAction
 import cn.bywave.calendar.desktop.ui.event.RecurringScopePicker
+import kotlinx.coroutines.launch
 
 @Composable
 fun MainScreen(
@@ -100,6 +102,10 @@ fun MainScreen(
     }
     val updateInfo by UpdateChecker.available.collectAsState()
     var showUpdateDialog by remember { mutableStateOf(false) }
+    // Settings page visibility. Toggled by the toolbar gear icon, the
+    // Cmd+, shortcut, or the MenuBar item. Esc inside Settings closes
+    // it (the SettingsScreen's own onClose).
+    var showSettings by remember { mutableStateOf(false) }
     // When MenuBar's "检查更新" fires, ShortcutAction.CheckUpdate
     // arrives here; we kick the force-check then auto-pop the dialog
     // if something new was found. forceCheckOutcome lets us show a
@@ -125,7 +131,12 @@ fun MainScreen(
                 ShortcutAction.Today -> s.today()
                 ShortcutAction.Previous -> s.previous()
                 ShortcutAction.Next -> s.next()
-                ShortcutAction.Escape -> s.closeSheet()
+                ShortcutAction.Escape -> {
+                    // Esc precedence: Settings page first, then any
+                    // open sheet/dialog. Settings is a top-level
+                    // overlay so it "owns" the keystroke when visible.
+                    if (showSettings) showSettings = false else s.closeSheet()
+                }
                 ShortcutAction.CheckUpdate -> {
                     val url = p?.serverUrl ?: return@collect
                     UpdateChecker.forceCheck(url)
@@ -135,6 +146,7 @@ fun MainScreen(
                     // give the user feedback via a small dialog.
                     showUpdateDialog = true
                 }
+                ShortcutAction.OpenSettings -> { showSettings = true }
             }
         }
     }
@@ -159,10 +171,11 @@ fun MainScreen(
             onNext = { state.next() },
             onRefresh = { state.load() },
             onNew = { state.openCreate() },
-            // Sign-out removes the active profile. ProfileStore promotes
-            // the next remaining one (or null when the list empties);
-            // Root reacts naturally — no need for an event back up.
-            onSignOut = { ProfileStore.clear() },
+            // Settings page hosts sign-out + all account / security /
+            // appearance / about controls. Previously the toolbar had
+            // its own Logout icon — removed in favor of the Settings
+            // path so a misclick can't drop the active profile.
+            onOpenSettings = { showSettings = true },
         )
         HorizontalDivider()
 
@@ -319,6 +332,38 @@ fun MainScreen(
             },
         )
     }
+
+    // Settings page — rendered as a full-screen overlay on top of the
+    // calendar. Hosts account / calendars / security / appearance /
+    // about. Sign-out, profile switch, and "+ add account" all bubble
+    // back up to the same ProfileStore callbacks the toolbar used to
+    // wire directly.
+    if (showSettings) {
+        SettingsScreen(
+            profile = p,
+            profiles = profiles,
+            calendars = ui.calendars,
+            onClose = { showSettings = false },
+            onSignOut = {
+                showSettings = false
+                ProfileStore.clear()
+            },
+            onSwitchProfile = { id -> ProfileStore.setActive(id) },
+            onRemoveProfile = { id -> ProfileStore.remove(id) },
+            onAddAccount = {
+                showSettings = false
+                onAddAccount()
+            },
+            onCheckUpdate = {
+                val url = p.serverUrl
+                scope.launch { UpdateChecker.forceCheck(url) }
+                // Don't close Settings — the dialog will float on top
+                // when the manifest comes back. If "up to date," the
+                // showUpdateDialog branch shows a slim confirmation.
+                showUpdateDialog = true
+            },
+        )
+    }
 }
 
 private fun anchorLabelFor(mode: ViewMode, anchor: java.time.LocalDate): String = when (mode) {
@@ -338,7 +383,7 @@ private fun TopBar(
     onNext: () -> Unit,
     onRefresh: () -> Unit,
     onNew: () -> Unit,
-    onSignOut: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -397,8 +442,11 @@ private fun TopBar(
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.Refresh, contentDescription = "刷新")
         }
-        IconButton(onClick = onSignOut) {
-            Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "退出登录")
+        // Settings (Cmd+,) — primary entry to the Settings page. Logout
+        // is still accessible there but no longer pollutes the toolbar
+        // (a misclick used to drop the active profile with no confirm).
+        IconButton(onClick = onOpenSettings) {
+            Icon(Icons.Default.Settings, contentDescription = "设置")
         }
     }
 }

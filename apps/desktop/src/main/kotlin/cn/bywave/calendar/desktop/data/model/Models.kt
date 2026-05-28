@@ -165,3 +165,22 @@ data class Profile(
     val deviceId: String,
     val refreshToken: String,
 )
+
+/** POST /api/v1/auth/web-session response. Server mints a 5-minute
+ *  one-shot token; opening the returned URL in a browser plants a web
+ *  session cookie for this user without re-authenticating. Used by the
+ *  desktop Settings page to "open <web page> already signed in" for
+ *  things the desktop UI doesn't (yet) cover natively — change password,
+ *  Passkey enroll, MFA setup, delete account, theme picker. */
+@Serializable
+data class WebSessionResponse(
+    val url: String,
+    val expiresAt: String,
+)
+
+@Serializable
+data class WebSessionRequest(
+    /** Path inside the web app to land on after the token is consumed.
+     *  Must start with /app/ (server enforces; rejects open redirects). */
+    val next: String,
+)
