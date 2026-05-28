@@ -80,6 +80,15 @@ interface BywaveApi {
     @POST("api/v1/devices/desktop-pair-approve")
     suspend fun desktopPairApprove(@Body body: DesktopPairApproveRequest)
 
+    /** Web 扫码登录 counterpart. Phone scans a browser's QR on the /login
+     *  page (encoded as https://server/web-pair/<code>), posts here with
+     *  bearer token. Browser's polling picks up the approval and the
+     *  server plants a session cookie on the polling browser. Same shape
+     *  + payload as desktopPairApprove — server just routes to a
+     *  different in-memory map. */
+    @POST("api/v1/devices/web-pair-approve")
+    suspend fun webPairApprove(@Body body: DesktopPairApproveRequest)
+
     /** Edit a calendar — name / color / timezone / description.
      *  All fields optional; only those passed get changed. */
     @PATCH("api/v1/calendars/{id}")

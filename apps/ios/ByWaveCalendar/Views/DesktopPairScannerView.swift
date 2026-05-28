@@ -1,17 +1,20 @@
-// Scan-to-login-desktop flow. Mirrors Android DesktopPairScannerScreen.
+// Scan-to-login flow. Mirrors Android DesktopPairScannerScreen.
 //
-// The desktop's QR encodes a plain HTTPS URL of the form
-// `<server>/desktop-pair/<CODE>` — so a phone without ByWave installed
-// can still scan it with the iOS system Camera and approve via the web
-// flow. When the user IS in the app, this view short-circuits the
-// browser bounce: ScannerView fires raw text → we regex out the 8-char
-// CODE → POST /api/v1/devices/desktop-pair-approve with the user's
-// access token → desktop's polling picks up the approval.
+// Two QR sources are accepted (auto-detected from the encoded URL):
+//
+//   1. Desktop app pair-init QR — `<server>/desktop-pair/<CODE>`.
+//      Approves via POST /api/v1/devices/desktop-pair-approve. The
+//      desktop's poll picks up refresh + access tokens.
+//
+//   2. Web /login scan-login QR — `<server>/web-pair/<CODE>`.
+//      Approves via POST /api/v1/devices/web-pair-approve. The
+//      browser's poll picks up the approval and the server plants
+//      a session cookie on the polling browser.
 //
 // Four result states surface as overlay sheets:
 //   .idle      → camera is live, nothing else
 //   .sending   → spinner + "正在批准…"
-//   .success   → ✓ + "电脑端正在自动登录"
+//   .success   → ✓ + "电脑端正在自动登录" or "网页端正在自动登录"
 //   .error     → ! + server's message
 //   .notQR     → "二维码无法识别" + hint about where to find the right QR
 
@@ -21,10 +24,14 @@ struct DesktopPairScannerView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
 
+    /// Which pair-flow the scanned URL matched. Picks the endpoint and
+    /// success-screen copy.
+    private enum PairKind { case desktop, web }
+
     private enum Phase: Equatable {
         case idle
         case sending
-        case success
+        case success(PairKind)
         case error(String)
         case notQR
     }
@@ -70,12 +77,14 @@ struct DesktopPairScannerView: View {
                 Text("正在批准…").font(.headline)
                 Text("正在让电脑端登录，请稍候。")
                     .font(.subheadline).foregroundStyle(.secondary)
-            case .success:
+            case .success(let kind):
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 48))
                     .foregroundStyle(.green)
                 Text("已批准").font(.headline)
-                Text("电脑端正在自动登录。可以回到电脑前继续操作。")
+                Text(kind == .web
+                     ? "网页端正在自动登录。可以回到电脑浏览器前继续操作。"
+                     : "电脑端正在自动登录。可以回到电脑前继续操作。")
                     .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("完成") { dismiss() }
@@ -97,10 +106,10 @@ struct DesktopPairScannerView: View {
                     .font(.system(size: 40))
                     .foregroundStyle(.secondary)
                 Text("二维码无法识别").font(.headline)
-                Text("这个二维码不像电脑端的登录码。请确认在电脑端看到的二维码上扫描。")
+                Text("这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。")
                     .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text("提示：电脑端 ByWave Calendar → 用手机扫码登录 会显示一个二维码。")
+                Text("提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。")
                     .font(.caption).foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
                 Button("关闭") { dismiss() }
@@ -116,7 +125,7 @@ struct DesktopPairScannerView: View {
     }
 
     private func handleScanned(_ raw: String) {
-        guard let code = Self.extractDesktopPairCode(from: raw) else {
+        guard let parsed = Self.extractPairCode(from: raw) else {
             phase = .notQR
             return
         }
@@ -126,11 +135,15 @@ struct DesktopPairScannerView: View {
                 let client = APIClient(state: state)
                 struct Body: Encodable { let code: String }
                 struct Resp: Decodable {}
+                let path = parsed.kind == .web
+                    ? "/devices/web-pair-approve"
+                    : "/devices/desktop-pair-approve"
                 let _: Resp = try await client.post(
-                    "/devices/desktop-pair-approve",
-                    body: Body(code: code),
+                    path,
+                    body: Body(code: parsed.code),
                 )
-                await MainActor.run { phase = .success }
+                let approvedKind = parsed.kind
+                await MainActor.run { phase = .success(approvedKind) }
             } catch let e as APIError {
                 await MainActor.run { phase = .error(Self.friendlyMessage(e)) }
             } catch {
@@ -141,26 +154,40 @@ struct DesktopPairScannerView: View {
         }
     }
 
-    /// Extract the 8-char code from a `https://<server>/desktop-pair/<CODE>`
-    /// URL. Lenient on scheme + intermediate path segments so deployments
-    /// behind a reverse-proxy with a path prefix still work. Returns nil
-    /// when the scanned text isn't a desktop-pair URL.
-    private static func extractDesktopPairCode(from raw: String) -> String? {
-        // Server emits 8 uppercase-alphanumeric chars; allow 6-16 to be
-        // forward-compatible if we change the length later.
-        let pattern = #"https?://[^\s/]+(?:/[^\s/]+)*/desktop-pair/([A-Z0-9]{6,16})"#
-        guard
-            let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-            let match = regex.firstMatch(
-                in: raw,
-                range: NSRange(raw.startIndex..., in: raw),
-            ),
+    /// Parsed pair-code + which flow matched.
+    private struct ParsedPair {
+        let code: String
+        let kind: PairKind
+    }
+
+    /// Extract the 8-char code from either:
+    ///   `https://<server>/desktop-pair/<CODE>`  (desktop app pair)
+    ///   `https://<server>/web-pair/<CODE>`      (web /login scan-login)
+    /// Returns the code + matched kind, or nil for any other text.
+    /// Lenient on scheme + intermediate path segments so reverse-proxy
+    /// deployments with a path prefix still work. 6-16 char window keeps
+    /// forward compatibility if we change the code length later.
+    private static func extractPairCode(from raw: String) -> ParsedPair? {
+        let nsRange = NSRange(raw.startIndex..., in: raw)
+        let desktopPattern = #"https?://[^\s/]+(?:/[^\s/]+)*/desktop-pair/([A-Z0-9]{6,16})"#
+        if
+            let regex = try? NSRegularExpression(pattern: desktopPattern, options: [.caseInsensitive]),
+            let match = regex.firstMatch(in: raw, range: nsRange),
             match.numberOfRanges >= 2,
             let range = Range(match.range(at: 1), in: raw)
-        else {
-            return nil
+        {
+            return ParsedPair(code: String(raw[range]).uppercased(), kind: .desktop)
         }
-        return String(raw[range]).uppercased()
+        let webPattern = #"https?://[^\s/]+(?:/[^\s/]+)*/web-pair/([A-Z0-9]{6,16})"#
+        if
+            let regex = try? NSRegularExpression(pattern: webPattern, options: [.caseInsensitive]),
+            let match = regex.firstMatch(in: raw, range: nsRange),
+            match.numberOfRanges >= 2,
+            let range = Range(match.range(at: 1), in: raw)
+        {
+            return ParsedPair(code: String(raw[range]).uppercased(), kind: .web)
+        }
+        return nil
     }
 
     private static func friendlyMessage(_ e: APIError) -> String {

@@ -61,7 +61,7 @@ import { z } from "zod";
 import QRCode from "qrcode";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser, loadUserFromRequest } from "../lib/session.js";
+import { requireUser, loadUserFromRequest, createSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
@@ -892,6 +892,236 @@ export async function deviceRoutes(app: FastifyInstance) {
     p.userEmail = user.email;
     p.userName = user.displayName;
 
+    return reply.send({ ok: true });
+  });
+
+  // ============================================================
+  // Web QR-pair (scan-to-login from a browser). Same structure as
+  // desktop-pair but lighter — the browser is already a cookie-
+  // session host, so the "approve" step just plants a bwc_sid
+  // cookie via createSession() and the user lands on /app. No
+  // refresh / access tokens involved.
+  //
+  // Flow:
+  //   1. Browser:  POST  /api/v1/devices/web-pair-init       →  { code, approveUrl, expiresAt }
+  //   2. Browser:  show QR encoding https://<host>/web-pair/<code>
+  //   3. Phone:    scans, opens that URL in browser (cookie auth — already
+  //                logged in via web), OR phone APP scans + POSTs
+  //                /api/v1/devices/web-pair-approve with bearer token
+  //   4. Phone:    renders approve/deny page (web) or auto-approves (APP)
+  //   5. Phone:    POST /web-pair/<code>/approve (cookie auth, CSRF)
+  //   6. Server:   marks code approved with userId
+  //   7. Browser:  GET /api/v1/devices/web-pair-status?code=...
+  //                → 200 + { redirectTo: "/app" } AND sets bwc_sid cookie
+  //                  (single-use — entry deleted after this call)
+  //                → 202 if still pending
+  //                → 404 if expired/unknown
+  //                → 410 if denied
+  //   8. Browser:  follows redirect, lands signed-in.
+
+  type WebPair = {
+    code: string;
+    status: "pending" | "approved" | "denied";
+    createdAt: number;
+    expiresAt: number;
+    userId?: string;
+  };
+  const webPairs = new Map<string, WebPair>();
+  const WEB_PAIR_TTL_MS = 5 * 60 * 1000;
+
+  function _purgeExpiredWebPairs() {
+    const now = Date.now();
+    for (const [code, p] of webPairs.entries()) {
+      if (p.expiresAt < now) webPairs.delete(code);
+    }
+  }
+
+  // -------- web-pair-init (anonymous — browser starts the QR flow) --------
+  // Anonymous because the calling browser has no session yet (that's the
+  // whole point). The one-time code IS the proof of authorization once
+  // the phone approves. Rate-limited per IP so a stranger can't churn
+  // codes faster than 30/min.
+  app.post("/devices/web-pair-init", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    _purgeExpiredWebPairs();
+    const { randomBytes } = await import("node:crypto");
+    // Same alphabet as desktop-pair (visually-unambiguous uppercase). 8
+    // chars → ~40 bits of entropy, plenty for a 5-minute window.
+    const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    const bytes = randomBytes(8);
+    let code = "";
+    for (const b of bytes) code += ALPHABET[b % ALPHABET.length];
+    const now = Date.now();
+    webPairs.set(code, {
+      code,
+      status: "pending",
+      createdAt: now,
+      expiresAt: now + WEB_PAIR_TTL_MS,
+    });
+    const serverUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const approveUrl = `${serverUrl}/web-pair/${code}`;
+    // Pre-render the QR server-side as SVG so the login page doesn't
+    // need a JS QR library bundled. Margin 1 for tight quiet zone;
+    // EC level M is enough — short URL, low chance of scan artifacts.
+    const qrSvg = await QRCode.toString(approveUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
+    return reply.send({
+      code,
+      approveUrl,
+      qrSvg,
+      expiresAt: new Date(now + WEB_PAIR_TTL_MS).toISOString(),
+    });
+  });
+
+  // -------- web-pair-status (anonymous, polled by browser) --------
+  // CRITICAL: on approval this call plants the bwc_sid cookie via
+  // createSession() so the browser lands fully signed in. That means
+  // the polling browser MUST be the same one that called init — but
+  // we don't enforce that with a "init token" because the random
+  // 8-char code itself is the proof (40 bits, 5min TTL, single-use).
+  // An attacker who steals the code from another browser's network
+  // tab could redeem it — same threat model as the desktop-pair flow.
+  app.get<{ Querystring: { code?: string } }>("/devices/web-pair-status", {
+    config: { rateLimit: { max: 600, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    _purgeExpiredWebPairs();
+    const code = (req.query?.code ?? "").toString().trim().toUpperCase();
+    if (!code) return reply.code(400).send({ error: "missing_code" });
+    const p = webPairs.get(code);
+    if (!p) return reply.code(404).send({ status: "expired" });
+    if (p.status === "denied") {
+      webPairs.delete(code);
+      return reply.code(410).send({ status: "denied" });
+    }
+    if (p.status === "pending") {
+      return reply.code(202).send({ status: "pending" });
+    }
+    // Approved — plant the session cookie and tell the browser where
+    // to go. Single-use: delete the entry so a second status poll
+    // (e.g. from a different tab that grabbed the code) returns 404.
+    if (!p.userId) {
+      // Shouldn't happen — approved without userId is a server bug.
+      webPairs.delete(code);
+      return reply.code(500).send({ status: "internal_error" });
+    }
+    // Look up the user so we can:
+    //   - confirm the account is still active (admin may have suspended
+    //     it between approval and the polling browser's next tick)
+    //   - decide mfaSatisfied: the phone-side session that approved this
+    //     pair was already MFA-verified, so we trust it.
+    const [user] = await db.select().from(schema.users).where(eq(schema.users.id, p.userId)).limit(1);
+    if (!user || !userIsActive(user)) {
+      webPairs.delete(code);
+      return reply.code(403).send({ status: "account_disabled" });
+    }
+    await createSession(reply, user.id, { mfaSatisfied: true });
+    const { setThemeCookies } = await import("../lib/user_theme.js");
+    setThemeCookies(reply, user.themePalette, user.themeDensity);
+    // Fire-and-forget the security-conscious notifications. Don't block
+    // the response — the user already sees the redirect.
+    void (async () => {
+      try {
+        const { recordLoginEvent } = await import("../lib/login_history.js");
+        await recordLoginEvent(req, user.id, "qr");
+      } catch (err) { req.log.warn({ err }, "qr_login_event_failed"); }
+    })();
+    void (async () => {
+      try {
+        const { notifyLoginSuccess } = await import("../lib/login_alert.js");
+        await notifyLoginSuccess(req, user, "qr");
+      } catch (err) { req.log.warn({ err }, "qr_login_alert_failed"); }
+    })();
+    webPairs.delete(code);
+    return reply.send({ status: "approved", redirectTo: "/app" });
+  });
+
+  // -------- web-pair approve page (rendered for phone browser) --------
+  // The phone scans the QR, lands here. Same cookie-session pattern as
+  // /desktop-pair/:code. If not logged in, bounce to /login with return_to.
+  app.get<{ Params: { code: string } }>("/web-pair/:code", async (req, reply) => {
+    _purgeExpiredWebPairs();
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    const user = await loadUserFromRequest(req);
+    if (!user) {
+      const back = encodeURIComponent(`/web-pair/${code}`);
+      return reply.redirect(`/login?return_to=${back}`);
+    }
+    if (!p) {
+      return reply.view("web-pair", {
+        title: "网页扫码登录",
+        state: "expired",
+        user,
+        csrfToken: csrfTokenFor(req),
+        siteName: (await getSettings()).siteName || "ByWave Calendar",
+      });
+    }
+    if (p.status !== "pending") {
+      return reply.view("web-pair", {
+        title: "网页扫码登录",
+        state: p.status === "approved" ? "already_approved" : "denied",
+        user,
+        csrfToken: csrfTokenFor(req),
+        siteName: (await getSettings()).siteName || "ByWave Calendar",
+      });
+    }
+    return reply.view("web-pair", {
+      title: "网页扫码登录",
+      state: "pending",
+      code,
+      user,
+      csrfToken: csrfTokenFor(req),
+      siteName: (await getSettings()).siteName || "ByWave Calendar",
+    });
+  });
+
+  // -------- web-pair approve / deny (cookie auth + CSRF) --------
+  app.post<{ Params: { code: string } }>("/web-pair/:code/approve", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredWebPairs();
+    const user = await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    if (!p) return reply.redirect(`/web-pair/${code}`);
+    if (p.status !== "pending") return reply.redirect(`/web-pair/${code}`);
+    p.status = "approved";
+    p.userId = user.id;
+    return reply.redirect(`/web-pair/${code}`);
+  });
+
+  app.post<{ Params: { code: string } }>("/web-pair/:code/deny", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    _purgeExpiredWebPairs();
+    await requireUser(req, reply);
+    const code = req.params.code.toUpperCase();
+    const p = webPairs.get(code);
+    if (p && p.status === "pending") {
+      p.status = "denied";
+    }
+    return reply.redirect(`/web-pair/${code}`);
+  });
+
+  // -------- web-pair approve via native APP (Bearer auth) --------
+  // Phone APP scans the browser's QR — encoding https://<host>/web-pair/<CODE>
+  // — extracts CODE, posts here with its Bearer access token. Approves
+  // on behalf of the APP user without bouncing through SFSafariView.
+  app.post<{ Body: { code?: string } }>("/devices/web-pair-approve", async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    _purgeExpiredWebPairs();
+    const user = await requireUser(req, reply);
+    if (!user) return;
+
+    const code = String(req.body?.code ?? "").toUpperCase().trim();
+    if (!code) return reply.code(400).send({ error: "missing_code" });
+
+    const p = webPairs.get(code);
+    if (!p) return reply.code(404).send({ error: "expired_or_unknown" });
+    if (p.status !== "pending") {
+      return reply.code(409).send({ error: "not_pending", status: p.status });
+    }
+    p.status = "approved";
+    p.userId = user.id;
     return reply.send({ ok: true });
   });
 }

@@ -15,7 +15,7 @@ function hash(s: string): string {
 export async function notifyLoginSuccess(
   req: FastifyRequest,
   user: { id: string; email: string; displayName?: string | null },
-  method: "password" | "passkey" | "mfa" | "sso",
+  method: "password" | "passkey" | "mfa" | "sso" | "qr",
 ): Promise<void> {
   const ip = req.ip ?? "unknown";
   const ua = (req.headers["user-agent"] as string | undefined) ?? "unknown";

@@ -169,7 +169,7 @@ export type LoginAlertCtx = {
   loginAt: Date;
   ip: string;
   userAgent: string;
-  method: "password" | "passkey" | "mfa" | "sso";
+  method: "password" | "passkey" | "mfa" | "sso" | "qr";
   location?: string;
 };
 
@@ -179,7 +179,7 @@ export function loginAlertMail(to: string, ctx: LoginAlertCtx): SendArgs {
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
   }).format(ctx.loginAt);
-  const methodLabel = ctx.method === "passkey" ? "Passkey" : ctx.method === "mfa" ? "密码 + MFA" : ctx.method === "sso" ? "SSO" : "密码";
+  const methodLabel = ctx.method === "passkey" ? "Passkey" : ctx.method === "mfa" ? "密码 + MFA" : ctx.method === "sso" ? "SSO" : ctx.method === "qr" ? "手机扫码授权" : "密码";
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
 
   const text = `${brand} 登录提醒

@@ -1,14 +1,22 @@
-// Wrapper around ScannerScreen specifically for the "scan a desktop's
-// pair-init QR and approve it" flow. The desktop's QR encodes a plain
-// HTTPS URL `<server>/desktop-pair/<code>` (so a phone with no APP
-// installed can still scan it with the system camera and approve via
-// the web flow). When the user is logged in to the APP, scanning here
-// short-circuits the browser bounce: we extract <code> + POST to
-// /api/v1/devices/desktop-pair-approve with our access token.
+// Wrapper around ScannerScreen for "scan a pair-init QR and approve it".
+// Two QR sources are accepted:
 //
-// Showing a result sheet (success / error / not-a-desktop-pair-qr)
-// before popping back gives the user feedback that the desktop is
-// actually logging in now.
+//   1. Desktop app pair QR — encodes <server>/desktop-pair/<code>.
+//      Phone POSTs /api/v1/devices/desktop-pair-approve. Server flips
+//      the pending desktop pair to approved; desktop's poll picks up
+//      refresh + access tokens.
+//
+//   2. Web /login page scan-login QR — encodes <server>/web-pair/<code>.
+//      Phone POSTs /api/v1/devices/web-pair-approve. Server flips the
+//      pending web pair to approved; the browser's poll picks up the
+//      approval and the server plants a bwc_sid session cookie on the
+//      polling browser.
+//
+// Branching on the URL prefix means one Settings entry covers both —
+// the user doesn't need to choose "scan desktop QR" vs "scan web QR".
+//
+// Showing a result sheet (success / error / not-a-pair-QR) before
+// popping back gives the user feedback that login actually happened.
 
 package cn.bywave.calendar.ui.setup
 
@@ -35,14 +43,20 @@ import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import kotlinx.coroutines.launch
 
+/** Which pair flow the scanned URL represents. Drives both the
+ *  approve endpoint and the post-success copy. */
+internal enum class PairKind { DESKTOP, WEB }
+
+internal data class ParsedPair(val code: String, val kind: PairKind)
+
 private sealed class ApproveResult {
     object Idle : ApproveResult()
     object Sending : ApproveResult()
-    object Success : ApproveResult()
+    data class Success(val kind: PairKind) : ApproveResult()
     data class Error(val message: String) : ApproveResult()
-    /** QR didn't match the desktop-pair URL pattern — likely the
-     *  pair-claim QR (which belongs in the setup screen, not here)
-     *  or some random barcode. Tell the user, let them try again. */
+    /** QR didn't match either pair URL pattern — likely the pair-claim
+     *  QR (which belongs in the setup screen, not here) or some random
+     *  barcode. Tell the user, let them try again. */
     object NotDesktopPair : ApproveResult()
 }
 
@@ -58,8 +72,8 @@ fun DesktopPairScannerScreen(
     // handles the rest of the flow.
     ScannerScreen(
         onResult = { raw ->
-            val code = extractDesktopPairCode(raw)
-            if (code == null) {
+            val parsed = extractPairCode(raw)
+            if (parsed == null) {
                 result = ApproveResult.NotDesktopPair
                 return@ScannerScreen
             }
@@ -70,8 +84,13 @@ fun DesktopPairScannerScreen(
                     val profile = profiles.active()
                         ?: throw IllegalStateException("未登录，请先登录后再扫码")
                     val client = ApiClient.forProfile(profile, profiles)
-                    client.api.desktopPairApprove(DesktopPairApproveRequest(code = code))
-                    result = ApproveResult.Success
+                    when (parsed.kind) {
+                        PairKind.DESKTOP -> client.api.desktopPairApprove(
+                            DesktopPairApproveRequest(code = parsed.code))
+                        PairKind.WEB -> client.api.webPairApprove(
+                            DesktopPairApproveRequest(code = parsed.code))
+                    }
+                    result = ApproveResult.Success(parsed.kind)
                 } catch (e: Exception) {
                     result = ApproveResult.Error(e.localizedMessage ?: "批准失败")
                 }
@@ -89,10 +108,17 @@ fun DesktopPairScannerScreen(
             text = { Text("正在让电脑端登录，请稍候。") },
             confirmButton = {},
         )
-        ApproveResult.Success -> AlertDialog(
+        is ApproveResult.Success -> AlertDialog(
             onDismissRequest = onClose,
             title = { Text("✓ 已批准", fontWeight = FontWeight.SemiBold) },
-            text = { Text("电脑端正在自动登录。可以回到电脑前继续操作。") },
+            text = {
+                Text(
+                    if (r.kind == PairKind.WEB)
+                        "网页端正在自动登录。可以回到电脑浏览器前继续操作。"
+                    else
+                        "电脑端正在自动登录。可以回到电脑前继续操作。",
+                )
+            },
             confirmButton = { TextButton(onClick = onClose) { Text("完成") } },
         )
         is ApproveResult.Error -> AlertDialog(
@@ -109,9 +135,9 @@ fun DesktopPairScannerScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    Text("这个二维码不像电脑端的登录码。请确认在电脑端看到的二维码上扫描。")
+                    Text("这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。")
                     Text(
-                        "提示：电脑端「登录 ByWave Calendar」→「用手机扫码登录」会显示一个二维码。",
+                        "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示一个二维码。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -122,14 +148,25 @@ fun DesktopPairScannerScreen(
     }
 }
 
-/** Pull the 8-char pair code out of a `https://<server>/desktop-pair/<CODE>`
- *  URL. Returns null when the scanned text doesn't look like a desktop-pair
- *  URL — callers handle that as "wrong QR." */
-private fun extractDesktopPairCode(raw: String): String? {
-    // Be lenient: accept http:// + https://, with or without trailing slash,
-    // any port, any path-prefix before /desktop-pair/. Server's emitted
-    // form is always https://server/desktop-pair/CODE, but a deployment
-    // behind a path proxy could vary.
-    val regex = Regex("""https?://[^\s/]+(?:/[^\s/]+)*/desktop-pair/([A-Z0-9]{6,16})""", RegexOption.IGNORE_CASE)
-    return regex.find(raw)?.groupValues?.getOrNull(1)?.uppercase()
+/** Pull the 8-char pair code out of either:
+ *    https://<server>/desktop-pair/<CODE>   (desktop app pair)
+ *    https://<server>/web-pair/<CODE>       (web /login scan-login)
+ *
+ *  Returns the code + which kind was matched, or null when the
+ *  scanned text doesn't look like either — callers handle that as
+ *  "wrong QR."
+ *
+ *  Lenient on scheme (http/https), port, and path-prefix to survive
+ *  reverse-proxy deployments. The exact "/desktop-pair/" or "/web-pair/"
+ *  literal must appear immediately before the code segment. */
+internal fun extractPairCode(raw: String): ParsedPair? {
+    val desktopRegex = Regex("""https?://[^\s/]+(?:/[^\s/]+)*/desktop-pair/([A-Z0-9]{6,16})""", RegexOption.IGNORE_CASE)
+    desktopRegex.find(raw)?.let { m ->
+        return ParsedPair(code = m.groupValues[1].uppercase(), kind = PairKind.DESKTOP)
+    }
+    val webRegex = Regex("""https?://[^\s/]+(?:/[^\s/]+)*/web-pair/([A-Z0-9]{6,16})""", RegexOption.IGNORE_CASE)
+    webRegex.find(raw)?.let { m ->
+        return ParsedPair(code = m.groupValues[1].uppercase(), kind = PairKind.WEB)
+    }
+    return null
 }

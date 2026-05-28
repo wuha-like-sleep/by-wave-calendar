@@ -720,6 +720,13 @@ const CSRF_EXEMPT_PATHS = new Set([
   // Bearer (matched by the Bearer check below), so only init needs
   // an explicit entry here.
   "/api/v1/devices/desktop-pair-init",
+  // Web scan-login (browser-side QR): same logic as desktop-pair-init.
+  // The browser calling /web-pair-init is anonymous (no cookie session
+  // yet) — the random code IS the proof once the phone approves. CSRF
+  // protects session cookies; there's no session here to protect.
+  // (web-pair-status is GET so already exempt; web-pair-approve takes
+  // Bearer from the phone APP and matches the bearer-bypass below.)
+  "/api/v1/devices/web-pair-init",
   // CSP violation reports are POSTed by the browser itself with no
   // cookies (per spec credentials are omitted). No session = no CSRF
   // surface; the endpoint just logs the report and returns 204.

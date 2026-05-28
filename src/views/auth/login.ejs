@@ -1,54 +1,105 @@
 <div class="mx-auto max-w-md">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
     <h1 class="text-2xl font-semibold text-slate-900">登录</h1>
-    <p class="mt-1 text-sm text-slate-500">用你的邮箱和密码登录，或直接用 Passkey</p>
+    <p class="mt-1 text-sm text-slate-500">用密码 / Passkey 登录，或用手机 APP 扫码授权</p>
 
-    <button type="button" id="passkey-login"
-            class="mt-6 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg>
-      使用 Passkey 登录
-    </button>
-
-    <% if (typeof ssoProviders !== 'undefined' && ssoProviders.length > 0) { %>
-      <% ssoProviders.forEach(function(p){ %>
-        <a href="/auth/idp/<%= encodeURIComponent(p.slug) %>/login"
-           class="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-800 hover:bg-violet-100 shadow-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <%= p.label %>
-        </a>
-      <% }) %>
-    <% } %>
-
-
-    <div class="relative my-6">
-      <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
-      <div class="relative flex justify-center text-xs"><span class="bg-white px-2 text-slate-400">或</span></div>
+    <%# Tab switch: 密码登录 / 扫码登录. Tabs are pure DOM toggle, no
+        network. The QR is only fetched once the user clicks the
+        scan tab — saves a webPairs slot for non-scanning visitors. %>
+    <div class="mt-5 grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
+      <button type="button" id="tab-password"
+              class="text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm">
+        密码登录
+      </button>
+      <button type="button" id="tab-qr"
+              class="text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900">
+        扫码登录
+      </button>
     </div>
 
-    <form method="post" action="/login" class="space-y-4">
-      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-      <div>
-        <label class="block text-sm font-medium text-slate-700">邮箱</label>
-        <input type="email" name="email" id="email" required autocomplete="email"
-               value="<%= form?.email || '' %>"
-               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <div>
-        <div class="flex items-center justify-between">
-          <label class="block text-sm font-medium text-slate-700">密码</label>
-          <a href="/forgot-password" class="text-xs text-brand-600 hover:text-brand-700 font-medium">忘记密码？</a>
-        </div>
-        <input type="password" name="password" required autocomplete="current-password"
-               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      </div>
-      <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">登录</button>
-    </form>
+    <%# -------- Password / Passkey / SSO panel -------- %>
+    <div id="panel-password">
+      <button type="button" id="passkey-login"
+              class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg>
+        使用 Passkey 登录
+      </button>
 
-    <% if (registrationOpen) { %>
-      <p class="mt-6 text-center text-sm text-slate-500">
-        还没账号？<a href="/register" class="text-brand-600 hover:text-brand-700 font-medium">注册</a>
+      <% if (typeof ssoProviders !== 'undefined' && ssoProviders.length > 0) { %>
+        <% ssoProviders.forEach(function(p){ %>
+          <a href="/auth/idp/<%= encodeURIComponent(p.slug) %>/login"
+             class="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-800 hover:bg-violet-100 shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <%= p.label %>
+          </a>
+        <% }) %>
+      <% } %>
+
+      <div class="relative my-6">
+        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
+        <div class="relative flex justify-center text-xs"><span class="bg-white px-2 text-slate-400">或</span></div>
+      </div>
+
+      <form method="post" action="/login" class="space-y-4">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <div>
+          <label class="block text-sm font-medium text-slate-700">邮箱</label>
+          <input type="email" name="email" id="email" required autocomplete="email"
+                 value="<%= form?.email || '' %>"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+        <div>
+          <div class="flex items-center justify-between">
+            <label class="block text-sm font-medium text-slate-700">密码</label>
+            <a href="/forgot-password" class="text-xs text-brand-600 hover:text-brand-700 font-medium">忘记密码？</a>
+          </div>
+          <input type="password" name="password" required autocomplete="current-password"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        </div>
+        <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">登录</button>
+      </form>
+
+      <% if (registrationOpen) { %>
+        <p class="mt-6 text-center text-sm text-slate-500">
+          还没账号？<a href="/register" class="text-brand-600 hover:text-brand-700 font-medium">注册</a>
+        </p>
+      <% } %>
+    </div>
+
+    <%# -------- QR scan-login panel (hidden by default) -------- %>
+    <div id="panel-qr" class="hidden">
+      <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
+        <div id="qr-loading" class="text-center py-12 text-sm text-slate-500">
+          <svg class="animate-spin mx-auto mb-3 h-6 w-6 text-brand-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path></svg>
+          正在生成二维码…
+        </div>
+        <div id="qr-display" class="hidden">
+          <div id="qr-box" class="bg-white rounded-lg p-3 flex items-center justify-center" style="min-height: 220px;"></div>
+          <p class="mt-4 text-sm text-slate-700 text-center">
+            打开 <span class="font-medium">ByWave Calendar</span> 手机 APP，<br>
+            点「设置 → 扫码登录网页版」，扫上面二维码。
+          </p>
+          <div id="qr-status" class="mt-4 text-center text-xs text-slate-500">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>
+            等待手机扫码授权…
+          </div>
+          <button type="button" id="qr-refresh"
+                  class="mt-4 hidden w-full text-xs text-brand-600 hover:text-brand-700 font-medium">
+            重新生成二维码
+          </button>
+        </div>
+        <div id="qr-error" class="hidden text-center py-6 text-sm text-rose-700">
+          <p id="qr-error-msg">二维码加载失败</p>
+          <button type="button" id="qr-error-retry"
+                  class="mt-3 text-xs text-brand-600 hover:text-brand-700 font-medium">
+            重试
+          </button>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-slate-400 text-center">
+        手机 APP 需要先用密码 / Passkey 登录一次 · 之后扫码即可
       </p>
-    <% } %>
+    </div>
   </div>
 </div>
 
@@ -88,5 +139,173 @@
       btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg> 使用 Passkey 登录';
     }
   });
+})();
+
+// -------- QR scan-login tab + polling --------
+// Wire:
+//   tab-password / tab-qr      — tab switch buttons (active = white bg)
+//   panel-password / panel-qr  — corresponding panels
+//   qr-loading / qr-display / qr-error  — three QR panel states
+// State machine on QR panel:
+//   loading → display(pending → approved → redirect)
+//   loading → error → click retry → loading
+//   display(expired)  → show refresh button
+//   display(denied)   → show refresh button + status message
+//
+// Polling cadence: 2s. Server's web-pair-status rate limit is 600/min
+// per IP so this leaves plenty of headroom for tabs reopening etc.
+// Each pair code TTLs at 5min server-side so we stop polling after 150
+// rounds (~5min) to avoid pointless requests for an expired code.
+(function(){
+  const tabPwd = document.getElementById("tab-password");
+  const tabQr = document.getElementById("tab-qr");
+  const panelPwd = document.getElementById("panel-password");
+  const panelQr = document.getElementById("panel-qr");
+  if (!tabPwd || !tabQr || !panelPwd || !panelQr) return;
+
+  let qrInitialized = false;
+  let pollTimer = null;
+  let pollCount = 0;
+  let currentCode = null;
+
+  function activateTab(which) {
+    if (which === "pwd") {
+      tabPwd.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm";
+      tabQr.className = "text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900";
+      panelPwd.classList.remove("hidden");
+      panelQr.classList.add("hidden");
+      stopPolling();
+    } else {
+      tabQr.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm";
+      tabPwd.className = "text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900";
+      panelQr.classList.remove("hidden");
+      panelPwd.classList.add("hidden");
+      if (!qrInitialized) {
+        qrInitialized = true;
+        initQr();
+      }
+    }
+  }
+  tabPwd.addEventListener("click", function(){ activateTab("pwd"); });
+  tabQr.addEventListener("click", function(){ activateTab("qr"); });
+
+  function showLoading() {
+    document.getElementById("qr-loading").classList.remove("hidden");
+    document.getElementById("qr-display").classList.add("hidden");
+    document.getElementById("qr-error").classList.add("hidden");
+  }
+  function showDisplay() {
+    document.getElementById("qr-loading").classList.add("hidden");
+    document.getElementById("qr-display").classList.remove("hidden");
+    document.getElementById("qr-error").classList.add("hidden");
+  }
+  function showError(msg) {
+    document.getElementById("qr-loading").classList.add("hidden");
+    document.getElementById("qr-display").classList.add("hidden");
+    document.getElementById("qr-error").classList.remove("hidden");
+    document.getElementById("qr-error-msg").textContent = msg || "二维码加载失败";
+  }
+  function setStatus(html, hideRefresh) {
+    document.getElementById("qr-status").innerHTML = html;
+    const refresh = document.getElementById("qr-refresh");
+    if (hideRefresh) refresh.classList.add("hidden"); else refresh.classList.remove("hidden");
+  }
+  function stopPolling() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+  }
+
+  async function initQr() {
+    stopPolling();
+    pollCount = 0;
+    showLoading();
+    try {
+      const initResp = await fetch("/api/v1/devices/web-pair-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: "{}"
+      });
+      if (!initResp.ok) {
+        if (initResp.status === 403) {
+          showError("管理员已停用 APP 同步功能，请用密码登录");
+          return;
+        }
+        throw new Error("init_failed_" + initResp.status);
+      }
+      const data = await initResp.json();
+      currentCode = data.code;
+      // Server pre-renders SVG so we don't need a JS QR lib bundled
+      // (matches the 中国友好 no-CDN constraint). Just inject it.
+      // The SVG is from our own server — same origin — so this is safe
+      // to drop in via innerHTML.
+      const box = document.getElementById("qr-box");
+      box.innerHTML = data.qrSvg;
+      // Force SVG to fill the box at ~220px square. The QRCode lib
+      // produces SVG with viewBox but no fixed width.
+      const svg = box.querySelector("svg");
+      if (svg) {
+        svg.setAttribute("width", "220");
+        svg.setAttribute("height", "220");
+      }
+      showDisplay();
+      setStatus('<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>等待手机扫码授权…', true);
+      pollStatus();
+    } catch (err) {
+      console.error(err);
+      showError("二维码生成失败 —— 请刷新页面重试");
+    }
+  }
+
+  async function pollStatus() {
+    if (!currentCode) return;
+    pollCount++;
+    if (pollCount > 150) {
+      // ~5min exceeded → server side TTL'd anyway. Stop polling and
+      // tell user to refresh.
+      setStatus('<span class="text-amber-600">二维码已过期</span>', false);
+      return;
+    }
+    try {
+      const resp = await fetch("/api/v1/devices/web-pair-status?code=" + encodeURIComponent(currentCode), {
+        method: "GET",
+        credentials: "same-origin"
+      });
+      if (resp.status === 202) {
+        // Still pending — poll again.
+        pollTimer = setTimeout(pollStatus, 2000);
+        return;
+      }
+      if (resp.status === 200) {
+        const data = await resp.json();
+        setStatus('<span class="text-emerald-600">✓ 已批准 —— 正在跳转…</span>', true);
+        // Cookie is now set by the server. Navigate to /app.
+        window.location = data.redirectTo || "/app";
+        return;
+      }
+      if (resp.status === 404) {
+        // Expired or unknown code.
+        setStatus('<span class="text-amber-600">二维码已过期</span>', false);
+        return;
+      }
+      if (resp.status === 410) {
+        // Denied.
+        setStatus('<span class="text-rose-600">已拒绝授权</span>', false);
+        return;
+      }
+      if (resp.status === 403) {
+        // Account suspended between approval and poll.
+        setStatus('<span class="text-rose-600">账号已停用</span>', false);
+        return;
+      }
+      // Unexpected response — keep polling, the next round may recover.
+      pollTimer = setTimeout(pollStatus, 2000);
+    } catch (err) {
+      // Network blip — keep trying.
+      pollTimer = setTimeout(pollStatus, 2000);
+    }
+  }
+
+  document.getElementById("qr-refresh").addEventListener("click", initQr);
+  document.getElementById("qr-error-retry").addEventListener("click", initQr);
 })();
 </script>
