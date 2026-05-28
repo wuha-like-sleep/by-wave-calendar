@@ -28,6 +28,7 @@ export type SettingsView = {
   lockoutMinutes: number;
   apiEnabled: boolean;
   appsEnabled: boolean;
+  qrLoginEnabled: boolean;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
   vapidPublicKey: string | null;
@@ -83,6 +84,7 @@ function toView(r: schema.SiteSettings): SettingsView {
     lockoutMinutes: r.lockoutMinutes || 15,
     apiEnabled: r.apiEnabled,
     appsEnabled: r.appsEnabled,
+    qrLoginEnabled: r.qrLoginEnabled,
     forceAdminMfa: r.forceAdminMfa,
     embedEnabled: r.embedEnabled,
     vapidPublicKey: r.vapidPublicKey,
@@ -145,6 +147,7 @@ export async function updateSettings(patch: Partial<{
   lockoutMinutes: number;
   apiEnabled: boolean;
   appsEnabled: boolean;
+  qrLoginEnabled: boolean;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
   vapidPublicKey: string | null;

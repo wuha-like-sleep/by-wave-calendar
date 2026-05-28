@@ -662,6 +662,7 @@ export async function adminRoutes(app: FastifyInstance) {
       activeNav: "/admin/api",
       apiEnabled: settings.apiEnabled,
       appsEnabled: settings.appsEnabled,
+      qrLoginEnabled: settings.qrLoginEnabled,
       deviceCount: devCount?.c ?? 0,
       ssoEnabled: providers.length > 0,
       tokens: tokens.map((t) => ({
@@ -698,6 +699,20 @@ export async function adminRoutes(app: FastifyInstance) {
     await updateSettings({ appsEnabled: enabled });
     await audit(req, u.id, enabled ? "apps.enable" : "apps.disable", { targetType: "site_settings" });
     return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "原生 APP 同步已启用" : "原生 APP 同步已关闭（已绑定的 APP 立即失效）") + "#apps");
+  });
+
+  // Master switch for the web 扫码登录 feature on the /login page. When
+  // off, the「扫码登录」tab disappears and the /api/v1/devices/web-pair-*
+  // endpoints all 403. Independent of appsEnabled so admins can keep
+  // native APPs working while hiding the cross-device QR flow.
+  app.post("/admin/qr-login/toggle", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
+    await updateSettings({ qrLoginEnabled: enabled });
+    await audit(req, u.id, enabled ? "qr_login.enable" : "qr_login.disable", { targetType: "site_settings" });
+    return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "网页扫码登录已启用" : "网页扫码登录已关闭（/login 不再显示扫码标签）") + "#qr-login");
   });
 
   app.post("/admin/api/tokens", {

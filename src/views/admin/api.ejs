@@ -61,6 +61,36 @@
   <% } %>
 </section>
 
+<section id="qr-login" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">网页扫码登录</h2>
+      <p class="text-sm text-slate-500 mt-1">在 /login 页面显示「扫码登录」标签 —— 用户手机 APP 扫一下，浏览器自动登录。关闭后：</p>
+      <ul class="mt-2 text-sm text-slate-500 list-disc list-inside space-y-0.5">
+        <li>/login 页面不再显示「扫码登录」标签</li>
+        <li>/api/v1/devices/web-pair-* 端点返回 403</li>
+        <li>不影响密码登录 / Passkey / SSO / 桌面端扫码绑定</li>
+      </ul>
+      <p class="mt-2 text-xs text-slate-500">⚠️ 这个开关只控制网页扫码登录，跟上面的「原生 APP 同步」是独立的两个开关。</p>
+    </div>
+    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium <%= qrLoginEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' %>">
+      <span class="inline-block h-2 w-2 rounded-full <%= qrLoginEnabled ? 'bg-emerald-500' : 'bg-slate-400' %>"></span>
+      <%= qrLoginEnabled ? '已启用' : '已关闭' %>
+    </span>
+  </div>
+  <form method="post" action="/admin/qr-login/toggle" class="flex items-center gap-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="enabled" <%= qrLoginEnabled ? "checked" : "" %> class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm text-slate-700">允许网页扫码登录</span>
+    </label>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+  </form>
+  <% if (!appsEnabled && qrLoginEnabled) { %>
+    <p class="mt-3 text-xs text-amber-700">⚠️ 上面的「原生 APP 同步」处于关闭状态，所以即使这里打开扫码登录也不能用 —— 手机 APP 无法授权（先开「原生 APP 同步」）。</p>
+  <% } %>
+</section>
+
 <% if (issuedToken) { %>
   <section class="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5 sm:p-6 mb-6">
     <div class="text-sm font-medium text-emerald-900 mb-2">✓ 已生成「<%= issuedLabel %>」—— 仅显示一次</div>

@@ -96,6 +96,17 @@ export const siteSettings = pgTable("site_settings", {
   // Default ON because most self-hosted admins want it; turn off if you
   // don't want any non-web clients touching your server.
   appsEnabled: boolean("apps_enabled").notNull().default(true),
+  // Master switch for the web 扫码登录 (QR scan-login) feature. When off:
+  //   - The /login page hides the「扫码登录」tab entirely (server-side
+  //     render check, not just CSS — so unauthenticated users can't even
+  //     poke at the endpoint).
+  //   - POST /api/v1/devices/web-pair-init returns 403.
+  //   - GET /api/v1/devices/web-pair-status returns 403.
+  //   - POST /api/v1/devices/web-pair-approve from phone APPs also 403s.
+  // Independent of `appsEnabled` because some admins might want the APPs
+  // working (CalDAV-style sync) but distrust the QR cross-device login
+  // flow (or just don't want to surface it on the login page). Default ON.
+  qrLoginEnabled: boolean("qr_login_enabled").notNull().default(true),
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),

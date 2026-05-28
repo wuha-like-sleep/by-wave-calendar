@@ -936,15 +936,35 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
   }
 
+  // Master switch for the web 扫码登录 flow. Distinct from
+  // ensureAppsEnabled so admins can keep native APPs working while
+  // turning off the cross-device QR login on /login. Sends a friendly
+  // 403 so the client-side JS in login.ejs can show "管理员已停用扫码登录"
+  // instead of a generic error.
+  async function ensureQrLoginEnabled(reply: FastifyReply, req?: { log: { warn: (msg: unknown, ...args: unknown[]) => void }; url?: string; ip?: string }): Promise<boolean> {
+    const s = await getSettings();
+    if (s.qrLoginEnabled) return true;
+    if (req) req.log.warn({ event: "qr_login_disabled_block", path: req.url, ip: req.ip }, "QR scan-login blocked: qrLoginEnabled=false. Toggle in admin → API → 网页扫码登录.");
+    reply.code(403).send({ error: "qr_login_disabled", message: "管理员已停用网页扫码登录功能。请用密码 / Passkey 登录。" });
+    return false;
+  }
+
   // -------- web-pair-init (anonymous — browser starts the QR flow) --------
   // Anonymous because the calling browser has no session yet (that's the
   // whole point). The one-time code IS the proof of authorization once
   // the phone approves. Rate-limited per IP so a stranger can't churn
   // codes faster than 30/min.
+  //
+  // Gated on TWO flags:
+  //   - appsEnabled  (master APP feature) — phone APP needs this to
+  //     approve via Bearer; if it's off, the whole flow is pointless.
+  //   - qrLoginEnabled (this feature specifically) — admin's explicit
+  //     "don't surface QR scan-login on /login" toggle.
   app.post("/devices/web-pair-init", {
     config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
+    if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();
     const { randomBytes } = await import("node:crypto");
     // Same alphabet as desktop-pair (visually-unambiguous uppercase). 8
@@ -985,6 +1005,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { code?: string } }>("/devices/web-pair-status", {
     config: { rateLimit: { max: 600, timeWindow: "1 minute" } },
   }, async (req, reply) => {
+    if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();
     const code = (req.query?.code ?? "").toString().trim().toUpperCase();
     if (!code) return reply.code(400).send({ error: "missing_code" });
@@ -1040,6 +1061,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // The phone scans the QR, lands here. Same cookie-session pattern as
   // /desktop-pair/:code. If not logged in, bounce to /login with return_to.
   app.get<{ Params: { code: string } }>("/web-pair/:code", async (req, reply) => {
+    if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();
     const code = req.params.code.toUpperCase();
     const p = webPairs.get(code);
@@ -1108,6 +1130,7 @@ export async function deviceRoutes(app: FastifyInstance) {
   // on behalf of the APP user without bouncing through SFSafariView.
   app.post<{ Body: { code?: string } }>("/devices/web-pair-approve", async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
+    if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();
     const user = await requireUser(req, reply);
     if (!user) return;

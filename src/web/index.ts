@@ -262,12 +262,19 @@ export async function webRoutes(app: FastifyInstance) {
   app.get("/login", async (req, reply) => {
     const user = await loadUserFromRequest(req);
     if (user) return reply.redirect("/app");
+    // QR scan-login requires BOTH the master APP feature AND the
+    // qrLoginEnabled toggle. Render-time check keeps the tab hidden
+    // when admin disabled it — better UX than letting the user click
+    // and get a 403. Server still gates the endpoints in case someone
+    // hand-crafts a request.
+    const settings = await getSettings();
     return reply.view("auth/login", {
       title: "登录",
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       form: {},
+      qrLoginEnabled: settings.appsEnabled && settings.qrLoginEnabled,
     });
   });
 

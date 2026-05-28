@@ -1,11 +1,16 @@
+<% const qrEnabled = (typeof qrLoginEnabled !== 'undefined' && qrLoginEnabled); %>
 <div class="mx-auto max-w-md">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
     <h1 class="text-2xl font-semibold text-slate-900">登录</h1>
-    <p class="mt-1 text-sm text-slate-500">用密码 / Passkey 登录，或用手机 APP 扫码授权</p>
+    <p class="mt-1 text-sm text-slate-500">
+      <% if (qrEnabled) { %>用密码 / Passkey 登录，或用手机 APP 扫码授权<% } else { %>用密码或 Passkey 登录<% } %>
+    </p>
 
+    <% if (qrEnabled) { %>
     <%# Tab switch: 密码登录 / 扫码登录. Tabs are pure DOM toggle, no
         network. The QR is only fetched once the user clicks the
-        scan tab — saves a webPairs slot for non-scanning visitors. %>
+        scan tab — saves a webPairs slot for non-scanning visitors.
+        Hidden entirely when admin disabled the QR login feature. %>
     <div class="mt-5 grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
       <button type="button" id="tab-password"
               class="text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm">
@@ -16,6 +21,7 @@
         扫码登录
       </button>
     </div>
+    <% } %>
 
     <%# -------- Password / Passkey / SSO panel -------- %>
     <div id="panel-password">
@@ -66,6 +72,7 @@
       <% } %>
     </div>
 
+    <% if (qrEnabled) { %>
     <%# -------- QR scan-login panel (hidden by default) -------- %>
     <div id="panel-qr" class="hidden">
       <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
@@ -100,6 +107,7 @@
         手机 APP 需要先用密码 / Passkey 登录一次 · 之后扫码即可
       </p>
     </div>
+    <% } %>
   </div>
 </div>
 
@@ -141,6 +149,7 @@
   });
 })();
 
+<% if (qrEnabled) { %>
 // -------- QR scan-login tab + polling --------
 // Wire:
 //   tab-password / tab-qr      — tab switch buttons (active = white bg)
@@ -232,7 +241,14 @@
         }
         throw new Error("init_failed_" + initResp.status);
       }
-      const data = await initResp.json();
+      // /api/v1/* responses are envelope-wrapped by the global onSend
+      // hook in server.ts: { ok: true, data: { code, qrSvg, ... } }.
+      // Unwrap here — same pattern as the desktop pair-init client. If
+      // we read data.qrSvg directly we get undefined → QR shows the
+      // literal string "undefined" (which is exactly the bug that
+      // shipped with the first version of this page).
+      const env = await initResp.json();
+      const data = env && env.ok && env.data ? env.data : env;
       currentCode = data.code;
       // Server pre-renders SVG so we don't need a JS QR lib bundled
       // (matches the 中国友好 no-CDN constraint). Just inject it.
@@ -276,10 +292,13 @@
         return;
       }
       if (resp.status === 200) {
-        const data = await resp.json();
+        // Envelope unwrap — same reason as init: /api/v1/* responses
+        // are wrapped in { ok, data }.
+        const envP = await resp.json();
+        const dataP = envP && envP.ok && envP.data ? envP.data : envP;
         setStatus('<span class="text-emerald-600">✓ 已批准 —— 正在跳转…</span>', true);
         // Cookie is now set by the server. Navigate to /app.
-        window.location = data.redirectTo || "/app";
+        window.location = dataP.redirectTo || "/app";
         return;
       }
       if (resp.status === 404) {
@@ -308,4 +327,5 @@
   document.getElementById("qr-refresh").addEventListener("click", initQr);
   document.getElementById("qr-error-retry").addEventListener("click", initQr);
 })();
+<% } %>
 </script>
