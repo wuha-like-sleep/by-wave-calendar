@@ -73,6 +73,23 @@ jobs:
         working-directory: apps/desktop
         run: ./gradlew ${{ matrix.target }} --no-daemon
 
+      # When jpackage fails it dumps the real error to a file we can't
+      # otherwise see — cat it into the workflow log so debugging doesn't
+      # require SSH-ing into the runner. Cross-platform shell since the
+      # logs path is the same shape on macOS / Linux / Windows.
+      - name: Dump jpackage logs on failure
+        if: failure()
+        shell: bash
+        working-directory: apps/desktop
+        run: |
+          echo "=== Listing build/compose/logs/ ==="
+          ls -la build/compose/logs/ 2>/dev/null || echo "(no logs dir)"
+          find build/compose/logs -type f -name "*.txt" 2>/dev/null | while read -r f; do
+            echo ""
+            echo "=== $f ==="
+            cat "$f"
+          done
+
       # Mac signing — only runs when APPLE_DEVELOPER_ID_APPLICATION
       # is set. Without it the DMG ships unsigned (the Gradle plugin
       # already gates signing on the env var; this block is just for

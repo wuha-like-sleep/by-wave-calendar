@@ -1,202 +1,100 @@
 <!--
-  Download landing — App Store + Android APK + open in browser.
-  Linked from the footer, the main landing hero, and external Gitee /
-  GitHub README badges.
-
-  The four URLs at the top of the file are the only things to change
-  when we cut a new release. Server reads them from this template's
-  locals (set in src/web/index.ts) so an admin redeploys without
-  touching the EJS layout.
+  Download landing — iOS / Android / Desktop 三平台等宽卡片，Web 单独
+  做成横幅 banner。所有 URL 走模板 locals（src/web/index.ts），改
+  发版只动那一处。
 -->
 
-<section class="relative overflow-hidden text-center py-12 sm:py-16">
+<!-- ============ Hero ============ -->
+<section class="relative overflow-hidden text-center py-14 sm:py-20">
   <div class="absolute inset-0 -z-10 bg-gradient-to-br from-brand-50 via-white to-slate-50"></div>
-  <div class="absolute -z-10 top-10 left-1/2 -translate-x-1/2 h-72 w-72 rounded-full bg-brand-400/10 blur-3xl"></div>
+  <div class="absolute -z-10 top-12 left-1/2 -translate-x-1/2 h-80 w-80 rounded-full bg-brand-400/15 blur-3xl"></div>
 
   <h1 class="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900">
     随处可用 · 始终归你
   </h1>
-  <p class="mt-4 max-w-2xl mx-auto text-base sm:text-lg text-slate-600 leading-relaxed">
-    iOS / Android / 网页 三端共享你的<span class="text-slate-900 font-medium"><%= siteName %></span>日程，
-    <br class="hidden sm:block"/>
-    数据始终在你绑定的服务器上。
+  <p class="mt-5 max-w-2xl mx-auto text-base sm:text-lg text-slate-600 leading-relaxed">
+    iOS · Android · macOS · Windows · Linux · 网页 全平台共享你的
+    <span class="text-slate-900 font-medium"><%= siteName %></span>
+    日程，数据始终在你绑定的服务器上。
   </p>
 </section>
 
-<!-- Download cards -->
-<section class="grid gap-4 sm:grid-cols-2 mt-2 max-w-4xl mx-auto">
-  <!-- iOS -->
-  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col">
-    <div class="flex items-center gap-3 mb-4">
-      <div class="h-12 w-12 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+<!-- ============ Three native cards (iOS / Android / Desktop) ============ -->
+<section class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto px-4">
+
+  <!-- ===== iOS ===== -->
+  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
+    <div class="flex items-center justify-between mb-5">
+      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
       </div>
-      <div class="text-left">
-        <h2 class="text-xl font-semibold text-slate-900">iOS</h2>
-        <p class="text-xs text-slate-500">iPhone · iPad</p>
-      </div>
+      <span class="text-xs font-mono text-slate-400">v<%= iosVersion %></span>
     </div>
 
-    <ul class="text-sm text-slate-600 space-y-1 mb-5">
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> iOS 16.0+</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 当前版本 <%= iosVersion %></li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 中文 / 英文 双语</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Passkey · MFA · 多账号</li>
+    <h2 class="text-xl font-semibold text-slate-900">iOS</h2>
+    <p class="text-sm text-slate-500 mt-0.5 mb-5">iPhone · iPad · macOS Catalyst</p>
+
+    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
+      <li class="flex items-center gap-2"><span class="text-slate-900">·</span> iOS 16.0+ · 中英双语</li>
+      <li class="flex items-center gap-2"><span class="text-slate-900">·</span> Passkey · MFA · 多账号</li>
     </ul>
 
     <div class="mt-auto space-y-2">
       <% if (iosAppStoreUrl) { %>
         <a href="<%= iosAppStoreUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-medium shadow-md transition">
-          App Store 下载 →
+           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          App Store 下载
         </a>
         <% if (iosTestFlightUrl) { %>
           <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
-             class="block w-full text-center rounded-md border border-slate-200 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50">
-            或加入 TestFlight 内测 (Beta)
+             class="block w-full text-center rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900 transition">
+            或加入 TestFlight 公测
           </a>
         <% } %>
       <% } else if (iosTestFlightUrl) { %>
         <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-medium shadow-md transition">
-          通过 TestFlight 加入 (Beta) →
+           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          通过 TestFlight 加入 Beta
         </a>
-        <p class="text-xs text-slate-400 mt-2 text-center">
-          App Store 正式版审核中，TestFlight 公测已开放。<br/>
-          点击后用 TestFlight APP 安装即可，正式版上架后自动转为正式版本。
+        <p class="text-xs text-slate-400 text-center pt-1">
+          App Store 正式版审核中 · 预计 <%= iosEtaWeek %>
         </p>
       <% } else { %>
         <button disabled
-                class="block w-full text-center rounded-lg bg-slate-200 text-slate-500 px-5 py-3 text-sm font-medium cursor-not-allowed">
-          🍎 App Store 审核中 · 敬请期待
+                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
+          App Store 审核中
         </button>
-        <p class="text-xs text-slate-400 mt-2 text-center">
-          预计 <%= iosEtaWeek %> 上架
+        <p class="text-xs text-slate-400 text-center pt-1">
+          预计 <%= iosEtaWeek %>
         </p>
       <% } %>
     </div>
   </div>
 
-  <!-- Desktop — macOS / Windows / Linux. Single Kotlin codebase, three
-       native installers. Each platform shows its own download button
-       when its manifest asset is present, or a "coming soon" branch
-       otherwise. Per-asset URL is either an external GitHub Releases
-       URL (preferred) or a server-hosted /downloads/desktop/<filename>
-       path (self-hoster fallback) — resolved by the route handler. -->
-  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col sm:col-span-2">
-    <div class="flex items-center gap-3 mb-4">
-      <div class="h-12 w-12 rounded-xl bg-brand-600 text-white flex items-center justify-center shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+  <!-- ===== Android ===== -->
+  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
+    <div class="flex items-center justify-between mb-5">
+      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.34a1.123 1.123 0 1 1-.001-2.247 1.123 1.123 0 0 1 .001 2.247m-11.046 0a1.123 1.123 0 1 1 0-2.247 1.123 1.123 0 0 1 0 2.247m11.45-6.155l2.196-3.801a.452.452 0 0 0-.78-.452l-2.226 3.85A13.49 13.49 0 0 0 12 7.5c-1.83 0-3.555.336-5.118.94L4.658 4.59a.452.452 0 0 0-.78.452l2.196 3.802C2.27 10.93 0 14.193 0 17.952h24c0-3.76-2.27-7.022-5.073-8.767"/></svg>
       </div>
-      <div class="text-left">
-        <h2 class="text-xl font-semibold text-slate-900">Desktop</h2>
-        <p class="text-xs text-slate-500">macOS · Windows · Linux</p>
-      </div>
-      <span class="ml-auto text-xs px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 border border-brand-100">
-        <%= desktopVersion %>
-      </span>
+      <span class="text-xs font-mono text-slate-400">v<%= androidVersion %></span>
     </div>
 
-    <ul class="text-sm text-slate-600 space-y-1 mb-3">
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Kotlin + Compose Multiplatform 原生</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 手机扫码登录 · 本地存放令牌</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 支持任意 ByWave 服务器（输入你的服务器地址）</li>
-    </ul>
+    <h2 class="text-xl font-semibold text-slate-900">Android</h2>
+    <p class="text-sm text-slate-500 mt-0.5 mb-5">Phone · Tablet</p>
 
-    <% if (desktopNotes) { %>
-      <details class="text-xs text-slate-600 mb-4 group">
-        <summary class="cursor-pointer text-brand-700 hover:text-brand-800 select-none list-none flex items-center gap-1">
-          <span class="transition-transform group-open:rotate-90">▸</span>
-          <span>本版更新内容</span>
-        </summary>
-        <div class="mt-2 pl-4 border-l-2 border-brand-100 whitespace-pre-line text-slate-600 leading-relaxed">
-<%= desktopNotes %>
-        </div>
-      </details>
-    <% } %>
-
-    <div class="mt-auto grid gap-2 sm:grid-cols-3">
-      <!-- macOS -->
-      <% if (desktopMacUrl) { %>
-        <a href="<%= desktopMacUrl %>"
-           class="block text-center rounded-lg bg-slate-900 hover:bg-slate-800 text-white px-4 py-3 text-sm font-medium shadow-md transition">
-          🍎 macOS .dmg<% if (desktopMacSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopMacSize %></span><% } %>
-        </a>
-      <% } else { %>
-        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
-          🍎 macOS · 即将发布
-        </button>
-      <% } %>
-
-      <!-- Windows -->
-      <% if (desktopWinUrl) { %>
-        <a href="<%= desktopWinUrl %>"
-           class="block text-center rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-4 py-3 text-sm font-medium shadow-md transition">
-          🪟 Windows .msi<% if (desktopWinSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopWinSize %></span><% } %>
-        </a>
-      <% } else { %>
-        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
-          🪟 Windows · 即将发布
-        </button>
-      <% } %>
-
-      <!-- Linux -->
-      <% if (desktopLinuxUrl) { %>
-        <a href="<%= desktopLinuxUrl %>"
-           class="block text-center rounded-lg bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 text-sm font-medium shadow-md transition">
-          🐧 Linux .deb<% if (desktopLinuxSize) { %><span class="block text-xs opacity-80 mt-0.5"><%= desktopLinuxSize %></span><% } %>
-        </a>
-      <% } else { %>
-        <button disabled class="block text-center rounded-lg bg-slate-100 text-slate-400 px-4 py-3 text-sm font-medium cursor-not-allowed">
-          🐧 Linux · 即将发布
-        </button>
-      <% } %>
-    </div>
-
-    <% if (desktopMacUrl || desktopWinUrl || desktopLinuxUrl) { %>
-      <div class="flex gap-2 text-xs mt-3">
-        <a href="<%= desktopGitHub %>" target="_blank" rel="noopener"
-           class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
-          GitHub Releases
-        </a>
-        <a href="<%= desktopGitee %>" target="_blank" rel="noopener"
-           class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
-          Gitee Releases
-        </a>
-      </div>
-    <% } else { %>
-      <p class="text-xs text-slate-400 mt-3 text-center">
-        首版预计 <%= desktopEtaWeek %> 发布，关注 GitHub Releases 接收通知。
-      </p>
-    <% } %>
-  </div>
-
-  <!-- Android -->
-  <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-7 flex flex-col">
-    <div class="flex items-center gap-3 mb-4">
-      <div class="h-12 w-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.34a1.123 1.123 0 1 1-.001-2.247 1.123 1.123 0 0 1 .001 2.247m-11.046 0a1.123 1.123 0 1 1 0-2.247 1.123 1.123 0 0 1 0 2.247m11.45-6.155l2.196-3.801a.452.452 0 0 0-.78-.452l-2.226 3.85A13.49 13.49 0 0 0 12 7.5c-1.83 0-3.555.336-5.118.94L4.658 4.59a.452.452 0 0 0-.78.452l2.196 3.802C2.27 10.93 0 14.193 0 17.952h24c0-3.76-2.27-7.022-5.073-8.767"/></svg>
-      </div>
-      <div class="text-left">
-        <h2 class="text-xl font-semibold text-slate-900">Android</h2>
-        <p class="text-xs text-slate-500">Phone · Tablet</p>
-      </div>
-    </div>
-
-    <ul class="text-sm text-slate-600 space-y-1 mb-3">
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Android 8.0+ (API 26)</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 当前版本 <%= androidVersion %></li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> Kotlin + Jetpack Compose 原生</li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">✓</span> 仅 APK 直装，不上应用商店</li>
+    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
+      <li class="flex items-center gap-2"><span class="text-emerald-600">·</span> Android 8.0+ · Kotlin Compose 原生</li>
+      <li class="flex items-center gap-2"><span class="text-emerald-600">·</span> APP 内自动更新 · 不上应用商店</li>
     </ul>
 
     <% if (typeof androidNotes !== 'undefined' && androidNotes) { %>
-      <details class="text-xs text-slate-600 mb-4 group">
-        <summary class="cursor-pointer text-emerald-700 hover:text-emerald-800 select-none list-none flex items-center gap-1">
-          <span class="transition-transform group-open:rotate-90">▸</span>
-          <span>本版更新内容</span>
+      <details class="text-xs text-slate-500 mb-5 group/notes -mt-3">
+        <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+          <span class="transition-transform group-open/notes:rotate-90">▸</span>
+          本版更新内容
         </summary>
-        <div class="mt-2 pl-4 border-l-2 border-emerald-100 whitespace-pre-line text-slate-600 leading-relaxed">
+        <div class="mt-2 pl-4 border-l-2 border-emerald-100 whitespace-pre-line leading-relaxed">
 <%= androidNotes %>
         </div>
       </details>
@@ -205,68 +103,156 @@
     <div class="mt-auto space-y-2">
       <% if (androidApkUrl) { %>
         <a href="<%= androidApkUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 text-sm font-medium shadow-md transition">
-          下载 APK (<%= androidApkSize %>) →
+           class="block w-full text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          下载 APK · <%= androidApkSize %>
         </a>
-        <div class="flex gap-2 text-xs">
-          <a href="<%= androidApkGitHub %>" target="_blank" rel="noopener"
-             class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
-            GitHub Releases
-          </a>
-          <a href="<%= androidApkGitee %>" target="_blank" rel="noopener"
-             class="flex-1 text-center rounded-md border border-slate-200 px-3 py-2 text-slate-600 hover:bg-slate-50">
-            Gitee Releases
-          </a>
-        </div>
       <% } else { %>
         <button disabled
-                class="block w-full text-center rounded-lg bg-slate-200 text-slate-500 px-5 py-3 text-sm font-medium cursor-not-allowed">
-          🤖 v0.1 即将发布
+                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
+          v0.1 即将发布
         </button>
-        <p class="text-xs text-slate-400 mt-2 text-center">
-          首版预计 <%= androidEtaWeek %> 发布，关注 GitHub Releases 接收通知
+        <p class="text-xs text-slate-400 text-center pt-1">
+          预计 <%= androidEtaWeek %>
         </p>
       <% } %>
     </div>
   </div>
+
+  <!-- ===== Desktop ===== -->
+  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
+    <div class="flex items-center justify-between mb-5">
+      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <span class="text-xs font-mono text-slate-400">v<%= desktopVersion %></span>
+    </div>
+
+    <h2 class="text-xl font-semibold text-slate-900">桌面端</h2>
+    <p class="text-sm text-slate-500 mt-0.5 mb-5">macOS · Windows · Linux</p>
+
+    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
+      <li class="flex items-center gap-2"><span class="text-brand-600">·</span> Compose Multiplatform 原生</li>
+      <li class="flex items-center gap-2"><span class="text-brand-600">·</span> 手机扫码登录 · 拖拽改时间</li>
+    </ul>
+
+    <% if (desktopNotes) { %>
+      <details class="text-xs text-slate-500 mb-5 group/notes -mt-3">
+        <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+          <span class="transition-transform group-open/notes:rotate-90">▸</span>
+          本版更新内容
+        </summary>
+        <div class="mt-2 pl-4 border-l-2 border-brand-100 whitespace-pre-line leading-relaxed">
+<%= desktopNotes %>
+        </div>
+      </details>
+    <% } %>
+
+    <div class="mt-auto space-y-2">
+      <!-- Primary: pick the first available platform; render others below as small chips -->
+      <% if (desktopMacUrl) { %>
+        <a href="<%= desktopMacUrl %>"
+           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          下载 macOS DMG<% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %>
+        </a>
+      <% } else if (desktopWinUrl) { %>
+        <a href="<%= desktopWinUrl %>"
+           class="block w-full text-center rounded-xl bg-sky-700 hover:bg-sky-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          下载 Windows MSI<% if (desktopWinSize) { %> · <%= desktopWinSize %><% } %>
+        </a>
+      <% } else if (desktopLinuxUrl) { %>
+        <a href="<%= desktopLinuxUrl %>"
+           class="block w-full text-center rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
+          下载 Linux DEB<% if (desktopLinuxSize) { %> · <%= desktopLinuxSize %><% } %>
+        </a>
+      <% } else { %>
+        <button disabled
+                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
+          即将发布
+        </button>
+        <p class="text-xs text-slate-400 text-center pt-1">
+          预计 <%= desktopEtaWeek %>
+        </p>
+      <% } %>
+
+      <!-- Three-platform chip row — primary highlighted, others grey/disabled -->
+      <div class="grid grid-cols-3 gap-1.5 pt-1">
+        <a href="<%= desktopMacUrl || '#' %>" <% if (!desktopMacUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopMacUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
+          macOS
+        </a>
+        <a href="<%= desktopWinUrl || '#' %>" <% if (!desktopWinUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopWinUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
+          Windows
+        </a>
+        <a href="<%= desktopLinuxUrl || '#' %>" <% if (!desktopLinuxUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopLinuxUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
+          Linux
+        </a>
+      </div>
+    </div>
+  </div>
 </section>
 
-<!-- Browser fallback -->
-<section class="max-w-4xl mx-auto mt-6 rounded-2xl border border-slate-200 bg-white p-6 flex flex-col sm:flex-row items-center gap-4">
-  <div class="h-12 w-12 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+<!-- ============ Web / PWA banner ============ -->
+<section class="max-w-6xl mx-auto mt-6 px-4">
+  <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50/60 via-white to-white p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+    <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center shadow-sm shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h3 class="font-semibold text-slate-900">网页版 · 不用下载也能用</h3>
+        <span class="text-[10px] font-medium bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full">PWA 可安装</span>
+      </div>
+      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">
+        功能跟原生 APP 完全一致 · 一键安装到桌面 / 主屏 · 离线壳缓存让地铁飞机也能查
+      </p>
+    </div>
+    <a href="/app"
+       class="rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 text-sm font-semibold shadow-sm transition shrink-0">
+      打开网页版 →
+    </a>
   </div>
-  <div class="flex-1 text-center sm:text-left">
-    <h3 class="font-semibold text-slate-900">不下载也能用 · 浏览器直接打开</h3>
-    <p class="text-sm text-slate-600 mt-1">
-      网页版功能完整，PWA 可一键安装到桌面 / 主屏。地铁飞机离线也能查日程。
-    </p>
-  </div>
-  <a href="/app" class="rounded-lg bg-brand-600 hover:bg-brand-700 text-white px-5 py-2.5 text-sm font-medium shadow transition shrink-0">
-    打开网页版 →
-  </a>
 </section>
 
-<!-- Android APK install hint (collapsed by default) -->
-<section class="max-w-4xl mx-auto mt-4 rounded-2xl border border-amber-100 bg-amber-50/50 p-5">
-  <details>
-    <summary class="cursor-pointer font-medium text-sm text-amber-900">📦 怎么安装 APK？（点开看 3 步）</summary>
+<!-- ============ Help: APK install hint ============ -->
+<% if (androidApkUrl) { %>
+<section class="max-w-6xl mx-auto mt-6 px-4">
+  <details class="rounded-2xl border border-amber-200/60 bg-amber-50/40 p-5">
+    <summary class="cursor-pointer font-medium text-sm text-amber-900 select-none">
+      📦 第一次装 APK 该怎么操作？
+    </summary>
     <ol class="mt-3 ml-4 list-decimal space-y-1.5 text-sm text-amber-900/90">
       <li>下载 APK 文件到手机</li>
-      <li>系统弹「未知来源」警告 → 选择「允许」（设置 → 应用 → 特殊权限 → 安装未知应用）</li>
-      <li>点击 APK 安装，跟着流程走</li>
+      <li>系统弹「未知来源」警告 → 设置 → 应用 → 特殊权限 → 允许该浏览器/文件管理器安装应用</li>
+      <li>点击 APK 安装，跟着流程走 · 后续升级走 APP 内通道，不用再开权限</li>
     </ol>
-    <p class="mt-2 text-xs text-amber-700/80">
-      首次安装可能需要在「设置 → 安全」里允许浏览器/文件管理器安装应用；
+    <p class="mt-3 text-xs text-amber-700/80">
       系统不会上传安装数据到任何第三方。
     </p>
   </details>
 </section>
+<% } %>
 
-<!-- Source code -->
-<section class="max-w-4xl mx-auto mt-6 mb-10 text-center">
-  <p class="text-xs uppercase tracking-wider text-slate-500 mb-3">开源 · 自托管</p>
-  <div class="flex flex-wrap justify-center gap-3">
+<!-- ============ Mac DMG: Gatekeeper note ============ -->
+<% if (desktopMacUrl) { %>
+<section class="max-w-6xl mx-auto mt-3 px-4">
+  <details class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+    <summary class="cursor-pointer font-medium text-sm text-slate-700 select-none">
+      🍎 macOS 第一次打开应用？
+    </summary>
+    <p class="mt-3 text-sm text-slate-600 leading-relaxed">
+      DMG 已由 Apple 公证，Gatekeeper 直接放行。如果你看到「无法验证开发者」，
+      说明你下载的是更旧的版本或者复制品 —— 请重新从本页下载。
+    </p>
+  </details>
+</section>
+<% } %>
+
+<!-- ============ Source code footer ============ -->
+<section class="max-w-6xl mx-auto mt-12 mb-12 px-4 text-center">
+  <p class="text-xs uppercase tracking-widest text-slate-400 mb-4">开源 · 自托管</p>
+  <div class="flex flex-wrap justify-center gap-2.5">
     <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener"
        class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.26.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.605-2.665-.305-5.467-1.334-5.467-5.93 0-1.31.468-2.382 1.235-3.222-.135-.303-.54-1.524.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.652.24 2.873.12 3.176.765.84 1.23 1.912 1.23 3.222 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22v3.293c0 .32.21.694.825.577C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -278,10 +264,13 @@
       Gitee 镜像
     </a>
     <a href="/support" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition">
-      📧 技术支持
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      技术支持
     </a>
   </div>
-  <p class="mt-4 text-xs text-slate-400">
-    iOS 与 Android 客户端的代码也开放在仓库的 <code class="font-mono">apps/ios</code> 与 <code class="font-mono">apps/android</code>。
+  <p class="mt-5 text-xs text-slate-400">
+    iOS / Android / 桌面端 / 服务端 全部代码在仓库的
+    <code class="font-mono text-slate-500">apps/</code> 和
+    <code class="font-mono text-slate-500">src/</code> 目录。
   </p>
 </section>
