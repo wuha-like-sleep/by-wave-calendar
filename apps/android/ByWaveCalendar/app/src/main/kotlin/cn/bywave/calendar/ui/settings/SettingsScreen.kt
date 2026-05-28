@@ -31,7 +31,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
@@ -167,7 +166,7 @@ fun SettingsScreen(
                             )
                         }
                         Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            Icons.Default.ChevronRight,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

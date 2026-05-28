@@ -67,6 +67,7 @@
         android:supportsRtl="false"
         android:theme="@style/Theme.ByWaveCalendar"
         android:enableOnBackInvokedCallback="true"
+        android:localeConfig="@xml/locales_config"
         tools:targetApi="34">
 
         <activity

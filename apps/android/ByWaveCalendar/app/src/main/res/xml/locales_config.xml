@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares the languages this APP ships translations for. Android 13+
+     reads this to show a 「Language」 entry in 系统设置 → 应用 →
+     ByWave Calendar (independent from the in-APP picker we added in
+     SettingsScreen — both paths write to the same AppCompatDelegate
+     state). Order doesn't matter; system Settings sorts by name. -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="zh-Hans"/>
+    <locale android:name="en"/>
+</locale-config>
