@@ -1066,22 +1066,25 @@ export async function pairPageRoutes(app: FastifyInstance) {
       return reply.redirect(`/login?return_to=${back}`);
     }
     const siteName = (await getSettings()).siteName || "ByWave Calendar";
+    // flash: null — partials/flash.ejs guards on `flash && ...`, but
+    // layout.ejs references `flash` directly so the locals object MUST
+    // contain the key, else EJS throws "flash is not defined".
     if (!p) {
       return reply.view("desktop-pair", {
         title: "桌面端登录", state: "expired", user,
-        csrfToken: csrfTokenFor(req), siteName,
+        csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     if (p.status !== "pending") {
       return reply.view("desktop-pair", {
         title: "桌面端登录",
         state: p.status === "approved" ? "already_approved" : "denied",
-        user, csrfToken: csrfTokenFor(req), siteName,
+        user, csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     return reply.view("desktop-pair", {
       title: "桌面端登录", state: "pending", code, user,
-      csrfToken: csrfTokenFor(req), siteName,
+      csrfToken: csrfTokenFor(req), siteName, flash: null,
     });
   });
 
@@ -1159,22 +1162,23 @@ export async function pairPageRoutes(app: FastifyInstance) {
       return reply.redirect(`/login?return_to=${back}`);
     }
     const siteName = (await getSettings()).siteName || "ByWave Calendar";
+    // flash: null — required by layout.ejs (see desktop-pair branch above).
     if (!p) {
       return reply.view("web-pair", {
         title: "网页扫码登录", state: "expired", user,
-        csrfToken: csrfTokenFor(req), siteName,
+        csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     if (p.status !== "pending") {
       return reply.view("web-pair", {
         title: "网页扫码登录",
         state: p.status === "approved" ? "already_approved" : "denied",
-        user, csrfToken: csrfTokenFor(req), siteName,
+        user, csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     return reply.view("web-pair", {
       title: "网页扫码登录", state: "pending", code, user,
-      csrfToken: csrfTokenFor(req), siteName,
+      csrfToken: csrfTokenFor(req), siteName, flash: null,
     });
   });
 
