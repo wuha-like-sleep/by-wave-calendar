@@ -169,6 +169,10 @@ struct DesktopPairScannerView: View {
             return "未登录。请先登录后再扫码。"
         case .network(let inner):
             return inner.localizedDescription
+        case .decode(let inner):
+            return "服务器响应解析失败：\(inner.localizedDescription)"
+        case .refreshFailed(let status):
+            return "登录已过期 (HTTP \(status))，请重新登录后再试。"
         case .server(let status, _):
             switch status {
             case 404: return "二维码已过期或无效，请让电脑端重新生成。"
