@@ -1,14 +1,14 @@
 {
-  "versionCode": 8,
-  "versionName": "0.7.2",
-  "releasedAt": "2026-05-28T13:05:00Z",
-  "notes": "修扫码登录的 envelope bug — desktopPairInit / desktopPairStatus 现在正确拆服务器 {ok,data} 外壳。v0.7.1 之前所有版本都受影响。",
+  "versionCode": 9,
+  "versionName": "0.7.3",
+  "releasedAt": "2026-05-28T14:30:00Z",
+  "notes": "新：在 APP 内更新（Cmd+U / 菜单「检查更新…」一键下载并打开）· 本地事件缓存（断网/秒画）· 关窗口不退出（红 × 隐藏，Cmd+Q 真退出）· 记住服务器域名。修：StandaloneCoroutine 取消异常误报；事件 chip 多行 + 显示时间。",
   "mandatory": false,
   "assets": {
     "mac": {
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.2/ByWaveCalendar-0.7.2-arm64.dmg",
-      "sha256": "6ea18a5bf2c043eb0544c24fa7a43d82f78ef0d46b00ad21af27f2074cae9054",
-      "sizeBytes": 113917343
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.3/ByWaveCalendar-0.7.3-arm64.dmg",
+      "sha256": "3ecc363019b16e7d9d09431d9e216f6a46820942994c8f83709e836feb45df18",
+      "sizeBytes": 114045610
     }
   }
 }
