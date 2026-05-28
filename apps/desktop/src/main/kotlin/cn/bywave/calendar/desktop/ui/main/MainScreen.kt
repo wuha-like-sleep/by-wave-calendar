@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.ui.calendar.ActiveSheet
 import cn.bywave.calendar.desktop.ui.calendar.CalendarState
 import cn.bywave.calendar.desktop.ui.calendar.DayView
@@ -87,6 +88,15 @@ fun MainScreen(
     }
 
     LaunchedEffect(state) { state?.load() }
+
+    // Background update check on every profile switch + first mount.
+    // Throttle is in UpdateChecker; subsequent profile switches in the
+    // same 6h window are no-ops. We do call once per session boot
+    // though, so a fresh launch on day 2 always re-checks.
+    LaunchedEffect(p?.serverUrl) {
+        p?.serverUrl?.let { UpdateChecker.check(it) }
+    }
+    val updateInfo by UpdateChecker.available.collectAsState()
 
     // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
     // Re-attaches when CalendarState rebuilds on profile switch. Escape
@@ -132,6 +142,10 @@ fun MainScreen(
             onSignOut = { ProfileStore.clear() },
         )
         HorizontalDivider()
+
+        // Update banner — only visible when UpdateChecker has spotted
+        // a manifest with versionCode > BuildInfo.VERSION_CODE.
+        updateInfo?.let { UpdateBanner(it) }
 
         Row(modifier = Modifier.fillMaxSize()) {
             Sidebar(

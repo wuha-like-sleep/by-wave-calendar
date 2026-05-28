@@ -30,9 +30,11 @@ plugins {
 group = "cn.bywave.calendar.desktop"
 // macOS pkgbuild + Win MSI both require MAJOR ≥ 1 in their native
 // installer version metadata, even if our marketing version is < 1.
-// Keep `version` ≥ 1.0.0 and surface a separate "display version"
-// inside the app if we want to say "v0.1" in UI.
-version = "1.0.0"
+// We keep installer `version` ≥ 1.0.0 (set on packageVersion below),
+// and surface the real marketing version via BuildInfo.VERSION_NAME.
+// The integer BuildInfo.VERSION_CODE is what the in-app updater
+// compares — keep it in lockstep with apps/desktop/releases/latest.json.
+version = "1.0.7"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
