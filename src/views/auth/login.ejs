@@ -1,24 +1,20 @@
 <% const qrEnabled = (typeof qrLoginEnabled !== 'undefined' && qrLoginEnabled); %>
 <div class="mx-auto max-w-md">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
-    <h1 class="text-2xl font-semibold text-slate-900">登录</h1>
+    <h1 class="text-2xl font-semibold text-slate-900"><%= t("login.title") %></h1>
     <p class="mt-1 text-sm text-slate-500">
-      <% if (qrEnabled) { %>用密码 / Passkey 登录，或用手机 APP 扫码授权<% } else { %>用密码或 Passkey 登录<% } %>
+      <% if (qrEnabled) { %><%= t("login.subtitle.withQr") %><% } else { %><%= t("login.subtitle.noQr") %><% } %>
     </p>
 
     <% if (qrEnabled) { %>
-    <%# Tab switch: 密码登录 / 扫码登录. Tabs are pure DOM toggle, no
-        network. The QR is only fetched once the user clicks the
-        scan tab — saves a webPairs slot for non-scanning visitors.
-        Hidden entirely when admin disabled the QR login feature. %>
     <div class="mt-5 grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
       <button type="button" id="tab-password"
               class="text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm">
-        密码登录
+        <%= t("login.tabPassword") %>
       </button>
       <button type="button" id="tab-qr"
               class="text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900">
-        扫码登录
+        <%= t("login.tabQr") %>
       </button>
     </div>
     <% } %>
@@ -28,7 +24,7 @@
       <button type="button" id="passkey-login"
               class="mt-5 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 shadow-sm">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg>
-        使用 Passkey 登录
+        <%= t("login.passkeyButton") %>
       </button>
 
       <% if (typeof ssoProviders !== 'undefined' && ssoProviders.length > 0) { %>
@@ -49,15 +45,15 @@
       <form method="post" action="/login" class="space-y-4">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <div>
-          <label class="block text-sm font-medium text-slate-700">邮箱</label>
+          <label class="block text-sm font-medium text-slate-700"><%= t("login.email") %></label>
           <input type="email" name="email" id="email" required autocomplete="email"
                  value="<%= form?.email || '' %>"
                  class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
           <div class="flex items-center justify-between">
-            <label class="block text-sm font-medium text-slate-700">密码</label>
-            <a href="/forgot-password" class="text-xs text-brand-600 hover:text-brand-700 font-medium">忘记密码？</a>
+            <label class="block text-sm font-medium text-slate-700"><%= t("login.password") %></label>
+            <a href="/forgot-password" class="text-xs text-brand-600 hover:text-brand-700 font-medium"><%= t("login.forgotPassword") %></a>
           </div>
           <input type="password" name="password" required autocomplete="current-password"
                  class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
@@ -69,15 +65,15 @@
         <label class="flex items-center gap-2 cursor-pointer select-none">
           <input type="checkbox" name="remember" id="remember-me" value="on"
                  class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-          <span class="text-sm text-slate-700">保持登录（30 天）</span>
-          <span class="text-xs text-slate-400">· 不勾选则关闭浏览器即退出</span>
+          <span class="text-sm text-slate-700"><%= t("login.rememberMe") %></span>
+          <span class="text-xs text-slate-400"><%= t("login.rememberMeHint") %></span>
         </label>
-        <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">登录</button>
+        <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700"><%= t("login.submit") %></button>
       </form>
 
       <% if (registrationOpen) { %>
         <p class="mt-6 text-center text-sm text-slate-500">
-          还没账号？<a href="/register" class="text-brand-600 hover:text-brand-700 font-medium">注册</a>
+          <%= t("login.noAccount") %> <a href="/register" class="text-brand-600 hover:text-brand-700 font-medium"><%= t("nav.register") %></a>
         </p>
       <% } %>
     </div>
@@ -119,6 +115,23 @@
     </div>
     <% } %>
   </div>
+
+  <%# 匿名访客的语言切换器 —— 写 bwc_locale cookie 立即生效。
+      下次刷新页面 + 同一浏览器后续所有页面都用这个语言。 %>
+  <form method="post" action="/locale" class="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="return_to" value="/login" />
+    <label for="locale-switch">🌐</label>
+    <select name="locale" id="locale-switch"
+            onchange="this.form.submit()"
+            class="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs">
+      <% locales.forEach(function(l){ %>
+        <option value="<%= l.code %>" <%= currentLocale === l.code ? "selected" : "" %>>
+          <%= l.label %>
+        </option>
+      <% }) %>
+    </select>
+  </form>
 </div>
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>

@@ -769,6 +769,14 @@ app.addHook("onRequest", async (req, reply) => {
   // without re-querying or going async per template render.
   const currentUser = await loadUserFromRequest(req).catch(() => null);
   const ssoProviders = await listEnabledProvidersPublic().catch(() => []);
+  // Locale resolution: cookie > user.locale > site default > Accept-Language
+  // > "zh-CN". See src/lib/i18n.ts:resolveLocale for the exact precedence.
+  // Computed once per request so every template render + every route
+  // handler shares the same answer.
+  const { resolveLocaleFromRequest, makeT, LOCALES, SITE_LOCALE_OPTIONS } = await import("./lib/i18n.js");
+  const currentLocale = resolveLocaleFromRequest(req, currentUser?.locale ?? null, settings.defaultLocale);
+  (req as unknown as { locale: string }).locale = currentLocale;
+  const t = makeT(currentLocale);
   const original = reply.view.bind(reply);
   (reply as unknown as { view: (n: string, l?: object) => unknown }).view = (name: string, locals: object = {}) =>
     original(name, {
@@ -787,6 +795,14 @@ app.addHook("onRequest", async (req, reply) => {
       themePalette: userTheme.palette ?? settings.themePalette,
       themeDensity: userTheme.density ?? settings.themeDensity,
       currentUser,
+      // i18n surface — templates call `t("key")` or read `currentLocale`
+      // for HTML <html lang> + the picker UI. `locales` and
+      // `siteLocaleOptions` feed dropdowns.
+      t,
+      currentLocale,
+      locales: LOCALES,
+      siteLocaleOptions: SITE_LOCALE_OPTIONS,
+      siteDefaultLocale: settings.defaultLocale,
       jsBasePath: JS_BASE_PATH,
       cspNonce: (req.raw as unknown as { cspNonce: string }).cspNonce,
       ...locals,

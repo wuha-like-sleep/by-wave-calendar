@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"
+<html lang="<%= typeof currentLocale !== 'undefined' ? currentLocale : 'zh-CN' %>"
       data-theme="<%= typeof themePalette !== 'undefined' ? themePalette : 'indigo' %>"
       data-density="<%= typeof themeDensity !== 'undefined' ? themeDensity : 'comfortable' %>"
       data-app-version="<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>">

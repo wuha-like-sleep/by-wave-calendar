@@ -302,6 +302,24 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/site?success=" + encodeURIComponent("站点设置已保存"));
   });
 
+  // -------- 网站默认语言 -------- (site-wide; user-level overrides)
+  // "auto" = resolve from browser Accept-Language. Any locale code
+  // must be in SITE_LOCALE_OPTIONS (= "auto" plus every entry in
+  // LOCALES). Surfaces in install.sh too via .env seed.
+  app.post("/admin/site/locale", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const { isValidSiteLocale } = await import("../lib/i18n.js");
+    const body = z.object({ defaultLocale: z.string().max(20) }).safeParse(req.body);
+    if (!body.success || !isValidSiteLocale(body.data.defaultLocale)) {
+      return reply.redirect("/admin/site?error=" + encodeURIComponent("不支持的语言"));
+    }
+    await updateSettings({ defaultLocale: body.data.defaultLocale });
+    await audit(req, u.id, "site.locale.update", { targetType: "site_settings", details: { locale: body.data.defaultLocale } });
+    return reply.redirect("/admin/site?success=" + encodeURIComponent("网站语言已更新") + "#language");
+  });
+
   app.post("/admin/smtp", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;

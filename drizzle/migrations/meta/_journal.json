@@ -267,6 +267,13 @@
       "when": 1779980815718,
       "tag": "0037_deep_frank_castle",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780006290804,
+      "tag": "0038_boring_nova",
+      "breakpoints": true
     }
   ]
 }

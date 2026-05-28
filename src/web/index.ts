@@ -335,6 +335,35 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // -------- Auth pages --------
+  // -------- Anonymous language switcher --------
+  // Used by the 🌐 picker on /login (visitors who haven't signed in).
+  // Logged-in users have a separate, persistent endpoint at
+  // /app/settings/locale that also writes to user.locale.
+  // CSRF protected to prevent a malicious page from setting the cookie
+  // for our domain via a hidden form post.
+  app.post("/locale", async (req, reply) => {
+    if (!verifyCsrf(req, reply)) return;
+    const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
+    const body = z.object({
+      locale: z.string().max(20),
+      return_to: z.string().max(200).optional(),
+    }).safeParse(req.body);
+    if (!body.success || !isValidLocale(body.data.locale)) {
+      return reply.redirect("/login");
+    }
+    reply.setCookie(LOCALE_COOKIE, body.data.locale, {
+      httpOnly: false, sameSite: "lax", secure: env.NODE_ENV === "production",
+      path: "/", maxAge: LOCALE_COOKIE_TTL_S,
+    });
+    // Bounce back to wherever they came from (sanitize: /login is safe;
+    // any other path is rejected to /login).
+    const r = body.data.return_to;
+    if (r === "/login" || r === "/register" || r === "/forgot-password") {
+      return reply.redirect(r);
+    }
+    return reply.redirect("/login");
+  });
+
   app.get("/login", async (req, reply) => {
     const user = await loadUserFromRequest(req);
     if (user) {
@@ -1994,6 +2023,35 @@ export async function webRoutes(app: FastifyInstance) {
     await db.update(schema.users).set({ themePalette: palette, themeDensity: density, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     setThemeCookies(reply, palette, density);
     return redirectWith(reply, "/app/settings", { success: "外观已更新" });
+  });
+
+  // -------- 我的语言 -------- (per-user; overrides site default)
+  // body.locale: "zh-CN" | "en" | "" (empty = inherit site default →
+  // wipes the column, also clears the bwc_locale override cookie).
+  app.post("/app/settings/locale", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
+    const body = z.object({ locale: z.string().max(20).optional() }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, "/app/settings", { error: "无效的语言选项" });
+    const raw = body.data.locale ?? "";
+    if (raw === "") {
+      // Empty selection → "Follow site default": wipe column + clear
+      // explicit cookie. Next request resolves through site default.
+      await db.update(schema.users).set({ locale: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+      reply.clearCookie(LOCALE_COOKIE, { path: "/" });
+    } else {
+      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings", { error: "不支持的语言" });
+      await db.update(schema.users).set({ locale: raw, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+      // Also write the override cookie so the change takes effect on
+      // THIS browser tab immediately (the redirect response carries it).
+      reply.setCookie(LOCALE_COOKIE, raw, {
+        httpOnly: false, sameSite: "lax", secure: env.NODE_ENV === "production",
+        path: "/", maxAge: LOCALE_COOKIE_TTL_S,
+      });
+    }
+    return redirectWith(reply, "/app/settings#language", { success: "语言已更新" });
   });
 
   app.post("/app/settings/delete-account", async (req, reply) => {

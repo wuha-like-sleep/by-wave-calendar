@@ -27,6 +27,11 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   themePalette: text("theme_palette"),
   themeDensity: text("theme_density"),
+  // Per-user UI language. NULL means "inherit site default". Valid
+  // values are entries in src/lib/i18n.ts SUPPORTED_LOCALES (zh-CN, en).
+  // The locale resolver falls back to site_settings.default_locale →
+  // Accept-Language → "zh-CN" when this is NULL.
+  locale: text("locale"),
   // Set on first SSO sign-in (and any subsequent SSO login if previously null).
   // Lets the user-management page show "通过 X 登录"; doesn't restrict other paths.
   ssoProviderSlug: text("sso_provider_slug"),
@@ -107,6 +112,12 @@ export const siteSettings = pgTable("site_settings", {
   // working (CalDAV-style sync) but distrust the QR cross-device login
   // flow (or just don't want to surface it on the login page). Default ON.
   qrLoginEnabled: boolean("qr_login_enabled").notNull().default(true),
+  // Default UI language for unauthenticated visitors and users who
+  // haven't explicitly chosen one. "auto" means resolve from the
+  // browser Accept-Language header; any other value must be a key
+  // in SUPPORTED_LOCALES (zh-CN, en). Set during install + editable
+  // in /admin/site → 网站语言.
+  defaultLocale: text("default_locale").notNull().default("zh-CN"),
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),

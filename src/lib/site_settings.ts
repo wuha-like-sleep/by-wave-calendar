@@ -29,6 +29,7 @@ export type SettingsView = {
   apiEnabled: boolean;
   appsEnabled: boolean;
   qrLoginEnabled: boolean;
+  defaultLocale: string;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
   vapidPublicKey: string | null;
@@ -85,6 +86,7 @@ function toView(r: schema.SiteSettings): SettingsView {
     apiEnabled: r.apiEnabled,
     appsEnabled: r.appsEnabled,
     qrLoginEnabled: r.qrLoginEnabled,
+    defaultLocale: r.defaultLocale || "zh-CN",
     forceAdminMfa: r.forceAdminMfa,
     embedEnabled: r.embedEnabled,
     vapidPublicKey: r.vapidPublicKey,
@@ -148,6 +150,7 @@ export async function updateSettings(patch: Partial<{
   apiEnabled: boolean;
   appsEnabled: boolean;
   qrLoginEnabled: boolean;
+  defaultLocale: string;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
   vapidPublicKey: string | null;
