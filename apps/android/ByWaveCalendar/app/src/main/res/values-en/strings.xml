@@ -93,4 +93,12 @@ to match the development locale.
     <string name="reminder_channel_name">Event reminders</string>
     <string name="reminder_channel_desc">Local notifications before event start.</string>
     <string name="reminder_default_body">Starting soon</string>
+
+    <!-- Language picker (Settings) -->
+    <string name="settings_language_section">Language</string>
+    <string name="settings_language_title">APP language</string>
+    <string name="settings_language_desc">Pick the in-APP language, overriding the system language.</string>
+    <string name="settings_language_follow_system">Follow system</string>
+    <string name="settings_language_zh">简体中文</string>
+    <string name="settings_language_en">English</string>
 </resources>

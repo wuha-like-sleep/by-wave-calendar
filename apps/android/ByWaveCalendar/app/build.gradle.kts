@@ -23,8 +23,8 @@ android {
         // string we show in About. We keep these in sync with iOS:
         //   MARKETING_VERSION 1.3.3   ↔   versionName "1.3.3"
         //   CURRENT_PROJECT_VERSION 1 ↔   versionCode 1  (Android starts fresh)
-        versionCode = 12
-        versionName = "0.9.0"
+        versionCode = 13
+        versionName = "0.9.1"
         // The setup screen URL scheme — server's QR-pair flow sends an
         // intent back to the APP via this scheme. iOS counterpart uses
         // `bywave://` too, so the server only needs one redirect target.
@@ -117,6 +117,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
+    // Only for AppCompatDelegate.setApplicationLocales — universal per-app
+    // language API across Android 8 through 14+. We don't use any
+    // AppCompat themes / activities elsewhere; the project is Compose-only.
+    implementation(libs.androidx.appcompat)
 
     // Compose (versions managed via the BOM so we don't list each here).
     implementation(platform(libs.compose.bom))

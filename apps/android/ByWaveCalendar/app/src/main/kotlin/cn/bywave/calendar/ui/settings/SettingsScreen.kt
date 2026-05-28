@@ -31,7 +31,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Logout
@@ -140,6 +142,85 @@ fun SettingsScreen(
                 ReadRow(label = stringResource(R.string.settings_email), value = active?.email ?: "—")
                 HorizontalDivider()
                 ReadRow(label = stringResource(R.string.settings_server), value = active?.serverUrl ?: "—")
+            }
+
+            // Language (v0.10+) — APP-level override via AppCompat-
+            // Delegate.setApplicationLocales. State + persistence live
+            // in cn.bywave.calendar.i18n.LocaleHelper.
+            run {
+                var showLangDialog by remember { mutableStateOf(false) }
+                val currentLocale by cn.bywave.calendar.i18n.LocaleHelper.current
+                Section(title = stringResource(R.string.settings_language_section)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showLangDialog = true }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_language_title), fontWeight = FontWeight.Medium)
+                            Text(
+                                cn.bywave.calendar.i18n.LocaleHelper.currentLabel(context),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (showLangDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showLangDialog = false },
+                        title = { Text(stringResource(R.string.settings_language_title)) },
+                        text = {
+                            // Hard-coded display labels for the 3 entries
+                            // so they're identifiable regardless of the
+                            // currently-active locale.
+                            val options = listOf(
+                                "" to stringResource(R.string.settings_language_follow_system),
+                                "zh-Hans" to stringResource(R.string.settings_language_zh),
+                                "en" to stringResource(R.string.settings_language_en),
+                            )
+                            Column {
+                                options.forEach { (code, label) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                cn.bywave.calendar.i18n.LocaleHelper.setLocale(context, code)
+                                                showLangDialog = false
+                                                // AppCompatDelegate triggers an
+                                                // Activity recreate so the new
+                                                // locale applies instantly. No
+                                                // manual restart needed.
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(label, modifier = Modifier.weight(1f))
+                                        if (code == currentLocale) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showLangDialog = false }) {
+                                Text(stringResource(android.R.string.cancel))
+                            }
+                        },
+                    )
+                }
             }
 
             // Sync (v0.6)
