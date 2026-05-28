@@ -99,7 +99,12 @@ class ApiClient(val serverUrl: String) {
             val body = runCatching { resp.bodyAsText() }.getOrDefault("<no body>")
             throw ApiException(resp.status.value, "pair-init failed: ${resp.status} $body")
         }
-        return resp.body()
+        // Go through unwrap() — server wraps every /api/v1/* response in
+        // { ok: true, data: ... }, so a bare resp.body() would try to
+        // deserialize the outer envelope as DesktopPairInitResponse and
+        // fail with "Fields [code, approveUrl, expiresAt] required but
+        // missing at path: $".
+        return unwrap(resp, DesktopPairInitResponse.serializer())
     }
 
     sealed class PairStatus {
@@ -116,7 +121,9 @@ class ApiClient(val serverUrl: String) {
                 parameter("code", code)
             }
             when (resp.status) {
-                HttpStatusCode.OK -> PairStatus.Approved(resp.body())
+                HttpStatusCode.OK -> PairStatus.Approved(
+                    unwrap(resp, DesktopPairStatusResponse.serializer()),
+                )
                 HttpStatusCode.Accepted -> PairStatus.Pending
                 HttpStatusCode.Gone -> PairStatus.Denied
                 HttpStatusCode.NotFound -> PairStatus.Expired

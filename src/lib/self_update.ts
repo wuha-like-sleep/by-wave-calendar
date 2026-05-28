@@ -30,17 +30,40 @@ export function pickBranch(): string {
 
 export type RemoteEntry = { name: string; url: string };
 
+/** Strip embedded credentials (`user:pass@host` form) from a git remote URL
+ *  before we expose it to the admin UI. Some setups embed an access token
+ *  directly in the URL — e.g. `https://name:token@gitee.com/...` — and we
+ *  don't want that token rendered in plaintext on the update page or
+ *  caught in audit logs. The remote in `.git/config` is unchanged; this
+ *  is purely a display sanitizer. */
+function sanitizeRemoteUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    if (u.username || u.password) {
+      u.username = "";
+      u.password = "";
+    }
+    return u.toString();
+  } catch {
+    // Non-URL remote (e.g. SSH git@host:repo.git form, or local path).
+    // Defensive secondary scrub for the `proto://user:pass@` shape in
+    // case our URL parser doesn't recognise the scheme.
+    return raw.replace(/^([a-z][a-z0-9+\-.]*:\/\/)[^/@\s]+@/i, "$1");
+  }
+}
+
 /** Enumerate configured git remotes via `git remote -v`. Output looks like
  *  `origin\thttps://github.com/...\t(fetch)` — we dedupe on name and keep
- *  only fetch URLs. Used by the admin UI to populate the source selector
- *  (GitHub origin vs Gitee mirror, etc). */
+ *  only fetch URLs. URLs are credential-sanitized before return so the
+ *  admin UI never displays embedded tokens. Used by the admin UI to
+ *  populate the source selector (GitHub origin vs Gitee mirror, etc). */
 export async function listRemotes(): Promise<RemoteEntry[]> {
   try {
     const out = (await run("git", ["remote", "-v"])).stdout.trim();
     const seen = new Map<string, string>();
     for (const line of out.split("\n")) {
       const m = line.match(/^(\S+)\s+(\S+)\s+\(fetch\)/);
-      if (m) seen.set(m[1]!, m[2]!);
+      if (m) seen.set(m[1]!, sanitizeRemoteUrl(m[2]!));
     }
     return [...seen.entries()].map(([name, url]) => ({ name, url }));
   } catch {
