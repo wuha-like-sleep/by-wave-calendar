@@ -344,7 +344,13 @@ private fun EventChip(
     val startMin = sLocal.hour * 60 + sLocal.minute
     val durMin = ((eLocal.hour * 60 + eLocal.minute) - startMin).coerceAtLeast(15)
     val y = HOUR_HEIGHT * (startMin / 60f)
-    val h = HOUR_HEIGHT * (durMin / 60f) - 2.dp
+    // Visual chip must be tall enough to render at least one line of
+    // text. 15-min events compute to 12dp height; after 6dp vertical
+    // padding the inner content gets 6dp which can't fit a 13dp text.
+    // Floor at 26dp so the title is always legible (will overlap the
+    // next hour's grid lines slightly — acceptable trade-off vs
+    // truncated text on every short event).
+    val h = (HOUR_HEIGHT * (durMin / 60f) - 2.dp).coerceAtLeast(26.dp)
     val x = TIME_GUTTER + columnWidth * dayIdx + slotWidth * idxInCluster
     val w = slotWidth - 2.dp
 
@@ -404,15 +410,18 @@ private fun EventChip(
                     },
                 )
             }
-            .padding(horizontal = 5.dp, vertical = 3.dp),
+            // Smaller vertical padding on short chips so 26dp floor
+            // still leaves room for 13dp text. Standard chips keep 3dp
+            // breathing room.
+            .padding(horizontal = 5.dp, vertical = if (h < 36.dp) 1.dp else 3.dp),
     ) {
-        // Show as many lines as the chip can fit (16dp/line, 4dp top
-        // padding). Previously capped at 2 even when the chip was 200dp
-        // tall, leaving most events showing "INFO & COMM TECHNOLOGY ..."
-        // and forcing users to click to read. We also tweak the time
-        // range to render as a tiny second line so users see what time
-        // the event starts without opening detail.
-        val lineCountHint = ((h - 8.dp).value / 14f).toInt().coerceIn(1, 6)
+        // Show as many lines as the chip can fit. Previously capped at
+        // 2 even when the chip was 200dp tall — left events showing
+        // "INFO & COMM TECHNOLOGY ..." and forced users to click to
+        // read. lineCountHint uses the actual available interior (minus
+        // padding) so the 26dp-floored short chip still fits one line.
+        val vPad = if (h < 36.dp) 2.dp else 6.dp
+        val lineCountHint = ((h - vPad).value / 14f).toInt().coerceIn(1, 6)
         Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(1.dp)) {
             Text(
                 text = event.summary,
@@ -424,7 +433,9 @@ private fun EventChip(
             )
             // Time range — only render when chip is tall enough that
             // the title + a second line fits without truncation pressure.
-            if (h > 38.dp) {
+            // Bumped to 44dp so 30-min events show title only (cleaner
+            // than crammed 「title 13:00 – 13:30」).
+            if (h > 44.dp) {
                 Text(
                     text = formatTimeRange(event),
                     style = MaterialTheme.typography.labelSmall,
