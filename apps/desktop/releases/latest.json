@@ -1,14 +1,14 @@
 {
-  "versionCode": 7,
-  "versionName": "0.7.0",
-  "releasedAt": "2026-05-28T11:14:00Z",
-  "notes": "桌面端首次正式发布。完整 CRUD + RRULE 编辑器 + 邀请人 + 拖拽改时间 + 右键菜单 + 键盘快捷键 + 多账号 + 自动更新提示。已通过 Apple 公证，Gatekeeper 绿灯直通。",
+  "versionCode": 8,
+  "versionName": "0.7.2",
+  "releasedAt": "2026-05-28T13:05:00Z",
+  "notes": "修扫码登录的 envelope bug — desktopPairInit / desktopPairStatus 现在正确拆服务器 {ok,data} 外壳。v0.7.1 之前所有版本都受影响。",
   "mandatory": false,
   "assets": {
     "mac": {
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.0/ByWaveCalendar-0.7.0-arm64.dmg",
-      "sha256": "5aeaf23efe9f6113c2e0b7e53f5dd5637f0039c7e3257050d2045fc62efb30e6",
-      "sizeBytes": 113973861
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.2/ByWaveCalendar-0.7.2-arm64.dmg",
+      "sha256": "6ea18a5bf2c043eb0544c24fa7a43d82f78ef0d46b00ad21af27f2074cae9054",
+      "sizeBytes": 113917343
     }
   }
 }
