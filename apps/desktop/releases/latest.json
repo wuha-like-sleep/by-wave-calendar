@@ -2,13 +2,18 @@
   "versionCode": 13,
   "versionName": "0.7.7",
   "releasedAt": "2026-05-29T11:00:00Z",
-  "notes": "Sparkle 风格 in-place 自动更新：点一下「下载并安装」→ 自动下载 DMG、挂载、替换 /Applications 里的 .app、重启。无需手动拖到 Applications。修：v0.7.6 Settings 字全部叠在一起的严重排版 bug（右 pane 用 Box 改成 Column）。",
+  "notes": "Sparkle 风格 in-place 自动更新：点一下「下载并安装」→ 自动下载 DMG、挂载、替换 /Applications 里的 .app、重启。无需手动拖到 Applications。修：v0.7.6 Settings 字全部叠在一起的严重排版 bug（右 pane 用 Box 改成 Column）。本次首次同发 Windows MSI。",
   "mandatory": false,
   "assets": {
     "mac": {
       "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.7/ByWaveCalendar-0.7.7-arm64.dmg",
       "sha256": "34f0fab550cb874fe3b17d5fa418f552807f042e35d2c3dd0310db1486db5dd6",
       "sizeBytes": 114182467
+    },
+    "win": {
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.7/ByWaveCalendar-0.7.7-x64.msi",
+      "sha256": "f667668ed0543e8a4c7401d9d36f2da392d1b39e76cda3fec739c851729ead73",
+      "sizeBytes": 103576746
     }
   }
 }

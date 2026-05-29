@@ -72,9 +72,9 @@ Apple Silicon · 已 Apple 公证
 </td>
 <td align="center">
 
-![Coming soon](https://img.shields.io/badge/Windows-MSI_即将发布-94a3b8?logo=windows&logoColor=white&style=for-the-badge)
+[![Download MSI](https://img.shields.io/badge/Windows-MSI_下载-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.7/ByWaveCalendar-0.7.7-x64.msi)
 
-跟 macOS 同一份 Kotlin 代码
+x64 · 跟 macOS 同一份 Kotlin 代码
 
 </td>
 <td align="center">
