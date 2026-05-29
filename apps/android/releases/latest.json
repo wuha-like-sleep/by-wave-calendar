@@ -1,12 +1,12 @@
 {
-  "versionCode": 12,
-  "versionName": "0.9.0",
-  "filename": "bywave-calendar-0.9.0.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.0/bywave-calendar-0.9.0.apk",
-  "sha256": "58d7ad433b4420a86f95b79127519e5fb0c782553cbcad35318e19c55354970c",
-  "sizeBytes": 36746815,
-  "releasedAt": "2026-05-27T16:24:48Z",
-  "notes": "v0.9.0 — Settings 美观度向 iOS 靠拢\n\n• 设置页分组卡片改成白底 + 圆角 + 细边框，告别磨砂玻璃感\n• 分组标题换成跟 iOS 同款的小字 + 字距\n• 行高、字号、图标尺寸全面对齐 iOS 视觉密度\n• Chevron 颜色更淡，让点击提示而不抢戏\n• 图标染主题色（紫），不再是中性灰\n\n后续版本会把同款风格扩展到事件详情 / 事件编辑 / 管理日历等页面。\n",
+  "versionCode": 13,
+  "versionName": "0.9.1",
+  "filename": "bywave-calendar-0.9.1.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.1/bywave-calendar-0.9.1.apk",
+  "sha256": "4164538ed54e2fdc024ca4a52993410a8e5ec5f791cef5ffb6843c29e34ef4a4",
+  "sizeBytes": 36766207,
+  "releasedAt": "2026-05-29T01:04:16Z",
+  "notes": "Android v0.9.1 — APP 内运行时语言切换 (中/English)\n\n• Settings → 语言：跟系统 / 简体中文 / English 三选\n• 切换瞬时生效，重启 APP 后保留\n• 跟 iOS v1.4.3 同款 UX：用 AppCompatDelegate.setApplicationLocales 做 APP 级 locale override，不污染系统设置\n• 加 res/xml/locales_config.xml 注册支持的 locale，让 Android 13+ 系统语言菜单也能识别 APP 的语言列表\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
