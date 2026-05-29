@@ -251,10 +251,12 @@ final class AppState: ObservableObject {
 
         guard let payload else { return }
 
-        // Update server version → ServerCapabilities. This branch runs
-        // even when only /health responded.
-        if let version = payload["version"] as? String, !version.isEmpty {
-            serverCapabilities = ServerCapabilities(version: version)
+        // Update ServerCapabilities from the payload. `.from` reads the
+        // explicit `capabilities` object + `capabilityVersion` when the
+        // server reports them (new servers, #77), and degrades to
+        // version-only inference for old servers / the /health fallback.
+        if (payload["version"] as? String)?.isEmpty == false || payload["capabilities"] != nil {
+            serverCapabilities = ServerCapabilities.from(payload: payload)
         }
 
         // Update theme only when the response actually has the field

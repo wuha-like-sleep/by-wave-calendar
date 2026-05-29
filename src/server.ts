@@ -233,8 +233,41 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
     amber: "#D97706",
     violet: "#7C3AED",
   };
+  // Read the real version from package.json (cheap, accurate even if the
+  // process is mid-deploy) instead of a hardcoded string that drifts.
+  let version = "0.0.0";
+  try {
+    const fs = await import("node:fs/promises");
+    const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
+    version = pkg.version || "0.0.0";
+  } catch { /* fall through to 0.0.0 */ }
+
+  // Capability gate (for #77 — old-server compatibility). Native apps read
+  // this to decide which UI to show: a feature absent from `capabilities`
+  // means "this server is too old / has it turned off — hide the UI for it
+  // so the user never taps a button that 404s." Apps MUST treat a missing
+  // key (or the whole object missing, on a really old server) as `false`,
+  // never assume a feature exists.
+  //
+  // `capabilityVersion` is a coarse monotonic counter the app can compare
+  // for cheap "is this server at least as new as build X" checks without
+  // enumerating every flag. Bump it whenever you add a capability key.
+  const capabilities = {
+    qrLogin: s.qrLoginEnabled,        // web 扫码登录 (/login QR tab)
+    apiTokens: s.apiEnabled,          // third-party bearer-token API
+    passkey: true,                    // WebAuthn register + login
+    appPasswords: true,               // CalDAV app-specific passwords
+    calendarSubscriptions: true,      // auto-sync remote ICS subscriptions
+    eventInvites: true,               // attendee invite + RSVP
+    webPush: true,                    // browser push notifications
+    i18n: true,                       // per-user UI language
+    desktopPairing: s.appsEnabled,    // desktop QR scan-to-login
+  };
+
   return {
-    version: "1.3.0",
+    version,
+    capabilityVersion: 1,
+    capabilities,
     appsEnabled: s.appsEnabled,
     siteName: s.siteName,
     themePalette: s.themePalette,
