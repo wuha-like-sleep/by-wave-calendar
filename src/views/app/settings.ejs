@@ -1,32 +1,28 @@
-<nav class="mb-6">
-  <div class="text-sm text-slate-500 mb-3">
-    <a href="/app" class="hover:text-slate-700">日历</a>
-    <span class="px-2">/</span>
-    <span class="text-slate-900">账号设置</span>
-  </div>
-  <div class="-mx-4 sm:mx-0 overflow-x-auto sticky top-14 bg-slate-50/95 backdrop-blur z-20">
-    <ul id="settings-tabs" class="flex gap-1 px-4 sm:px-0 sm:flex-wrap border-b border-slate-200 min-w-max sm:min-w-0">
-      <% [
-        { href: '#profile',  label: '资料' },
-        { href: '#passkey',  label: 'Passkey' },
-        { href: '#mfa',      label: '二次验证' },
-        { href: '#app-passwords', label: '应用密码' },
-        { href: '#push',     label: '推送通知' },
-        { href: '#theme',    label: '外观' },
-        { href: '#password', label: '密码' },
-      ].forEach(function(item){ %>
-        <li>
-          <a href="<%= item.href %>" data-settings-tab
-             class="inline-block px-3 sm:px-4 py-2 text-sm text-slate-600 hover:text-slate-900 border-b-2 border-transparent transition">
-            <%= item.label %>
-          </a>
-        </li>
-      <% }) %>
-    </ul>
-  </div>
-</nav>
+<%# v1.3.16: replaced the in-page anchor-scrolling tabs with admin-
+   style separate routes. `currentTab` (passed by /app/settings,
+   /app/settings/security, /app/settings/devices, /app/settings/
+   notifications, /app/settings/appearance) controls which section
+   blocks render. Backward-compat: visiting /app/settings still
+   works (lands on "account" tab); old anchor URLs like
+   #passkey resolve too because the routes are still mounted, the
+   anchor just goes to the section within the current tab. %>
+<% const tab = (typeof currentTab !== 'undefined' && currentTab) || 'account';
+   // Per-tab section visibility map. Section IDs that aren't in the
+   // active tab's list get a `hidden` class — keeps all the JS in one
+   // file (avoids splitting modal+script blocks that span sections).
+   const sectionsByTab = {
+     account:       ['profile', 'danger'],
+     security:      ['passkey', 'mfa', 'password'],
+     devices:       ['devices', 'app-passwords', 'caldav-connect'],
+     notifications: ['push'],
+     appearance:    ['language', 'theme'],
+   };
+   const visibleSections = sectionsByTab[tab] || sectionsByTab.account;
+   function isVisible(id){ return visibleSections.indexOf(id) !== -1; }
+%>
+<%- include('settings/_nav', { activeNav: '/app/settings' + (tab === 'account' ? '' : '/' + tab) }) %>
 
-<section id="profile" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="profile" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('profile')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-4">资料</h2>
   <dl class="space-y-3 text-sm">
     <div class="flex justify-between"><dt class="text-slate-500">邮箱</dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
@@ -47,7 +43,7 @@
   </div>
 </section>
 
-<section id="passkey" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="passkey" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('passkey')) { %> style="display:none"<% } %>>
   <div class="flex items-center justify-between mb-4">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">Passkey</h2>
@@ -81,7 +77,7 @@
   <% } %>
 </section>
 
-<section id="mfa" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="mfa" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('mfa')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-2">二次验证 (TOTP)</h2>
   <% if (user.mfaEnabled) { %>
     <p class="text-sm text-emerald-700 mb-4">✓ 二次验证已启用 —— 登录时需要输入认证器中的 6 位验证码</p>
@@ -108,7 +104,7 @@
   <% } %>
 </section>
 
-<section id="push" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="push" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('push')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-1">浏览器推送通知</h2>
   <p class="text-sm text-slate-500 mb-4">允许浏览器在事件到达提醒时间时显示桌面通知（手机锁屏也能弹）。无需邮件，但需要浏览器开启过这个站点的通知权限。</p>
   <div id="push-status" class="text-sm text-slate-500 mb-3">检测中…</div>
@@ -210,7 +206,7 @@
 })();
 </script>
 
-<section id="caldav-connect" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="caldav-connect" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('caldav-connect')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">CalDAV 同步</h2>
@@ -293,7 +289,7 @@
 </script>
 
 <!-- ============== 我的设备（iOS / Android / 桌面 APP） ============== -->
-<section id="devices" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="devices" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('devices')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">我的设备</h2>
@@ -477,7 +473,7 @@
 })();
 </script>
 
-<section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('app-passwords')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">CalDAV 应用专属密码 <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">可选</span></h2>
@@ -532,7 +528,7 @@
   <% } %>
 </section>
 
-<section id="language" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="language" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('language')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.languageTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">仅你自己可见</span></h2>
@@ -557,7 +553,7 @@
   </form>
 </section>
 
-<section id="theme" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="theme" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('theme')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">外观 <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">仅你自己可见</span></h2>
@@ -623,7 +619,7 @@
   </form>
 </section>
 
-<section id="password" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="password" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('password')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-4">修改密码</h2>
   <p class="text-xs text-slate-500 mb-3">修改后所有设备的登录会话都会失效，需要重新登录</p>
   <form method="post" action="/app/settings/password" class="space-y-3 max-w-md">
@@ -642,7 +638,7 @@
   </form>
 </section>
 
-<section id="danger" class="rounded-2xl border-2 border-red-200 bg-red-50/40 p-5 sm:p-6 mb-6 scroll-mt-32">
+<section id="danger" class="rounded-2xl border-2 border-red-200 bg-red-50/40 p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('danger')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-red-900 mb-2">⚠️ 删除账号</h2>
   <p class="text-sm text-red-800 mb-4">永久删除你的账号 —— 所有日历、事件、订阅、Passkey、API token、登录历史<strong>立即</strong>从数据库消失，无法恢复。其他人参加过你建的活动的邀请记录也会一起删除。</p>
   <details>

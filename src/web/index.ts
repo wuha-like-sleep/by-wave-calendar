@@ -1782,7 +1782,14 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/verify-email", { success: "验证码已发送到你的邮箱，输入后即可完成验证" });
   });
 
-  app.get("/app/settings", async (req, reply) => {
+  // Shared data-load helper for all 5 sub-pages. They all render the
+  // same EJS template (src/views/app/settings.ejs) — the only
+  // difference is the `currentTab` view-local, which controls which
+  // <section> blocks are visible. Keeping one template avoids
+  // duplicating the modals + JS that span multiple sections (e.g.
+  // the device-pair modal is rendered alongside the devices section
+  // but its JS interacts with the calendar list and CalDAV setup).
+  async function renderSettings(req: FastifyRequest, reply: FastifyReply, currentTab: "account" | "security" | "devices" | "notifications" | "appearance") {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
     const passkeys = await db
@@ -1797,22 +1804,12 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webauthnCredentials.createdAt));
 
     const apps = await listAppPasswords(user.id);
-    // Login history moved to a dedicated /app/logins page — settings is
-    // now leaner; the 资料 section links there.
     const q = (req.query ?? {}) as Record<string, unknown>;
     const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
     const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
 
-    // CalDAV connection info — surface the URL + username so users don't
-    // have to dig through docs to set up iPhone / macOS / Thunderbird.
-    // We don't show the principal-href because RFC 6764 discovery resolves
-    // it automatically from the base /caldav/ URL on every client we
-    // care about (Apple Calendar, Thunderbird, DAVx5, Outlook).
     const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     const caldavBaseUrl = `${baseUrl}/caldav/`;
-
-    // Surface the apps-enabled flag so the EJS can hide the
-    // 「绑定新设备」 button + show a notice when the admin turned it off.
     const siteSettings = await getSettings();
 
     return reply.view("app/settings", {
@@ -1837,8 +1834,20 @@ export async function webRoutes(app: FastifyInstance) {
       newAppLabel: newLabel,
       caldavBaseUrl,
       appsEnabled: siteSettings.appsEnabled,
+      currentTab,
     });
-  });
+  }
+
+  // 5 routes — admin-style separate pages. Tab nav across the top is
+  // rendered by src/views/app/settings/_nav.ejs, included from
+  // settings.ejs. Old anchor links like /app/settings#passkey still
+  // resolve (they just scroll inside the active tab); explicit links
+  // from emails / nav menus should target the sub-route directly.
+  app.get("/app/settings", (req, reply) => renderSettings(req, reply, "account"));
+  app.get("/app/settings/security", (req, reply) => renderSettings(req, reply, "security"));
+  app.get("/app/settings/devices", (req, reply) => renderSettings(req, reply, "devices"));
+  app.get("/app/settings/notifications", (req, reply) => renderSettings(req, reply, "notifications"));
+  app.get("/app/settings/appearance", (req, reply) => renderSettings(req, reply, "appearance"));
 
   // Login history as its own page. Shows more rows (100 vs 30 in the
   // old settings tab) since we're no longer crammed in alongside MFA
@@ -1975,7 +1984,7 @@ export async function webRoutes(app: FastifyInstance) {
       .object({ label: z.string().min(1).max(60) })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "请填写设备标签（最长 60 字）" });
+      return redirectWith(reply, "/app/settings/devices", { error: "请填写设备标签（最长 60 字）" });
     }
     const issued = await createAppPassword(user.id, body.data.label);
     const params = new URLSearchParams({
@@ -1983,7 +1992,7 @@ export async function webRoutes(app: FastifyInstance) {
       newAppPassword: issued.plain,
       newAppLabel: body.data.label,
     });
-    return reply.redirect(`/app/settings?${params.toString()}#app-passwords`);
+    return reply.redirect(`/app/settings/devices?${params.toString()}#app-passwords`);
   });
 
   app.post<{ Params: { id: string } }>("/app/settings/app-passwords/:id/revoke", async (req, reply) => {
@@ -1991,12 +2000,12 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
-    if (!id.success) return reply.redirect("/app/settings");
+    if (!id.success) return reply.redirect("/app/settings/devices");
     await revokeAppPassword(user.id, id.data);
     // Same TTL invalidation as password change — phone with the
     // revoked password should fail next sync, not 60s from now.
     invalidateCalDavAuthCache(user.id);
-    return redirectWith(reply, "/app/settings", { success: "应用密码已撤销" });
+    return redirectWith(reply, "/app/settings/devices", { success: "应用密码已撤销" });
   });
 
   app.post("/app/settings/theme", async (req, reply) => {
@@ -2011,18 +2020,18 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "无效的外观选项" });
+      return redirectWith(reply, "/app/settings/appearance", { error: "无效的外观选项" });
     }
     if (body.data.reset) {
       await db.update(schema.users).set({ themePalette: null, themeDensity: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       clearThemeCookies(reply);
-      return redirectWith(reply, "/app/settings", { success: "已恢复为站点默认外观" });
+      return redirectWith(reply, "/app/settings/appearance", { success: "已恢复为站点默认外观" });
     }
     const palette = isValidPalette(body.data.palette) ? body.data.palette : null;
     const density = isValidDensity(body.data.density) ? body.data.density : null;
     await db.update(schema.users).set({ themePalette: palette, themeDensity: density, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     setThemeCookies(reply, palette, density);
-    return redirectWith(reply, "/app/settings", { success: "外观已更新" });
+    return redirectWith(reply, "/app/settings/appearance", { success: "外观已更新" });
   });
 
   // -------- 我的语言 -------- (per-user; overrides site default)
@@ -2034,7 +2043,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
     const body = z.object({ locale: z.string().max(20).optional() }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/app/settings", { error: "无效的语言选项" });
+    if (!body.success) return redirectWith(reply, "/app/settings/appearance", { error: "无效的语言选项" });
     const raw = body.data.locale ?? "";
     if (raw === "") {
       // Empty selection → "Follow site default": wipe column + clear
@@ -2042,7 +2051,7 @@ export async function webRoutes(app: FastifyInstance) {
       await db.update(schema.users).set({ locale: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       reply.clearCookie(LOCALE_COOKIE, { path: "/" });
     } else {
-      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings", { error: "不支持的语言" });
+      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings/appearance", { error: "不支持的语言" });
       await db.update(schema.users).set({ locale: raw, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       // Also write the override cookie so the change takes effect on
       // THIS browser tab immediately (the redirect response carries it).
@@ -2051,7 +2060,7 @@ export async function webRoutes(app: FastifyInstance) {
         path: "/", maxAge: LOCALE_COOKIE_TTL_S,
       });
     }
-    return redirectWith(reply, "/app/settings#language", { success: "语言已更新" });
+    return redirectWith(reply, "/app/settings/appearance#language", { success: "语言已更新" });
   });
 
   app.post("/app/settings/delete-account", async (req, reply) => {
@@ -2095,15 +2104,15 @@ export async function webRoutes(app: FastifyInstance) {
       .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(200) })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "新密码格式不正确" });
+      return redirectWith(reply, "/app/settings/security", { error: "新密码格式不正确" });
     }
     const policyErr = passwordPolicyError(body.data.newPassword);
     if (policyErr) {
-      return redirectWith(reply, "/app/settings", { error: policyErr });
+      return redirectWith(reply, "/app/settings/security", { error: policyErr });
     }
     const ok = await verifyPassword(body.data.currentPassword, user.passwordHash);
     if (!ok) {
-      return redirectWith(reply, "/app/settings", { error: "当前密码错误" });
+      return redirectWith(reply, "/app/settings/security", { error: "当前密码错误" });
     }
     const passwordHash = await hashPassword(body.data.newPassword);
     await db.update(schema.users).set({ passwordHash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
