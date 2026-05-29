@@ -248,6 +248,16 @@ object I18n {
         "setup.serverUrl" to "Server URL",
         "setup.scanButton" to "Show pairing QR",
         "setup.scanInstructions" to "Open the ByWave APP on your phone, sign in, then scan the QR shown here.",
+
+        // Event reminders (desktop notifications)
+        "reminder.untitled" to "Event",
+        "reminder.body" to "Starts at {time}",
+        "settings.reminders.title" to "Event reminders",
+        "settings.reminders.desc" to "Pop a desktop notification before an event starts. Per-computer setting.",
+        "settings.reminders.enable" to "Enable reminders",
+        "settings.reminders.lead" to "Notify",
+        "settings.reminders.atStart" to "At start time",
+        "settings.reminders.leadMinutes" to "{n} min before",
     )
 
     private val zhCN: Map<String, String> = mapOf(
@@ -377,6 +387,16 @@ object I18n {
         "setup.serverUrl" to "服务器地址",
         "setup.scanButton" to "显示配对二维码",
         "setup.scanInstructions" to "打开手机上的 ByWave APP，登录后扫描这里的二维码即可。",
+
+        // 事件提醒（桌面通知）
+        "reminder.untitled" to "事件",
+        "reminder.body" to "{time} 开始",
+        "settings.reminders.title" to "事件提醒",
+        "settings.reminders.desc" to "事件开始前在桌面弹出通知提醒。此设置按电脑保存。",
+        "settings.reminders.enable" to "开启提醒",
+        "settings.reminders.lead" to "提前",
+        "settings.reminders.atStart" to "事件开始时",
+        "settings.reminders.leadMinutes" to "提前 {n} 分钟",
     )
 
     private val zhTW: Map<String, String> = mapOf(

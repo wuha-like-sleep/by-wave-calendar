@@ -69,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
@@ -829,6 +830,66 @@ private fun AppearanceSection(profile: Profile) {
                 )
             }
             if (loc != cn.bywave.calendar.desktop.i18n.I18n.all.last()) HorizontalDivider()
+        }
+    }
+
+    Spacer(Modifier.height(36.dp))
+
+    // -- Event reminders (desktop notifications; per-install) --
+    val remindersOn by cn.bywave.calendar.desktop.data.notify.ReminderPrefs.enabled.collectAsState()
+    val leadMinutes by cn.bywave.calendar.desktop.data.notify.ReminderPrefs.leadMinutes.collectAsState()
+    SectionTitle(t("settings.reminders.title"))
+    Text(
+        t("settings.reminders.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(t("settings.reminders.enable"), modifier = Modifier.weight(1f))
+            Switch(
+                checked = remindersOn,
+                onCheckedChange = { cn.bywave.calendar.desktop.data.notify.ReminderPrefs.setEnabled(it) },
+            )
+        }
+        // Lead-time chips — only meaningful while reminders are on.
+        if (remindersOn) {
+            HorizontalDivider()
+            Text(
+                t("settings.reminders.lead"),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                cn.bywave.calendar.desktop.data.notify.ReminderPrefs.leadOptions.forEach { m ->
+                    val selected = m == leadMinutes
+                    val label = if (m == 0) t("settings.reminders.atStart")
+                                else cn.bywave.calendar.desktop.i18n.I18n.t(
+                                    "settings.reminders.leadMinutes", mapOf("n" to m))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(
+                                if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                            )
+                            .clickable { cn.bywave.calendar.desktop.data.notify.ReminderPrefs.setLeadMinutes(m) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
 

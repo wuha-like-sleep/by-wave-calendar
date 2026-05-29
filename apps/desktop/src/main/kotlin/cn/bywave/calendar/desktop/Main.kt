@@ -53,6 +53,8 @@ fun main() = application {
     // Initialize i18n before the first @Composable mounts so the initial
     // tree renders in the user's chosen language (no flash of English).
     cn.bywave.calendar.desktop.i18n.I18n.init()
+    // Load reminder prefs (enabled + lead time) before the scheduler starts.
+    cn.bywave.calendar.desktop.data.notify.ReminderPrefs.init()
 
     val state = rememberWindowState(width = 1100.dp, height = 720.dp)
     // Track visibility separately so the close button hides the window

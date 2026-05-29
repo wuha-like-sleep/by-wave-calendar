@@ -93,6 +93,16 @@ fun MainScreen(
 
     LaunchedEffect(state) { state?.load() }
 
+    // Event-reminder scheduler: polls the loaded events and fires a native
+    // desktop notification `leadMinutes` before each event's start. Bound to
+    // the current state's event flow; re-binds on profile switch. Lives as
+    // long as the main screen (the whole session). Honors ReminderPrefs
+    // (on/off + lead) read live each tick.
+    LaunchedEffect(state) {
+        val s = state ?: return@LaunchedEffect
+        cn.bywave.calendar.desktop.data.notify.ReminderScheduler.run(s.ui)
+    }
+
     // Background update check on every profile switch + first mount.
     // Throttle is in UpdateChecker; subsequent profile switches in the
     // same 6h window are no-ops. We do call once per session boot
