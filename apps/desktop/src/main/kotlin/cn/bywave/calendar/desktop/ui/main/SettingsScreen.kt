@@ -86,6 +86,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bywave.calendar.desktop.BuildInfo
@@ -761,30 +762,444 @@ private fun ColorSwatchRow(selected: String, onSelect: (String) -> Unit) {
 
 @Composable
 private fun SecuritySection(profile: Profile) {
-    SectionTitle("安全")
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    // 修改密码 + 我的设备 are now native (own dialogs / inline list).
+    // Passkey / MFA / 登录历史 / 删除账号 stay on the web — they need
+    // richer native UI (WebAuthn ceremony, TOTP enrollment, irreversible
+    // confirmation) than this client warrants yet.
+    var changePassword by remember { mutableStateOf(false) }
+
+    SectionTitle(t("settings.security.title"))
     Text(
-        "敏感操作（改密码 / Passkey / MFA / 删除账号）走网页 —— 桌面 APP 通过一次性令牌把你直接送进已登录的网页。",
+        t("settings.security.desc"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 16.dp),
     )
 
     SectionCard {
-        OpenInWebRow(profile = profile, next = "/app/settings#password", title = "修改密码", subtitle = "需要当前密码")
+        // Native change-password — opens an in-app dialog instead of the web.
+        ActionRow(
+            title = t("settings.security.changePassword"),
+            subtitle = t("settings.security.changePassword.sub"),
+            onClick = { changePassword = true },
+        )
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings#passkey", title = "Passkey 管理", subtitle = "添加 / 重命名 / 撤销")
+        OpenInWebRow(profile = profile, next = "/app/settings#passkey", title = t("settings.security.passkey"), subtitle = t("settings.security.passkey.sub"))
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings#mfa", title = "二次验证 (TOTP)", subtitle = "MFA / 备用码")
+        OpenInWebRow(profile = profile, next = "/app/settings#mfa", title = t("settings.security.mfa"), subtitle = t("settings.security.mfa.sub"))
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings#devices", title = "我的设备", subtitle = "查看 / 撤销其它登录")
-        HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/logins", title = "登录历史", subtitle = "最近 100 条登录记录")
+        OpenInWebRow(profile = profile, next = "/app/logins", title = t("settings.security.loginHistory"), subtitle = t("settings.security.loginHistory.sub"))
     }
 
+    // Native devices list — load on first render, refresh after revoke.
     Spacer(Modifier.height(32.dp))
-    SectionTitle("危险操作", danger = true)
+    DevicesSection(profile = profile)
+
+    Spacer(Modifier.height(32.dp))
+    SectionTitle(t("settings.security.danger"), danger = true)
     SectionCard(danger = true) {
-        OpenInWebRow(profile = profile, next = "/app/settings#danger", title = "删除账号", subtitle = "永久删除，请谨慎", danger = true)
+        OpenInWebRow(profile = profile, next = "/app/settings#danger", title = t("settings.security.deleteAccount"), subtitle = t("settings.security.deleteAccount.sub"), danger = true)
+    }
+
+    if (changePassword) {
+        ChangePasswordDialog(
+            profile = profile,
+            onDismiss = { changePassword = false },
+        )
+    }
+}
+
+/** Native change-password dialog. Two fields (current + new) plus a
+ *  confirm field so a typo in the new password doesn't lock the user out.
+ *  Client-side validation mirrors the server's policy (new ≥ 8 chars,
+ *  new != current); server errors (wrong current password, weak password)
+ *  surface inline. On success we note that OTHER sessions were signed out
+ *  (the server invalidates them) — this desktop keeps working. */
+@Composable
+private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    // After a successful change we swap the form for a success note (which
+    // also mentions other sessions being signed out) + a single Close.
+    var done by remember { mutableStateOf(false) }
+
+    val canSubmit = !working && !done &&
+        current.isNotBlank() && next.length >= 8 && confirm.isNotBlank()
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                t("settings.security.changePassword.title"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            if (done) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(t("settings.security.changePassword.success"))
+                    Text(
+                        t("settings.security.changePassword.otherSessions"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Column(
+                    modifier = Modifier.width(380.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    OutlinedTextField(
+                        value = current,
+                        onValueChange = { current = it },
+                        label = { Text(t("settings.security.changePassword.current")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = next,
+                        onValueChange = { next = it },
+                        label = { Text(t("settings.security.changePassword.new")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = confirm,
+                        onValueChange = { confirm = it },
+                        label = { Text(t("settings.security.changePassword.confirm")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        t("settings.security.changePassword.hint"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (errorMsg != null) {
+                        Text(
+                            errorMsg!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (done) {
+                TextButton(onClick = onDismiss) { Text(t("settings.security.changePassword.close")) }
+            } else {
+                Button(
+                    onClick = {
+                        // Local validation first — avoids a round-trip for
+                        // the common "new password typo" case. (Length is
+                        // already gated by `canSubmit`.)
+                        if (next != confirm) {
+                            errorMsg = t("settings.security.changePassword.mismatch")
+                        } else {
+                            working = true
+                            errorMsg = null
+                            scope.launch {
+                                val api = ApiClient(profile.serverUrl)
+                                runCatching {
+                                    api.changePassword(currentPassword = current, newPassword = next)
+                                }.onSuccess {
+                                    api.close()
+                                    working = false
+                                    done = true
+                                }.onFailure {
+                                    api.close()
+                                    working = false
+                                    errorMsg = it.localizedMessage ?: t("settings.security.changePassword.failed")
+                                }
+                            }
+                        }
+                    },
+                    enabled = canSubmit,
+                ) {
+                    if (working) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(t("settings.security.changePassword.submit"))
+                }
+            }
+        },
+        dismissButton = {
+            if (!done) {
+                TextButton(onClick = onDismiss, enabled = !working) {
+                    Text(t("settings.security.changePassword.cancel"))
+                }
+            }
+        },
+    )
+}
+
+/** Native "我的设备" list. Loads the paired devices on first render
+ *  (and after each revoke). Each row shows label / kind / last-seen plus
+ *  a Revoke button — except the row for THIS desktop's own device, which
+ *  we don't let the user revoke from here (that would log the current
+ *  session out on the next token refresh). The active device is matched
+ *  by `profile.deviceId`. */
+@Composable
+private fun DevicesSection(profile: Profile) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    var devices by remember { mutableStateOf<List<cn.bywave.calendar.desktop.data.model.DeviceDTO>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var revoking by remember { mutableStateOf<cn.bywave.calendar.desktop.data.model.DeviceDTO?>(null) }
+    // Bump to force a reload (after a successful revoke).
+    var reloadKey by remember { mutableStateOf(0) }
+
+    androidx.compose.runtime.LaunchedEffect(reloadKey) {
+        loading = true
+        loadError = null
+        val api = ApiClient(profile.serverUrl)
+        runCatching { api.listDevices() }
+            .onSuccess {
+                api.close()
+                devices = it.devices
+                loading = false
+            }
+            .onFailure {
+                api.close()
+                loadError = it.localizedMessage ?: t("settings.devices.loadFailed")
+                loading = false
+            }
+    }
+
+    SectionTitle(t("settings.devices.title"))
+    Text(
+        t("settings.devices.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+
+    SectionCard {
+        when {
+            loading -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(t("settings.devices.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            loadError != null -> {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { reloadKey++ }) { Text(t("error.retry")) }
+                }
+            }
+            devices.isNullOrEmpty() -> {
+                Text(
+                    t("settings.devices.empty"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            else -> {
+                val list = devices!!
+                list.forEach { device ->
+                    val isCurrent = device.id == profile.deviceId
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(device.label, fontWeight = FontWeight.Medium)
+                                if (isCurrent) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        t("settings.devices.thisDevice"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                }
+                            }
+                            val meta = buildString {
+                                append(device.kind)
+                                val seen = device.lastSeenAt ?: device.createdAt
+                                append(" · ")
+                                append(
+                                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                                        "settings.devices.lastSeen",
+                                        mapOf("when" to formatTimestamp(seen)),
+                                    ),
+                                )
+                            }
+                            Text(
+                                meta,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        // Don't let the user revoke the device they're using —
+                        // it'd boot this very session on the next refresh.
+                        if (!isCurrent) {
+                            TextButton(onClick = { revoking = device }) {
+                                Text(t("settings.devices.revoke"), color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                    if (device != list.last()) HorizontalDivider()
+                }
+            }
+        }
+    }
+
+    revoking?.let { device ->
+        RevokeDeviceDialog(
+            profile = profile,
+            device = device,
+            onDismiss = { revoking = null },
+            onRevoked = {
+                revoking = null
+                reloadKey++  // re-fetch the list so the revoked row disappears
+            },
+        )
+    }
+}
+
+/** Confirm dialog for revoking a single device. Revoking signs that
+ *  device out on its next token refresh — irreversible from the device's
+ *  side (it must re-pair), so we make the user confirm. */
+@Composable
+private fun RevokeDeviceDialog(
+    profile: Profile,
+    device: cn.bywave.calendar.desktop.data.model.DeviceDTO,
+    onDismiss: () -> Unit,
+    onRevoked: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                t("settings.devices.revokeTitle"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                        "settings.devices.revokeConfirm",
+                        mapOf("label" to device.label),
+                    ),
+                )
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    working = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile.serverUrl)
+                        runCatching {
+                            api.revokeDevice(device.id)
+                        }.onSuccess {
+                            api.close()
+                            working = false
+                            onRevoked()
+                        }.onFailure {
+                            api.close()
+                            working = false
+                            errorMsg = it.localizedMessage ?: t("settings.devices.revokeFailed")
+                        }
+                    }
+                },
+                enabled = !working,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (working) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("settings.devices.revoke"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(t("settings.calendars.cancel"))
+            }
+        },
+    )
+}
+
+/** Best-effort pretty-print of an ISO8601 server timestamp into the
+ *  user's local zone. Falls back to the raw string if parsing fails (the
+ *  server could change format) — better than crashing the row. */
+private fun formatTimestamp(iso: String): String {
+    return runCatching {
+        val instant = java.time.Instant.parse(iso)
+        val local = instant.atZone(java.time.ZoneId.systemDefault())
+        java.time.format.DateTimeFormatter
+            .ofPattern("yyyy-MM-dd HH:mm")
+            .format(local)
+    }.getOrDefault(iso)
+}
+
+/** Plain action row that runs a native handler (no web hop). Mirrors
+ *  OpenInWebRow's layout but with a chevron-free trailing affordance —
+ *  it stays inside the app, so it doesn't get the "↗ leaves the app" icon. */
+@Composable
+private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.Medium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

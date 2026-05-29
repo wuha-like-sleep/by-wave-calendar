@@ -26,8 +26,10 @@ import cn.bywave.calendar.desktop.data.model.AttendeesResponse
 import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
+import cn.bywave.calendar.desktop.data.model.ChangePasswordInput
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
+import cn.bywave.calendar.desktop.data.model.DevicesResponse
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
@@ -255,6 +257,69 @@ class ApiClient(val serverUrl: String) {
         )
     }
 
+    // ---- Account / devices (native security flows) ----
+    //
+    // These cover what used to deep-link out to the web Settings page:
+    // change password and view/revoke paired devices. MFA setup, Passkey,
+    // delete-account and login history stay on the web — they need more
+    // native UI than is worth building right now.
+
+    /** POST /api/v1/account/password — change the account password.
+     *  Server verifies `currentPassword`, enforces its own min-length /
+     *  policy on `newPassword`, then invalidates all OTHER sessions (this
+     *  device's refresh token survives, so the desktop keeps working).
+     *
+     *  The server replies with a bare { ok: true } that the onSend
+     *  envelope hook passes through UNCHANGED (it already has a top-level
+     *  `ok`). That means there's no `data` payload to decode — so we can't
+     *  route through unwrap() (which would throw "missing_data"). Instead
+     *  we mirror deleteEvent/deleteCalendar: check the status, and on a
+     *  non-2xx surface the server's { ok:false, error:{ message } } so the
+     *  dialog can show "当前密码错误" / "weak_password" inline. */
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            val jsonBody = jsonCfg.encodeToString(
+                ChangePasswordInput.serializer(),
+                ChangePasswordInput(currentPassword = currentPassword, newPassword = newPassword),
+            )
+            client.post("$baseUrl/api/v1/account/password") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            // Prefer the server's structured { ok:false, error:{ message } }
+            // so the user sees "当前密码错误" rather than a raw HTTP code.
+            throw errorFrom(resp, "change password failed")
+        }
+    }
+
+    /** GET /api/v1/devices — list the user's paired devices. Goes through
+     *  unwrap(): the route's { devices: [...] } body has no top-level `ok`,
+     *  so the onSend hook wraps it as { ok: true, data: { devices } }. */
+    suspend fun listDevices(): DevicesResponse {
+        return getAuthed("/api/v1/devices", DevicesResponse.serializer())
+    }
+
+    /** DELETE /api/v1/devices/{id} — revoke (un-pair) one device. Same
+     *  bare-{ ok: true } story as changePassword, so we check status only
+     *  (no unwrap). Revoking the CURRENT desktop's own device would log it
+     *  out on the next refresh — the UI guards against that by hiding the
+     *  revoke button on the active device. */
+    suspend fun revokeDevice(id: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            client.delete("$baseUrl/api/v1/devices/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "revoke device failed")
+        }
+    }
+
     suspend fun attendees(eventId: String): AttendeesResponse {
         return getAuthed("/api/v1/events/$eventId/attendees", AttendeesResponse.serializer())
     }
@@ -411,6 +476,25 @@ class ApiClient(val serverUrl: String) {
             ?: err?.get("code")?.jsonPrimitive?.contentOrNullSafe()
             ?: "HTTP ${resp.status.value}"
         throw ApiException(resp.status.value, message)
+    }
+
+    /** Build an ApiException from a non-2xx response whose body we expect
+     *  to be the { ok:false, error:{ code, message } } envelope (or the
+     *  legacy { error, message } shape). Used by the bare-{ ok: true }
+     *  endpoints (changePassword / revokeDevice) that can't go through
+     *  unwrap(). Falls back to `fallback` + status if the body is unusable
+     *  so the caller always gets *something* readable to show inline. */
+    private suspend fun errorFrom(resp: HttpResponse, fallback: String): ApiException {
+        val raw = runCatching { resp.bodyAsText() }.getOrDefault("")
+        val message = runCatching {
+            val obj = jsonCfg.parseToJsonElement(raw).jsonObject
+            val err = obj["error"]?.jsonObject
+            err?.get("message")?.jsonPrimitive?.contentOrNullSafe()
+                ?: err?.get("code")?.jsonPrimitive?.contentOrNullSafe()
+                ?: obj["message"]?.jsonPrimitive?.contentOrNullSafe()
+                ?: obj["error"]?.jsonPrimitive?.contentOrNullSafe()
+        }.getOrNull()
+        return ApiException(resp.status.value, message ?: "$fallback: HTTP ${resp.status.value}")
     }
 }
 

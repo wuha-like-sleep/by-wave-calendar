@@ -196,6 +196,33 @@ object I18n {
         "settings.security.deleteAccount" to "Delete account",
         "settings.security.deleteAccount.sub" to "Permanent — proceed carefully",
 
+        // Settings — Security / native change-password dialog
+        "settings.security.changePassword.title" to "Change password",
+        "settings.security.changePassword.current" to "Current password",
+        "settings.security.changePassword.new" to "New password",
+        "settings.security.changePassword.confirm" to "Confirm new password",
+        "settings.security.changePassword.hint" to "New password must be at least 8 characters.",
+        "settings.security.changePassword.submit" to "Change password",
+        "settings.security.changePassword.cancel" to "Cancel",
+        "settings.security.changePassword.close" to "Close",
+        "settings.security.changePassword.mismatch" to "The two new passwords don't match.",
+        "settings.security.changePassword.success" to "Password changed.",
+        "settings.security.changePassword.otherSessions" to "For your security, all other signed-in sessions were signed out. This device stays signed in.",
+        "settings.security.changePassword.failed" to "Couldn't change the password.",
+
+        // Settings — Security / native devices list
+        "settings.devices.title" to "My devices",
+        "settings.devices.desc" to "Devices and apps paired with your account. Revoke any you don't recognize.",
+        "settings.devices.loading" to "Loading devices…",
+        "settings.devices.empty" to "No paired devices.",
+        "settings.devices.thisDevice" to "This device",
+        "settings.devices.lastSeen" to "last seen {when}",
+        "settings.devices.revoke" to "Revoke",
+        "settings.devices.revokeTitle" to "Revoke device?",
+        "settings.devices.revokeConfirm" to "Sign \"{label}\" out? It will need to pair again to sync.",
+        "settings.devices.revokeFailed" to "Couldn't revoke the device.",
+        "settings.devices.loadFailed" to "Couldn't load your devices.",
+
         // Settings — Appearance
         "settings.appearance.title" to "Appearance",
         "settings.appearance.desc" to "Theme / palette / density are stored per account. Pick on the web once and they sync next time the desktop signs in.",
@@ -342,6 +369,33 @@ object I18n {
         "settings.security.danger" to "危险操作",
         "settings.security.deleteAccount" to "删除账号",
         "settings.security.deleteAccount.sub" to "永久删除，请谨慎",
+
+        // 安全 / 原生修改密码弹窗
+        "settings.security.changePassword.title" to "修改密码",
+        "settings.security.changePassword.current" to "当前密码",
+        "settings.security.changePassword.new" to "新密码",
+        "settings.security.changePassword.confirm" to "确认新密码",
+        "settings.security.changePassword.hint" to "新密码至少 8 个字符。",
+        "settings.security.changePassword.submit" to "修改密码",
+        "settings.security.changePassword.cancel" to "取消",
+        "settings.security.changePassword.close" to "关闭",
+        "settings.security.changePassword.mismatch" to "两次输入的新密码不一致。",
+        "settings.security.changePassword.success" to "密码已修改。",
+        "settings.security.changePassword.otherSessions" to "出于安全考虑，其它已登录的会话都已退出。当前设备仍保持登录。",
+        "settings.security.changePassword.failed" to "修改密码失败。",
+
+        // 安全 / 原生「我的设备」列表
+        "settings.devices.title" to "我的设备",
+        "settings.devices.desc" to "已与你账号配对的设备和 APP。不认识的请撤销。",
+        "settings.devices.loading" to "正在加载设备…",
+        "settings.devices.empty" to "暂无配对的设备。",
+        "settings.devices.thisDevice" to "当前设备",
+        "settings.devices.lastSeen" to "最近活动 {when}",
+        "settings.devices.revoke" to "撤销",
+        "settings.devices.revokeTitle" to "撤销该设备？",
+        "settings.devices.revokeConfirm" to "确定要让「{label}」退出登录吗？它需要重新配对才能继续同步。",
+        "settings.devices.revokeFailed" to "撤销设备失败。",
+        "settings.devices.loadFailed" to "加载设备列表失败。",
 
         "settings.appearance.title" to "外观",
         "settings.appearance.desc" to "主题 / 配色 / 密度的偏好绑定到你的账号 —— 在网页设置一次，下次桌面端登录同步生效。",

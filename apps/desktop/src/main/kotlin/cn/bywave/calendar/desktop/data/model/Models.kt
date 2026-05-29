@@ -168,6 +168,52 @@ data class DesktopPairStatusResponse(
     val userName: String? = null,
 )
 
+// ---- Account: change password ----
+//
+// POST /api/v1/account/password. Mirrors the server's zod body
+// (currentPassword + newPassword, newPassword min 8). Server returns
+// { ok: true } on success (an empty `data` payload after the envelope
+// is stripped) and invalidates all OTHER sessions — the current device's
+// refresh token survives, so the desktop stays signed in.
+
+@Serializable
+data class ChangePasswordInput(
+    val currentPassword: String,
+    val newPassword: String,
+)
+
+// ---- Devices: list + revoke ----
+//
+// GET /api/v1/devices returns { devices: [...] }; each row carries the
+// fields the server hands back (see src/routes/devices.ts GET /devices).
+// ignoreUnknownKeys on the shared Json config means future server-side
+// columns won't break older desktop builds, but we mirror the current
+// shape so the UI can show label / kind / last-seen.
+
+/** One paired device from GET /api/v1/devices. All timestamps are ISO8601
+ *  strings (or null when the server has never seen the device since
+ *  pairing). `prefix` is the refresh-token prefix — handy for the user to
+ *  tell two same-labelled devices apart, but we mostly show label + kind. */
+@Serializable
+data class DeviceDTO(
+    val id: String,
+    val label: String,
+    val kind: String,
+    val prefix: String? = null,
+    val appVersion: String? = null,
+    val lastSeenAt: String? = null,
+    val lastSeenIp: String? = null,
+    val firstSeenIp: String? = null,
+    val createdAt: String,
+)
+
+/** GET /api/v1/devices response (the `data` payload after the outer
+ *  { ok, data } envelope is stripped). */
+@Serializable
+data class DevicesResponse(
+    val devices: List<DeviceDTO>,
+)
+
 // ---- Profile / persistence ----
 
 /** On-disk profile written to ~/.bywave-calendar/profile.json after a
