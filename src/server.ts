@@ -752,6 +752,17 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
       "/push/public-key": { get: { summary: "VAPID public key for browser PushManager" } },
       "/push/subscribe": { post: { summary: "Register a push subscription" } },
       "/push/unsubscribe": { post: { summary: "Remove a push subscription" } },
+      "/booking-links": {
+        get: { summary: "List my booking links (each includes a public booking URL)" },
+        post: { summary: "Create a booking link" },
+      },
+      "/booking-links/{id}": {
+        patch: { summary: "Update a booking link (title/duration/availability/enabled/notify)" },
+        delete: { summary: "Delete a booking link" },
+      },
+      "/booking-links/{id}/bookings": {
+        get: { summary: "List bookings made on a link (future & active by default; ?all=1 for all)" },
+      },
     },
   });
 });
