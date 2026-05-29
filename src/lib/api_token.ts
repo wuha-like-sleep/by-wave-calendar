@@ -89,6 +89,72 @@ export async function revokeApiTokenAdmin(id: string): Promise<void> {
     .where(eq(schema.apiTokens.id, id));
 }
 
+/**
+ * Rotate a token: issue a NEW token with the same userId/label/scope, then put
+ * the OLD token on a short grace period instead of revoking it immediately.
+ *
+ * Why a grace period instead of insta-revoke: external integrations (n8n,
+ * Zapier, cron, custom scripts) need a window to pick up the new secret and
+ * roll over their config without an outage. The default 7 days matches the
+ * "AWS-style credential rotation" expectation and is long enough that an
+ * operator who runs rotation at the start of the week will have a working
+ * weekend even if migration slips.
+ *
+ * Implementation: we DON'T touch `revokedAt` on the old token (which would
+ * 401 it immediately). We just compress its `expiresAt` to `now + graceDays`,
+ * so verifyApiToken's expiry check kicks in after the grace ends. If the old
+ * token already had a NEARER expiresAt (e.g. it was already on a 1-day TTL),
+ * we leave that alone — we never EXTEND a token's life via rotation.
+ *
+ * Returns the same shape as createApiToken (id + plain + prefix of the NEW
+ * token). The caller surfaces `plain` once and only once — same one-shot
+ * "save it now or lose it" UX as initial creation.
+ *
+ * Throws if the source token id doesn't exist or has already been revoked.
+ */
+export async function rotateApiToken(input: {
+  oldTokenId: string;
+  graceDays?: number;
+  /** Optional override of the new token's label. Defaults to old label
+   *  (admins can keep their "n8n integration" label across rotations). */
+  newLabel?: string;
+}): Promise<IssuedApiToken & { oldExpiresAt: Date }> {
+  const grace = input.graceDays ?? 7;
+  const [old] = await db
+    .select()
+    .from(schema.apiTokens)
+    .where(eq(schema.apiTokens.id, input.oldTokenId))
+    .limit(1);
+  if (!old) throw new Error("api_token rotate: source token not found");
+  if (old.revokedAt) throw new Error("api_token rotate: source token already revoked");
+  const now = new Date();
+  const proposedExpiry = new Date(now.getTime() + grace * 24 * 60 * 60 * 1000);
+  // Don't extend lifetime — if the old token already expires sooner, keep that.
+  const oldExpiresAt = old.expiresAt && old.expiresAt < proposedExpiry
+    ? old.expiresAt
+    : proposedExpiry;
+
+  // Mint the new token first. If this succeeds but the old-token update fails
+  // (extremely unlikely but possible under DB hiccup), we have an extra valid
+  // token — fail-safe direction for an integration-critical flow. The opposite
+  // (old shrunk, new never minted) would mean a 7-day outage; that's the
+  // failure we explicitly avoid by ordering writes this way.
+  const issued = await createApiToken({
+    userId: old.userId,
+    label: input.newLabel?.trim() || old.label,
+    scope: old.scope === "read" ? "read" : "write",
+    expiresInDays: null,  // new token follows the org's standard "no expiry"
+                          // default; admin can rotate it again later
+  });
+
+  await db
+    .update(schema.apiTokens)
+    .set({ expiresAt: oldExpiresAt })
+    .where(eq(schema.apiTokens.id, input.oldTokenId));
+
+  return { ...issued, oldExpiresAt };
+}
+
 export type VerifiedToken = {
   userId: string;
   scope: "read" | "write";

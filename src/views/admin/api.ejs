@@ -151,10 +151,38 @@
                   <span class="text-slate-400">从未使用</span>
                 <% } %>
               </td>
-              <td class="py-2 pr-4 text-xs text-slate-500">
-                <%= t.expiresAtLocal ? '' : '不过期' %><% if (t.expiresAtLocal) { %><%- t.expiresAtLocal %><% } %>
+              <td class="py-2 pr-4 text-xs">
+                <%
+                  // Color-code the expiry badge by urgency. Buckets chosen so a
+                  // weekly dashboard glance catches anything that'll bite next
+                  // week. Tokens with no expiry get a soft "永久" so they don't
+                  // disappear visually, but they're also flagged below with
+                  // a faint rotation reminder.
+                  let _expBadge = '';
+                  if (t.daysUntilExpiry === null) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">永久</span>';
+                  } else if (t.daysUntilExpiry < 0) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">已过期 ' + Math.abs(t.daysUntilExpiry) + ' 天</span>';
+                  } else if (t.daysUntilExpiry <= 7) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">' + t.daysUntilExpiry + ' 天后过期</span>';
+                  } else if (t.daysUntilExpiry <= 30) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">' + t.daysUntilExpiry + ' 天后过期</span>';
+                  } else {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">' + t.daysUntilExpiry + ' 天后过期</span>';
+                  }
+                %>
+                <%- _expBadge %>
+                <% if (t.expiresAtLocal) { %>
+                  <div class="text-xs text-slate-400 mt-0.5"><%- t.expiresAtLocal %></div>
+                <% } %>
               </td>
               <td class="py-2 px-5 sm:px-0 text-right">
+                <form method="post" action="/admin/api/tokens/<%= t.id %>/rotate" class="m-0 inline-block"
+                      data-confirm="轮换 <%= t.label %>？会签发一个新 token，旧 token 7 天内仍可用，方便外部系统迁移。" data-confirm-ok="轮换">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <input type="hidden" name="graceDays" value="7" />
+                  <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 mr-2">轮换</button>
+                </form>
                 <form method="post" action="/admin/api/tokens/<%= t.id %>/revoke" class="m-0 inline-block"
                       data-confirm="撤销 <%= t.label %>？该 token 立即失效，外部系统会拿到 401。" data-confirm-danger="1" data-confirm-ok="撤销">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />

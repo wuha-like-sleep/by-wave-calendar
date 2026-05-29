@@ -19,7 +19,7 @@ import {
 } from "../lib/email_templates.js";
 import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
-import { createApiToken, listAllApiTokens, revokeApiTokenAdmin } from "../lib/api_token.js";
+import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
@@ -683,12 +683,23 @@ export async function adminRoutes(app: FastifyInstance) {
       qrLoginEnabled: settings.qrLoginEnabled,
       deviceCount: devCount?.c ?? 0,
       ssoEnabled: providers.length > 0,
-      tokens: tokens.map((t) => ({
-        ...t,
-        createdAtLocal: localTimeIso(t.createdAt),
-        lastUsedAtLocal: t.lastUsedAt ? localTimeIso(t.lastUsedAt) : null,
-        expiresAtLocal: t.expiresAt ? localTimeIso(t.expiresAt) : null,
-      })),
+      tokens: tokens.map((t) => {
+        // Days-until-expiry surfaces in the UI as a color-coded badge so
+        // admins notice approaching expiries during routine dashboard
+        // glances. Negative means "expired already (but not yet revoked —
+        // typically a rotation grace period that the cron job hasn't
+        // cleaned up). null = no expiry set.
+        const daysUntilExpiry = t.expiresAt
+          ? Math.floor((t.expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+          : null;
+        return {
+          ...t,
+          createdAtLocal: localTimeIso(t.createdAt),
+          lastUsedAtLocal: t.lastUsedAt ? localTimeIso(t.lastUsedAt) : null,
+          expiresAtLocal: t.expiresAt ? localTimeIso(t.expiresAt) : null,
+          daysUntilExpiry,
+        };
+      }),
       allUsers,
       issuedToken,
       issuedLabel,
@@ -772,6 +783,47 @@ export async function adminRoutes(app: FastifyInstance) {
     await audit(req, u.id, "api_token.revoke", { targetType: "api_token", targetId: id.data });
     return reply.redirect("/admin/api?success=" + encodeURIComponent("Token 已撤销"));
   });
+
+  // Rotate a token: mint a fresh secret, keep the old one valid for `graceDays`
+  // so external integrations have a window to roll over without an outage.
+  // The new token shows up in the issued-banner same as /tokens POST — admin
+  // copies it ONCE, then it's gone. Both old + new appear in the list with
+  // their respective expiry timestamps until grace elapses.
+  app.post<{ Params: { id: string }; Body: { graceDays?: string | number } }>(
+    "/admin/api/tokens/:id/rotate",
+    { config: { rateLimit: { max: 10, timeWindow: "5 minutes" } } },
+    async (req, reply) => {
+      const u = await requireAdmin(req, reply);
+      if (!u) return;
+      if (!verifyCsrf(req, reply)) return;
+      const id = z.string().uuid().safeParse(req.params.id);
+      if (!id.success) return reply.redirect("/admin/api?error=" + encodeURIComponent("Token id 无效"));
+      // Optional override; default 7 days. Capped at 30 to prevent admins
+      // accidentally setting "rotate but never expire" — that defeats the
+      // point of rotation. Min 0 = revoke-immediately if the new key has
+      // already been deployed and we want to cut the old one off.
+      const graceRaw = (req.body?.graceDays ?? 7).toString();
+      const grace = z.coerce.number().int().min(0).max(30).safeParse(graceRaw);
+      if (!grace.success) return reply.redirect("/admin/api?error=" + encodeURIComponent("grace 天数无效（0–30）"));
+      try {
+        const issued = await rotateApiToken({ oldTokenId: id.data, graceDays: grace.data });
+        await audit(req, u.id, "api_token.rotate", {
+          targetType: "api_token",
+          targetId: id.data,
+          details: { newTokenId: issued.id, graceDays: grace.data, oldExpiresAt: issued.oldExpiresAt.toISOString() },
+        });
+        const params = new URLSearchParams({
+          issued: issued.plain,
+          issuedLabel: "Rotated token",
+          success: `Token 已轮换，旧 token 还有 ${grace.data} 天有效期。立即复制新 token，仅显示一次。`,
+        });
+        return reply.redirect("/admin/api?" + params.toString());
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "rotate failed";
+        return reply.redirect("/admin/api?error=" + encodeURIComponent(`轮换失败：${msg}`));
+      }
+    },
+  );
 
   // ---------- Security knobs (risk-login + lockout) ----------
   app.get("/admin/security", async (req, reply) => {
