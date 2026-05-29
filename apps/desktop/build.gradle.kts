@@ -94,7 +94,16 @@ compose.desktop {
             // Kotlin code, not installer metadata).
             description = "ByWave Calendar - self-hosted calendar desktop client"
             copyright = "(c) 2026 ByWave"
-            licenseFile.set(project.rootProject.file("../../LICENSE"))
+            // NOTE: do NOT set licenseFile here. jpackage turns it into a
+            // click-through SLA embedded in the .dmg (an LPic/license
+            // resource). That SLA makes `hdiutil attach` block / cancel in
+            // any non-interactive context — which is exactly how the
+            // in-app updater (UpdateInstaller.mountDmg) mounts the
+            // downloaded DMG. With an SLA the one-click "download & install
+            // → auto-relaunch" flow silently degrades to the Finder
+            // fallback (user has to agree + drag manually). The project is
+            // open-source (LICENSE is in the repo + the in-app About page),
+            // so a DMG SLA buys us nothing and breaks seamless auto-update.
 
             // App icon for the OS-native installer. Each platform needs
             // a different file format; missing files just fall back to
