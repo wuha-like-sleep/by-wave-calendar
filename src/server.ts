@@ -39,6 +39,18 @@ import { loadUserFromRequest } from "./lib/session.js";
 
 const projectRoot = process.cwd();
 
+// App version, read once at boot from package.json so /health, the OpenAPI
+// doc, and /api/v1/health/app all report the same number without a hardcoded
+// literal drifting out of sync on every release. Falls back to "0.0.0" if
+// the file can't be read (shouldn't happen in a real deploy).
+const APP_VERSION: string = await (async () => {
+  try {
+    const fs = await import("node:fs/promises");
+    const pkg = JSON.parse(await fs.readFile(path.join(projectRoot, "package.json"), "utf8"));
+    return typeof pkg.version === "string" ? pkg.version : "0.0.0";
+  } catch { return "0.0.0"; }
+})();
+
 const httpsOptions = env.USE_HTTPS ? httpsOptionsFromEnv() : undefined;
 
 const app = Fastify({
@@ -218,7 +230,7 @@ await app.register(view, {
 });
 
 // ---- Health ----
-app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: "1.3.0" }));
+app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok", version: APP_VERSION }));
 
 // Public diagnostic endpoint for APP onboarding troubleshooting. The
 // iOS / Android APP can ping this BEFORE the user attempts to log in
@@ -249,14 +261,9 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
     amber: "#D97706",
     violet: "#7C3AED",
   };
-  // Read the real version from package.json (cheap, accurate even if the
-  // process is mid-deploy) instead of a hardcoded string that drifts.
-  let version = "0.0.0";
-  try {
-    const fs = await import("node:fs/promises");
-    const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
-    version = pkg.version || "0.0.0";
-  } catch { /* fall through to 0.0.0 */ }
+  // Version comes from the boot-time APP_VERSION read (single source of
+  // truth shared with /health + the OpenAPI doc).
+  const version = APP_VERSION;
 
   // Capability gate (for #77 — old-server compatibility). Native apps read
   // this to decide which UI to show: a feature absent from `capabilities`
@@ -680,7 +687,7 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
     openapi: "3.1.0",
     info: {
       title: "ByWave Calendar API",
-      version: "1.3.0",
+      version: APP_VERSION,
       description: "Standardized REST API. All responses wrap in { ok, data } / { ok: false, error }.",
     },
     servers: [{ url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/v1` }],
