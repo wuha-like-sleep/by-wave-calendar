@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
@@ -53,16 +54,20 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -85,7 +90,9 @@ import androidx.compose.ui.unit.sp
 import cn.bywave.calendar.desktop.BuildInfo
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
@@ -115,6 +122,12 @@ fun SettingsScreen(
     onRemoveProfile: (String) -> Unit,
     onAddAccount: () -> Unit,
     onCheckUpdate: () -> Unit,
+    /** Called after a calendar create / update / delete succeeds. The
+     *  caller (MainScreen) re-runs the events fetch — calendars are
+     *  embedded in that response, so reloading is how the new/edited/
+     *  deleted calendar propagates back into this list AND into the
+     *  calendar views behind the Settings overlay. */
+    onCalendarsChanged: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(SettingsTab.Account) }
 
@@ -194,7 +207,11 @@ fun SettingsScreen(
                             onAddAccount = onAddAccount,
                             onSignOut = onSignOut,
                         )
-                        SettingsTab.Calendars -> CalendarsSection(calendars = calendars, profile = profile)
+                        SettingsTab.Calendars -> CalendarsSection(
+                            calendars = calendars,
+                            profile = profile,
+                            onChanged = onCalendarsChanged,
+                        )
                         SettingsTab.Security -> SecuritySection(profile = profile)
                         SettingsTab.Appearance -> AppearanceSection(profile = profile)
                         SettingsTab.About -> AboutSection(
@@ -323,12 +340,51 @@ private fun AccountSection(
 }
 
 // -------- Calendars --------
+//
+// v0.8: desktop went read/write. Previously this section just listed
+// calendars + a "manage on the web" deep-link. Now it owns full CRUD —
+// create / rename / recolor / change timezone / delete — by calling the
+// CalendarCRUD endpoints on a short-lived ApiClient (same pattern the
+// OpenInWebRow uses for its one-shot web-session call). After any
+// mutation we fire `onChanged`, which re-runs the parent's events fetch;
+// calendars ride along in that response (EventsResponse.calendars), so
+// the reload is what surfaces the new/edited/deleted calendar both here
+// and in the calendar views behind the Settings overlay.
+
+/** Brand swatch palette — mirrors the web app's calendar colors so a
+ *  calendar created on desktop matches one created on web. Plain preset
+ *  swatches (no full color wheel) keeps the picker simple. */
+private val CALENDAR_COLOR_PRESETS: List<String> = listOf(
+    "#6366f1", // indigo
+    "#059669", // emerald
+    "#E11D48", // rose
+    "#0284C7", // sky
+    "#D97706", // amber
+    "#7C3AED", // violet
+    "#DC2626", // red
+    "#64748b", // slate
+)
 
 @Composable
-private fun CalendarsSection(calendars: List<CalendarMeta>, profile: Profile) {
-    SectionTitle("我的日历")
+private fun CalendarsSection(
+    calendars: List<CalendarMeta>,
+    profile: Profile,
+    onChanged: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    // At most one dialog up at a time. `null` = none, otherwise the kind
+    // + (for edit/delete) the target calendar. Kept local to this section
+    // — calendar CRUD is a self-contained flow that doesn't need to live
+    // in CalendarState.
+    var editing by remember { mutableStateOf<CalendarMeta?>(null) }   // edit dialog target
+    var deleting by remember { mutableStateOf<CalendarMeta?>(null) }  // delete confirm target
+    var creating by remember { mutableStateOf(false) }               // create dialog open
+
+    SectionTitle(t("settings.calendars.title"))
     Text(
-        "桌面端目前只读显示。新建 / 删除 / 改属性请到网页端。",
+        t("settings.calendars.desc"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 12.dp),
@@ -337,7 +393,7 @@ private fun CalendarsSection(calendars: List<CalendarMeta>, profile: Profile) {
     SectionCard {
         if (calendars.isEmpty()) {
             Text(
-                "还没有日历。",
+                t("settings.calendars.empty"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
@@ -353,7 +409,7 @@ private fun CalendarsSection(calendars: List<CalendarMeta>, profile: Profile) {
                         modifier = Modifier
                             .size(14.dp)
                             .clip(CircleShape)
-                            .background(parseHex(cal.color) ?: Color.Gray),
+                            .background(parseHex(cal.color)),
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
@@ -366,6 +422,24 @@ private fun CalendarsSection(calendars: List<CalendarMeta>, profile: Profile) {
                             )
                         }
                     }
+                    // Per-row Edit + Delete affordances. Icon buttons keep
+                    // the row compact; tooltips come from contentDescription.
+                    IconButton(onClick = { editing = cal }) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = t("settings.calendars.edit"),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { deleting = cal }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = t("settings.calendars.delete"),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
                 if (cal != calendars.last()) HorizontalDivider()
             }
@@ -373,7 +447,313 @@ private fun CalendarsSection(calendars: List<CalendarMeta>, profile: Profile) {
     }
 
     Spacer(Modifier.height(16.dp))
-    OpenInWebButton(profile = profile, next = "/app/calendars", label = "在网页管理日历")
+    Button(onClick = { creating = true }) {
+        Text(t("settings.calendars.new"))
+    }
+
+    // ---- Dialogs ----
+
+    if (creating) {
+        CalendarEditDialog(
+            profile = profile,
+            existing = null,
+            onDismiss = { creating = false },
+            onSaved = {
+                creating = false
+                onChanged()
+            },
+        )
+    }
+
+    editing?.let { cal ->
+        CalendarEditDialog(
+            profile = profile,
+            existing = cal,
+            onDismiss = { editing = null },
+            onSaved = {
+                editing = null
+                onChanged()
+            },
+        )
+    }
+
+    deleting?.let { cal ->
+        CalendarDeleteDialog(
+            profile = profile,
+            calendar = cal,
+            onDismiss = { deleting = null },
+            onDeleted = {
+                deleting = null
+                onChanged()
+            },
+        )
+    }
+}
+
+/** Create OR edit dialog — one composable, switched by `existing`.
+ *  `existing == null` → create (POST); otherwise → edit (PATCH the
+ *  changed fields). Owns its own form state + a short-lived ApiClient
+ *  for the mutation, surfacing API errors inline (mirrors how
+ *  EventEditDialog renders `errorMessage` in-body). */
+@Composable
+private fun CalendarEditDialog(
+    profile: Profile,
+    existing: CalendarMeta?,
+    onDismiss: () -> Unit,
+    onSaved: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    val isEdit = existing != null
+    var name by remember { mutableStateOf(existing?.name.orEmpty()) }
+    // Default new calendars to the first brand swatch; pre-select the
+    // existing color on edit (parseHex tolerates any case / missing #).
+    var color by remember { mutableStateOf(existing?.color ?: CALENDAR_COLOR_PRESETS.first()) }
+    // Default new-calendar timezone to the system zone so the field is
+    // never empty on create (the server otherwise infers one, but
+    // showing the user's tz up front is clearer).
+    var timezone by remember {
+        mutableStateOf(existing?.timezone ?: java.time.ZoneId.systemDefault().id)
+    }
+    var description by remember { mutableStateOf(existing?.description.orEmpty()) }
+
+    var saving by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val canSubmit = name.isNotBlank() && !saving
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = {
+            Text(
+                if (isEdit) t("settings.calendars.editTitle") else t("settings.calendars.createTitle"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(420.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(t("settings.calendars.nameLabel") + " *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // Color picker — a wrapping row of preset swatches; the
+                // selected one gets a ring. Reuses the circle-swatch motif
+                // from EventEditDialog's CalendarPicker.
+                Text(
+                    t("settings.calendars.colorLabel"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                ColorSwatchRow(selected = color, onSelect = { color = it })
+
+                OutlinedTextField(
+                    value = timezone,
+                    onValueChange = { timezone = it },
+                    label = { Text(t("settings.calendars.timezoneLabel")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(t("settings.calendars.descLabel")) },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    saving = true
+                    errorMsg = null
+                    scope.launch {
+                        // Short-lived ApiClient for the active profile —
+                        // same one-shot pattern as OpenInWebRow. The
+                        // bearer token comes from ProfileStore (active
+                        // profile), so we don't thread one in here.
+                        val api = ApiClient(profile.serverUrl)
+                        val tz = timezone.trim().ifBlank { null }
+                        val desc = description.trim().ifBlank { null }
+                        runCatching {
+                            if (isEdit) {
+                                // PATCH: only send what could have changed.
+                                api.updateCalendar(
+                                    id = existing!!.id,
+                                    body = CalendarUpdateInput(
+                                        name = name.trim(),
+                                        description = desc,
+                                        color = color,
+                                        timezone = tz,
+                                    ),
+                                )
+                            } else {
+                                api.createCalendar(
+                                    body = CalendarCreateInput(
+                                        name = name.trim(),
+                                        description = desc,
+                                        color = color,
+                                        timezone = tz,
+                                    ),
+                                )
+                            }
+                        }.onSuccess {
+                            api.close()
+                            saving = false
+                            onSaved()
+                        }.onFailure {
+                            api.close()
+                            saving = false
+                            errorMsg = it.localizedMessage ?: "操作失败"
+                        }
+                    }
+                },
+                enabled = canSubmit,
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(if (isEdit) t("settings.calendars.save") else t("settings.calendars.create"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) {
+                Text(t("settings.calendars.cancel"))
+            }
+        },
+    )
+}
+
+/** Confirm dialog for deleting a calendar. Deleting cascades to all of
+ *  the calendar's events server-side, so the warning copy spells that
+ *  out (with the calendar name interpolated) and the confirm button is
+ *  styled as a destructive action. */
+@Composable
+private fun CalendarDeleteDialog(
+    profile: Profile,
+    calendar: CalendarMeta,
+    onDismiss: () -> Unit,
+    onDeleted: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                t("settings.calendars.deleteTitle"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                        "settings.calendars.deleteWarning",
+                        mapOf("name" to calendar.name),
+                    ),
+                )
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    working = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile.serverUrl)
+                        runCatching {
+                            api.deleteCalendar(calendar.id)
+                        }.onSuccess {
+                            api.close()
+                            working = false
+                            onDeleted()
+                        }.onFailure {
+                            api.close()
+                            working = false
+                            errorMsg = it.localizedMessage ?: "删除失败"
+                        }
+                    }
+                },
+                enabled = !working,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (working) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("settings.calendars.deleteConfirm"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(t("settings.calendars.cancel"))
+            }
+        },
+    )
+}
+
+/** Wrapping row of preset color swatches. The selected swatch gets a
+ *  thicker outline ring so the current choice is obvious at a glance. */
+@Composable
+private fun ColorSwatchRow(selected: String, onSelect: (String) -> Unit) {
+    // Normalize for comparison — server may echo back lower/upper case.
+    val sel = selected.removePrefix("#").lowercase()
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        CALENDAR_COLOR_PRESETS.forEach { hex ->
+            val isSel = hex.removePrefix("#").lowercase() == sel
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(parseHex(hex))
+                    .border(
+                        width = if (isSel) 3.dp else 1.dp,
+                        color = if (isSel) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                        shape = CircleShape,
+                    )
+                    .clickable { onSelect(hex) },
+            )
+        }
+    }
 }
 
 // -------- Security --------

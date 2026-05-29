@@ -157,9 +157,27 @@ object I18n {
 
         // Settings — Calendars
         "settings.calendars.title" to "My calendars",
-        "settings.calendars.desc" to "Desktop is read-only for now. Create / delete / edit calendars on the web.",
+        "settings.calendars.desc" to "Create, rename, recolor, change timezone, or delete your calendars right here.",
         "settings.calendars.empty" to "No calendars yet.",
         "settings.calendars.openOnWeb" to "Manage calendars on the web",
+        // Settings — Calendars (management — added when desktop went read/write)
+        "settings.calendars.new" to "+ New calendar",
+        "settings.calendars.edit" to "Edit",
+        "settings.calendars.delete" to "Delete",
+        "settings.calendars.createTitle" to "New calendar",
+        "settings.calendars.editTitle" to "Edit calendar",
+        "settings.calendars.nameLabel" to "Name",
+        "settings.calendars.colorLabel" to "Color",
+        "settings.calendars.timezoneLabel" to "Timezone",
+        "settings.calendars.descLabel" to "Description",
+        "settings.calendars.create" to "Create",
+        "settings.calendars.save" to "Save",
+        "settings.calendars.cancel" to "Cancel",
+        // Delete confirm — the warning MUST make the cascade explicit:
+        // deleting a calendar drops all of its events server-side.
+        "settings.calendars.deleteTitle" to "Delete calendar?",
+        "settings.calendars.deleteWarning" to "This permanently deletes \"{name}\" and ALL of its events. This cannot be undone.",
+        "settings.calendars.deleteConfirm" to "Delete calendar",
 
         // Settings — Security
         "settings.security.title" to "Security",
@@ -278,9 +296,26 @@ object I18n {
         "settings.signOut.button" to "退出当前账号",
 
         "settings.calendars.title" to "我的日历",
-        "settings.calendars.desc" to "桌面端目前只读显示。新建 / 删除 / 改属性请到网页端。",
+        "settings.calendars.desc" to "可直接在这里新建、重命名、改颜色 / 时区，或删除日历。",
         "settings.calendars.empty" to "还没有日历。",
         "settings.calendars.openOnWeb" to "在网页管理日历",
+        // Settings — Calendars（管理）
+        "settings.calendars.new" to "+ 新建日历",
+        "settings.calendars.edit" to "编辑",
+        "settings.calendars.delete" to "删除",
+        "settings.calendars.createTitle" to "新建日历",
+        "settings.calendars.editTitle" to "编辑日历",
+        "settings.calendars.nameLabel" to "名称",
+        "settings.calendars.colorLabel" to "颜色",
+        "settings.calendars.timezoneLabel" to "时区",
+        "settings.calendars.descLabel" to "描述",
+        "settings.calendars.create" to "创建",
+        "settings.calendars.save" to "保存",
+        "settings.calendars.cancel" to "取消",
+        // 删除确认必须明确说明级联：删除日历会连同其所有事件一并删除。
+        "settings.calendars.deleteTitle" to "删除日历？",
+        "settings.calendars.deleteWarning" to "这将永久删除「{name}」及其所有事件，且无法撤销。",
+        "settings.calendars.deleteConfirm" to "删除日历",
 
         "settings.security.title" to "安全",
         "settings.security.desc" to "敏感操作（改密码 / Passkey / MFA / 删除账号）走网页 —— 桌面 APP 通过一次性令牌把你直接送进已登录的网页。",

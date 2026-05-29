@@ -362,6 +362,12 @@ fun MainScreen(
                 // showUpdateDialog branch shows a slim confirmation.
                 showUpdateDialog = true
             },
+            // A calendar create / rename / recolor / delete in Settings
+            // mutates server state; re-run the events fetch so the
+            // updated calendar list (embedded in EventsResponse.calendars)
+            // flows back into both the Settings list and the calendar
+            // views behind the overlay.
+            onCalendarsChanged = { state.load() },
         )
     }
 }
