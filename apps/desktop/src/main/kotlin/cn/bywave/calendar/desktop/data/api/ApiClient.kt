@@ -23,6 +23,9 @@ import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.desktop.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.desktop.data.model.AttendeesResponse
+import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
+import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
@@ -145,6 +148,48 @@ class ApiClient(val serverUrl: String) {
         return getAuthed("/api/v1/events", EventsResponse.serializer()) {
             parameter("from", from)
             parameter("to", to)
+        }
+    }
+
+    // ---- Calendars (CRUD) ----
+
+    /** POST /api/v1/calendars — create a calendar. Returns the new row
+     *  (parsed as CalendarMeta; extra server columns ignored). */
+    suspend fun createCalendar(body: CalendarCreateInput): CalendarMeta {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/calendars",
+            body = body,
+            bodySerializer = CalendarCreateInput.serializer(),
+            respSerializer = CalendarMeta.serializer(),
+        )
+    }
+
+    /** PATCH /api/v1/calendars/{id} — rename / recolor / change timezone /
+     *  edit description. Only non-null fields are sent. Returns updated row. */
+    suspend fun updateCalendar(id: String, body: CalendarUpdateInput): CalendarMeta {
+        return withBodyAuthed(
+            method = HttpMethod.PATCH,
+            path = "/api/v1/calendars/$id",
+            body = body,
+            bodySerializer = CalendarUpdateInput.serializer(),
+            respSerializer = CalendarMeta.serializer(),
+        )
+    }
+
+    /** DELETE /api/v1/calendars/{id} — delete a calendar and (server-side
+     *  cascade) all its events. Server returns { ok: true }; we only care
+     *  that the status is success. */
+    suspend fun deleteCalendar(id: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            client.delete("$baseUrl/api/v1/calendars/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "calendar delete failed: ${resp.status} $body")
         }
     }
 

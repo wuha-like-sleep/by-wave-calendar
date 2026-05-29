@@ -54,6 +54,28 @@ data class CalendarMeta(
     val description: String? = null,
 )
 
+// ---- Calendar create / update ----
+// Mirror the server's createSchema (POST /api/v1/calendars): name required,
+// the rest optional. updateSchema is the same fields all-optional (PATCH).
+// Both endpoints return the full calendar row, which CalendarMeta parses
+// (ignoreUnknownKeys drops the extra server-only columns).
+
+@Serializable
+data class CalendarCreateInput(
+    val name: String,
+    val description: String? = null,
+    val color: String? = null,      // "#rrggbb"
+    val timezone: String? = null,
+)
+
+@Serializable
+data class CalendarUpdateInput(
+    val name: String? = null,
+    val description: String? = null,
+    val color: String? = null,
+    val timezone: String? = null,
+)
+
 // ---- Event create / update / delete ----
 
 @Serializable
