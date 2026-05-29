@@ -6,5 +6,11 @@
      state). Order doesn't matter; system Settings sorts by name. -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="zh-Hans"/>
+    <locale android:name="zh-TW"/>
     <locale android:name="en"/>
+    <locale android:name="ja"/>
+    <locale android:name="ko"/>
+    <locale android:name="es"/>
+    <locale android:name="fr"/>
+    <locale android:name="de"/>
 </locale-config>

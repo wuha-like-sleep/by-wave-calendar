@@ -31,7 +31,14 @@ object LocaleHelper {
     val supported: List<Pair<String, String>> = listOf(
         ""        to "跟随系统",
         "zh-Hans" to "简体中文",
+        // "zh-TW" (BCP-47) resolves to the values-zh-rTW resource folder.
+        "zh-TW"   to "繁體中文",
         "en"      to "English",
+        "ja"      to "日本語",
+        "ko"      to "한국어",
+        "es"      to "Español",
+        "fr"      to "Français",
+        "de"      to "Deutsch",
     )
 
     private const val PREFS_NAME = "bwc_prefs"

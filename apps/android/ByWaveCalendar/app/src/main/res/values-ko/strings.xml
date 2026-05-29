@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ByWave Calendar</string>
+
+    <string name="setup_title">서버에 로그인</string>
+    <string name="setup_subtitle">ByWave Calendar 서버에 로그인하여 동기화를 시작하세요</string>
+    <string name="setup_server_label">서버</string>
+    <string name="setup_server_hint">https://example.com 또는 example.com</string>
+    <string name="setup_email_label">이메일</string>
+    <string name="setup_email_hint">you@example.com</string>
+    <string name="setup_password_label">비밀번호</string>
+    <string name="setup_signin">로그인</string>
+    <string name="setup_signing_in">로그인 중…</string>
+    <string name="setup_or">또는</string>
+    <string name="setup_qr_scan">QR 스캔</string>
+    <string name="setup_qr_hint">웹 앱에서 「설정 → 내 기기 → 새 기기 페어링」을 연 다음, 카메라를 QR 코드에 맞추세요</string>
+
+    <string name="calendar_title">캘린더</string>
+    <string name="calendar_today">오늘</string>
+    <string name="calendar_day">일</string>
+    <string name="calendar_week">주</string>
+    <string name="calendar_month">월</string>
+    <string name="calendar_year">년</string>
+    <string name="calendar_no_events_today">오늘은 일정이 없습니다</string>
+    <string name="calendar_no_events">일정 없음</string>
+    <string name="calendar_synced">동기화됨</string>
+    <string name="calendar_syncing">동기화 중…</string>
+
+    <string name="action_save">저장</string>
+    <string name="action_cancel">취소</string>
+    <string name="action_delete">삭제</string>
+    <string name="action_done">완료</string>
+    <string name="action_retry">다시 시도</string>
+    <string name="action_close">닫기</string>
+    <string name="error_generic">문제가 발생했습니다</string>
+    <string name="error_network">네트워크 오류 — 연결을 확인하세요</string>
+
+    <string name="settings_title">설정</string>
+    <string name="settings_account">계정</string>
+    <string name="settings_about">정보</string>
+    <string name="settings_signout">로그아웃</string>
+    <string name="settings_signout_confirm">로그아웃하면 로컬 캐시가 지워집니다. 다음에 다시 로그인해야 합니다.</string>
+    <string name="settings_version">버전 %1$s</string>
+    <string name="settings_server">서버</string>
+    <string name="settings_email">이메일</string>
+    <string name="settings_language">언어</string>
+    <string name="settings_privacy">개인정보 처리방침</string>
+    <string name="settings_terms">서비스 약관</string>
+    <string name="settings_support">지원</string>
+    <string name="settings_github">GitHub 저장소</string>
+
+    <string name="event_new">새 일정</string>
+    <string name="event_edit">일정 편집</string>
+    <string name="event_summary">제목</string>
+    <string name="event_summary_hint">일정 제목</string>
+    <string name="event_calendar">캘린더</string>
+    <string name="event_allday">종일</string>
+    <string name="event_start">시작</string>
+    <string name="event_end">종료</string>
+    <string name="event_location">위치</string>
+    <string name="event_location_hint">선택 사항 — 예: 상하이 / Zoom</string>
+    <string name="event_link">링크</string>
+    <string name="event_link_hint">https://… (회의 링크 / 문서 URL)</string>
+    <string name="event_description">메모</string>
+    <string name="event_description_hint">안건, 핵심 내용, 메모…</string>
+    <string name="event_delete_confirm_title">일정을 삭제할까요?</string>
+    <string name="event_delete_confirm_message">이 작업은 취소할 수 없습니다.</string>
+
+    <string name="scan_hint">QR 코드를 프레임 안에 맞추세요 — 자동으로 스캔됩니다</string>
+    <string name="scan_no_camera_permission">카메라 권한이 필요합니다</string>
+    <string name="scan_grant_permission">허용</string>
+
+    <string name="settings_sync_section">동기화 및 알림</string>
+    <string name="settings_mirror_title">시스템 캘린더에 미러링</string>
+    <string name="settings_mirror_desc">Android 캘린더 제공자에 일정을 기록하여 Google 캘린더 / 기본 캘린더 / 위젯에서 볼 수 있게 합니다.</string>
+    <string name="settings_reminders_title">일정 시작 전 알림</string>
+    <string name="settings_reminders_desc">각 일정 시작 N분 전에 로컬 알림을 표시합니다. 완전히 기기 내 타이머이며 Apple/Google 서버를 거치지 않습니다.</string>
+    <string name="settings_reminder_lead">알림 시점</string>
+    <string name="settings_reminder_lead_5">5분</string>
+    <string name="settings_reminder_lead_10">10분</string>
+    <string name="settings_reminder_lead_15">15분</string>
+    <string name="settings_reminder_lead_30">30분</string>
+    <string name="settings_reminder_lead_60">1시간</string>
+    <string name="settings_reminder_lead_120">2시간</string>
+    <string name="settings_perm_calendar_denied">캘린더 권한이 거부되었습니다. 「설정 → 앱 → ByWave Calendar → 권한」에서 사용 설정하세요.</string>
+    <string name="settings_perm_notifications_denied">알림 권한이 거부되었습니다. 「설정 → 앱 → ByWave Calendar → 알림」에서 사용 설정하세요.</string>
+
+    <string name="reminder_channel_name">일정 알림</string>
+    <string name="reminder_channel_desc">일정 시작 전 로컬 알림.</string>
+    <string name="reminder_default_body">곧 시작합니다</string>
+
+    <!-- Language picker (Settings) -->
+    <string name="settings_language_section">언어</string>
+    <string name="settings_language_title">APP 언어</string>
+    <string name="settings_language_desc">시스템 언어를 무시하고 APP 내 언어를 선택합니다.</string>
+    <string name="settings_language_follow_system">시스템 따르기</string>
+    <string name="settings_language_zh">简体中文</string>
+    <string name="settings_language_en">English</string>
+</resources>

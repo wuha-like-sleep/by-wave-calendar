@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ByWave Calendar</string>
+
+    <string name="setup_title">Inicia sesión en tu servidor</string>
+    <string name="setup_subtitle">Inicia sesión en tu servidor de ByWave Calendar para empezar a sincronizar</string>
+    <string name="setup_server_label">Servidor</string>
+    <string name="setup_server_hint">https://example.com o example.com</string>
+    <string name="setup_email_label">Correo electrónico</string>
+    <string name="setup_email_hint">you@example.com</string>
+    <string name="setup_password_label">Contraseña</string>
+    <string name="setup_signin">Iniciar sesión</string>
+    <string name="setup_signing_in">Iniciando sesión…</string>
+    <string name="setup_or">o</string>
+    <string name="setup_qr_scan">Escanear QR</string>
+    <string name="setup_qr_hint">Abre la app web → Ajustes → Mis dispositivos → Vincular nuevo dispositivo y apunta la cámara al código QR</string>
+
+    <string name="calendar_title">Calendario</string>
+    <string name="calendar_today">Hoy</string>
+    <string name="calendar_day">Día</string>
+    <string name="calendar_week">Semana</string>
+    <string name="calendar_month">Mes</string>
+    <string name="calendar_year">Año</string>
+    <string name="calendar_no_events_today">Nada para hoy</string>
+    <string name="calendar_no_events">Sin eventos</string>
+    <string name="calendar_synced">Sincronizado</string>
+    <string name="calendar_syncing">Sincronizando…</string>
+
+    <string name="action_save">Guardar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_delete">Eliminar</string>
+    <string name="action_done">Listo</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_close">Cerrar</string>
+    <string name="error_generic">Algo salió mal</string>
+    <string name="error_network">Error de red — comprueba tu conexión</string>
+
+    <string name="settings_title">Ajustes</string>
+    <string name="settings_account">Cuenta</string>
+    <string name="settings_about">Acerca de</string>
+    <string name="settings_signout">Cerrar sesión</string>
+    <string name="settings_signout_confirm">Al cerrar sesión se borra la caché local. Tendrás que iniciar sesión de nuevo la próxima vez.</string>
+    <string name="settings_version">Versión %1$s</string>
+    <string name="settings_server">Servidor</string>
+    <string name="settings_email">Correo electrónico</string>
+    <string name="settings_language">Idioma</string>
+    <string name="settings_privacy">Política de privacidad</string>
+    <string name="settings_terms">Términos del servicio</string>
+    <string name="settings_support">Soporte</string>
+    <string name="settings_github">Repositorio de GitHub</string>
+
+    <string name="event_new">Nuevo evento</string>
+    <string name="event_edit">Editar evento</string>
+    <string name="event_summary">Título</string>
+    <string name="event_summary_hint">Título del evento</string>
+    <string name="event_calendar">Calendario</string>
+    <string name="event_allday">Todo el día</string>
+    <string name="event_start">Empieza</string>
+    <string name="event_end">Termina</string>
+    <string name="event_location">Ubicación</string>
+    <string name="event_location_hint">Opcional — p. ej. Shanghái / Zoom</string>
+    <string name="event_link">Enlace</string>
+    <string name="event_link_hint">https://… (enlace de reunión / URL de documento)</string>
+    <string name="event_description">Notas</string>
+    <string name="event_description_hint">Agenda, conclusiones, notas…</string>
+    <string name="event_delete_confirm_title">¿Eliminar evento?</string>
+    <string name="event_delete_confirm_message">Esto no se puede deshacer.</string>
+
+    <string name="scan_hint">Encuadra el QR — el escaneo empieza automáticamente</string>
+    <string name="scan_no_camera_permission">Se requiere permiso de cámara</string>
+    <string name="scan_grant_permission">Conceder</string>
+
+    <string name="settings_sync_section">Sincronización y notificaciones</string>
+    <string name="settings_mirror_title">Reflejar en el calendario del sistema</string>
+    <string name="settings_mirror_desc">Escribe los eventos en el proveedor de Calendario de Android para que Google Calendar / el calendario nativo / los widgets los vean.</string>
+    <string name="settings_reminders_title">Avisar antes de que empiece el evento</string>
+    <string name="settings_reminders_desc">Lanza una notificación local N minutos antes de cada evento. Temporizador totalmente en el dispositivo; sin servidores de Apple/Google.</string>
+    <string name="settings_reminder_lead">Antelación</string>
+    <string name="settings_reminder_lead_5">5 minutos</string>
+    <string name="settings_reminder_lead_10">10 minutos</string>
+    <string name="settings_reminder_lead_15">15 minutos</string>
+    <string name="settings_reminder_lead_30">30 minutos</string>
+    <string name="settings_reminder_lead_60">1 hora</string>
+    <string name="settings_reminder_lead_120">2 horas</string>
+    <string name="settings_perm_calendar_denied">Permiso de calendario denegado. Abre Ajustes → Aplicaciones → ByWave Calendar → Permisos para activarlo.</string>
+    <string name="settings_perm_notifications_denied">Permiso de notificaciones denegado. Abre Ajustes → Aplicaciones → ByWave Calendar → Notificaciones para activarlo.</string>
+
+    <string name="reminder_channel_name">Recordatorios de eventos</string>
+    <string name="reminder_channel_desc">Notificaciones locales antes de que empiece el evento.</string>
+    <string name="reminder_default_body">Empieza pronto</string>
+
+    <!-- Language picker (Settings) -->
+    <string name="settings_language_section">Idioma</string>
+    <string name="settings_language_title">Idioma de la APP</string>
+    <string name="settings_language_desc">Elige el idioma de la APP, anulando el idioma del sistema.</string>
+    <string name="settings_language_follow_system">Seguir el sistema</string>
+    <string name="settings_language_zh">简体中文</string>
+    <string name="settings_language_en">English</string>
+</resources>

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Visible APP name under the launcher icon. Matches iOS
+         CFBundleDisplayName = "ByWave Calendar". -->
+    <string name="app_name">ByWave Calendar</string>
+
+    <!-- Setup / Login -->
+    <string name="setup_title">登入你的伺服器</string>
+    <string name="setup_subtitle">登入你的 ByWave Calendar 伺服器，開始同步</string>
+    <string name="setup_server_label">伺服器位址</string>
+    <string name="setup_server_hint">https://example.com 或 example.com</string>
+    <string name="setup_email_label">電子郵件</string>
+    <string name="setup_email_hint">you@example.com</string>
+    <string name="setup_password_label">密碼</string>
+    <string name="setup_signin">登入</string>
+    <string name="setup_signing_in">登入中…</string>
+    <string name="setup_or">或</string>
+    <string name="setup_qr_scan">掃碼登入</string>
+    <string name="setup_qr_hint">在網頁「設定 → 我的裝置 → 綁定新裝置」產生 QR code，對準它掃一下</string>
+
+    <!-- Calendar -->
+    <string name="calendar_title">行事曆</string>
+    <string name="calendar_today">今天</string>
+    <string name="calendar_day">日</string>
+    <string name="calendar_week">週</string>
+    <string name="calendar_month">月</string>
+    <string name="calendar_year">年</string>
+    <string name="calendar_no_events_today">今天沒有事件</string>
+    <string name="calendar_no_events">無事件</string>
+    <string name="calendar_synced">已同步</string>
+    <string name="calendar_syncing">同步中…</string>
+
+    <!-- Common -->
+    <string name="action_save">儲存</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_delete">刪除</string>
+    <string name="action_done">完成</string>
+    <string name="action_retry">重試</string>
+    <string name="action_close">關閉</string>
+    <string name="error_generic">發生錯誤</string>
+    <string name="error_network">網路錯誤，請檢查連線</string>
+
+    <!-- Settings -->
+    <string name="settings_title">設定</string>
+    <string name="settings_account">帳號</string>
+    <string name="settings_about">關於</string>
+    <string name="settings_signout">登出</string>
+    <string name="settings_signout_confirm">登出後本機行事曆快取會清空，下次需要重新登入。</string>
+    <string name="settings_version">版本 %1$s</string>
+    <string name="settings_server">伺服器</string>
+    <string name="settings_email">電子郵件</string>
+    <string name="settings_language">語言</string>
+    <string name="settings_privacy">隱私權政策</string>
+    <string name="settings_terms">使用條款</string>
+    <string name="settings_support">技術支援</string>
+    <string name="settings_github">GitHub 儲存庫</string>
+
+    <!-- Event edit -->
+    <string name="event_new">新增事件</string>
+    <string name="event_edit">編輯事件</string>
+    <string name="event_summary">標題</string>
+    <string name="event_summary_hint">事件標題</string>
+    <string name="event_calendar">行事曆</string>
+    <string name="event_allday">全天</string>
+    <string name="event_start">開始</string>
+    <string name="event_end">結束</string>
+    <string name="event_location">地點</string>
+    <string name="event_location_hint">選填 — 例如 上海 / Zoom 會議室</string>
+    <string name="event_link">連結</string>
+    <string name="event_link_hint">https://… (會議連結 / 文件位址等)</string>
+    <string name="event_description">備註</string>
+    <string name="event_description_hint">議程、要點、注意事項……</string>
+    <string name="event_delete_confirm_title">刪除事件？</string>
+    <string name="event_delete_confirm_message">此操作無法復原。</string>
+
+    <!-- Scanner -->
+    <string name="scan_hint">將 QR code 放入框內 — 自動辨識</string>
+    <string name="scan_no_camera_permission">沒有相機權限</string>
+    <string name="scan_grant_permission">授權</string>
+
+    <!-- Sync (v0.6) -->
+    <string name="settings_sync_section">同步與通知</string>
+    <string name="settings_mirror_title">同步到系統行事曆</string>
+    <string name="settings_mirror_desc">把事件鏡像到 Android 系統「行事曆」provider，讓 Google 日曆 / 預設行事曆 / 桌面小工具都能看到。</string>
+    <string name="settings_reminders_title">事件開始前提醒</string>
+    <string name="settings_reminders_desc">在事件開始前若干分鐘彈出本機通知。不走 Apple/Google 伺服器，純本機定時。</string>
+    <string name="settings_reminder_lead">提前時間</string>
+    <string name="settings_reminder_lead_5">5 分鐘</string>
+    <string name="settings_reminder_lead_10">10 分鐘</string>
+    <string name="settings_reminder_lead_15">15 分鐘</string>
+    <string name="settings_reminder_lead_30">30 分鐘</string>
+    <string name="settings_reminder_lead_60">1 小時</string>
+    <string name="settings_reminder_lead_120">2 小時</string>
+    <string name="settings_perm_calendar_denied">系統行事曆權限被拒。請到「設定 → 應用程式 → ByWave Calendar → 權限」開啟行事曆權限。</string>
+    <string name="settings_perm_notifications_denied">通知權限被拒。請到「設定 → 應用程式 → ByWave Calendar → 通知」開啟。</string>
+
+    <!-- Reminder channel -->
+    <string name="reminder_channel_name">事件提醒</string>
+    <string name="reminder_channel_desc">事件開始前的本機定時通知。</string>
+    <string name="reminder_default_body">即將開始</string>
+
+    <!-- Language picker (Settings) -->
+    <string name="settings_language_section">語言</string>
+    <string name="settings_language_title">APP 顯示語言</string>
+    <string name="settings_language_desc">選擇 APP 內介面語言，覆蓋系統語言。</string>
+    <string name="settings_language_follow_system">跟隨系統</string>
+    <string name="settings_language_zh">簡體中文</string>
+    <string name="settings_language_en">English</string>
+</resources>
