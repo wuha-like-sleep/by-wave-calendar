@@ -169,7 +169,17 @@ fun SettingsScreen(
                 }
                 VerticalDivider()
                 // Right pane — content for the selected tab.
-                Box(
+                //
+                // CRITICAL BUG FIX (v0.7.7): this was a Box, which
+                // stacks children on top of each other (Compose's Box
+                // is the same as FrameLayout/RelativeLayout). Every
+                // SectionTitle / SectionCard / Spacer in the section
+                // composables got placed at (0,0), making the title,
+                // description, and buttons overlap — exactly the
+                // "字全部挤在一起" the user reported on v0.7.6.
+                // Column is the right container: stacks children
+                // vertically, respects Spacers, supports verticalScroll.
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .verticalScroll(rememberScrollState())
