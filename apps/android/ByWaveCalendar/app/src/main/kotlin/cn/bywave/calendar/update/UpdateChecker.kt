@@ -45,6 +45,13 @@ object UpdateChecker {
     private var lastCheckMs: Long = 0
     private const val THROTTLE_MS: Long = 6 * 60 * 60 * 1000L  // 6h
 
+    /** Canonical manifest on GitHub raw. Fallback when the user's own
+     *  server returns nothing newer (or is unreachable) — a server that
+     *  hasn't been re-deployed since the last release would otherwise lock
+     *  users out of newer APKs. Same role as the desktop client's fallback. */
+    private const val GITHUB_MANIFEST_URL =
+        "https://raw.githubusercontent.com/wuha-like-sleep/by-wave-calendar/main/apps/android/releases/latest.json"
+
     /** Force a check on the next call regardless of throttle. Used by
      *  the "立即检查更新" button in Settings. */
     fun resetThrottle() { lastCheckMs = 0 }
@@ -91,8 +98,28 @@ object UpdateChecker {
             ?: BywaveApp.instance.profiles.active()?.serverUrl
             ?: return false
         val api = UpdateApiFactory.create(baseUrl)
-        val rel = api.latest()
         val localVersionCode = localVersionCode(context)
+
+        // 1) Primary: the user's own server. 2) Fallback: canonical GitHub
+        // raw manifest — tried whenever the server gives us nothing newer
+        // (or errors), so a stale/unreachable server can't lock users out
+        // of newer releases. If BOTH are unreachable we re-throw the server
+        // error so the user-initiated "检查更新" path can report a failure.
+        val serverResult = runCatching { api.latest() }
+        val fromServer = serverResult.getOrNull()
+        val serverIsNewer = fromServer != null && fromServer.versionCode > localVersionCode
+        val fromGithub =
+            if (serverIsNewer) null
+            else runCatching { api.fetchManifest(GITHUB_MANIFEST_URL) }.getOrNull()
+        val rel = listOfNotNull(fromServer, fromGithub).maxByOrNull { it.versionCode }
+        if (rel == null) {
+            // Neither source reachable — surface the server error to callers
+            // (checkNow turns it into a "检查失败" snackbar). Auto-poll
+            // swallows it via its own runCatching.
+            serverResult.exceptionOrNull()?.let { throw it }
+            _state.value = UpdateState.Idle
+            return false
+        }
 
         // Determine if update is needed.
         val newer = rel.versionCode > localVersionCode

@@ -22,6 +22,7 @@ import retrofit2.Retrofit
 // extension function this jar exports.
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.GET
+import retrofit2.http.Url
 import java.util.concurrent.TimeUnit
 
 @Serializable
@@ -40,6 +41,13 @@ data class AndroidReleaseDto(
 interface UpdateApi {
     @GET("api/app/android/latest")
     suspend fun latest(): AndroidReleaseDto
+
+    /** Fetch a manifest from an absolute URL (overrides baseUrl). Used for
+     *  the canonical GitHub-raw fallback so a user whose own server hasn't
+     *  been re-deployed lately still has a path to discover updates —
+     *  mirrors the desktop client's UpdateChecker fallback. */
+    @GET
+    suspend fun fetchManifest(@Url url: String): AndroidReleaseDto
 }
 
 internal object UpdateApiFactory {
