@@ -78,6 +78,16 @@ struct ServerCapabilities {
     /// Desktop QR scan-to-login binding (admin-toggleable via appsEnabled).
     var hasDesktopPairing: Bool { cap("desktopPairing", fallback: version.atLeast("0.7.2")) }
 
+    /// Native "Sign in with Apple" — POST /api/v1/auth/apple (server #67).
+    /// Prefers the server's explicit `appleSignIn` capability flag when it
+    /// reports one. Servers that predate the flag (it isn't in the v1
+    /// capability set yet) fall back to a semver guess. The SetupView button
+    /// shows whenever this is true OR the server version is unknown — and a
+    /// server that has the route but no SIWA_CLIENT_IDS configured still
+    /// degrades gracefully by returning 503 apple_signin_not_configured,
+    /// which AppleSignInError maps to a friendly message.
+    var hasAppleSignIn: Bool { cap("appleSignIn", fallback: version.atLeast("1.5.0")) }
+
     /// CSRF exempt list correctly allows /devices/pair-claim,
     /// /auth/login-password, /auth/refresh — v0.7.5+. Older servers
     /// return 403 csrf_invalid for any APP login attempt; iOS shows a

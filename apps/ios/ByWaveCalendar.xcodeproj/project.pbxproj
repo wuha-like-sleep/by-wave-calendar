@@ -47,6 +47,7 @@
 		1F0001000000000000000026 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000026 /* Localizable.strings */; };
 		1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000029 /* ManageCalendarsView.swift */; };
 		1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002B /* DesktopPairScannerView.swift */; };
+		1F000100000000000000002D /* AppleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002D /* AppleSignIn.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -93,6 +94,7 @@
 		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1B0001000000000000000029 /* ManageCalendarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageCalendarsView.swift; sourceTree = "<group>"; };
 		1B000100000000000000002B /* DesktopPairScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPairScannerView.swift; sourceTree = "<group>"; };
+		1B000100000000000000002D /* AppleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignIn.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -150,6 +152,7 @@
 				1B0001000000000000000005 /* Keychain.swift */,
 				1B0001000000000000000006 /* PairingService.swift */,
 				1B000100000000000000000F /* WebAuthLogin.swift */,
+				1B000100000000000000002D /* AppleSignIn.swift */,
 			);
 			path = Auth;
 			sourceTree = "<group>";
@@ -298,6 +301,7 @@
 				1F000100000000000000000D /* RecurringScopePicker.swift in Sources */,
 				1F000100000000000000000E /* SettingsView.swift in Sources */,
 				1F000100000000000000000F /* WebAuthLogin.swift in Sources */,
+				1F000100000000000000002D /* AppleSignIn.swift in Sources */,
 				1F0001000000000000000010 /* EventKitMirror.swift in Sources */,
 				1F0001000000000000000011 /* EventCache.swift in Sources */,
 				1F0001000000000000000012 /* EventRowView.swift in Sources */,
@@ -487,7 +491,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.4.3;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
@@ -522,7 +526,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.4.3;
+				MARKETING_VERSION = 1.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;

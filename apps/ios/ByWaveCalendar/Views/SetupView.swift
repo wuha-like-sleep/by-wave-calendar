@@ -8,6 +8,7 @@
 // access tokens. RootView then flips to CalendarView.
 
 import SwiftUI
+import AuthenticationServices
 
 private enum LoginMethod: String, CaseIterable, Identifiable {
     // Order matters — first wins as the default selection. Scan-first
@@ -88,6 +89,17 @@ struct SetupView: View {
                     // because the field is empty).
                     if method.needsServerURL {
                         browserLoginButton
+                        // Native "Sign in with Apple". Like the browser
+                        // button it needs a server URL (so it doesn't 404
+                        // against an empty host), hence the same gate. The
+                        // capability check is graceful — shown when the
+                        // server reports support OR is too old to report
+                        // capabilities at all; a server without SIWA
+                        // configured returns 503 which surfaces a friendly
+                        // "ask the admin" banner.
+                        if state.serverCapabilities.hasAppleSignIn {
+                            appleSignInButton
+                        }
                     }
                     if let errorMessage {
                         errorBanner(text: errorMessage)
@@ -347,6 +359,35 @@ struct SetupView: View {
         }
     }
 
+    // MARK: - Sign in with Apple
+    private var appleSignInButton: some View {
+        // SwiftUI's first-party button gives us Apple's HIG-mandated chrome
+        // (the logo, label, corner radius) for free. We DON'T use its
+        // onRequest/onCompletion closures, though: those run the request
+        // through the SwiftUI button and only hand back the raw credential,
+        // which would force us to duplicate the server-exchange +
+        // completePairing logic. Instead the real button is rendered purely
+        // for its appearance (hit-testing disabled) and a transparent Button
+        // on top routes the tap into our AppleSignIn coordinator, which
+        // already does scopes → identityToken → /api/v1/auth/apple →
+        // completePairing in one place.
+        SignInWithAppleButton(.signIn) { _ in } onCompletion: { _ in }
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .frame(height: 48)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            // Visual only — let the overlay receive every tap so we never
+            // accidentally fire the system button's (no-op) closures.
+            .allowsHitTesting(false)
+            .overlay {
+                Button {
+                    Task { await loginWithApple() }
+                } label: {
+                    Color.clear.contentShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isWorking || serverURLInput.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+    }
+
     // MARK: - Computed
     private var canSubmitPassword: Bool {
         !isWorking && !serverURLInput.trimmingCharacters(in: .whitespaces).isEmpty
@@ -479,6 +520,40 @@ struct SetupView: View {
             await doClaim(serverURL: url, code: code)
         } catch let e as WebAuthError {
             if case .userCancelled = e { return }  // silent
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func loginWithApple() async {
+        guard let url = await normalizedServerURL() else {
+            errorMessage = "服务器地址无效"; return
+        }
+        isWorking = true; errorMessage = nil
+        defer { isWorking = false }
+        do {
+            // AppleSignIn returns the SAME PasswordLoginResponse the
+            // password / MFA paths use — so we go through the identical
+            // completePairing landing as every other login method.
+            let r = try await AppleSignIn.start(serverURL: url)
+            // Lenient parse — server emits Date.toISOString() with
+            // fractional seconds which the default ISO8601DateFormatter
+            // rejects. See AppState.parseIsoLenient.
+            let expDate = AppState.parseIsoLenient(r.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+            state.completePairing(
+                serverURL: url,
+                refreshToken: r.refreshToken,
+                accessToken: r.accessToken,
+                accessTokenExpiresAt: expDate,
+                userEmail: r.userEmail,
+                userName: r.userName,
+            )
+            // Close the sheet when SetupView was presented from
+            // ProfileSwitcher's "添加另一个账号"; no-op at first launch.
+            dismiss()
+        } catch let e as AppleSignInError {
+            if case .userCancelled = e { return }  // silent — user tapped Cancel
             errorMessage = e.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
