@@ -141,3 +141,36 @@ ADMIN_PASSWORD='your-strong-password' \
 SKIP_SETCAP=1 \
 bash deploy/bt-panel/install.sh
 ```
+
+---
+
+## 八、备份恢复链路验证（数据保险）
+
+后台「数据备份 / 恢复」功能很重要 —— 但是不验证你不知道它真的能用。
+搬服务器之前，先在一个空 PG 库里跑一次自动 round-trip：
+
+```bash
+# 1. 起一个本地一次性数据库
+createdb bywave_test_restore
+
+# 2. 灌当前代码的 schema 进去
+DATABASE_URL=postgresql://localhost:5432/bywave_test_restore \
+  npm run db:migrate
+
+# 3. 跑 export → import 全链路自检
+DATABASE_URL=postgresql://localhost:5432/bywave_test_restore \
+  npx tsx scripts/verify-backup-restore.ts
+
+# 期望看到结尾：
+#   ✅ 29/29 checks passed
+#   Backup round-trip OK — exportData() and importData() are mutually inverse for every table in EXPORT_TABLES.
+
+# 4. 收拾
+dropdb bywave_test_restore
+```
+
+脚本会：seed 15 张业务表 → 调 `exportData()` → 全表 TRUNCATE → 调
+`importData(bundle)` → 重新读出来比对行数、Date 字段反序列化、外键完整。
+
+🛡️ **脚本不会跑非 `*test*` 数据库**（看到非 test 关键字 URL 直接拒绝），
+所以不会误清生产库。但保险起见，永远只针对一次性创建的库跑。
