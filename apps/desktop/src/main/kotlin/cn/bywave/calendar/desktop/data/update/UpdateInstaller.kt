@@ -226,8 +226,13 @@ object UpdateInstaller {
             |echo "[$(date)] removing old .app" >> "${'$'}LOG"
             |rm -rf "$currentAppPath"
             |
-            |echo "[$(date)] copying new .app from DMG" >> "${'$'}LOG"
-            |cp -R "$newAppPath" "$currentAppPath"
+            |echo "[$(date)] copying new .app from DMG (ditto)" >> "${'$'}LOG"
+            |# ditto, not `cp -R`: it's Apple's recommended tool for copying
+            |# signed .app bundles. cp -R can mangle extended attributes /
+            |# ACLs / resource forks in edge cases, which silently corrupts
+            |# the code signature; ditto preserves them faithfully so the
+            |# copy stays byte-for-byte Gatekeeper-valid.
+            |ditto "$newAppPath" "$currentAppPath"
             |COPY_EXIT=${'$'}?
             |
             |if [ ${'$'}COPY_EXIT -ne 0 ]; then
@@ -241,6 +246,18 @@ object UpdateInstaller {
             |# notarized + stapled, but downloaded files get the attr
             |# regardless.
             |xattr -dr com.apple.quarantine "$currentAppPath" >/dev/null 2>&1 || true
+            |
+            |# Re-verify the COPIED app before relaunching. We verified the
+            |# source on the DMG above, but a copy can still go wrong (disk
+            |# full, interrupted ditto). Since we already removed the old
+            |# app, the worst case is no app at all — so if the copy doesn't
+            |# verify, don't launch a broken/unsigned binary; open the DMG so
+            |# the user can finish the install by hand.
+            |if ! codesign --verify --deep --strict "$currentAppPath" >> "${'$'}LOG" 2>&1; then
+            |  echo "[$(date)] COPIED APP FAILED VERIFY — opening DMG for manual install" >> "${'$'}LOG"
+            |  open "$mountPoint"
+            |  exit 1
+            |fi
             |
             |# Eject the DMG. Quiet — failure here doesn't matter (user
             |# can manually eject later from Finder).
