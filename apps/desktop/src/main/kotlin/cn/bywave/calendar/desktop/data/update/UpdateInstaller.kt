@@ -200,6 +200,24 @@ object UpdateInstaller {
             |# hooks generally take well under a second.
             |sleep 2
             |
+            |# SECURITY: verify the new .app's code signature BEFORE we
+            |# overwrite the running app + strip its quarantine attr. The
+            |# in-app updater already verified the DMG's sha256 against the
+            |# (HTTPS-fetched) manifest, but that only proves "this is the
+            |# bytes the manifest pointed at" — if the manifest source were
+            |# ever compromised, sha256 would still self-match. codesign
+            |# --verify independently confirms the .app carries an intact
+            |# Apple Developer ID signature. We strip com.apple.quarantine
+            |# below (so Gatekeeper won't re-check on launch), so this is the
+            |# last line of defense. If it fails, abort the swap and open the
+            |# DMG for manual install rather than installing an unverified app.
+            |echo "[$(date)] verifying code signature of new .app" >> "${'$'}LOG"
+            |if ! codesign --verify --deep --strict "$newAppPath" >> "${'$'}LOG" 2>&1; then
+            |  echo "[$(date)] SIGNATURE VERIFY FAILED — refusing to install, opening DMG" >> "${'$'}LOG"
+            |  open "$mountPoint"
+            |  exit 1
+            |fi
+            |
             |# Belt-and-suspenders: kill any straggler ByWave process.
             |pkill -f "ByWaveCalendar" >> "${'$'}LOG" 2>&1
             |sleep 1

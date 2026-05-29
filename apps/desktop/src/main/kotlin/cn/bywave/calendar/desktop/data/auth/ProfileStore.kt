@@ -210,22 +210,57 @@ object ProfileStore {
 
     private fun persist() {
         Files.createDirectories(storeDir)
-        // Best-effort 0600 on POSIX.
-        try {
-            val perms = PosixFilePermissions.fromString("rw-------")
-            if (!Files.exists(storeFile)) {
-                Files.createFile(storeFile, PosixFilePermissions.asFileAttribute(perms))
-            } else {
-                Files.setPosixFilePermissions(storeFile, perms)
-            }
-        } catch (_: UnsupportedOperationException) {
-            // Windows / non-POSIX — NTFS ACLs handle it.
-        } catch (_: Exception) { /* fs perms are nice-to-have */ }
         val body = ProfilesFile(
             activeId = _activeId.value,
             profiles = _profiles.value,
             lastServerUrl = _lastServerUrl.value,
         )
-        Files.writeString(storeFile, json.encodeToString(ProfilesFile.serializer(), body))
+        val serialized = json.encodeToString(ProfilesFile.serializer(), body)
+
+        // Atomic write: serialize to a sibling temp file, then rename over
+        // the real file. A crash mid-write can only leave the *temp* file
+        // half-written — the real profiles.json (which holds every refresh
+        // token) is never observed truncated. Without this, a crash during
+        // writeString could zero out the file and force re-login of EVERY
+        // paired profile. Create the temp with 0600 from the start so the
+        // tokens are never briefly world-readable.
+        val tmp = storeDir.resolve("profiles.json.tmp")
+        try {
+            val perms = PosixFilePermissions.fromString("rw-------")
+            Files.deleteIfExists(tmp)
+            runCatching {
+                Files.createFile(tmp, PosixFilePermissions.asFileAttribute(perms))
+            }.onFailure {
+                // Non-POSIX (Windows) — createFile without the perm attr;
+                // NTFS ACLs inherit from the (user-private) home dir.
+                if (!Files.exists(tmp)) Files.createFile(tmp)
+            }
+            Files.writeString(tmp, serialized)
+            // Re-assert 0600 on POSIX in case the FS didn't honor the attr.
+            runCatching { Files.setPosixFilePermissions(tmp, perms) }
+            // ATOMIC_MOVE so the swap is a single rename syscall. Fall back
+            // to a plain move if the FS can't do atomic (rare; e.g. crossing
+            // a mount — but tmp is a sibling so same FS in practice).
+            try {
+                Files.move(tmp, storeFile,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(tmp, storeFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+            // Re-assert perms on the destination (REPLACE_EXISTING may keep
+            // the old file's perms on some platforms).
+            runCatching { Files.setPosixFilePermissions(storeFile, perms) }
+        } catch (e: Exception) {
+            // Last-resort fallback: direct write so we don't silently lose
+            // the user's session on an unexpected FS quirk. Non-atomic, but
+            // better than dropping the data entirely.
+            System.err.println("[ProfileStore] atomic persist failed (${e.message}); falling back to direct write")
+            runCatching {
+                Files.writeString(storeFile, serialized)
+                Files.setPosixFilePermissions(storeFile, PosixFilePermissions.fromString("rw-------"))
+            }
+            runCatching { Files.deleteIfExists(tmp) }
+        }
     }
 }
