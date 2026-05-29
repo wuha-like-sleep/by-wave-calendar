@@ -11,8 +11,11 @@ import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
+import cn.bywave.calendar.data.model.CalendarCreateRequest
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.CalendarUpdateInput
+import cn.bywave.calendar.data.model.ChangePasswordRequest
+import cn.bywave.calendar.data.model.DeleteAccountRequest
 import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
@@ -24,6 +27,8 @@ import cn.bywave.calendar.data.model.MfaVerifyRequest
 import cn.bywave.calendar.data.model.PairClaimRequest
 import cn.bywave.calendar.data.model.RefreshRequest
 import cn.bywave.calendar.data.model.RefreshResponse
+import cn.bywave.calendar.data.model.ShareToken
+import cn.bywave.calendar.data.model.ShareTokenCreateRequest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -97,6 +102,39 @@ interface BywaveApi {
         @Body body: CalendarUpdateInput,
     ): CalendarMeta
 
+    /** Create a new calendar. Returns the freshly-inserted row (the
+     *  server replies 201; Retrofit treats any 2xx as success). */
+    @POST("api/v1/calendars")
+    suspend fun createCalendar(@Body body: CalendarCreateRequest): CalendarMeta
+
+    /** Delete a calendar. CASCADES — the server drops its events too
+     *  (the FK from events → calendars is onDelete: cascade). No body
+     *  in the success response we care about; envelope unwraps to
+     *  `{ ok: true }`. Show a destructive confirm before calling. */
+    @DELETE("api/v1/calendars/{id}")
+    suspend fun deleteCalendar(@Path("id") id: String)
+
+    /** List the active (non-revoked) subscribe links for a calendar.
+     *  Each token carries a public `url` (`<base>/ics/<token>.ics`). */
+    @GET("api/v1/calendars/{id}/share-tokens")
+    suspend fun shareTokens(@Path("id") id: String): List<ShareToken>
+
+    /** Mint a new subscribe link (optional label). Returns the row
+     *  with its `url`. Server replies 201. */
+    @POST("api/v1/calendars/{id}/share-tokens")
+    suspend fun createShareToken(
+        @Path("id") id: String,
+        @Body body: ShareTokenCreateRequest,
+    ): ShareToken
+
+    /** Revoke a subscribe link. The .ics URL stops resolving; already-
+     *  imported events on subscribers' devices are left untouched. */
+    @DELETE("api/v1/calendars/{id}/share-tokens/{token}")
+    suspend fun revokeShareToken(
+        @Path("id") id: String,
+        @Path("token") token: String,
+    )
+
     @GET("api/v1/events")
     suspend fun events(
         @Query("from") from: String,
@@ -143,6 +181,27 @@ interface BywaveApi {
         @Path("id") id: String,
         @Body body: AttendeeRevokeRequest,
     )
+
+    // ---- Native account management ----
+    //
+    // Bearer-auth endpoints that reply WITHOUT the data envelope (bare
+    // `{ ok: true }` on success, 4xx + `{ error, message }` on failure).
+    // We don't decode the success body; the caller only cares that no
+    // HttpException was thrown. On 4xx the message is in the errorBody —
+    // see serverErrorMessage() for extraction.
+
+    /** Change password. newPassword must be ≥ 8 chars. On success the
+     *  server invalidates every OTHER session/device but keeps THIS
+     *  device's refresh token alive, so the APP keeps working. */
+    @POST("api/v1/account/password")
+    suspend fun changePassword(@Body body: ChangePasswordRequest)
+
+    /** Permanently delete the account. `confirm` must exactly equal the
+     *  server's literal phrase (see DeleteAccountRequest). On success
+     *  the account + all sessions are gone — the APP must sign out and
+     *  return to setup. */
+    @POST("api/v1/account/delete")
+    suspend fun deleteAccount(@Body body: DeleteAccountRequest)
 }
 
 class ApiClient private constructor(
@@ -335,4 +394,28 @@ private class EnvelopeInterceptor : Interceptor {
 
     private fun Response.rebody(text: String, contentType: String): Response =
         newBuilder().body(text.toResponseBody(contentType.toMediaTypeOrNull())).build()
+}
+
+/** Pull the server's human-readable error out of a thrown exception so
+ *  the UI can show an actionable inline message instead of a raw
+ *  "HTTP 401" or stack trace. Native account endpoints reply with a
+ *  `{ "error": code, "message": text }` body on 4xx; the enveloped
+ *  /api/v1 routes surface `{ "code": ..., "message": ... }`. We read
+ *  the HttpException's errorBody and dig out `message`, falling back to
+ *  the exception's own message (e.g. for network/timeout failures).
+ *
+ *  Returns null only when there's truly nothing useful — callers should
+ *  pair with their own localized fallback string. */
+fun serverErrorMessage(e: Throwable): String? {
+    val http = e as? retrofit2.HttpException
+    if (http != null) {
+        val raw = runCatching { http.response()?.errorBody()?.string() }.getOrNull()
+        if (!raw.isNullOrBlank()) {
+            val json = Json { ignoreUnknownKeys = true }
+            val obj = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull()
+            val msg = runCatching { obj?.get("message")?.jsonPrimitive?.content }.getOrNull()
+            if (!msg.isNullOrBlank()) return msg
+        }
+    }
+    return e.localizedMessage
 }

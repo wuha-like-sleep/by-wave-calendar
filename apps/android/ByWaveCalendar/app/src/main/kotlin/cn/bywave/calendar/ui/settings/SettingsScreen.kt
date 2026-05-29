@@ -34,10 +34,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,6 +47,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -65,12 +68,17 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
+import cn.bywave.calendar.data.api.ApiClient
+import cn.bywave.calendar.data.api.serverErrorMessage
+import cn.bywave.calendar.data.model.ChangePasswordRequest
+import cn.bywave.calendar.data.model.DeleteAccountRequest
 import cn.bywave.calendar.data.store.SyncPreferences
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.update.UpdateChecker
@@ -91,6 +99,8 @@ fun SettingsScreen(
     val prefsStore = remember { SyncPreferences(context) }
     val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
     var showSignOutDialog by remember { mutableStateOf(false) }
+    var showChangePassword by remember { mutableStateOf(false) }
+    var showDeleteAccount by remember { mutableStateOf(false) }
     var permissionWarning by remember { mutableStateOf<String?>(null) }
     // Feedback host for "检查更新" — Snackbar is the right grain for a
     // throwaway "已是最新版" or "检查失败" toast.
@@ -141,6 +151,17 @@ fun SettingsScreen(
                 ReadRow(label = stringResource(R.string.settings_email), value = active?.email ?: "—")
                 HorizontalDivider()
                 ReadRow(label = stringResource(R.string.settings_server), value = active?.serverUrl ?: "—")
+            }
+
+            // Account security (v0.11) — native change-password. Used to
+            // bounce out to the web via the /auth/web-session bridge; the
+            // server's POST /account/password lets us do it in-app now.
+            Section(title = stringResource(R.string.settings_security)) {
+                ActionRow(
+                    label = stringResource(R.string.settings_change_password),
+                    onClick = { showChangePassword = true },
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
             }
 
             // Language (v0.10+) — APP-level override via AppCompat-
@@ -419,6 +440,19 @@ fun SettingsScreen(
                 )
             }
 
+            // Danger zone (v0.11) — native account deletion. Server's
+            // POST /account/delete requires password + an exact confirm
+            // phrase; on success the account + all sessions are gone and
+            // we sign this profile out (same path as 退出登录).
+            Section(title = "") {
+                ActionRow(
+                    icon = Icons.Filled.Delete,
+                    label = stringResource(R.string.settings_delete_account),
+                    danger = true,
+                    onClick = { showDeleteAccount = true },
+                )
+            }
+
             Spacer(Modifier.size(24.dp))
         }
     }
@@ -441,6 +475,226 @@ fun SettingsScreen(
             },
         )
     }
+
+    if (showChangePassword) {
+        ChangePasswordDialog(onDismiss = { showChangePassword = false })
+    }
+
+    if (showDeleteAccount) {
+        DeleteAccountDialog(
+            onDismiss = { showDeleteAccount = false },
+            onDeleted = {
+                showDeleteAccount = false
+                // Reuse the sign-out path: wipes the local cache,
+                // invalidates the API client, removes the profile, and
+                // pops back to calendar/setup as activeId recomputes.
+                onSignOut()
+            },
+        )
+    }
+}
+
+// ---- Native account dialogs (v0.11) ----
+
+@Composable
+private fun ChangePasswordDialog(onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var current by remember { mutableStateOf("") }
+    var next by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // Client-side validation mirrors the server (newPassword min 8) so we
+    // don't make a round trip just to learn the password is too short.
+    val tooShort = next.isNotEmpty() && next.length < 8
+    val mismatch = confirm.isNotEmpty() && next != confirm
+    val canSubmit = !busy &&
+        current.isNotEmpty() &&
+        next.length >= 8 &&
+        next == confirm
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.settings_change_password)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = current,
+                    onValueChange = { current = it },
+                    label = { Text(stringResource(R.string.password_current)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = next,
+                    onValueChange = { next = it },
+                    label = { Text(stringResource(R.string.password_new)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = tooShort,
+                    supportingText = if (tooShort) {
+                        { Text(stringResource(R.string.password_too_short), color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = confirm,
+                    onValueChange = { confirm = it },
+                    label = { Text(stringResource(R.string.password_confirm)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = mismatch,
+                    supportingText = if (mismatch) {
+                        { Text(stringResource(R.string.password_mismatch), color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSubmit,
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        error = null
+                        try {
+                            val profile = BywaveApp.instance.profiles.active()
+                                ?: throw IllegalStateException("未登录")
+                            val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
+                            client.api.changePassword(
+                                ChangePasswordRequest(currentPassword = current, newPassword = next),
+                            )
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(R.string.password_changed),
+                                android.widget.Toast.LENGTH_LONG,
+                            ).show()
+                            onDismiss()
+                        } catch (e: Exception) {
+                            error = serverErrorMessage(e)
+                                ?: context.getString(R.string.password_change_failed)
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(R.string.action_save))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun DeleteAccountDialog(
+    onDismiss: () -> Unit,
+    onDeleted: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var password by remember { mutableStateOf("") }
+    var phrase by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // The confirm phrase MUST exactly equal the server's z.literal. We
+    // pull it from resources (same key in every locale — NOT localized)
+    // and gate the button on a verbatim match, so we never even attempt
+    // a request the server would reject as bad_confirmation.
+    val requiredPhrase = stringResource(R.string.delete_account_confirm_phrase)
+    val phraseMismatch = phrase.isNotEmpty() && phrase != requiredPhrase
+    val canSubmit = !busy && password.isNotEmpty() && phrase == requiredPhrase
+
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.delete_account_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.delete_account_warning),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text(stringResource(R.string.delete_account_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = phrase,
+                    onValueChange = { phrase = it },
+                    label = { Text(stringResource(R.string.delete_account_confirm_label)) },
+                    singleLine = true,
+                    isError = phraseMismatch,
+                    supportingText = if (phraseMismatch) {
+                        { Text(stringResource(R.string.delete_account_confirm_mismatch), color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = canSubmit,
+                onClick = {
+                    scope.launch {
+                        busy = true
+                        error = null
+                        try {
+                            val profile = BywaveApp.instance.profiles.active()
+                                ?: throw IllegalStateException("未登录")
+                            val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
+                            client.api.deleteAccount(
+                                DeleteAccountRequest(password = password, confirm = requiredPhrase),
+                            )
+                            onDeleted()
+                        } catch (e: Exception) {
+                            error = serverErrorMessage(e)
+                                ?: context.getString(R.string.delete_account_failed)
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+            ) {
+                if (busy) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(
+                        stringResource(R.string.settings_delete_account),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !busy) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 // v0.9.0 UX refactor — Section/ActionRow/ReadRow tuned to match iOS

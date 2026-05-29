@@ -106,4 +106,65 @@
     <string name="settings_language_follow_system">跟随系统</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">新建日历</string>
+    <string name="calendars_new_title">新建日历</string>
+    <string name="calendars_name">名称</string>
+    <string name="calendars_name_empty">名称不能为空</string>
+    <string name="calendars_description">描述</string>
+    <string name="calendars_description_hint">可选 — 这个日历是做什么的</string>
+    <string name="calendars_color">颜色</string>
+    <string name="calendars_timezone">默认时区</string>
+    <string name="calendars_timezone_hint">IANA 时区 id，新建事件时的默认时区；已有事件保留各自的时区</string>
+    <string name="calendars_create">创建</string>
+    <string name="calendars_created">已创建</string>
+    <string name="calendars_create_failed">创建日历失败</string>
+    <string name="calendars_delete">删除日历</string>
+    <string name="calendars_delete_title">删除「%1$s」？</string>
+    <string name="calendars_delete_message">这会一并删除该日历下的所有事件，且无法恢复。</string>
+    <string name="calendars_deleted">日历已删除</string>
+    <string name="calendars_delete_failed">删除日历失败</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">订阅链接</string>
+    <string name="share_links_desc">把此日历以只读方式分享出去 — 任何拿到链接的人都能在自己的日历 APP 里订阅这些事件。</string>
+    <string name="share_links_empty">还没有订阅链接</string>
+    <string name="share_links_generate">生成链接</string>
+    <string name="share_links_label">标签（可选）</string>
+    <string name="share_links_label_hint">例如 家庭 / 工作团队</string>
+    <string name="share_links_generated">已生成订阅链接</string>
+    <string name="share_links_generate_failed">生成链接失败</string>
+    <string name="share_links_copy">复制</string>
+    <string name="share_links_copied">链接已复制</string>
+    <string name="share_links_revoke">撤销</string>
+    <string name="share_links_revoke_title">撤销此订阅链接？</string>
+    <string name="share_links_revoke_message">撤销后该链接立即失效；已经导入到他人日历里的事件会保留。</string>
+    <string name="share_links_revoked">订阅链接已撤销</string>
+    <string name="share_links_revoke_failed">撤销链接失败</string>
+    <string name="share_links_no_label">未命名链接</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">账号安全</string>
+    <string name="settings_change_password">修改密码</string>
+    <string name="password_current">当前密码</string>
+    <string name="password_new">新密码</string>
+    <string name="password_confirm">确认新密码</string>
+    <string name="password_too_short">新密码至少 8 个字符</string>
+    <string name="password_mismatch">两次输入的新密码不一致</string>
+    <string name="password_changed">密码已修改，其它设备需要重新登录</string>
+    <string name="password_change_failed">修改密码失败</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">删除账号</string>
+    <string name="delete_account_title">删除账号</string>
+    <string name="delete_account_warning">这会永久删除你的账号、所有日历和事件，且无法恢复。</string>
+    <string name="delete_account_password">密码</string>
+    <!-- IMPORTANT: this phrase MUST exactly equal the native endpoint's
+         z.literal in src/routes/devices.ts (POST /account/delete). Do
+         not localize the literal itself — only the surrounding hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">为确认，请输入「删除我的账号」</string>
+    <string name="delete_account_confirm_mismatch">请精确输入「删除我的账号」</string>
+    <string name="delete_account_failed">删除账号失败</string>
 </resources>

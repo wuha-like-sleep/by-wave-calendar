@@ -72,6 +72,41 @@ data class CalendarUpdateInput(
     val timezone: String? = null,
 )
 
+/** POST /api/v1/calendars body. Server's createSchema requires `name`
+ *  (1..200 chars); description/color/timezone are optional. color must
+ *  match /^#[0-9a-fA-F]{6}$/ when present — the swatch picker only ever
+ *  produces valid 6-hex values. Response is a CalendarMeta row. */
+@Serializable
+data class CalendarCreateRequest(
+    val name: String,
+    val description: String? = null,
+    val color: String? = null,
+    val timezone: String? = null,
+)
+
+// ---- Share / subscribe links (.ics) ----
+
+/** One row from GET /api/v1/calendars/:id/share-tokens (and the body of
+ *  POST .../share-tokens). The server augments each DB row with a `url`
+ *  field — the public `<base>/ics/<token>.ics` subscribe link. `token`
+ *  is the primary key; we use it as the path segment when revoking.
+ *  `createdAt` / `revokedAt` are ISO 8601 strings (Date serialized). */
+@Serializable
+data class ShareToken(
+    val token: String,
+    val calendarId: String,
+    val label: String? = null,
+    val revokedAt: String? = null,
+    val createdAt: String? = null,
+    /** Public subscribe URL — `<PUBLIC_BASE_URL>/ics/<token>.ics`. */
+    val url: String? = null,
+)
+
+/** POST /api/v1/calendars/:id/share-tokens body. `label` is optional —
+ *  a free-text name shown next to the link ("家庭", "工作团队"). */
+@Serializable
+data class ShareTokenCreateRequest(val label: String? = null)
+
 // ---- Auth ----
 //
 // IMPORTANT: native APPs do NOT call /auth/login (web cookie path —
@@ -219,4 +254,38 @@ data class EventExtra(
     val attendees: List<String>? = null,
     val category: String? = null,
     val url: String? = null,
+)
+
+// ---- Native account management ----
+//
+// These hit the bearer-auth JSON endpoints in src/routes/devices.ts
+// (POST /account/password, POST /account/delete). Unlike the /api/v1
+// calendar/event routes these reply WITHOUT the ok()/data envelope —
+// success is a bare `{ ok: true }` and failure is a 4xx with
+// `{ error, message }`. The EnvelopeInterceptor leaves un-enveloped
+// bodies (no top-level `ok` boolean wrapping `data`) intact, so the
+// 4xx flows through as an HttpException whose errorBody carries the
+// server's localized `message`. We never decode the success body.
+
+/** POST /api/v1/account/password body. newPassword must be ≥ 8 chars
+ *  (server's z.string().min(8)); the server also runs passwordPolicyError
+ *  and returns 400 weak_password with a message if it's too weak.
+ *  On success all OTHER sessions/devices are invalidated; the current
+ *  device's refresh token survives. */
+@Serializable
+data class ChangePasswordRequest(
+    val currentPassword: String,
+    val newPassword: String,
+)
+
+/** POST /api/v1/account/delete body. The server validates
+ *  `confirm` as a z.literal — it must EXACTLY equal the Chinese phrase
+ *  「删除我的账号」 (note this differs from the web delete-account page's
+ *  phrase; we match THIS native endpoint, devices.ts:754-757). On
+ *  success the account + all sessions are destroyed; the APP must sign
+ *  the profile out and return to setup. */
+@Serializable
+data class DeleteAccountRequest(
+    val password: String,
+    val confirm: String,
 )

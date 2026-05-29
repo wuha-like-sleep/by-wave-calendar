@@ -101,4 +101,65 @@ to match the development locale.
     <string name="settings_language_follow_system">Follow system</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">New calendar</string>
+    <string name="calendars_new_title">New calendar</string>
+    <string name="calendars_name">Name</string>
+    <string name="calendars_name_empty">Name can\'t be empty</string>
+    <string name="calendars_description">Description</string>
+    <string name="calendars_description_hint">Optional — what this calendar is for</string>
+    <string name="calendars_color">Color</string>
+    <string name="calendars_timezone">Default time zone</string>
+    <string name="calendars_timezone_hint">IANA time-zone id used as the default for new events; existing events keep their own.</string>
+    <string name="calendars_create">Create</string>
+    <string name="calendars_created">Created</string>
+    <string name="calendars_create_failed">Couldn\'t create calendar</string>
+    <string name="calendars_delete">Delete calendar</string>
+    <string name="calendars_delete_title">Delete “%1$s”?</string>
+    <string name="calendars_delete_message">This also deletes every event in this calendar and can\'t be undone.</string>
+    <string name="calendars_deleted">Calendar deleted</string>
+    <string name="calendars_delete_failed">Couldn\'t delete calendar</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">Subscribe links</string>
+    <string name="share_links_desc">Share this calendar read-only — anyone with a link can subscribe to its events in their own calendar app.</string>
+    <string name="share_links_empty">No subscribe links yet</string>
+    <string name="share_links_generate">Generate link</string>
+    <string name="share_links_label">Label (optional)</string>
+    <string name="share_links_label_hint">e.g. Family / Work team</string>
+    <string name="share_links_generated">Subscribe link generated</string>
+    <string name="share_links_generate_failed">Couldn\'t generate link</string>
+    <string name="share_links_copy">Copy</string>
+    <string name="share_links_copied">Link copied</string>
+    <string name="share_links_revoke">Revoke</string>
+    <string name="share_links_revoke_title">Revoke this subscribe link?</string>
+    <string name="share_links_revoke_message">The link stops working immediately. Events already imported into others\' calendars are kept.</string>
+    <string name="share_links_revoked">Subscribe link revoked</string>
+    <string name="share_links_revoke_failed">Couldn\'t revoke link</string>
+    <string name="share_links_no_label">Unnamed link</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">Account &amp; security</string>
+    <string name="settings_change_password">Change password</string>
+    <string name="password_current">Current password</string>
+    <string name="password_new">New password</string>
+    <string name="password_confirm">Confirm new password</string>
+    <string name="password_too_short">New password must be at least 8 characters</string>
+    <string name="password_mismatch">The new passwords don\'t match</string>
+    <string name="password_changed">Password changed. Other devices must sign in again.</string>
+    <string name="password_change_failed">Couldn\'t change password</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">Delete account</string>
+    <string name="delete_account_title">Delete account</string>
+    <string name="delete_account_warning">This permanently deletes your account, all calendars, and all events. It can\'t be undone.</string>
+    <string name="delete_account_password">Password</string>
+    <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
+         in src/routes/devices.ts. Do NOT translate this value, only the
+         surrounding label/hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">To confirm, type “删除我的账号”</string>
+    <string name="delete_account_confirm_mismatch">Type “删除我的账号” exactly</string>
+    <string name="delete_account_failed">Couldn\'t delete account</string>
 </resources>
