@@ -256,6 +256,12 @@
 				en,
 				Base,
 				"zh-Hans",
+				"zh-Hant",
+				ja,
+				ko,
+				es,
+				fr,
+				de,
 			);
 			mainGroup = 1E0001000000000000000001;
 			productRefGroup = 1E0001000000000000000006 /* Products */;

@@ -1,0 +1,200 @@
+// Localizable.strings (French)
+// Key = the Chinese source string from views. iOS picks this when the
+// device locale prefers fr-*.
+
+// MARK: - General actions
+"完成" = "Terminé";
+"取消" = "Annuler";
+"保存" = "Enregistrer";
+"删除" = "Supprimer";
+"确定" = "OK";
+"好" = "OK";
+"出错了" = "Une erreur s’est produite";
+"继续" = "Continuer";
+"重试" = "Réessayer";
+"创建" = "Créer";
+"或" = "ou";
+
+// MARK: - Calendar tabs / nav
+"日" = "Jour";
+"周" = "Semaine";
+"月" = "Mois";
+"年" = "Année";
+"今天" = "Aujourd’hui";
+"日历" = "Calendrier";
+"无事件" = "Aucun événement";
+"今天没有事件" = "Rien aujourd’hui";
+"明天没有事件" = "Rien demain";
+
+// MARK: - Setup / Login
+"扫码" = "Scanner";
+"密码" = "Mot de passe";
+"配对码" = "Code d’appairage";
+"登录" = "Se connecter";
+"登录中…" = "Connexion…";
+"服务器地址" = "Serveur";
+"邮箱" = "E-mail";
+"邮箱地址" = "Adresse e-mail";
+"打开相机扫码" = "Scanner le QR code";
+"用浏览器登录" = "Se connecter via le navigateur";
+"快速登录（推荐）" = "Connexion rapide (recommandé)";
+"登录你的服务器，开始同步" = "Connectez-vous pour démarrer la synchronisation";
+"在电脑或手机浏览器登录你的 ByWave Calendar" = "Connectez-vous à votre ByWave Calendar dans un navigateur";
+"进入「设置 → 我的设备 → 绑定新设备」" = "Allez dans Réglages → Mes appareils → Associer un nouvel appareil";
+"用本机相机对准二维码 — 服务器地址和配对码都在码里" = "Pointez l’appareil photo vers le QR — l’URL du serveur et le code y sont";
+"如果你开启了二次验证（MFA），请改用「扫码」" = "Si vous utilisez la MFA, vous pourriez avoir besoin du scan";
+"对准网页上的二维码" = "Visez le QR à l’écran";
+"将二维码放入框内 — 自动识别" = "Cadrez le QR — le scan démarre automatiquement";
+"已取消" = "Annulé";
+"相机初始化失败" = "Échec du démarrage de l’appareil photo";
+"关闭" = "Fermer";
+"没有相机权限" = "Autorisation d’appareil photo requise";
+"打开 设置 → 隐私 → 相机 → ByWaveCalendar，开启权限后回到 APP 重试。" = "Ouvrez Réglages → Confidentialité → Appareil photo → ByWaveCalendar pour autoriser l’accès.";
+
+// MARK: - Settings top-level
+"设置" = "Réglages";
+"账号" = "Compte";
+"同步与通知" = "Synchronisation et notifications";
+"外观" = "Apparence";
+"关于" = "À propos";
+"未登录" = "Non connecté";
+"切换账号" = "Changer de compte";
+"添加另一个账号" = "Ajouter un autre compte";
+"已登录的账号" = "Comptes connectés";
+"语言" = "Langue";
+
+// MARK: - Account management
+"身份" = "Identité";
+"昵称" = "Nom affiché";
+"安全" = "Sécurité";
+"修改密码" = "Changer le mot de passe";
+"二次验证 (MFA)" = "Double authentification (MFA)";
+"Passkey 管理" = "Passkeys";
+"第三方账户绑定" = "Comptes liés";
+"删除账户" = "Supprimer le compte";
+"删除账户？" = "Supprimer le compte ?";
+"永久删除" = "Supprimer définitivement";
+"更多账号设置" = "Plus de réglages du compte";
+"二次确认" = "Confirmation";
+"新密码" = "Nouveau mot de passe";
+"至少 8 位" = "Au moins 8 caractères";
+"无法恢复 — 所有数据将被永久清除。" = "Action irréversible — toutes les données seront définitivement supprimées.";
+"此操作无法恢复。" = "Cette action est irréversible.";
+
+// MARK: - MFA setup
+"二次验证" = "Vérification en deux étapes";
+"二维码" = "QR code";
+"启用二次验证" = "Activer la 2FA";
+"二次验证已启用 ✓" = "Double authentification activée ✓";
+"二次验证当前已启用" = "La double authentification est actuellement activée";
+"关闭二次验证" = "Désactiver la 2FA";
+"我已保存，完成" = "Je les ai enregistrés — terminé";
+"保存这些备用码 — 认证器失效时每个码可用一次。" = "Enregistrez ces codes de secours — chacun est utilisable une fois si votre authentificateur ne fonctionne plus.";
+"处理中…" = "Traitement…";
+
+// MARK: - Sync / notifications
+"连接" = "Connexion";
+"服务器" = "Serveur";
+"设备名" = "Nom de l’appareil";
+"系统日历" = "Calendrier système";
+"同步到系统日历" = "Refléter dans le Calendrier système";
+"单向同步到 iOS 日历的「ByWave Calendar」子日历。" = "Synchronisation unidirectionnelle vers le sous-calendrier « ByWave Calendar » du Calendrier iOS.";
+"提醒通知" = "Rappels";
+"事件开始前提醒" = "Avertir avant le début de l’événement";
+"提前" = "Délai";
+"5 分钟" = "5 minutes";
+"10 分钟" = "10 minutes";
+"15 分钟" = "15 minutes";
+"30 分钟" = "30 minutes";
+"1 小时" = "1 heure";
+"2 小时" = "2 heures";
+"没有日历权限。打开 设置 → 隐私 → 日历 → ByWaveCalendar 开启。" = "Autorisation de calendrier requise. Ouvrez Réglages → Confidentialité → Calendriers → ByWaveCalendar.";
+"没有通知权限。打开 设置 → 通知 → ByWaveCalendar 开启。" = "Autorisation de notifications requise. Ouvrez Réglages → Notifications → ByWaveCalendar.";
+
+// MARK: - Appearance / theme
+"主题" = "Thème";
+"跟随系统" = "Système";
+"浅色" = "Clair";
+"深色" = "Sombre";
+"品牌色" = "Couleur de marque";
+"主色" = "Couleur d’accent";
+
+// MARK: - About
+"版本" = "Version";
+"APP 版本" = "Version de l’app";
+"服务器版本" = "Version du serveur";
+"法律" = "Mentions légales";
+"项目" = "Projet";
+"版本信息" = "Informations de version";
+"隐私政策" = "Politique de confidentialité";
+"使用条款" = "Conditions d’utilisation";
+"GitHub 仓库" = "Dépôt GitHub";
+"自托管日历，专为你设计" = "Calendrier auto-hébergé, conçu pour vous";
+
+// MARK: - Calendar list / filter
+"显示的日历" = "Calendriers visibles";
+"新建日历" = "Nouveau calendrier";
+"全部显示" = "Tout afficher";
+"筛选日历" = "Filtrer les calendriers";
+"名称" = "Nom";
+"颜色" = "Couleur";
+"时区" = "Fuseau horaire";
+"描述" = "Description";
+
+// MARK: - Event editor
+"新建事件" = "Nouvel événement";
+"编辑事件" = "Modifier l’événement";
+"事件详情" = "Détails de l’événement";
+"事件标题" = "Titre";
+"时间" = "Heure";
+"开始" = "Début";
+"结束" = "Fin";
+"全天" = "Journée entière";
+"地点" = "Lieu";
+"备注" = "Notes";
+"链接" = "Lien";
+"https://… (会议链接 / 文档地址等)" = "https://… (lien de réunion / URL de document)";
+"打开链接 %@" = "Ouvrir le lien %@";
+"可选" = "Facultatif";
+"邀请人" = "Participants";
+"管理参与者" = "Gérer les participants";
+"保存后可邀请" = "Enregistrez d’abord, puis invitez";
+"尚未邀请" = "Personne n’a encore été invité";
+
+// MARK: - Attendees
+"邀请新参与者" = "Inviter un nouveau participant";
+"邀请" = "Inviter";
+"所有邀请记录" = "Historique des invitations";
+"还没有人" = "Personne pour l’instant";
+"已接受" = "Accepté";
+"已邀请 · 等待回复" = "Invité · en attente";
+"该参与者会从事件移除，待接受的邀请也会作废。" = "Retire le participant et annule les invitations en attente.";
+
+// MARK: - Recurring events
+"删除事件？" = "Supprimer l’événement ?";
+"删除事件" = "Supprimer l’événement";
+"重复规则" = "Règle de récurrence";
+"此操作不可恢复。" = "Cette action est irréversible.";
+"此操作不可恢复。重复事件请进详情删除。" = "Action irréversible. Pour les événements récurrents, ouvrez les détails pour les supprimer.";
+
+// MARK: - Search
+"搜索" = "Rechercher";
+"没有匹配" = "Aucun résultat";
+"刷新" = "Actualiser";
+
+// MARK: - Sign out / device
+"解绑并退出登录" = "Dissocier et se déconnecter";
+"只退出登录（保留服务器端的绑定)" = "Se déconnecter seulement";
+"只退出登录（保留服务器端的绑定）" = "Se déconnecter seulement (conserver l’association sur le serveur)";
+"解绑当前设备？" = "Dissocier cet appareil ?";
+"解绑" = "Dissocier";
+"解绑中…" = "Dissociation…";
+"APP 将立即失去访问权限。" = "L’app perdra l’accès immédiatement.";
+"移除后本机不再保存登录信息。" = "Les informations de connexion seront effacées de cet appareil.";
+"删除中…" = "Suppression…";
+
+// MARK: - Format strings with interpolation
+"%lld 人" = "%lld personnes";
+"%lld 个账号" = "%lld comptes";
+"当前参与者 (%lld)" = "Participants actuels (%lld)";
+"还有 %lld 个…" = "+%lld de plus…";
