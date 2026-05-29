@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="<%= currentLocale %>">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -30,25 +30,53 @@
 </head>
 <body>
   <div class="embed-toolbar">
-    <button type="button" id="btn-prev" aria-label="上一段">◀</button>
-    <button type="button" id="btn-today">今天</button>
-    <button type="button" id="btn-next" aria-label="下一段">▶</button>
+    <button type="button" id="btn-prev" aria-label="<%= t('embed.prevAria') %>">◀</button>
+    <button type="button" id="btn-today"><%= t("embed.todayButton") %></button>
+    <button type="button" id="btn-next" aria-label="<%= t('embed.nextAria') %>">▶</button>
     <span class="period" id="period-label">…</span>
     <span class="title" style="color: <%= calendar.color || '#6366f1' %>">● <%= calendar.name %></span>
     <select id="view-select" style="border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:12px;background:#fff;">
-      <option value="month">月</option>
-      <option value="week" selected>周</option>
-      <option value="day">日</option>
+      <option value="month"><%= t("embed.viewMonth") %></option>
+      <option value="week" selected><%= t("embed.viewWeek") %></option>
+      <option value="day"><%= t("embed.viewDay") %></option>
     </select>
   </div>
   <div id="embed-cal"></div>
   <a class="powered" href="<%= publicBaseUrl %>" target="_blank" rel="noopener">Powered by ByWave</a>
+
+  <script type="application/json" id="bwc-embed-i18n" nonce="<%= cspNonce %>"><%-
+    JSON.stringify({
+      dayLong: [
+        t("embed.dayLongSun"),
+        t("embed.dayLongMon"),
+        t("embed.dayLongTue"),
+        t("embed.dayLongWed"),
+        t("embed.dayLongThu"),
+        t("embed.dayLongFri"),
+        t("embed.dayLongSat"),
+      ],
+      dayShort: [
+        t("embed.dayShortSun"),
+        t("embed.dayShortMon"),
+        t("embed.dayShortTue"),
+        t("embed.dayShortWed"),
+        t("embed.dayShortThu"),
+        t("embed.dayShortFri"),
+        t("embed.dayShortSat"),
+      ],
+    })
+  %></script>
 
   <script src="/static/lib/toastui-calendar.min.js"></script>
   <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   (function(){
     const EVENTS = <%- JSON.stringify(events) %>;
     const CAL_COLOR = "<%= calendar.color || '#6366f1' %>";
+    const LOCALE = "<%= currentLocale %>";
+    const BWC_I18N = (() => {
+      try { return JSON.parse(document.getElementById('bwc-embed-i18n').textContent); }
+      catch { return { dayLong: [], dayShort: [] }; }
+    })();
     const cal = new tui.Calendar("#embed-cal", {
       defaultView: "week",
       useFormPopup: false,
@@ -57,10 +85,10 @@
       week: {
         taskView: false, eventView: ["time", "allday"],
         hourStart: 7, hourEnd: 23, startDayOfWeek: 1,
-        dayNames: ["周日","周一","周二","周三","周四","周五","周六"],
+        dayNames: BWC_I18N.dayLong,
         showNowIndicator: true,
       },
-      month: { startDayOfWeek: 1, dayNames: ["日","一","二","三","四","五","六"], visibleWeeksCount: 0, isAlways6Weeks: false },
+      month: { startDayOfWeek: 1, dayNames: BWC_I18N.dayShort, visibleWeeksCount: 0, isAlways6Weeks: false },
       calendars: [{ id: "embed", name: "", backgroundColor: CAL_COLOR, borderColor: CAL_COLOR, dragBackgroundColor: CAL_COLOR, color: "#fff" }],
     });
     cal.createEvents(EVENTS.map(e => ({
@@ -75,12 +103,12 @@
     function updateLabel(){
       const s = cal.getDateRangeStart().toDate();
       const e = cal.getDateRangeEnd().toDate();
-      const fmt = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric" });
+      const fmt = new Intl.DateTimeFormat(LOCALE, { year:"numeric", month:"long", day:"numeric" });
       if (view === "month") {
         const mid = new Date((+s + +e)/2);
-        document.getElementById("period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long" }).format(mid);
+        document.getElementById("period-label").textContent = new Intl.DateTimeFormat(LOCALE, { year:"numeric", month:"long" }).format(mid);
       } else if (view === "day") {
-        document.getElementById("period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year:"numeric", month:"long", day:"numeric", weekday:"long" }).format(s);
+        document.getElementById("period-label").textContent = new Intl.DateTimeFormat(LOCALE, { year:"numeric", month:"long", day:"numeric", weekday:"long" }).format(s);
       } else {
         document.getElementById("period-label").textContent = `${fmt.format(s)} – ${fmt.format(e)}`;
       }

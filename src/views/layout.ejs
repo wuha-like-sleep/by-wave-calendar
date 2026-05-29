@@ -140,21 +140,21 @@
       <footer class="mt-16 border-t border-slate-200 bg-white">
         <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 py-6 text-sm text-slate-500 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div class="flex items-center gap-3 flex-wrap">
-            <span>© <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · 日历共享平台</span>
+            <span>© <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · <%= t("footer.copyrightSeparator") %></span>
             <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener"
                class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-100 hover:border-slate-300 transition">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.26.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.605-2.665-.305-5.467-1.334-5.467-5.93 0-1.31.468-2.382 1.235-3.222-.135-.303-.54-1.524.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.652.24 2.873.12 3.176.765.84 1.23 1.912 1.23 3.222 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22v3.293c0 .32.21.694.825.577C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
-              我们的开源项目
+              <%= t("footer.ourOpenSource") %>
             </a>
           </div>
           <div class="flex flex-wrap gap-3 text-xs text-slate-400 items-center">
-            <a href="/" class="hover:text-slate-700">首页</a>
-            <a href="/download" class="hover:text-slate-700">下载</a>
-            <a href="/about" class="hover:text-slate-700">关于</a>
-            <a href="/privacy" class="hover:text-slate-700">隐私政策</a>
-            <a href="/terms" class="hover:text-slate-700">使用条款</a>
-            <a href="/support" class="hover:text-slate-700">技术支持</a>
-            <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener" class="hover:text-slate-700">源代码</a>
+            <a href="/" class="hover:text-slate-700"><%= t("footer.linkHome") %></a>
+            <a href="/download" class="hover:text-slate-700"><%= t("footer.linkDownload") %></a>
+            <a href="/about" class="hover:text-slate-700"><%= t("footer.linkAbout") %></a>
+            <a href="/privacy" class="hover:text-slate-700"><%= t("footer.linkPrivacy") %></a>
+            <a href="/terms" class="hover:text-slate-700"><%= t("footer.linkTerms") %></a>
+            <a href="/support" class="hover:text-slate-700"><%= t("footer.linkSupport") %></a>
+            <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener" class="hover:text-slate-700"><%= t("footer.linkSource") %></a>
             <% if (typeof icpNumber !== 'undefined' && icpNumber) { %>
               <span class="text-slate-300">·</span>
               <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="hover:text-slate-700"><%= icpNumber %></a>
@@ -165,7 +165,7 @@
     <% } %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>
       <div class="border-t border-slate-200 bg-white py-1.5 px-4 text-center text-[11px] text-slate-400">
-        © <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · 我们的开源项目
+        © <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · <%= t("footer.ourOpenSource") %>
         <% if (typeof icpNumber !== 'undefined' && icpNumber) { %>
           · <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="hover:text-slate-600"><%= icpNumber %></a>
         <% } %>
@@ -183,13 +183,13 @@
       <div class="w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
         <div class="border-b border-slate-100 flex items-center px-4">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
-          <input type="text" id="palette-input" placeholder="搜索事件、跳转页面…"
+          <input type="text" id="palette-input" placeholder="<%= t('layout.palette.placeholder') %>"
                  class="flex-1 py-3 px-3 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400" />
           <kbd class="text-xs text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">Esc</kbd>
         </div>
         <ul id="palette-results" class="max-h-[50vh] overflow-y-auto py-1 text-sm"></ul>
         <div class="border-t border-slate-100 px-4 py-2 text-xs text-slate-400 flex items-center gap-3">
-          <span>↑↓ 导航</span><span>↵ 选择</span><span>Esc 关闭</span>
+          <span><%= t("layout.palette.hintNavigate") %></span><span><%= t("layout.palette.hintSelect") %></span><span><%= t("layout.palette.hintClose") %></span>
         </div>
       </div>
     </div>
