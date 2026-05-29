@@ -753,10 +753,30 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (!user) return;
     const body = z.object({
       password: z.string().min(1).max(200),
-      confirm: z.literal("删除我的账号"),
+      confirm: z.string().min(1).max(100),
     }).safeParse(req.body);
     if (!body.success) {
-      return reply.code(400).send({ error: "bad_confirmation", message: "请输入密码并精确输入「删除我的账号」以确认" });
+      return reply.code(400).send({ error: "bad_confirmation", message: "请输入密码并输入确认短语 / Enter your password and the confirmation phrase" });
+    }
+    // The confirm phrase is shown to the user in their APP's UI language —
+    // which may differ from the server-stored user.locale. So accept the
+    // phrase as it appears in ANY supported locale (plus the zh-CN literal
+    // for back-compat). Previously this was z.literal("删除我的账号"), which
+    // meant an English / 日本語 / … user could never match it and was unable
+    // to delete their account natively. Mirrors the web handler's logic.
+    const { LOCALES, translate } = await import("../lib/i18n.js");
+    const typed = body.data.confirm.trim();
+    const phraseAccepted =
+      typed === "删除我的账号" ||
+      LOCALES.some(
+        (l) => translate(l.code, "settings.account.deleteConfirmFieldPlaceholder").trim() === typed,
+      );
+    if (!phraseAccepted) {
+      const expected = translate(
+        (user.locale as Parameters<typeof translate>[0]) || "en",
+        "settings.account.deleteConfirmFieldPlaceholder",
+      );
+      return reply.code(400).send({ error: "bad_confirmation", message: `确认短语不正确，请精确输入「${expected}」/ confirmation phrase mismatch` });
     }
     if (!user.passwordHash) {
       return reply.code(412).send({ error: "no_local_password", message: "SSO 账号请联系管理员删除。" });
