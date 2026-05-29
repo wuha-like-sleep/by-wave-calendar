@@ -39,6 +39,9 @@ enum class ShortcutAction {
     /** Open the Settings page. Cmd/Ctrl + , — same shortcut as macOS
      *  app settings convention (System Settings, Safari, etc.). */
     OpenSettings,
+    /** Open the global event search dialog. Cmd/Ctrl + F — the universal
+     *  "find" shortcut; matches the web Cmd+K palette / iOS search. */
+    OpenSearch,
 }
 
 object ShortcutBus {
@@ -65,6 +68,7 @@ fun keyEventToShortcut(e: KeyEvent): ShortcutAction? {
         mod && e.key == Key.DirectionLeft -> ShortcutAction.Previous
         mod && e.key == Key.DirectionRight -> ShortcutAction.Next
         mod && e.key == Key.U -> ShortcutAction.CheckUpdate
+        mod && e.key == Key.F -> ShortcutAction.OpenSearch
         mod && e.key == Key.Comma -> ShortcutAction.OpenSettings
         !mod && e.key == Key.Escape -> ShortcutAction.Escape
         else -> null

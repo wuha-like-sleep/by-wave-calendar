@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -96,6 +97,7 @@ import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
+import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import kotlinx.coroutines.launch
@@ -383,6 +385,7 @@ private fun CalendarsSection(
     var editing by remember { mutableStateOf<CalendarMeta?>(null) }   // edit dialog target
     var deleting by remember { mutableStateOf<CalendarMeta?>(null) }  // delete confirm target
     var creating by remember { mutableStateOf(false) }               // create dialog open
+    var sharing by remember { mutableStateOf<CalendarMeta?>(null) }   // share-links dialog target
 
     SectionTitle(t("settings.calendars.title"))
     Text(
@@ -424,8 +427,17 @@ private fun CalendarsSection(
                             )
                         }
                     }
-                    // Per-row Edit + Delete affordances. Icon buttons keep
-                    // the row compact; tooltips come from contentDescription.
+                    // Per-row Share + Edit + Delete affordances. Icon
+                    // buttons keep the row compact; tooltips come from
+                    // contentDescription.
+                    IconButton(onClick = { sharing = cal }) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = t("settings.calendars.share"),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { editing = cal }) {
                         Icon(
                             Icons.Default.Edit,
@@ -489,6 +501,293 @@ private fun CalendarsSection(
                 onChanged()
             },
         )
+    }
+
+    sharing?.let { cal ->
+        ShareLinksDialog(
+            profile = profile,
+            calendar = cal,
+            onDismiss = { sharing = null },
+        )
+    }
+}
+
+/** Per-calendar share / subscribe-link manager. Mirrors the web
+ *  calendar.ejs "分享" panel: list active subscribe links (each a public
+ *  read-only .ics URL), generate a new one (optional label), copy the URL
+ *  to the clipboard, and revoke (with a confirm step). All calls go through
+ *  a short-lived ApiClient for the active profile — same one-shot pattern
+ *  the calendar CRUD dialogs use. The list reloads after create / revoke
+ *  (via reloadKey) so the UI always reflects server state. */
+@Composable
+private fun ShareLinksDialog(
+    profile: Profile,
+    calendar: CalendarMeta,
+    onDismiss: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var tokens by remember { mutableStateOf<List<ShareToken>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var newLabel by remember { mutableStateOf("") }
+    var generating by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    // Token (id) the user just copied — drives a transient "已复制" hint.
+    var copied by remember { mutableStateOf<String?>(null) }
+    // Revoke confirm target. null = no confirm up.
+    var revoking by remember { mutableStateOf<ShareToken?>(null) }
+    // Bump to force a reload after create / revoke.
+    var reloadKey by remember { mutableStateOf(0) }
+
+    androidx.compose.runtime.LaunchedEffect(reloadKey) {
+        loading = true
+        loadError = null
+        val api = ApiClient(profile.serverUrl)
+        runCatching { api.listShareTokens(calendar.id) }
+            .onSuccess {
+                api.close()
+                tokens = it
+                loading = false
+            }
+            .onFailure {
+                api.close()
+                loadError = it.localizedMessage ?: t("settings.share.loadFailed")
+                loading = false
+            }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                cn.bywave.calendar.desktop.i18n.I18n.t(
+                    "settings.share.title",
+                    mapOf("name" to calendar.name),
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    t("settings.share.intro"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // Generate-new row: optional label + button.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newLabel,
+                        onValueChange = { newLabel = it },
+                        label = { Text(t("settings.share.labelPlaceholder")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = {
+                            generating = true
+                            actionError = null
+                            scope.launch {
+                                val api = ApiClient(profile.serverUrl)
+                                runCatching {
+                                    api.createShareToken(
+                                        calendarId = calendar.id,
+                                        label = newLabel.trim().ifBlank { null },
+                                    )
+                                }.onSuccess {
+                                    api.close()
+                                    generating = false
+                                    newLabel = ""
+                                    reloadKey++  // re-list so the new link shows
+                                }.onFailure {
+                                    api.close()
+                                    generating = false
+                                    actionError = it.localizedMessage ?: t("settings.share.generateFailed")
+                                }
+                            }
+                        },
+                        enabled = !generating,
+                    ) {
+                        if (generating) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(t("settings.share.generate"))
+                    }
+                }
+
+                if (actionError != null) {
+                    Text(
+                        actionError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                HorizontalDivider()
+
+                when {
+                    loading -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(t("settings.share.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    loadError != null -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { reloadKey++ }) { Text(t("error.retry")) }
+                        }
+                    }
+                    tokens.isNullOrEmpty() -> {
+                        Text(
+                            t("settings.share.empty"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    else -> {
+                        val list = tokens!!
+                        list.forEach { tok ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    tok.label?.ifBlank { null } ?: t("settings.share.unnamed"),
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                Text(
+                                    tok.url,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    maxLines = 2,
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(onClick = {
+                                        copyToClipboard(tok.url)
+                                        copied = tok.token
+                                    }) {
+                                        Text(
+                                            if (copied == tok.token) t("settings.share.copied")
+                                            else t("settings.share.copy"),
+                                        )
+                                    }
+                                    TextButton(onClick = { revoking = tok }) {
+                                        Text(
+                                            t("settings.share.revoke"),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                            if (tok != list.last()) HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(t("settings.share.close")) }
+        },
+    )
+
+    // Revoke confirm — revoking invalidates the .ics URL for anyone still
+    // subscribed, so we make the user confirm (mirrors web's data-confirm).
+    revoking?.let { tok ->
+        var working by remember { mutableStateOf(false) }
+        var revokeError by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { if (!working) revoking = null },
+            title = {
+                Text(
+                    t("settings.share.revokeTitle"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(t("settings.share.revokeConfirm"))
+                    if (revokeError != null) {
+                        Text(
+                            revokeError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        working = true
+                        revokeError = null
+                        scope.launch {
+                            val api = ApiClient(profile.serverUrl)
+                            runCatching {
+                                api.revokeShareToken(calendar.id, tok.token)
+                            }.onSuccess {
+                                api.close()
+                                working = false
+                                revoking = null
+                                reloadKey++  // re-list so the revoked link disappears
+                            }.onFailure {
+                                api.close()
+                                working = false
+                                revokeError = it.localizedMessage ?: t("settings.share.revokeFailed")
+                            }
+                        }
+                    },
+                    enabled = !working,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    if (working) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(t("settings.share.revoke"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { revoking = null }, enabled = !working) {
+                    Text(t("settings.calendars.cancel"))
+                }
+            },
+        )
+    }
+}
+
+/** Put `text` on the system clipboard. Uses AWT's Toolkit clipboard
+ *  directly — Compose Desktop's ClipboardManager works too, but Toolkit is
+ *  available everywhere without threading a LocalClipboardManager through,
+ *  and copy-a-URL doesn't need rich content. Best-effort: a headless /
+ *  locked-down environment could throw, which we swallow (the URL is still
+ *  shown on screen for manual copy). */
+private fun copyToClipboard(text: String) {
+    runCatching {
+        java.awt.Toolkit.getDefaultToolkit().systemClipboard
+            .setContents(java.awt.datatransfer.StringSelection(text), null)
     }
 }
 

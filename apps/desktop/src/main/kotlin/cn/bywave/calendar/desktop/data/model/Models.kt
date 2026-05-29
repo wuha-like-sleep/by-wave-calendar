@@ -116,6 +116,65 @@ data class EventExtra(
     val url: String? = null,
 )
 
+// ---- Global search ----
+//
+// GET /api/v1/search?q=<needle>&limit=<n>. The server matches the needle
+// (case-insensitive substring) against each event's summary / description
+// / location across every calendar the user can see (owned + shared), and
+// returns a lighter row shape than EventDTO — notably no rrule / allDay /
+// extra. We mirror iOS's SearchResult: decode into SearchResultDTO, then
+// promote to EventDTO on tap (missing fields default to nil/false; the
+// detail dialog re-fetches via /events if the user edits). Same client as
+// every other authed call, same { ok, data } envelope: the route uses a
+// bare reply.send({ events }), which the server's onSend hook wraps to
+// { ok: true, data: { events } } — so unwrap() decodes into SearchResponse.
+
+@Serializable
+data class SearchResultDTO(
+    val id: String,
+    val calendarId: String,
+    val calendarName: String? = null,
+    val calendarColor: String? = null,
+    val summary: String,
+    val location: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+)
+
+/** GET /api/v1/search response (the `data` payload after the outer
+ *  { ok, data } envelope is stripped). */
+@Serializable
+data class SearchResponse(
+    val events: List<SearchResultDTO>,
+)
+
+// ---- Share / subscribe links ----
+//
+// GET/POST/DELETE /api/v1/calendars/{id}/share-tokens. A share token is an
+// opaque key the server turns into a public read-only .ics subscribe URL
+// (the `url` field — e.g. https://server/ics/<token>.ics). The list route
+// uses okList() so its `data` payload is a bare JSON ARRAY of ShareToken
+// (not an object) — see ApiClient.listShareTokens for how that's decoded.
+// `revokedAt` is always null for rows the list returns (the server filters
+// revoked tokens out), but we keep it nullable to mirror the DB shape.
+
+@Serializable
+data class ShareToken(
+    val token: String,
+    val calendarId: String,
+    val label: String? = null,
+    val url: String,
+    val revokedAt: String? = null,
+    val createdAt: String,
+)
+
+/** POST /api/v1/calendars/{id}/share-tokens body. `label` is an optional
+ *  free-text name so the user can tell two links apart ("公开", "给老板"). */
+@Serializable
+data class ShareTokenCreateInput(
+    val label: String? = null,
+)
+
 // ---- Attendees ----
 
 @Serializable

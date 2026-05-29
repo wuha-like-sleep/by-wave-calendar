@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -116,6 +117,9 @@ fun MainScreen(
     // Cmd+, shortcut, or the MenuBar item. Esc inside Settings closes
     // it (the SettingsScreen's own onClose).
     var showSettings by remember { mutableStateOf(false) }
+    // Global search dialog visibility. Opened by the toolbar magnifier or
+    // Cmd/Ctrl+F; Esc closes it (handled in the ShortcutAction.Escape arm).
+    var showSearch by remember { mutableStateOf(false) }
     // When MenuBar's "检查更新" fires, ShortcutAction.CheckUpdate
     // arrives here; we kick the force-check then auto-pop the dialog
     // if something new was found. forceCheckOutcome lets us show a
@@ -142,11 +146,16 @@ fun MainScreen(
                 ShortcutAction.Previous -> s.previous()
                 ShortcutAction.Next -> s.next()
                 ShortcutAction.Escape -> {
-                    // Esc precedence: Settings page first, then any
-                    // open sheet/dialog. Settings is a top-level
-                    // overlay so it "owns" the keystroke when visible.
-                    if (showSettings) showSettings = false else s.closeSheet()
+                    // Esc precedence: search dialog, then Settings page,
+                    // then any open sheet/dialog. The search dialog floats
+                    // on top so it "owns" the keystroke when visible.
+                    when {
+                        showSearch -> showSearch = false
+                        showSettings -> showSettings = false
+                        else -> s.closeSheet()
+                    }
                 }
+                ShortcutAction.OpenSearch -> { showSearch = true }
                 ShortcutAction.CheckUpdate -> {
                     val url = p?.serverUrl ?: return@collect
                     UpdateChecker.forceCheck(url)
@@ -181,6 +190,7 @@ fun MainScreen(
             onNext = { state.next() },
             onRefresh = { state.load() },
             onNew = { state.openCreate() },
+            onOpenSearch = { showSearch = true },
             // Settings page hosts sign-out + all account / security /
             // appearance / about controls. Previously the toolbar had
             // its own Logout icon — removed in favor of the Settings
@@ -343,6 +353,21 @@ fun MainScreen(
         )
     }
 
+    // Global search dialog. Opened by the toolbar magnifier / Cmd+F.
+    // Picking a result jumps the calendar to that event's local date
+    // (CalendarState.jumpToDay switches to Day view at that date) and
+    // closes the dialog. Floats above everything via AlertDialog.
+    if (showSearch) {
+        SearchDialog(
+            serverUrl = p.serverUrl,
+            onJumpToDate = { day ->
+                state.jumpToDay(day)
+                showSearch = false
+            },
+            onDismiss = { showSearch = false },
+        )
+    }
+
     // Settings page — rendered as a full-screen overlay on top of the
     // calendar. Hosts account / calendars / security / appearance /
     // about. Sign-out, profile switch, and "+ add account" all bubble
@@ -399,6 +424,7 @@ private fun TopBar(
     onNext: () -> Unit,
     onRefresh: () -> Unit,
     onNew: () -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     // Collect locale so this whole TopBar re-renders when the user
@@ -459,6 +485,10 @@ private fun TopBar(
             Text(t("topbar.new"))
         }
         Spacer(Modifier.width(4.dp))
+        // Global search (Cmd/Ctrl+F) — opens the event search dialog.
+        IconButton(onClick = onOpenSearch) {
+            Icon(Icons.Default.Search, contentDescription = t("topbar.search"))
+        }
         IconButton(onClick = onRefresh) {
             Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
         }

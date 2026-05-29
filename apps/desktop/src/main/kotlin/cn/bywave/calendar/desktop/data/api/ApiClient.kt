@@ -36,6 +36,9 @@ import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.EventsResponse
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
+import cn.bywave.calendar.desktop.data.model.SearchResponse
+import cn.bywave.calendar.desktop.data.model.ShareToken
+import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
 import cn.bywave.calendar.desktop.data.model.WebSessionRequest
 import cn.bywave.calendar.desktop.data.model.WebSessionResponse
 import io.ktor.client.HttpClient
@@ -62,6 +65,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -153,6 +157,20 @@ class ApiClient(val serverUrl: String) {
         }
     }
 
+    /** GET /api/v1/search?q=<needle>&limit=<n>. Server-side substring match
+     *  (case-insensitive) over summary / description / location across every
+     *  calendar the user can see, ordered recency-first. Same endpoint the
+     *  web Cmd+K palette + iOS SearchView use. `limit` caps results (server
+     *  enforces max 100). The route hands back { events: [...] } which the
+     *  envelope hook wraps to { ok: true, data: { events } } — so this goes
+     *  through getAuthed/unwrap like every other authed read. */
+    suspend fun search(query: String, limit: Int = 100): SearchResponse {
+        return getAuthed("/api/v1/search", SearchResponse.serializer()) {
+            parameter("q", query)
+            parameter("limit", limit)
+        }
+    }
+
     // ---- Calendars (CRUD) ----
 
     /** POST /api/v1/calendars — create a calendar. Returns the new row
@@ -192,6 +210,50 @@ class ApiClient(val serverUrl: String) {
         if (!resp.status.isSuccess()) {
             val body = runCatching { resp.bodyAsText() }.getOrDefault("")
             throw ApiException(resp.status.value, "calendar delete failed: ${resp.status} $body")
+        }
+    }
+
+    // ---- Share / subscribe links ----
+
+    /** GET /api/v1/calendars/{id}/share-tokens — list a calendar's active
+     *  subscribe links (revoked ones are filtered out server-side). The
+     *  route uses okList(), so its `data` payload is a bare JSON ARRAY (not
+     *  an object) — we unwrap it with a List serializer rather than a
+     *  wrapper DTO. */
+    suspend fun listShareTokens(calendarId: String): List<ShareToken> {
+        return getAuthed(
+            "/api/v1/calendars/$calendarId/share-tokens",
+            ListSerializer(ShareToken.serializer()),
+        )
+    }
+
+    /** POST /api/v1/calendars/{id}/share-tokens — mint a new subscribe link.
+     *  Optional `label` names it. Returns the new ShareToken (with its `url`
+     *  .ics subscribe link). */
+    suspend fun createShareToken(calendarId: String, label: String? = null): ShareToken {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/calendars/$calendarId/share-tokens",
+            body = ShareTokenCreateInput(label = label),
+            bodySerializer = ShareTokenCreateInput.serializer(),
+            respSerializer = ShareToken.serializer(),
+        )
+    }
+
+    /** DELETE /api/v1/calendars/{id}/share-tokens/{token} — revoke a link.
+     *  Anyone still subscribed to that .ics URL stops getting updates. The
+     *  server returns a bare { ok: true } (no `data`), so we check status
+     *  only — same pattern as deleteCalendar / revokeDevice. */
+    suspend fun revokeShareToken(calendarId: String, token: String) {
+        val resp = withRefresh {
+            val accessToken = ProfileStore.accessToken()
+            client.delete("$baseUrl/api/v1/calendars/$calendarId/share-tokens/$token") {
+                if (!accessToken.isNullOrEmpty()) bearerAuth(accessToken)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "share-token revoke failed: ${resp.status} $body")
         }
     }
 
