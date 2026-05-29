@@ -854,12 +854,22 @@ export async function deviceRoutes(app: FastifyInstance) {
       desktopP.deviceId = device.id;
       desktopP.userEmail = user.email;
       desktopP.userName = user.displayName;
-      return reply.send({ ok: true });
+      // `kind` lets newer mobile builds (iOS v1.4.4+ / Android v0.9.2+)
+      // show the correct success copy without relying on URL-prefix
+      // sniffing. Older clients ignore unknown fields → no break.
+      return reply.send({ ok: true, kind: "desktop" });
     }
     // webPairs fallback. Same approval semantics as POST /devices/
     // web-pair-approve below — just mark the entry approved with the
     // bearer-authenticated user; the browser polling web-pair-status
     // picks it up and plants the cookie session.
+    //
+    // Why this fallback exists: the web QR encodes a /desktop-pair/<CODE>
+    // URL (not /web-pair/<CODE>) so OLD mobile builds — whose scanner
+    // regex only matches /desktop-pair/ — recognize it. They post here
+    // thinking it's a desktop pair; we look up webPairs by the same
+    // code namespace and dispatch correctly. New builds use kind to
+    // render "网页端正在登录" instead of the desktop copy.
     const webP = webPairs.get(code);
     if (webP) {
       if (webP.status !== "pending") {
@@ -868,7 +878,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       if (!(await ensureQrLoginEnabled(reply, req))) return;
       webP.status = "approved";
       webP.userId = user.id;
-      return reply.send({ ok: true });
+      return reply.send({ ok: true, kind: "web" });
     }
     return reply.code(404).send({ error: "expired_or_unknown" });
   });
@@ -1055,7 +1065,10 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     p.status = "approved";
     p.userId = user.id;
-    return reply.send({ ok: true });
+    // `kind` mirrors what /devices/desktop-pair-approve returns, so the
+    // mobile success-screen renderer can use the same field regardless
+    // of which approve endpoint the client called.
+    return reply.send({ ok: true, kind: "web" });
   });
 }
 
