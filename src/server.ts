@@ -10,6 +10,7 @@ import rateLimit from "@fastify/rate-limit";
 import view from "@fastify/view";
 import formbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
+import compress from "@fastify/compress";
 import ejs from "ejs";
 import { env } from "./env.js";
 import { authRoutes } from "./routes/auth.js";
@@ -144,6 +145,20 @@ await app.register(helmet, {
   hsts: env.NODE_ENV === "production" ? { maxAge: 31_536_000, includeSubDomains: true, preload: false } : false,
 });
 
+// ---- Response compression (perf) ----
+// gzip/brotli for text payloads (HTML, JSON, CSS, JS). Big win on the
+// EJS-rendered calendar pages + the /api/v1/events JSON which can be tens
+// of KB. `threshold` skips tiny bodies where the compression overhead
+// isn't worth it. We register BEFORE routes so it wraps every reply.
+// Static assets are also covered (fastifyStatic streams through this).
+await app.register(compress, {
+  global: true,
+  // brotli first (better ratio) then gzip; the client's Accept-Encoding
+  // decides. Skip if the client doesn't advertise either.
+  encodings: ["br", "gzip"],
+  threshold: 1024,  // bytes — don't compress sub-1KB responses
+});
+
 // ---- Global rate limit ----
 await app.register(rateLimit, {
   global: true,
@@ -220,6 +235,7 @@ app.get("/health", { config: { rateLimit: false } }, async () => ({ status: "ok"
 app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async () => {
   // Lazy import to avoid pulling getSettings into the eager init path.
   const { getSettings } = await import("./lib/site_settings.js");
+  const { appleSignInConfigured } = await import("./lib/apple_signin.js");
   const s = await getSettings();
   // Theme palette → hex accent. Mirrors web's tailwind brand-600 values.
   // iOS reads `themeAccent` on launch and applies it as the global .tint
@@ -262,6 +278,10 @@ app.get("/api/v1/health/app", { config: { rateLimit: { max: 30, timeWindow: "1 m
     webPush: true,                    // browser push notifications
     i18n: true,                       // per-user UI language
     desktopPairing: s.appsEnabled,    // desktop QR scan-to-login
+    // Sign in with Apple — only "available" when the server actually has
+    // SIWA_CLIENT_IDS configured (else /auth/apple returns 503). The iOS
+    // app reads this to decide whether to show the Apple button.
+    appleSignIn: appleSignInConfigured(),
   };
 
   return {
