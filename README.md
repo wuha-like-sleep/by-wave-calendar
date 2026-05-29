@@ -65,7 +65,7 @@
 <tr>
 <td align="center">
 
-[![Download DMG](https://img.shields.io/badge/macOS-DMG_下载-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.6/ByWaveCalendar-0.7.6-arm64.dmg)
+[![Download DMG](https://img.shields.io/badge/macOS-DMG_下载-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.7/ByWaveCalendar-0.7.7-arm64.dmg)
 
 Apple Silicon · 已 Apple 公证
 

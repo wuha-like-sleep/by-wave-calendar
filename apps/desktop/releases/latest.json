@@ -1,14 +1,14 @@
 {
-  "versionCode": 12,
-  "versionName": "0.7.6",
-  "releasedAt": "2026-05-29T01:30:00Z",
-  "notes": "修：Settings 文字排版（中文 section 不再挤）· 关窗口后点 dock 图标稳定显示窗口（minimize+hide 双 flag）· UpdateChecker 加 GitHub raw 兜底，从此自动更新链路不再依赖服务端代码新鲜度。沿用 v0.7.5 的 APP 内语言切换 + 设置页。",
+  "versionCode": 13,
+  "versionName": "0.7.7",
+  "releasedAt": "2026-05-29T11:00:00Z",
+  "notes": "Sparkle 风格 in-place 自动更新：点一下「下载并安装」→ 自动下载 DMG、挂载、替换 /Applications 里的 .app、重启。无需手动拖到 Applications。修：v0.7.6 Settings 字全部叠在一起的严重排版 bug（右 pane 用 Box 改成 Column）。",
   "mandatory": false,
   "assets": {
     "mac": {
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.6/ByWaveCalendar-0.7.6-arm64.dmg",
-      "sha256": "f75d846e6a7fd98e6104eb46026a3d8fe8d18260f24127672490560be1faaba8",
-      "sizeBytes": 114147553
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.7.7/ByWaveCalendar-0.7.7-arm64.dmg",
+      "sha256": "34f0fab550cb874fe3b17d5fa418f552807f042e35d2c3dd0310db1486db5dd6",
+      "sizeBytes": 114182467
     }
   }
 }
