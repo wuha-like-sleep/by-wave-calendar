@@ -1,18 +1,18 @@
 <%- include('_nav', { activeNav: '/admin/users' }) %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6">用户管理</h1>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6"><%= t("adminUsers.heading") %></h1>
 
 <div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
   <table class="min-w-full text-sm">
     <thead class="bg-slate-50 border-b border-slate-200">
       <tr class="text-left text-xs uppercase tracking-wide text-slate-500">
-        <th class="px-4 py-3">邮箱</th>
-        <th class="px-4 py-3">昵称</th>
-        <th class="px-4 py-3">验证</th>
-        <th class="px-4 py-3">登录方式</th>
-        <th class="px-4 py-3">注册</th>
-        <th class="px-4 py-3">角色</th>
-        <th class="px-4 py-3">操作</th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.email") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.displayName") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.verified") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.loginMethod") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.createdAt") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.role") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.actions") %></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
@@ -20,19 +20,19 @@
         <tr>
           <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]">
             <%= u.email %>
-            <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]">已停用</span><% } %>
+            <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]"><%= t("adminUsers.badge.disabled") %></span><% } %>
           </td>
           <td class="px-4 py-3 text-slate-700"><%= u.displayName || '—' %></td>
           <td class="px-4 py-3">
             <% if (u.emailVerified) { %>
-              <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">✓ 已验证</span>
+              <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminUsers.badge.emailVerified") %></span>
             <% } else { %>
-              <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700">未验证</span>
+              <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.emailUnverified") %></span>
             <% } %>
           </td>
           <td class="px-4 py-3">
             <div class="flex flex-wrap gap-1 max-w-[220px]">
-              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="所有账号都支持密码登录（SSO 账号的密码是随机生成且不可登录，除非自助走「忘记密码」重设）">密码</span>
+              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
               <% if (u.passkeyCount > 0) { %>
                 <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>
               <% } %>
@@ -44,7 +44,7 @@
               <% } %>
             </div>
             <% if (u.lastLoginMethod) { %>
-              <div class="mt-0.5 text-[10px] text-slate-400">上次：<%= u.lastLoginMethod %></div>
+              <div class="mt-0.5 text-[10px] text-slate-400"><%= t("adminUsers.lastLoginPrefix") %><%= u.lastLoginMethod %></div>
             <% } %>
           </td>
           <td class="px-4 py-3 text-xs text-slate-500">
@@ -52,40 +52,40 @@
           </td>
           <td class="px-4 py-3">
             <% if (u.isAdmin) { %>
-              <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">管理员</span>
+              <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"><%= t("adminUsers.role.admin") %></span>
             <% } else { %>
-              <span class="text-xs text-slate-400">普通</span>
+              <span class="text-xs text-slate-400"><%= t("adminUsers.role.normal") %></span>
             <% } %>
           </td>
           <td class="px-4 py-3">
             <% if (u.id !== user.id) { %>
               <div class="flex flex-wrap gap-x-3 gap-y-1 items-center text-xs">
                 <form method="post" action="/admin/users/<%= u.id %>/toggle-admin" class="m-0 inline"
-                      data-confirm="<%= u.isAdmin ? '撤销该用户的管理员身份？' : '将该用户提升为管理员？' %>"
+                      data-confirm="<%= u.isAdmin ? t("adminUsers.confirm.revokeAdmin") : t("adminUsers.confirm.promoteAdmin") %>"
                       data-confirm-danger="<%= u.isAdmin ? '1' : '0' %>"
-                      data-confirm-ok="<%= u.isAdmin ? '撤销管理员' : '设为管理员' %>">
+                      data-confirm-ok="<%= u.isAdmin ? t("adminUsers.action.revokeAdmin") : t("adminUsers.action.promoteAdmin") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="<%= u.isAdmin ? 'text-red-600 hover:text-red-700' : 'text-brand-600 hover:text-brand-700' %>">
-                    <%= u.isAdmin ? '撤销管理员' : '设为管理员' %>
+                    <%= u.isAdmin ? t("adminUsers.action.revokeAdmin") : t("adminUsers.action.promoteAdmin") %>
                   </button>
                 </form>
                 <form method="post" action="/admin/users/<%= u.id %>/toggle-disabled" class="m-0 inline"
-                      data-confirm="<%= u.disabledAt ? '重新启用此账号？' : '停用此账号？该用户所有设备会被踢下线，登录会被拒绝。' %>"
+                      data-confirm="<%= u.disabledAt ? t("adminUsers.confirm.enable") : t("adminUsers.confirm.disable") %>"
                       data-confirm-danger="<%= u.disabledAt ? '0' : '1' %>"
-                      data-confirm-ok="<%= u.disabledAt ? '重新启用' : '停用账号' %>">
+                      data-confirm-ok="<%= u.disabledAt ? t("adminUsers.action.enable") : t("adminUsers.action.disable") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <button type="submit" class="<%= u.disabledAt ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700' %>">
-                    <%= u.disabledAt ? '重新启用' : '停用账号' %>
+                    <%= u.disabledAt ? t("adminUsers.action.enable") : t("adminUsers.action.disable") %>
                   </button>
                 </form>
                 <form method="post" action="/admin/users/<%= u.id %>/revoke-sessions" class="m-0 inline"
-                      data-confirm="踢出该用户的所有登录会话？需要重新登录。" data-confirm-danger="1" data-confirm-ok="踢出">
+                      data-confirm="<%= t("adminUsers.confirm.kick") %>" data-confirm-danger="1" data-confirm-ok="<%= t("adminUsers.confirmOk.kick") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="text-slate-600 hover:text-slate-900">踢出登录</button>
+                  <button type="submit" class="text-slate-600 hover:text-slate-900"><%= t("adminUsers.action.kick") %></button>
                 </form>
               </div>
             <% } else { %>
-              <span class="text-xs text-slate-300">你自己</span>
+              <span class="text-xs text-slate-300"><%= t("adminUsers.self") %></span>
             <% } %>
           </td>
         </tr>

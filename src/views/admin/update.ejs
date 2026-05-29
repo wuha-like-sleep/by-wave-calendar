@@ -8,29 +8,29 @@
         <span class="inline-flex items-center justify-center h-9 w-9 rounded-xl bg-brand-50 text-brand-700">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.6L21 3"/><path d="M21 3v6h-6"/></svg>
         </span>
-        <h1 class="text-xl sm:text-2xl font-semibold text-slate-900">系统更新</h1>
+        <h1 class="text-xl sm:text-2xl font-semibold text-slate-900"><%= t("adminUpdate.heading") %></h1>
       </div>
-      <p class="text-sm text-slate-500">从 Git 远端拉新代码 → 重建 → 迁移 → 重启，全自动。</p>
+      <p class="text-sm text-slate-500"><%= t("adminUpdate.lead") %></p>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
       <div class="rounded-lg bg-white border border-slate-200 px-3 py-2">
-        <div class="text-slate-400 mb-0.5">应用版本</div>
+        <div class="text-slate-400 mb-0.5"><%= t("adminUpdate.stat.appVersion") %></div>
         <div class="font-mono font-semibold text-slate-900">v<%= pkgVersion %></div>
       </div>
       <div class="rounded-lg bg-white border border-slate-200 px-3 py-2">
-        <div class="text-slate-400 mb-0.5">Node</div>
+        <div class="text-slate-400 mb-0.5"><%= t("adminUpdate.stat.node") %></div>
         <div class="font-mono font-semibold text-slate-900"><%= nodeVersion %></div>
       </div>
       <div class="rounded-lg bg-white border border-slate-200 px-3 py-2 col-span-2 sm:col-span-1">
-        <div class="text-slate-400 mb-0.5">运行时长</div>
+        <div class="text-slate-400 mb-0.5"><%= t("adminUpdate.stat.uptime") %></div>
         <div class="font-mono font-semibold text-slate-900" id="uptime-text" data-uptime="<%= uptimeSeconds %>">—</div>
       </div>
     </div>
   </div>
   <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-    <span>远端：<code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= remote %></code></span>
-    <span>分支：<code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= branch %></code></span>
-    <span>PM2：<code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= pm2Name %></code></span>
+    <span><%= t("adminUpdate.meta.remote") %><code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= remote %></code></span>
+    <span><%= t("adminUpdate.meta.branch") %><code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= branch %></code></span>
+    <span><%= t("adminUpdate.meta.pm2") %><code class="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-700"><%= pm2Name %></code></span>
   </div>
 </section>
 
@@ -38,22 +38,22 @@
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-4">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-base font-semibold text-slate-900">更新源</h2>
-      <p class="text-xs text-slate-500 mt-0.5">国内访问 GitHub 慢可以切到 Gitee 镜像</p>
+      <h2 class="text-base font-semibold text-slate-900"><%= t("adminUpdate.source.heading") %></h2>
+      <p class="text-xs text-slate-500 mt-0.5"><%= t("adminUpdate.source.desc") %></p>
     </div>
     <div class="flex gap-2 flex-wrap">
       <% if (!hasGithub) { %>
         <button type="button" id="btn-add-github"
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          添加 GitHub
+          <%= t("adminUpdate.source.addGithub") %>
         </button>
       <% } %>
       <% if (!hasGitee) { %>
         <button type="button" id="btn-add-gitee"
           class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          添加 Gitee 镜像
+          <%= t("adminUpdate.source.addGitee") %>
         </button>
       <% } %>
     </div>
@@ -70,7 +70,7 @@
             <% if (r.url.includes("github.com")) { %>
               <span class="text-[10px] bg-slate-900 text-white px-1.5 py-0.5 rounded">GitHub</span>
             <% } else if (r.url.includes("gitee.com")) { %>
-              <span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded">Gitee · 国内快</span>
+              <span class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded"><%= t("adminUpdate.source.giteeBadge") %></span>
             <% } %>
           </div>
           <code class="text-[11px] text-slate-500 break-all"><%= r.url %></code>
@@ -79,7 +79,7 @@
     <% }); %>
     <% if (!remotes.length) { %>
       <div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
-        没有检测到任何 git remote。请先 ssh 到服务器执行 `git remote add origin &lt;url&gt;`。
+        <%= t("adminUpdate.source.noRemotes") %>
       </div>
     <% } %>
   </div>
@@ -89,19 +89,19 @@
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
     <div>
-      <h2 class="text-base font-semibold text-slate-900">检查并应用更新</h2>
-      <p class="text-xs text-slate-500 mt-0.5">先检查 → 看到新提交 → 立即更新</p>
+      <h2 class="text-base font-semibold text-slate-900"><%= t("adminUpdate.check.heading") %></h2>
+      <p class="text-xs text-slate-500 mt-0.5"><%= t("adminUpdate.check.desc") %></p>
     </div>
     <div class="flex gap-2 flex-shrink-0">
       <button type="button" id="btn-check"
         class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700 disabled:opacity-40 disabled:cursor-not-allowed">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9c2.5 0 4.8 1 6.5 2.6L21 3"/><path d="M21 3v6h-6"/></svg>
-        检查更新
+        <%= t("adminUpdate.check.button") %>
       </button>
       <button type="button" id="btn-apply" disabled
         class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        立即更新
+        <%= t("adminUpdate.apply.button") %>
       </button>
     </div>
   </div>
@@ -111,33 +111,33 @@
     <div id="status-up-to-date" class="hidden rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
       <div class="flex items-center gap-2 text-emerald-800 font-medium">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5L20 7"/></svg>
-        已是最新版本
+        <%= t("adminUpdate.status.upToDate") %>
       </div>
-      <div class="mt-1 text-emerald-700 text-xs">当前提交 <code class="font-mono" id="cur-sha-up">—</code> 与远端一致。</div>
+      <div class="mt-1 text-emerald-700 text-xs"><%- t("adminUpdate.status.upToDateDetail") %></div>
     </div>
 
     <div id="status-behind" class="hidden rounded-lg border border-brand-200 bg-brand-50/60 p-4 text-sm">
       <div class="flex items-center gap-2 text-brand-800 font-medium">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-        发现 <span id="behind-n">0</span> 个新提交
+        <%- t("adminUpdate.status.behind") %>
       </div>
       <div class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
         <div class="rounded-md bg-white border border-brand-100 px-3 py-2">
-          <div class="text-slate-400 mb-0.5">当前</div>
+          <div class="text-slate-400 mb-0.5"><%= t("adminUpdate.status.current") %></div>
           <code class="font-mono text-slate-700 text-xs break-all" id="cur-sha">—</code>
           <div class="text-slate-500 mt-1 truncate" id="cur-subject"></div>
         </div>
         <div class="rounded-md bg-white border border-emerald-100 px-3 py-2">
-          <div class="text-emerald-600 mb-0.5">远端</div>
+          <div class="text-emerald-600 mb-0.5"><%= t("adminUpdate.status.remote") %></div>
           <code class="font-mono text-slate-700 text-xs break-all" id="remote-sha">—</code>
         </div>
       </div>
       <details class="mt-3" open>
-        <summary class="cursor-pointer text-xs text-brand-700 hover:text-brand-800 font-medium">📋 提交日志</summary>
+        <summary class="cursor-pointer text-xs text-brand-700 hover:text-brand-800 font-medium"><%= t("adminUpdate.status.commitLog") %></summary>
         <ul id="new-commits" class="mt-2 space-y-1.5"></ul>
       </details>
       <div id="dirty-line" class="mt-3 hidden rounded-md bg-amber-50 border border-amber-200 p-2.5 text-xs text-amber-800">
-        ⚠️ 工作树有未提交的本地改动 —— 更新会用 <code class="bg-amber-100 px-1 rounded">git reset --hard</code> 覆盖，建议先备份。
+        <%- t("adminUpdate.status.dirty") %>
       </div>
     </div>
   </div>
@@ -145,7 +145,7 @@
   <!-- 执行进度 -->
   <div id="apply-box" class="hidden mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
     <div class="flex items-center justify-between mb-2">
-      <div class="text-sm font-medium text-slate-700">执行进度</div>
+      <div class="text-sm font-medium text-slate-700"><%= t("adminUpdate.progress.heading") %></div>
       <div id="progress-label" class="text-xs font-mono text-slate-500">0 / 0</div>
     </div>
     <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden mb-3">
@@ -159,21 +159,21 @@
 
 <!-- ============ 维护操作 ============ -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-base font-semibold text-slate-900 mb-1">维护操作</h2>
-  <p class="text-xs text-slate-500 mb-4">不拉新代码、只对当前部署做动作</p>
+  <h2 class="text-base font-semibold text-slate-900 mb-1"><%= t("adminUpdate.maint.heading") %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%= t("adminUpdate.maint.desc") %></p>
   <div class="flex flex-wrap gap-2">
     <button type="button" id="btn-restart"
       class="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/><path d="M21 3v6h-6"/></svg>
-      重启服务
+      <%= t("adminUpdate.maint.restart") %>
     </button>
     <a href="/admin/backup" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-      下载备份
+      <%= t("adminUpdate.maint.downloadBackup") %>
     </a>
     <a href="/admin/audit" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-700 hover:bg-slate-50">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
-      审计日志
+      <%= t("adminUpdate.maint.audit") %>
     </a>
   </div>
 </section>
@@ -181,18 +181,62 @@
 <!-- ============ 说明 (折叠) ============ -->
 <section class="rounded-2xl border border-slate-200 bg-slate-50/40 p-5 sm:p-6">
   <details>
-    <summary class="cursor-pointer text-sm font-medium text-slate-700">这些按钮到底做了什么？</summary>
+    <summary class="cursor-pointer text-sm font-medium text-slate-700"><%= t("adminUpdate.help.summary") %></summary>
     <ul class="mt-3 text-sm text-slate-600 space-y-2 list-disc pl-5">
-      <li><strong class="text-slate-800">检查更新</strong> · 服务器跑 <code class="bg-slate-100 px-1 rounded text-xs">git fetch <%= remote %> <%= branch %></code>，对比 HEAD 与远端的差异，列出新增提交</li>
-      <li><strong class="text-slate-800">立即更新</strong> · 依次执行 <code class="bg-slate-100 px-1 rounded text-xs">git reset --hard <%= remote %>/<%= branch %></code> → <code class="bg-slate-100 px-1 rounded text-xs">npm ci --include=dev</code> → <code class="bg-slate-100 px-1 rounded text-xs">npm run build</code> → <code class="bg-slate-100 px-1 rounded text-xs">npm run db:migrate</code>。任何一步失败立即停止</li>
-      <li><strong class="text-slate-800">重启服务</strong> · 等同 <code class="bg-slate-100 px-1 rounded text-xs">pm2 restart <%= pm2Name %></code>，常用于证书续期 / 改了 .env 后</li>
-      <li>远端覆盖：<code class="bg-slate-100 px-1 rounded text-xs">UPDATE_REMOTE</code> / <code class="bg-slate-100 px-1 rounded text-xs">UPDATE_BRANCH</code> 环境变量</li>
+      <li><%- t("adminUpdate.help.check", { remote: remote, branch: branch }) %></li>
+      <li><%- t("adminUpdate.help.apply", { remote: remote, branch: branch }) %></li>
+      <li><%- t("adminUpdate.help.restart", { pm2Name: pm2Name }) %></li>
+      <li><%- t("adminUpdate.help.envOverride") %></li>
     </ul>
   </details>
 </section>
 
+<script type="application/json" id="bwc-update-i18n" nonce="<%= cspNonce %>"><%-
+JSON.stringify({
+  uptimeSeconds: t("adminUpdate.uptime.seconds"),
+  uptimeMinutes: t("adminUpdate.uptime.minutes"),
+  uptimeHoursMinutes: t("adminUpdate.uptime.hoursMinutes"),
+  uptimeDaysHours: t("adminUpdate.uptime.daysHours"),
+  sourceAddingButton: t("adminUpdate.source.addingButton"),
+  sourceAddFailed: t("adminUpdate.source.addFailed"),
+  sourceAddGithubLabel: t("adminUpdate.source.addGithub"),
+  sourceAddGiteeLabel: t("adminUpdate.source.addGitee"),
+  unknownError: t("common.unknownError"),
+  checkButton: t("adminUpdate.check.button"),
+  checkButtonRunning: t("adminUpdate.check.buttonRunning"),
+  checkFailed: t("adminUpdate.check.failed"),
+  checkFailedToast: t("adminUpdate.check.failedToast"),
+  applyButton: t("adminUpdate.apply.button"),
+  applyButtonRunning: t("adminUpdate.apply.buttonRunning"),
+  applyRetry: t("adminUpdate.apply.retry"),
+  applyRestarting: t("adminUpdate.apply.restarting"),
+  applyConfirmTitle: t("adminUpdate.apply.confirmTitle"),
+  applyConfirmMessage: t("adminUpdate.apply.confirmMessage"),
+  applyConfirmOk: t("adminUpdate.apply.confirmOk"),
+  applySuccessFinal: t("adminUpdate.apply.successFinal"),
+  applyFailedFinal: t("adminUpdate.apply.failedFinal"),
+  applyConnectFailed: t("adminUpdate.apply.connectFailed"),
+  restartWaitingService: t("adminUpdate.restart.waitingService"),
+  restartBackOnline: t("adminUpdate.restart.backOnline"),
+  restartTimeout: t("adminUpdate.restart.timeout"),
+  restartConfirmTitle: t("adminUpdate.restart.confirmTitle"),
+  restartConfirmMessage: t("adminUpdate.restart.confirmMessage"),
+  restartConfirmOk: t("adminUpdate.restart.confirmOk"),
+  restartToastSuccess: t("adminUpdate.restart.toastSuccess"),
+  restartToastFailed: t("adminUpdate.restart.toastFailed"),
+  progressPrep: t("adminUpdate.progress.prep"),
+  progressExpandHint: t("adminUpdate.progress.expandHint"),
+  progressNoOutput: t("adminUpdate.progress.noOutput"),
+}) %></script>
+
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
+  const BWC_I18N = (() => {
+    try { return JSON.parse(document.getElementById('bwc-update-i18n').textContent); }
+    catch { return {}; }
+  })();
+  const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+
   const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
   const checkBtn = document.getElementById('btn-check');
   const applyBtn = document.getElementById('btn-apply');
@@ -205,16 +249,16 @@
     const el = document.getElementById('uptime-text');
     if (!el) return;
     let secs = parseInt(el.dataset.uptime || '0', 10) || 0;
-    function fmt(s) {
-      if (s < 60) return s + ' 秒';
+    function fmtUptime(s) {
+      if (s < 60) return fmt(BWC_I18N.uptimeSeconds, { n: s });
       const m = Math.floor(s / 60);
-      if (m < 60) return m + ' 分钟';
+      if (m < 60) return fmt(BWC_I18N.uptimeMinutes, { n: m });
       const h = Math.floor(m / 60);
-      if (h < 24) return h + ' 时 ' + (m % 60) + ' 分';
+      if (h < 24) return fmt(BWC_I18N.uptimeHoursMinutes, { h: h, m: (m % 60) });
       const d = Math.floor(h / 24);
-      return d + ' 天 ' + (h % 24) + ' 时';
+      return fmt(BWC_I18N.uptimeDaysHours, { d: d, h: (h % 24) });
     }
-    function render() { el.textContent = fmt(secs); }
+    function render() { el.textContent = fmtUptime(secs); }
     render();
     setInterval(() => { secs++; render(); }, 1000);
   })();
@@ -251,7 +295,7 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       const orig = btn.innerHTML;
-      btn.textContent = '添加中…';
+      btn.textContent = BWC_I18N.sourceAddingButton;
       try {
         const r = await postJson('/admin/update/add-remote', { name });
         if (r.ok) {
@@ -259,19 +303,19 @@
           // rendered template — the EJS surface is the source of truth.
           window.location.reload();
         } else {
-          alert(label + '添加失败：' + (r.error || '未知错误'));
+          alert(fmt(BWC_I18N.sourceAddFailed, { label: label, error: (r.error || BWC_I18N.unknownError) }));
           btn.disabled = false;
           btn.innerHTML = orig;
         }
       } catch (e) {
-        alert(label + '添加失败：' + (e?.message || e));
+        alert(fmt(BWC_I18N.sourceAddFailed, { label: label, error: (e?.message || e) }));
         btn.disabled = false;
         btn.innerHTML = orig;
       }
     });
   }
-  wireAddRemoteBtn('btn-add-github', 'github', 'GitHub');
-  wireAddRemoteBtn('btn-add-gitee', 'gitee', 'Gitee 镜像');
+  wireAddRemoteBtn('btn-add-github', 'github', BWC_I18N.sourceAddGithubLabel);
+  wireAddRemoteBtn('btn-add-gitee', 'gitee', BWC_I18N.sourceAddGiteeLabel);
 
   async function autoRestartAndReload() {
     const finalEl = document.getElementById('apply-final');
@@ -282,7 +326,7 @@
     let attempts = 0;
     while (Date.now() - startedAt < TIMEOUT_MS) {
       attempts++;
-      finalEl.innerHTML = '<span class="text-slate-600">⏳ 等服务回来…（' + attempts + ' 次）</span>';
+      finalEl.innerHTML = '<span class="text-slate-600">' + escapeHtml(fmt(BWC_I18N.restartWaitingService, { n: attempts })) + '</span>';
       await new Promise((r) => setTimeout(r, 1500));
       try {
         const resp = await fetch('/api/version', { cache: 'no-store', credentials: 'same-origin' });
@@ -290,23 +334,23 @@
         const data = await resp.json();
         const newV = String(data.version || '');
         if (newV && newV !== oldVersion) {
-          finalEl.innerHTML = '<span class="text-emerald-700">✓ 服务已重新上线，正在刷新…</span>';
+          finalEl.innerHTML = '<span class="text-emerald-700">' + escapeHtml(BWC_I18N.restartBackOnline) + '</span>';
           await new Promise((r) => setTimeout(r, 700));
           window.location.reload();
           return;
         }
       } catch (_e) {}
     }
-    finalEl.innerHTML = '<span class="text-amber-700">⚠️ 60 秒内没等到服务恢复，可能 pm2 没在前台 —— 请手动检查后再点「重启服务」。</span>';
+    finalEl.innerHTML = '<span class="text-amber-700">' + escapeHtml(BWC_I18N.restartTimeout) + '</span>';
   }
 
   checkBtn.addEventListener('click', async () => {
     checkBtn.disabled = true;
     const orig = checkBtn.innerHTML;
-    checkBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 检查中…';
+    checkBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.checkButtonRunning);
     try {
       const data = await postJson('/admin/update/check');
-      if (!data.ok) throw new Error(data.error || '检查失败');
+      if (!data.ok) throw new Error(data.error || BWC_I18N.checkFailed);
       const s = data.status;
       statusBox.classList.remove('hidden');
       const upBox = document.getElementById('status-up-to-date');
@@ -340,7 +384,7 @@
       }
       document.getElementById('dirty-line').classList.toggle('hidden', !s.hasLocalChanges);
     } catch (err) {
-      window.bwc && window.bwc.toast('检查失败：' + err.message, 'error');
+      window.bwc && window.bwc.toast(fmt(BWC_I18N.checkFailedToast, { error: err.message }), 'error');
     } finally {
       checkBtn.disabled = false;
       checkBtn.innerHTML = orig;
@@ -348,9 +392,9 @@
   });
 
   applyBtn.addEventListener('click', async () => {
-    if (!(await window.bwc.confirm({ title: '开始更新', message: '会用 git reset --hard 覆盖本地改动并自动重建。', danger: true, confirmLabel: '开始更新' }))) return;
+    if (!(await window.bwc.confirm({ title: BWC_I18N.applyConfirmTitle, message: BWC_I18N.applyConfirmMessage, danger: true, confirmLabel: BWC_I18N.applyConfirmOk }))) return;
     applyBtn.disabled = true;
-    applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 更新中…';
+    applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyButtonRunning);
     applyBox.classList.remove('hidden');
     const logsEl = document.getElementById('apply-logs');
     const finalEl = document.getElementById('apply-final');
@@ -363,7 +407,7 @@
     progressBar.classList.remove('bg-red-600');
     progressBar.classList.add('bg-brand-600');
     progressLabel.textContent = '0 / 0';
-    progressCurrent.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 准备开始…';
+    progressCurrent.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.progressPrep);
 
     function handleEvent(ev) {
       if (ev.type === 'start') {
@@ -379,22 +423,22 @@
             '<summary class="cursor-pointer flex items-center gap-2 px-3 py-2 text-sm">' +
               '<span class="' + (ev.ok ? 'text-emerald-700' : 'text-red-700') + ' font-semibold">' + (ev.ok ? '✓' : '✗') + '</span>' +
               '<span class="font-medium ' + (ev.ok ? 'text-emerald-900' : 'text-red-900') + '">' + escapeHtml(ev.step) + '</span>' +
-              '<span class="text-xs text-slate-400 ml-auto">点击展开输出</span>' +
+              '<span class="text-xs text-slate-400 ml-auto">' + escapeHtml(BWC_I18N.progressExpandHint) + '</span>' +
             '</summary>' +
-            '<pre class="px-3 pb-3 mt-1 text-xs whitespace-pre-wrap break-all text-slate-700 max-h-60 overflow-y-auto">' + escapeHtml(ev.output || '(no output)') + '</pre>' +
+            '<pre class="px-3 pb-3 mt-1 text-xs whitespace-pre-wrap break-all text-slate-700 max-h-60 overflow-y-auto">' + escapeHtml(ev.output || BWC_I18N.progressNoOutput) + '</pre>' +
           '</details>';
         logsEl.appendChild(li);
       } else if (ev.type === 'final') {
         progressBar.style.width = '100%';
         progressCurrent.innerHTML = '';
         if (ev.ok) {
-          finalEl.innerHTML = '<span class="text-emerald-700">✓ 更新成功 —— 正在自动重启服务，页面会在重启完成后自动刷新…</span>';
-          applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 重启中…';
+          finalEl.innerHTML = '<span class="text-emerald-700">' + escapeHtml(BWC_I18N.applySuccessFinal) + '</span>';
+          applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyRestarting);
           autoRestartAndReload();
         } else {
-          finalEl.innerHTML = '<span class="text-red-700">✗ 有步骤失败，详见上方日志。已停在失败前一步。</span>';
+          finalEl.innerHTML = '<span class="text-red-700">' + escapeHtml(BWC_I18N.applyFailedFinal) + '</span>';
           applyBtn.disabled = false;
-          applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 重试';
+          applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyRetry);
           progressBar.classList.remove('bg-brand-600');
           progressBar.classList.add('bg-red-600');
         }
@@ -431,22 +475,22 @@
         }
       }
     } catch (err) {
-      finalEl.innerHTML = '<span class="text-red-700">连接失败：' + escapeHtml(err.message) + '</span>';
+      finalEl.innerHTML = '<span class="text-red-700">' + escapeHtml(fmt(BWC_I18N.applyConnectFailed, { error: err.message })) + '</span>';
       applyBtn.disabled = false;
-      applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 重试';
+      applyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyRetry);
     }
   });
 
   restartBtn.addEventListener('click', async () => {
-    if (!(await window.bwc.confirm({ title: '重启服务', message: '当前所有请求会被打断（一般 1-3 秒恢复）。', danger: true, confirmLabel: '立即重启' }))) return;
+    if (!(await window.bwc.confirm({ title: BWC_I18N.restartConfirmTitle, message: BWC_I18N.restartConfirmMessage, danger: true, confirmLabel: BWC_I18N.restartConfirmOk }))) return;
     restartBtn.disabled = true;
     const orig = restartBtn.innerHTML;
-    restartBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> 重启中…';
+    restartBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyRestarting);
     try {
       await postJson('/admin/update/restart');
-      window.bwc && window.bwc.toast('已发送重启信号，1-3 秒后服务会重新上线', 'success');
+      window.bwc && window.bwc.toast(BWC_I18N.restartToastSuccess, 'success');
     } catch (err) {
-      window.bwc && window.bwc.toast('重启失败：' + err.message, 'error');
+      window.bwc && window.bwc.toast(fmt(BWC_I18N.restartToastFailed, { error: err.message }), 'error');
     }
     setTimeout(() => { restartBtn.disabled = false; restartBtn.innerHTML = orig; }, 3000);
   });

@@ -1,33 +1,33 @@
 <%- include('_nav') %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">第三方 API 集成</h1>
-<p class="text-sm text-slate-500 mb-6">开启后，管理员可以为某个用户账号签发长期 Bearer Token，交给外部平台（Zoom / Notion / n8n / 内部系统）调用 ByWave 的 REST API，读取或写入该用户的日程。建议同时启用 SSO，让外部平台和 ByWave 共享同一套用户身份。</p>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminApi.heading") %></h1>
+<p class="text-sm text-slate-500 mb-6"><%= t("adminApi.lead") %></p>
 
 <% if (!ssoEnabled && apiEnabled) { %>
   <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6">
-    <div class="text-sm font-medium text-amber-900">⚠️ 建议同时启用 SSO</div>
-    <div class="mt-1 text-sm text-amber-800">现在 API 已开但 SSO 没开。第三方平台拿到的是 ByWave 自维护的账号，无法跟用户在其他系统的身份对齐。<a href="/admin/sso" class="underline">去配置 SSO →</a></div>
+    <div class="text-sm font-medium text-amber-900"><%= t("adminApi.ssoSuggestion.title") %></div>
+    <div class="mt-1 text-sm text-amber-800"><%- t("adminApi.ssoSuggestion.body") %></div>
   </div>
 <% } %>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">主开关</h2>
-      <p class="text-sm text-slate-500 mt-1">关闭后任何已签发的 token 调用都会被拒（返回 401）。在 ByWave 网页里用 cookie 登录的用户不受影响。</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("adminApi.master.heading") %></h2>
+      <p class="text-sm text-slate-500 mt-1"><%= t("adminApi.master.desc") %></p>
     </div>
     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium <%= apiEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' %>">
       <span class="inline-block h-2 w-2 rounded-full <%= apiEnabled ? 'bg-emerald-500' : 'bg-slate-400' %>"></span>
-      <%= apiEnabled ? '已启用' : '已关闭' %>
+      <%= apiEnabled ? t("adminApi.status.enabled") : t("adminApi.status.disabled") %>
     </span>
   </div>
   <form method="post" action="/admin/api/toggle" class="flex items-center gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="inline-flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="enabled" <%= apiEnabled ? "checked" : "" %> class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">启用第三方 API</span>
+      <span class="text-sm text-slate-700"><%= t("adminApi.master.toggleLabel") %></span>
     </label>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
 </section>
 
@@ -35,120 +35,131 @@
 <section id="apps" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">原生 APP 同步</h2>
-      <p class="text-sm text-slate-500 mt-1">允许 iOS / Android / 桌面原生 APP 通过扫码绑定到服务器同步日历。关闭后：</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("adminApi.apps.heading") %></h2>
+      <p class="text-sm text-slate-500 mt-1"><%= t("adminApi.apps.desc") %></p>
       <ul class="mt-2 text-sm text-slate-500 list-disc list-inside space-y-0.5">
-        <li>已绑定的 APP 下次请求时立即失效（返回 403）</li>
-        <li>用户的「我的设备」页隐藏「绑定新设备」按钮</li>
-        <li>不影响网页 / PWA / CalDAV / 第三方 API</li>
+        <li><%= t("adminApi.apps.bullet1") %></li>
+        <li><%= t("adminApi.apps.bullet2") %></li>
+        <li><%= t("adminApi.apps.bullet3") %></li>
       </ul>
     </div>
     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium <%= appsEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' %>">
       <span class="inline-block h-2 w-2 rounded-full <%= appsEnabled ? 'bg-emerald-500' : 'bg-slate-400' %>"></span>
-      <%= appsEnabled ? '已启用' : '已关闭' %>
+      <%= appsEnabled ? t("adminApi.status.enabled") : t("adminApi.status.disabled") %>
     </span>
   </div>
   <form method="post" action="/admin/apps/toggle" class="flex items-center gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="inline-flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="enabled" <%= appsEnabled ? "checked" : "" %> class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">允许原生 APP 同步</span>
+      <span class="text-sm text-slate-700"><%= t("adminApi.apps.toggleLabel") %></span>
     </label>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
   <% if (appsEnabled && typeof deviceCount !== 'undefined') { %>
-    <p class="mt-3 text-xs text-slate-500">当前有 <strong class="text-slate-700"><%= deviceCount %></strong> 台 APP 已绑定。每个用户可在 <a href="/app/settings#devices" class="text-brand-700 hover:underline">设置 → 我的设备</a> 中查看自己的。</p>
+    <p class="mt-3 text-xs text-slate-500"><%- t("adminApi.apps.deviceCount", { count: deviceCount }) %></p>
   <% } %>
 </section>
 
 <section id="qr-login" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32">
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">网页扫码登录</h2>
-      <p class="text-sm text-slate-500 mt-1">在 /login 页面显示「扫码登录」标签 —— 用户手机 APP 扫一下，浏览器自动登录。关闭后：</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("adminApi.qrLogin.heading") %></h2>
+      <p class="text-sm text-slate-500 mt-1"><%= t("adminApi.qrLogin.desc") %></p>
       <ul class="mt-2 text-sm text-slate-500 list-disc list-inside space-y-0.5">
-        <li>/login 页面不再显示「扫码登录」标签</li>
-        <li>/api/v1/devices/web-pair-* 端点返回 403</li>
-        <li>不影响密码登录 / Passkey / SSO / 桌面端扫码绑定</li>
+        <li><%= t("adminApi.qrLogin.bullet1") %></li>
+        <li><%= t("adminApi.qrLogin.bullet2") %></li>
+        <li><%= t("adminApi.qrLogin.bullet3") %></li>
       </ul>
-      <p class="mt-2 text-xs text-slate-500">⚠️ 这个开关只控制网页扫码登录，跟上面的「原生 APP 同步」是独立的两个开关。</p>
+      <p class="mt-2 text-xs text-slate-500"><%= t("adminApi.qrLogin.independence") %></p>
     </div>
     <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium <%= qrLoginEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500' %>">
       <span class="inline-block h-2 w-2 rounded-full <%= qrLoginEnabled ? 'bg-emerald-500' : 'bg-slate-400' %>"></span>
-      <%= qrLoginEnabled ? '已启用' : '已关闭' %>
+      <%= qrLoginEnabled ? t("adminApi.status.enabled") : t("adminApi.status.disabled") %>
     </span>
   </div>
   <form method="post" action="/admin/qr-login/toggle" class="flex items-center gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="inline-flex items-center gap-2 cursor-pointer">
       <input type="checkbox" name="enabled" <%= qrLoginEnabled ? "checked" : "" %> class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">允许网页扫码登录</span>
+      <span class="text-sm text-slate-700"><%= t("adminApi.qrLogin.toggleLabel") %></span>
     </label>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
   <% if (!appsEnabled && qrLoginEnabled) { %>
-    <p class="mt-3 text-xs text-amber-700">⚠️ 上面的「原生 APP 同步」处于关闭状态，所以即使这里打开扫码登录也不能用 —— 手机 APP 无法授权（先开「原生 APP 同步」）。</p>
+    <p class="mt-3 text-xs text-amber-700"><%= t("adminApi.qrLogin.needsApps") %></p>
   <% } %>
 </section>
 
 <% if (issuedToken) { %>
   <section class="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-5 sm:p-6 mb-6">
-    <div class="text-sm font-medium text-emerald-900 mb-2">✓ 已生成「<%= issuedLabel %>」—— 仅显示一次</div>
+    <div class="text-sm font-medium text-emerald-900 mb-2"><%= t("adminApi.issued.heading", { label: issuedLabel }) %></div>
     <div class="flex items-center gap-2 mb-2">
       <code id="new-token" class="flex-1 block break-all rounded-md bg-white border border-emerald-300 px-3 py-2 text-sm font-mono text-slate-900"><%= issuedToken %></code>
-      <button type="button" data-copy-token class="rounded-md bg-white border border-emerald-300 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-100">复制</button>
+      <button type="button" data-copy-token class="rounded-md bg-white border border-emerald-300 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-100"><%= t("common.copy") %></button>
     </div>
-    <p class="text-xs text-emerald-800">立即粘贴到第三方平台的 API 配置里。关闭这个页面后再也看不到原文，只能撤销重发。</p>
+    <p class="text-xs text-emerald-800"><%= t("adminApi.issued.copyHint") %></p>
   </section>
+  <script type="application/json" id="bwc-api-i18n" nonce="<%= cspNonce %>"><%-
+  JSON.stringify({
+    copySuccess: t("common.copied"),
+    copyFailed: t("common.clipboardBlocked"),
+  }) %></script>
   <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
-    document.querySelector("[data-copy-token]")?.addEventListener("click", async () => {
-      const t = document.getElementById("new-token");
-      try { await navigator.clipboard.writeText(t.textContent.trim()); window.bwc && window.bwc.toast("已复制", "success"); }
-      catch { window.bwc && window.bwc.toast("浏览器拒绝了剪贴板访问，手动选中复制吧", "error"); }
-    });
+    (function(){
+      const BWC_I18N = (() => {
+        try { return JSON.parse(document.getElementById('bwc-api-i18n').textContent); }
+        catch { return {}; }
+      })();
+      document.querySelector("[data-copy-token]")?.addEventListener("click", async () => {
+        const el = document.getElementById("new-token");
+        try { await navigator.clipboard.writeText(el.textContent.trim()); window.bwc && window.bwc.toast(BWC_I18N.copySuccess, "success"); }
+        catch { window.bwc && window.bwc.toast(BWC_I18N.copyFailed, "error"); }
+      });
+    })();
   </script>
 <% } %>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">已签发的 Token</h2>
-  <p class="text-sm text-slate-500 mb-4">每条 token 都绑定一个用户账号，API 调用以该用户身份执行 —— 也就是看到的和能改的就是那个用户自己的日历。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminApi.tokens.heading") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminApi.tokens.lead") %></p>
 
   <% if (!tokens || tokens.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没签发任何 token</div>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500"><%= t("adminApi.tokens.empty") %></div>
   <% } else { %>
     <div class="overflow-x-auto -mx-5 sm:mx-0">
       <table class="min-w-full text-sm">
         <thead class="text-xs text-slate-400 uppercase">
           <tr class="border-b border-slate-100">
-            <th class="text-left font-medium py-2 px-5 sm:px-0 sm:pr-4">名称 / 前缀</th>
-            <th class="text-left font-medium py-2 pr-4">作为用户</th>
-            <th class="text-left font-medium py-2 pr-4">权限</th>
-            <th class="text-left font-medium py-2 pr-4">最近使用</th>
-            <th class="text-left font-medium py-2 pr-4">过期</th>
-            <th class="text-right font-medium py-2 px-5 sm:px-0">操作</th>
+            <th class="text-left font-medium py-2 px-5 sm:px-0 sm:pr-4"><%= t("adminApi.tokens.col.label") %></th>
+            <th class="text-left font-medium py-2 pr-4"><%= t("adminApi.tokens.col.asUser") %></th>
+            <th class="text-left font-medium py-2 pr-4"><%= t("adminApi.tokens.col.scope") %></th>
+            <th class="text-left font-medium py-2 pr-4"><%= t("adminApi.tokens.col.lastUsed") %></th>
+            <th class="text-left font-medium py-2 pr-4"><%= t("adminApi.tokens.col.expiry") %></th>
+            <th class="text-right font-medium py-2 px-5 sm:px-0"><%= t("adminApi.tokens.col.actions") %></th>
           </tr>
         </thead>
         <tbody>
-          <% tokens.forEach(function(t){ %>
+          <% tokens.forEach(function(tok){ %>
             <tr class="border-b border-slate-50">
               <td class="py-2 px-5 sm:px-0 sm:pr-4">
-                <div class="text-slate-900 font-medium"><%= t.label %></div>
-                <code class="text-xs text-slate-500 font-mono">bwc_<%= t.prefix %>_…</code>
+                <div class="text-slate-900 font-medium"><%= tok.label %></div>
+                <code class="text-xs text-slate-500 font-mono">bwc_<%= tok.prefix %>_…</code>
               </td>
-              <td class="py-2 pr-4 text-slate-700"><%= t.userEmail %></td>
+              <td class="py-2 pr-4 text-slate-700"><%= tok.userEmail %></td>
               <td class="py-2 pr-4">
-                <% if (t.scope === 'read') { %>
-                  <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">只读</span>
+                <% if (tok.scope === 'read') { %>
+                  <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"><%= t("adminApi.tokens.scope.read") %></span>
                 <% } else { %>
-                  <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">读写</span>
+                  <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminApi.tokens.scope.write") %></span>
                 <% } %>
               </td>
               <td class="py-2 pr-4 text-xs text-slate-500">
-                <% if (t.lastUsedAtLocal) { %>
-                  <%- t.lastUsedAtLocal %>
-                  <% if (t.lastUsedIp) { %><span class="text-slate-400 font-mono"> · <%= t.lastUsedIp %></span><% } %>
+                <% if (tok.lastUsedAtLocal) { %>
+                  <%- tok.lastUsedAtLocal %>
+                  <% if (tok.lastUsedIp) { %><span class="text-slate-400 font-mono"> · <%= tok.lastUsedIp %></span><% } %>
                 <% } else { %>
-                  <span class="text-slate-400">从未使用</span>
+                  <span class="text-slate-400"><%= t("adminApi.tokens.neverUsed") %></span>
                 <% } %>
               </td>
               <td class="py-2 pr-4 text-xs">
@@ -159,34 +170,34 @@
                   // disappear visually, but they're also flagged below with
                   // a faint rotation reminder.
                   let _expBadge = '';
-                  if (t.daysUntilExpiry === null) {
-                    _expBadge = '<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">永久</span>';
-                  } else if (t.daysUntilExpiry < 0) {
-                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">已过期 ' + Math.abs(t.daysUntilExpiry) + ' 天</span>';
-                  } else if (t.daysUntilExpiry <= 7) {
-                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">' + t.daysUntilExpiry + ' 天后过期</span>';
-                  } else if (t.daysUntilExpiry <= 30) {
-                    _expBadge = '<span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">' + t.daysUntilExpiry + ' 天后过期</span>';
+                  if (tok.daysUntilExpiry === null) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">' + t("adminApi.tokens.daysUntilExpiry.never") + '</span>';
+                  } else if (tok.daysUntilExpiry < 0) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">' + t("adminApi.tokens.daysUntilExpiry.expired", { n: Math.abs(tok.daysUntilExpiry) }) + '</span>';
+                  } else if (tok.daysUntilExpiry <= 7) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-red-700">' + t("adminApi.tokens.daysUntilExpiry.soon", { n: tok.daysUntilExpiry }) + '</span>';
+                  } else if (tok.daysUntilExpiry <= 30) {
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">' + t("adminApi.tokens.daysUntilExpiry.soon", { n: tok.daysUntilExpiry }) + '</span>';
                   } else {
-                    _expBadge = '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">' + t.daysUntilExpiry + ' 天后过期</span>';
+                    _expBadge = '<span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">' + t("adminApi.tokens.daysUntilExpiry.soon", { n: tok.daysUntilExpiry }) + '</span>';
                   }
                 %>
                 <%- _expBadge %>
-                <% if (t.expiresAtLocal) { %>
-                  <div class="text-xs text-slate-400 mt-0.5"><%- t.expiresAtLocal %></div>
+                <% if (tok.expiresAtLocal) { %>
+                  <div class="text-xs text-slate-400 mt-0.5"><%- tok.expiresAtLocal %></div>
                 <% } %>
               </td>
               <td class="py-2 px-5 sm:px-0 text-right">
-                <form method="post" action="/admin/api/tokens/<%= t.id %>/rotate" class="m-0 inline-block"
-                      data-confirm="轮换 <%= t.label %>？会签发一个新 token，旧 token 7 天内仍可用，方便外部系统迁移。" data-confirm-ok="轮换">
+                <form method="post" action="/admin/api/tokens/<%= tok.id %>/rotate" class="m-0 inline-block"
+                      data-confirm="<%= t("adminApi.tokens.rotate.confirm", { label: tok.label }) %>" data-confirm-ok="<%= t("adminApi.tokens.rotate.confirmOk") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                   <input type="hidden" name="graceDays" value="7" />
-                  <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 mr-2">轮换</button>
+                  <button type="submit" class="text-xs text-brand-600 hover:text-brand-700 mr-2"><%= t("adminApi.tokens.rotate.button") %></button>
                 </form>
-                <form method="post" action="/admin/api/tokens/<%= t.id %>/revoke" class="m-0 inline-block"
-                      data-confirm="撤销 <%= t.label %>？该 token 立即失效，外部系统会拿到 401。" data-confirm-danger="1" data-confirm-ok="撤销">
+                <form method="post" action="/admin/api/tokens/<%= tok.id %>/revoke" class="m-0 inline-block"
+                      data-confirm="<%= t("adminApi.tokens.revoke.confirm", { label: tok.label }) %>" data-confirm-danger="1" data-confirm-ok="<%= t("adminApi.tokens.revoke.confirmOk") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="text-xs text-red-600 hover:text-red-700">撤销</button>
+                  <button type="submit" class="text-xs text-red-600 hover:text-red-700"><%= t("adminApi.tokens.revoke.button") %></button>
                 </form>
               </td>
             </tr>
@@ -198,16 +209,16 @@
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-3">签发新 Token</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminApi.issue.heading") %></h2>
   <form method="post" action="/admin/api/tokens" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="text-sm sm:col-span-2">
-      <span class="block font-medium text-slate-700 mb-1">名称 <span class="text-xs text-slate-400">(给运维看的备注，比如 "Zoom 集成" / "n8n workflow #42")</span></span>
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminApi.issue.labelField") %> <span class="text-xs text-slate-400"><%= t("adminApi.issue.labelHint") %></span></span>
       <input type="text" name="label" required maxlength="80"
              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm">
-      <span class="block font-medium text-slate-700 mb-1">作为哪个用户</span>
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminApi.issue.userField") %></span>
       <select name="userId" required class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
         <% allUsers.forEach(function(u){ %>
           <option value="<%= u.id %>"><%= u.email %><%= u.displayName ? ' (' + u.displayName + ')' : '' %></option>
@@ -215,41 +226,41 @@
       </select>
     </label>
     <label class="text-sm">
-      <span class="block font-medium text-slate-700 mb-1">权限</span>
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminApi.issue.scopeField") %></span>
       <select name="scope" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
-        <option value="write" selected>读写（可以新增 / 修改 / 删除事件）</option>
-        <option value="read">只读（只能 GET）</option>
+        <option value="write" selected><%= t("adminApi.issue.scope.write") %></option>
+        <option value="read"><%= t("adminApi.issue.scope.read") %></option>
       </select>
     </label>
     <label class="text-sm sm:col-span-2">
-      <span class="block font-medium text-slate-700 mb-1">有效期（天）<span class="text-xs text-slate-400">0 = 永不过期</span></span>
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminApi.issue.expiryField") %> <span class="text-xs text-slate-400"><%= t("adminApi.issue.expiryHint") %></span></span>
       <input type="number" name="expiresInDays" value="0" min="0" max="3650"
              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <div class="sm:col-span-2 flex justify-end">
-      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700"<%= apiEnabled ? '' : ' disabled title="先在上面启用 API"' %>>
-        签发 Token
+      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700"<%= apiEnabled ? '' : ' disabled title="' + t("adminApi.issue.disabledTitle") + '"' %>>
+        <%= t("adminApi.issue.submit") %>
       </button>
     </div>
   </form>
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-3">API 使用示例</h2>
-  <p class="text-sm text-slate-500 mb-3">所有调用都带头：<code class="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-xs font-mono">Authorization: Bearer &lt;token&gt;</code></p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminApi.examples.heading") %></h2>
+  <p class="text-sm text-slate-500 mb-3"><%= t("adminApi.examples.headerHint") %> <code class="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-xs font-mono">Authorization: Bearer &lt;token&gt;</code></p>
   <div class="space-y-3 text-xs">
     <details>
-      <summary class="cursor-pointer font-medium text-slate-700">📋 列出用户的日历</summary>
+      <summary class="cursor-pointer font-medium text-slate-700"><%= t("adminApi.examples.listCalendars") %></summary>
       <pre class="mt-2 overflow-x-auto rounded bg-white border border-slate-200 p-3 font-mono">curl -H "Authorization: Bearer &lt;token&gt;" \
   <%= baseUrl %>/api/calendars</pre>
     </details>
     <details>
-      <summary class="cursor-pointer font-medium text-slate-700">📅 查询某日历的事件</summary>
+      <summary class="cursor-pointer font-medium text-slate-700"><%= t("adminApi.examples.queryEvents") %></summary>
       <pre class="mt-2 overflow-x-auto rounded bg-white border border-slate-200 p-3 font-mono">curl -H "Authorization: Bearer &lt;token&gt;" \
   "<%= baseUrl %>/api/events?from=2026-05-01T00:00:00Z&to=2026-06-01T00:00:00Z"</pre>
     </details>
     <details>
-      <summary class="cursor-pointer font-medium text-slate-700">➕ 新建事件</summary>
+      <summary class="cursor-pointer font-medium text-slate-700"><%= t("adminApi.examples.createEvent") %></summary>
       <pre class="mt-2 overflow-x-auto rounded bg-white border border-slate-200 p-3 font-mono">curl -X POST -H "Authorization: Bearer &lt;token&gt;" \
   -H "Content-Type: application/json" \
   -d '{
@@ -261,13 +272,13 @@
     "extra": { "attendees": ["alice@example.com", "bob@example.com"] }
   }' \
   <%= baseUrl %>/api/events</pre>
-      <p class="mt-1 text-slate-500">extra.attendees 里的邮箱会自动收到 .ics 邀请邮件。</p>
+      <p class="mt-1 text-slate-500"><%= t("adminApi.examples.createEventNote") %></p>
     </details>
     <details>
-      <summary class="cursor-pointer font-medium text-slate-700">✏️ 修改事件 / ❌ 删除事件</summary>
+      <summary class="cursor-pointer font-medium text-slate-700"><%= t("adminApi.examples.editDelete") %></summary>
       <pre class="mt-2 overflow-x-auto rounded bg-white border border-slate-200 p-3 font-mono">PATCH  <%= baseUrl %>/api/events/&lt;id&gt;
 DELETE <%= baseUrl %>/api/events/&lt;id&gt;</pre>
     </details>
   </div>
-  <p class="mt-4 text-xs text-slate-500">完整端点见仓库 README，或直接看 src/routes/{events,calendars}.ts。只读 token 在调用 POST / PATCH / DELETE 时会被拒（403 token_is_read_only）。</p>
+  <p class="mt-4 text-xs text-slate-500"><%= t("adminApi.examples.footer") %></p>
 </section>
