@@ -18,6 +18,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:migrate:prod": "node dist/scripts/migrate.js",
     "db:studio": "drizzle-kit studio",
+    "i18n:check": "tsx scripts/i18n-coverage.ts",
     "create-admin": "tsx scripts/create-admin.ts",
     "create-admin:prod": "node dist/scripts/create-admin.js",
     "release": "bash scripts/release.sh",

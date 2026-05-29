@@ -53,9 +53,30 @@ export function isValidSiteLocale(s: unknown): s is "auto" | LocaleCode {
 }
 
 /**
- * Translation dictionaries. The English dict (`en`) is the source of
- * truth — keys MUST exist there; other locales are allowed to omit
- * keys and fall back to English.
+ * Translation dictionaries. The English dict (`en`) is the SOURCE OF TRUTH:
+ * every key the app can ever ask for MUST exist here. Other locales are
+ * typed as `Partial<Record<TranslationKey, string>>`, which gives two
+ * compile-time guarantees that make adding languages safe:
+ *
+ *   1. Typo safety — a translator can only use keys that exist in `en`.
+ *      Write `"setttings.foo"` (typo) and tsc errors immediately, instead
+ *      of the bug silently shipping as an untranslated key.
+ *   2. Partial allowed — a locale may omit any key; `translate()` falls
+ *      back to `en`, then to the key itself. So a new language can land
+ *      incrementally (translate 100 keys today, the rest later) without
+ *      breaking the build or the page.
+ *
+ * Coverage (how many keys each locale has actually translated) is reported
+ * by `scripts/i18n-coverage.ts` — run `npm run i18n:check`. That's the tool
+ * a translator uses to see what's left.
+ *
+ * ── Adding a new language (e.g. Japanese "ja") ──────────────────────────
+ *   1. Add `{ code: "ja", label: "日本語", labelEn: "Japanese" }` to LOCALES.
+ *   2. Add `const ja: Partial<Record<TranslationKey, string>> = { … }` below
+ *      (copy zhCN as a starting skeleton, or start empty and fill in).
+ *   3. Add `ja` to the DICTIONARIES map at the bottom.
+ *   4. Run `npm run i18n:check` to see which keys are still missing; they'll
+ *      fall back to English until translated, so you can ship partial.
  *
  * Namespace conventions:
  *   common.*    — buttons, generic words used everywhere
@@ -63,10 +84,12 @@ export function isValidSiteLocale(s: unknown): s is "auto" | LocaleCode {
  *   login.*     — /login page
  *   register.*  — /register page
  *   settings.*  — /app/settings page
- *   admin.*     — /admin/* pages
+ *   admin*.*    — /admin/* pages
+ *   calendar.*  — main /app/calendars/:id view
+ *   booking.* / inviteAccept.* / embed.* / search.*  — public + app surfaces
  *   error.*     — error views
  */
-const en: Record<string, string> = {
+const en = {
   // common
   "common.save": "Save",
   "common.cancel": "Cancel",
@@ -705,9 +728,14 @@ const en: Record<string, string> = {
   "error.notFoundMessage": "What you're looking for doesn't exist or has been removed.",
   "error.internal": "Internal server error",
   "error.backHome": "Back to home",
-};
+} satisfies Record<string, string>;
 
-const zhCN: Record<string, string> = {
+/** Every translation key the app knows about, derived from the English
+ *  source dict. Non-English locales are typed against this so a typo'd
+ *  or stale key is a compile error rather than a silent fallback. */
+export type TranslationKey = keyof typeof en;
+
+const zhCN: Partial<Record<TranslationKey, string>> = {
   "common.save": "保存",
   "common.cancel": "取消",
   "common.delete": "删除",
@@ -1332,22 +1360,62 @@ const zhCN: Record<string, string> = {
   "error.backHome": "回到首页",
 };
 
-const DICTIONARIES: Record<LocaleCode, Record<string, string>> = {
+// `en` is the complete source of truth; every other locale is a partial
+// map keyed against TranslationKey (so missing keys fall back, typo'd keys
+// fail to compile). The index signature stays loose (`string` key) so the
+// runtime translate() can take any string without a cast.
+const DICTIONARIES: Record<LocaleCode, Partial<Record<TranslationKey, string>>> = {
   en,
   "zh-CN": zhCN,
 };
 
-/** Translate a single key under a given locale, with a graceful
- *  fallback chain. Optional `vars` substitutes `{name}` placeholders. */
+/** Translate a single key under a given locale, with a graceful fallback
+ *  chain: requested locale → English → the key string itself. Optional
+ *  `vars` substitutes `{name}` placeholders.
+ *
+ *  `key` is typed as a plain `string` (not `TranslationKey`) on purpose:
+ *  callers include EJS templates and JS bundles that pass dynamically-built
+ *  keys we can't statically verify. Unknown keys degrade to the readable,
+ *  greppable key text rather than throwing. The compile-time safety lives
+ *  on the dict definitions (each locale is `Partial<Record<TranslationKey,
+ *  string>>`), so a typo in a *dictionary* is caught even though a typo in
+ *  a *call site* is not. */
 export function translate(locale: LocaleCode, key: string, vars?: Record<string, string | number>): string {
   const dict = DICTIONARIES[locale] ?? DICTIONARIES.en;
-  let value = dict[key] ?? DICTIONARIES.en[key] ?? key;
+  const k = key as TranslationKey;
+  let value = dict[k] ?? DICTIONARIES.en[k] ?? key;
   if (vars) {
     for (const [name, v] of Object.entries(vars)) {
       value = value.replaceAll(`{${name}}`, String(v));
     }
   }
   return value;
+}
+
+/** Per-locale translation coverage, for `scripts/i18n-coverage.ts`. The
+ *  English dict is the source of truth (always 100%); every other locale
+ *  reports how many of those keys it actually translates and which are
+ *  still missing (those fall back to English at runtime). This is the tool
+ *  a translator runs when adding / topping up a language. */
+export function i18nCoverage(): Array<{
+  locale: LocaleCode;
+  label: string;
+  total: number;
+  translated: number;
+  missing: string[];
+}> {
+  const allKeys = Object.keys(en) as TranslationKey[];
+  return LOCALES.map((l) => {
+    const dict = DICTIONARIES[l.code] ?? {};
+    const missing = allKeys.filter((k) => dict[k] === undefined);
+    return {
+      locale: l.code,
+      label: l.label,
+      total: allKeys.length,
+      translated: allKeys.length - missing.length,
+      missing,
+    };
+  });
 }
 
 /** Cookie name for explicit user override. Lifetime: 1 year. Cleared
