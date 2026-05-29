@@ -2043,7 +2043,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
     const body = z.object({ locale: z.string().max(20).optional() }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/app/settings/appearance", { error: "无效的语言选项" });
+    if (!body.success) return redirectWith(reply, "/app/settings#language", { error: "无效的语言选项" });
     const raw = body.data.locale ?? "";
     if (raw === "") {
       // Empty selection → "Follow site default": wipe column + clear
@@ -2051,7 +2051,7 @@ export async function webRoutes(app: FastifyInstance) {
       await db.update(schema.users).set({ locale: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       reply.clearCookie(LOCALE_COOKIE, { path: "/" });
     } else {
-      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings/appearance", { error: "不支持的语言" });
+      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings#language", { error: "不支持的语言" });
       await db.update(schema.users).set({ locale: raw, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       // Also write the override cookie so the change takes effect on
       // THIS browser tab immediately (the redirect response carries it).
@@ -2060,7 +2060,7 @@ export async function webRoutes(app: FastifyInstance) {
         path: "/", maxAge: LOCALE_COOKIE_TTL_S,
       });
     }
-    return redirectWith(reply, "/app/settings/appearance#language", { success: "语言已更新" });
+    return redirectWith(reply, "/app/settings#language", { success: "语言已更新" });
   });
 
   app.post("/app/settings/delete-account", async (req, reply) => {
@@ -2069,10 +2069,28 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       password: z.string().min(1),
-      confirm: z.literal("删除我的账号"),
+      confirm: z.string().min(1).max(100),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "请输入密码并精确输入「删除我的账号」以确认" });
+      return redirectWith(reply, "/app/settings", { error: "请输入密码并输入确认短语" });
+    }
+    // The confirm phrase is i18n'd — the form shows
+    // settings.account.deleteConfirmFieldPlaceholder in the user's locale.
+    // We must accept whatever phrase that locale displays (not a hardcoded
+    // zh-CN string), otherwise non-Chinese users could never delete their
+    // account (they'd type the localized phrase the UI told them to, and a
+    // `z.literal("删除我的账号")` check would always reject it). Resolve the
+    // user's effective locale the same way the renderer does, then compare
+    // against that locale's phrase. We also still accept the zh-CN phrase as
+    // a back-compat fallback.
+    const { resolveLocaleFromRequest, translate } = await import("../lib/i18n.js");
+    const { getSettings: _getSettings } = await import("../lib/site_settings.js");
+    const _settings = await _getSettings();
+    const _locale = resolveLocaleFromRequest(req, user.locale, _settings.defaultLocale);
+    const _expected = translate(_locale, "settings.account.deleteConfirmFieldPlaceholder");
+    const _typed = body.data.confirm.trim();
+    if (_typed !== _expected && _typed !== "删除我的账号") {
+      return redirectWith(reply, "/app/settings", { error: `确认短语不正确，请精确输入「${_expected}」` });
     }
     // Verify password (SSO-only accounts can't self-delete this way; they
     // need to clear MFA / set a password first or contact admin).

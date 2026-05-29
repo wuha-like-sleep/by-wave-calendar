@@ -32,13 +32,25 @@ import type { FastifyRequest } from "fastify";
 // language. `npm run i18n:check` reports per-locale coverage.
 import { en, type TranslationKey } from "./i18n/locales/en.js";
 import { zhCN } from "./i18n/locales/zh-CN.js";
+import { zhTW } from "./i18n/locales/zh-TW.js";
+import { ja } from "./i18n/locales/ja.js";
+import { ko } from "./i18n/locales/ko.js";
+import { es } from "./i18n/locales/es.js";
+import { fr } from "./i18n/locales/fr.js";
+import { de } from "./i18n/locales/de.js";
 
 export type { TranslationKey };
 
 /** Supported locale tags. Order here = order shown in the picker. */
 export const LOCALES = [
   { code: "zh-CN", label: "简体中文", labelEn: "Chinese (Simplified)" },
+  { code: "zh-TW", label: "繁體中文", labelEn: "Chinese (Traditional)" },
   { code: "en", label: "English", labelEn: "English" },
+  { code: "ja", label: "日本語", labelEn: "Japanese" },
+  { code: "ko", label: "한국어", labelEn: "Korean" },
+  { code: "es", label: "Español", labelEn: "Spanish" },
+  { code: "fr", label: "Français", labelEn: "French" },
+  { code: "de", label: "Deutsch", labelEn: "German" },
 ] as const;
 
 export type LocaleCode = (typeof LOCALES)[number]["code"];
@@ -88,6 +100,12 @@ export function isValidSiteLocale(s: unknown): s is "auto" | LocaleCode {
 const DICTIONARIES: Record<LocaleCode, Partial<Record<TranslationKey, string>>> = {
   en,
   "zh-CN": zhCN,
+  "zh-TW": zhTW,
+  ja,
+  ko,
+  es,
+  fr,
+  de,
 };
 
 /** Translate a single key under a given locale, with a graceful fallback

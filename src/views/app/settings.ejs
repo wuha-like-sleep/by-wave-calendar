@@ -11,11 +11,14 @@
    // active tab's list get a `hidden` class — keeps all the JS in one
    // file (avoids splitting modal+script blocks that span sections).
    const sectionsByTab = {
-     account:       ['profile', 'danger'],
+     // Language lives under 账户/Account (it's a per-account preference).
+     // It sits between profile and the danger zone in the file, so it
+     // renders profile → language → danger on this tab.
+     account:       ['profile', 'language', 'danger'],
      security:      ['passkey', 'mfa', 'password'],
      devices:       ['devices', 'app-passwords', 'caldav-connect'],
      notifications: ['push'],
-     appearance:    ['language', 'theme'],
+     appearance:    ['theme'],
    };
    const visibleSections = sectionsByTab[tab] || sectionsByTab.account;
    function isVisible(id){ return visibleSections.indexOf(id) !== -1; }
