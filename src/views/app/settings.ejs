@@ -23,21 +23,21 @@
 <%- include('settings/_nav', { activeNav: '/app/settings' + (tab === 'account' ? '' : '/' + tab) }) %>
 
 <section id="profile" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('profile')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">资料</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("settings.account.profileTitle") %></h2>
   <dl class="space-y-3 text-sm">
-    <div class="flex justify-between"><dt class="text-slate-500">邮箱</dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
-    <div class="flex justify-between"><dt class="text-slate-500">昵称</dt><dd class="font-medium text-slate-900"><%= user.displayName || '—' %></dd></div>
-    <div class="flex justify-between"><dt class="text-slate-500">注册时间</dt><dd class="font-medium text-slate-900"><%- createdAtLocal %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500"><%= t("settings.account.emailLabel") %></dt><dd class="font-medium text-slate-900"><%= user.email %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500"><%= t("settings.account.displayNameLabel") %></dt><dd class="font-medium text-slate-900"><%= user.displayName || '—' %></dd></div>
+    <div class="flex justify-between"><dt class="text-slate-500"><%= t("settings.account.createdAtLabel") %></dt><dd class="font-medium text-slate-900"><%- createdAtLocal %></dd></div>
   </dl>
   <div class="mt-4 pt-4 border-t border-slate-100 flex flex-wrap gap-3 text-sm">
     <a href="/app/logins" class="text-brand-700 hover:text-brand-800 hover:underline inline-flex items-center gap-1">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-      登录历史
+      <%= t("settings.account.loginHistoryLink") %>
     </a>
     <% if (user.isAdmin) { %>
       <a href="/admin" class="text-slate-600 hover:text-slate-900 hover:underline inline-flex items-center gap-1">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z"/><path d="M3 12h18"/></svg>
-        管理后台
+        <%= t("settings.account.adminLink") %>
       </a>
     <% } %>
   </div>
@@ -47,17 +47,17 @@
   <div class="flex items-center justify-between mb-4">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">Passkey</h2>
-      <p class="text-sm text-slate-500">用指纹 / Face ID / 硬件密钥免密码登录，比密码 + MFA 更安全更快</p>
+      <p class="text-sm text-slate-500"><%= t("settings.security.passkeyDesc") %></p>
     </div>
     <button type="button" id="add-passkey"
             class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      添加 Passkey
+      <%= t("settings.security.passkeyAdd") %>
     </button>
   </div>
 
   <% if (passkeys.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没有 Passkey</div>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500"><%= t("settings.security.passkeyEmpty") %></div>
   <% } else { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100">
       <% passkeys.forEach(function(pk){ %>
@@ -65,12 +65,12 @@
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900"><%= pk.deviceName || 'Passkey' %></div>
             <div class="text-xs text-slate-500">
-              添加于 <%- pk.createdAtLocal %>
-              <% if (pk.lastUsedAtLocal) { %> · 最近使用 <%- pk.lastUsedAtLocal %><% } %>
+              <%= t("settings.security.passkeyAddedAt", { date: pk.createdAtLocal }) %>
+              <% if (pk.lastUsedAtLocal) { %> · <%= t("settings.security.passkeyLastUsed", { date: pk.lastUsedAtLocal }) %><% } %>
             </div>
           </div>
           <button type="button" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"
-                  data-delete-passkey="<%= pk.id %>">删除</button>
+                  data-delete-passkey="<%= pk.id %>"><%= t("common.delete") %></button>
         </li>
       <% }) %>
     </ul>
@@ -78,53 +78,96 @@
 </section>
 
 <section id="mfa" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('mfa')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-2">二次验证 (TOTP)</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-2"><%= t("settings.security.mfaTitle") %></h2>
   <% if (user.mfaEnabled) { %>
-    <p class="text-sm text-emerald-700 mb-4">✓ 二次验证已启用 —— 登录时需要输入认证器中的 6 位验证码</p>
+    <p class="text-sm text-emerald-700 mb-4"><%= t("settings.security.mfaEnabledNote") %></p>
     <details class="mb-4">
-      <summary class="cursor-pointer text-sm text-slate-700 hover:text-slate-900">重新生成备用码</summary>
-      <form method="post" action="/app/settings/mfa/regenerate-codes" class="mt-3" data-confirm="生成新备用码会让旧的失效，确定？" data-confirm-ok="重新生成">
+      <summary class="cursor-pointer text-sm text-slate-700 hover:text-slate-900"><%= t("settings.security.mfaRegenSummary") %></summary>
+      <form method="post" action="/app/settings/mfa/regenerate-codes" class="mt-3" data-confirm="<%= t('settings.security.mfaRegenConfirm') %>" data-confirm-ok="<%= t('settings.security.mfaRegenConfirmOk') %>">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">生成新备用码</button>
+        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("settings.security.mfaRegenButton") %></button>
       </form>
     </details>
     <details>
-      <summary class="cursor-pointer text-sm text-red-700 hover:text-red-900">关闭二次验证</summary>
+      <summary class="cursor-pointer text-sm text-red-700 hover:text-red-900"><%= t("settings.security.mfaDisableSummary") %></summary>
       <form method="post" action="/app/settings/mfa/disable" class="mt-3 flex gap-2">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" placeholder="输入当前 6 位验证码"
+        <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" placeholder="<%= t('settings.security.mfaCodePlaceholder') %>"
                inputmode="numeric"
                class="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">关闭 MFA</button>
+        <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"><%= t("settings.security.mfaDisableButton") %></button>
       </form>
     </details>
   <% } else { %>
-    <p class="text-sm text-slate-500 mb-4">没启用 —— 启用后登录需要密码 + 认证器 6 位码（除非用 Passkey）</p>
-    <a href="/app/settings/mfa/setup" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">启用 TOTP</a>
+    <p class="text-sm text-slate-500 mb-4"><%= t("settings.security.mfaDisabledNote") %></p>
+    <a href="/app/settings/mfa/setup" class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("settings.security.mfaSetupButton") %></a>
   <% } %>
 </section>
 
 <section id="push" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('push')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">浏览器推送通知</h2>
-  <p class="text-sm text-slate-500 mb-4">允许浏览器在事件到达提醒时间时显示桌面通知（手机锁屏也能弹）。无需邮件，但需要浏览器开启过这个站点的通知权限。</p>
-  <div id="push-status" class="text-sm text-slate-500 mb-3">检测中…</div>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("settings.notifications.pushTitle") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%= t("settings.notifications.pushDesc") %></p>
+  <div id="push-status" class="text-sm text-slate-500 mb-3"><%= t("settings.notifications.pushChecking") %></div>
   <div class="flex gap-2">
     <button type="button" id="btn-push-enable" class="hidden inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-      🔔 开启推送
+      <%= t("settings.notifications.pushEnable") %>
     </button>
     <button type="button" id="btn-push-disable" class="hidden inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-      关闭推送
+      <%= t("settings.notifications.pushDisable") %>
     </button>
     <button type="button" id="btn-push-test" class="hidden inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
-      发送测试通知
+      <%= t("settings.notifications.pushTest") %>
     </button>
   </div>
 </section>
+
+<script type="application/json" id="bwc-settings-i18n" nonce="<%= cspNonce %>"><%-
+JSON.stringify({
+  loading: t("settings.devices.loading"),
+  empty: t("settings.devices.empty"),
+  loadFailed: t("settings.devices.loadFailed"),
+  modalGenerating: t("settings.devices.modalGenerating"),
+  pairInitFailed: t("settings.devices.pairInitFailed"),
+  expiresIn: t("settings.devices.expiresIn"),
+  revokeConfirm: t("settings.devices.revokeConfirm"),
+  revokeConfirmOk: t("settings.devices.revokeConfirmOk"),
+  revokeSuccess: t("settings.devices.revokeSuccess"),
+  revokeFailed: t("settings.devices.revokeFailed"),
+  lastActive: t("settings.devices.lastActive"),
+  kindDesktop: t("settings.devices.kindDesktop"),
+  kindOther: t("settings.devices.kindOther"),
+  agoNever: t("settings.devices.agoNever"),
+  agoJustNow: t("settings.devices.agoJustNow"),
+  agoMinutes: t("settings.devices.agoMinutes"),
+  agoHours: t("settings.devices.agoHours"),
+  agoDays: t("settings.devices.agoDays"),
+  revoke: t("settings.devices.revoke"),
+  copySuccess: t("settings.devices.copySuccess"),
+  copyFallback: t("settings.devices.copyFallback"),
+  caldavCopied: t("settings.devices.caldavCopied"),
+  pushUnsupported: t("settings.notifications.pushUnsupported"),
+  pushDenied: t("settings.notifications.pushDenied"),
+  pushOn: t("settings.notifications.pushOn"),
+  pushOff: t("settings.notifications.pushOff"),
+  pushEnableFailed: t("settings.notifications.pushEnableFailed"),
+  passkeyAddPrompt: t("settings.security.passkeyAddPrompt"),
+  passkeyAddSuccess: t("settings.security.passkeyAddSuccess"),
+  passkeyAddFailed: t("settings.security.passkeyAddFailed"),
+  passkeyDeleteConfirm: t("settings.security.passkeyDeleteConfirm"),
+  passkeyDeleteConfirmOk: t("settings.security.passkeyDeleteConfirmOk"),
+  passkeyDeleted: t("settings.security.passkeyDeleted"),
+  passkeyDeleteFailed: t("settings.security.passkeyDeleteFailed"),
+}) %></script>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 // Web Push opt-in flow. Pure browser-side: gets the VAPID public key from
 // /api/push/public-key, calls PushManager.subscribe(), forwards the
 // resulting subscription to /api/push/subscribe.
+const BWC_I18N = (() => {
+  try { return JSON.parse(document.getElementById('bwc-settings-i18n').textContent); }
+  catch { return {}; }
+})();
+const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 (async function () {
   const status = document.getElementById("push-status");
   const enableBtn = document.getElementById("btn-push-enable");
@@ -133,11 +176,11 @@
   if (!status || !enableBtn || !disableBtn) return;
 
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    status.textContent = "你的浏览器不支持 Web Push（试试 Chrome / Edge / Safari 16+）";
+    status.textContent = BWC_I18N.pushUnsupported;
     return;
   }
   if (Notification.permission === "denied") {
-    status.textContent = "浏览器已拒绝通知权限。要重新开启，请在地址栏左侧的小锁图标里手动允许通知。";
+    status.textContent = BWC_I18N.pushDenied;
     return;
   }
 
@@ -153,12 +196,12 @@
 
   function updateUI() {
     if (sub) {
-      status.textContent = "✓ 已开启 —— 提醒会同时发到这台设备的浏览器通知";
+      status.textContent = BWC_I18N.pushOn;
       enableBtn.classList.add("hidden");
       disableBtn.classList.remove("hidden");
       testBtn.classList.remove("hidden");
     } else {
-      status.textContent = "还没开启";
+      status.textContent = BWC_I18N.pushOff;
       enableBtn.classList.remove("hidden");
       disableBtn.classList.add("hidden");
       testBtn.classList.add("hidden");
@@ -184,7 +227,7 @@
       });
       updateUI();
     } catch (e) {
-      status.textContent = "开启失败：" + (e && e.message ? e.message : e);
+      status.textContent = fmt(BWC_I18N.pushEnableFailed, { error: (e && e.message ? e.message : e) });
     }
     enableBtn.disabled = false;
   });
@@ -209,69 +252,73 @@
 <section id="caldav-connect" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('caldav-connect')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">CalDAV 同步</h2>
-      <p class="mt-1 text-sm text-slate-500">把 ByWave 日历直接接到 iPhone / Mac / Outlook / Thunderbird，双向同步事件 + 邀请 + RSVP。</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.devices.caldavTitle") %></h2>
+      <p class="mt-1 text-sm text-slate-500"><%= t("settings.devices.caldavDesc") %></p>
     </div>
   </div>
 
   <dl class="space-y-3">
     <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
-      <dt class="text-xs text-slate-500">服务器地址</dt>
+      <dt class="text-xs text-slate-500"><%= t("settings.devices.caldavServerLabel") %></dt>
       <dd><code id="caldav-url" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"><%= caldavBaseUrl %></code></dd>
       <button type="button" data-copy="caldav-url"
-              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">复制</button>
+              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50"><%= t("settings.devices.caldavCopy") %></button>
     </div>
     <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
-      <dt class="text-xs text-slate-500">用户名</dt>
+      <dt class="text-xs text-slate-500"><%= t("settings.devices.caldavUserLabel") %></dt>
       <dd><code id="caldav-user" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-sm font-mono text-slate-900"><%= user.email %></code></dd>
       <button type="button" data-copy="caldav-user"
-              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50">复制</button>
+              class="rounded-md border border-slate-300 bg-white px-2 py-2 text-xs text-slate-700 hover:bg-slate-50"><%= t("settings.devices.caldavCopy") %></button>
     </div>
     <div class="grid grid-cols-[6.5rem_1fr_auto] items-center gap-2">
-      <dt class="text-xs text-slate-500">密码</dt>
+      <dt class="text-xs text-slate-500"><%= t("settings.devices.caldavPasswordLabel") %></dt>
       <dd class="text-sm text-slate-700">
-        建议<a href="#app-passwords" class="text-brand-700 hover:underline">生成下方应用密码</a>，主账号密码也可（不推荐 — 开启 MFA 后必须用应用密码）
+        <%- t("settings.devices.caldavPasswordHint") %>
       </dd>
       <span></span>
     </div>
   </dl>
 
   <details class="mt-4 rounded-lg border border-slate-200 bg-slate-50">
-    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">iPhone / iPad 接入步骤</summary>
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900"><%= t("settings.devices.caldavIphoneSummary") %></summary>
     <ol class="list-decimal space-y-1 px-8 py-3 text-sm text-slate-700">
-      <li>设置 → 日历 → 帐户 → 添加帐户 → 其他 → 添加 CalDAV 帐户</li>
-      <li>服务器：粘贴上方「服务器地址」</li>
-      <li>用户名：邮箱；密码：应用专属密码</li>
-      <li>描述：随意，例如 "ByWave"；下一步保存</li>
-      <li>日历 App 打开「ByWave」分组即可看到所有日历；新建事件 + 邀请同事都会实时同步</li>
+      <li><%= t("settings.devices.caldavIphoneStep1") %></li>
+      <li><%= t("settings.devices.caldavIphoneStep2") %></li>
+      <li><%= t("settings.devices.caldavIphoneStep3") %></li>
+      <li><%= t("settings.devices.caldavIphoneStep4") %></li>
+      <li><%= t("settings.devices.caldavIphoneStep5") %></li>
     </ol>
   </details>
 
   <details class="mt-2 rounded-lg border border-slate-200 bg-slate-50">
-    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">macOS Calendar.app 接入步骤</summary>
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900"><%= t("settings.devices.caldavMacSummary") %></summary>
     <ol class="list-decimal space-y-1 px-8 py-3 text-sm text-slate-700">
-      <li>日历 → 设置 → 帐户 → 左下角 + → 选择「其他 CalDAV 帐户」</li>
-      <li>帐户类型：手动；用户名：邮箱；密码：应用密码；服务器地址：上方「服务器地址」</li>
-      <li>登录 → 选取要同步的日历 → 完成</li>
+      <li><%= t("settings.devices.caldavMacStep1") %></li>
+      <li><%= t("settings.devices.caldavMacStep2") %></li>
+      <li><%= t("settings.devices.caldavMacStep3") %></li>
     </ol>
   </details>
 
   <details class="mt-2 rounded-lg border border-slate-200 bg-slate-50">
-    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900">Thunderbird / DAVx⁵ / Outlook</summary>
+    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-slate-900"><%= t("settings.devices.caldavOtherSummary") %></summary>
     <ul class="list-disc space-y-1 px-8 py-3 text-sm text-slate-700">
-      <li><strong>Thunderbird</strong>：日历 → 新建日历 → 网络上 → CalDAV → 粘贴服务器地址</li>
-      <li><strong>Android (DAVx⁵)</strong>：添加帐户 → 用 URL 和用户名登录 → 服务器地址 + 邮箱 + 应用密码</li>
-      <li><strong>Outlook</strong>：原生不支持 CalDAV，可用 <code>Outlook CalDav Synchronizer</code> 插件或导出 .ics 订阅</li>
+      <li><%- t("settings.devices.caldavThunderbird") %></li>
+      <li><%- t("settings.devices.caldavAndroid") %></li>
+      <li><%- t("settings.devices.caldavOutlook") %></li>
     </ul>
   </details>
 
   <div class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-    💡 邀请功能在 CalDAV 上是双向的：你在手机上把同事的邮箱加进 ATTENDEE，对方会收到 ByWave 的邀请邮件；对方点击 Accept/Decline 后，下次手机同步就能看到对方的回执。
+    <%= t("settings.devices.caldavTip") %>
   </div>
 </section>
 
 <script nonce="<%= cspNonce %>">
   (function() {
+    const BWC_I18N = (() => {
+      try { return JSON.parse(document.getElementById('bwc-settings-i18n').textContent); }
+      catch { return {}; }
+    })();
     document.querySelectorAll("[data-copy]").forEach(function(btn) {
       btn.addEventListener("click", async function() {
         var id = btn.getAttribute("data-copy");
@@ -280,7 +327,7 @@
         try {
           await navigator.clipboard.writeText(target.textContent.trim());
           var old = btn.textContent;
-          btn.textContent = "已复制";
+          btn.textContent = BWC_I18N.caldavCopied;
           setTimeout(function() { btn.textContent = old; }, 1500);
         } catch (e) { /* clipboard blocked — leave UI silent */ }
       });
@@ -292,31 +339,31 @@
 <section id="devices" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('devices')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">我的设备</h2>
-      <p class="mt-1 text-sm text-slate-500">用 iOS / Android / 桌面原生 APP 同步日历的设备。Web 浏览器不在这里 —— 用「踢出登录」管理浏览器会话。</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.devices.heading") %></h2>
+      <p class="mt-1 text-sm text-slate-500"><%= t("settings.devices.desc") %></p>
     </div>
     <% if (appsEnabled) { %>
       <button type="button" id="btn-pair-device"
               class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-        绑定新设备
+        <%= t("settings.devices.pairNew") %>
       </button>
     <% } else { %>
-      <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">已停用</span>
+      <span class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500"><%= t("settings.devices.disabledBadge") %></span>
     <% } %>
   </div>
 
   <% if (!appsEnabled) { %>
     <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-      管理员已关闭 APP 同步功能。
+      <%= t("settings.devices.adminDisabled") %>
       <% if (user.isAdmin) { %>
-        前往 <a href="/admin/api#apps" class="text-brand-700 hover:underline font-medium">管理后台 → API</a> 重新启用。
+        <%- t("settings.devices.adminDisabledAdminHint") %>
       <% } else { %>
-        请联系管理员开启。
+        <%= t("settings.devices.adminDisabledUserHint") %>
       <% } %>
     </div>
   <% } else { %>
     <ul id="device-list" class="divide-y divide-slate-100 border-t border-slate-100">
-      <li class="py-6 text-center text-sm text-slate-400">加载中…</li>
+      <li class="py-6 text-center text-sm text-slate-400"><%= t("settings.devices.loading") %></li>
     </ul>
   <% } %>
 </section>
@@ -325,36 +372,41 @@
 <div id="modal-pair-device" class="hidden fixed inset-0 z-[70] bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-      <h3 class="text-base font-semibold text-slate-900">绑定新设备</h3>
-      <button type="button" id="btn-pair-close" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <h3 class="text-base font-semibold text-slate-900"><%= t("settings.devices.pairNew") %></h3>
+      <button type="button" id="btn-pair-close" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t('settings.devices.modalClose') %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="p-5">
-      <p class="text-sm text-slate-600 mb-4">在 iOS / Android APP 上选「扫码登录」，对准下面这张码就行：</p>
+      <p class="text-sm text-slate-600 mb-4"><%= t("settings.devices.modalIntro") %></p>
       <div id="pair-qr" class="mx-auto bg-white p-3 rounded-lg border border-slate-200 w-56 h-56 flex items-center justify-center">
-        <span class="text-xs text-slate-400">生成中…</span>
+        <span class="text-xs text-slate-400"><%= t("settings.devices.modalGenerating") %></span>
       </div>
       <details class="mt-4">
-        <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-700">手动输入也行（如果手机没相机权限）</summary>
+        <summary class="cursor-pointer text-xs text-slate-500 hover:text-slate-700"><%= t("settings.devices.modalManualSummary") %></summary>
         <div class="mt-2 grid grid-cols-2 gap-3 text-sm">
           <div>
-            <div class="text-xs text-slate-500 mb-1">服务器地址</div>
+            <div class="text-xs text-slate-500 mb-1"><%= t("settings.devices.modalServerLabel") %></div>
             <code id="pair-url" class="block break-all rounded-md bg-slate-50 border border-slate-200 px-3 py-2 font-mono text-xs"></code>
           </div>
           <div>
-            <div class="text-xs text-slate-500 mb-1">配对码</div>
+            <div class="text-xs text-slate-500 mb-1"><%= t("settings.devices.modalCodeLabel") %></div>
             <code id="pair-code" class="block rounded-md bg-slate-50 border border-slate-200 px-3 py-2 font-mono text-lg text-center"></code>
           </div>
         </div>
       </details>
-      <p id="pair-expires" class="mt-3 text-xs text-amber-700 text-center">5 分钟内有效</p>
+      <p id="pair-expires" class="mt-3 text-xs text-amber-700 text-center"><%= t("settings.devices.modalExpires") %></p>
     </div>
   </div>
 </div>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function() {
+  const BWC_I18N = (() => {
+    try { return JSON.parse(document.getElementById('bwc-settings-i18n').textContent); }
+    catch { return {}; }
+  })();
+  const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const csrf = '<%= csrfToken %>';
   const list = document.getElementById("device-list");
   const modal = document.getElementById("modal-pair-device");
@@ -370,18 +422,18 @@
   if (!list || !btnPair) return;
 
   function fmtAgo(iso) {
-    if (!iso) return "从未";
+    if (!iso) return BWC_I18N.agoNever;
     const diff = Date.now() - new Date(iso).getTime();
     const min = Math.floor(diff / 60000);
-    if (min < 1) return "刚刚";
-    if (min < 60) return min + " 分钟前";
+    if (min < 1) return BWC_I18N.agoJustNow;
+    if (min < 60) return fmt(BWC_I18N.agoMinutes, { n: min });
     const hr = Math.floor(min / 60);
-    if (hr < 24) return hr + " 小时前";
+    if (hr < 24) return fmt(BWC_I18N.agoHours, { n: hr });
     const d = Math.floor(hr / 24);
-    return d + " 天前";
+    return fmt(BWC_I18N.agoDays, { n: d });
   }
   function kindLabel(k) {
-    return ({ ios: "iOS", android: "Android", desktop: "桌面" }[k]) || "其他";
+    return ({ ios: "iOS", android: "Android", desktop: BWC_I18N.kindDesktop }[k]) || BWC_I18N.kindOther;
   }
 
   async function loadDevices() {
@@ -390,7 +442,7 @@
       const data = await resp.json();
       const devs = (data && (data.devices || data.data?.devices)) || [];
       if (devs.length === 0) {
-        list.innerHTML = '<li class="py-6 text-center text-sm text-slate-400">还没有绑定 APP。点右上「绑定新设备」加一个。</li>';
+        list.innerHTML = '<li class="py-6 text-center text-sm text-slate-400">' + escapeHtml(BWC_I18N.empty) + '</li>';
         return;
       }
       list.innerHTML = devs.map(function(d) {
@@ -398,19 +450,19 @@
           '<div class="min-w-0">' +
             '<div class="text-sm font-medium text-slate-900">' +
               escapeHtml(d.label) +
-              ' <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-normal text-slate-500">' + kindLabel(d.kind) + '</span>' +
+              ' <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-normal text-slate-500">' + escapeHtml(kindLabel(d.kind)) + '</span>' +
             '</div>' +
             '<div class="text-xs text-slate-500 mt-0.5">' +
-              '最近活动 ' + fmtAgo(d.lastSeenAt) + (d.lastSeenIp ? ' · ' + escapeHtml(d.lastSeenIp) : '') +
+              escapeHtml(BWC_I18N.lastActive) + ' ' + escapeHtml(fmtAgo(d.lastSeenAt)) + (d.lastSeenIp ? ' · ' + escapeHtml(d.lastSeenIp) : '') +
               (d.appVersion ? ' · v' + escapeHtml(d.appVersion) : '') +
             '</div>' +
           '</div>' +
-          '<button type="button" data-revoke="' + d.id + '" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">解绑</button>' +
+          '<button type="button" data-revoke="' + d.id + '" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">' + escapeHtml(BWC_I18N.revoke) + '</button>' +
         '</li>';
       }).join("");
     } catch (err) {
       console.error("load_devices", err);
-      list.innerHTML = '<li class="py-6 text-center text-sm text-red-500">加载失败 —— 刷新一下</li>';
+      list.innerHTML = '<li class="py-6 text-center text-sm text-red-500">' + escapeHtml(BWC_I18N.loadFailed) + '</li>';
     }
   }
   function escapeHtml(s) {
@@ -422,7 +474,7 @@
   list.addEventListener("click", async function(e) {
     const btn = e.target.closest("[data-revoke]");
     if (!btn) return;
-    if (!(await window.bwc.confirm({ message: "解绑这个设备？该 APP 会立即失去同步能力。", danger: true, confirmLabel: "解绑" }))) return;
+    if (!(await window.bwc.confirm({ message: BWC_I18N.revokeConfirm, danger: true, confirmLabel: BWC_I18N.revokeConfirmOk }))) return;
     try {
       const resp = await fetch("/api/v1/devices/" + encodeURIComponent(btn.dataset.revoke), {
         method: "DELETE",
@@ -430,14 +482,14 @@
         headers: { "X-CSRF-Token": csrf },
       });
       if (!resp.ok) throw new Error();
-      window.bwc.toast("已解绑", "success");
+      window.bwc.toast(BWC_I18N.revokeSuccess, "success");
       loadDevices();
-    } catch (_e) { window.bwc.toast("解绑失败", "error"); }
+    } catch (_e) { window.bwc.toast(BWC_I18N.revokeFailed, "error"); }
   });
 
   btnPair.addEventListener("click", async function() {
     modal.classList.remove("hidden");
-    qrBox.innerHTML = '<span class="text-xs text-slate-400">生成中…</span>';
+    qrBox.innerHTML = '<span class="text-xs text-slate-400">' + escapeHtml(BWC_I18N.modalGenerating) + '</span>';
     try {
       const resp = await fetch("/api/v1/devices/pair-init", {
         method: "POST",
@@ -457,13 +509,13 @@
         pairCode.textContent = p.code;
       } catch (_e) {}
       const expMs = new Date(d.expiresAt).getTime() - Date.now();
-      pairExp.textContent = "约 " + Math.max(0, Math.floor(expMs / 60000)) + " 分钟内有效，过期后重新点「绑定新设备」即可";
+      pairExp.textContent = fmt(BWC_I18N.expiresIn, { n: Math.max(0, Math.floor(expMs / 60000)) });
       // Refresh device list 30s later so the new device appears once the
       // app finishes the claim (we don't have push for this — polling is fine).
       setTimeout(loadDevices, 30000);
     } catch (err) {
       console.error("pair_init", err);
-      qrBox.innerHTML = '<span class="text-xs text-red-500">生成失败</span>';
+      qrBox.innerHTML = '<span class="text-xs text-red-500">' + escapeHtml(BWC_I18N.pairInitFailed) + '</span>';
     }
   });
   btnClose.addEventListener("click", function() { modal.classList.add("hidden"); loadDevices(); });
@@ -476,36 +528,36 @@
 <section id="app-passwords" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('app-passwords')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-4 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">CalDAV 应用专属密码 <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">可选</span></h2>
-      <p class="mt-1 text-sm text-slate-500">为手机 / 桌面日历客户端单独生成密码，避免在第三方 App 里填主账号密码。开启 MFA 后建议使用应用密码连接 CalDAV。</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.devices.appPasswordsTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.devices.appPasswordsOptional") %></span></h2>
+      <p class="mt-1 text-sm text-slate-500"><%= t("settings.devices.appPasswordsDesc") %></p>
     </div>
   </div>
 
   <% if (newAppPassword) { %>
     <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
       <div class="flex items-center justify-between gap-2 mb-2">
-        <div class="text-sm font-medium text-emerald-900">已生成「<%= newAppLabel || '新应用密码' %>」—— 只显示这一次</div>
+        <div class="text-sm font-medium text-emerald-900"><%= t("settings.devices.newAppPasswordHeading", { label: newAppLabel || t("settings.devices.newAppPasswordDefaultLabel") }) %></div>
         <button type="button" data-copy-app-pwd
-                class="rounded-md bg-white border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50">复制</button>
+                class="rounded-md bg-white border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"><%= t("settings.devices.copy") %></button>
       </div>
       <code id="new-app-password" class="block break-all rounded-md bg-white border border-emerald-200 px-3 py-2 text-sm font-mono text-slate-900"><%= newAppPassword %></code>
-      <p class="mt-2 text-xs text-emerald-800">把这串密码粘贴到 CalDAV 客户端的密码字段；用户名填邮箱即可。刷新页面后这段密码会消失，请立即保存。</p>
+      <p class="mt-2 text-xs text-emerald-800"><%= t("settings.devices.newAppPasswordHint") %></p>
     </div>
   <% } %>
 
   <form method="post" action="/app/settings/app-passwords" class="flex flex-col sm:flex-row gap-2 mb-4">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="text" name="label" required maxlength="60"
-           placeholder="设备标签（如：iPhone 日历 / Mac Calendar.app）"
+           placeholder="<%= t('settings.devices.appPasswordLabelPlaceholder') %>"
            class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     <button type="submit"
             class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-      生成新应用密码
+      <%= t("settings.devices.generateAppPassword") %>
     </button>
   </form>
 
   <% if (appPasswords.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没有应用密码 —— 主账号密码仍可用于 CalDAV 登录</div>
+    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500"><%= t("settings.devices.appPasswordsEmpty") %></div>
   <% } else { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100">
       <% appPasswords.forEach(function(ap){ %>
@@ -513,14 +565,14 @@
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900"><%= ap.label %></div>
             <div class="text-xs text-slate-500">
-              前缀 <code class="font-mono text-slate-700"><%= ap.prefix %></code> ·
-              创建于 <%- ap.createdAtLocal %>
-              <% if (ap.lastUsedAtLocal) { %> · 最近使用 <%- ap.lastUsedAtLocal %><% } else { %> · 从未使用<% } %>
+              <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= ap.prefix %></code> ·
+              <%= t("settings.devices.appPasswordCreated", { date: ap.createdAtLocal }) %>
+              <% if (ap.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsed", { date: ap.lastUsedAtLocal }) %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
             </div>
           </div>
-          <form method="post" action="/app/settings/app-passwords/<%= ap.id %>/revoke" data-confirm="撤销后这个应用密码立即失效，对应客户端需重新生成。" data-confirm-danger="1" data-confirm-ok="撤销">
+          <form method="post" action="/app/settings/app-passwords/<%= ap.id %>/revoke" data-confirm="<%= t('settings.devices.appPasswordRevokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.devices.appPasswordRevoke') %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1">撤销</button>
+            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.appPasswordRevoke") %></button>
           </form>
         </li>
       <% }) %>
@@ -531,7 +583,7 @@
 <section id="language" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('language')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.languageTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">仅你自己可见</span></h2>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.languageTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.appearance.languageScope") %></span></h2>
       <p class="mt-1 text-sm text-slate-500"><%= t("settings.languageDesc") %></p>
     </div>
   </div>
@@ -556,14 +608,14 @@
 <section id="theme" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('theme')) { %> style="display:none"<% } %>>
   <div class="flex items-start justify-between gap-3 mb-3">
     <div>
-      <h2 class="text-lg font-semibold text-slate-900">外观 <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">仅你自己可见</span></h2>
-      <p class="mt-1 text-sm text-slate-500">为你自己选个色系和密度，覆盖站点默认。不填则跟随管理员的站点设置。</p>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.appearance.themeTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.appearance.themeScope") %></span></h2>
+      <p class="mt-1 text-sm text-slate-500"><%= t("settings.appearance.themeDesc") %></p>
     </div>
     <% if (userPalette || userDensity) { %>
       <form method="post" action="/app/settings/theme" class="m-0">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="hidden" name="reset" value="1" />
-        <button type="submit" class="text-xs text-slate-500 hover:text-slate-700 underline">恢复站点默认</button>
+        <button type="submit" class="text-xs text-slate-500 hover:text-slate-700 underline"><%= t("settings.appearance.themeResetSite") %></button>
       </form>
     <% } %>
   </div>
@@ -572,16 +624,16 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
 
     <div>
-      <label class="block text-sm font-medium text-slate-700 mb-2">主题色（站点默认：<span class="font-mono"><%= sitePalette %></span>）</label>
+      <label class="block text-sm font-medium text-slate-700 mb-2"><%- t("settings.appearance.paletteLabel", { palette: sitePalette }) %></label>
       <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-2">
         <% const palettes = [
-          { id: 'indigo',  name: '靛蓝',   c1: '#a5b4fc', c2: '#6366f1', c3: '#4338ca' },
-          { id: 'emerald', name: '翠绿',   c1: '#6ee7b7', c2: '#10b981', c3: '#047857' },
-          { id: 'rose',    name: '玫瑰',   c1: '#fda4af', c2: '#f43f5e', c3: '#be123c' },
-          { id: 'sky',     name: '天蓝',   c1: '#7dd3fc', c2: '#0ea5e9', c3: '#0369a1' },
-          { id: 'amber',   name: '琥珀',   c1: '#fcd34d', c2: '#f59e0b', c3: '#b45309' },
-          { id: 'violet',  name: '紫罗兰', c1: '#c4b5fd', c2: '#8b5cf6', c3: '#6d28d9' },
-          { id: 'slate',   name: '石板灰', c1: '#cbd5e1', c2: '#64748b', c3: '#334155' },
+          { id: 'indigo',  nameKey: 'settings.appearance.paletteIndigo',  c1: '#a5b4fc', c2: '#6366f1', c3: '#4338ca' },
+          { id: 'emerald', nameKey: 'settings.appearance.paletteEmerald', c1: '#6ee7b7', c2: '#10b981', c3: '#047857' },
+          { id: 'rose',    nameKey: 'settings.appearance.paletteRose',    c1: '#fda4af', c2: '#f43f5e', c3: '#be123c' },
+          { id: 'sky',     nameKey: 'settings.appearance.paletteSky',     c1: '#7dd3fc', c2: '#0ea5e9', c3: '#0369a1' },
+          { id: 'amber',   nameKey: 'settings.appearance.paletteAmber',   c1: '#fcd34d', c2: '#f59e0b', c3: '#b45309' },
+          { id: 'violet',  nameKey: 'settings.appearance.paletteViolet',  c1: '#c4b5fd', c2: '#8b5cf6', c3: '#6d28d9' },
+          { id: 'slate',   nameKey: 'settings.appearance.paletteSlate',   c1: '#cbd5e1', c2: '#64748b', c3: '#334155' },
         ]; palettes.forEach(function(p){ %>
           <label class="user-palette-card cursor-pointer rounded-xl border-2 p-2 transition <%= userPalette === p.id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
             <input type="radio" name="palette" value="<%= p.id %>" <%= userPalette === p.id ? 'checked' : '' %> class="sr-only" />
@@ -590,74 +642,74 @@
               <span class="block h-4 w-4 rounded" style="background: <%= p.c2 %>"></span>
               <span class="block h-4 w-4 rounded" style="background: <%= p.c3 %>"></span>
             </div>
-            <div class="text-xs font-medium text-slate-900"><%= p.name %></div>
+            <div class="text-xs font-medium text-slate-900"><%= t(p.nameKey) %></div>
           </label>
         <% }) %>
       </div>
-      <p class="mt-1 text-xs text-slate-400">不选 = 跟随站点设置</p>
+      <p class="mt-1 text-xs text-slate-400"><%= t("settings.appearance.paletteNoneHint") %></p>
     </div>
 
     <div>
-      <label class="block text-sm font-medium text-slate-700 mb-2">密度（站点默认：<span class="font-mono"><%= siteDensity %></span>）</label>
+      <label class="block text-sm font-medium text-slate-700 mb-2"><%- t("settings.appearance.densityLabel", { density: siteDensity }) %></label>
       <div class="grid grid-cols-2 gap-2 max-w-md">
         <label class="cursor-pointer rounded-xl border-2 p-3 transition <%= userDensity === 'comfortable' ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
           <input type="radio" name="density" value="comfortable" <%= userDensity === 'comfortable' ? 'checked' : '' %> class="sr-only" />
-          <div class="text-sm font-medium text-slate-900">舒适</div>
-          <div class="text-xs text-slate-500 mt-0.5">默认间距</div>
+          <div class="text-sm font-medium text-slate-900"><%= t("settings.appearance.densityComfortable") %></div>
+          <div class="text-xs text-slate-500 mt-0.5"><%= t("settings.appearance.densityComfortableHint") %></div>
         </label>
         <label class="cursor-pointer rounded-xl border-2 p-3 transition <%= userDensity === 'compact' ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
           <input type="radio" name="density" value="compact" <%= userDensity === 'compact' ? 'checked' : '' %> class="sr-only" />
-          <div class="text-sm font-medium text-slate-900">紧凑</div>
-          <div class="text-xs text-slate-500 mt-0.5">一屏多塞内容</div>
+          <div class="text-sm font-medium text-slate-900"><%= t("settings.appearance.densityCompact") %></div>
+          <div class="text-xs text-slate-500 mt-0.5"><%= t("settings.appearance.densityCompactHint") %></div>
         </label>
       </div>
     </div>
 
     <div class="pt-2 border-t border-slate-100">
-      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存外观</button>
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("settings.appearance.saveTheme") %></button>
     </div>
   </form>
 </section>
 
 <section id="password" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('password')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">修改密码</h2>
-  <p class="text-xs text-slate-500 mb-3">修改后所有设备的登录会话都会失效，需要重新登录</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("settings.security.passwordTitle") %></h2>
+  <p class="text-xs text-slate-500 mb-3"><%= t("settings.security.passwordDesc") %></p>
   <form method="post" action="/app/settings/password" class="space-y-3 max-w-md">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <div>
-      <label class="block text-sm font-medium text-slate-700">当前密码</label>
+      <label class="block text-sm font-medium text-slate-700"><%= t("settings.security.currentPasswordLabel") %></label>
       <input type="password" name="currentPassword" required autocomplete="current-password"
              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div>
-      <label class="block text-sm font-medium text-slate-700">新密码</label>
+      <label class="block text-sm font-medium text-slate-700"><%= t("settings.security.newPasswordLabel") %></label>
       <input type="password" name="newPassword" required minlength="8" autocomplete="new-password"
              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">更新密码</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("settings.security.updatePassword") %></button>
   </form>
 </section>
 
 <section id="danger" class="rounded-2xl border-2 border-red-200 bg-red-50/40 p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('danger')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-red-900 mb-2">⚠️ 删除账号</h2>
-  <p class="text-sm text-red-800 mb-4">永久删除你的账号 —— 所有日历、事件、订阅、Passkey、API token、登录历史<strong>立即</strong>从数据库消失，无法恢复。其他人参加过你建的活动的邀请记录也会一起删除。</p>
+  <h2 class="text-lg font-semibold text-red-900 mb-2"><%= t("settings.account.deleteTitle") %></h2>
+  <p class="text-sm text-red-800 mb-4"><%- t("settings.account.deleteDesc") %></p>
   <details>
-    <summary class="cursor-pointer text-sm font-medium text-red-700 hover:text-red-800">我了解风险，继续删除</summary>
+    <summary class="cursor-pointer text-sm font-medium text-red-700 hover:text-red-800"><%= t("settings.account.deleteSummary") %></summary>
     <form method="post" action="/app/settings/delete-account" class="mt-3 space-y-3 max-w-md"
-          data-confirm="最终确认：账号永久删除，不可恢复。继续？" data-confirm-danger="1" data-confirm-ok="永久删除" data-confirm-title="删除账号">
+          data-confirm="<%= t('settings.account.deleteConfirmMessage') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.account.deleteConfirmOk') %>" data-confirm-title="<%= t('settings.account.deleteConfirmTitle') %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div>
-        <label class="block text-xs font-medium text-red-900 mb-1">当前密码</label>
+        <label class="block text-xs font-medium text-red-900 mb-1"><%= t("settings.account.deletePasswordLabel") %></label>
         <input type="password" name="password" required autocomplete="current-password"
                class="block w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100" />
       </div>
       <div>
-        <label class="block text-xs font-medium text-red-900 mb-1">输入「删除我的账号」以确认</label>
-        <input type="text" name="confirm" required placeholder="删除我的账号"
+        <label class="block text-xs font-medium text-red-900 mb-1"><%= t("settings.account.deleteConfirmFieldLabel") %></label>
+        <input type="text" name="confirm" required placeholder="<%= t('settings.account.deleteConfirmFieldPlaceholder') %>"
                class="block w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-mono focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-100" />
       </div>
       <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-        永久删除我的账号
+        <%= t("settings.account.deleteFinalButton") %>
       </button>
     </form>
   </details>
@@ -690,11 +742,16 @@
   }
 })();
 (function(){
+  const BWC_I18N = (() => {
+    try { return JSON.parse(document.getElementById('bwc-settings-i18n').textContent); }
+    catch { return {}; }
+  })();
+  const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
   document.getElementById("add-passkey")?.addEventListener("click", async () => {
     try {
-      const name = prompt("给这把 Passkey 起个名字（比如 Mac TouchID / iPhone）", "");
+      const name = prompt(BWC_I18N.passkeyAddPrompt, "");
       const opts = await (await fetch("/webauthn/register/options", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
@@ -710,11 +767,11 @@
         body: JSON.stringify({ response: att, deviceName: name || undefined })
       })).json();
       if (!verify.ok) throw new Error(verify.error || "verify_failed");
-      window.bwc.toast("Passkey 添加成功", "success");
+      window.bwc.toast(BWC_I18N.passkeyAddSuccess, "success");
       setTimeout(() => window.location.reload(), 500);
     } catch (err) {
       console.error(err);
-      window.bwc.toast("添加失败：" + (err.message || err), "error");
+      window.bwc.toast(fmt(BWC_I18N.passkeyAddFailed, { error: (err.message || err) }), "error");
     }
   });
 
@@ -723,19 +780,19 @@
     if (!el) return;
     try {
       await navigator.clipboard.writeText(el.textContent.trim());
-      window.bwc.toast("已复制到剪贴板", "success");
+      window.bwc.toast(BWC_I18N.copySuccess, "success");
     } catch {
       const r = document.createRange();
       r.selectNode(el);
       window.getSelection().removeAllRanges();
       window.getSelection().addRange(r);
-      window.bwc.toast("已选中，按 Cmd/Ctrl+C 复制", "info");
+      window.bwc.toast(BWC_I18N.copyFallback, "info");
     }
   });
 
   document.querySelectorAll("[data-delete-passkey]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      if (!(await window.bwc.confirm({ message: "确定删除这把 Passkey？", danger: true, confirmLabel: "删除" }))) return;
+      if (!(await window.bwc.confirm({ message: BWC_I18N.passkeyDeleteConfirm, danger: true, confirmLabel: BWC_I18N.passkeyDeleteConfirmOk }))) return;
       const id = btn.getAttribute("data-delete-passkey");
       const resp = await fetch("/webauthn/credentials/" + id + "/delete", {
         method: "POST",
@@ -743,10 +800,10 @@
         credentials: "same-origin"
       });
       if (resp.ok) {
-        window.bwc.toast("已删除", "success");
+        window.bwc.toast(BWC_I18N.passkeyDeleted, "success");
         setTimeout(() => window.location.reload(), 400);
       } else {
-        window.bwc.toast("删除失败", "error");
+        window.bwc.toast(BWC_I18N.passkeyDeleteFailed, "error");
       }
     });
   });
