@@ -47,6 +47,7 @@
     "fastify": "^5.1.0",
     "htmx.org": "^2.0.10",
     "ical-generator": "^7.2.0",
+    "jose": "^6.2.3",
     "nanoid": "^5.0.9",
     "nodemailer": "^8.0.7",
     "otplib": "^13.4.0",

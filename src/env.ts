@@ -25,6 +25,15 @@ const schema = z.object({
   APNS_BUNDLE_ID: z.string().optional(),
   APNS_PRODUCTION: boolFlag.default(false),
 
+  // Sign in with Apple (#67). Comma-separated list of accepted `aud`
+  // values for the Apple identity token. For the native iOS app this is
+  // the app's BUNDLE ID (e.g. cn.bywave.calendar); for web SIWA it's the
+  // Service ID. List both if you support both. When EMPTY, the server's
+  // /api/v1/auth/apple endpoint refuses all requests (feature off) — set
+  // this only after configuring "Sign in with Apple" in Apple Developer.
+  // Falls back to APNS_BUNDLE_ID if that's set and this isn't.
+  SIWA_CLIENT_IDS: z.string().optional(),
+
   // PG connection pool max. Default 20 covers a typical 1-process pm2
   // deployment: reminders cron + per-request connections + CalDAV burst
   // syncs can otherwise queue behind the prior 10-connection limit and

@@ -414,6 +414,144 @@ export async function deviceRoutes(app: FastifyInstance) {
     });
   });
 
+  // -------- Sign in with Apple (#67) --------
+  // The native iOS app authorizes via ASAuthorizationController, gets an
+  // Apple-signed identityToken (RS256 JWT), and POSTs it here. We verify
+  // that token against Apple's JWKS (never trusting any app-supplied
+  // identity field), then link/create the user and mint device tokens —
+  // exactly like /auth/login-password, just with Apple as the auth proof.
+  //
+  // Linking rules (in priority order):
+  //   1. By apple_sub — the stable, primary key for "this Apple account".
+  //   2. By email — links an existing email/password account to Apple on
+  //      first SIWA login (so a user who already had a password account
+  //      can start using SIWA without creating a duplicate). Only when
+  //      Apple says the email is verified AND it's not a private-relay
+  //      proxy (a relay address could belong to anyone's hidden alias).
+  //   3. Otherwise create a fresh passwordless account.
+  app.post("/auth/apple", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
+    if (!(await ensureAppsEnabled(reply, req))) return;
+    const { appleSignInConfigured, verifyAppleIdentityToken, AppleVerifyError } =
+      await import("../lib/apple_signin.js");
+    if (!appleSignInConfigured()) {
+      return reply.code(503).send({ error: "apple_signin_not_configured" });
+    }
+    const body = z.object({
+      identityToken: z.string().min(1).max(8192),
+      label: z.string().min(1).max(60),
+      kind: z.enum(["ios", "android", "desktop", "other"]).default("ios"),
+      appVersion: z.string().max(40).optional(),
+      clientDeviceId: z.string().min(8).max(64).optional(),
+      // Apple hands the display name to the app ONLY on the very first
+      // authorization; the app forwards it here so we can populate it for
+      // a brand-new account. We treat it as untrusted decoration (NOT
+      // identity) — the verified token is the source of truth for sub/email.
+      fullName: z.string().max(100).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+
+    let claims;
+    try {
+      claims = await verifyAppleIdentityToken(body.data.identityToken);
+    } catch (err) {
+      if (err instanceof AppleVerifyError) {
+        req.log.warn({ code: err.code }, "apple_signin_verify_failed");
+        return reply.code(401).send({ error: "apple_token_invalid", code: err.code });
+      }
+      throw err;
+    }
+
+    // 1) Link by apple_sub (the durable key).
+    let [user] = await db.select().from(schema.users).where(eq(schema.users.appleSub, claims.sub)).limit(1);
+
+    // 2) Else link an existing account by verified, non-relay email.
+    if (!user && claims.email && claims.emailVerified && !claims.isPrivateRelay) {
+      const [byEmail] = await db.select().from(schema.users).where(eq(schema.users.email, claims.email)).limit(1);
+      if (byEmail) {
+        await db.update(schema.users)
+          .set({ appleSub: claims.sub, emailVerified: true, updatedAt: new Date() })
+          .where(eq(schema.users.id, byEmail.id));
+        user = { ...byEmail, appleSub: claims.sub, emailVerified: true } as schema.User;
+      }
+    }
+
+    // 3) Else create a fresh passwordless account.
+    if (!user) {
+      // Apple may withhold email on re-auth, but on FIRST authorization it's
+      // always present. If somehow absent (edge: user revoked + the token
+      // omits it on a first-seen sub), synthesize a stable placeholder from
+      // the sub so the notNull email column is satisfied; the user can set a
+      // real email later in settings.
+      const email = claims.email || `${claims.sub.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}@appleid.local`;
+      // Guard against a race / duplicate email: if that email already exists
+      // (without an apple_sub — otherwise step 1 would've matched), link it.
+      const [emailClash] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+      if (emailClash) {
+        await db.update(schema.users)
+          .set({ appleSub: claims.sub, updatedAt: new Date() })
+          .where(eq(schema.users.id, emailClash.id));
+        user = { ...emailClash, appleSub: claims.sub } as schema.User;
+      } else {
+        const { hashPassword } = await import("../lib/password.js");
+        const { randomBytes } = await import("node:crypto");
+        // Passwordless account: store a valid-but-unguessable bcrypt hash so
+        // the notNull column is satisfied and no password compare can ever
+        // succeed against it (same trick as SSO accounts).
+        const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
+        const [created] = await db.insert(schema.users).values({
+          email,
+          emailVerified: claims.emailVerified,
+          passwordHash: stubPassword,
+          displayName: body.data.fullName?.trim() || null,
+          appleSub: claims.sub,
+        }).returning();
+        if (!created) return reply.code(500).send({ error: "account_create_failed" });
+        user = created;
+        // Seed a default calendar so the new user isn't staring at nothing.
+        await db.insert(schema.calendars).values({
+          ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
+        });
+      }
+    }
+
+    if (!userIsActive(user)) {
+      return reply.code(403).send({ error: "account_disabled" });
+    }
+
+    // Mint device tokens — identical to /auth/login-password's happy path.
+    const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+    const refresh = await issueRefreshToken();
+    const { upsertDeviceForUser } = await import("../lib/devices.js");
+    const device = await upsertDeviceForUser({
+      userId: user.id,
+      label: body.data.label,
+      kind: body.data.kind,
+      appVersion: body.data.appVersion ?? null,
+      clientDeviceId: body.data.clientDeviceId ?? null,
+      refreshHash: refresh.hash,
+      refreshPrefix: refresh.prefix,
+      ip: req.ip,
+      userAgent: ua,
+    });
+    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    const access = signAccessToken(user.id, device.id);
+    void (async () => {
+      try {
+        const { recordLoginEvent } = await import("../lib/login_history.js");
+        await recordLoginEvent(req, user.id, "apple");
+      } catch (err) { req.log.warn({ err }, "login_event_failed"); }
+    })();
+    return reply.send({
+      accessToken: access.token,
+      accessTokenExpiresAt: access.expiresAt.toISOString(),
+      refreshToken: refresh.plain,
+      deviceId: device.id,
+      userId: user.id,
+      userEmail: user.email,
+      userName: user.displayName,
+    });
+  });
+
   // -------- refresh access token --------
   // Phone hits this on 401 or when its cached access token is near expiry.
   app.post("/auth/refresh", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {

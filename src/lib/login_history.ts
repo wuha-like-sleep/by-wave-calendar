@@ -2,7 +2,7 @@ import type { FastifyRequest } from "fastify";
 import { desc, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 
-export type LoginMethod = "password" | "passkey" | "mfa" | "sso" | "qr";
+export type LoginMethod = "password" | "passkey" | "mfa" | "sso" | "qr" | "apple";
 
 export async function recordLoginEvent(
   req: FastifyRequest,

@@ -35,6 +35,12 @@ export const users = pgTable("users", {
   // Set on first SSO sign-in (and any subsequent SSO login if previously null).
   // Lets the user-management page show "通过 X 登录"; doesn't restrict other paths.
   ssoProviderSlug: text("sso_provider_slug"),
+  // Apple "sub" (stable per-user opaque id) from Sign in with Apple (#67).
+  // Set on first SIWA login; used to re-link the same Apple account on
+  // subsequent logins even if the user hid their email (Apple private relay
+  // can rotate the email but `sub` is stable). Unique so two accounts can't
+  // claim the same Apple identity. NULL for non-Apple accounts.
+  appleSub: text("apple_sub"),
   // Admin can flip this to suspend an account without deleting it (login is
   // rejected with a friendly "账号已停用" message until the admin re-enables).
   disabledAt: timestamp("disabled_at", { withTimezone: true }),
@@ -42,6 +48,10 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUnique: uniqueIndex("users_email_unique").on(t.email),
+  // Partial unique index: at most one account per Apple `sub`. Postgres
+  // treats NULLs as distinct so the many non-Apple accounts (apple_sub
+  // NULL) don't collide.
+  appleSubUnique: uniqueIndex("users_apple_sub_unique").on(t.appleSub),
 }));
 
 export const passwordResets = pgTable("password_resets", {
