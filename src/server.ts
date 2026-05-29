@@ -19,6 +19,7 @@ import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
+import { bookingRoutes } from "./routes/booking.js";
 import { oauthServerRoutes } from "./web/oauth_server.js";
 import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
@@ -641,6 +642,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(searchRoutes, { prefix });
   await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
+  await app.register(bookingRoutes, { prefix });
 }
 // QR scan-login approve pages (/desktop-pair/:code and /web-pair/:code)
 // MUST be at root — phone cameras open the QR-encoded URL verbatim and
