@@ -1,11 +1,15 @@
-// Full-screen update dialog. Replaces the previous "banner with one
-// download button that opens browser" UX with an in-app flow:
+// In-app update dialog. v0.7.7 made the install fully automatic
+// (Sparkle-style):
 //   1. Show new version + notes side-by-side with current version.
-//   2. "下载并打开" button starts UpdateDownloader, progress bar
-//      shows bytes / total / percent live.
-//   3. On done, the OS pops Finder with the mounted DMG —
-//      user drags .app to /Applications + relaunches.
-//   4. On error, show the message + "重试".
+//   2. "下载并安装" → UpdateDownloader streams the DMG to ~/Downloads/,
+//      progress bar live.
+//   3. On download complete → UpdateInstaller.install(file) mounts
+//      the DMG via hdiutil, spawns a detached shell script that
+//      swaps the .app under /Applications/ and relaunches, then
+//      exitProcess(0). User sees "正在安装并重启…" briefly, the
+//      window closes, and the new version pops up ~5 seconds later.
+//   4. On any step failing → DMG opens in Finder (v0.7.6 behaviour)
+//      and the running app stays up so the user can still work.
 //
 // Mandatory updates hide "稍后" so users have to act; non-mandatory
 // have a dismiss path that closes the dialog for this session.
@@ -48,6 +52,7 @@ import cn.bywave.calendar.desktop.BuildInfo
 import cn.bywave.calendar.desktop.data.update.DownloadState
 import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.data.update.UpdateDownloader
+import cn.bywave.calendar.desktop.data.update.UpdateInstaller
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,8 +62,21 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         // defensively in case the dismiss races with state collection.
         ?: return
     val download by UpdateDownloader.state.collectAsState()
+    val install by UpdateInstaller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val asset = UpdateChecker.platform?.let { info.assets[it] }
+
+    // Chain: download Done → hand the file to UpdateInstaller. The
+    // install path takes over from there (mounts DMG, spawns swap
+    // script, exits the JVM). LaunchedEffect keyed on download
+    // identity so a re-click on "重试" after a failure re-triggers
+    // the chain.
+    LaunchedEffect(download) {
+        val d = download
+        if (d is DownloadState.Done && install is UpdateInstaller.InstallState.Idle) {
+            UpdateInstaller.install(d.file)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = {
@@ -142,6 +160,10 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                             }
                         }
                         is DownloadState.Done -> {
+                            // Show the install-stage label. UpdateInstaller
+                            // takes the file from here; states are:
+                            //   Idle / Mounting / Swapping            — automated
+                            //   FallbackOpenedInFinder / Failed        — manual
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.CheckCircle,
@@ -151,7 +173,18 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "已下载到 ${d.file.parent} —— Finder 已弹出，把图标拖到「应用程序」即可。",
+                                    when (val i = install) {
+                                        UpdateInstaller.InstallState.Idle ->
+                                            "已下载 · 准备安装…"
+                                        UpdateInstaller.InstallState.Mounting ->
+                                            "正在挂载 DMG…"
+                                        UpdateInstaller.InstallState.Swapping ->
+                                            "正在安装并重启…"
+                                        is UpdateInstaller.InstallState.FallbackOpenedInFinder ->
+                                            "${i.reason}（保留在 ${d.file.parent}）"
+                                        is UpdateInstaller.InstallState.Failed ->
+                                            i.message
+                                    },
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
@@ -173,14 +206,31 @@ fun UpdateDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            if (asset != null && download !is DownloadState.Running) {
+            // Button visible:
+            //   - asset exists (we have a download URL for this OS)
+            //   - download isn't currently in progress
+            //   - install isn't currently in progress (Swapping → we're
+            //     about to exit, no point in clicking anything)
+            val showAction = asset != null
+                && download !is DownloadState.Running
+                && install !is UpdateInstaller.InstallState.Mounting
+                && install !is UpdateInstaller.InstallState.Swapping
+            if (showAction) {
                 Button(onClick = {
                     UpdateDownloader.reset()
                     scope.launch {
-                        UpdateDownloader.downloadAndOpen(asset.url, asset.sha256.ifBlank { null })
+                        // v0.7.7: download() — no implicit Finder open.
+                        // The LaunchedEffect(download) collector above
+                        // chains to UpdateInstaller.install() on Done.
+                        UpdateDownloader.download(asset!!.url, asset.sha256.ifBlank { null })
                     }
                 }) {
-                    Text(if (download is DownloadState.Done) "再次打开" else "下载并打开")
+                    Text(when {
+                        install is UpdateInstaller.InstallState.FallbackOpenedInFinder -> "重试自动安装"
+                        download is DownloadState.Done -> "重新下载"
+                        download is DownloadState.Failed -> "重试"
+                        else -> "下载并安装"
+                    })
                 }
             }
         },

@@ -1,10 +1,8 @@
 // In-app DMG downloader for the desktop updater. Streams the file from
-// the server's manifest URL straight to ~/Downloads/, reports bytes
-// progress on a flow, then asks the OS to `open` the file — which on
-// macOS pops the standard "drag the .app to Applications" Finder
-// window. We deliberately stop there: writing the new .app into the
-// running app's bundle requires sudo / launchd shenanigans, and is
-// what Sparkle-style auto-updaters do. For now one drag is the price.
+// the server's manifest URL straight to ~/Downloads/ and reports bytes
+// progress on a flow. v0.7.7 moved the "open the DMG" side-effect out
+// of here — the caller (UpdateDialog) now hands the downloaded file to
+// UpdateInstaller.install() which does the in-place swap-and-relaunch.
 //
 // Path strategy: save into ~/Downloads/ (where users expect downloads
 // to land) with the manifest's filename. If the file already exists +
@@ -54,19 +52,24 @@ object UpdateDownloader {
     }
 
     /** Download `url` to ~/Downloads/<filename>. If a file with the
-     *  same name + sha256 already exists we skip the network and go
-     *  straight to "open". Caller observes [state] for progress UI. */
-    suspend fun downloadAndOpen(url: String, expectedSha256: String? = null) {
+     *  same name + sha256 already exists we skip the network. On
+     *  completion [state] transitions to Done(file) and the caller
+     *  (UpdateDialog → UpdateInstaller.install) takes over to do the
+     *  in-place swap-and-relaunch.
+     *
+     *  v0.7.7: removed the implicit `openInFinder` call at the end. The
+     *  install path is now decoupled from the download path so the
+     *  dialog can show "正在安装并重启…" between the two stages. */
+    suspend fun download(url: String, expectedSha256: String? = null) {
         try {
             val filename = url.substringAfterLast('/').ifEmpty { "ByWaveCalendar.dmg" }
             val downloads = File(System.getProperty("user.home"), "Downloads")
             if (!downloads.exists()) downloads.mkdirs()
             val target = File(downloads, filename)
 
-            // Skip path: filename + sha matches → just open.
+            // Skip path: filename + sha matches → reuse on-disk file.
             if (target.exists() && expectedSha256 != null && sha256(target).equals(expectedSha256, ignoreCase = true)) {
                 _state.value = DownloadState.Done(target)
-                openInFinder(target)
                 return
             }
 
@@ -109,11 +112,20 @@ object UpdateDownloader {
                     return@execute
                 }
                 _state.value = DownloadState.Done(target)
-                openInFinder(target)
             }
         } catch (e: Exception) {
             _state.value = DownloadState.Failed(e.localizedMessage ?: "下载失败")
         }
+    }
+
+    /** Back-compat shim for any call site still on the v0.7.3-v0.7.6
+     *  "download + open the DMG in Finder" model. New code should call
+     *  [download] + [UpdateInstaller.install] explicitly. */
+    @Deprecated("Use download() + UpdateInstaller.install() for in-place updates.")
+    suspend fun downloadAndOpen(url: String, expectedSha256: String? = null) {
+        download(url, expectedSha256)
+        val s = state.value
+        if (s is DownloadState.Done) openInFinder(s.file)
     }
 
     fun reset() {
