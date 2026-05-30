@@ -68,6 +68,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "register.passwordHint": "至少 8 個字元，建議混合字母數字",
   "register.captchaLabel": "人機驗證（請計算下方算式）",
   "register.agreeTerms": "我已閱讀並同意 <a href='/terms' target='_blank' class='text-brand-600 hover:underline'>《使用條款》</a> 和 <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>《隱私政策》</a>",
+  "register.inviteNotice": "你正在透過邀請連結註冊",
   "register.submit": "建立帳號",
   "register.haveAccount": "已有帳號？",
   "register.signIn": "登入",

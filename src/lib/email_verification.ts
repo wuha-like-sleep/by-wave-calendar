@@ -21,6 +21,8 @@ export function hashCode(code: string): string {
 export type PendingRegistration = {
   passwordHash: string;
   displayName: string | null;
+  /** When registrationMode === "invite": the invite token to consume on success. */
+  inviteToken?: string | null;
 };
 
 export async function issueCode(email: string, payload: PendingRegistration): Promise<{ ok: boolean; code?: string }> {

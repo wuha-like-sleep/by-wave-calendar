@@ -18,10 +18,11 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { invitationIcs } from "../lib/ical.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
-import { issueCode, verifyCode } from "../lib/email_verification.js";
+import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
+import { validateInvite, consumeInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
@@ -36,6 +37,18 @@ import { randomBytes } from "node:crypto";
 import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES, setThemeCookies } from "../lib/user_theme.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
+
+/** User-facing message for a failed invite validation (never leaks token internals). */
+function inviteErrorMsg(reason: Exclude<InviteValidation, { ok: true }>["reason"]): string {
+  switch (reason) {
+    case "revoked": return "该邀请链接已被撤销";
+    case "expired": return "该邀请链接已过期";
+    case "exhausted": return "该邀请链接的可用次数已用完";
+    case "email_mismatch": return "该邀请链接仅限指定邮箱注册";
+    case "not_found":
+    default: return "邀请链接无效，请向管理员索取新的链接";
+  }
+}
 
 // Round-trip cookie for "send the user back to the page they tried to
 // open before being bounced to /login." Lifetime is 15 min — long enough
@@ -118,7 +131,10 @@ function redirectWith(reply: FastifyReply, path: string, flash?: Flash) {
   if (flash?.error) params.set("error", flash.error);
   if (flash?.success) params.set("success", flash.success);
   const qs = params.toString();
-  return reply.redirect(qs ? `${path}?${qs}` : path);
+  if (!qs) return reply.redirect(path);
+  // Use & when the path already carries a query string (e.g. /register?invite=…).
+  const sep = path.includes("?") ? "&" : "?";
+  return reply.redirect(`${path}${sep}${qs}`);
 }
 
 // Emit a <time> element carrying the UTC instant; the client-side local-time.js
@@ -669,26 +685,37 @@ export async function webRoutes(app: FastifyInstance) {
         message: "管理员暂时关闭了开放注册。",
       });
     }
+    let inviteToken: string | null = null;
     if (settings.registrationMode === "invite") {
-      return reply.code(403).view("error", {
-        title: "仅邀请注册",
-        user: null,
-        csrfToken: csrfTokenFor(req),
-        flash: {},
-        statusCode: 403,
-        heading: "仅邀请注册",
-        message: "本站当前仅接受邀请注册，请联系管理员获取邀请链接。",
-      });
+      const q = z.object({ invite: z.string().max(128).optional() }).safeParse(req.query);
+      const token = q.success ? q.data.invite : undefined;
+      const v = await validateInvite(token);
+      if (!v.ok) {
+        // No token, or an invalid/expired/used one → don't render the form.
+        return reply.code(403).view("error", {
+          title: "仅邀请注册",
+          user: null,
+          csrfToken: csrfTokenFor(req),
+          flash: {},
+          statusCode: 403,
+          heading: "仅邀请注册",
+          message: token ? inviteErrorMsg(v.reason) : "本站当前仅接受邀请注册，请联系管理员获取邀请链接。",
+        });
+      }
+      inviteToken = token!;
     }
     const user = await loadUserFromRequest(req);
     if (user) return reply.redirect("/app");
+    const inviteForValidation = inviteToken ? await validateInvite(inviteToken) : null;
     return reply.view("auth/register", {
       title: "注册",
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
-      form: {},
+      form: { email: inviteForValidation?.ok ? (inviteForValidation.invite.email ?? "") : "" },
       captcha: getClientRender(await getCaptchaConfig()),
+      inviteToken,
+      inviteEmailLocked: !!(inviteForValidation?.ok && inviteForValidation.invite.email),
     });
   });
 
@@ -697,7 +724,7 @@ export async function webRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     const settings = await getSettings();
-    if (settings.registrationMode !== "public") {
+    if (settings.registrationMode === "closed") {
       return redirectWith(reply, "/login", { error: "公开注册已关闭" });
     }
     const body = z
@@ -709,14 +736,20 @@ export async function webRoutes(app: FastifyInstance) {
         company: z.string().max(0).optional(),
         // mandatory「同意条款」checkbox (browsers send "on" when checked)
         agreeTerms: z.string().optional(),
+        // invite-mode registration token (carried by the hidden field)
+        invite: z.string().max(128).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确" });
     }
+    // The page this request came from (so error redirects keep the invite token).
+    const registerBackUrl = body.data.invite
+      ? `/register?invite=${encodeURIComponent(body.data.invite)}`
+      : "/register";
     // Must agree to the Terms + Privacy Policy to register.
     if (body.data.agreeTerms !== "on") {
-      return redirectWith(reply, "/register", { error: "请先阅读并勾选同意《使用条款》与《隐私政策》" });
+      return redirectWith(reply, registerBackUrl, { error: "请先阅读并勾选同意《使用条款》与《隐私政策》" });
     }
     // Human verification — pluggable provider; block before we spend an
     // email send / DB write. verifyCaptcha reads the captcha fields straight
@@ -728,22 +761,33 @@ export async function webRoutes(app: FastifyInstance) {
     );
     if (!captchaResult.ok) {
       req.log.warn({ reason: captchaResult.reason }, "register_captcha_failed");
-      return redirectWith(reply, "/register", { error: "人机验证未通过，请刷新页面后重试" });
+      return redirectWith(reply, registerBackUrl, { error: "人机验证未通过，请刷新页面后重试" });
     }
     const policyErr = passwordPolicyError(body.data.password);
     if (policyErr) {
-      return redirectWith(reply, "/register", { error: policyErr });
+      return redirectWith(reply, registerBackUrl, { error: policyErr });
     }
     const email = body.data.email.toLowerCase().trim();
+    // Invite-mode gate: a valid (non-consumed) invite is required. We validate
+    // here but only CONSUME it after email verification succeeds, so abandoned
+    // registrations don't burn a single-use invite.
+    let inviteToken: string | null = null;
+    if (settings.registrationMode === "invite") {
+      const v = await validateInvite(body.data.invite, email);
+      if (!v.ok) {
+        return redirectWith(reply, registerBackUrl, { error: inviteErrorMsg(v.reason) });
+      }
+      inviteToken = body.data.invite!;
+    }
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
     if (existing.length > 0) {
-      return redirectWith(reply, "/register", { error: "该邮箱已注册" });
+      return redirectWith(reply, registerBackUrl, { error: "该邮箱已注册" });
     }
     const passwordHash = await hashPassword(body.data.password);
 
-    const result = await issueCode(email, { passwordHash, displayName: body.data.displayName ?? null });
+    const result = await issueCode(email, { passwordHash, displayName: body.data.displayName ?? null, inviteToken });
     if (!result.ok) {
-      return redirectWith(reply, "/register", { error: "验证码发送失败，请稍后重试或联系管理员" });
+      return redirectWith(reply, registerBackUrl, { error: "验证码发送失败，请稍后重试或联系管理员" });
     }
 
     reply.setCookie(PENDING_EMAIL_COOKIE, email, {
@@ -819,6 +863,18 @@ export async function webRoutes(app: FastifyInstance) {
         await db.insert(schema.calendars).values({
           ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
         });
+        // Consume the invite (if any) now that the account actually exists.
+        // Best-effort: a race that exhausts the invite here shouldn't fail an
+        // already-created account — log and move on.
+        const inviteToken = result.payload?.inviteToken;
+        if (inviteToken) {
+          try {
+            const consumed = await consumeInvite(inviteToken, email);
+            if (!consumed.ok) req.log.warn({ email }, "invite_consume_failed_post_signup");
+          } catch (err) {
+            req.log.warn({ err }, "invite_consume_error");
+          }
+        }
       }
     }
     if (!user) return redirectWith(reply, "/verify-email", { error: "完成验证失败" });
@@ -848,7 +904,7 @@ export async function webRoutes(app: FastifyInstance) {
       .limit(1);
     if (!pending) return redirectWith(reply, "/register", { error: "请重新发起注册" });
 
-    const payload = pending.payload as unknown as { passwordHash: string; displayName: string | null };
+    const payload = pending.payload as unknown as PendingRegistration;
     const result = await issueCode(email, payload);
     if (!result.ok) return redirectWith(reply, "/verify-email", { error: "发送失败，请稍后重试" });
     return redirectWith(reply, "/verify-email", { success: "新的验证码已发送" });

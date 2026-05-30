@@ -13,11 +13,13 @@ import { CAPTCHA_PROVIDERS, isCaptchaProvider } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
 import {
   calendarInviteMail,
+  inviteSignupMail,
   loginAlertMail,
   passwordResetMail,
   verificationCodeMail,
   welcomeMail,
 } from "../lib/email_templates.js";
+import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
 import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
@@ -959,6 +961,114 @@ export async function adminRoutes(app: FastifyInstance) {
       embedEnabled: body.data.embedEnabled === "on",
     });
     return reply.redirect("/admin/security?success=" + encodeURIComponent("安全设置已保存"));
+  });
+
+  // ---------- Invite-based registration (registrationMode === "invite") ----------
+  const inviteBaseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+
+  app.get("/admin/invites", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    const invites = await listInvites();
+    return reply.view("admin/invites", {
+      title: "邀请注册 · 管理后台",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/invites",
+      settings,
+      invites,
+      baseUrl: inviteBaseUrl,
+    });
+  });
+
+  app.post("/admin/invites", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      email: z.string().max(254).optional(),
+      note: z.string().max(200).optional(),
+      maxUses: z.coerce.number().int().min(1).max(1000).optional(),
+      expiresInDays: z.coerce.number().int().min(0).max(365).optional(),
+      sendEmail: z.string().optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("参数无效") + "#list");
+    }
+    const rawEmail = body.data.email?.trim().toLowerCase() || "";
+    // An email is optional, but if present it must be valid (it then binds the invite).
+    if (rawEmail && !z.string().email().safeParse(rawEmail).success) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("收件邮箱格式不正确") + "#list");
+    }
+    const email = rawEmail || null;
+    const wantsEmail = body.data.sendEmail === "on";
+    if (wantsEmail && !email) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("勾选「立即发送邮件」时必须填写收件邮箱") + "#list");
+    }
+    const invite = await createInvite({
+      createdBy: user.id,
+      email,
+      note: body.data.note || null,
+      maxUses: body.data.maxUses ?? 1,
+      expiresInDays: body.data.expiresInDays && body.data.expiresInDays > 0 ? body.data.expiresInDays : null,
+    });
+    await audit(req, user.id, "invite.create", {
+      targetType: "signup_invite", targetId: invite.token,
+      details: { email, maxUses: invite.maxUses },
+    });
+    if (wantsEmail && email) {
+      const settings = await getSettings();
+      const inviteUrl = `${inviteBaseUrl}/register?invite=${encodeURIComponent(invite.token)}`;
+      try {
+        await sendMail(inviteSignupMail({ to: email, inviteUrl, siteName: settings.siteName, inviterName: user.displayName ?? undefined }));
+        await audit(req, user.id, "invite.email", { targetType: "signup_invite", targetId: invite.token, details: { to: email } });
+        return reply.redirect("/admin/invites?success=" + encodeURIComponent(`邀请已创建并发送到 ${email}`) + "#list");
+      } catch (err) {
+        req.log.warn({ err }, "invite_email_send_failed");
+        return reply.redirect("/admin/invites?error=" + encodeURIComponent("邀请已创建，但邮件发送失败（请检查 SMTP 设置）") + "#list");
+      }
+    }
+    return reply.redirect("/admin/invites?success=" + encodeURIComponent("邀请链接已生成") + "#list");
+  });
+
+  app.post<{ Params: { token: string } }>("/admin/invites/:token/revoke", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    await revokeInvite(req.params.token);
+    await audit(req, user.id, "invite.revoke", { targetType: "signup_invite", targetId: req.params.token });
+    return reply.redirect("/admin/invites?success=" + encodeURIComponent("邀请已撤销") + "#list");
+  });
+
+  app.post<{ Params: { token: string } }>("/admin/invites/:token/email", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ to: z.string().max(254).optional() }).safeParse(req.body);
+    const v = await validateInvite(req.params.token);
+    if (!v.ok) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("该邀请已失效，无法发送") + "#list");
+    }
+    const to = ((body.success && body.data.to?.trim().toLowerCase()) || v.invite.email || "").trim();
+    if (!to || !z.string().email().safeParse(to).success) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("请填写合法的收件邮箱") + "#list");
+    }
+    // If the invite is email-bound, only send to that address.
+    if (v.invite.email && to !== v.invite.email) {
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("该邀请仅限指定邮箱，不能发往其他地址") + "#list");
+    }
+    const settings = await getSettings();
+    const inviteUrl = `${inviteBaseUrl}/register?invite=${encodeURIComponent(req.params.token)}`;
+    try {
+      await sendMail(inviteSignupMail({ to, inviteUrl, siteName: settings.siteName, inviterName: user.displayName ?? undefined }));
+      await audit(req, user.id, "invite.email", { targetType: "signup_invite", targetId: req.params.token, details: { to } });
+      return reply.redirect("/admin/invites?success=" + encodeURIComponent(`邀请已发送到 ${to}`) + "#list");
+    } catch (err) {
+      req.log.warn({ err }, "invite_email_send_failed");
+      return reply.redirect("/admin/invites?error=" + encodeURIComponent("邮件发送失败（请检查 SMTP 设置）") + "#list");
+    }
   });
 
   // ---------- Email template preview (admin only) ----------

@@ -72,6 +72,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "register.passwordHint": "Au moins 8 caractères ; il est recommandé de mélanger lettres et chiffres",
   "register.captchaLabel": "Vérification humaine (résolvez le calcul)",
   "register.agreeTerms": "J’ai lu et j’accepte les <a href='/terms' target='_blank' class='text-brand-600 hover:underline'>Conditions d’utilisation</a> et la <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>Politique de confidentialité</a>",
+  "register.inviteNotice": "Vous vous inscrivez avec un lien d’invitation",
   "register.submit": "Créer un compte",
   "register.haveAccount": "Vous avez déjà un compte ?",
   "register.signIn": "Se connecter",

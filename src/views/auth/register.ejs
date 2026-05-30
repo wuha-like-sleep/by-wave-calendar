@@ -6,8 +6,18 @@
       <%= t("register.verifyNotice") %>
     </div>
 
+    <% if (typeof inviteToken !== "undefined" && inviteToken) { %>
+    <div class="mt-4 flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-xs text-emerald-800">
+      <svg class="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>
+      <span><%= t("register.inviteNotice") %></span>
+    </div>
+    <% } %>
+
     <form method="post" action="/register" class="mt-6 space-y-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <% if (typeof inviteToken !== "undefined" && inviteToken) { %>
+      <input type="hidden" name="invite" value="<%= inviteToken %>" />
+      <% } %>
       <!-- honeypot for bots -->
       <input type="text" name="company" tabindex="-1" autocomplete="off"
              class="absolute -left-[9999px] w-px h-px opacity-0" aria-hidden="true" />
@@ -15,7 +25,8 @@
         <label class="block text-sm font-medium text-slate-700"><%= t("register.emailLabel") %></label>
         <input type="email" name="email" required autocomplete="email"
                value="<%= form?.email || '' %>"
-               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               <%= (typeof inviteEmailLocked !== "undefined" && inviteEmailLocked) ? "readonly" : "" %>
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 read-only:bg-slate-50 read-only:text-slate-500" />
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700"><%= t("register.displayNameLabel") %></label>
