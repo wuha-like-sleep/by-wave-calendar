@@ -70,6 +70,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "Anzeigename (optional)",
   "register.passwordLabel": "Passwort",
   "register.passwordHint": "Mindestens 8 Zeichen; eine Mischung aus Buchstaben und Zahlen wird empfohlen",
+  "register.captchaLabel": "Mensch-Verifizierung (lösen Sie die Rechnung)",
   "register.submit": "Konto erstellen",
   "register.haveAccount": "Sie haben bereits ein Konto?",
   "register.signIn": "Anmelden",

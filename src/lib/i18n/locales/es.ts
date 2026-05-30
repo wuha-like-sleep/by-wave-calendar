@@ -70,6 +70,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "Nombre visible (opcional)",
   "register.passwordLabel": "Contraseña",
   "register.passwordHint": "Al menos 8 caracteres; se recomienda combinar letras y números",
+  "register.captchaLabel": "Verificación humana (resuelve la suma)",
   "register.submit": "Crear cuenta",
   "register.haveAccount": "¿Ya tiene una cuenta?",
   "register.signIn": "Iniciar sesión",

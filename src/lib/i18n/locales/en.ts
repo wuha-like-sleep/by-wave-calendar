@@ -77,6 +77,7 @@ export const en = {
   "register.displayNameLabel": "Display name (optional)",
   "register.passwordLabel": "Password",
   "register.passwordHint": "At least 8 characters; mixing letters and numbers is recommended",
+  "register.captchaLabel": "Human verification (solve the sum)",
   "register.submit": "Create account",
   "register.haveAccount": "Already have an account?",
   "register.signIn": "Sign in",

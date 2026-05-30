@@ -21,6 +21,7 @@ import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type We
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings } from "../lib/site_settings.js";
+import { issueCaptcha, verifyCaptcha } from "../lib/captcha.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
@@ -417,6 +418,7 @@ export async function webRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       form: {},
       qrLoginEnabled: settings.appsEnabled && settings.qrLoginEnabled,
+      registrationMode: settings.registrationMode,
     });
   });
 
@@ -688,6 +690,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       form: {},
+      captcha: issueCaptcha(),
     });
   });
 
@@ -706,10 +709,17 @@ export async function webRoutes(app: FastifyInstance) {
         displayName: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : undefined)),
         // honeypot field — must be empty
         company: z.string().max(0).optional(),
+        // self-hosted human-verification challenge
+        captchaToken: z.string().max(200).optional(),
+        captchaAnswer: z.string().max(12).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确" });
+    }
+    // Human verification — block before we spend an email send / DB write.
+    if (!verifyCaptcha(body.data.captchaToken, body.data.captchaAnswer)) {
+      return redirectWith(reply, "/register", { error: "人机验证未通过，请重新计算后提交" });
     }
     const policyErr = passwordPolicyError(body.data.password);
     if (policyErr) {

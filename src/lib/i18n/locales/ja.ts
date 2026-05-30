@@ -70,6 +70,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "表示名（任意）",
   "register.passwordLabel": "パスワード",
   "register.passwordHint": "8文字以上。英字と数字を組み合わせることをおすすめします",
+  "register.captchaLabel": "人間確認（下の計算を解いてください）",
   "register.submit": "アカウントを作成",
   "register.haveAccount": "すでにアカウントをお持ちですか？",
   "register.signIn": "サインイン",

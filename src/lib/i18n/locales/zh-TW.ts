@@ -66,6 +66,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "暱稱（可選）",
   "register.passwordLabel": "密碼",
   "register.passwordHint": "至少 8 個字元，建議混合字母數字",
+  "register.captchaLabel": "人機驗證（請計算下方算式）",
   "register.submit": "建立帳號",
   "register.haveAccount": "已有帳號？",
   "register.signIn": "登入",

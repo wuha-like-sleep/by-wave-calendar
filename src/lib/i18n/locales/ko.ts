@@ -70,6 +70,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "표시 이름 (선택)",
   "register.passwordLabel": "비밀번호",
   "register.passwordHint": "최소 8자; 문자와 숫자를 섞어 사용하는 것을 권장합니다",
+  "register.captchaLabel": "사람 확인 (아래 계산을 풀어 주세요)",
   "register.submit": "계정 만들기",
   "register.haveAccount": "이미 계정이 있으신가요?",
   "register.signIn": "로그인",

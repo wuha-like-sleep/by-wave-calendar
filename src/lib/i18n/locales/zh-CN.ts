@@ -67,6 +67,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "register.displayNameLabel": "昵称（可选）",
   "register.passwordLabel": "密码",
   "register.passwordHint": "至少 8 个字符，建议混合字母数字",
+  "register.captchaLabel": "人机验证（请计算下方算式）",
   "register.submit": "创建账号",
   "register.haveAccount": "已有账号？",
   "register.signIn": "登录",
