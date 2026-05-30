@@ -107,6 +107,36 @@
   }
 }
 
+/* ---------- Legal / long-form document typography ----------
+   The legal pages (privacy / terms / data-processing) used Tailwind's
+   `prose` class, but the @tailwindcss/typography plugin isn't installed,
+   so `prose` was a dead class — and Tailwind's preflight strips default
+   list bullets + heading sizes, leaving the pages looking like an
+   unstyled text dump. This `.legal-prose` component restores readable
+   typography without pulling in the plugin (keeps the dep footprint
+   small). Apply on the page's container instead of `prose prose-slate`. */
+@layer components {
+  .legal-prose { @apply text-[15px] leading-relaxed text-slate-700; }
+  .legal-prose h2 { @apply text-xl font-semibold text-slate-900 mt-10 mb-3 pb-2 border-b border-slate-100; }
+  .legal-prose h3 { @apply text-base font-semibold text-slate-800 mt-6 mb-2; }
+  .legal-prose p { @apply mb-4; }
+  .legal-prose ul { @apply list-disc pl-5 space-y-1.5 mb-4; }
+  .legal-prose ol { @apply list-decimal pl-5 space-y-1.5 mb-4; }
+  .legal-prose li { @apply leading-relaxed; }
+  .legal-prose a { @apply text-brand-700 hover:underline; }
+  .legal-prose strong { @apply font-semibold text-slate-900; }
+  .legal-prose code { @apply text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded; }
+  .legal-prose table { @apply w-full text-sm border-collapse my-5; }
+  .legal-prose th { @apply text-left font-semibold text-slate-900 border-b-2 border-slate-200 py-2 pr-4 align-top; }
+  .legal-prose td { @apply border-b border-slate-100 py-2 pr-4 align-top; }
+}
+
+/* <details> accordion (support page FAQ) — hide the default disclosure
+   triangle so our own chevron is the only affordance. `list-none` covers
+   most browsers; the webkit rule covers Safari/Chrome. */
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+
 /* HTMX swap fade */
 .htmx-swapping { opacity: 0; transition: opacity 150ms ease-out; }
 .htmx-settling { opacity: 1; transition: opacity 200ms ease-in; }
