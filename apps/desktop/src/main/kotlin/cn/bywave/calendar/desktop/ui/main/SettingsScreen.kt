@@ -87,11 +87,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bywave.calendar.desktop.BuildInfo
+import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.BookingLink
@@ -252,6 +255,7 @@ private fun NavRow(tab: SettingsTab, active: Boolean, onClick: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
+            .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2083,6 +2087,7 @@ private fun AppearanceSection(profile: Profile) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .pointerHoverIcon(PointerIcon.Hand)
                     .clickable { cn.bywave.calendar.desktop.i18n.I18n.setLocale(loc) }
                     .padding(vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -2152,6 +2157,7 @@ private fun AppearanceSection(profile: Profile) {
                                 if (selected) MaterialTheme.colorScheme.primary
                                 else MaterialTheme.colorScheme.surfaceVariant,
                             )
+                            .pointerHoverIcon(PointerIcon.Hand)
                             .clickable { cn.bywave.calendar.desktop.data.notify.ReminderPrefs.setLeadMinutes(m) }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                     ) {
@@ -2249,7 +2255,7 @@ private fun SectionTitle(text: String, danger: Boolean = false) {
 @Composable
 private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(Dimens.cardRadius),
         color = if (danger)
             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
         else

@@ -22,6 +22,7 @@ package cn.bywave.calendar.desktop.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +35,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -57,11 +57,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.model.SearchResultDTO
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
+import cn.bywave.calendar.desktop.ui.theme.Dimens
+import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
+import cn.bywave.calendar.desktop.ui.theme.rowShape
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -181,7 +186,10 @@ fun SearchDialog(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            CircularProgressIndicator(
+                                strokeWidth = Dimens.spinnerStroke,
+                                modifier = Modifier.size(Dimens.spinnerSmall),
+                            )
                             Spacer(Modifier.width(10.dp))
                             Text(t("search.searching"), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -243,19 +251,22 @@ fun SearchDialog(
  *  like part of the same app. */
 @Composable
 private fun SearchResultRow(result: SearchResultDTO, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .clickable(onClick = onClick)
+            .clip(rowShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = Dimens.cardFillAlpha))
+            .hoverHighlight(interaction, rowShape)
+            .pointerHoverIcon(PointerIcon.Hand)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
                 .padding(top = 4.dp)
-                .size(10.dp)
+                .size(Dimens.colorDot)
                 .clip(CircleShape)
                 .background(parseHex(result.calendarColor)),
         )

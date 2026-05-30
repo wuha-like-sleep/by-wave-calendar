@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.ui.event.EventContextMenu
+import cn.bywave.calendar.desktop.ui.theme.Dimens
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -384,7 +385,7 @@ private fun EventChip(
             .offset(x = liveX, y = liveY)
             .width(w)
             .height(liveH)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(Dimens.chipRadius))
             .background(color.copy(alpha = if (isDragging || isResizing) 0.7f else 0.95f))
             .onClick(
                 matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),

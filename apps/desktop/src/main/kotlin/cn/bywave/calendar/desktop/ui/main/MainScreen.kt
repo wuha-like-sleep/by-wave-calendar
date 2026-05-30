@@ -83,6 +83,7 @@ import cn.bywave.calendar.desktop.ui.event.EventEditDialog
 import cn.bywave.calendar.desktop.ui.event.EventEditMode
 import cn.bywave.calendar.desktop.ui.event.RecurringAction
 import cn.bywave.calendar.desktop.ui.event.RecurringScopePicker
+import cn.bywave.calendar.desktop.ui.theme.Dimens
 import kotlinx.coroutines.launch
 
 @Composable
@@ -538,8 +539,8 @@ private fun TopBar(
 
         if (loading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(18.dp),
-                strokeWidth = 2.dp,
+                modifier = Modifier.size(Dimens.spinnerSmall),
+                strokeWidth = Dimens.spinnerStroke,
             )
             Spacer(Modifier.width(8.dp))
         }

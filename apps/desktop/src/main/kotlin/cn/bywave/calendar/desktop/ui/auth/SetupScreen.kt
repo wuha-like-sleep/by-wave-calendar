@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.Profile
+import cn.bywave.calendar.desktop.ui.theme.Dimens
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -296,7 +297,10 @@ private fun QrPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(
+                modifier = Modifier.size(Dimens.spinnerSmall),
+                strokeWidth = Dimens.spinnerStroke,
+            )
             Text(
                 pollMessage,
                 style = MaterialTheme.typography.bodyMedium,

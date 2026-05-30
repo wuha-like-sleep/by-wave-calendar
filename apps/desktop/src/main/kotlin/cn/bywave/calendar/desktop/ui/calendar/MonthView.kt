@@ -12,6 +12,7 @@ package cn.bywave.calendar.desktop.ui.calendar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,12 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.ui.event.EventContextMenu
+import cn.bywave.calendar.desktop.ui.theme.Dimens
+import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -141,10 +146,15 @@ private fun DayCell(
     val isToday = day == LocalDate.now()
     val isInMonth = YearMonth.from(day) == monthAnchor
     var menuFor by remember { mutableStateOf<EventDTO?>(null) }
+    val interaction = remember { MutableInteractionSource() }
 
     Column(
         modifier = modifier
-            .clickable(onClick = onDayClick)
+            // Hover wash on the whole day cell so the grid feels alive
+            // under the mouse (no rounded shape — cells tile edge-to-edge).
+            .hoverHighlight(interaction)
+            .pointerHoverIcon(PointerIcon.Hand)
+            .clickable(interactionSource = interaction, indication = null, onClick = onDayClick)
             .padding(top = 4.dp, start = 4.dp, end = 4.dp, bottom = 2.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -178,8 +188,9 @@ private fun DayCell(
                     text = ev.summary,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(3.dp))
+                        .clip(RoundedCornerShape(Dimens.chipRadius))
                         .background(color.copy(alpha = 0.9f))
+                        .pointerHoverIcon(PointerIcon.Hand)
                         .onClick(
                             matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
                             onClick = { menuFor = ev },
