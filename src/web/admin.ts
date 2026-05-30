@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -562,7 +562,46 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/admin/audit", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return;
-    const rows = await db
+
+    // Map an action's first segment to a coloured category badge. The full
+    // Tailwind class strings live here (admin.ts is in tailwind.config's
+    // content globs) so they survive purge — don't build them dynamically
+    // in the EJS or the colours won't be generated.
+    const catMeta = (prefix: string): { label: string; badge: string } => {
+      switch (prefix) {
+        case "site": case "settings": return { label: "配置", badge: "bg-slate-100 text-slate-700" };
+        case "api_token": case "api": case "oauth": return { label: "API", badge: "bg-violet-100 text-violet-700" };
+        case "backup": return { label: "数据", badge: "bg-amber-100 text-amber-700" };
+        case "user": case "users": return { label: "用户", badge: "bg-sky-100 text-sky-700" };
+        case "sso": case "idp": return { label: "SSO", badge: "bg-emerald-100 text-emerald-700" };
+        case "update": case "self_update": return { label: "更新", badge: "bg-indigo-100 text-indigo-700" };
+        case "invite": return { label: "邀请", badge: "bg-teal-100 text-teal-700" };
+        case "mfa": case "passkey": case "password": case "session": case "login": return { label: "安全", badge: "bg-rose-100 text-rose-700" };
+        default: return { label: prefix || "其它", badge: "bg-slate-100 text-slate-600" };
+      }
+    };
+
+    const qp = (req.query ?? {}) as { cat?: string; actor?: string; q?: string; page?: string };
+    const PER_PAGE = 50;
+    const page = Math.max(1, Math.min(100000, Number(qp.page) || 1));
+    const cat = (qp.cat ?? "").trim().slice(0, 40);
+    const actor = (qp.actor ?? "").trim().slice(0, 254);
+    const term = (qp.q ?? "").trim().slice(0, 200);
+
+    const conds = [];
+    if (cat) conds.push(like(schema.adminAuditLog.action, `${cat}.%`));
+    if (actor) conds.push(ilike(schema.users.email, `%${actor}%`));
+    if (term) {
+      const t = `%${term}%`;
+      conds.push(or(
+        ilike(schema.adminAuditLog.action, t),
+        ilike(schema.adminAuditLog.targetType, t),
+        ilike(schema.adminAuditLog.targetId, t),
+      ));
+    }
+    const where = conds.length ? and(...conds) : undefined;
+
+    const baseSelect = db
       .select({
         id: schema.adminAuditLog.id,
         action: schema.adminAuditLog.action,
@@ -575,18 +614,43 @@ export async function adminRoutes(app: FastifyInstance) {
         actorEmail: schema.users.email,
       })
       .from(schema.adminAuditLog)
-      // LEFT JOIN (was INNER) — actorUserId is SET NULL on user delete, and
-      // we still want to show those rows ("[已删除用户]" instead of dropping
-      // the entry entirely).
-      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      // LEFT JOIN — actorUserId is SET NULL on user delete; still show the row.
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId));
+
+    const rows = await (where ? baseSelect.where(where) : baseSelect)
       .orderBy(desc(schema.adminAuditLog.createdAt))
-      .limit(200);
+      .limit(PER_PAGE)
+      .offset((page - 1) * PER_PAGE);
+
+    const countSelect = db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(schema.adminAuditLog)
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId));
+    const countRows = await (where ? countSelect.where(where) : countSelect);
+    const total = countRows[0]?.total ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+
+    // Category dropdown — distinct action prefixes present, with counts.
+    const prefRows = await db
+      .select({
+        p: sql<string>`split_part(${schema.adminAuditLog.action}, '.', 1)`,
+        c: sql<number>`count(*)::int`,
+      })
+      .from(schema.adminAuditLog)
+      .groupBy(sql`split_part(${schema.adminAuditLog.action}, '.', 1)`)
+      .orderBy(desc(sql`count(*)`));
+    const categories = prefRows.map((r) => ({ key: r.p, count: r.c, label: catMeta(r.p).label }));
+
     return reply.view("admin/audit", {
       title: "审计日志 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
       activeNav: "/admin/audit",
+      filter: { cat, actor, q: term },
+      page, totalPages, total: total ?? 0, perPage: PER_PAGE,
+      categories,
       entries: rows.map((r) => ({
         ...r,
+        cat: catMeta((r.action.split(".")[0] ?? "")),
         createdAtIso: `<time data-tz datetime="${r.createdAt.toISOString()}" data-style="datetime">${r.createdAt.toISOString()}</time>`,
         detailsJson: r.details ? JSON.stringify(r.details, null, 2) : null,
       })),
