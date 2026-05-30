@@ -22,6 +22,7 @@
 		1F000100000000000000000C /* EventEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000C /* EventEditView.swift */; };
 		1F000100000000000000000D /* RecurringScopePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000D /* RecurringScopePicker.swift */; };
 		1F000100000000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000E /* SettingsView.swift */; };
+		1F0001000000000000000040 /* BookingLinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000040 /* BookingLinksView.swift */; };
 		1F000100000000000000000F /* WebAuthLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000F /* WebAuthLogin.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
@@ -67,6 +68,7 @@
 		1B000100000000000000000C /* EventEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000D /* RecurringScopePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringScopePicker.swift; sourceTree = "<group>"; };
 		1B000100000000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000040 /* BookingLinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingLinksView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000F /* WebAuthLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthLogin.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				1B000100000000000000000C /* EventEditView.swift */,
 				1B000100000000000000000D /* RecurringScopePicker.swift */,
 				1B000100000000000000000E /* SettingsView.swift */,
+				1B0001000000000000000040 /* BookingLinksView.swift */,
 				1B0001000000000000000012 /* EventRowView.swift */,
 				1B0001000000000000000013 /* DayView.swift */,
 				1B0001000000000000000014 /* WeekView.swift */,
@@ -306,6 +309,7 @@
 				1F000100000000000000000C /* EventEditView.swift in Sources */,
 				1F000100000000000000000D /* RecurringScopePicker.swift in Sources */,
 				1F000100000000000000000E /* SettingsView.swift in Sources */,
+				1F0001000000000000000040 /* BookingLinksView.swift in Sources */,
 				1F000100000000000000000F /* WebAuthLogin.swift in Sources */,
 				1F000100000000000000002D /* AppleSignIn.swift in Sources */,
 				1F0001000000000000000010 /* EventKitMirror.swift in Sources */,
