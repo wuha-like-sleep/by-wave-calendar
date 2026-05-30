@@ -11,18 +11,20 @@
 //                   reveals nothing that lets a bot skip the work.
 //   - "turnstile" → Cloudflare Turnstile (loads challenges.cloudflare.com).
 //   - "recaptcha" → Google reCAPTCHA v2 checkbox (loads www.google.com).
+//   - "hcaptcha"  → hCaptcha (loads js.hcaptcha.com; privacy-friendly, GDPR).
 //
-// turnstile / recaptcha are OPTIONAL and load third-party scripts; they are
+// turnstile / recaptcha / hcaptcha are OPTIONAL and load third-party scripts; they are
 // off by default precisely because this project ships no foreign CDNs unless
 // the operator opts in.
 
-export type CaptchaProvider = "none" | "builtin" | "turnstile" | "recaptcha";
+export type CaptchaProvider = "none" | "builtin" | "turnstile" | "recaptcha" | "hcaptcha";
 
 export const CAPTCHA_PROVIDERS: readonly CaptchaProvider[] = [
   "none",
   "builtin",
   "turnstile",
   "recaptcha",
+  "hcaptcha",
 ] as const;
 
 export function isCaptchaProvider(v: unknown): v is CaptchaProvider {

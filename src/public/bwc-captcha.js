@@ -5,7 +5,7 @@
 // It auto-initialises every element matching [data-bwc-captcha] on DOMContent-
 // Loaded. Configuration comes from data-* attributes on that container:
 //
-//   data-bwc-captcha="builtin" | "turnstile" | "recaptcha" | "none"
+//   data-bwc-captcha="builtin" | "turnstile" | "recaptcha" | "hcaptcha" | "none"
 //   builtin:
 //     data-token="<signed token>"           (echoed back unchanged on submit)
 //     data-challenge="<raw challenge str>"   (hashed with salt + nonce)
@@ -449,6 +449,38 @@
       .catch(function () { setFailed(ui, L.failed); });
   }
 
+  function initHcaptcha(container, form) {
+    var L = labels(container);
+    var ui = buildShell(container, L.verifying);
+    var sitekey = container.getAttribute("data-sitekey") || "";
+    if (!sitekey) { setFailed(ui, L.failed); return; }
+    behaviour(container, form);
+
+    var mount = document.createElement("div");
+    container.appendChild(mount);
+
+    loadScript("https://js.hcaptcha.com/1/api.js")
+      .then(function () {
+        var tries = 0;
+        (function waitForApi() {
+          if (window.hcaptcha && window.hcaptcha.render) {
+            ui.box.style.display = "none";
+            window.hcaptcha.render(mount, {
+              sitekey: sitekey,
+              callback: function (token) { setHidden(form, FIELD.token, token); },
+              "expired-callback": function () { setHidden(form, FIELD.token, ""); },
+              "error-callback": function () { setHidden(form, FIELD.token, ""); },
+            });
+          } else if (tries++ < 100) {
+            setTimeout(waitForApi, 50);
+          } else {
+            setFailed(ui, L.failed);
+          }
+        })();
+      })
+      .catch(function () { setFailed(ui, L.failed); });
+  }
+
   // --------------------------------------------------------------------------
   // Bootstrap.
   // --------------------------------------------------------------------------
@@ -461,6 +493,7 @@
     if (provider === "builtin") return initBuiltin(container, form);
     if (provider === "turnstile") return initTurnstile(container, form);
     if (provider === "recaptcha") return initRecaptcha(container, form);
+    if (provider === "hcaptcha") return initHcaptcha(container, form);
     // "none" → nothing to render.
   }
 

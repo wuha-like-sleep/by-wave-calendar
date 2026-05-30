@@ -91,8 +91,10 @@
     builtin: "内置无感验证（Proof-of-Work，自托管 / 无 CDN，推荐）",
     turnstile: "Cloudflare Turnstile（第三方，加载 challenges.cloudflare.com）",
     recaptcha: "Google reCAPTCHA v2（第三方，加载 www.google.com）",
+    hcaptcha: "hCaptcha（第三方，加载 hcaptcha.com，隐私友好）",
   };
-  const captchaThirdParty = settings.captchaProvider === "turnstile" || settings.captchaProvider === "recaptcha";
+  const thirdPartyProviders = ["turnstile", "recaptcha", "hcaptcha"];
+  const captchaThirdParty = thirdPartyProviders.indexOf(settings.captchaProvider) !== -1;
 %>
 <form method="post" action="/admin/security/captcha" id="captcha" class="space-y-6 mt-6">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -107,7 +109,7 @@
       <div>
         <label class="block text-sm font-medium text-slate-700">验证方式</label>
         <select name="captchaProvider"
-                onchange="document.getElementById('captcha-thirdparty').style.display = (this.value==='turnstile'||this.value==='recaptcha') ? '' : 'none'"
+                onchange="document.getElementById('captcha-thirdparty').style.display = (this.value==='turnstile'||this.value==='recaptcha'||this.value==='hcaptcha') ? '' : 'none'"
                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
           <% captchaProviders.forEach(function (p) { %>
             <option value="<%= p %>" <%= settings.captchaProvider === p ? "selected" : "" %>><%= captchaLabels[p] || p %></option>

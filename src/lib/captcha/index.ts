@@ -11,7 +11,7 @@
 // settings page.
 
 import { issueChallenge, verifyChallenge } from "./builtin_pow.js";
-import { verifyRecaptcha, verifyTurnstile } from "./providers.js";
+import { verifyHcaptcha, verifyRecaptcha, verifyTurnstile } from "./providers.js";
 import type { CaptchaConfig, ClientRender, VerifyResult } from "./types.js";
 
 export type { CaptchaConfig, CaptchaProvider, ClientRender, VerifyResult } from "./types.js";
@@ -67,6 +67,7 @@ export function getClientRender(config: CaptchaConfig): ClientRender {
     }
     case "turnstile":
     case "recaptcha":
+    case "hcaptcha":
       return { provider: config.provider, siteKey: config.siteKey ?? null };
     case "none":
     default:
@@ -109,6 +110,14 @@ export async function verifyCaptcha(
       const token = b[FIELD.token];
       if (!token) return { ok: false, reason: "missing_token" };
       return verifyRecaptcha(secret, token, remoteIp);
+    }
+
+    case "hcaptcha": {
+      const secret = config.secret?.trim();
+      if (!secret) return { ok: false, reason: "missing_secret" };
+      const token = b[FIELD.token];
+      if (!token) return { ok: false, reason: "missing_token" };
+      return verifyHcaptcha(secret, token, remoteIp);
     }
 
     default:

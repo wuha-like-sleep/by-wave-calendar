@@ -17,6 +17,7 @@ import type { VerifyResult } from "./types.js";
 
 const TURNSTILE_ENDPOINT = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const RECAPTCHA_ENDPOINT = "https://www.google.com/recaptcha/api/siteverify";
+const HCAPTCHA_ENDPOINT = "https://api.hcaptcha.com/siteverify";
 
 /** Network timeout so a slow/hung provider can't pin a registration request. */
 const VERIFY_TIMEOUT_MS = 8000;
@@ -74,4 +75,14 @@ export function verifyRecaptcha(
   remoteIp?: string,
 ): Promise<VerifyResult> {
   return postSiteVerify(RECAPTCHA_ENDPOINT, secret, token, remoteIp);
+}
+
+export function verifyHcaptcha(
+  secret: string,
+  token: string,
+  remoteIp?: string,
+): Promise<VerifyResult> {
+  // hCaptcha's siteverify is byte-compatible with the others (secret/response/
+  // remoteip → { success }).
+  return postSiteVerify(HCAPTCHA_ENDPOINT, secret, token, remoteIp);
 }

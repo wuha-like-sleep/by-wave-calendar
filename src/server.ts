@@ -137,17 +137,17 @@ await app.register(helmet, {
       // Third-party CAPTCHA hosts (Cloudflare Turnstile / Google reCAPTCHA) are
       // whitelisted but load NOTHING unless an admin opts into that provider in
       // Admin/安全. The default "builtin" PoW captcha is same-origin only.
-      "script-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://www.gstatic.com", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
+      "script-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://www.gstatic.com", "https://js.hcaptcha.com", "https://newassets.hcaptcha.com", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
       // Inline event handlers (onclick / onsubmit) on existing templates;
       // refactoring 27 of them is its own batch.
       "script-src-attr": ["'unsafe-inline'"],
       // Tailwind utilities + style="background: ..." color swatches need this.
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:"],
-      "connect-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com"],
+      "connect-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://api.hcaptcha.com", "https://newassets.hcaptcha.com"],
       "font-src": ["'self'", "data:"],
-      // Turnstile / reCAPTCHA render their challenge inside an iframe.
-      "frame-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com"],
+      // Turnstile / reCAPTCHA / hCaptcha render their challenge inside an iframe.
+      "frame-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://newassets.hcaptcha.com"],
       // builtin PoW captcha spawns a Web Worker from a same-origin Blob.
       "worker-src": ["'self'", "blob:"],
       "frame-ancestors": ["'none'"],
