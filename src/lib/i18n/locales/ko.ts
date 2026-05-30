@@ -71,6 +71,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "register.passwordLabel": "비밀번호",
   "register.passwordHint": "최소 8자; 문자와 숫자를 섞어 사용하는 것을 권장합니다",
   "register.captchaLabel": "사람 확인 (아래 계산을 풀어 주세요)",
+  "register.agreeTerms": "<a href='/terms' target='_blank' class='text-brand-600 hover:underline'>이용약관</a> 및 <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>개인정보처리방침</a>에 동의합니다",
   "register.submit": "계정 만들기",
   "register.haveAccount": "이미 계정이 있으신가요?",
   "register.signIn": "로그인",

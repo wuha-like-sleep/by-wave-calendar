@@ -68,6 +68,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "register.passwordLabel": "密码",
   "register.passwordHint": "至少 8 个字符，建议混合字母数字",
   "register.captchaLabel": "人机验证（请计算下方算式）",
+  "register.agreeTerms": "我已阅读并同意 <a href='/terms' target='_blank' class='text-brand-600 hover:underline'>《使用条款》</a> 和 <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>《隐私政策》</a>",
   "register.submit": "创建账号",
   "register.haveAccount": "已有账号？",
   "register.signIn": "登录",

@@ -71,6 +71,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "register.passwordLabel": "Passwort",
   "register.passwordHint": "Mindestens 8 Zeichen; eine Mischung aus Buchstaben und Zahlen wird empfohlen",
   "register.captchaLabel": "Mensch-Verifizierung (lösen Sie die Rechnung)",
+  "register.agreeTerms": "Ich habe die <a href='/terms' target='_blank' class='text-brand-600 hover:underline'>Nutzungsbedingungen</a> und <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>Datenschutzrichtlinie</a> gelesen und stimme zu",
   "register.submit": "Konto erstellen",
   "register.haveAccount": "Sie haben bereits ein Konto?",
   "register.signIn": "Anmelden",

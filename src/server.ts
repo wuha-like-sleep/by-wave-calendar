@@ -134,15 +134,22 @@ await app.register(helmet, {
       // All third-party libs are self-hosted (国内 CDN 不稳定).
       // No 'unsafe-inline' in script-src — inline <script> tags must carry the
       // per-request nonce that the EJS layout templates inject as nonce="…".
-      "script-src": ["'self'", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
+      // Third-party CAPTCHA hosts (Cloudflare Turnstile / Google reCAPTCHA) are
+      // whitelisted but load NOTHING unless an admin opts into that provider in
+      // Admin/安全. The default "builtin" PoW captcha is same-origin only.
+      "script-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://www.gstatic.com", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
       // Inline event handlers (onclick / onsubmit) on existing templates;
       // refactoring 27 of them is its own batch.
       "script-src-attr": ["'unsafe-inline'"],
       // Tailwind utilities + style="background: ..." color swatches need this.
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:"],
-      "connect-src": ["'self'"],
+      "connect-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com"],
       "font-src": ["'self'", "data:"],
+      // Turnstile / reCAPTCHA render their challenge inside an iframe.
+      "frame-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com"],
+      // builtin PoW captcha spawns a Web Worker from a same-origin Blob.
+      "worker-src": ["'self'", "blob:"],
       "frame-ancestors": ["'none'"],
       "base-uri": ["'self'"],
       "form-action": ["'self'"],

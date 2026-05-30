@@ -100,6 +100,12 @@ export const siteSettings = pgTable("site_settings", {
   lockoutEnabled: boolean("lockout_enabled").notNull().default(true),
   lockoutThreshold: integer("lockout_threshold").notNull().default(5),
   lockoutMinutes: integer("lockout_minutes").notNull().default(15),
+  // Human-verification (CAPTCHA) on public registration. provider:
+  //   "none" | "builtin" (self-hosted PoW) | "turnstile" | "recaptcha" | …
+  // siteKey is the public key (safe to render); secret is the private key.
+  captchaProvider: text("captcha_provider").notNull().default("builtin"),
+  captchaSiteKey: text("captcha_site_key"),
+  captchaSecret: text("captcha_secret"),
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),
@@ -515,6 +521,22 @@ export const eventInviteTokens = pgTable("event_invite_tokens", {
   emailIdx: index("event_invite_tokens_email_idx").on(t.recipientEmail),
 }));
 
+// User-registration invites — used when site_settings.registration_mode =
+// "invite". An admin generates a token; the invitee registers via
+// /register?invite=<token>. Single-use by default (max_uses = 1); `email`
+// optionally scopes it to one address. Consumed on successful email verify.
+export const signupInvites = pgTable("signup_invites", {
+  token: text("token").primaryKey(),
+  email: text("email"),                 // NULL = anyone with the link
+  note: text("note"),                   // admin's free-text label
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  maxUses: integer("max_uses").notNull().default(1),
+  usedCount: integer("used_count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const calendarInvitations = pgTable("calendar_invitations", {
   token: text("token").primaryKey(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
@@ -692,3 +714,5 @@ export type BookingLink = typeof bookingLinks.$inferSelect;
 export type NewBookingLink = typeof bookingLinks.$inferInsert;
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
+export type SignupInvite = typeof signupInvites.$inferSelect;
+export type NewSignupInvite = typeof signupInvites.$inferInsert;

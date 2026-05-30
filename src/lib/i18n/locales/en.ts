@@ -78,6 +78,7 @@ export const en = {
   "register.passwordLabel": "Password",
   "register.passwordHint": "At least 8 characters; mixing letters and numbers is recommended",
   "register.captchaLabel": "Human verification (solve the sum)",
+  "register.agreeTerms": "I have read and agree to the <a href='/terms' target='_blank' class='text-brand-600 hover:underline'>Terms of Use</a> and <a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>Privacy Policy</a>",
   "register.submit": "Create account",
   "register.haveAccount": "Already have an account?",
   "register.signIn": "Sign in",

@@ -29,20 +29,27 @@
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <p class="mt-1 text-xs text-slate-500"><%= t("register.passwordHint") %></p>
       </div>
-      <% if (typeof captcha !== "undefined" && captcha) { %>
+      <% if (typeof captcha !== "undefined" && captcha && captcha.provider !== "none") { %>
       <div>
-        <label class="block text-sm font-medium text-slate-700"><%= t("register.captchaLabel") %></label>
-        <div class="mt-1 flex items-center gap-2">
-          <span class="inline-flex items-center justify-center min-w-[68px] h-[38px] shrink-0 rounded-lg bg-slate-100 text-slate-700 font-mono text-sm select-none" aria-hidden="true"><%= captcha.question %> =</span>
-          <input type="text" name="captchaAnswer" required inputmode="numeric" pattern="[0-9]*" autocomplete="off"
-                 aria-label="<%= captcha.question %>"
-                 class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        </div>
-        <input type="hidden" name="captchaToken" value="<%= captcha.token %>" />
+        <% if (captcha.provider === "builtin") { %>
+          <div data-bwc-captcha="builtin"
+               data-token="<%= captcha.builtin.token %>"
+               data-challenge="<%= captcha.builtin.challenge %>"
+               data-salt="<%= captcha.builtin.salt %>"
+               data-difficulty="<%= captcha.builtin.difficulty %>"></div>
+        <% } else { %>
+          <div data-bwc-captcha="<%= captcha.provider %>" data-sitekey="<%= captcha.siteKey %>"></div>
+        <% } %>
       </div>
       <% } %>
+      <label class="flex items-start gap-2 text-xs text-slate-500">
+        <input type="checkbox" name="agreeTerms" required class="mt-0.5 rounded border-slate-300 text-brand-600 focus:ring-brand-100" />
+        <span><%- t("register.agreeTerms") %></span>
+      </label>
       <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700"><%= t("register.submit") %></button>
     </form>
+
+    <script src="<%= (typeof jsBasePath !== 'undefined' ? jsBasePath : '/static') %>/bwc-captcha.js<%= (typeof assetVersion !== 'undefined' ? '?v=' + assetVersion : '') %>" defer></script>
 
     <p class="mt-6 text-center text-sm text-slate-500">
       <%= t("register.haveAccount") %><a href="/login" class="text-brand-600 hover:text-brand-700 font-medium"><%= t("register.signIn") %></a>

@@ -20,8 +20,8 @@ import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { issueCode, verifyCode } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
-import { getSettings } from "../lib/site_settings.js";
-import { issueCaptcha, verifyCaptcha } from "../lib/captcha.js";
+import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
+import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
@@ -688,7 +688,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       form: {},
-      captcha: issueCaptcha(),
+      captcha: getClientRender(await getCaptchaConfig()),
     });
   });
 
@@ -707,17 +707,28 @@ export async function webRoutes(app: FastifyInstance) {
         displayName: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : undefined)),
         // honeypot field — must be empty
         company: z.string().max(0).optional(),
-        // self-hosted human-verification challenge
-        captchaToken: z.string().max(200).optional(),
-        captchaAnswer: z.string().max(12).optional(),
+        // mandatory「同意条款」checkbox (browsers send "on" when checked)
+        agreeTerms: z.string().optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确" });
     }
-    // Human verification — block before we spend an email send / DB write.
-    if (!verifyCaptcha(body.data.captchaToken, body.data.captchaAnswer)) {
-      return redirectWith(reply, "/register", { error: "人机验证未通过，请重新计算后提交" });
+    // Must agree to the Terms + Privacy Policy to register.
+    if (body.data.agreeTerms !== "on") {
+      return redirectWith(reply, "/register", { error: "请先阅读并勾选同意《使用条款》与《隐私政策》" });
+    }
+    // Human verification — pluggable provider; block before we spend an
+    // email send / DB write. verifyCaptcha reads the captcha fields straight
+    // out of req.body by name and never throws.
+    const captchaResult = await verifyCaptcha(
+      await getCaptchaConfig(),
+      req.body as Record<string, string | undefined>,
+      req.ip,
+    );
+    if (!captchaResult.ok) {
+      req.log.warn({ reason: captchaResult.reason }, "register_captcha_failed");
+      return redirectWith(reply, "/register", { error: "人机验证未通过，请刷新页面后重试" });
     }
     const policyErr = passwordPolicyError(body.data.password);
     if (policyErr) {

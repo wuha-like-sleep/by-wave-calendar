@@ -84,3 +84,60 @@
     <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存安全设置</button>
   </div>
 </form>
+
+<%
+  const captchaLabels = {
+    none: "关闭 —— 不做人机验证",
+    builtin: "内置无感验证（Proof-of-Work，自托管 / 无 CDN，推荐）",
+    turnstile: "Cloudflare Turnstile（第三方，加载 challenges.cloudflare.com）",
+    recaptcha: "Google reCAPTCHA v2（第三方，加载 www.google.com）",
+  };
+  const captchaThirdParty = settings.captchaProvider === "turnstile" || settings.captchaProvider === "recaptcha";
+%>
+<form method="post" action="/admin/security/captcha" id="captcha" class="space-y-6 mt-6">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="mb-4">
+      <h2 class="text-lg font-semibold text-slate-900">注册人机验证（CAPTCHA）</h2>
+      <p class="mt-1 text-sm text-slate-500">控制注册页用哪种人机验证。<strong>内置</strong>是自托管的无感 Proof-of-Work —— 浏览器要真实消耗 CPU 算出哈希，F12 看不到任何「正确答案」，且不依赖任何外部 CDN。如果你更信任大厂，可切到 Cloudflare / Google，把它们后台拿到的 Site Key / Secret 填进来即可。</p>
+    </div>
+
+    <div class="max-w-lg space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">验证方式</label>
+        <select name="captchaProvider"
+                onchange="document.getElementById('captcha-thirdparty').style.display = (this.value==='turnstile'||this.value==='recaptcha') ? '' : 'none'"
+                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+          <% captchaProviders.forEach(function (p) { %>
+            <option value="<%= p %>" <%= settings.captchaProvider === p ? "selected" : "" %>><%= captchaLabels[p] || p %></option>
+          <% }); %>
+        </select>
+      </div>
+
+      <div id="captcha-thirdparty" style="<%= captchaThirdParty ? '' : 'display:none' %>" class="space-y-4 rounded-xl bg-slate-50 border border-slate-200 p-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Site Key（公开）</label>
+          <input type="text" name="captchaSiteKey" maxlength="500" autocomplete="off"
+                 value="<%= settings.captchaSiteKey || '' %>"
+                 placeholder="0x4AAAAAAA…"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p class="mt-1 text-xs text-slate-400">显示在前端的公开密钥，可以放心暴露。</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Secret Key（保密）</label>
+          <input type="password" name="captchaSecret" maxlength="2000" autocomplete="new-password"
+                 placeholder="<%= settings.captchaProvider !== 'none' && settings.captchaProvider !== 'builtin' ? '留空则保持当前已保存的 Secret' : '' %>"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p class="mt-1 text-xs text-slate-400">服务端校验用的密钥，<strong>只写不显</strong>。留空表示沿用已保存的值，不会被清空。</p>
+        </div>
+      </div>
+
+      <p class="text-xs text-amber-700">⚠️ 选第三方但 Secret 缺失时，系统<strong>故意「验证失败」</strong>（fail-closed），宁可挡住注册也不放机器人进来。要彻底关掉验证请选「关闭」。</p>
+    </div>
+  </section>
+
+  <div class="flex justify-end">
+    <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存验证设置</button>
+  </div>
+</form>

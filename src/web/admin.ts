@@ -9,6 +9,7 @@ import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { getSettings, updateSettings } from "../lib/site_settings.js";
+import { CAPTCHA_PROVIDERS, isCaptchaProvider } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
 import {
   calendarInviteMail,
@@ -901,8 +902,35 @@ export async function adminRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       activeNav: "/admin/security",
       settings,
+      captchaProviders: CAPTCHA_PROVIDERS,
       publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
     });
+  });
+
+  // CAPTCHA provider config — separate form (its own secret-keep logic).
+  app.post("/admin/security/captcha", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      captchaProvider: z.string(),
+      captchaSiteKey: z.string().max(500).optional(),
+      captchaSecret: z.string().max(2000).optional(),
+    }).safeParse(req.body);
+    if (!body.success || !isCaptchaProvider(body.data.captchaProvider)) {
+      return reply.redirect("/admin/security?error=" + encodeURIComponent("无效的人机验证配置") + "#captcha");
+    }
+    const patch: { captchaProvider: string; captchaSiteKey: string | null; captchaSecret?: string | null } = {
+      captchaProvider: body.data.captchaProvider,
+      captchaSiteKey: body.data.captchaSiteKey?.trim() || null,
+    };
+    // Blank secret on save = keep the stored one (like the SSO client secret);
+    // only overwrite when a non-empty value is submitted.
+    const secret = body.data.captchaSecret?.trim();
+    if (secret) patch.captchaSecret = secret;
+    await updateSettings(patch);
+    await audit(req, u.id, "site.captcha.update", { targetType: "site_settings", details: { provider: body.data.captchaProvider } });
+    return reply.redirect("/admin/security?success=" + encodeURIComponent("人机验证设置已保存") + "#captcha");
   });
 
   app.post("/admin/security", async (req, reply) => {

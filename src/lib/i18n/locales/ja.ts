@@ -71,6 +71,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "register.passwordLabel": "パスワード",
   "register.passwordHint": "8文字以上。英字と数字を組み合わせることをおすすめします",
   "register.captchaLabel": "人間確認（下の計算を解いてください）",
+  "register.agreeTerms": "<a href='/terms' target='_blank' class='text-brand-600 hover:underline'>利用規約</a>と<a href='/privacy' target='_blank' class='text-brand-600 hover:underline'>プライバシーポリシー</a>に同意します",
   "register.submit": "アカウントを作成",
   "register.haveAccount": "すでにアカウントをお持ちですか？",
   "register.signIn": "サインイン",

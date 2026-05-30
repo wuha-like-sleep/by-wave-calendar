@@ -281,6 +281,13 @@
       "when": 1780039920961,
       "tag": "0039_icy_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1780166372120,
+      "tag": "0040_lame_madame_masque",
+      "breakpoints": true
     }
   ]
 }

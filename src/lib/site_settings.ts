@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { updateBrandForEmails } from "./email_templates.js";
+import { isCaptchaProvider, type CaptchaConfig, type CaptchaProvider } from "./captcha/index.js";
 
 export type SettingsView = {
   siteName: string;
@@ -35,6 +36,10 @@ export type SettingsView = {
   vapidPublicKey: string | null;
   vapidPrivateKey: string | null;
   vapidSubject: string | null;
+  // CAPTCHA — provider + public site key are safe for the wide-read view.
+  // The secret is NOT here; read it only via getCaptchaConfig().
+  captchaProvider: CaptchaProvider;
+  captchaSiteKey: string | null;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -92,7 +97,16 @@ function toView(r: schema.SiteSettings): SettingsView {
     vapidPublicKey: r.vapidPublicKey,
     vapidPrivateKey: r.vapidPrivateKey,
     vapidSubject: r.vapidSubject,
+    captchaProvider: isCaptchaProvider(r.captchaProvider) ? r.captchaProvider : "builtin",
+    captchaSiteKey: r.captchaSiteKey ?? null,
   };
+}
+
+/** CAPTCHA config incl. the secret — read narrowly (never goes to templates). */
+export async function getCaptchaConfig(): Promise<CaptchaConfig> {
+  const [row] = await db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)).limit(1);
+  const provider: CaptchaProvider = isCaptchaProvider(row?.captchaProvider) ? row!.captchaProvider : "builtin";
+  return { provider, siteKey: row?.captchaSiteKey ?? null, secret: row?.captchaSecret ?? null };
 }
 
 export async function getSettings(): Promise<SettingsView> {
@@ -156,6 +170,9 @@ export async function updateSettings(patch: Partial<{
   vapidPublicKey: string | null;
   vapidPrivateKey: string | null;
   vapidSubject: string | null;
+  captchaProvider: string;
+  captchaSiteKey: string | null;
+  captchaSecret: string | null;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)
