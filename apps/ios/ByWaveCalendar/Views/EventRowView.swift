@@ -103,7 +103,7 @@ struct EventRowView: View {
         // per row was a measurable hot path (DateFormatter init is
         // surprisingly expensive on iOS).
         if event.allDay {
-            return DateFormatters.allDayShort.string(from: event.startsAt)
+            return DateFormatters.monthDay.string(from: event.startsAt) + " · " + "全天".loc
         }
         let sameDay = Calendar.current.isDate(event.startsAt, inSameDayAs: event.endsAt)
         let f = sameDay ? DateFormatters.timeShort : DateFormatters.dateTimeShort

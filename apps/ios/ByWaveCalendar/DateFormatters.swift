@@ -15,30 +15,26 @@
 import Foundation
 
 enum DateFormatters {
-    /// "HH:mm" — used by EventRowView.timeLabel for same-day events.
-    static let timeShort: DateFormatter = make(format: "HH:mm")
-    /// "M/d HH:mm" — multi-day events.
-    static let dateTimeShort: DateFormatter = make(format: "M/d HH:mm")
-    /// "M月d日（全天）" — all-day pill in lists.
-    static let allDayShort: DateFormatter = make(format: "M月d日（全天）")
-    /// "M月d日" — month-view day-sheet title.
-    static let monthDay: DateFormatter = make(format: "M月d日")
-    /// "EEE" — 周一 / 周二 etc., week view headers.
-    static let weekdayShort: DateFormatter = make(format: "EEE")
-    /// "yyyy年M月d日 EEEE" — day-view anchor label.
-    static let dayWithWeekday: DateFormatter = make(format: "yyyy年M月d日 EEEE")
-    /// "yyyy年M月" — month anchor.
-    static let yearMonth: DateFormatter = make(format: "yyyy年M月")
-    /// "yyyy年" — year anchor.
-    static let yearOnly: DateFormatter = make(format: "yyyy年")
-    /// "M月d日 HH:mm" — attendee-page short timestamps.
-    static let monthDayTime: DateFormatter = make(format: "M月d日 HH:mm")
-    /// "yyyy年M月d日 HH:mm" — event detail full datetime.
-    static let fullDateTime: DateFormatter = make(format: "yyyy年M月d日 HH:mm")
-    /// "yyyy年M月d日" — all-day detail.
-    static let fullDate: DateFormatter = make(format: "yyyy年M月d日")
-    /// "HH:mm 同步" — synced-at label.
-    static let syncedAt: DateFormatter = make(format: "HH:mm 同步")
+    // Locale-aware. Previously every formatter hardcoded
+    // `Locale(identifier: "zh_CN")` + Chinese patterns ("yyyy年M月d日",
+    // "周一"…), so after the 8-language localization dates STILL rendered
+    // Chinese-style in en/ja/ko/fr/de/es. Now they follow the app locale:
+    // fixed patterns (HH:mm, EEE) just take the current locale; date
+    // patterns use CLDR templates so field order + separators localize
+    // ("5月25日" / "May 25" / "25 may"). Only the formatters actually in
+    // use are kept — the dead ones (full date/time, year anchors, synced-at)
+    // were replaced by inline locale-aware formatters elsewhere.
+
+    /// Same-day event time. 24-hour + colon reads the same everywhere, so a
+    /// fixed pattern is fine (only the locale's numerals differ).
+    static let timeShort: DateFormatter = makeFixed("HH:mm")
+    /// Month/day + time for multi-day events; CLDR orders the fields per
+    /// locale, "H" keeps 24-hour time.
+    static let dateTimeShort: DateFormatter = makeTemplate("MdHm")
+    /// Month + day ("5月25日" / "May 25"). Month-view day sheet + all-day pill.
+    static let monthDay: DateFormatter = makeTemplate("MMMd")
+    /// Abbreviated weekday for week-view headers ("周一" / "Mon" / "Lun").
+    static let weekdayShort: DateFormatter = makeFixed("EEE")
 
     /// ISO8601 WITH fractional seconds (matches what the server emits).
     /// ISO8601DateFormatter is also documented thread-safe when read-only.
@@ -54,10 +50,21 @@ enum DateFormatters {
         return f
     }()
 
-    private static func make(format: String) -> DateFormatter {
+    /// Fixed pattern under the app's current locale (honors the in-app
+    /// AppleLanguages override, which a language change relaunch applies).
+    private static func makeFixed(_ format: String) -> DateFormatter {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         f.dateFormat = format
+        return f
+    }
+
+    /// Build from a CLDR field template (no literals) so the locale picks
+    /// its own field order + separators. Locale must be set before the call.
+    private static func makeTemplate(_ template: String) -> DateFormatter {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate(template)
         return f
     }
 }
