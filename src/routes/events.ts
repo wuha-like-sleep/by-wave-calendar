@@ -167,10 +167,19 @@ export async function eventRoutes(app: FastifyInstance) {
     if (!(await ownsCalendar(id, user.id))) {
       return reply.code(404).send({ error: "not_found" });
     }
+    // Optional ?eventId=<uuid> — return just that one event. The calendar
+    // grid's clickEvent uses this to fetch the full (extra-bearing) event
+    // when the user opens a detail, instead of pulling the WHOLE calendar's
+    // event list (potentially thousands of rows) just to find one by id.
+    // Absent → original behavior (all live events), so old clients are
+    // unaffected.
+    const q = z.object({ eventId: z.string().uuid().optional() }).safeParse(req.query);
+    const conds = [eq(schema.events.calendarId, id), isNull(schema.events.deletedAt)];
+    if (q.success && q.data.eventId) conds.push(eq(schema.events.id, q.data.eventId));
     const rows = await db
       .select()
       .from(schema.events)
-      .where(and(eq(schema.events.calendarId, id), isNull(schema.events.deletedAt)))
+      .where(and(...conds))
       .orderBy(asc(schema.events.startsAt));
     return reply.send(rows);
   });

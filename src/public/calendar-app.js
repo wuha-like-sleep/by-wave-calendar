@@ -1181,7 +1181,10 @@
   cal.on("clickEvent", async (info) => {
     const calId = info.event.calendarId;
     const id = info.event.id;
-    const evs = await fetch(`/api/calendars/${calId}/events`, fetchOpts()).then((r) => r.json()).catch(() => []);
+    // Fetch just this one event (server filters by ?eventId) rather than
+    // pulling the entire calendar's event list to find one by id. Falls back
+    // gracefully on older servers that ignore the param (returns all → .find).
+    const evs = await fetch(`/api/calendars/${calId}/events?eventId=${encodeURIComponent(id)}`, fetchOpts()).then((r) => r.json()).catch(() => []);
     const fresh = (evs || []).find((e) => e.id === id);
     if (!fresh) return;
     const extra = fresh.extra || {};
