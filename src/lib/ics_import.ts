@@ -1,7 +1,7 @@
+import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
-import { newEventUid } from "./ids.js";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB cap on remote ICS responses
@@ -65,38 +65,85 @@ async function upsertEvents(
 
   for (const ev of parsed) {
     if (!ev.uid || !ev.summary) { skipped++; continue; }
-    // Generate a stable uid if the source uid is suspiciously short.
-    const uid = ev.uid.length >= 8 ? ev.uid : `${ev.uid}-${newEventUid()}`;
+    // Stable synthetic uid for suspiciously-short source uids.
+    //
+    // BUG (fixed here): this used to be `${ev.uid}-${newEventUid()}` — a
+    // RANDOM suffix minted fresh on every call. That broke idempotency:
+    // the (calendarId, uid) conflict target never matched on re-import, so
+    // every manual re-import AND every 5-minute subscription refresh
+    // INSERTED a brand-new row → the "one event became several copies"
+    // duplication. Derive the suffix DETERMINISTICALLY from the event's
+    // identity instead, so the same source event maps to the same row
+    // across imports, while two genuinely-distinct events that happen to
+    // share a short source uid still resolve to different uids.
+    const uid = ev.uid.length >= 8
+      ? ev.uid
+      : `${ev.uid}-${createHash("sha1")
+          .update(`${ev.uid}|${ev.summary}|${ev.startsAt.toISOString()}|${ev.endsAt.toISOString()}`)
+          .digest("hex")
+          .slice(0, 12)}`;
+
+    const desc = ev.description ?? null;
+    const loc = ev.location ?? null;
+    const rrule = ev.rrule ?? null;
     const extra: Record<string, unknown> = {};
     if (sourceTag) extra.source = sourceTag;
-    const values = {
-      calendarId,
-      uid,
-      summary: ev.summary,
-      description: ev.description ?? null,
-      location: ev.location ?? null,
-      startsAt: ev.startsAt,
-      endsAt: ev.endsAt,
-      allDay: ev.allDay,
-      rrule: ev.rrule ?? null,
-      extra: Object.keys(extra).length ? extra : null,
-      updatedAt: new Date(),
-    };
+    const extraVal = Object.keys(extra).length ? extra : null;
+
+    // Look up the current row so we can SKIP no-op writes. Re-writing
+    // updatedAt on every refresh — even when nothing changed — churns the
+    // CalDAV etag (etag = etagOf(updatedAt)). Apple Calendar caches etags;
+    // a perpetually-moving etag makes its If-Match PUTs fail with 412 →
+    // it surfaces "无法更新日历 / The calendar could not be updated". Only
+    // touch the row when a user-visible field actually differs.
+    const [existing] = await db
+      .select()
+      .from(schema.events)
+      .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
+      .limit(1);
+
+    if (existing) {
+      // Leave soft-deleted rows alone: don't resurrect something the user
+      // (or the dedupe script) removed, and don't churn its updatedAt.
+      if (existing.deletedAt != null) { skipped++; continue; }
+      const unchanged =
+        existing.summary === ev.summary &&
+        (existing.description ?? null) === desc &&
+        (existing.location ?? null) === loc &&
+        existing.startsAt.getTime() === ev.startsAt.getTime() &&
+        existing.endsAt.getTime() === ev.endsAt.getTime() &&
+        existing.allDay === ev.allDay &&
+        (existing.rrule ?? null) === rrule;
+      if (unchanged) { skipped++; continue; }
+    }
+
     const result = await db
       .insert(schema.events)
-      .values(values)
+      .values({
+        calendarId,
+        uid,
+        summary: ev.summary,
+        description: desc,
+        location: loc,
+        startsAt: ev.startsAt,
+        endsAt: ev.endsAt,
+        allDay: ev.allDay,
+        rrule,
+        extra: extraVal,
+        updatedAt: new Date(),
+      })
       .onConflictDoUpdate({
         target: [schema.events.calendarId, schema.events.uid],
         set: {
-          summary: values.summary,
-          description: values.description,
-          location: values.location,
-          startsAt: values.startsAt,
-          endsAt: values.endsAt,
-          allDay: values.allDay,
-          rrule: values.rrule,
-          extra: values.extra,
-          updatedAt: values.updatedAt,
+          summary: ev.summary,
+          description: desc,
+          location: loc,
+          startsAt: ev.startsAt,
+          endsAt: ev.endsAt,
+          allDay: ev.allDay,
+          rrule,
+          extra: extraVal,
+          updatedAt: new Date(),
         },
       })
       .returning({ id: schema.events.id, inserted: sql<boolean>`(xmax = 0)` });
