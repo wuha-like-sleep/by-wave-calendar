@@ -16,6 +16,7 @@
 import SwiftUI
 import SafariServices
 import UIKit
+import WebKit
 
 struct SettingsView: View {
     @EnvironmentObject var state: AppState
@@ -907,6 +908,13 @@ struct AboutSettingsPage: View {
     /// Set to a (title, content) pair when we've decided to show the
     /// bundled local fallback. Drives the local legal sheet.
     @State private var localLegal: LegalSheetItem?
+    /// Set to the operator-hosted legal page URL when the server has its
+    /// own /privacy //terms etc. Drives a navigation-LOCKED webview sheet
+    /// (LockedWebView) so the legal page can't bounce the user off to a
+    /// third-party site — it stays pinned to that single page. (Distinct
+    /// from `webURL`, which uses the free-navigating SFSafariViewController
+    /// for the Passkey / SSO / MFA flows that legitimately need redirects.)
+    @State private var lockedLegal: LegalWebItem?
 
     var body: some View {
         Form {
@@ -986,6 +994,19 @@ struct AboutSettingsPage: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button("完成") { localLegal = nil }
+                        }
+                    }
+            }
+        }
+        .sheet(item: $lockedLegal) { item in
+            NavigationStack {
+                LockedWebView(url: item.url)
+                    .ignoresSafeArea(edges: .bottom)
+                    .navigationTitle(item.title.loc)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("完成") { lockedLegal = nil }
                         }
                     }
             }
@@ -1106,7 +1127,12 @@ struct AboutSettingsPage: View {
         do {
             let (_, resp) = try await URLSession.shared.data(for: req)
             if let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
-                webURL = url
+                // Operator's own legal page is reachable. Show it in a
+                // navigation-LOCKED webview (not free-roaming Safari) so
+                // tapping a link inside it can't navigate this in-app page
+                // off to somewhere else — external links open in the
+                // system browser instead. See LockedWebView.
+                lockedLegal = LegalWebItem(title: title, url: url)
                 return
             }
         } catch {
@@ -1122,6 +1148,15 @@ struct LegalSheetItem: Identifiable {
     var id: String { title }
     let title: String
     let content: String
+}
+
+/// Sheet payload for the operator-hosted legal page shown in the
+/// navigation-locked LockedWebView. Identifiable on the URL so
+/// sheet(item:) recreates the webview if the target page changes.
+struct LegalWebItem: Identifiable {
+    var id: String { url.absoluteString }
+    let title: String
+    let url: URL
 }
 
 // MARK: - Account-management web bridge
@@ -1163,6 +1198,148 @@ struct SafariWebView: UIViewControllerRepresentable {
         return vc
     }
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+/// Navigation-locked WKWebView.
+///
+/// Shows exactly one page (`url`) and refuses to let that page — or any
+/// script / link inside it — navigate the embedded webview anywhere
+/// else. This is used for content we want to *display in place* and
+/// pin down, e.g. the operator-hosted legal pages (/privacy, /terms,
+/// /data-processing): there's no legitimate reason for a privacy page
+/// to bounce the in-app webview to a third-party site.
+///
+/// Policy:
+///   - The very first load (and reloads of the exact same page) is
+///     allowed.
+///   - Same-host navigations are allowed (so an operator's /privacy
+///     page may link to its own /terms and stay in place).
+///   - Internal/utility schemes (about:, blob:, data:) are allowed —
+///     WebKit uses these for `about:blank`, generated content, etc.
+///   - Any cross-host / cross-scheme navigation is CANCELLED. If it was
+///     triggered by the user tapping a link, we hand the URL to the
+///     system browser instead (so external links still "work", just not
+///     *inside* our locked webview). Non-user-initiated redirects to a
+///     different host are simply dropped.
+///   - Pop-ups / `target="_blank"` (createWebViewWith) never spawn a
+///     second webview; the URL goes to the system browser instead.
+///   - Back/forward swipe gestures are disabled — there is no history
+///     to navigate to in a single-page lock.
+///
+/// NOTE: this is deliberately NOT used for the Passkey / SSO / MFA /
+/// web-session flows — those legitimately need to redirect across hosts
+/// (e.g. to an external IdP) and rely on SFSafariViewController sharing
+/// Safari's cookies / Passkey credentials. Locking those would break
+/// them. See `SafariWebView` above.
+struct LockedWebView: UIViewRepresentable {
+    /// The single page this webview is locked to.
+    let url: URL
+
+    func makeCoordinator() -> Coordinator { Coordinator(allowedHost: url.host) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let cfg = WKWebViewConfiguration()
+        // Block JS-initiated window.open popups from auto-opening a new
+        // webview without a user gesture; combined with the
+        // createWebViewWith handler below this keeps everything single-page.
+        cfg.preferences.javaScriptCanOpenWindowsAutomatically = false
+        let webView = WKWebView(frame: .zero, configuration: cfg)
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        // No history in a locked single-page view — disable the
+        // back/forward edge-swipe so the user can't gesture elsewhere.
+        webView.allowsBackForwardNavigationGestures = false
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        // If the bound URL changes to a genuinely different page, reload.
+        // (In practice the sheet is recreated per-URL so this rarely fires.)
+        if context.coordinator.allowedHost != url.host {
+            context.coordinator.allowedHost = url.host
+        }
+        if webView.url != url && !webView.isLoading {
+            webView.load(URLRequest(url: url))
+        }
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        /// Host of the initially-loaded page; same-host navigation is
+        /// the only cross-page movement we permit.
+        var allowedHost: String?
+
+        init(allowedHost: String?) { self.allowedHost = allowedHost }
+
+        /// Schemes WebKit uses internally that must always be allowed.
+        private let internalSchemes: Set<String> = ["about", "blob", "data"]
+
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let target = navigationAction.request.url else {
+                // No URL to evaluate — allow (covers some internal frames).
+                decisionHandler(.allow)
+                return
+            }
+
+            let scheme = target.scheme?.lowercased() ?? ""
+
+            // Internal/utility schemes (about:blank, blob:, data:) — allow.
+            if internalSchemes.contains(scheme) {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Same host over http(s) — allow (stay within the locked site).
+            if (scheme == "http" || scheme == "https"),
+               let host = target.host,
+               hostMatches(host) {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Everything else is "somewhere else" → cancel the in-webview
+            // navigation. If the user explicitly tapped a link, escalate
+            // it to the system browser so the link still does something.
+            decisionHandler(.cancel)
+            if navigationAction.navigationType == .linkActivated {
+                openExternally(target)
+            }
+        }
+
+        /// Refuse to spawn a second webview for target="_blank" / popups.
+        /// Route the requested URL to the system browser instead and
+        /// return nil so WebKit doesn't create a nested webview.
+        func webView(_ webView: WKWebView,
+                     createWebViewWith configuration: WKWebViewConfiguration,
+                     for navigationAction: WKNavigationAction,
+                     windowFeatures: WKWindowFeatures) -> WKWebView? {
+            if let target = navigationAction.request.url {
+                openExternally(target)
+            }
+            return nil
+        }
+
+        /// Host match: exact, or a subdomain of the allowed host
+        /// (e.g. allowed "rl.lz-ss.com" also matches "www.rl.lz-ss.com").
+        private func hostMatches(_ host: String) -> Bool {
+            guard let allowed = allowedHost else { return false }
+            if host == allowed { return true }
+            return host.hasSuffix("." + allowed)
+        }
+
+        /// Hand a URL to the system browser. Only http/https are opened;
+        /// other schemes are dropped so a hostile page can't deep-link us
+        /// into arbitrary app URL handlers.
+        private func openExternally(_ url: URL) {
+            let scheme = url.scheme?.lowercased() ?? ""
+            guard scheme == "http" || scheme == "https" else { return }
+            DispatchQueue.main.async {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
 }
 
 // URL needs Identifiable conformance for sheet(item:) to bind cleanly.
