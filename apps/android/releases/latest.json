@@ -3,11 +3,11 @@
   "versionName": "0.9.3",
   "filename": "bywave-calendar-0.9.3.apk",
   "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.3/bywave-calendar-0.9.3.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.2/bywave-calendar-0.9.2.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.3/bywave-calendar-0.9.3.apk",
   "sha256": "2ed74344199173102a15a8ef095cc2a832446dfe97c321b94adb0c658e5150c4",
   "sizeBytes": 36937207,
   "releasedAt": "2026-05-30T11:28:57Z",
-  "notes": "Android v0.9.2\n\n• 新增「预约链接」管理：创建 / 复制公开链接 / 启停 / 删除\n• 创建事件发 clientUid 幂等键，配合服务端根治「一个事件变三个」重复\n• 自动更新加 GitHub raw 兜底：服务器没更新也能发现新版本\n• 删除账号确认短语支持任意界面语言",
+  "notes": "Android v0.9.3\n\n• 6 种次要语言（繁体中文 / 日本語 / 한국어 / Español / Français / Deutsch）补齐到 100%，预约链接等界面不再回退英文\n• 含 v0.9.2 的预约链接管理、创建事件幂等（根治重复）、自动更新 GitHub 兜底",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }

@@ -207,6 +207,10 @@ d.update({
     "versionName": "$VERSION_NAME",
     "filename": "$CANONICAL_FILENAME",
     "downloadUrl": "$DOWNLOAD_URL",
+    # `url` mirrors downloadUrl — it's what the Android client's GitHub-raw
+    # update fallback reads (AndroidReleaseDto.url). Must be bumped together
+    # or the fallback would hand out the PREVIOUS version's APK.
+    "url": "$DOWNLOAD_URL",
     "sha256": "$SHA256",
     "sizeBytes": $SIZE,
     "releasedAt": "$RELEASED_AT",
