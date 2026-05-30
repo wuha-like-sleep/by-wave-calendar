@@ -96,4 +96,100 @@
     <string name="settings_language_follow_system">Seguir el sistema</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">Nuevo calendario</string>
+    <string name="calendars_new_title">Nuevo calendario</string>
+    <string name="calendars_name">Nombre</string>
+    <string name="calendars_name_empty">El nombre no puede estar vacío</string>
+    <string name="calendars_description">Descripción</string>
+    <string name="calendars_description_hint">Opcional — para qué sirve este calendario</string>
+    <string name="calendars_color">Color</string>
+    <string name="calendars_timezone">Zona horaria predeterminada</string>
+    <string name="calendars_timezone_hint">ID de zona horaria IANA usado como predeterminado para los eventos nuevos; los eventos existentes mantienen la suya.</string>
+    <string name="calendars_create">Crear</string>
+    <string name="calendars_created">Creado</string>
+    <string name="calendars_create_failed">No se pudo crear el calendario</string>
+    <string name="calendars_delete">Eliminar calendario</string>
+    <string name="calendars_delete_title">¿Eliminar “%1$s”?</string>
+    <string name="calendars_delete_message">Esto también elimina todos los eventos de este calendario y no se puede deshacer.</string>
+    <string name="calendars_deleted">Calendario eliminado</string>
+    <string name="calendars_delete_failed">No se pudo eliminar el calendario</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">Enlaces de suscripción</string>
+    <string name="share_links_desc">Comparte este calendario en modo solo lectura — cualquiera con un enlace puede suscribirse a sus eventos en su propia app de calendario.</string>
+    <string name="share_links_empty">Aún no hay enlaces de suscripción</string>
+    <string name="share_links_generate">Generar enlace</string>
+    <string name="share_links_label">Etiqueta (opcional)</string>
+    <string name="share_links_label_hint">p. ej. Familia / Equipo de trabajo</string>
+    <string name="share_links_generated">Enlace de suscripción generado</string>
+    <string name="share_links_generate_failed">No se pudo generar el enlace</string>
+    <string name="share_links_copy">Copiar</string>
+    <string name="share_links_copied">Enlace copiado</string>
+    <string name="share_links_revoke">Revocar</string>
+    <string name="share_links_revoke_title">¿Revocar este enlace de suscripción?</string>
+    <string name="share_links_revoke_message">El enlace deja de funcionar de inmediato. Los eventos ya importados en los calendarios de otras personas se conservan.</string>
+    <string name="share_links_revoked">Enlace de suscripción revocado</string>
+    <string name="share_links_revoke_failed">No se pudo revocar el enlace</string>
+    <string name="share_links_no_label">Enlace sin nombre</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">Cuenta y seguridad</string>
+    <string name="settings_change_password">Cambiar contraseña</string>
+    <string name="password_current">Contraseña actual</string>
+    <string name="password_new">Nueva contraseña</string>
+    <string name="password_confirm">Confirmar nueva contraseña</string>
+    <string name="password_too_short">La nueva contraseña debe tener al menos 8 caracteres</string>
+    <string name="password_mismatch">Las nuevas contraseñas no coinciden</string>
+    <string name="password_changed">Contraseña cambiada. Los demás dispositivos deberán iniciar sesión de nuevo.</string>
+    <string name="password_change_failed">No se pudo cambiar la contraseña</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">Eliminar cuenta</string>
+    <string name="delete_account_title">Eliminar cuenta</string>
+    <string name="delete_account_warning">Esto elimina de forma permanente tu cuenta, todos los calendarios y todos los eventos. No se puede deshacer.</string>
+    <string name="delete_account_password">Contraseña</string>
+    <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
+         in src/routes/devices.ts. Do NOT translate this value, only the
+         surrounding label/hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">Para confirmar, escribe “删除我的账号”</string>
+    <string name="delete_account_confirm_mismatch">Escribe “删除我的账号” exactamente</string>
+    <string name="delete_account_failed">No se pudo eliminar la cuenta</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">Enlaces de reserva</string>
+    <string name="booking_desc">Crea una página de reservas pública — cualquiera con el enlace puede reservar una reunión en tu tiempo disponible, y las reservas confirmadas van al calendario que elijas.</string>
+    <string name="booking_empty">Aún no hay enlaces de reserva</string>
+    <string name="booking_create">Nuevo</string>
+    <string name="booking_create_title">Nuevo enlace de reserva</string>
+    <string name="booking_created">Enlace de reserva creado</string>
+    <string name="booking_create_failed">No se pudo crear el enlace de reserva</string>
+    <string name="booking_slug">Slug</string>
+    <string name="booking_slug_hint">El sufijo de la URL pública, p. ej. book/your-slug. Solo letras minúsculas, dígitos y guiones.</string>
+    <string name="booking_slug_invalid">Solo letras minúsculas, dígitos y guiones, empezando por una letra o dígito, máximo 31 caracteres.</string>
+    <string name="booking_link_title">Título</string>
+    <string name="booking_link_description">Descripción</string>
+    <string name="booking_link_description_hint">Opcional — de qué trata esta reunión</string>
+    <string name="booking_calendar">Guardar en el calendario</string>
+    <string name="booking_calendar_none">Elige un calendario</string>
+    <string name="booking_duration">Duración (minutos)</string>
+    <string name="booking_duration_value">%1$d min</string>
+    <string name="booking_min_notice">Antelación mínima (horas)</string>
+    <string name="booking_max_days">Días reservables por adelantado</string>
+    <string name="booking_buffer_before">Margen antes (min)</string>
+    <string name="booking_buffer_after">Margen después (min)</string>
+    <string name="booking_notify_email">Avisarme por correo al reservar</string>
+    <string name="booking_notify_email_desc">Te envía un correo cuando alguien reserva.</string>
+    <string name="booking_paused">En pausa</string>
+    <string name="booking_copy_link">Copiar enlace</string>
+    <string name="booking_copied">Enlace copiado</string>
+    <string name="booking_open">Abrir</string>
+    <string name="booking_delete">Eliminar</string>
+    <string name="booking_delete_title">¿Eliminar “%1$s”?</string>
+    <string name="booking_delete_message">La página de reservas deja de funcionar de inmediato. Las reservas ya confirmadas permanecen en los calendarios de los asistentes.</string>
+    <string name="booking_deleted">Enlace de reserva eliminado</string>
+    <string name="booking_delete_failed">No se pudo eliminar el enlace de reserva</string>
+    <string name="booking_update_failed">No se pudo actualizar el enlace de reserva</string>
 </resources>

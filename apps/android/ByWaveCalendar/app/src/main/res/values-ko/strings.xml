@@ -96,4 +96,100 @@
     <string name="settings_language_follow_system">시스템 따르기</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">새 캘린더</string>
+    <string name="calendars_new_title">새 캘린더</string>
+    <string name="calendars_name">이름</string>
+    <string name="calendars_name_empty">이름은 비워 둘 수 없습니다</string>
+    <string name="calendars_description">설명</string>
+    <string name="calendars_description_hint">선택 사항 — 이 캘린더의 용도</string>
+    <string name="calendars_color">색상</string>
+    <string name="calendars_timezone">기본 시간대</string>
+    <string name="calendars_timezone_hint">새 일정의 기본값으로 사용되는 IANA 시간대 ID입니다. 기존 일정은 각자의 시간대를 유지합니다.</string>
+    <string name="calendars_create">만들기</string>
+    <string name="calendars_created">생성됨</string>
+    <string name="calendars_create_failed">캘린더를 만들 수 없습니다</string>
+    <string name="calendars_delete">캘린더 삭제</string>
+    <string name="calendars_delete_title">“%1$s”을(를) 삭제할까요?</string>
+    <string name="calendars_delete_message">이 캘린더의 모든 일정도 함께 삭제되며 취소할 수 없습니다.</string>
+    <string name="calendars_deleted">캘린더가 삭제되었습니다</string>
+    <string name="calendars_delete_failed">캘린더를 삭제할 수 없습니다</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">구독 링크</string>
+    <string name="share_links_desc">이 캘린더를 읽기 전용으로 공유합니다 — 링크가 있는 사람은 누구나 자신의 캘린더 앱에서 이 일정을 구독할 수 있습니다.</string>
+    <string name="share_links_empty">아직 구독 링크가 없습니다</string>
+    <string name="share_links_generate">링크 생성</string>
+    <string name="share_links_label">레이블(선택 사항)</string>
+    <string name="share_links_label_hint">예: 가족 / 업무 팀</string>
+    <string name="share_links_generated">구독 링크가 생성되었습니다</string>
+    <string name="share_links_generate_failed">링크를 생성할 수 없습니다</string>
+    <string name="share_links_copy">복사</string>
+    <string name="share_links_copied">링크가 복사되었습니다</string>
+    <string name="share_links_revoke">해지</string>
+    <string name="share_links_revoke_title">이 구독 링크를 해지할까요?</string>
+    <string name="share_links_revoke_message">링크가 즉시 작동을 멈춥니다. 이미 다른 사람의 캘린더로 가져온 일정은 유지됩니다.</string>
+    <string name="share_links_revoked">구독 링크가 해지되었습니다</string>
+    <string name="share_links_revoke_failed">링크를 해지할 수 없습니다</string>
+    <string name="share_links_no_label">이름 없는 링크</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">계정 및 보안</string>
+    <string name="settings_change_password">비밀번호 변경</string>
+    <string name="password_current">현재 비밀번호</string>
+    <string name="password_new">새 비밀번호</string>
+    <string name="password_confirm">새 비밀번호 확인</string>
+    <string name="password_too_short">새 비밀번호는 8자 이상이어야 합니다</string>
+    <string name="password_mismatch">새 비밀번호가 일치하지 않습니다</string>
+    <string name="password_changed">비밀번호가 변경되었습니다. 다른 기기는 다시 로그인해야 합니다.</string>
+    <string name="password_change_failed">비밀번호를 변경할 수 없습니다</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">계정 삭제</string>
+    <string name="delete_account_title">계정 삭제</string>
+    <string name="delete_account_warning">계정, 모든 캘린더, 모든 일정이 영구적으로 삭제됩니다. 취소할 수 없습니다.</string>
+    <string name="delete_account_password">비밀번호</string>
+    <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
+         in src/routes/devices.ts. Do NOT translate this value, only the
+         surrounding label/hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">확인하려면 “删除我的账号”을(를) 입력하세요</string>
+    <string name="delete_account_confirm_mismatch">“删除我的账号”을(를) 정확히 입력하세요</string>
+    <string name="delete_account_failed">계정을 삭제할 수 없습니다</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">예약 링크</string>
+    <string name="booking_desc">공개 예약 페이지를 만듭니다 — 링크가 있는 사람은 누구나 가능한 시간에 회의를 예약할 수 있고, 확정된 예약은 선택한 캘린더에 추가됩니다.</string>
+    <string name="booking_empty">아직 예약 링크가 없습니다</string>
+    <string name="booking_create">새로 만들기</string>
+    <string name="booking_create_title">새 예약 링크</string>
+    <string name="booking_created">예약 링크가 생성되었습니다</string>
+    <string name="booking_create_failed">예약 링크를 만들 수 없습니다</string>
+    <string name="booking_slug">슬러그</string>
+    <string name="booking_slug_hint">공개 URL의 접미사입니다. 예: book/your-slug. 소문자, 숫자, 하이픈만 사용할 수 있습니다.</string>
+    <string name="booking_slug_invalid">소문자, 숫자, 하이픈만 사용하고 문자나 숫자로 시작하며 최대 31자입니다.</string>
+    <string name="booking_link_title">제목</string>
+    <string name="booking_link_description">설명</string>
+    <string name="booking_link_description_hint">선택 사항 — 이 회의의 내용</string>
+    <string name="booking_calendar">저장할 캘린더</string>
+    <string name="booking_calendar_none">캘린더 선택</string>
+    <string name="booking_duration">소요 시간(분)</string>
+    <string name="booking_duration_value">%1$d분</string>
+    <string name="booking_min_notice">최소 사전 통지(시간)</string>
+    <string name="booking_max_days">예약 가능 일수</string>
+    <string name="booking_buffer_before">앞 여유 시간(분)</string>
+    <string name="booking_buffer_after">뒤 여유 시간(분)</string>
+    <string name="booking_notify_email">예약 시 이메일로 알림</string>
+    <string name="booking_notify_email_desc">누군가 예약하면 이메일을 보냅니다.</string>
+    <string name="booking_paused">일시 중지됨</string>
+    <string name="booking_copy_link">링크 복사</string>
+    <string name="booking_copied">링크가 복사되었습니다</string>
+    <string name="booking_open">열기</string>
+    <string name="booking_delete">삭제</string>
+    <string name="booking_delete_title">“%1$s”을(를) 삭제할까요?</string>
+    <string name="booking_delete_message">예약 페이지가 즉시 작동을 멈춥니다. 이미 확정된 예약은 참석자의 캘린더에 남아 있습니다.</string>
+    <string name="booking_deleted">예약 링크가 삭제되었습니다</string>
+    <string name="booking_delete_failed">예약 링크를 삭제할 수 없습니다</string>
+    <string name="booking_update_failed">예약 링크를 업데이트할 수 없습니다</string>
 </resources>

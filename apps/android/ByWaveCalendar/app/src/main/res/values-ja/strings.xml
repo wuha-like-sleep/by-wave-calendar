@@ -96,4 +96,100 @@
     <string name="settings_language_follow_system">システムに従う</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">新しいカレンダー</string>
+    <string name="calendars_new_title">新しいカレンダー</string>
+    <string name="calendars_name">名前</string>
+    <string name="calendars_name_empty">名前は空にできません</string>
+    <string name="calendars_description">説明</string>
+    <string name="calendars_description_hint">任意 — このカレンダーの用途</string>
+    <string name="calendars_color">色</string>
+    <string name="calendars_timezone">既定のタイムゾーン</string>
+    <string name="calendars_timezone_hint">新しい予定の既定値として使う IANA タイムゾーン ID。既存の予定はそれぞれのタイムゾーンを保持します。</string>
+    <string name="calendars_create">作成</string>
+    <string name="calendars_created">作成しました</string>
+    <string name="calendars_create_failed">カレンダーを作成できませんでした</string>
+    <string name="calendars_delete">カレンダーを削除</string>
+    <string name="calendars_delete_title">「%1$s」を削除しますか？</string>
+    <string name="calendars_delete_message">このカレンダー内のすべての予定も削除され、取り消せません。</string>
+    <string name="calendars_deleted">カレンダーを削除しました</string>
+    <string name="calendars_delete_failed">カレンダーを削除できませんでした</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">購読リンク</string>
+    <string name="share_links_desc">このカレンダーを読み取り専用で共有します — リンクを持つ人は誰でも自分のカレンダーアプリでその予定を購読できます。</string>
+    <string name="share_links_empty">購読リンクはまだありません</string>
+    <string name="share_links_generate">リンクを生成</string>
+    <string name="share_links_label">ラベル（任意）</string>
+    <string name="share_links_label_hint">例: 家族 / 仕事チーム</string>
+    <string name="share_links_generated">購読リンクを生成しました</string>
+    <string name="share_links_generate_failed">リンクを生成できませんでした</string>
+    <string name="share_links_copy">コピー</string>
+    <string name="share_links_copied">リンクをコピーしました</string>
+    <string name="share_links_revoke">無効化</string>
+    <string name="share_links_revoke_title">この購読リンクを無効化しますか？</string>
+    <string name="share_links_revoke_message">リンクはすぐに使えなくなります。すでに他の人のカレンダーに取り込まれた予定は保持されます。</string>
+    <string name="share_links_revoked">購読リンクを無効化しました</string>
+    <string name="share_links_revoke_failed">リンクを無効化できませんでした</string>
+    <string name="share_links_no_label">名前のないリンク</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">アカウントとセキュリティ</string>
+    <string name="settings_change_password">パスワードを変更</string>
+    <string name="password_current">現在のパスワード</string>
+    <string name="password_new">新しいパスワード</string>
+    <string name="password_confirm">新しいパスワードを確認</string>
+    <string name="password_too_short">新しいパスワードは 8 文字以上にしてください</string>
+    <string name="password_mismatch">新しいパスワードが一致しません</string>
+    <string name="password_changed">パスワードを変更しました。他のデバイスは再度サインインが必要です。</string>
+    <string name="password_change_failed">パスワードを変更できませんでした</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">アカウントを削除</string>
+    <string name="delete_account_title">アカウントを削除</string>
+    <string name="delete_account_warning">これはアカウント、すべてのカレンダー、すべての予定を完全に削除します。取り消せません。</string>
+    <string name="delete_account_password">パスワード</string>
+    <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
+         in src/routes/devices.ts. Do NOT translate this value, only the
+         surrounding label/hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">確認するには「删除我的账号」と入力してください</string>
+    <string name="delete_account_confirm_mismatch">「删除我的账号」と正確に入力してください</string>
+    <string name="delete_account_failed">アカウントを削除できませんでした</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">予約リンク</string>
+    <string name="booking_desc">公開の予約ページを作成します — リンクを持つ人は誰でもあなたの空き時間に会議を予約でき、確定した予約は選んだカレンダーに入ります。</string>
+    <string name="booking_empty">予約リンクはまだありません</string>
+    <string name="booking_create">新規</string>
+    <string name="booking_create_title">新しい予約リンク</string>
+    <string name="booking_created">予約リンクを作成しました</string>
+    <string name="booking_create_failed">予約リンクを作成できませんでした</string>
+    <string name="booking_slug">スラッグ</string>
+    <string name="booking_slug_hint">公開 URL の末尾。例: book/your-slug。小文字・数字・ハイフンのみ使えます。</string>
+    <string name="booking_slug_invalid">小文字・数字・ハイフンのみ、先頭は文字か数字、最大 31 文字。</string>
+    <string name="booking_link_title">タイトル</string>
+    <string name="booking_link_description">説明</string>
+    <string name="booking_link_description_hint">任意 — この会議の内容</string>
+    <string name="booking_calendar">保存先カレンダー</string>
+    <string name="booking_calendar_none">カレンダーを選択</string>
+    <string name="booking_duration">所要時間（分）</string>
+    <string name="booking_duration_value">%1$d 分</string>
+    <string name="booking_min_notice">最短予約受付時間（時間）</string>
+    <string name="booking_max_days">予約可能な日数</string>
+    <string name="booking_buffer_before">前の余裕時間（分）</string>
+    <string name="booking_buffer_after">後の余裕時間（分）</string>
+    <string name="booking_notify_email">予約時にメールで通知</string>
+    <string name="booking_notify_email_desc">誰かが予約したときにメールを送ります。</string>
+    <string name="booking_paused">一時停止中</string>
+    <string name="booking_copy_link">リンクをコピー</string>
+    <string name="booking_copied">リンクをコピーしました</string>
+    <string name="booking_open">開く</string>
+    <string name="booking_delete">削除</string>
+    <string name="booking_delete_title">「%1$s」を削除しますか？</string>
+    <string name="booking_delete_message">予約ページはすぐに使えなくなります。すでに確定した予約は参加者のカレンダーに残ります。</string>
+    <string name="booking_deleted">予約リンクを削除しました</string>
+    <string name="booking_delete_failed">予約リンクを削除できませんでした</string>
+    <string name="booking_update_failed">予約リンクを更新できませんでした</string>
 </resources>

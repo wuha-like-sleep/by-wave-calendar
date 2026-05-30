@@ -106,4 +106,100 @@
     <string name="settings_language_follow_system">跟隨系統</string>
     <string name="settings_language_zh">簡體中文</string>
     <string name="settings_language_en">English</string>
+
+    <!-- Manage calendars: create / delete (v0.11) -->
+    <string name="calendars_new">新增行事曆</string>
+    <string name="calendars_new_title">新增行事曆</string>
+    <string name="calendars_name">名稱</string>
+    <string name="calendars_name_empty">名稱不能為空</string>
+    <string name="calendars_description">說明</string>
+    <string name="calendars_description_hint">選填 — 這個行事曆的用途</string>
+    <string name="calendars_color">顏色</string>
+    <string name="calendars_timezone">預設時區</string>
+    <string name="calendars_timezone_hint">作為新事件預設值的 IANA 時區代碼；既有事件維持自己的時區。</string>
+    <string name="calendars_create">建立</string>
+    <string name="calendars_created">已建立</string>
+    <string name="calendars_create_failed">無法建立行事曆</string>
+    <string name="calendars_delete">刪除行事曆</string>
+    <string name="calendars_delete_title">要刪除「%1$s」嗎？</string>
+    <string name="calendars_delete_message">這也會刪除此行事曆中的所有事件，且無法復原。</string>
+    <string name="calendars_deleted">行事曆已刪除</string>
+    <string name="calendars_delete_failed">無法刪除行事曆</string>
+
+    <!-- Manage calendars: share / subscribe links (v0.11) -->
+    <string name="share_links_title">訂閱連結</string>
+    <string name="share_links_desc">以唯讀方式分享此行事曆 — 擁有連結的人都能在自己的行事曆 App 中訂閱它的事件。</string>
+    <string name="share_links_empty">尚無訂閱連結</string>
+    <string name="share_links_generate">產生連結</string>
+    <string name="share_links_label">標籤（選填）</string>
+    <string name="share_links_label_hint">例如 家人 / 工作團隊</string>
+    <string name="share_links_generated">已產生訂閱連結</string>
+    <string name="share_links_generate_failed">無法產生連結</string>
+    <string name="share_links_copy">複製</string>
+    <string name="share_links_copied">連結已複製</string>
+    <string name="share_links_revoke">撤銷</string>
+    <string name="share_links_revoke_title">要撤銷這個訂閱連結嗎？</string>
+    <string name="share_links_revoke_message">連結會立即停止運作。已匯入他人行事曆的事件會保留。</string>
+    <string name="share_links_revoked">訂閱連結已撤銷</string>
+    <string name="share_links_revoke_failed">無法撤銷連結</string>
+    <string name="share_links_no_label">未命名連結</string>
+
+    <!-- Account security: change password (v0.11) -->
+    <string name="settings_security">帳號與安全</string>
+    <string name="settings_change_password">變更密碼</string>
+    <string name="password_current">目前密碼</string>
+    <string name="password_new">新密碼</string>
+    <string name="password_confirm">確認新密碼</string>
+    <string name="password_too_short">新密碼至少需要 8 個字元</string>
+    <string name="password_mismatch">兩次輸入的新密碼不一致</string>
+    <string name="password_changed">密碼已變更。其他裝置需要重新登入。</string>
+    <string name="password_change_failed">無法變更密碼</string>
+
+    <!-- Account security: delete account (v0.11) -->
+    <string name="settings_delete_account">刪除帳號</string>
+    <string name="delete_account_title">刪除帳號</string>
+    <string name="delete_account_warning">這會永久刪除你的帳號、所有行事曆和所有事件，且無法復原。</string>
+    <string name="delete_account_password">密碼</string>
+    <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
+         in src/routes/devices.ts. Do NOT translate this value, only the
+         surrounding label/hint. -->
+    <string name="delete_account_confirm_phrase">删除我的账号</string>
+    <string name="delete_account_confirm_label">請輸入「删除我的账号」以確認</string>
+    <string name="delete_account_confirm_mismatch">請完全照樣輸入「删除我的账号」</string>
+    <string name="delete_account_failed">無法刪除帳號</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">預約連結</string>
+    <string name="booking_desc">建立公開的預約頁面 — 擁有連結的人都能在你的空檔時段預約會議，確認後的預約會落在你選擇的行事曆上。</string>
+    <string name="booking_empty">尚無預約連結</string>
+    <string name="booking_create">新增</string>
+    <string name="booking_create_title">新增預約連結</string>
+    <string name="booking_created">已建立預約連結</string>
+    <string name="booking_create_failed">無法建立預約連結</string>
+    <string name="booking_slug">網址後綴</string>
+    <string name="booking_slug_hint">公開網址的後綴，例如 book/your-slug。只能使用小寫字母、數字和連字號。</string>
+    <string name="booking_slug_invalid">只能使用小寫字母、數字和連字號，須以字母或數字開頭，最多 31 個字元。</string>
+    <string name="booking_link_title">標題</string>
+    <string name="booking_link_description">說明</string>
+    <string name="booking_link_description_hint">選填 — 這場會議的主題</string>
+    <string name="booking_calendar">儲存到行事曆</string>
+    <string name="booking_calendar_none">選擇行事曆</string>
+    <string name="booking_duration">時長（分鐘）</string>
+    <string name="booking_duration_value">%1$d 分鐘</string>
+    <string name="booking_min_notice">最短提前通知（小時）</string>
+    <string name="booking_max_days">可預約的天數</string>
+    <string name="booking_buffer_before">前置緩衝（分鐘）</string>
+    <string name="booking_buffer_after">後置緩衝（分鐘）</string>
+    <string name="booking_notify_email">有預約時用電子郵件通知我</string>
+    <string name="booking_notify_email_desc">有人預約時寄一封電子郵件給你。</string>
+    <string name="booking_paused">已暫停</string>
+    <string name="booking_copy_link">複製連結</string>
+    <string name="booking_copied">連結已複製</string>
+    <string name="booking_open">開啟</string>
+    <string name="booking_delete">刪除</string>
+    <string name="booking_delete_title">要刪除「%1$s」嗎？</string>
+    <string name="booking_delete_message">預約頁面會立即停止運作。已確認的預約仍會保留在與會者的行事曆上。</string>
+    <string name="booking_deleted">預約連結已刪除</string>
+    <string name="booking_delete_failed">無法刪除預約連結</string>
+    <string name="booking_update_failed">無法更新預約連結</string>
 </resources>
