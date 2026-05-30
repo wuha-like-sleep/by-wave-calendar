@@ -1,30 +1,30 @@
 {
-  "versionCode": 14,
-  "versionName": "0.8.0",
-  "releasedAt": "2026-05-29T13:00:00Z",
-  "notes": "本次更新（自 0.7.7）：\n• 8 种语言（简/繁中文、English、日本語、한국어、Español、Français、Deutsch）\n• 日历管理：原生新建 / 改名 / 改色 / 改时区 / 删除\n• 事件提醒 + 桌面通知\n• 原生修改密码 + 我的设备管理\n• 全局搜索（Cmd/Ctrl+F）\n• 分享 / 订阅链接管理\n• 修复：去掉 DMG 许可弹窗，一键自动更新（下载→自动重启）现已真正生效",
+  "versionCode": 15,
+  "versionName": "0.8.1",
+  "releasedAt": "2026-05-30T06:30:00Z",
+  "notes": "本次更新（自 0.8.0）：\n• Agenda 日程视图（从今天起 30 天的事件流，按日分组）\n• Cmd/Ctrl + 1/2/3/4 快速切换 日/周/月/日程\n• 菜单栏「新建事件」（Cmd+N），隐藏状态也能直接新建\n• 预约链接管理：创建 / 复制公开链接 / 启停 / 删除\n• 创建事件幂等键，配合服务端根治「一个事件变三个」重复",
   "mandatory": false,
   "assets": {
     "mac": {
-      "filename": "ByWaveCalendar-0.8.0-arm64.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-arm64.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-arm64.dmg",
-      "sha256": "f8f581fdb8b0bd1b606d24b9e1d1edf8b127ec067ddf365bbd93755cb0d90b57",
-      "sizeBytes": 114200064
+      "filename": "ByWaveCalendar-0.8.1-arm64.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-arm64.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-arm64.dmg",
+      "sha256": "e8f813704256b91d9e71f43cc8457696da3ac38b2dabc70fc17740b41518a8cc",
+      "sizeBytes": 114422101
     },
     "win": {
-      "filename": "ByWaveCalendar-0.8.0-x64.msi",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-x64.msi",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-x64.msi",
-      "sha256": "d425ebb556f3b7871a7b6406129ccfbe7109aa48df92744dd56921f2c4eb704d",
-      "sizeBytes": 103916096
+      "filename": "ByWaveCalendar-0.8.1-x64.msi",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-x64.msi",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-x64.msi",
+      "sha256": "c13e0459d1bdaec3f9db7510d029525b143fe4be46353a3107912cca6c770036",
+      "sizeBytes": 104079936
     },
     "linux": {
-      "filename": "bywave-calendar_0.8.0_amd64.deb",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/bywave-calendar_0.8.0_amd64.deb",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/bywave-calendar_0.8.0_amd64.deb",
-      "sha256": "ec326f0d7c6733c9536ad56dc6ff7eac79a606a325dbac310629309ff200796a",
-      "sizeBytes": 95748850
+      "filename": "bywave-calendar_0.8.1_amd64.deb",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/bywave-calendar_0.8.1_amd64.deb",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/bywave-calendar_0.8.1_amd64.deb",
+      "sha256": "f5e0d9d11ff7d476ee65e0d659b292db5be42a4280343bc28a8288349dbaa5d4",
+      "sizeBytes": 95850722
     }
   }
 }

@@ -9,7 +9,7 @@
 <br/>
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/server-v1.3.16-2563eb.svg)](package.json)
+[![Version](https://img.shields.io/badge/server-v1.5.0-2563eb.svg)](package.json)
 [![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows-6366f1.svg)](#-下载客户端--download)
 [![Node](https://img.shields.io/badge/Node-≥20-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -59,17 +59,17 @@ TODO: 把截图放进 docs/screenshots/ 然后在这里引用，例如：
 |---|---|---|
 | 🌐 Web / PWA | — | 浏览器打开你的 ByWave 服务器即可，支持装到桌面 / 主屏 |
 | 📱 iOS | v1.4.3 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
-| 🤖 Android | v0.9.1 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.1/bywave-calendar-0.9.1.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
-| 🍎 macOS | v0.8.0 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-arm64.dmg) — 已 Apple 公证 |
-| 🪟 Windows | v0.8.0 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-x64.msi) |
-| 🐧 Linux | v0.8.0 | [DEB (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/bywave-calendar_0.8.0_amd64.deb) |
+| 🤖 Android | v0.9.2 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.2/bywave-calendar-0.9.2.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
+| 🍎 macOS | v0.8.1 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-arm64.dmg) — 已 Apple 公证 |
+| 🪟 Windows | v0.8.1 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-x64.msi) |
+| 🐧 Linux | v0.8.1 | [DEB (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/bywave-calendar_0.8.1_amd64.deb) |
 
 <div align="center">
 
 [![App Store](https://img.shields.io/badge/iOS-App%20Store-000000?logo=apple&logoColor=white&style=for-the-badge)](https://apps.apple.com/us/app/bywavecalendar/id6772655143)
-[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.1/bywave-calendar-0.9.1.apk)
-[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-arm64.dmg)
-[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.0/ByWaveCalendar-0.8.0-x64.msi)
+[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.2/bywave-calendar-0.9.2.apk)
+[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-arm64.dmg)
+[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.1/ByWaveCalendar-0.8.1-x64.msi)
 
 </div>
 
