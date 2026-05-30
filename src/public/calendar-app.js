@@ -988,12 +988,16 @@
     }
     // Timezone field is now a hidden <input> driven by the custom
     // searchable combobox (#modal-tz). Set the underlying value, then
-    // ask the picker to refresh its visible label. Falls back to
-    // "Asia/Shanghai" when the event has no stored timezone so the
-    // picker never shows an empty trigger.
+    // ask the picker to refresh its visible label. For a NEW event with
+    // no stored timezone, prefill the BROWSER-DETECTED zone (the OS's IANA
+    // zone via Intl — already accurate; no geolocation needed) so the
+    // picker reflects where the user actually is instead of a hardcoded
+    // Asia/Shanghai. The user still sees + can change it in the picker.
     const tzInput = form.querySelector('[name="timezone"]');
     if (tzInput) {
-      tzInput.value = payload.timezone || "Asia/Shanghai";
+      let detectedTz = "Asia/Shanghai";
+      try { detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || detectedTz; } catch (_e) { /* keep fallback */ }
+      tzInput.value = payload.timezone || detectedTz;
       const tzPicker = tzInput.closest("[data-tz-picker]");
       if (tzPicker && typeof window.bwcSyncTzPicker === "function") {
         window.bwcSyncTzPicker(tzPicker);
@@ -1615,9 +1619,13 @@
         } else {
           const name = importForm.querySelector('input[name="newName"]').value.trim() || "导入的日历";
           const color = importForm.querySelector('input[name="newColor"]').value || "#6366f1";
+          // New calendar inherits the user's browser-detected (OS/IANA) zone
+          // rather than a hardcoded Asia/Shanghai.
+          let newCalTz = "Asia/Shanghai";
+          try { newCalTz = Intl.DateTimeFormat().resolvedOptions().timeZone || newCalTz; } catch (_e) { /* keep fallback */ }
           const created = await fetch("/api/calendars", fetchOpts({
             method: "POST",
-            body: JSON.stringify({ name, color, timezone: "Asia/Shanghai" }),
+            body: JSON.stringify({ name, color, timezone: newCalTz }),
           }));
           if (!created.ok) throw new Error("创建日历失败");
           const calRow = await created.json();
