@@ -1,3 +1,5 @@
+<p align="center"><b>简体中文</b> | <a href="README.en.md">English</a> | <a href="README.zh-TW.md">繁體中文</a></p>
+
 <div align="center">
 
 <img src="src/public/icons/icon-512.png" alt="ByWave Calendar" width="96" height="96" />
@@ -6,26 +8,24 @@
 
 **自托管的日历共享平台 · 一个域名同时搞定 网页 / PWA / iOS / Android / 桌面端 / ICS 订阅 / CalDAV / SSO / 第三方 API**
 
-*A self-hosted, open-source calendar-sharing platform with native web, iOS, Android & desktop clients.*
-
 <br/>
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/server-v1.5.3-2563eb.svg)](package.json)
-[![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-下载客户端--download)
+[![Version](https://img.shields.io/badge/server-v1.5.4-2563eb.svg)](package.json)
+[![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-下载客户端)
 [![Node](https://img.shields.io/badge/Node-≥20-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/wuha-like-sleep/by-wave-calendar/pulls)
 
-[在线 Demo / Live Demo](https://rl.lz-ss.com) · [下载客户端](#-下载客户端--download) · [功能](#-功能--features) · [一键部署](#-一键部署到宝塔--self-host) · [架构](#-技术栈--tech-stack)
+[在线 Demo](https://rl.lz-ss.com) · [下载客户端](#-下载客户端) · [功能](#-功能) · [一键部署](#-一键部署到宝塔) · [架构](#-技术栈)
 
 </div>
 
 ---
 
-## 这是什么 · What is this
+## 这是什么
 
 ByWave Calendar 是一个**自己服务器上跑的日历共享平台**。一个域名同时提供：
 
@@ -35,34 +35,21 @@ ByWave Calendar 是一个**自己服务器上跑的日历共享平台**。一个
 
 适合个人、团队、小组织自建一套「不依赖任何外部 SaaS、可控、可备份」的日历。所有第三方前端资源都已本地化打包，**国内服务器直接装、无国外 CDN 依赖**。MIT 开源。
 
-> ByWave Calendar is a calendar platform you run on your own server. One domain serves a web app (installable as a PWA), native iOS / Android / macOS / Windows clients, plus standard CalDAV sync, ICS feeds, and a REST API. Fully self-hosted, no external SaaS dependency. MIT-licensed.
-
 <br/>
 
-## 📸 截图 · Screenshots
+## 📸 截图
 
-> _截图待补充。Screenshots coming soon — 还没有图片提交到仓库。_
+> _截图待补充 —— 还没有图片提交到仓库。_
 >
-> _可以先看 [在线 Demo](https://rl.lz-ss.com)。Try the [live demo](https://rl.lz-ss.com) for now._
-
-<!--
-TODO: 把截图放进 docs/screenshots/ 然后在这里引用。建议至少四张：
-  - 网页日历月/周视图（桌面浏览器）   docs/screenshots/web-calendar.png
-  - 移动端响应式 + PWA 主屏图标        docs/screenshots/mobile.png
-  - 桌面端 Compose 客户端              docs/screenshots/desktop.png
-  - 管理后台（更新 / SSO / API）        docs/screenshots/admin.png
-例如：
-![网页日历](docs/screenshots/web-calendar.png)
-![移动端](docs/screenshots/mobile.png)
--->
+> _可以先看 [在线 Demo](https://rl.lz-ss.com)。_
 
 <br/>
 
-## 📥 下载客户端 · Download
+## 📥 下载客户端
 
-当前各端版本 / Current client versions:
+当前各端版本：
 
-| 平台 Platform | 版本 Version | 下载 Download |
+| 平台 | 版本 | 下载 |
 |---|---|---|
 | 🌐 Web / PWA | — | 浏览器打开你的 ByWave 服务器即可，支持装到桌面 / 主屏 |
 | 📱 iOS | v1.5.1 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
@@ -80,44 +67,42 @@ TODO: 把截图放进 docs/screenshots/ 然后在这里引用。建议至少四�
 
 </div>
 
-> **Android 首装提示**：首次安装需在系统设置里允许「来自此应用的未知应用」，开一次终身有效；后续升级走 APP 内自动更新，无需重新下载。
->
-> **桌面端**：用 [Compose Multiplatform](apps/desktop/README.md) 实现，**不是浏览器套壳** —— Skia 原生渲染，Mac / Win / Linux 一份 Kotlin 代码出三平台，自带 Sparkle 风格 in-place 自动更新。详见 [apps/desktop/README.md](apps/desktop/README.md)。
->
-> _Android requires a one-time "allow unknown apps" permission on first install, then self-updates in-app. The desktop client is native Compose Multiplatform (not a browser wrapper) with built-in auto-update._
+**Android 首装提示**：首次安装需在系统设置里允许「来自此应用的未知应用」，开一次终身有效；后续升级走 APP 内自动更新，无需重新下载。
+
+**桌面端**：用 [Compose Multiplatform](apps/desktop/README.md) 实现，**不是浏览器套壳** —— Skia 原生渲染，Mac / Win / Linux 一份 Kotlin 代码出三平台，自带 Sparkle 风格 in-place 自动更新。详见 [apps/desktop/README.md](apps/desktop/README.md)。
 
 <br/>
 
-## ✨ 功能 · Features
+## ✨ 功能
 
-**日历与事件 · Calendars & events**
+**日历与事件**
 - 📅 网页日历（Toast UI Calendar）月 / 周 / 日视图，拖拽建事件、点格快速加，移动端响应式
 - 🔁 周期事件（RRULE / RFC 5545 展开），事件提醒（reminders）
 - 🔍 全站搜索 + `Cmd+K` 命令面板，跨自有 + 共享日历查事件
 - 📲 PWA：一键装到桌面 / 主屏，离线壳缓存，新版本自动弹窗提示
 
-**同步与互通 · Sync & interop**
+**同步与互通**
 - 🔄 **CalDAV 双向同步**（RFC 4791）：iOS 系统日历、Apple Calendar.app、Synology 直接登 `https://你的域名/caldav/` 加账号
 - 📤 **ICS 订阅发布**（RFC 5545）：每个日历生成不变的只读链接，丢给 Google / Apple / Outlook 当「订阅日历」
 - 📥 **ICS 导入**：文件 / URL 一次性 / URL 周期订阅 / 粘贴文本，四种方式
 
-**协作 · Collaboration**
+**协作**
 - 👥 **日历邀请**：邮件邀请协作者，接受后日历进入对方账号
 - 🙋 **事件 RSVP**：邀请带「参加 / 不参加 / 可能」+ 一键加到 Google / Apple / ByWave
 - 🗓 **预约链接 (booking)**：发布每周可约时段，对方在公开页选时间约你，自动建带参与者的事件
 
-**认证与安全 · Auth & security**
+**认证与安全**
 - 🔐 邮箱+密码 + **Passkey (WebAuthn)** + **TOTP MFA** + 多 **SSO** 提供方（OIDC / Keycloak / Okta / Google Workspace）
 - 🛡 失败锁定 + 陌生设备邮件验证码 + Passkey/MFA/密码变更邮件提醒 + 登录历史 + 审计日志
 - 🔑 **应用密码**：CalDAV / 客户端登录不暴露主密码
 
-**集成与扩展 · Integrations & API**
+**集成与扩展**
 - 🔌 **第三方 REST API**：admin 签发 Bearer Token，Zoom / Notion / n8n / 内部系统直接读写日历
 - 🔓 **OAuth 2.0 授权服务器**（授权码 + PKCE）：让外部 app 经用户授权代调 API
 - 🪝 **Webhooks**：事件变更推送到外部端点，带投递记录
 - 🔔 **Web Push**（VAPID / RFC 8030）+ iOS APNs 推送通知
 
-**运维与定制 · Ops & customization**
+**运维与定制**
 - ⚙️ **管理后台**：站点名 / Logo / SMTP / SSO / 安全策略 / 主题 / API / Webhook / 审计
 - ♻️ **一键自更新**：后台点一下检查 + 立即更新，带实时进度条 + 自动重启刷新
 - 💾 **数据备份 / 恢复**：后台全表导出 / 导入，附带 round-trip 自检脚本
@@ -127,7 +112,7 @@ TODO: 把截图放进 docs/screenshots/ 然后在这里引用。建议至少四�
 
 <br/>
 
-## 🚀 一键部署到宝塔 · Self-host
+## 🚀 一键部署到宝塔
 
 > 国内服务器推荐用 Gitee 作为代码源（GitHub 在国内不稳定）。本仓库每次 push 同时同步到 GitHub 和 Gitee。
 
@@ -161,7 +146,7 @@ bash deploy/bt-panel/install.sh
 
 <br/>
 
-## 🔌 第三方 API 示例 · API example
+## 🔌 第三方 API 示例
 
 ```bash
 # 列出当前 token 绑定用户的所有日历
@@ -186,7 +171,7 @@ curl -X POST -H "Authorization: Bearer bwc_..." \
 
 <br/>
 
-## 🧱 技术栈 · Tech stack
+## 🧱 技术栈
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -205,13 +190,13 @@ curl -X POST -H "Authorization: Bearer bwc_..." \
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-| 端 Client | 技术 Stack |
+| 端 | 技术 |
 |---|---|
-| 服务端 Server | TypeScript + Fastify 5 + EJS + HTMX + Tailwind CSS · Drizzle ORM + PostgreSQL 16 |
+| 服务端 | TypeScript + Fastify 5 + EJS + HTMX + Tailwind CSS · Drizzle ORM + PostgreSQL 16 |
 | 日历 UI | Toast UI Calendar 2.x |
-| 身份 Auth | bcrypt + @simplewebauthn/server + otplib + 自建 OIDC client + OAuth 2.0 server |
-| 推送 Push | web-push (VAPID) + @parse/node-apn (APNs) |
-| 桌面端 Desktop | Kotlin + Compose Multiplatform（Skia 原生渲染） |
+| 身份 | bcrypt + @simplewebauthn/server + otplib + 自建 OIDC client + OAuth 2.0 server |
+| 推送 | web-push (VAPID) + @parse/node-apn (APNs) |
+| 桌面端 | Kotlin + Compose Multiplatform（Skia 原生渲染） |
 | iOS | Swift / SwiftUI |
 | Android | Kotlin / Jetpack Compose |
 
@@ -219,7 +204,7 @@ curl -X POST -H "Authorization: Bearer bwc_..." \
 
 <br/>
 
-## 📂 仓库结构 · Repo structure
+## 📂 仓库结构
 
 ```
 by-wave-calendar/
@@ -264,9 +249,9 @@ by-wave-calendar/
 
 <br/>
 
-## 🤝 贡献 · Contributing
+## 🤝 贡献
 
-PRs welcome。本地开发 / Local development:
+PRs welcome。本地开发：
 
 ```bash
 npm install
