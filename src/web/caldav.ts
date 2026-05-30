@@ -158,15 +158,28 @@ async function streamMultistatus(
     "Transfer-Encoding": "chunked",
   });
   raw.write(`${XML_DECL}\n<multistatus ${NS}>\n`);
-  // Backpressure: respect socket .write() returning false. Without
-  // this we could pile up megabytes in the Node write buffer for a
-  // slow client.
-  for await (const entry of entries) {
-    if (!raw.write(entry + "\n")) {
-      await new Promise<void>((resolve) => raw.once("drain", resolve));
+  // CRITICAL robustness: once we've sent the 207 + opening <multistatus>,
+  // we can no longer switch to an error status. If iterating `entries`
+  // throws partway (e.g. a single event fails to serialize), we MUST
+  // still close </multistatus> — an unterminated chunked stream gives the
+  // client truncated, unparseable XML, which Apple Calendar surfaces as
+  // "无法更新日历 / The calendar could not be refreshed", and because the
+  // bad event persists it fails on EVERY refresh. try/finally guarantees
+  // the document is always well-formed even on a mid-stream failure.
+  try {
+    // Backpressure: respect socket .write() returning false. Without
+    // this we could pile up megabytes in the Node write buffer for a
+    // slow client.
+    for await (const entry of entries) {
+      if (!raw.write(entry + "\n")) {
+        await new Promise<void>((resolve) => raw.once("drain", resolve));
+      }
     }
+  } catch (err) {
+    reply.log.warn({ err }, "caldav_multistatus_stream_error");
+  } finally {
+    raw.end("</multistatus>\n");
   }
-  raw.end("</multistatus>\n");
 }
 
 function setOptionsHeaders(reply: FastifyReply): void {
@@ -498,12 +511,21 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     // one <response> at a time; streamMultistatus flushes each.
     await streamMultistatus(reply, (function* () {
       for (const e of events) {
-        yield responseEntry(eventHref(user.id, cal.id, e.uid), {
-          etag: etagOf(e.updatedAt),
-          contentType: "text/calendar; charset=utf-8; component=VEVENT",
-          lastModified: e.updatedAt,
-          calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
-        });
+        let entry: string;
+        try {
+          entry = responseEntry(eventHref(user.id, cal.id, e.uid), {
+            etag: etagOf(e.updatedAt),
+            contentType: "text/calendar; charset=utf-8; component=VEVENT",
+            lastModified: e.updatedAt,
+            calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
+          });
+        } catch (err) {
+          // Skip one un-serializable event instead of breaking the whole
+          // REPORT. Logged so the offending row can be found and fixed.
+          req.log.warn({ caldav: "multiget", calId: cal.id, eventId: e.id, uid: e.uid, err: String(err) }, "caldav_event_serialize_skipped");
+          continue;
+        }
+        yield entry;
       }
     })());
     return;
@@ -537,10 +559,19 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
   const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
   await streamMultistatus(reply, (function* () {
     for (const e of events) {
-      yield responseEntry(eventHref(user.id, cal.id, e.uid), {
-        etag: etagOf(e.updatedAt),
-        calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
-      });
+      let entry: string;
+      try {
+        entry = responseEntry(eventHref(user.id, cal.id, e.uid), {
+          etag: etagOf(e.updatedAt),
+          calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
+        });
+      } catch (err) {
+        // Skip one un-serializable event instead of breaking the whole
+        // REPORT. Logged so the offending row can be found and fixed.
+        req.log.warn({ caldav: "calendar-query", calId: cal.id, eventId: e.id, uid: e.uid, err: String(err) }, "caldav_event_serialize_skipped");
+        continue;
+      }
+      yield entry;
     }
   })());
 }
@@ -569,10 +600,17 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   if (!event) return reply.code(404).send("Not Found");
 
   const statusMap = await loadAttendeeStatuses([event.id]);
+  let ics: string;
+  try {
+    ics = rowToVCalendar(event, cal.name, statusMap.get(event.id));
+  } catch (err) {
+    req.log.warn({ caldav: "get", calId: cal.id, eventId: event.id, uid: event.uid, err: String(err) }, "caldav_event_serialize_failed");
+    return reply.code(500).type("text/plain").send("Event could not be serialized");
+  }
   reply
     .header("Content-Type", "text/calendar; charset=utf-8")
     .header("ETag", etagOf(event.updatedAt));
-  return reply.send(rowToVCalendar(event, cal.name, statusMap.get(event.id)));
+  return reply.send(ics);
 }
 
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
