@@ -58,12 +58,46 @@ function zoneLabel(tz: string): string {
   return `${tail.replace(/_/g, " ")} 时间`;
 }
 
-function baseLayout(opts: { title: string; preheader?: string; body: string }): string {
+// ---------- Brand palette ----------
+// Indigo brand, sourced from src/styles/input.css default palette:
+//   --brand-600: 79 70 229  => #4F46E5 (primary)
+//   --brand-500: 99 102 241 => #6366F1 (accent / gradient end)
+const BRAND_PRIMARY = "#4f46e5";
+const BRAND_ACCENT = "#6366f1";
+
+// Absolute, publicly-reachable URL to the platform logo. Email clients can't
+// resolve relative paths, so we build a full URL from the site's own public
+// base. @fastify/static serves src/public at the "/static/" prefix
+// (see server.ts), so src/public/icons/icon-512.png is exposed at
+// /static/icons/icon-512.png. Returns null if PUBLIC_BASE_URL is somehow
+// unusable, in which case layout() falls back to a text-only brand title.
+function brandLogoUrl(): string | null {
+  const base = (env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/static/icons/icon-512.png`;
+}
+
+// Shared, email-client-safe skeleton for every message we send. Table-based
+// layout (no flex/grid), all styling inline (no <style>/external CSS), a
+// brand-colored header with the platform logo + name, a content area, and a
+// footer that names the platform and notes the mail is auto-sent.
+function layout(opts: {
+  title: string;
+  preheader?: string;
+  body: string;
+  // Optional extra footer links (e.g. support / unsubscribe). Rendered as
+  // " · "-separated anchors above the auto-send notice.
+  footerLinks?: Array<{ label: string; url: string }>;
+}): string {
+  const logo = brandLogoUrl();
+  const year = new Date().getFullYear();
+  const links = (opts.footerLinks ?? []).filter((l) => l.url);
   return `<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <title>${escape(opts.title)}</title>
   </head>
   <body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei','Helvetica Neue',sans-serif;color:#0f172a;">
@@ -73,11 +107,17 @@ function baseLayout(opts: { title: string; preheader?: string; body: string }): 
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;background:#ffffff;border-radius:16px;box-shadow:0 1px 3px rgba(15,23,42,0.06);overflow:hidden;">
             <tr>
-              <td style="padding:24px 28px;background:linear-gradient(135deg,#4f46e5,#6366f1);color:#ffffff;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span style="display:inline-block;width:24px;height:24px;background:rgba(255,255,255,0.18);border-radius:6px;"></span>
-                  <strong style="font-size:16px;letter-spacing:0.4px;">${escape(brand)}</strong>
-                </div>
+              <td style="padding:22px 28px;background:${BRAND_PRIMARY};background:linear-gradient(135deg,${BRAND_PRIMARY},${BRAND_ACCENT});color:#ffffff;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    ${logo ? `<td style="vertical-align:middle;padding-right:10px;">
+                      <img src="${logo}" width="32" height="32" alt="${escape(brand)}" style="display:block;width:32px;height:32px;border-radius:8px;border:0;background:rgba(255,255,255,0.18);" />
+                    </td>` : ""}
+                    <td style="vertical-align:middle;">
+                      <strong style="font-size:17px;letter-spacing:0.4px;color:#ffffff;">${escape(brand)}</strong>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
             <tr>
@@ -86,18 +126,24 @@ function baseLayout(opts: { title: string; preheader?: string; body: string }): 
               </td>
             </tr>
             <tr>
-              <td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.5;">
-                这封邮件由 ${escape(brand)} 自动发出，请勿直接回复。<br/>
-                如果不是你本人操作，请忽略并尽快修改密码。
+              <td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
+                ${links.length ? `<div style="margin:0 0 8px;">${links.map((l) => `<a href="${l.url}" style="color:${BRAND_PRIMARY};text-decoration:none;">${escape(l.label)}</a>`).join(`<span style="color:#cbd5e1;"> · </span>`)}</div>` : ""}
+                此邮件由 ${escape(brand)} 自动发送，请勿直接回复。
               </td>
             </tr>
           </table>
-          <div style="margin-top:12px;color:#94a3b8;font-size:12px;">© ${new Date().getFullYear()} ${escape(brand)} · 日历共享平台</div>
+          <div style="margin-top:12px;color:#94a3b8;font-size:12px;">© ${year} ${escape(brand)} · 日历共享平台</div>
         </td>
       </tr>
     </table>
   </body>
 </html>`;
+}
+
+// Backwards-compatible alias: existing templates call baseLayout(). Keep the
+// name so nothing below has to change beyond what we're intentionally editing.
+function baseLayout(opts: { title: string; preheader?: string; body: string }): string {
+  return layout(opts);
 }
 
 function escape(s: string): string {
@@ -445,4 +491,42 @@ export function welcomeMail(to: string, displayName: string | null): SendArgs {
       </ul>`,
   });
   return { to, subject: `欢迎加入 ${brand}`, html, text };
+}
+
+// ---------- Signup invitation (invite a new person to register) ----------
+// New template (added for the registration-invite flow). The caller supplies
+// the platform name explicitly so the visible copy stays correct even if this
+// is rendered before site_settings has primed updateBrandForEmails(); the
+// header/footer logo + name still come from the shared layout() (module brand).
+export function inviteSignupMail(args: {
+  to: string;
+  inviteUrl: string;
+  siteName: string;
+  inviterName?: string;
+}): SendArgs {
+  const { to, inviteUrl, siteName } = args;
+  const name = (siteName || "").trim() || brand;
+  const inviter = args.inviterName?.trim();
+  const text = `${inviter ? `${inviter} 邀请你加入 ${name}` : `邀请你加入 ${name}`}\n\n${name} 是一个日历共享平台，可以创建日历、添加事件、生成订阅链接分享给朋友和家人。\n点击下面链接完成注册（链接可能有时效，请尽快使用）：\n${inviteUrl}\n\n如果你并不认识邀请人，可以直接忽略这封邮件。`;
+  const html = layout({
+    title: `${inviter ? `${inviter} 邀请你加入 ${name}` : `邀请你加入 ${name}`}`,
+    preheader: `${inviter ? `${inviter} 邀请你注册 ${name}` : `邀请你注册 ${name}`}`,
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;font-weight:600;">✉️ 注册邀请</h1>
+      <p style="margin:0 0 14px;color:#475569;line-height:1.6;font-size:14px;">
+        ${inviter ? `<strong>${escape(inviter)}</strong> 邀请你加入 <strong>${escape(name)}</strong>。` : `你被邀请加入 <strong>${escape(name)}</strong>。`}
+        这是一个日历共享平台 —— 创建日历、添加事件，并把订阅链接分享给朋友和家人。
+      </p>
+      <p style="margin:22px 0 14px;">
+        <a href="${inviteUrl}" style="display:inline-block;background:${BRAND_PRIMARY};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请并注册</a>
+      </p>
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
+        按钮没反应？复制下面链接到浏览器打开：<br/>
+        <a href="${inviteUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${inviteUrl}</a>
+      </p>
+      <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
+        如果你并不认识邀请人，可以直接忽略这封邮件 —— 不会有任何账号被创建。
+      </p>`,
+  });
+  return { to, subject: `【${name}】邀请你注册`, html, text };
 }
