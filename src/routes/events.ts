@@ -251,6 +251,45 @@ export async function eventRoutes(app: FastifyInstance) {
       }
     }
 
+    // Content-level dedup — "完全一样的只记录一次".
+    //
+    // clientUid above only catches a retry of the SAME create. The user's
+    // duplicates came from DIFFERENT sources (multiple devices / an import)
+    // each POSTing a byte-identical event with its own (or no) key, so the
+    // uid check couldn't see them as the same. Here we treat a create whose
+    // every user-visible field exactly matches an existing LIVE event in the
+    // same calendar as a duplicate, and return that row instead of inserting
+    // another copy. Tradeoff: a user genuinely wanting two identical events
+    // at the same time gets one — acceptable per the explicit "identical →
+    // record once" request, and astronomically rarer than the dup bug.
+    {
+      const startsAt = new Date(body.startsAt);
+      const endsAt = new Date(body.endsAt);
+      const candidates = await db
+        .select()
+        .from(schema.events)
+        .where(and(
+          eq(schema.events.calendarId, body.calendarId),
+          isNull(schema.events.deletedAt),
+          eq(schema.events.summary, body.summary),
+          eq(schema.events.startsAt, startsAt),
+          eq(schema.events.endsAt, endsAt),
+        ));
+      const norm = (s: string | null | undefined): string => (s ?? "");
+      const matches = candidates.filter((c) =>
+        c.allDay === (body.allDay ?? false) &&
+        norm(c.rrule) === norm(body.rrule) &&
+        norm(c.description) === norm(body.description) &&
+        norm(c.location) === norm(body.location),
+      );
+      // Return the OLDEST match (candidates come back in no particular order;
+      // pick the earliest createdAt so repeat calls converge on one row).
+      if (matches.length > 0) {
+        const oldest = matches.reduce((a, b) => (a.createdAt <= b.createdAt ? a : b));
+        return reply.code(200).send(oldest);
+      }
+    }
+
     let row: typeof schema.events.$inferSelect | undefined;
     try {
       [row] = await db
