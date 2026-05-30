@@ -85,7 +85,14 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
   // occurrences whose START is in [from - duration, to] so events that
   // START before `from` but END after `from` still get included.
   const expandFrom = new Date(from.getTime() - Math.max(0, durationMs));
-  const starts = rule.between(expandFrom, to, true).slice(0, MAX_OCCURRENCES_PER_EVENT);
+  // Pass an iterator that HALTS at the cap. Plain `.between(...).slice(N)`
+  // would first MATERIALIZE every in-window occurrence — a pathological
+  // RRULE (e.g. FREQ=SECONDLY over a month) is millions of Date objects and
+  // a CPU/memory spike before the slice ever runs. The API accepts arbitrary
+  // rrule strings, and the reminders cron re-expands every event every
+  // minute over a 30-day window, so this is a real DoS surface. The iterator
+  // returns false once we've collected the cap, stopping generation early.
+  const starts = rule.between(expandFrom, to, true, (_d: Date, i: number) => i < MAX_OCCURRENCES_PER_EVENT);
 
   // Build a Set of exdate timestamps (ms) for fast lookup. The
   // exdates array on the event is stored as ISO strings; we normalize

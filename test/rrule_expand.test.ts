@@ -112,3 +112,29 @@ describe("expandEvent — recurring", () => {
     expect(out[0].isOccurrence).toBe(true);
   });
 });
+
+describe("expandEvent — bounded expansion (DoS guard)", () => {
+  it("caps a long-running daily RRULE at 366 occurrences over a multi-year window", () => {
+    // 3 years of a daily event = ~1095 occurrences; the iterator must halt
+    // at MAX_OCCURRENCES_PER_EVENT (366) instead of materializing them all.
+    const out = expandEvent(
+      { id: "e1", startsAt: D("2026-01-01T09:00:00Z"), endsAt: D("2026-01-01T10:00:00Z"), rrule: "FREQ=DAILY" },
+      D("2026-01-01T00:00:00Z"),
+      D("2029-01-01T00:00:00Z"),
+    );
+    expect(out).toHaveLength(366);
+  });
+
+  it("bounds a pathological sub-daily RRULE quickly without exploding", () => {
+    // FREQ=HOURLY over a month is ~744 occurrences; without the iterator cap
+    // this would materialize all of them first. Must return fast + bounded.
+    const t0 = Date.now();
+    const out = expandEvent(
+      { id: "e1", startsAt: D("2026-01-01T00:00:00Z"), endsAt: D("2026-01-01T00:30:00Z"), rrule: "FREQ=HOURLY" },
+      D("2026-01-01T00:00:00Z"),
+      D("2026-02-01T00:00:00Z"),
+    );
+    expect(out.length).toBeLessThanOrEqual(366);
+    expect(Date.now() - t0).toBeLessThan(2000);
+  });
+});
