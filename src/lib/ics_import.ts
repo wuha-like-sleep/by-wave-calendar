@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
+import { safeFetch, SsrfBlockedError } from "./ssrf_guard.js";
+import { env } from "../env.js";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB cap on remote ICS responses
@@ -35,16 +37,26 @@ export async function fetchIcsUrl(url: string): Promise<string> {
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let body: string;
   try {
-    const resp = await fetch(normalized, {
+    // SSRF guard: this URL is fully user-controlled (ICS subscription).
+    // safeFetch validates protocol, rejects embedded credentials, blocks
+    // private/loopback/link-local/reserved IP targets, and re-validates
+    // every redirect hop. Operators can opt into internal targets via
+    // ICS_ALLOW_PRIVATE_NETWORK.
+    const resp = await safeFetch(normalized, {
       method: "GET",
-      redirect: "follow",
       signal: controller.signal,
       headers: { "User-Agent": "ByWave-Calendar/1.0 (ICS importer)" },
+      allowPrivate: env.ICS_ALLOW_PRIVATE_NETWORK,
     });
     if (!resp.ok) throw new Error(`远程返回 HTTP ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
     if (buf.byteLength > MAX_BYTES) throw new Error(`文件过大（>${MAX_BYTES / 1024 / 1024} MB）`);
     body = buf.toString("utf8");
+  } catch (err) {
+    // Surface the SSRF rejection as a clean, user-readable message rather
+    // than leaking it as an opaque fetch failure.
+    if (err instanceof SsrfBlockedError) throw new Error(err.message);
+    throw err;
   } finally {
     clearTimeout(timer);
   }

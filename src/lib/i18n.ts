@@ -125,10 +125,32 @@ export function translate(locale: LocaleCode, key: string, vars?: Record<string,
   let value = dict[k] ?? DICTIONARIES.en[k] ?? key;
   if (vars) {
     for (const [name, v] of Object.entries(vars)) {
-      value = value.replaceAll(`{${name}}`, String(v));
+      // XSS hardening: t() output is emitted RAW (`<%- t(...) %>`) in every
+      // EJS template, because the dictionary strings themselves legitimately
+      // contain trusted markup (e.g. "With <strong>{host}</strong>" and
+      // "<a href=...>Sign in as {email}</a>"). The *interpolated* values,
+      // however, are frequently user-controlled — a host display name, a
+      // subscription's upstream error preview, an invitee email — so they
+      // MUST be HTML-escaped before substitution. Escaping only the values
+      // (not the template) kills stored/reflected XSS via the public booking
+      // page, attendee lists, subscription-status banners, etc., while
+      // preserving the intended markup of the trusted template text.
+      value = value.replaceAll(`{${name}}`, escapeHtml(String(v)));
     }
   }
   return value;
+}
+
+/** Minimal HTML-entity escape for the 5 significant chars. Used to make
+ *  user-controlled interpolation values safe inside the raw-rendered
+ *  translation templates. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /** Per-locale translation coverage, for `scripts/i18n-coverage.ts`. The

@@ -44,6 +44,16 @@ const schema = z.object({
   REGISTRATION_OPEN: boolFlag.default(true),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(10),
+
+  // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
+  // subscriptions, one-shot URL imports, and — defense-in-depth — outbound
+  // webhooks) are blocked from reaching private / loopback / link-local /
+  // reserved IP ranges by default. Self-hosters who legitimately need to
+  // pull an ICS feed from an internal host (e.g. an intranet calendar) can
+  // set this to true to opt out of the IP-range block. Protocol (http/https
+  // only) and embedded-credential checks still apply. Leave false unless you
+  // know you need it — this is the SSRF blast-radius control.
+  ICS_ALLOW_PRIVATE_NETWORK: boolFlag.default(false),
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD: z.string().min(8).optional(),
 

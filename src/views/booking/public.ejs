@@ -67,7 +67,7 @@
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
-  const ALL_SLOTS = <%- JSON.stringify(slotsByDate) %>;
+  const ALL_SLOTS = <%- jsonForScript(slotsByDate) %>;
   const LOCALE = "<%= currentLocale %>";
   const dateList = document.getElementById("date-list");
   const slotGrid = document.getElementById("slot-grid");

@@ -70,7 +70,7 @@
   <script src="/static/lib/toastui-calendar.min.js"></script>
   <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   (function(){
-    const EVENTS = <%- JSON.stringify(events) %>;
+    const EVENTS = <%- jsonForScript(events) %>;
     const CAL_COLOR = "<%= calendar.color || '#6366f1' %>";
     const LOCALE = "<%= currentLocale %>";
     const BWC_I18N = (() => {

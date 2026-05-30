@@ -663,7 +663,7 @@
 </div>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
-  window.__bwc = <%- JSON.stringify({
+  window.__bwc = <%- jsonForScript({
     calendars: calendars.map(c => ({
       id: c.id,
       name: c.name,

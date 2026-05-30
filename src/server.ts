@@ -37,6 +37,11 @@ import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
+// Safe JSON-for-<script> serializer (XSS hardening) — escapes the chars that
+// could break out of an inline <script>. Used by the view-locals injector
+// below so templates can do `<%- jsonForScript(x) %>` instead of the unsafe
+// `<%- JSON.stringify(x) %>`.
+import { jsonForScript } from "./lib/script_json.js";
 
 const projectRoot = process.cwd();
 
@@ -878,6 +883,11 @@ app.addHook("onRequest", async (req, reply) => {
       siteDefaultLocale: settings.defaultLocale,
       jsBasePath: JS_BASE_PATH,
       cspNonce: (req.raw as unknown as { cspNonce: string }).cspNonce,
+      // XSS-safe JSON serializer for inline <script> bootstrap blocks.
+      // Templates use `<%- jsonForScript(x) %>` instead of the unsafe
+      // `<%- JSON.stringify(x) %>` whenever the payload can contain
+      // user-controlled strings (event/calendar fields).
+      jsonForScript,
       ...locals,
     });
 });

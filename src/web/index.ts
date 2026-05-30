@@ -1085,7 +1085,13 @@ export async function webRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/url-once", async (req, reply) => {
+  // Rate-limited: each call triggers a server-side outbound fetch to a
+  // user-supplied URL. Even with the SSRF IP-block in place, an unthrottled
+  // endpoint lets one account drive a lot of outbound requests (probing
+  // public hosts, amplifying load). 10/min per IP is plenty for real use.
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/url-once", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
@@ -1109,7 +1115,12 @@ export async function webRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: { id: string } }>("/app/calendars/:id/subscriptions", async (req, reply) => {
+  // Rate-limited: creating a subscription immediately fires a server-side
+  // fetch of the user-supplied URL (refreshSubscription below). Same
+  // reasoning as /import/url-once.
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/subscriptions", {
+    config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
@@ -1152,7 +1163,11 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post<{ Params: { id: string; subId: string } }>("/app/calendars/:id/subscriptions/:subId/refresh", async (req, reply) => {
+  // Rate-limited: manual refresh triggers an immediate outbound fetch of the
+  // subscription's user-supplied URL. Same reasoning as /import/url-once.
+  app.post<{ Params: { id: string; subId: string } }>("/app/calendars/:id/subscriptions/:subId/refresh", {
+    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;

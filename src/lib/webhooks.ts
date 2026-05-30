@@ -17,6 +17,8 @@
 import { createHmac } from "node:crypto";
 import { eq, inArray } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
+import { safeFetch } from "./ssrf_guard.js";
+import { env } from "../env.js";
 
 export type WebhookEventName =
   | "event.created" | "event.updated" | "event.deleted"
@@ -34,7 +36,19 @@ async function sendOnce(url: string, body: string, signature: string | null): Pr
       "User-Agent": "ByWave-Calendar-Webhook/1.0",
     };
     if (signature) headers["X-Bywave-Signature"] = signature;
-    const resp = await fetch(url, { method: "POST", headers, body, signal: ctrl.signal });
+    // SSRF guard (defense-in-depth). Webhook URLs are admin-configured, but
+    // an admin could be socially engineered into pointing one at an internal
+    // service to exfiltrate event payloads / probe the network. safeFetch
+    // blocks private/loopback/reserved targets and bad protocols, and
+    // re-validates redirects. Operators with an internal receiver can opt in
+    // via ICS_ALLOW_PRIVATE_NETWORK (same flag governs all user-URL fetches).
+    const resp = await safeFetch(url, {
+      method: "POST",
+      headers,
+      body,
+      signal: ctrl.signal,
+      allowPrivate: env.ICS_ALLOW_PRIVATE_NETWORK,
+    });
     const text = (await resp.text()).slice(0, MAX_BODY_LOG);
     return { statusCode: resp.status, responseBody: text, ok: resp.ok, errorMessage: null };
   } catch (err) {
