@@ -1,13 +1,13 @@
 {
-  "versionCode": 13,
-  "versionName": "0.9.1",
-  "filename": "bywave-calendar-0.9.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.1/bywave-calendar-0.9.1.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.1/bywave-calendar-0.9.1.apk",
-  "sha256": "4164538ed54e2fdc024ca4a52993410a8e5ec5f791cef5ffb6843c29e34ef4a4",
-  "sizeBytes": 36766207,
-  "releasedAt": "2026-05-29T01:04:16Z",
-  "notes": "Android v0.9.1 — APP 内运行时语言切换 (中/English)\n\n• Settings → 语言：跟系统 / 简体中文 / English 三选\n• 切换瞬时生效，重启 APP 后保留\n• 跟 iOS v1.4.3 同款 UX：用 AppCompatDelegate.setApplicationLocales 做 APP 级 locale override，不污染系统设置\n• 加 res/xml/locales_config.xml 注册支持的 locale，让 Android 13+ 系统语言菜单也能识别 APP 的语言列表\n",
+  "versionCode": 14,
+  "versionName": "0.9.2",
+  "filename": "bywave-calendar-0.9.2.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.2/bywave-calendar-0.9.2.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.2/bywave-calendar-0.9.2.apk",
+  "sha256": "9ba1aeb6464d28e42677ac9a59320ebb4d2d298eb0b46eb63422aa4da60e3008",
+  "sizeBytes": 36909951,
+  "releasedAt": "2026-05-30T06:20:00Z",
+  "notes": "Android v0.9.2\n\n• 新增「预约链接」管理：创建 / 复制公开链接 / 启停 / 删除\n• 创建事件发 clientUid 幂等键，配合服务端根治「一个事件变三个」重复\n• 自动更新加 GitHub raw 兜底：服务器没更新也能发现新版本\n• 删除账号确认短语支持任意界面语言",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
