@@ -1218,6 +1218,17 @@
 
   $("#form-event").addEventListener("submit", async (e) => {
     e.preventDefault();
+    // Guard against double-submit. The handler awaits a conflict-check
+    // round-trip before saving; a fast double-click (or Enter + click) in
+    // that window would call bwcStore.put() twice, each minting a DIFFERENT
+    // local id / clientUid — so the server's idempotency can't collapse
+    // them and you'd get TWO events. Disable the button for the whole flow
+    // (the `finally` re-enables it) and also surface a "保存中…" state.
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    if (submitBtn && submitBtn.dataset.saving === "1") return;
+    const prevLabel = submitBtn ? submitBtn.textContent : "";
+    if (submitBtn) { submitBtn.dataset.saving = "1"; submitBtn.disabled = true; submitBtn.textContent = "保存中…"; }
+    try {
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id;
     const isAllDay = !!data.allDay;
@@ -1322,6 +1333,11 @@
     } catch (err) {
       console.error(err);
       window.bwc && window.bwc.toast("保存失败", "error");
+    }
+    } finally {
+      // Re-enable on every exit path (success, validation cancel, error)
+      // so the form is usable again. Harmless when the modal already closed.
+      if (submitBtn) { submitBtn.dataset.saving = ""; submitBtn.disabled = false; submitBtn.textContent = prevLabel; }
     }
   });
 
