@@ -20,6 +20,10 @@
     <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
     <% const js = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
+    <%# auth-guard first: wraps window.fetch before any app script runs, so an
+        expired-session 401 bounces the user to /login instead of silently
+        failing in place. %>
+    <script src="<%= js %>/auth-guard.js?v=<%= v %>" defer></script>
     <script defer src="/static/lib/htmx.min.js"></script>
     <script src="<%= js %>/app.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/local-time.js?v=<%= v %>" defer></script>
