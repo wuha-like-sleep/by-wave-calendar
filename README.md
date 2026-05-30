@@ -1,6 +1,8 @@
 <div align="center">
 
-# 📅 ByWave Calendar
+<img src="src/public/icons/icon-512.png" alt="ByWave Calendar" width="96" height="96" />
+
+# ByWave Calendar
 
 **自托管的日历共享平台 · 一个域名同时搞定 网页 / PWA / iOS / Android / 桌面端 / ICS 订阅 / CalDAV / SSO / 第三方 API**
 
@@ -9,8 +11,8 @@
 <br/>
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/server-v1.5.0-2563eb.svg)](package.json)
-[![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows-6366f1.svg)](#-下载客户端--download)
+[![Version](https://img.shields.io/badge/server-v1.5.3-2563eb.svg)](package.json)
+[![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-下载客户端--download)
 [![Node](https://img.shields.io/badge/Node-≥20-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
@@ -44,7 +46,12 @@ ByWave Calendar 是一个**自己服务器上跑的日历共享平台**。一个
 > _可以先看 [在线 Demo](https://rl.lz-ss.com)。Try the [live demo](https://rl.lz-ss.com) for now._
 
 <!--
-TODO: 把截图放进 docs/screenshots/ 然后在这里引用，例如：
+TODO: 把截图放进 docs/screenshots/ 然后在这里引用。建议至少四张：
+  - 网页日历月/周视图（桌面浏览器）   docs/screenshots/web-calendar.png
+  - 移动端响应式 + PWA 主屏图标        docs/screenshots/mobile.png
+  - 桌面端 Compose 客户端              docs/screenshots/desktop.png
+  - 管理后台（更新 / SSO / API）        docs/screenshots/admin.png
+例如：
 ![网页日历](docs/screenshots/web-calendar.png)
 ![移动端](docs/screenshots/mobile.png)
 -->
@@ -58,7 +65,7 @@ TODO: 把截图放进 docs/screenshots/ 然后在这里引用，例如：
 | 平台 Platform | 版本 Version | 下载 Download |
 |---|---|---|
 | 🌐 Web / PWA | — | 浏览器打开你的 ByWave 服务器即可，支持装到桌面 / 主屏 |
-| 📱 iOS | v1.4.3 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
+| 📱 iOS | v1.5.1 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
 | 🤖 Android | v0.9.3 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.3/bywave-calendar-0.9.3.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
 | 🍎 macOS | v0.8.3 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.3/ByWaveCalendar-0.8.3-arm64.dmg) — 已 Apple 公证 |
 | 🪟 Windows | v0.8.3 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v0.8.3/ByWaveCalendar-0.8.3-x64.msi) |
@@ -115,7 +122,7 @@ TODO: 把截图放进 docs/screenshots/ 然后在这里引用，例如：
 - ♻️ **一键自更新**：后台点一下检查 + 立即更新，带实时进度条 + 自动重启刷新
 - 💾 **数据备份 / 恢复**：后台全表导出 / 导入，附带 round-trip 自检脚本
 - 🎨 **多套主题**：7 套品牌色 + 2 种密度，**每个用户**单独设偏好
-- 🌐 **多语言 (i18n)**：服务端 + iOS + Android 均支持 **简体中文 / English** 运行时切换
+- 🌐 **多语言 (i18n)**：服务端 + iOS + Android + 桌面端均支持 **8 种语言** 运行时切换 —— 简体中文 / 繁體中文 / English / 日本語 / 한국어 / Español / Français / Deutsch
 - 🇨🇳 **中国友好**：第三方前端资源（HTMX / Toast UI / SimpleWebAuthn / Tailwind）全本地化，无国外 CDN
 
 <br/>
@@ -249,10 +256,9 @@ by-wave-calendar/
 - [x] 管理员后台 + 一键自更新 + 数据备份恢复
 - [x] 第三方 Bearer API + Webhooks
 - [x] OAuth 2.0 授权服务器（授权码 + PKCE）
-- [x] i18n（简体中文 / English）服务端 + 移动端
+- [x] i18n（8 种语言）服务端 + iOS + Android + 桌面端
 - [x] Web Push + iOS APNs 通知
-- [x] 原生 iOS / Android / 桌面端客户端
-- [ ] Linux 桌面端 DEB 发布
+- [x] 原生 iOS / Android / 桌面端客户端（macOS DMG / Windows MSI / Linux DEB）
 - [ ] 复杂 RRULE / VTIMEZONE 全支持
 - [ ] OAuth refresh token
 
