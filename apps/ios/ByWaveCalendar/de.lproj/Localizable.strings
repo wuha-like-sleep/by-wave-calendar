@@ -370,3 +370,7 @@
 "未能从 Apple 获取登录凭证，请重试" = "Es konnte kein Anmeldetoken von Apple abgerufen werden. Versuche es erneut";
 "Apple 返回了无法识别的凭证，请重试" = "Apple hat einen nicht erkannten Berechtigungsnachweis zurückgegeben. Versuche es erneut";
 "Apple 登录失败 (HTTP %lld)" = "Anmeldung mit Apple fehlgeschlagen (HTTP %lld)";
+
+/* Accessibility — calendar nav chevrons */
+"上一页" = "Zurück";
+"下一页" = "Weiter";

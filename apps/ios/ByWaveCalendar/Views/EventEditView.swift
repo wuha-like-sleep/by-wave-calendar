@@ -361,6 +361,10 @@ struct EventEditView: View {
                     recurrenceId: recIdIso,
                 ))
             }
+            // Success buzz — mirrors WeekView.commitMove so every
+            // create / edit / duplicate that lands on the server gives the
+            // same confirmation feel.
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved(saved)
         } catch let e as APIError {
             errorMessage = e.localizedDescription

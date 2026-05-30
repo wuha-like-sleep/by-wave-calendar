@@ -17,6 +17,37 @@
 import SwiftUI
 
 enum Theme {
+    // MARK: - Spacing scale
+    //
+    // A small, deliberate set of gaps so views stop hand-rolling
+    // 2/6/14/22 one-offs. Use these for the *structural* gaps that most
+    // affect perceived rhythm — section spacing, the gap between a card's
+    // body and the next card, padding inside a primary control. Fine
+    // optical nudges (a 3pt shadow inset, a 1pt hairline offset) can stay
+    // literal; this scale is for the layout grid, not micro-tuning.
+    enum Spacing {
+        static let xs: CGFloat = 4
+        static let s: CGFloat = 8
+        static let m: CGFloat = 12
+        static let l: CGFloat = 16
+        static let xl: CGFloat = 24
+    }
+
+    // MARK: - Corner radii
+    //
+    // Before this, corners were drawn at 4/7/10/12/14/18/24 with no
+    // system — a card here, a button there, all slightly different.
+    // Collapse to four roles. `card` is the most visible offender to fix
+    // first (every list/grid card should match); `button` is the primary
+    // CTA pill. `control` covers smaller inputs/menus; `chip` the little
+    // count/status pills.
+    enum Radius {
+        static let control: CGFloat = 10
+        static let card: CGFloat = 12
+        static let button: CGFloat = 14
+        static let chip: CGFloat = 12
+    }
+
     // MARK: - Surfaces (backgrounds you paint behind content)
 
     /// Text-field background. Reads as "depressed" against the parent

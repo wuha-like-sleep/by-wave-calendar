@@ -370,3 +370,7 @@
 "未能从 Apple 获取登录凭证，请重试" = "Impossible d’obtenir un jeton de connexion d’Apple. Réessayez";
 "Apple 返回了无法识别的凭证，请重试" = "Apple a renvoyé un identifiant non reconnu. Réessayez";
 "Apple 登录失败 (HTTP %lld)" = "Échec de la connexion avec Apple (HTTP %lld)";
+
+/* Accessibility — calendar nav chevrons */
+"上一页" = "Précédent";
+"下一页" = "Suivant";

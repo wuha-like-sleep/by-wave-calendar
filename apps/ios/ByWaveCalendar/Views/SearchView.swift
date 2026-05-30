@@ -43,17 +43,12 @@ struct SearchView: View {
                     Section { Text(errorMessage).foregroundStyle(.red).font(.callout) }
                 }
                 if results.isEmpty && !isSearching && !query.isEmpty {
-                    // Custom empty state — was ContentUnavailableView but
-                    // that's iOS 17+. Open to lowering deployment target.
-                    VStack(spacing: 12) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 36))
-                            .foregroundStyle(.tertiary)
-                        Text("没有匹配").font(.headline).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
-                    .listRowBackground(Color.clear)
+                    // App target is iOS 17 → use the system component, same
+                    // as ManageCalendarsView / BookingLinksView. (The old
+                    // comment said this was held back by the deployment
+                    // target, but the target is 17.0.)
+                    ContentUnavailableView.search(text: query)
+                        .listRowBackground(Color.clear)
                 } else if isSearching && results.isEmpty {
                     HStack { Spacer(); ProgressView(); Spacer() }
                         .listRowBackground(Color.clear)
@@ -62,7 +57,13 @@ struct SearchView: View {
                     Button {
                         detailFor = r
                     } label: {
-                        SearchRow(result: r)
+                        // Reuse the shared row so results render identically
+                        // to Day/Week lists (dot, summary, time, location,
+                        // calendar name). showsDate keeps the full date —
+                        // search spans arbitrary days, unlike Day/Week. The
+                        // /search response has no rrule/allDay so the repeat /
+                        // past affordances correctly stay hidden.
+                        EventRowView(event: r.toEventDTO(), calendar: r.calendarMeta(), showsDate: true)
                     }
                     .buttonStyle(.plain)
                 }
@@ -82,9 +83,7 @@ struct SearchView: View {
                 NavigationStack {
                     EventDetailView(
                         event: r.toEventDTO(),
-                        calendar: r.calendarName.flatMap { name in
-                            CalendarMeta(id: r.calendarId, name: name, color: r.calendarColor ?? "#6366f1")
-                        },
+                        calendar: r.calendarMeta(),
                         allCalendars: calendars,
                         onChanged: {
                             // Search result list doesn't auto-refresh after
@@ -132,44 +131,18 @@ struct SearchView: View {
     }
 }
 
-private struct SearchRow: View {
-    let result: SearchResult
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(Color(hex: result.calendarColor) ?? .accentColor)
-                .frame(width: 10, height: 10)
-                .padding(.top, 6)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(result.summary).font(.body.weight(.medium)).lineLimit(2)
-                HStack(spacing: 6) {
-                    Image(systemName: "clock").font(.caption2)
-                    Text(timeLabel).font(.caption).foregroundStyle(.secondary)
-                }
-                if let location = result.location, !location.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "mappin").font(.caption2)
-                        Text(location).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                if let n = result.calendarName {
-                    Text(n).font(.caption2).foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-    private var timeLabel: String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy年M月d日 HH:mm"
-        return f.string(from: result.startsAt)
-    }
-}
-
 // Lift a search result up to a full EventDTO for the detail view. Fields
 // not returned by /search default to nil/false; detail view re-fetches
 // for edit/delete so missing rrule isn't a correctness problem.
 private extension SearchResult {
+    /// Build the CalendarMeta that EventRowView (and the detail sheet)
+    /// need for the color dot + calendar-name line. Falls back to the
+    /// brand indigo when /search omitted the color.
+    func calendarMeta() -> CalendarMeta? {
+        guard let name = calendarName else { return nil }
+        return CalendarMeta(id: calendarId, name: name, color: calendarColor ?? "#6366f1")
+    }
+
     func toEventDTO() -> EventDTO {
         EventDTO(
             id: id,

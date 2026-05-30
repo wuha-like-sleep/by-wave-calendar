@@ -371,3 +371,7 @@
 "未能从 Apple 获取登录凭证，请重试" = "未能從 Apple 取得登入憑證，請重試";
 "Apple 返回了无法识别的凭证，请重试" = "Apple 回傳了無法辨識的憑證，請重試";
 "Apple 登录失败 (HTTP %lld)" = "Apple 登入失敗 (HTTP %lld)";
+
+/* Accessibility — calendar nav chevrons */
+"上一页" = "上一頁";
+"下一页" = "下一頁";

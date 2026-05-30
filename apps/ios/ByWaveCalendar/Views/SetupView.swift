@@ -61,7 +61,7 @@ struct SetupView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 22) {
+                VStack(spacing: Theme.Spacing.xl) {
                     hero
                     methodPicker
                     // URL field only appears for methods that need it.
@@ -283,7 +283,7 @@ struct SetupView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
-            .background(Theme.card, in: RoundedRectangle(cornerRadius: 12))
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
 
             Button {
                 showingScanner = true
@@ -301,7 +301,7 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity).padding(.vertical, 16)
                 .background(brandGradient)
                 .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button))
                 .shadow(color: Theme.brandShadow, radius: 8, y: 4)
             }
             .disabled(isWorking)
@@ -419,7 +419,7 @@ struct SetupView: View {
         .frame(maxWidth: .infinity).padding(.vertical, 14)
         .background(brandGradient)
         .foregroundStyle(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.button))
         .opacity(canSubmitPassword || canSubmitCode ? 1.0 : 0.6)
     }
 

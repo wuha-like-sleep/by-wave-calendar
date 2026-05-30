@@ -87,13 +87,12 @@ struct DayView: View {
 private struct EmptyDayPlaceholder: View {
     let date: Date
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "calendar")
-                .font(.system(size: 48))
-                .foregroundStyle(.tertiary)
-            Text(label).font(.headline)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Unified with ManageCalendarsView / BookingLinksView, which both
+        // use the system ContentUnavailableView. App target is iOS 17, so
+        // the system component is available everywhere — no self-drawn
+        // VStack to keep in sync.
+        ContentUnavailableView(label, systemImage: "calendar")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var label: String {
         let cal = Calendar.current

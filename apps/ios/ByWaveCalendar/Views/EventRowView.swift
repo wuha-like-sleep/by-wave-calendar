@@ -7,6 +7,11 @@ import SwiftUI
 struct EventRowView: View {
     let event: EventDTO
     let calendar: CalendarMeta?
+    // Show the full calendar date in the time line. Day/Week lists leave
+    // this false — the date is already implied by the view they're in, so
+    // a per-row date would be noise. SearchView sets it true: results span
+    // arbitrary dates, so "14:00–15:00" alone is ambiguous there.
+    var showsDate: Bool = false
     // Optional callbacks for the long-press context menu. When nil, the
     // menu items don't render (used by SearchView where these actions
     // don't make sense without a parent refresh hook).
@@ -106,6 +111,15 @@ struct EventRowView: View {
             return DateFormatters.monthDay.string(from: event.startsAt) + " · " + "全天".loc
         }
         let sameDay = Calendar.current.isDate(event.startsAt, inSameDayAs: event.endsAt)
+        // In search (showsDate) a same-day event still needs its date —
+        // the result could be any day. dateTimeShort already carries the
+        // M/D, so we just prepend the start date and keep the end as a
+        // plain time when it's the same day.
+        if showsDate, sameDay {
+            let day = DateFormatters.monthDay.string(from: event.startsAt)
+            let t = DateFormatters.timeShort
+            return day + " " + t.string(from: event.startsAt) + " – " + t.string(from: event.endsAt)
+        }
         let f = sameDay ? DateFormatters.timeShort : DateFormatters.dateTimeShort
         return f.string(from: event.startsAt) + " – " + f.string(from: event.endsAt)
     }

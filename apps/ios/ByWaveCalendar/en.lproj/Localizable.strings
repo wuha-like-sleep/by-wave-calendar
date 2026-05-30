@@ -370,3 +370,7 @@
 "未能从 Apple 获取登录凭证，请重试" = "Couldn't get a sign-in token from Apple. Please retry.";
 "Apple 返回了无法识别的凭证，请重试" = "Apple returned an unrecognized credential. Please retry.";
 "Apple 登录失败 (HTTP %lld)" = "Sign in with Apple failed (HTTP %lld)";
+
+/* Accessibility — calendar nav chevrons */
+"上一页" = "Previous";
+"下一页" = "Next";

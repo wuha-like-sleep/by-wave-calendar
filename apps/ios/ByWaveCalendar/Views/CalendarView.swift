@@ -76,6 +76,7 @@ struct CalendarView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel(Text("设置"))
                 }
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -117,10 +118,12 @@ struct CalendarView: View {
                     } label: {
                         Image(systemName: "line.3.horizontal.decrease.circle")
                     }
+                    .accessibilityLabel(Text("筛选日历"))
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showingCreate = true } label: { Image(systemName: "plus") }
                         .disabled(calendars.isEmpty)
+                        .accessibilityLabel(Text("新建事件"))
                 }
             }
             .refreshable { await load(force: true) }
@@ -151,6 +154,9 @@ struct CalendarView: View {
             .onChange(of: mode) { _, _ in
                 // Mode switch is pure UI now (filter window changes) —
                 // events are already cached for a wide range. No fetch.
+                // Light selection tick so the day/week/month/year segmented
+                // control feels physical, like the iOS Calendar tabs.
+                UISelectionFeedbackGenerator().selectionChanged()
             }
             .onChange(of: anchor) { _, _ in
                 // Only refetch when the user navigated far enough out of
@@ -258,7 +264,11 @@ struct CalendarView: View {
             .padding(.horizontal, 14)
 
             HStack(spacing: 6) {
-                Button { shiftAnchor(by: -1) } label: { Image(systemName: "chevron.left") }
+                Button {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    shiftAnchor(by: -1)
+                } label: { Image(systemName: "chevron.left") }
+                    .accessibilityLabel(Text("上一页"))
                 Spacer()
                 Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
                     Text(anchorLabel)
@@ -266,7 +276,11 @@ struct CalendarView: View {
                         .foregroundStyle(.primary)
                 }
                 Spacer()
-                Button { shiftAnchor(by: 1) } label: { Image(systemName: "chevron.right") }
+                Button {
+                    UISelectionFeedbackGenerator().selectionChanged()
+                    shiftAnchor(by: 1)
+                } label: { Image(systemName: "chevron.right") }
+                    .accessibilityLabel(Text("下一页"))
             }
             .padding(.horizontal, 14)
             .padding(.bottom, 4)

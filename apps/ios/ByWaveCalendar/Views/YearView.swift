@@ -124,11 +124,11 @@ private struct MonthCard: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Theme.Radius.card)
                 .fill(isCurrentMonth ? Color.accentColor.opacity(0.12) : Theme.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Theme.Radius.card)
                 .strokeBorder(isCurrentMonth ? Color.accentColor.opacity(0.5) : Theme.gridLine, lineWidth: isCurrentMonth ? 1 : 0.5)
         )
     }
