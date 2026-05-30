@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Refresh
@@ -39,6 +39,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.ui.theme.Radii
+import cn.bywave.calendar.ui.theme.Sizing
 
 /** Server's scope enum, sent as ?scope=instance|future|series on
  *  PATCH/DELETE. Mirrors src/routes/events.ts. */
@@ -126,9 +128,10 @@ private fun ScopeRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(Radii.cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .clickable(onClick = onClick)
+            .heightIn(min = Sizing.minTouchTarget)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -95,6 +96,7 @@ import cn.bywave.calendar.data.model.ShareTokenCreateRequest
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseHex
+import cn.bywave.calendar.ui.components.EmptyState
 import kotlinx.coroutines.launch
 
 // iOS-parity swatch palette. Same 8 presets the iOS calendar editor
@@ -144,17 +146,17 @@ fun CalendarListScreen(
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             if (state.calendars.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("还没有日历", color = mutedTextColor())
-                        Spacer(Modifier.size(12.dp))
+                EmptyState(
+                    icon = Icons.Outlined.CalendarMonth,
+                    title = "还没有日历",
+                    action = {
                         OutlinedButton(onClick = { creating = true }) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(6.dp))
                             Text(stringResource(R.string.calendars_new))
                         }
-                    }
-                }
+                    },
+                )
             } else {
                 state.calendars.forEachIndexed { i, c ->
                     Row(

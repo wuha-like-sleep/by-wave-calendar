@@ -23,10 +23,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
@@ -59,6 +59,8 @@ import cn.bywave.calendar.ui.calendar.calendarColor
 import cn.bywave.calendar.ui.calendar.calendarName
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseInstant
+import cn.bywave.calendar.ui.theme.Radii
+import cn.bywave.calendar.ui.theme.Sizing
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -146,7 +148,7 @@ private fun EventDetailContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(Radii.fieldShape)
                     .clickable {
                         runCatching {
                             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
@@ -154,6 +156,7 @@ private fun EventDetailContent(
                             context.startActivity(intent)
                         }
                     }
+                    .heightIn(min = Sizing.minTouchTarget)
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -193,8 +196,9 @@ private fun EventDetailContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(Radii.fieldShape)
                     .clickable(onClick = onOpenAttendees)
+                    .heightIn(min = Sizing.minTouchTarget)
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.Top,
             ) {
@@ -229,8 +233,9 @@ private fun EventDetailContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(Radii.fieldShape)
                     .clickable(onClick = onOpenAttendees)
+                    .heightIn(min = Sizing.minTouchTarget)
                     .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

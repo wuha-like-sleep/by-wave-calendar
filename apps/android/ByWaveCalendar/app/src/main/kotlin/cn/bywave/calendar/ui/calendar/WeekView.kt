@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +52,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.theme.NowLineRed
+import cn.bywave.calendar.ui.theme.Radii
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -232,21 +233,21 @@ private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
     val x = TIME_GUTTER + columnWidth * todayIdx
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Red dot at the column's left edge
+        // Dot at the column's left edge
         Box(
             modifier = Modifier
                 .offset(x = x - 4.dp, y = y - 4.dp)
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(Color.Red),
+                .background(NowLineRed),
         )
-        // Red line across the column
+        // Line across the column
         Box(
             modifier = Modifier
                 .offset(x = x, y = y - 0.75.dp)
                 .width(columnWidth)
                 .height(1.5.dp)
-                .background(Color.Red),
+                .background(NowLineRed),
         )
     }
 }
@@ -290,7 +291,7 @@ private fun EventChip(
             .offset(x = x, y = y)
             .width(w)
             .height(h)
-            .clip(RoundedCornerShape(4.dp))
+            .clip(Radii.chipShape)
             .background(color.copy(alpha = 0.95f))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(horizontal = 4.dp, vertical = 3.dp),

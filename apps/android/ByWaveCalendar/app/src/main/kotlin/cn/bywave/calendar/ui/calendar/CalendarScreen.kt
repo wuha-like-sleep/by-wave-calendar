@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -65,6 +64,8 @@ import cn.bywave.calendar.ui.event.RecurringAction
 import cn.bywave.calendar.ui.event.RecurringScope
 import cn.bywave.calendar.ui.event.RecurringScopePicker
 import cn.bywave.calendar.ui.profile.ProfileSwitcherDialog
+import cn.bywave.calendar.ui.theme.MultiAccountGreen
+import cn.bywave.calendar.ui.theme.Sizing
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,28 +115,50 @@ fun CalendarScreen(
                     // Avatar badge — opens the profile switcher. Shows
                     // a small green dot when there's more than one
                     // profile to hint the multi-account feature.
+                    //
+                    // The visible circle is 36dp, but we wrap it in a
+                    // 48dp clickable IconButton-sized box so the touch
+                    // target meets the accessibility minimum and the
+                    // ripple reads like the other top-bar actions.
                     Box(
                         modifier = Modifier
-                            .padding(end = 8.dp)
-                            .size(36.dp)
+                            .padding(end = 4.dp)
+                            .size(Sizing.minTouchTarget)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                            .clickable { showSwitcher = true },
+                            .clickable(
+                                onClickLabel = "切换账号",
+                            ) { showSwitcher = true },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = active?.initial ?: "?",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        if (profilesList.size > 1) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .size(10.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF22C55E)),
+                        Box(
+                            modifier = Modifier
+                                .size(Sizing.avatar)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = active?.initial ?: "?",
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                fontWeight = FontWeight.SemiBold,
                             )
+                            if (profilesList.size > 1) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(Sizing.calendarDotSmall)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.surface),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(MultiAccountGreen),
+                                    )
+                                }
+                            }
                         }
                     }
                 },

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,6 +61,7 @@ import cn.bywave.calendar.ui.calendar.calendarName
 import cn.bywave.calendar.ui.calendar.formatTimeRange
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseInstant
+import cn.bywave.calendar.ui.components.EmptyState
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -114,8 +116,16 @@ fun SearchScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             when {
-                state.query.isBlank() -> EmptyHint(text = "输入关键字开始搜索")
-                state.results.isEmpty() -> EmptyHint(text = "没有匹配的事件")
+                state.query.isBlank() -> EmptyState(
+                    icon = Icons.Default.Search,
+                    title = "输入关键字开始搜索",
+                    subtitle = "搜索范围覆盖标题、备注和地点",
+                )
+                state.results.isEmpty() -> EmptyState(
+                    icon = Icons.Default.SearchOff,
+                    title = "没有匹配的事件",
+                    subtitle = "换个关键字再试试",
+                )
                 else -> ResultsList(
                     results = state.results,
                     calendars = state.calendars,
@@ -216,13 +226,6 @@ private fun ResultRow(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun EmptyHint(text: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text = text, color = mutedTextColor())
     }
 }
 

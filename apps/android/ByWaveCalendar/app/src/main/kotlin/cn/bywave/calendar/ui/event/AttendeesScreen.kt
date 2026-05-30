@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonRemove
+import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.bywave.calendar.ui.components.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,12 +142,11 @@ fun AttendeesScreen(
                     CircularProgressIndicator()
                 }
             } else if (state.attendees.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "还没有人",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                EmptyState(
+                    icon = Icons.Outlined.GroupAdd,
+                    title = "还没有人",
+                    subtitle = "在上方输入邮箱邀请第一位参与者",
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

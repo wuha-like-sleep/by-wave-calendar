@@ -15,12 +15,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.EventNote
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.components.EmptyState
+import cn.bywave.calendar.ui.theme.Radii
+import cn.bywave.calendar.ui.theme.Sizing
+import cn.bywave.calendar.ui.theme.Spacing
 import java.time.LocalDate
 
 @Composable
@@ -42,18 +48,17 @@ fun DayView(
     onEventLongPress: (EventDTO) -> Unit = {},
 ) {
     if (events.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = if (anchor == LocalDate.now()) "今天没有事件" else "无事件",
-                color = mutedTextColor(),
-            )
-        }
+        EmptyState(
+            icon = Icons.Outlined.EventNote,
+            title = if (anchor == LocalDate.now()) "今天没有事件" else "无事件",
+            subtitle = "点按右下角 + 新建一个事件",
+        )
         return
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         items(items = events, key = { "${it.id}@${it.startsAt}" }) { ev ->
             EventRow(
@@ -81,10 +86,11 @@ private fun EventRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(Radii.cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(12.dp),
+            .heightIn(min = Sizing.minTouchTarget)
+            .padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

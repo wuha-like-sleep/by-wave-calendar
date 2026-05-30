@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -43,6 +42,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -95,6 +95,8 @@ import cn.bywave.calendar.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.calendar.mutedTextColor
+import cn.bywave.calendar.ui.components.EmptyState
+import cn.bywave.calendar.ui.theme.Radii
 import kotlinx.coroutines.launch
 
 // Server slug rule: ^[a-z0-9][a-z0-9-]{0,30}$ — lower-case alnum start,
@@ -180,20 +182,18 @@ fun BookingLinksScreen(
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 }
             } else if (links.isEmpty()) {
-                Box(
+                EmptyState(
                     modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.booking_empty), color = mutedTextColor())
-                        Spacer(Modifier.size(12.dp))
+                    icon = Icons.Outlined.Link,
+                    title = stringResource(R.string.booking_empty),
+                    action = {
                         OutlinedButton(onClick = { creating = true }) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.size(6.dp))
                             Text(stringResource(R.string.booking_create))
                         }
-                    }
-                }
+                    },
+                )
             } else {
                 links.forEach { link ->
                     BookingLinkCard(
@@ -308,7 +308,7 @@ private fun BookingLinkCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(Radii.cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -627,11 +627,11 @@ private fun CalendarPicker(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(Radii.fieldShape)
                     .border(
                         0.5.dp,
                         MaterialTheme.colorScheme.outline,
-                        RoundedCornerShape(8.dp),
+                        Radii.fieldShape,
                     )
                     .clickable { expanded = true }
                     .padding(horizontal = 14.dp, vertical = 14.dp),
