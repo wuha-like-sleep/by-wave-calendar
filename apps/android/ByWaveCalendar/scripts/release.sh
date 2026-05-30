@@ -184,8 +184,12 @@ if [ -n "$NOTES_FILE" ]; then
   MANIFEST_NOTES=$(python3 -c "import json,sys; print(json.dumps(open('$NOTES_FILE').read()))")
 else
   # Keep the existing notes if they look like they're for THIS version;
-  # otherwise fall back to a template.
-  MANIFEST_NOTES=$(python3 -c "import json; print(json.dumps('$EXISTING_NOTES' or 'v${VERSION_NAME} 发布'))")
+  # otherwise fall back to a template. Pass EXISTING_NOTES via the
+  # environment (NOT interpolated into the Python source) — the previous
+  # release's notes are multi-line, and splicing them into a single-quoted
+  # literal produced "SyntaxError: unterminated string literal" and aborted
+  # the manifest update mid-release.
+  MANIFEST_NOTES=$(BWC_EXISTING_NOTES="$EXISTING_NOTES" BWC_VN="$VERSION_NAME" python3 -c "import json,os; print(json.dumps(os.environ['BWC_EXISTING_NOTES'] or ('v'+os.environ['BWC_VN']+' 发布')))")
 fi
 
 # Python case for the JSON-edit heredoc below — the heredoc substitutes
