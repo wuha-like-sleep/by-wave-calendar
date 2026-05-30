@@ -96,6 +96,14 @@ struct EventCreateInput: Encodable {
     let allDay: Bool?
     let rrule: String?
     let extra: EventExtra?
+    // Optional stable idempotency key. When set, the server uses it as the
+    // event's uid (UNIQUE per calendar), so a retried create (user taps
+    // 创建, request times out, taps again) collapses onto the first row
+    // instead of inserting a duplicate. The editor generates one value per
+    // new-event session and reuses it across every save attempt. nil here
+    // is dropped by the synthesized encoder (encodeIfPresent), so existing
+    // callers that don't set it send the same body as before.
+    var clientUid: String?
 }
 
 // Body for PATCH /events/:id (update). All fields optional — server only

@@ -48,6 +48,13 @@ sealed class EventEditMode {
 data class EventEditUiState(
     val isEdit: Boolean = false,
     val sourceId: String? = null,
+    /** Idempotency key for the create (POST) path. Generated ONCE in
+     *  bootstrap when the editor opens for a new event (Create or
+     *  Duplicate) and reused on every save attempt, so a retried save
+     *  (timeout → user taps again) collapses onto the first server row
+     *  instead of duplicating. Null in edit (PATCH) mode — updates are
+     *  already idempotent by id. */
+    val clientUid: String? = null,
     /** Source event's RRULE — non-null when editing a recurring event.
      *  Used by EventEditScreen to decide whether to pop the
      *  RecurringScopePicker before save. */
@@ -85,6 +92,9 @@ class EventEditViewModel : ViewModel() {
                 val start = mode.seedStart ?: nextHalfHour()
                 _state.value = EventEditUiState(
                     isEdit = false,
+                    // Stable idempotency key — generated here, ONCE per
+                    // editor open, so retried saves reuse it (no dupes).
+                    clientUid = newClientUid(),
                     calendars = calendars,
                     calendarId = calendars.firstOrNull()?.id.orEmpty(),
                     start = start,
@@ -125,6 +135,9 @@ class EventEditViewModel : ViewModel() {
                 val newStart = nextHalfHour()
                 _state.value = EventEditUiState(
                     isEdit = false,                     // POST, not PATCH
+                    // Fresh idempotency key — "copy as new" is a create,
+                    // so it gets its own once-per-open clientUid too.
+                    clientUid = newClientUid(),
                     sourceId = null,
                     calendars = calendars,
                     calendarId = s.calendarId,
@@ -221,6 +234,10 @@ class EventEditViewModel : ViewModel() {
                         endsAt = endIso,
                         allDay = if (s.allDay) true else null,
                         extra = extra,
+                        // Reuse the once-per-open key so a retried save
+                        // (timeout → tap again) hits the same server uid
+                        // and collapses onto the first row.
+                        clientUid = s.clientUid,
                     )
                     client.api.createEvent(body)
                 }
@@ -251,6 +268,13 @@ class EventEditViewModel : ViewModel() {
             }
         }
     }
+
+    /** Mint a fresh stable idempotency key for a new-event editing
+     *  session. Called ONCE per editor open (in bootstrap), never inside
+     *  save — a retried save must reuse the stored value so the server
+     *  dedups on the same uid. */
+    private fun newClientUid(): String =
+        java.util.UUID.randomUUID().toString() + "@bywave"
 
     private companion object {
         val ISO: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME

@@ -34,13 +34,30 @@ import java.time.format.DateTimeFormatter
 sealed class ActiveSheet {
     /** Read-only details for an event. */
     data class Detail(val event: EventDTO) : ActiveSheet()
-    /** Create new event (optionally seeded with a start time). */
-    data class Create(val seedStart: java.time.LocalDateTime? = null) : ActiveSheet()
-    /** Edit an existing event. */
+    /** Create new event (optionally seeded with a start time). `clientUid`
+     *  is generated ONCE when the editor opens (see [CalendarState.openCreate])
+     *  and reused on every save attempt so a retried create (e.g. save →
+     *  timeout → save again) collapses onto the same server row instead of
+     *  duplicating. */
+    data class Create(
+        val seedStart: java.time.LocalDateTime? = null,
+        val clientUid: String = newClientUid(),
+    ) : ActiveSheet()
+    /** Edit an existing event. Updates are idempotent by event id, so no
+     *  clientUid is sent. */
     data class Edit(val event: EventDTO) : ActiveSheet()
-    /** "Copy as new" — same shape as Create but pre-filled from source. */
-    data class Duplicate(val source: EventDTO) : ActiveSheet()
+    /** "Copy as new" — same shape as Create but pre-filled from source.
+     *  Lands as a POST, so it carries its own stable `clientUid` too. */
+    data class Duplicate(
+        val source: EventDTO,
+        val clientUid: String = newClientUid(),
+    ) : ActiveSheet()
 }
+
+/** Mint a stable client-side uid for an idempotent create. Format mirrors
+ *  an iCalendar UID (`<uuid>@bywave`); the server treats it as the event's
+ *  uid (UNIQUE per calendar). */
+internal fun newClientUid(): String = java.util.UUID.randomUUID().toString() + "@bywave"
 
 /** When the user pressed "Save" on the edit form of a recurring event,
  *  we park the pending update here while the scope picker is up. Once
@@ -195,12 +212,23 @@ class CalendarState(
 
     // ---- Create / update / delete ----
 
-    /** Create a new event. Closes the sheet + reloads on success. */
+    /** Create a new event. Closes the sheet + reloads on success.
+     *
+     *  `clientUid` is read from the open Create/Duplicate sheet (generated
+     *  once when that sheet opened), NOT minted here — so a retried save
+     *  reuses the same uid and the server collapses the retry onto the
+     *  first row instead of duplicating. Falls back to a fresh uid only if
+     *  no create sheet is somehow open (defensive; shouldn't happen). */
     fun create(body: EventCreateInput) {
+        val clientUid = when (val sheet = _ui.value.activeSheet) {
+            is ActiveSheet.Create -> sheet.clientUid
+            is ActiveSheet.Duplicate -> sheet.clientUid
+            else -> newClientUid()
+        }
         scope.launch {
             _ui.value = _ui.value.copy(saving = true, formError = null)
             try {
-                client.createEvent(body)
+                client.createEvent(body, clientUid = clientUid)
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
             } catch (e: Exception) {

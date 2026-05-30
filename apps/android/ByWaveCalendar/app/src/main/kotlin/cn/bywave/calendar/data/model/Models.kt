@@ -316,6 +316,13 @@ data class EventCreateInput(
     val allDay: Boolean? = null,
     val rrule: String? = null,
     val extra: EventExtra? = null,
+    /** Idempotency key. When set, the server uses it as the event's uid
+     *  (UNIQUE per calendar) so a RETRIED create collapses onto the first
+     *  row instead of duplicating. Generated ONCE per new-event editing
+     *  session (see EventEditViewModel.bootstrap) and reused on every
+     *  save attempt. `explicitNulls = false` omits it from the wire when
+     *  null (the edit/PATCH path never sends it). */
+    val clientUid: String? = null,
 )
 
 @Serializable

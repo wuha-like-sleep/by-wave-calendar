@@ -89,6 +89,12 @@ data class EventCreateInput(
     val allDay: Boolean? = null,
     val rrule: String? = null,
     val extra: EventExtra? = null,
+    /** Stable client-generated uid for idempotent create. When set, the
+     *  server uses it as the event's uid (UNIQUE per calendar), so a
+     *  RETRIED POST collapses onto the first row instead of duplicating.
+     *  Generated once per new-event editing session and reused across
+     *  retries. Omitted from the wire when null (explicitNulls=false). */
+    val clientUid: String? = null,
 )
 
 @Serializable

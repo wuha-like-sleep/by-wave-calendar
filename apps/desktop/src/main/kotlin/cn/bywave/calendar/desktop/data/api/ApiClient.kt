@@ -322,12 +322,16 @@ class ApiClient(val serverUrl: String) {
         }
     }
 
-    /** POST /api/v1/events — create a new event. */
-    suspend fun createEvent(body: EventCreateInput): EventDTO {
+    /** POST /api/v1/events — create a new event. Pass a stable
+     *  `clientUid` (generated once when the create editor opens) to make
+     *  the create idempotent: the server uses it as the event's uid
+     *  (UNIQUE per calendar), so a RETRIED save collapses onto the first
+     *  row instead of duplicating. Null leaves it off the wire. */
+    suspend fun createEvent(body: EventCreateInput, clientUid: String? = null): EventDTO {
         return withBodyAuthed(
             method = HttpMethod.POST,
             path = "/api/v1/events",
-            body = body,
+            body = if (clientUid != null) body.copy(clientUid = clientUid) else body,
             bodySerializer = EventCreateInput.serializer(),
             respSerializer = EventDTO.serializer(),
         )

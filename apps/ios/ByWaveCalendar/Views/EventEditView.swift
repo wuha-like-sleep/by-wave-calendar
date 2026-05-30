@@ -70,6 +70,13 @@ struct EventEditView: View {
     @State private var saving = false
     @State private var errorMessage: String?
 
+    // Stable idempotency key for create/duplicate. Generated ONCE here, at
+    // editor-construction time (see init), and reused on every save attempt
+    // so a retry after a timeout collapses onto the first server row instead
+    // of duplicating. nil for edit mode — updates are already idempotent by
+    // event id, and the server uses clientUid only on insert.
+    @State private var clientUid: String?
+
     // Lock end-time auto-shift to start-time changes UNTIL the user
     // manually touches the end picker. Same UX as the web client —
     // change "start" by 30 min, "end" follows; touch "end" once, the
@@ -135,6 +142,16 @@ struct EventEditView: View {
             _endsAt = State(initialValue: start.addingTimeInterval(3600))
             _allDay = State(initialValue: false)
             _calendarId = State(initialValue: calendars.first?.id ?? "")
+        }
+        // Generate the idempotency key exactly once, here at construction
+        // time — NOT inside save() — so that if the first POST times out and
+        // the user taps 创建 again, the retry carries the SAME clientUid and
+        // the server dedups it. Only create + duplicate POST a new event;
+        // edit PATCHes by id and must not send a clientUid.
+        if mode.isCreate {
+            _clientUid = State(initialValue: UUID().uuidString + "@bywave")
+        } else {
+            _clientUid = State(initialValue: nil)
         }
     }
 
@@ -315,6 +332,10 @@ struct EventEditView: View {
                     allDay: allDay,
                     rrule: nil,
                     extra: extra,
+                    // Stable across retries within this editor session (see
+                    // the clientUid @State). Always set in create/duplicate
+                    // mode; this branch only runs for those modes.
+                    clientUid: clientUid,
                 ))
             case .edit(let existing):
                 // Only send calendarId when it actually changed — otherwise
