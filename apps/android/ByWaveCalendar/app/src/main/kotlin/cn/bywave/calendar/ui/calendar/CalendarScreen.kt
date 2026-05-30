@@ -36,6 +36,8 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +87,10 @@ fun CalendarScreen(
     val active = profilesList.firstOrNull { it.id == activeId }
 
     val state by vm.state.collectAsState()
+    // Subtle haptic on primary (FAB create) + destructive (delete confirm)
+    // taps, to match the iOS app's feel. Long-press already buzzes via
+    // Compose's built-in combinedClickable haptic.
+    val haptic = LocalHapticFeedback.current
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
     var actionsForEvent by remember { mutableStateOf<EventDTO?>(null) }
     var pendingDelete by remember { mutableStateOf<EventDTO?>(null) }
@@ -165,7 +171,10 @@ fun CalendarScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onCreateEvent) {
+            FloatingActionButton(onClick = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onCreateEvent()
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "新建事件")
             }
         },
@@ -261,6 +270,7 @@ fun CalendarScreen(
             text = { Text("「${pd.summary}」将被永久删除，此操作不可恢复。") },
             confirmButton = {
                 TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     pendingDelete = null
                     vm.deleteEvent(pd.id)
                 }) { Text("删除") }

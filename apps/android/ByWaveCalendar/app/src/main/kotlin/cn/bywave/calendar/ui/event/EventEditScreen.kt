@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -83,6 +85,8 @@ fun EventEditScreen(
     vm: EventEditViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
+    // Subtle haptic on the destructive delete confirm (matches iOS).
+    val haptic = LocalHapticFeedback.current
 
     // bootstrap once — keyed on a stable identity (source id or "create").
     val bootstrapKey = when (initialMode) {
@@ -265,6 +269,7 @@ fun EventEditScreen(
                 text = { Text(stringResource(R.string.event_delete_confirm_message)) },
                 confirmButton = {
                     TextButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showDeleteDialog = false
                         vm.delete()
                     }) { Text(stringResource(R.string.action_delete)) }

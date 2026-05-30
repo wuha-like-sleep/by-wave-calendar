@@ -31,6 +31,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +64,16 @@ fun RecurringScopePicker(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // Buzz on a destructive (delete-scope) pick — the pick IS the
+    // confirmation for recurring deletes, so it deserves the same haptic
+    // as the plain delete dialog. Edit-scope picks stay silent.
+    val haptic = LocalHapticFeedback.current
+    val pick: (RecurringScope) -> Unit = { scope ->
+        if (action == RecurringAction.Delete) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+        onPick(scope)
+    }
     val title = if (action == RecurringAction.Edit) "保存重复事件" else "删除重复事件"
     val subtitle = if (action == RecurringAction.Edit)
         "这是一个重复事件，请选择保存范围："
@@ -91,20 +103,20 @@ fun RecurringScopePicker(
                 icon = Icons.Outlined.LooksOne,
                 title = "仅此事件",
                 detail = if (action == RecurringAction.Edit) "只修改这一次" else "只删除这一次",
-                onClick = { onPick(RecurringScope.Instance) },
+                onClick = { pick(RecurringScope.Instance) },
             )
             ScopeRow(
                 icon = Icons.AutoMirrored.Filled.ArrowForward,
                 title = "此事件及后续",
                 detail = if (action == RecurringAction.Edit) "修改此次及之后" else "删除此次及之后",
-                onClick = { onPick(RecurringScope.Future) },
+                onClick = { pick(RecurringScope.Future) },
             )
             ScopeRow(
                 icon = Icons.Filled.Refresh,
                 title = "整个系列",
                 detail = if (action == RecurringAction.Edit) "修改整个系列" else "删除整个系列",
                 tint = if (action == RecurringAction.Delete) MaterialTheme.colorScheme.error else null,
-                onClick = { onPick(RecurringScope.Series) },
+                onClick = { pick(RecurringScope.Series) },
             )
 
             Spacer(Modifier.size(4.dp))
