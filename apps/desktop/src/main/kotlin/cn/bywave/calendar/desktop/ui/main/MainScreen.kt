@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -44,6 +45,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -60,7 +62,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.update.DownloadState
 import cn.bywave.calendar.desktop.data.update.UpdateChecker
+import cn.bywave.calendar.desktop.data.update.UpdateDownloader
+import cn.bywave.calendar.desktop.data.update.UpdateInstaller
 import cn.bywave.calendar.desktop.ui.calendar.ActiveSheet
 import cn.bywave.calendar.desktop.ui.calendar.CalendarState
 import cn.bywave.calendar.desktop.ui.calendar.DayView
@@ -126,11 +131,34 @@ fun MainScreen(
     // if something new was found. forceCheckOutcome lets us show a
     // light snackbar-ish indicator on "already latest" too.
     val forceOutcome by UpdateChecker.lastForceCheckOutcome.collectAsState()
+    // A DMG that's downloaded + staged to apply on quit. Drives the slim
+    // "退出后自动更新" banner below. Set by UpdateInstaller.stage() once
+    // the background download completes.
+    val staged by UpdateInstaller.staged.collectAsState()
+    // Lets the user dismiss the staged-update banner for this session.
+    // The update still applies on quit — this only hides the bar.
+    var bannerDismissed by remember { mutableStateOf(false) }
     LaunchedEffect(updateInfo) {
-        // Auto-open dialog when a new manifest lands — replaces the old
-        // banner behaviour where users had to click to act. They can
-        // still dismiss for the session.
-        if (updateInfo != null) showUpdateDialog = true
+        // v0.8: Chrome / VS Code style — download silently in the
+        // background instead of popping a blocking dialog. The download
+        // → stage chain (collector below) then surfaces a slim banner; the
+        // swap applies on quit. We only kick a download when one isn't
+        // already running/done and nothing is staged yet.
+        val info = updateInfo ?: return@LaunchedEffect
+        val asset = UpdateChecker.platform?.let { info.assets[it] } ?: return@LaunchedEffect
+        val dl = UpdateDownloader.state.value
+        if ((dl is DownloadState.Idle || dl is DownloadState.Failed) &&
+            UpdateInstaller.staged.value == null
+        ) {
+            scope.launch { UpdateDownloader.download(asset.url, asset.sha256.ifBlank { null }) }
+        }
+    }
+    // When the background download finishes, stage the file so it applies
+    // on quit (and arm the shutdown hook). Collected once for the session.
+    LaunchedEffect(Unit) {
+        UpdateDownloader.state.collect { s ->
+            if (s is DownloadState.Done) UpdateInstaller.stage(s.file)
+        }
     }
 
     // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
@@ -204,9 +232,19 @@ fun MainScreen(
         )
         HorizontalDivider()
 
-        // Update banner removed in v0.7.3 — dialog (UpdateDialog) is
-        // the new entry point and auto-opens when UpdateChecker spots
-        // a new manifest. See LaunchedEffect(updateInfo) above.
+        // Staged-update banner (re-added in v0.8; a minimal banner was
+        // removed in v0.7.3). Non-blocking: a new version has already
+        // downloaded in the background and will apply on quit. We offer
+        // an immediate "立即重启" plus a "×" to hide the bar for this
+        // session (the update still applies on quit regardless).
+        val stagedFile = staged
+        if (stagedFile != null && !bannerDismissed) {
+            StagedUpdateBanner(
+                versionName = updateInfo?.versionName,
+                onRestartNow = { UpdateInstaller.staged.value?.let { UpdateInstaller.install(it) } },
+                onDismiss = { bannerDismissed = true },
+            )
+        }
 
         Row(modifier = Modifier.fillMaxSize()) {
             Sidebar(
@@ -625,5 +663,52 @@ private fun ErrorBanner(message: String, onRetry: () -> Unit) {
         )
         Spacer(Modifier.width(12.dp))
         OutlinedButton(onClick = onRetry) { Text("重试") }
+    }
+}
+
+/** Slim, non-blocking bar shown when a newer version has been downloaded
+ *  and staged to apply on quit. "立即重启" applies it now (swap +
+ *  relaunch); "×" hides the bar for this session (the update still
+ *  applies when the user quits). Styled as a thin primaryContainer
+ *  strip above the calendar. */
+@Composable
+private fun StagedUpdateBanner(
+    versionName: String?,
+    onRestartNow: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // Reactive locale so the strings re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val message = remember(locale, versionName) {
+        cn.bywave.calendar.desktop.i18n.I18n.t(
+            "update.staged",
+            mapOf("version" to ("v" + (versionName ?: ""))),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "✓ $message",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        TextButton(onClick = onRestartNow) {
+            Text(cn.bywave.calendar.desktop.i18n.I18n.t("update.restartNow"))
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = cn.bywave.calendar.desktop.i18n.I18n.t("settings.close"),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }

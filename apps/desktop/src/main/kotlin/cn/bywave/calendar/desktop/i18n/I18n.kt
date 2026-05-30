@@ -332,6 +332,11 @@ object I18n {
         "update.upToDate.body" to "You're already running the latest version (v{version}).",
         "update.upToDate.checking" to "Checking for updates…",
         "update.upToDate.button" to "OK",
+        // Download-in-background + apply-on-restart (Chrome/VS Code style):
+        // the new version downloads silently and applies when the user
+        // quits; the banner offers an immediate restart too.
+        "update.staged" to "New version {version} is ready — it'll install when you quit.",
+        "update.restartNow" to "Restart now",
 
         // Sidebar / profile switcher
         "sidebar.calendars" to "Calendars",
@@ -571,6 +576,10 @@ object I18n {
         "update.upToDate.body" to "当前已经是最新的 v{version}。",
         "update.upToDate.checking" to "正在检查更新…",
         "update.upToDate.button" to "好的",
+        // 后台下载 + 退出时应用（Chrome / VS Code 风格）：新版本静默
+        // 下载完成后，退出时自动安装；横幅也提供「立即重启」立刻应用。
+        "update.staged" to "新版本 {version} 已就绪，退出后自动更新",
+        "update.restartNow" to "立即重启",
 
         "sidebar.calendars" to "日历",
         "sidebar.empty" to "（暂无日历）",
