@@ -317,7 +317,7 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     await updateSettings({ defaultLocale: body.data.defaultLocale });
     await audit(req, u.id, "site.locale.update", { targetType: "site_settings", details: { locale: body.data.defaultLocale } });
-    return reply.redirect("/admin/site?success=" + encodeURIComponent("网站语言已更新") + "#language");
+    return reply.redirect("/admin/site#language");
   });
 
   app.post("/admin/smtp", async (req, reply) => {

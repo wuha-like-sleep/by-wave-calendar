@@ -2060,7 +2060,10 @@ export async function webRoutes(app: FastifyInstance) {
         path: "/", maxAge: LOCALE_COOKIE_TTL_S,
       });
     }
-    return redirectWith(reply, "/app/settings#language", { success: "语言已更新" });
+    // No success toast: the UI visibly switching language IS the feedback,
+    // and a hardcoded Chinese "语言已更新" toast looked wrong after switching
+    // to another language. Just redirect back to the language section.
+    return reply.redirect("/app/settings#language");
   });
 
   app.post("/app/settings/delete-account", async (req, reply) => {
