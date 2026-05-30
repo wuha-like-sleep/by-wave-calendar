@@ -117,6 +117,7 @@ enum class ViewMode(val label: String) {
     Day("日"),
     Week("周"),
     Month("月"),
+    Agenda("日程"),
 }
 
 @Composable

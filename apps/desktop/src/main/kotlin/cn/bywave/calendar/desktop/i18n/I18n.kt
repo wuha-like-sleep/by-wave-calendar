@@ -117,6 +117,8 @@ object I18n {
         "topbar.nextDay" to "Next day",
         "topbar.nextWeek" to "Next week",
         "topbar.nextMonth" to "Next month",
+        "topbar.prevAgenda" to "Previous 30 days",
+        "topbar.nextAgenda" to "Next 30 days",
         "topbar.refresh" to "Refresh",
         "topbar.new" to "New event",
         "topbar.search" to "Search",
@@ -124,6 +126,7 @@ object I18n {
         "viewmode.day" to "Day",
         "viewmode.week" to "Week",
         "viewmode.month" to "Month",
+        "viewmode.agenda" to "Agenda",
 
         // MenuBar (macOS)
         "menu.appGroup" to "ByWave Calendar",
@@ -363,6 +366,8 @@ object I18n {
         "topbar.nextDay" to "后一天",
         "topbar.nextWeek" to "下一周",
         "topbar.nextMonth" to "下一月",
+        "topbar.prevAgenda" to "前 30 天",
+        "topbar.nextAgenda" to "后 30 天",
         "topbar.refresh" to "刷新",
         "topbar.new" to "新建",
         "topbar.search" to "搜索",
@@ -370,6 +375,7 @@ object I18n {
         "viewmode.day" to "日",
         "viewmode.week" to "周",
         "viewmode.month" to "月",
+        "viewmode.agenda" to "日程",
 
         "menu.appGroup" to "ByWave Calendar",
         "menu.showWindow" to "显示窗口",

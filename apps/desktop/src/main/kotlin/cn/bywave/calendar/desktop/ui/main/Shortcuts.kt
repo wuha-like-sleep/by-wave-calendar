@@ -42,6 +42,12 @@ enum class ShortcutAction {
     /** Open the global event search dialog. Cmd/Ctrl + F — the universal
      *  "find" shortcut; matches the web Cmd+K palette / iOS search. */
     OpenSearch,
+    /** Switch the calendar view. Cmd/Ctrl + 1/2/3/4 → Day/Week/Month/Agenda
+     *  — the digit-to-view convention from Google Calendar / Fantastical. */
+    ViewDay,
+    ViewWeek,
+    ViewMonth,
+    ViewAgenda,
 }
 
 object ShortcutBus {
@@ -70,6 +76,10 @@ fun keyEventToShortcut(e: KeyEvent): ShortcutAction? {
         mod && e.key == Key.U -> ShortcutAction.CheckUpdate
         mod && e.key == Key.F -> ShortcutAction.OpenSearch
         mod && e.key == Key.Comma -> ShortcutAction.OpenSettings
+        mod && e.key == Key.One -> ShortcutAction.ViewDay
+        mod && e.key == Key.Two -> ShortcutAction.ViewWeek
+        mod && e.key == Key.Three -> ShortcutAction.ViewMonth
+        mod && e.key == Key.Four -> ShortcutAction.ViewAgenda
         !mod && e.key == Key.Escape -> ShortcutAction.Escape
         else -> null
     }

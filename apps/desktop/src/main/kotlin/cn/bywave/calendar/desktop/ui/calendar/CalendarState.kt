@@ -335,6 +335,8 @@ class CalendarState(
             ViewMode.Day -> from.plusDays(dir)
             ViewMode.Week -> from.plusWeeks(dir)
             ViewMode.Month -> from.plusMonths(dir)
+            // Agenda shows a rolling ~30-day window; prev/next pages it.
+            ViewMode.Agenda -> from.plusDays(dir * AGENDA_WINDOW_DAYS)
         }
     }
 
@@ -357,10 +359,20 @@ class CalendarState(
                 cells.first().atStartOfDay(zone).toInstant() to
                     cells.last().plusDays(1).atStartOfDay(zone).toInstant()
             }
+            // Agenda: a flat list from the anchor day forward for
+            // AGENDA_WINDOW_DAYS. The window starts at the anchor (today by
+            // default) so it reads as "what's coming up".
+            ViewMode.Agenda -> {
+                val s = anchor.atStartOfDay(zone).toInstant()
+                val e = anchor.plusDays(AGENDA_WINDOW_DAYS).atStartOfDay(zone).toInstant()
+                s to e
+            }
         }
     }
 
     companion object {
         private val ISO_INSTANT: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
+        /** Length of the Agenda view's rolling window, in days. */
+        private const val AGENDA_WINDOW_DAYS = 30L
     }
 }

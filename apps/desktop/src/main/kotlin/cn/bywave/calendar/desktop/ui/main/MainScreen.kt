@@ -64,6 +64,7 @@ import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.ui.calendar.ActiveSheet
 import cn.bywave.calendar.desktop.ui.calendar.CalendarState
 import cn.bywave.calendar.desktop.ui.calendar.DayView
+import cn.bywave.calendar.desktop.ui.calendar.AgendaView
 import cn.bywave.calendar.desktop.ui.calendar.MonthView
 import cn.bywave.calendar.desktop.ui.calendar.ViewMode
 import cn.bywave.calendar.desktop.ui.calendar.WeekView
@@ -166,6 +167,10 @@ fun MainScreen(
                     showUpdateDialog = true
                 }
                 ShortcutAction.OpenSettings -> { showSettings = true }
+                ShortcutAction.ViewDay -> s.setMode(ViewMode.Day)
+                ShortcutAction.ViewWeek -> s.setMode(ViewMode.Week)
+                ShortcutAction.ViewMonth -> s.setMode(ViewMode.Month)
+                ShortcutAction.ViewAgenda -> s.setMode(ViewMode.Agenda)
             }
         }
     }
@@ -241,6 +246,15 @@ fun MainScreen(
                         events = ui.events,
                         calendars = ui.calendars,
                         onDayClick = { state.jumpToDay(it) },
+                        onEventClick = { state.openDetail(it) },
+                        onEventEdit = { state.openEdit(it) },
+                        onEventDuplicate = { state.openDuplicate(it) },
+                        onEventDelete = { state.delete(it) },
+                    )
+                    ViewMode.Agenda -> AgendaView(
+                        anchor = ui.anchor,
+                        events = ui.events,
+                        calendars = ui.calendars,
                         onEventClick = { state.openDetail(it) },
                         onEventEdit = { state.openEdit(it) },
                         onEventDuplicate = { state.openDuplicate(it) },
@@ -411,6 +425,8 @@ private fun anchorLabelFor(mode: ViewMode, anchor: java.time.LocalDate): String 
     ViewMode.Day -> formatDayAnchor(anchor)
     ViewMode.Week -> formatWeekAnchor(startOfWeek(anchor))
     ViewMode.Month -> formatMonthAnchor(anchor)
+    // Agenda spans a 30-day window from the anchor.
+    ViewMode.Agenda -> "${formatWeekAnchor(anchor).substringBefore(" –")} 起 30 天"
 }
 
 @Composable
@@ -508,18 +524,21 @@ private fun viewModeKey(mode: ViewMode): String = when (mode) {
     ViewMode.Day -> "viewmode.day"
     ViewMode.Week -> "viewmode.week"
     ViewMode.Month -> "viewmode.month"
+    ViewMode.Agenda -> "viewmode.agenda"
 }
 
 private fun prevLabel(mode: ViewMode, t: (String) -> String): String = when (mode) {
     ViewMode.Day -> t("topbar.prevDay")
     ViewMode.Week -> t("topbar.prevWeek")
     ViewMode.Month -> t("topbar.prevMonth")
+    ViewMode.Agenda -> t("topbar.prevAgenda")
 }
 
 private fun nextLabel(mode: ViewMode, t: (String) -> String): String = when (mode) {
     ViewMode.Day -> t("topbar.nextDay")
     ViewMode.Week -> t("topbar.nextWeek")
     ViewMode.Month -> t("topbar.nextMonth")
+    ViewMode.Agenda -> t("topbar.nextAgenda")
 }
 
 @Composable
