@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		1F0001000000000000000001 /* ByWaveCalendarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000001 /* ByWaveCalendarApp.swift */; };
 		1F0001000000000000000002 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000002 /* AppState.swift */; };
-		1F000100000000000000002C /* LocaleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002C /* LocaleManager.swift */; };
 		1F0001000000000000000003 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000003 /* APIClient.swift */; };
 		1F0001000000000000000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000004 /* Models.swift */; };
 		1F0001000000000000000005 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000005 /* Keychain.swift */; };
@@ -22,7 +21,6 @@
 		1F000100000000000000000C /* EventEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000C /* EventEditView.swift */; };
 		1F000100000000000000000D /* RecurringScopePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000D /* RecurringScopePicker.swift */; };
 		1F000100000000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000E /* SettingsView.swift */; };
-		1F0001000000000000000040 /* BookingLinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000040 /* BookingLinksView.swift */; };
 		1F000100000000000000000F /* WebAuthLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000F /* WebAuthLogin.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
@@ -48,14 +46,15 @@
 		1F0001000000000000000026 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000026 /* Localizable.strings */; };
 		1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000029 /* ManageCalendarsView.swift */; };
 		1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002B /* DesktopPairScannerView.swift */; };
+		1F000100000000000000002C /* LocaleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002C /* LocaleManager.swift */; };
 		1F000100000000000000002D /* AppleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002D /* AppleSignIn.swift */; };
+		1F0001000000000000000040 /* BookingLinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000040 /* BookingLinksView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		1B0000000000000000000001 /* ByWaveCalendar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ByWaveCalendar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1B0001000000000000000001 /* ByWaveCalendarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ByWaveCalendarApp.swift; sourceTree = "<group>"; };
 		1B0001000000000000000002 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
-		1B000100000000000000002C /* LocaleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocaleManager.swift; sourceTree = "<group>"; };
 		1B0001000000000000000003 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		1B0001000000000000000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		1B0001000000000000000005 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
@@ -68,7 +67,6 @@
 		1B000100000000000000000C /* EventEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000D /* RecurringScopePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringScopePicker.swift; sourceTree = "<group>"; };
 		1B000100000000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
-		1B0001000000000000000040 /* BookingLinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingLinksView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000F /* WebAuthLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthLogin.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
@@ -96,7 +94,15 @@
 		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1B0001000000000000000029 /* ManageCalendarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageCalendarsView.swift; sourceTree = "<group>"; };
 		1B000100000000000000002B /* DesktopPairScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopPairScannerView.swift; sourceTree = "<group>"; };
+		1B000100000000000000002C /* LocaleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocaleManager.swift; sourceTree = "<group>"; };
 		1B000100000000000000002D /* AppleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignIn.swift; sourceTree = "<group>"; };
+		1B0001000000000000000040 /* BookingLinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingLinksView.swift; sourceTree = "<group>"; };
+		E5E1F0622FCB3E3A00ECC51B /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E5E1F0632FCB3E3D00ECC51B /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E5E1F0642FCB3E3F00ECC51B /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		E5E1F0652FCB3E4100ECC51B /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E5E1F0662FCB3E4300ECC51B /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
+		E5E1F0672FCB3E4500ECC51B /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/Localizable.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -344,6 +350,12 @@
 			children = (
 				1B0001000000000000000027 /* zh-Hans */,
 				1B0001000000000000000028 /* en */,
+				E5E1F0622FCB3E3A00ECC51B /* es */,
+				E5E1F0632FCB3E3D00ECC51B /* ko */,
+				E5E1F0642FCB3E3F00ECC51B /* zh-Hant */,
+				E5E1F0652FCB3E4100ECC51B /* fr */,
+				E5E1F0662FCB3E4300ECC51B /* de */,
+				E5E1F0672FCB3E4500ECC51B /* ja */,
 			);
 			name = Localizable.strings;
 			sourceTree = "<group>";
@@ -484,7 +496,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -501,7 +513,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.5.0;
+				MARKETING_VERSION = 1.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
@@ -519,7 +531,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 18;
+				CURRENT_PROJECT_VERSION = 19;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -536,7 +548,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.5.0;
+				MARKETING_VERSION = 1.5.1;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
