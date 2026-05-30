@@ -344,6 +344,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "footer.linkDownload": "下载",
   "footer.linkAbout": "关于",
   "footer.linkPrivacy": "隐私政策",
+  "footer.linkDataProcessing": "数据处理政策",
   "footer.linkTerms": "使用条款",
   "footer.linkSupport": "技术支持",
   "footer.linkSource": "源代码",

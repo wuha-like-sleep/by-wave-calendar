@@ -2,16 +2,17 @@
   <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">隐私政策</h1>
   <p class="text-sm text-slate-500 mb-8">最近更新：<%= updatedDate %></p>
 
-  <p>本《隐私政策》解释 <strong><%= siteName %></strong>（以下简称"本服务"或"我们"）通过网页、PWA、iOS / Android / 桌面 APP、CalDAV、API、邮件、ICS 订阅、嵌入式 widget 等渠道收集、使用、存储和保护您信息的方式。本服务是<strong>自托管</strong>的开源软件 —— 这意味着您的数据存放在<strong>本服务的运营者</strong>所控制的服务器上（具体见页脚联系方式），而不是任何第三方云端。</p>
+  <p>本《隐私政策》解释 <strong><%= siteName %></strong>（以下简称"本服务"或"我们"）通过网页、PWA、iOS / Android / 桌面 APP、CalDAV、API、邮件、ICS 订阅、嵌入式 widget 等渠道收集、使用、存储和保护您信息的方式。本服务是<strong>自托管</strong>的开源软件（MIT 许可）—— 这意味着您的数据存放在<strong>本服务的运营者</strong>所控制的服务器上（具体见页脚联系方式），不经过任何第三方 SaaS 云端，也不会传给本软件的作者。本政策与配套的 <a href="/data-processing" class="text-brand-700 hover:underline">《数据处理政策》</a> 和 <a href="/terms" class="text-brand-700 hover:underline">《使用条款》</a> 一并构成完整说明。</p>
 
   <h2>1. 我们收集的信息</h2>
   <h3>1.1 账号信息</h3>
   <ul>
     <li><strong>邮箱地址</strong>：注册账号时由您提供，用于登录、找回密码、接收邀请、登录提醒、事件提醒。</li>
-    <li><strong>密码哈希</strong>：我们仅存储 bcrypt 哈希后的不可逆密文，<strong>永远不存储明文密码</strong>。</li>
+    <li><strong>密码哈希</strong>：我们仅存储 bcrypt（cost 12）哈希后的不可逆密文，<strong>永远不存储明文密码</strong>。</li>
     <li><strong>显示名（可选）</strong>：您在个人资料里设置的昵称。</li>
     <li><strong>Passkey / WebAuthn 凭据</strong>：当您启用 Passkey 登录时，仅存储公钥；私钥永远只在您的设备里。</li>
     <li><strong>TOTP / 备用码（二次验证）</strong>：当您启用 MFA 时，存储 TOTP secret 和加密的备用码。</li>
+    <li><strong>SSO 身份（可选）</strong>：当您通过运营者配置的 SSO（OIDC，例如 Keycloak、Authelia）登录时，存储与该身份提供方关联的标识。</li>
   </ul>
 
   <h3>1.2 日历内容</h3>
@@ -26,62 +27,71 @@
   <ul>
     <li><strong>登录历史</strong>：每次成功登录的时间、IP、User-Agent，用于在「设置 → 我的登录」展示，便于您审计可疑访问。</li>
     <li><strong>会话 cookie</strong>：网页登录后服务器会签发 HttpOnly cookie 以保持登录状态。</li>
-    <li><strong>设备绑定（APP）</strong>：当您把 iOS / Android / 桌面 APP 绑定到服务器时，存储设备名、平台、APP 版本、首次/最近一次连接的 IP + User-Agent。当前版本 iOS APP 未启用 APNs 推送，不会存储 push token；后续版本若启用会另行更新本说明。</li>
+    <li><strong>设备配对信息（APP）</strong>：当您把 iOS / Android / 桌面 APP 绑定到服务器时，存储设备名、平台、APP 版本、首次/最近一次连接的 IP + User-Agent。</li>
+    <li><strong>推送订阅 token</strong>：
+      <ul>
+        <li><strong>网页 Web Push</strong>：当您在浏览器上同意推送通知时，存储浏览器签发的推送订阅 endpoint。</li>
+        <li><strong>移动端 APNs / FCM</strong>：服务器具备向移动设备推送的能力；当某台设备注册推送时，会存储该设备的推送 token。<strong>当前发布的 iOS APP 并未声明推送能力、不会获取或上传 APNs token</strong>，仅使用前台刷新与后台轮询同步事件；后续版本若启用推送，会在升级说明中另行公告。</li>
+      </ul>
+    </li>
     <li><strong>多账号档案（iOS APP）</strong>：当您在 iOS APP 中绑定多个服务器时，每个账号档案（服务器地址、邮箱、显示名）独立存储在本机 Keychain 中。这些档案本身不会被同步到服务器；iCloud Keychain 端到端加密可选地同步到您自己的其它 Apple 设备。</li>
     <li><strong>API token / 应用密码</strong>：仅哈希存储，明文只在签发时显示一次。</li>
   </ul>
 
-  <h3>1.4 操作日志</h3>
+  <h3>1.4 操作 / 审计日志</h3>
   <ul>
     <li>管理员操作（启用/停用账号、撤销 token、修改设置等）会写入审计日志，包含操作类型、操作者、对象、IP。</li>
     <li>外部 Webhook 投递记录（HTTP 状态、响应正文前 1KB、是否成功）。</li>
-    <li>Web Push 订阅 endpoint（如果您在网页上同意了浏览器推送通知）。</li>
+    <li>服务器运行日志用于排障；访问 token、推送 token、密码等敏感凭据<strong>不会写入日志</strong>。</li>
   </ul>
 
   <h2>2. 我们不收集的信息</h2>
   <ul>
     <li>我们<strong>不会</strong>主动收集您的位置、设备 IMEI/MAC、通讯录、相册、社交关系等任何与日历功能无关的信息。</li>
-    <li>iOS APP 的相机权限<strong>仅</strong>用于扫描登录二维码；图像不会被上传或保存。</li>
-    <li>iOS APP 的日历权限（如果您启用「同步到系统日历」）仅用于将本服务的事件写入您指定的 iOS 系统日历子日历，<strong>不读取</strong>您 iCloud / Google / 其他日历的内容。</li>
-    <li>iOS APP 的通知权限仅用于事件开始前的本地提醒。</li>
-    <li>我们<strong>不使用</strong>任何广告 SDK、行为追踪 SDK、第三方分析 SDK。</li>
+    <li>iOS / Android APP 的相机权限<strong>仅</strong>用于扫描登录二维码；图像不会被上传或保存。</li>
+    <li>APP 的日历权限（如果您启用「同步到系统日历」）仅用于将本服务的事件写入您指定的系统日历子日历，<strong>不读取</strong>您 iCloud / Google / 其他日历的内容。</li>
+    <li>APP 的通知权限仅用于事件开始前的本地提醒。</li>
+    <li>我们<strong>不使用</strong>任何广告 SDK、行为追踪 SDK、第三方分析 SDK；前端引用的第三方资源全部本地化托管，<strong>不加载任何国外 CDN</strong>。</li>
   </ul>
 
   <h2>3. 我们如何使用这些信息</h2>
   <ul>
     <li>提供日历功能：显示、编辑、提醒事件，管理日历分享。</li>
     <li>账号安全：检测异常登录、风险登录验证、防止暴力破解、停用账号时立即吊销所有 token。</li>
-    <li>邮件通知：邀请、取消、提醒、登录提醒、密码重置、二次验证。</li>
+    <li>邮件通知：邀请、取消、提醒、登录提醒、密码重置、二次验证（通过运营者自行配置的 SMTP 发送）。</li>
     <li>外部集成：当您在 admin 后台配置 Webhook 时，事件变更会推送到您指定的 URL。</li>
-    <li>多设备同步：APP 通过定期后台轮询与应用前台刷新拉取服务器的事件变更，<strong>仅同步您自己的事件</strong>。当前版本未使用推送通道。</li>
+    <li>多设备同步：APP 通过定期后台轮询与应用前台刷新拉取服务器的事件变更，<strong>仅同步您自己有权访问的事件</strong>。</li>
   </ul>
 
   <h2>4. 数据存储与安全</h2>
   <ul>
     <li>所有数据存放于本服务运营者的服务器，使用 PostgreSQL 数据库，受 Linux 文件权限保护。</li>
-    <li>HTTPS / TLS 全程加密，HSTS 已启用。</li>
-    <li>密码 bcrypt 哈希，访问令牌 HMAC-SHA256 JWT 签名，CSRF token 防跨站请求伪造，Helmet CSP 防 XSS。</li>
+    <li>传输层强制 HTTPS / TLS 全程加密，HSTS 已启用。</li>
+    <li>密码 bcrypt（cost 12）哈希，访问令牌 HMAC-SHA256 JWT 签名，CSRF token 防跨站请求伪造，Helmet CSP 防 XSS。</li>
     <li>登录尝试失败 5 次后临时锁定账号 15 分钟。</li>
     <li>站点支持双因素验证（TOTP）、Passkey、SSO（OIDC）。</li>
+    <li><strong>设备本地保护</strong>：iOS 把凭证存入 Keychain；Android 用 EncryptedSharedPreferences（Android Keystore 加密）；桌面端把凭证文件写为 0600（仅属主可读）权限；各端 token 均不写入本地日志。</li>
     <li>定期数据库备份由运营者负责。</li>
   </ul>
 
   <h2>5. 数据共享</h2>
-  <p>我们<strong>不会</strong>把您的数据卖给第三方，也不会用作广告投放。下列场景会发生数据传输，且都在您主动操作的范围内：</p>
+  <p>我们<strong>不会</strong>把您的数据卖给第三方，也不会用作广告投放。下列场景会发生数据传输，且都在您主动操作或运营者主动配置的范围内：</p>
   <ul>
     <li><strong>事件邀请</strong>：您邀请某人参加事件时，对方会通过邮件收到事件标题、时间、地点、描述、组织者邮箱。</li>
     <li><strong>日历分享</strong>：您主动生成的订阅链接（ICS / 嵌入 widget）会暴露相应日历的事件，链接持有者均可访问。</li>
     <li><strong>第三方集成</strong>：您在 admin 后台启用的 Webhook / OAuth 应用 / API token 会按您的配置访问您的数据。</li>
-    <li><strong>邮件发送</strong>：通过您的 admin 配置的 SMTP 服务器发送。</li>
+    <li><strong>邮件发送（SMTP）</strong>：通过运营者自行配置的 SMTP 服务器发送通知邮件。</li>
+    <li><strong>推送服务（APNs / FCM）</strong>：当移动端推送启用时，推送内容会经苹果 APNs / 谷歌 FCM 网关投递到您的设备。</li>
     <li><strong>SSO</strong>：当您选择第三方登录（Keycloak、Authelia 等）时，您的邮箱会传给该 IdP 完成身份验证。</li>
   </ul>
+  <p>以上第三方<strong>仅限运营者自行配置启用的基础设施</strong>（SMTP、APNs/FCM、SSO 提供方），不包含任何分析、广告或追踪服务。详见 <a href="/data-processing" class="text-brand-700 hover:underline">《数据处理政策》</a>。</p>
 
   <h2>6. 您的权利</h2>
   <ul>
     <li><strong>查看</strong>：进入网页设置查看您的账号信息、登录历史、绑定的设备、API token 等。</li>
     <li><strong>修改</strong>：随时修改邮箱、密码、显示名、二次验证设置。</li>
-    <li><strong>删除</strong>：在「设置 → 危险区」永久删除账号。删除会清空您的所有日历、事件、订阅、绑定的设备、API token。<strong>此操作不可恢复</strong>。</li>
-    <li><strong>导出</strong>：admin 可在「管理后台 → 备份」导出全站 JSON。您也可以通过 .ics 订阅链接下载单个日历。</li>
+    <li><strong>删除</strong>：在 web 或 APP 的「设置 → 危险区」永久删除账号。删除会清空您的所有日历、事件、订阅、绑定的设备、API token。<strong>此操作不可恢复</strong>。</li>
+    <li><strong>导出 / 可携</strong>：admin 可在「管理后台 → 备份」导出全站 JSON；您也可以通过 .ics 订阅链接下载单个日历，或经 CalDAV 对接其它客户端。</li>
     <li><strong>解绑设备</strong>：在「设置 → 我的设备」随时解除某台 APP 的绑定，对应设备立即失去访问权限。</li>
   </ul>
 
@@ -90,20 +100,31 @@
     <li><strong>bwc_session</strong>：登录会话，HttpOnly + Secure + SameSite=Lax。</li>
     <li><strong>bwc_csrf</strong>：CSRF token，用于防御跨站请求伪造。</li>
     <li><strong>bwc_login_chall</strong>：邮件验证码挑战会话，10 分钟过期。</li>
-    <li>我们不使用第三方追踪 cookie。</li>
+    <li>以上均为维持基本功能所必需的<strong>会话型 Cookie</strong>；我们不使用第三方追踪 cookie，也无广告 cookie。</li>
   </ul>
 
-  <h2>8. 儿童隐私</h2>
+  <h2>8. 数据留存</h2>
+  <ul>
+    <li><strong>账号 + 日历 + 事件</strong>：在账号存续期间持续保留，直到您删除事件或注销账号。</li>
+    <li><strong>软删除事件</strong>：删除后保留 90 天供恢复，到期物理删除。</li>
+    <li><strong>登录历史 / 审计日志</strong>：由运营者按其运维策略保留，用于安全审计。</li>
+    <li><strong>注销账号后</strong>：账号及其关联数据被永久清除；运营者的<strong>定期数据库备份</strong>中可能仍残留至备份按其轮换策略到期为止。</li>
+  </ul>
+
+  <h2>9. 跨境数据传输</h2>
+  <p>数据是否跨境，取决于运营者把服务器部署在何处，以及运营者所配置的 SMTP / 推送 / SSO 基础设施所在地。本软件本身不规定服务器位置。若您对数据存储与处理的具体地理位置有疑问，请咨询本站运营者。</p>
+
+  <h2>10. 儿童隐私</h2>
   <p>本服务不针对 13 岁以下儿童。如发现您是儿童，请勿提交个人信息。如运营者发现错误收集了儿童信息，会主动删除。</p>
 
-  <h2>9. 政策变更</h2>
+  <h2>11. 政策变更</h2>
   <p>我们可能不定期更新本政策，更新后会显示在本页面顶部"最近更新"日期。重大变更我们会通过邮件通知。</p>
 
-  <h2>10. 联系</h2>
+  <h2>12. 联系</h2>
   <p>对本政策、您的数据有任何疑问：</p>
   <ul>
-    <li><strong>本站账号 / 数据 / 服务器层面的问题</strong>：联系本站运营者（联系方式见站点页脚或 <a href="/support" class="text-brand-700 hover:underline">技术支持页</a>）。</li>
+    <li><strong>本站账号 / 数据 / 服务器层面的问题</strong>：联系本站运营者（联系方式见站点页脚或 <a href="/support" class="text-brand-700 hover:underline">技术支持页</a>；由运营者填写）。</li>
     <li><strong>软件 / APP / 项目层面的问题</strong>：联系项目方 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>，或到 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a> 提 issue。</li>
   </ul>
-  <p>本服务基于开源软件 by-wave-calendar 自托管，软件源码完全开放。</p>
+  <p>本服务基于开源软件 by-wave-calendar 自托管，软件源码完全开放（MIT）。</p>
 </div>

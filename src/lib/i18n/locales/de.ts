@@ -356,6 +356,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "footer.linkDownload": "Download",
   "footer.linkAbout": "Über uns",
   "footer.linkPrivacy": "Datenschutz",
+  "footer.linkDataProcessing": "Datenverarbeitung",
   "footer.linkTerms": "Nutzungsbedingungen",
   "footer.linkSupport": "Support",
   "footer.linkSource": "Quellcode",

@@ -18,19 +18,27 @@
 //
 // v1.3.3 — APNs push registration removed; APP currently does not
 // subscribe to Apple Push. Privacy text reflects this.
+//
+// 2026-05-31 — text refresh + added a Data Processing policy
+// (LegalContent.dataProcessing) to mirror the server's three-document
+// set (privacy / data-processing / terms). Wording kept consistent
+// with the web EJS pages and the Android in-app text.
 
 import Foundation
 
 enum LegalContent {
     /// One source of truth — bump on every meaningful change so the
     /// version line at the bottom of each page nudges users to re-read.
-    static let lastUpdated = "2026-05-24"
+    static let lastUpdated = "2026-05-31"
 
     static let privacy: String = """
     # 隐私政策
 
     本应用（ByWave Calendar，以下简称"APP"）是一个开源的自托管日历客户端。\
-    APP 本身不收集你的任何信息，也不会把你的数据发送给 APP 的开发者。
+    APP 本身不收集你的任何信息，也不会把你的数据发送给 APP 的开发者。\
+    本文说明 APP 在你设备上的数据行为；你账户里的数据如何被处理，\
+    请同时参阅你所绑定服务器的《隐私政策》《数据处理政策》《使用条款》\
+    （多数服务器在网页 /privacy、/data-processing、/terms 提供）。
 
     ## 1. 数据流向
 
@@ -39,14 +47,16 @@ enum LegalContent {
 
     具体到 APP 本机层面，APP 会：
 
-    - 把服务器的访问凭证（refresh token）保存在 iOS Keychain 里（不上传到任何第三方）
+    - 把服务器的访问凭证（refresh token）保存在 iOS Keychain 里（加密、不上传到任何第三方）
     - 把最近一次拉取的日历事件缓存在 APP 的 Documents 目录下，方便离线查看
     - 如果你开启「同步到系统日历」，会把事件镜像到 iOS「日历」APP 的一个子日历里
     - 如果你开启「事件开始前提醒」，会在本机排好 iOS 本地通知队列
     - 通过定期后台轮询和应用前台刷新从你绑定的服务器拉取最新事件 \
-      （当前版本未使用 Apple Push / APNs；后续启用时会在升级说明里另行公告）
+      （当前发布版本未声明 Apple Push / APNs 能力，不会获取或上传推送 token；\
+      后续若启用推送，会在升级说明里另行公告）
 
-    APP 不会把以上任何数据发送给 ByWave Calendar 项目的开发者或任何其它第三方。\
+    APP 不会把以上任何数据发送给 ByWave Calendar 项目的开发者或任何其它第三方，\
+    也不含任何广告、行为追踪或第三方分析 SDK。\
     iCloud Keychain 同步的项目（服务器地址、设备标识符）由 Apple 的端到端加密保护，开发者也无法访问。
 
     ## 2. APP 申请的权限
@@ -91,11 +101,81 @@ enum LegalContent {
     最近更新：\(lastUpdated)
     """
 
+    static let dataProcessing: String = """
+    # 数据处理政策
+
+    本文是《隐私政策》的配套说明，从「处理什么、为什么、存多久、怎么保护、\
+    与谁共享、是否跨境」的角度，描述与 ByWave Calendar APP 相关的数据处理。\
+    APP 是一个纯客户端，**真正的数据控制者是你绑定的那台服务器的运营者**；\
+    本软件作者既不运营服务器，也不接触你的数据。
+
+    ## 1. 角色划分
+
+    - **数据控制者**：你绑定的服务器的运营者 —— 决定为何、如何处理你账户里的数据
+    - **软件作者**：仅提供开源软件（MIT），不运营服务、不接触你的数据
+    - **APP 本机**：仅作客户端，不向作者或任何第三方回传你的数据
+
+    ## 2. APP 在本机处理的数据
+
+    - **访问凭证（refresh token）**：存于 iOS Keychain（加密），用于免重复登录
+    - **事件缓存**：最近拉取的事件存于 APP Documents 目录，仅供离线查看
+    - **多账号档案**：服务器地址 / 邮箱 / 显示名存于本机 Keychain；\
+      可选地经 iCloud Keychain 端到端加密同步到你自己的其它 Apple 设备
+    - **本地通知队列**：若开启「事件开始前提醒」，在本机排程 iOS 本地通知
+
+    这些数据**不出你的设备 + 你绑定的服务器**这一范围。卸载 APP 时 iOS 会一并清除。
+
+    ## 3. 服务器侧处理（由运营者负责）
+
+    你的账号、日历、事件、邀请、设备配对信息、推送订阅 token、可选 SSO 身份、\
+    审计日志等存储在**运营者的服务器**（通常是 PostgreSQL）上，不经第三方 SaaS。\
+    具体的收集范围、目的、保存期限、安全措施、子处理者与跨境安排，\
+    以**该服务器的《数据处理政策》**为准（多数服务器在网页 /data-processing 提供）。
+
+    ## 4. 第三方（仅限运营者自行配置）
+
+    服务器默认不依赖任何第三方。运营者可能自行配置：发邮件的 SMTP、\
+    推送用的 APNs / FCM、登录用的 SSO 提供方。传输全程强制 HTTPS。\
+    **不含任何分析、广告或追踪服务**；APP 也不内置任何此类 SDK。
+
+    ## 5. 当前发布版本关于推送的说明
+
+    当前发布的 iOS APP **未声明 Apple Push / APNs 能力**，不会获取或上传推送 token，\
+    仅通过前台刷新与后台轮询同步事件。后续若启用推送，会在升级说明中另行公告，\
+    届时设备的推送 token 会被服务器存储以便向你投递通知。
+
+    ## 6. 你的权利与行使方式
+
+    - **查看**：在 APP 内直接查看；服务器也支持 CalDAV / API 导出
+    - **更正**：在 APP 或 web 端任意修改
+    - **删除**：APP「设置 → 账号 → 删除账户」会请求服务器永久清除你的账号 + 全部关联数据
+    - **可携**：导出 .ics 文件，或经 CalDAV 对接其它客户端
+    - **撤回同意**：在 iOS 系统设置或 APP 内关闭相机 / 日历 / 通知等权限
+
+    更具体的数据权利请按你所在地法规（如 GDPR、中国《个人信息保护法》），\
+    向**服务器运营者**主张。
+
+    ## 7. 跨境传输
+
+    数据是否跨境，取决于运营者把服务器及其 SMTP / 推送 / SSO 基础设施部署在何处。\
+    APP 本身不规定服务器位置；请向你绑定服务器的运营者咨询。
+
+    ## 8. 联系方式
+
+    - 账户 / 数据 / 服务器层面：联系你绑定服务器的运营者
+    - APP / 软件层面：邮件 info@by-wave.com，或到 \
+      https://github.com/wuha-like-sleep/by-wave-calendar 提 issue
+
+    ---
+
+    最近更新：\(lastUpdated)
+    """
+
     static let terms: String = """
     # 使用条款
 
     欢迎使用 ByWave Calendar（以下简称"APP"）。本应用是一个开源的自托管日历客户端，\
-    使用前请阅读以下条款。
+    使用前请阅读以下条款。关于数据如何被处理，请同时参阅《隐私政策》与《数据处理政策》。
 
     ## 1. 服务说明
 

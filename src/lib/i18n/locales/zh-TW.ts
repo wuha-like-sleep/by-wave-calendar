@@ -343,6 +343,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "footer.linkDownload": "下載",
   "footer.linkAbout": "關於",
   "footer.linkPrivacy": "隱私政策",
+  "footer.linkDataProcessing": "資料處理政策",
   "footer.linkTerms": "使用條款",
   "footer.linkSupport": "技術支援",
   "footer.linkSource": "原始碼",

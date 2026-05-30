@@ -51,6 +51,7 @@
     <string name="settings_email">邮箱</string>
     <string name="settings_language">语言</string>
     <string name="settings_privacy">隐私政策</string>
+    <string name="settings_data_processing">数据处理政策</string>
     <string name="settings_terms">使用条款</string>
     <string name="settings_support">技术支持</string>
     <string name="settings_github">GitHub 仓库</string>

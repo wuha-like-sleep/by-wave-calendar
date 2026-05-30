@@ -363,6 +363,7 @@ export const en = {
   "footer.linkDownload": "Download",
   "footer.linkAbout": "About",
   "footer.linkPrivacy": "Privacy",
+  "footer.linkDataProcessing": "Data Processing",
   "footer.linkTerms": "Terms",
   "footer.linkSupport": "Support",
   "footer.linkSource": "Source code",

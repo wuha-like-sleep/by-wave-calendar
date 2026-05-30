@@ -45,6 +45,7 @@
     <string name="settings_email">メール</string>
     <string name="settings_language">言語</string>
     <string name="settings_privacy">プライバシーポリシー</string>
+    <string name="settings_data_processing">データ処理方針</string>
     <string name="settings_terms">利用規約</string>
     <string name="settings_support">サポート</string>
     <string name="settings_github">GitHub リポジトリ</string>

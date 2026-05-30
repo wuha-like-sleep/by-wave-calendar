@@ -366,21 +366,30 @@ fun SettingsScreen(
 
             // About
             Section(title = stringResource(R.string.settings_about)) {
+                // Legal links open the bound server's own pages (each
+                // operator self-hosts their policies), falling back to the
+                // project site when signed out — see legalUrl().
                 ActionRow(
                     label = stringResource(R.string.settings_privacy),
-                    onClick = { openExternal(context, "https://rl.lz-ss.com/privacy") },
+                    onClick = { openExternal(context, legalUrl(active?.serverUrl, "/privacy")) },
+                    trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
+                )
+                HorizontalDivider()
+                ActionRow(
+                    label = stringResource(R.string.settings_data_processing),
+                    onClick = { openExternal(context, legalUrl(active?.serverUrl, "/data-processing")) },
                     trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                 )
                 HorizontalDivider()
                 ActionRow(
                     label = stringResource(R.string.settings_terms),
-                    onClick = { openExternal(context, "https://rl.lz-ss.com/terms") },
+                    onClick = { openExternal(context, legalUrl(active?.serverUrl, "/terms")) },
                     trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                 )
                 HorizontalDivider()
                 ActionRow(
                     label = stringResource(R.string.settings_support),
-                    onClick = { openExternal(context, "https://rl.lz-ss.com/support") },
+                    onClick = { openExternal(context, legalUrl(active?.serverUrl, "/support")) },
                     trailingIcon = Icons.AutoMirrored.Filled.OpenInNew,
                 )
                 HorizontalDivider()
@@ -831,6 +840,19 @@ private fun openExternal(context: android.content.Context, url: String) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
+}
+
+// Build a legal-page URL (e.g. /privacy, /data-processing, /terms) on the
+// CURRENTLY BOUND server rather than hardcoding one operator's host. This
+// project is open-source + self-hosted: each operator publishes their own
+// policies at <their-server>/privacy etc, so a fork / another deployment
+// must not point users at someone else's site. When no server is bound yet
+// (signed out), fall back to the project's public demo — which serves the
+// same generic, honest policies — so the links still resolve to something.
+private const val PROJECT_DEMO_SITE = "https://rl.lz-ss.com"
+private fun legalUrl(serverUrl: String?, path: String): String {
+    val base = serverUrl?.trim()?.trimEnd('/').takeUnless { it.isNullOrEmpty() } ?: PROJECT_DEMO_SITE
+    return base + path
 }
 
 @Composable

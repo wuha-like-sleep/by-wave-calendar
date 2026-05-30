@@ -935,6 +935,11 @@ struct AboutSettingsPage: View {
                          tint: .blue,
                          serverPath: "/privacy",
                          fallback: LegalContent.privacy)
+                legalRow(title: "数据处理政策",
+                         systemImage: "tray.full.fill",
+                         tint: .indigo,
+                         serverPath: "/data-processing",
+                         fallback: LegalContent.dataProcessing)
                 legalRow(title: "使用条款",
                          systemImage: "doc.text.fill",
                          tint: .teal,

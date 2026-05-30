@@ -356,6 +356,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "footer.linkDownload": "다운로드",
   "footer.linkAbout": "소개",
   "footer.linkPrivacy": "개인정보",
+  "footer.linkDataProcessing": "데이터 처리 정책",
   "footer.linkTerms": "약관",
   "footer.linkSupport": "지원",
   "footer.linkSource": "소스 코드",

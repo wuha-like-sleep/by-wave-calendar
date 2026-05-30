@@ -210,7 +210,22 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-24",
+      updatedDate: "2026-05-31",
+    });
+  });
+
+  // Data Processing Policy — companion to /privacy, structured around
+  // what we process, why, retention, security, sub-processors, and
+  // cross-border. Linked from the footer + /privacy + /terms.
+  app.get("/data-processing", async (req, reply) => {
+    const settings = await getSettings();
+    return reply.view("legal/data-processing", {
+      title: "数据处理政策",
+      user: await loadUserFromRequest(req),
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      siteName: settings.siteName || "ByWave Calendar",
+      updatedDate: "2026-05-31",
     });
   });
 
@@ -222,7 +237,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-24",
+      updatedDate: "2026-05-31",
     });
   });
 
@@ -330,7 +345,7 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-24",
+      updatedDate: "2026-05-31",
     });
   });
 

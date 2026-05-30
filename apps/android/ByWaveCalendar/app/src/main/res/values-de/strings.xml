@@ -45,6 +45,7 @@
     <string name="settings_email">E-Mail</string>
     <string name="settings_language">Sprache</string>
     <string name="settings_privacy">Datenschutzrichtlinie</string>
+    <string name="settings_data_processing">Richtlinie zur Datenverarbeitung</string>
     <string name="settings_terms">Nutzungsbedingungen</string>
     <string name="settings_support">Support</string>
     <string name="settings_github">GitHub-Repository</string>

@@ -356,6 +356,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "footer.linkDownload": "ダウンロード",
   "footer.linkAbout": "概要",
   "footer.linkPrivacy": "プライバシー",
+  "footer.linkDataProcessing": "データ処理方針",
   "footer.linkTerms": "利用規約",
   "footer.linkSupport": "サポート",
   "footer.linkSource": "ソースコード",

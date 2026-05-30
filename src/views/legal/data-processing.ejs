@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 prose prose-slate">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">数据处理政策</h1>
+  <p class="text-sm text-slate-500 mb-8">最近更新：<%= updatedDate %></p>
+
+  <p>本《数据处理政策》是 <a href="/privacy" class="text-brand-700 hover:underline">《隐私政策》</a> 的配套文件，以更结构化的方式说明 <strong><%= siteName %></strong>（以下简称"本服务"）<strong>处理哪些个人数据、为什么处理、如何存储、保存多久、采用何种安全措施、与哪些第三方共享、以及跨境情况</strong>。本服务是<strong>自托管</strong>的开源软件（MIT 许可），数据控制者为本站<strong>运营者</strong>；本软件作者不接触您的数据。</p>
+
+  <h2>1. 数据控制者与角色</h2>
+  <ul>
+    <li><strong>数据控制者</strong>：本站运营者（决定为何、如何处理您的数据；联系方式由运营者填写，见页脚 / <a href="/support" class="text-brand-700 hover:underline">技术支持页</a>）。</li>
+    <li><strong>软件作者</strong>：仅提供开源软件，不运营本站、不接触您的数据。</li>
+    <li><strong>第三方处理者</strong>：仅限运营者自行配置启用的基础设施服务商（见第 5 节）。</li>
+  </ul>
+
+  <h2>2. 我们处理的数据类别及目的</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>数据类别</th><th>具体内容</th><th>处理目的</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>账号身份</td><td>邮箱、密码哈希（bcrypt）、显示名、可选的 Passkey 公钥、TOTP/备用码、SSO 身份标识</td><td>账号注册、登录、身份验证、账号安全</td></tr>
+        <tr><td>日历与事件</td><td>日历元数据、事件（标题/描述/地点/链接/时间/重复规则/与会人/提醒）、邀请与 RSVP</td><td>提供核心日历功能</td></tr>
+        <tr><td>设备配对信息</td><td>设备名、平台、APP 版本、配对/连接时的 IP 与 User-Agent</td><td>多设备同步、设备管理与解绑、安全审计</td></tr>
+        <tr><td>推送订阅 token</td><td>Web Push endpoint；移动端 APNs/FCM token（当推送启用且设备注册时）</td><td>向您的设备投递通知</td></tr>
+        <tr><td>会话与安全</td><td>会话/CSRF cookie、登录历史（时间/IP/UA）、失败登录计数</td><td>维持登录态、防暴力破解、异常登录检测</td></tr>
+        <tr><td>凭据派生</td><td>API token / 应用密码（仅哈希存储）</td><td>API / CalDAV 访问授权</td></tr>
+        <tr><td>审计日志</td><td>管理员操作记录、Webhook 投递记录</td><td>运维与安全审计</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>我们<strong>不处理</strong>位置、设备 IMEI/MAC、通讯录、相册、社交关系等与日历功能无关的信息，也<strong>不进行</strong>任何用户画像、广告定向或行为分析。</p>
+
+  <h2>3. 处理的合法性基础</h2>
+  <ul>
+    <li><strong>履行合同 / 提供服务</strong>：账号、日历、事件、同步等核心功能所必需。</li>
+    <li><strong>合法利益</strong>：安全审计、防滥用、异常登录检测（在不损害您基本权利的前提下）。</li>
+    <li><strong>您的同意</strong>：可选功能，如推送通知、系统日历同步、SSO 登录 —— 可随时撤回。</li>
+    <li><strong>法律义务</strong>：在适用法律要求时配合（由运营者依其所在法域判断）。</li>
+  </ul>
+
+  <h2>4. 存储位置与保存期限</h2>
+  <ul>
+    <li><strong>主存储</strong>：运营者服务器上的 PostgreSQL 数据库（运营者自有/自托管，不经第三方 SaaS）。</li>
+    <li><strong>设备本地</strong>：iOS Keychain / Android EncryptedSharedPreferences / 桌面 0600 权限文件中的访问凭证，以及用于离线查看的事件缓存。</li>
+    <li><strong>账号 + 日历 + 事件</strong>：账号存续期间持续保留，直至您删除或注销。</li>
+    <li><strong>软删除事件</strong>：保留 90 天供恢复，到期物理删除。</li>
+    <li><strong>登录历史 / 审计日志</strong>：由运营者按其运维策略保留。</li>
+    <li><strong>注销后</strong>：账号及关联数据被永久清除；运营者的定期备份中可能残留至该备份按轮换策略到期。</li>
+  </ul>
+
+  <h2>5. 第三方处理者（仅限运营者自行配置）</h2>
+  <p>本服务<strong>默认不依赖任何第三方</strong>。以下子处理者仅在运营者主动配置时才参与，且各自只接触完成其功能所必需的最小数据：</p>
+  <ul>
+    <li><strong>SMTP 邮件服务</strong>：投递邀请、提醒、登录提醒、密码重置等邮件 —— 收件人邮箱与邮件正文。</li>
+    <li><strong>APNs（苹果）/ FCM（谷歌）推送网关</strong>：在移动端推送启用时投递通知 —— 推送 token 与通知载荷。</li>
+    <li><strong>SSO 身份提供方（OIDC，如 Keycloak、Authelia）</strong>：身份验证 —— 您的邮箱 / 身份标识。</li>
+  </ul>
+  <p>以上不包含任何分析、广告或追踪服务。本服务<strong>不向任何第三方出售或共享数据用于营销</strong>。其余的数据外发（事件邀请、ICS/widget 分享、Webhook、API）均由您主动操作触发，详见《隐私政策》第 5 节。</p>
+
+  <h2>6. 安全措施</h2>
+  <ul>
+    <li><strong>传输</strong>：强制 HTTPS / TLS，HSTS 已启用。</li>
+    <li><strong>存储</strong>：密码 bcrypt（cost 12）哈希；API token / 应用密码仅哈希存储；访问令牌 HMAC-SHA256 JWT 签名。</li>
+    <li><strong>应用</strong>：CSRF token、Helmet CSP（防 XSS）、登录失败 5 次锁定 15 分钟、可选 MFA / Passkey / SSO。</li>
+    <li><strong>设备端</strong>：iOS Keychain / Android Keystore 加密 / 桌面 0600 文件；敏感凭据不写日志。</li>
+    <li><strong>前端</strong>：第三方资源全部本地化，不加载国外 CDN。</li>
+    <li><strong>备份</strong>：定期数据库备份由运营者负责。</li>
+  </ul>
+
+  <h2>7. 跨境数据传输</h2>
+  <p>数据是否跨境，完全取决于运营者把服务器部署在何处，以及运营者所配置的 SMTP / APNs / FCM / SSO 等基础设施所在地。本软件本身不规定服务器位置，也不内置任何会自动把数据传出运营者基础设施的链路。请向本站运营者咨询其部署的具体地理位置与跨境安排。</p>
+
+  <h2>8. 您的权利与行使方式</h2>
+  <ul>
+    <li><strong>访问 / 查看</strong>：在 web 或 APP 内直接查看您的账号、日历、登录历史、设备、token。</li>
+    <li><strong>更正</strong>：随时修改邮箱、密码、显示名、二次验证设置等。</li>
+    <li><strong>删除</strong>：「设置 → 危险区 → 删除账户」永久清除账号及全部关联数据（不可恢复）。</li>
+    <li><strong>可携 / 导出</strong>：通过 .ics 订阅链接、CalDAV，或由 admin 在「管理后台 → 备份」导出 JSON。</li>
+    <li><strong>限制 / 反对</strong>：可关闭推送、系统日历同步、SSO 等可选处理。</li>
+    <li><strong>撤回同意</strong>：在系统设置或 APP 内随时关闭相应权限/功能。</li>
+  </ul>
+  <p>行使权利或提出投诉，请联系本站运营者（由运营者填写联系方式）。您也有权向您所在法域的数据保护监管机构投诉。</p>
+
+  <h2>9. 政策变更</h2>
+  <p>本政策可能不定期更新，更新后会在顶部"最近更新"日期体现；重大变更会通过邮件通知。</p>
+
+  <h2>10. 联系</h2>
+  <ul>
+    <li><strong>本站数据处理 / 行使权利</strong>：联系本站运营者（联系方式见页脚或 <a href="/support" class="text-brand-700 hover:underline">技术支持页</a>；由运营者填写）。</li>
+    <li><strong>软件 / 项目层面</strong>：邮件 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> 或到 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a> 提 issue。</li>
+  </ul>
+</div>

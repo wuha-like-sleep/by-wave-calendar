@@ -50,6 +50,7 @@ to match the development locale.
     <string name="settings_email">Email</string>
     <string name="settings_language">Language</string>
     <string name="settings_privacy">Privacy Policy</string>
+    <string name="settings_data_processing">Data Processing Policy</string>
     <string name="settings_terms">Terms of Service</string>
     <string name="settings_support">Support</string>
     <string name="settings_github">GitHub Repository</string>
