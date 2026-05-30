@@ -47,6 +47,14 @@ const createSchema = z.object({
   allDay: z.boolean().optional(),
   rrule: z.string().max(500).optional(),
   extra: extraSchema,
+  // Optional client-generated idempotency key. When set, the server
+  // stores it as the event's iCalendar uid (UNIQUE per calendar) so a
+  // retried create — e.g. the offline outbox replaying a create whose
+  // HTTP response was lost after the server already committed — collapses
+  // onto the first row instead of inserting a duplicate. This is the fix
+  // for "one event became three copies". Clients should generate it once
+  // per new event and reuse it across retries.
+  clientUid: z.string().min(1).max(255).optional(),
 });
 
 // Update accepts calendarId too so apps can move an event between
@@ -210,21 +218,61 @@ export async function eventRoutes(app: FastifyInstance) {
     if (new Date(body.endsAt) < new Date(body.startsAt)) {
       return reply.code(400).send({ error: "ends_before_starts" });
     }
-    const [row] = await db
-      .insert(schema.events)
-      .values({
-        calendarId: body.calendarId,
-        uid: newEventUid(),
-        summary: body.summary,
-        description: body.description,
-        location: body.location,
-        startsAt: new Date(body.startsAt),
-        endsAt: new Date(body.endsAt),
-        allDay: body.allDay ?? false,
-        rrule: body.rrule,
-        extra: body.extra as unknown as object | null,
-      })
-      .returning();
+
+    // Idempotent create. A client may legitimately send the SAME create
+    // more than once — classically when the server commits the INSERT but
+    // the HTTP response is dropped on a flaky network, so the client (the
+    // offline outbox, or a user re-tapping "save") retries. Without a
+    // stable key every retry minted a fresh uid and inserted a duplicate
+    // row: the root cause of "one event became three". When the client
+    // supplies `clientUid`, we use it as the event's uid (UNIQUE per
+    // calendar) so retries land on the first row.
+    const stableUid = body.clientUid?.trim();
+    if (stableUid) {
+      const [existing] = await db
+        .select()
+        .from(schema.events)
+        .where(and(eq(schema.events.calendarId, body.calendarId), eq(schema.events.uid, stableUid)))
+        .limit(1);
+      if (existing) {
+        // Already created under this key → idempotent success. Crucially
+        // we return BEFORE the invite-email / webhook / push side effects
+        // so a retry never re-notifies attendees.
+        return reply.code(200).send(existing);
+      }
+    }
+
+    let row: typeof schema.events.$inferSelect | undefined;
+    try {
+      [row] = await db
+        .insert(schema.events)
+        .values({
+          calendarId: body.calendarId,
+          uid: stableUid || newEventUid(),
+          summary: body.summary,
+          description: body.description,
+          location: body.location,
+          startsAt: new Date(body.startsAt),
+          endsAt: new Date(body.endsAt),
+          allDay: body.allDay ?? false,
+          rrule: body.rrule,
+          extra: body.extra as unknown as object | null,
+        })
+        .returning();
+    } catch (e) {
+      // A concurrent retry won the race on UNIQUE(calendarId, uid). Return
+      // the row it created instead of surfacing a 500 — still idempotent.
+      const msg = e instanceof Error ? e.message : "";
+      if (stableUid && (msg.includes("duplicate") || msg.includes("unique"))) {
+        const [existing] = await db
+          .select()
+          .from(schema.events)
+          .where(and(eq(schema.events.calendarId, body.calendarId), eq(schema.events.uid, stableUid)))
+          .limit(1);
+        if (existing) return reply.code(200).send(existing);
+      }
+      throw e;
+    }
 
     // Fire-and-forget RSVP emails to attendees listed in extra.attendees.
     // The email carries a METHOD:REQUEST .ics so Gmail / Outlook / Apple Mail

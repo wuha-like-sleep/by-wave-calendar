@@ -219,10 +219,19 @@
     const localCopy = { ...event, id: tempId, calendarId: calendarId || event.calendarId, _dirty: true };
 
     await tx(STORE_EVENTS, "readwrite", (s) => s.put(localCopy));
+    const payload = { ...event, calendarId: calendarId || event.calendarId };
+    // Idempotency key for creates. The outbox replays at-least-once: if a
+    // create POST commits on the server but its response is lost, the item
+    // stays queued and is retried — previously minting a DUPLICATE event
+    // each time. We send the stable tempId as `clientUid`; it's persisted
+    // in the outbox payload, so every replay carries the same key and the
+    // server collapses retries onto the first row. (Updates are already
+    // idempotent by event id, so they don't need this.)
+    if (isCreate) payload.clientUid = tempId;
     await enqueue({
       op: isCreate ? "create" : "update",
       eventId: tempId,
-      payload: { ...event, calendarId: calendarId || event.calendarId },
+      payload,
     });
     emit("event-changed", { id: tempId, kind: isCreate ? "created" : "updated" });
     syncOutbox();  // best-effort immediate
