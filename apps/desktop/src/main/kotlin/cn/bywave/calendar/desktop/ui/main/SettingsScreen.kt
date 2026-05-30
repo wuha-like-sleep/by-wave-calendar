@@ -57,6 +57,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -93,6 +94,9 @@ import androidx.compose.ui.unit.sp
 import cn.bywave.calendar.desktop.BuildInfo
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.BookingLink
+import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
+import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
@@ -110,6 +114,7 @@ import java.net.URI
 private enum class SettingsTab(val labelKey: String, val icon: ImageVector) {
     Account("settings.tabAccount", Icons.Default.AccountCircle),
     Calendars("settings.tabCalendars", Icons.Default.CalendarMonth),
+    Booking("settings.tabBooking", Icons.Default.Link),
     Security("settings.tabSecurity", Icons.Default.Security),
     Appearance("settings.tabAppearance", Icons.Default.Brush),
     About("settings.tabAbout", Icons.Default.Info),
@@ -215,6 +220,10 @@ fun SettingsScreen(
                             calendars = calendars,
                             profile = profile,
                             onChanged = onCalendarsChanged,
+                        )
+                        SettingsTab.Booking -> BookingSection(
+                            calendars = calendars,
+                            profile = profile,
                         )
                         SettingsTab.Security -> SecuritySection(profile = profile)
                         SettingsTab.Appearance -> AppearanceSection(profile = profile)
@@ -1055,6 +1064,551 @@ private fun ColorSwatchRow(selected: String, onSelect: (String) -> Unit) {
             )
         }
     }
+}
+
+// -------- Booking links --------
+//
+// Native owner-management for "预约链接 / Booking links" — public
+// scheduling pages where guests pick an open slot. Mirrors the web owner
+// UI and the share-links panel above: list links (title / duration /
+// enabled state / publicUrl + Copy), create new ones with a form, toggle
+// enabled (pause / resume), and delete (with confirm). All calls go through
+// a short-lived ApiClient for the active profile — the same one-shot
+// pattern the calendar CRUD + share-links dialogs use. The list reloads
+// after any mutation (via reloadKey) so the UI always reflects server
+// state. weeklyAvailability is intentionally NOT exposed here for v1 — the
+// server defaults it, matching the web owner UI.
+
+@Composable
+private fun BookingSection(
+    calendars: List<CalendarMeta>,
+    profile: Profile,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var links by remember { mutableStateOf<List<BookingLink>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    // The id the user just copied — drives a transient "已复制" hint.
+    var copied by remember { mutableStateOf<String?>(null) }
+    var creating by remember { mutableStateOf(false) }            // create dialog open
+    var deleting by remember { mutableStateOf<BookingLink?>(null) } // delete confirm target
+    // Bump to force a reload after create / toggle / delete.
+    var reloadKey by remember { mutableStateOf(0) }
+    // Id currently being toggled — disables its switch while the PATCH flies.
+    var toggling by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+
+    androidx.compose.runtime.LaunchedEffect(reloadKey) {
+        loading = true
+        loadError = null
+        val api = ApiClient(profile.serverUrl)
+        runCatching { api.listBookingLinks() }
+            .onSuccess {
+                api.close()
+                links = it
+                loading = false
+            }
+            .onFailure {
+                api.close()
+                loadError = it.localizedMessage ?: t("booking.loadFailed")
+                loading = false
+            }
+    }
+
+    SectionTitle(t("booking.title"))
+    Text(
+        t("booking.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+
+    SectionCard {
+        when {
+            loading -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text(t("booking.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            loadError != null -> {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { reloadKey++ }) { Text(t("error.retry")) }
+                }
+            }
+            links.isNullOrEmpty() -> {
+                Text(
+                    t("booking.empty"),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            else -> {
+                val list = links!!
+                list.forEach { link ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(link.title, fontWeight = FontWeight.Medium)
+                                Text(
+                                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                                        "booking.durationValue",
+                                        mapOf("n" to link.durationMinutes),
+                                    ) + " · " +
+                                        if (link.enabled) t("booking.enabled") else t("booking.paused"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            // Enabled toggle (PATCH enabled). Disabled while
+                            // its own PATCH is in flight.
+                            Switch(
+                                checked = link.enabled,
+                                enabled = toggling != link.id,
+                                onCheckedChange = { wantEnabled ->
+                                    toggling = link.id
+                                    actionError = null
+                                    scope.launch {
+                                        val api = ApiClient(profile.serverUrl)
+                                        runCatching {
+                                            api.setBookingLinkEnabled(link.id, wantEnabled)
+                                        }.onSuccess {
+                                            api.close()
+                                            toggling = null
+                                            reloadKey++  // re-list so state reflects server
+                                        }.onFailure {
+                                            api.close()
+                                            toggling = null
+                                            actionError = it.localizedMessage ?: t("booking.toggleFailed")
+                                        }
+                                    }
+                                },
+                            )
+                            IconButton(onClick = { deleting = link }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = t("booking.delete"),
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                        Text(
+                            link.publicUrl,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            maxLines = 2,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = {
+                                copyToClipboard(link.publicUrl)
+                                copied = link.id
+                            }) {
+                                Text(
+                                    if (copied == link.id) t("booking.copied")
+                                    else t("booking.copyLink"),
+                                )
+                            }
+                            TextButton(onClick = {
+                                runCatching {
+                                    Desktop.getDesktop().browse(URI(link.publicUrl))
+                                }
+                            }) {
+                                Text(t("booking.open"))
+                            }
+                        }
+                    }
+                    if (link != list.last()) HorizontalDivider()
+                }
+            }
+        }
+    }
+
+    if (actionError != null) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            actionError!!,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+
+    Spacer(Modifier.height(16.dp))
+    // Can't create a booking link without a calendar to bind it to.
+    Button(onClick = { creating = true }, enabled = calendars.isNotEmpty()) {
+        Text(t("booking.new"))
+    }
+    if (calendars.isEmpty()) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            t("booking.needCalendar"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+
+    // ---- Dialogs ----
+
+    if (creating) {
+        BookingCreateDialog(
+            profile = profile,
+            calendars = calendars,
+            onDismiss = { creating = false },
+            onCreated = {
+                creating = false
+                reloadKey++
+            },
+        )
+    }
+
+    deleting?.let { link ->
+        BookingDeleteDialog(
+            profile = profile,
+            link = link,
+            onDismiss = { deleting = null },
+            onDeleted = {
+                deleting = null
+                reloadKey++
+            },
+        )
+    }
+}
+
+/** Create-a-booking-link dialog. Owns its own form state + a short-lived
+ *  ApiClient for the POST, surfacing API errors inline (mirrors
+ *  CalendarEditDialog). weeklyAvailability is left to the server default —
+ *  no availability editor here for v1. */
+@Composable
+private fun BookingCreateDialog(
+    profile: Profile,
+    calendars: List<CalendarMeta>,
+    onDismiss: () -> Unit,
+    onCreated: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var slug by remember { mutableStateOf("") }
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    // Default the calendar picker to the first calendar (the caller only
+    // opens this dialog when calendars is non-empty).
+    var calendarId by remember { mutableStateOf(calendars.first().id) }
+    var duration by remember { mutableStateOf("30") }
+    var minNotice by remember { mutableStateOf("4") }
+    var maxDays by remember { mutableStateOf("30") }
+    var bufferBefore by remember { mutableStateOf("0") }
+    var bufferAfter by remember { mutableStateOf("0") }
+    var notifyEmail by remember { mutableStateOf(true) }
+
+    var saving by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    // Slug shape mirrors the server's ^[a-z0-9][a-z0-9-]{0,30}$ so we can
+    // gate submit + show a hint before the round-trip.
+    val slugRegex = remember { Regex("^[a-z0-9][a-z0-9-]{0,30}$") }
+    val slugOk = slug.matches(slugRegex)
+    val durationInt = duration.trim().toIntOrNull()
+    val minNoticeInt = minNotice.trim().toIntOrNull()
+    val maxDaysInt = maxDays.trim().toIntOrNull()
+    val canSubmit = !saving && slugOk && title.isNotBlank() &&
+        durationInt != null && durationInt > 0 &&
+        minNoticeInt != null && minNoticeInt >= 0 &&
+        maxDaysInt != null && maxDaysInt > 0
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = {
+            Text(
+                t("booking.createTitle"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedTextField(
+                    value = slug,
+                    onValueChange = { slug = it },
+                    label = { Text(t("booking.slugLabel") + " *") },
+                    singleLine = true,
+                    isError = slug.isNotEmpty() && !slugOk,
+                    supportingText = { Text(t("booking.slugHint")) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text(t("booking.titleLabel") + " *") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text(t("booking.descLabel")) },
+                    minLines = 2,
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // Calendar picker — reuse the calendars the app already
+                // loaded. A simple vertical list of selectable rows keeps
+                // it lightweight (no dropdown menu plumbing).
+                Text(
+                    t("booking.calendarLabel"),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    calendars.forEach { cal ->
+                        val selected = cal.id == calendarId
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { calendarId = cal.id }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                                    ),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .clip(CircleShape)
+                                    .background(parseHex(cal.color)),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                cal.name,
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                            )
+                        }
+                    }
+                }
+
+                // Numeric fields. Kept as text fields with numeric parsing
+                // (canSubmit gates bad input) rather than steppers — simpler
+                // and matches the free-text style of the rest of the form.
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = duration,
+                        onValueChange = { duration = it.filter { c -> c.isDigit() } },
+                        label = { Text(t("booking.duration") + " *") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = minNotice,
+                        onValueChange = { minNotice = it.filter { c -> c.isDigit() } },
+                        label = { Text(t("booking.minNotice")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = maxDays,
+                        onValueChange = { maxDays = it.filter { c -> c.isDigit() } },
+                        label = { Text(t("booking.maxDays")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = bufferBefore,
+                        onValueChange = { bufferBefore = it.filter { c -> c.isDigit() } },
+                        label = { Text(t("booking.bufferBefore")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = bufferAfter,
+                        onValueChange = { bufferAfter = it.filter { c -> c.isDigit() } },
+                        label = { Text(t("booking.bufferAfter")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(t("booking.notifyEmail"), modifier = Modifier.weight(1f))
+                    Switch(checked = notifyEmail, onCheckedChange = { notifyEmail = it })
+                }
+
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    saving = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile.serverUrl)
+                        runCatching {
+                            api.createBookingLink(
+                                BookingLinkCreateInput(
+                                    slug = slug.trim(),
+                                    title = title.trim(),
+                                    description = description.trim().ifBlank { null },
+                                    calendarId = calendarId,
+                                    durationMinutes = durationInt!!,
+                                    minNoticeHours = minNoticeInt!!,
+                                    maxDaysAhead = maxDaysInt!!,
+                                    bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
+                                    bufferAfterMin = bufferAfter.trim().toIntOrNull(),
+                                    notifyEmail = notifyEmail,
+                                ),
+                            )
+                        }.onSuccess {
+                            api.close()
+                            saving = false
+                            onCreated()
+                        }.onFailure {
+                            api.close()
+                            saving = false
+                            errorMsg = it.localizedMessage ?: t("booking.createFailed")
+                        }
+                    }
+                },
+                enabled = canSubmit,
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("booking.create"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !saving) {
+                Text(t("booking.cancel"))
+            }
+        },
+    )
+}
+
+/** Confirm dialog for deleting a booking link. Deleting removes the public
+ *  scheduling page so the warning copy (with the link title interpolated)
+ *  spells that out, and the confirm button is styled destructive — mirrors
+ *  CalendarDeleteDialog / the share-link revoke confirm. */
+@Composable
+private fun BookingDeleteDialog(
+    profile: Profile,
+    link: BookingLink,
+    onDismiss: () -> Unit,
+    onDeleted: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                t("booking.deleteTitle"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.error,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                        "booking.deleteWarning",
+                        mapOf("name" to link.title),
+                    ),
+                )
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    working = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile.serverUrl)
+                        runCatching {
+                            api.deleteBookingLink(link.id)
+                        }.onSuccess {
+                            api.close()
+                            working = false
+                            onDeleted()
+                        }.onFailure {
+                            api.close()
+                            working = false
+                            errorMsg = it.localizedMessage ?: t("booking.deleteFailed")
+                        }
+                    }
+                },
+                enabled = !working,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (working) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("booking.deleteConfirm"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(t("booking.cancel"))
+            }
+        },
+    )
 }
 
 // -------- Security --------

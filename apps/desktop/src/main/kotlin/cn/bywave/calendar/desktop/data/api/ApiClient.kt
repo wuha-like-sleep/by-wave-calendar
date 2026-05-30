@@ -23,6 +23,9 @@ import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.desktop.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.desktop.data.model.AttendeesResponse
+import cn.bywave.calendar.desktop.data.model.BookingLink
+import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
+import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
@@ -254,6 +257,68 @@ class ApiClient(val serverUrl: String) {
         if (!resp.status.isSuccess()) {
             val body = runCatching { resp.bodyAsText() }.getOrDefault("")
             throw ApiException(resp.status.value, "share-token revoke failed: ${resp.status} $body")
+        }
+    }
+
+    // ---- Booking links (owner management) ----
+
+    /** GET /api/v1/booking-links — list the user's booking links. The route
+     *  hands back a bare JSON ARRAY of BookingLink (okList-style), so we
+     *  unwrap it with a List serializer rather than a wrapper DTO — same
+     *  shape as listShareTokens. */
+    suspend fun listBookingLinks(): List<BookingLink> {
+        return getAuthed(
+            "/api/v1/booking-links",
+            ListSerializer(BookingLink.serializer()),
+        )
+    }
+
+    /** POST /api/v1/booking-links — create a booking link. Returns the new
+     *  row (with its server-rendered `publicUrl`). The server validates the
+     *  slug shape (^[a-z0-9][a-z0-9-]{0,30}$) and defaults
+     *  weeklyAvailability / buffers / notifyEmail when omitted. */
+    suspend fun createBookingLink(body: BookingLinkCreateInput): BookingLink {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/booking-links",
+            body = body,
+            bodySerializer = BookingLinkCreateInput.serializer(),
+            respSerializer = BookingLink.serializer(),
+        )
+    }
+
+    /** PATCH /api/v1/booking-links/{id} — update any subset of a booking
+     *  link's fields. Only non-null fields are sent. Returns the updated
+     *  row. */
+    suspend fun updateBookingLink(id: String, body: BookingLinkUpdateInput): BookingLink {
+        return withBodyAuthed(
+            method = HttpMethod.PATCH,
+            path = "/api/v1/booking-links/$id",
+            body = body,
+            bodySerializer = BookingLinkUpdateInput.serializer(),
+            respSerializer = BookingLink.serializer(),
+        )
+    }
+
+    /** Convenience wrapper around updateBookingLink that flips just the
+     *  enabled flag (pause / resume a link). Returns the updated row. */
+    suspend fun setBookingLinkEnabled(id: String, enabled: Boolean): BookingLink {
+        return updateBookingLink(id, BookingLinkUpdateInput(enabled = enabled))
+    }
+
+    /** DELETE /api/v1/booking-links/{id} — delete a booking link. Server
+     *  returns a bare { ok: true } (no `data`), so we check status only —
+     *  same pattern as deleteCalendar / revokeShareToken. */
+    suspend fun deleteBookingLink(id: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            client.delete("$baseUrl/api/v1/booking-links/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "booking-link delete failed: ${resp.status} $body")
         }
     }
 

@@ -175,6 +175,94 @@ data class ShareTokenCreateInput(
     val label: String? = null,
 )
 
+// ---- Booking links (owner management) ----
+//
+// GET/POST/PATCH/DELETE /api/v1/booking-links. A booking link is a public
+// scheduling page (the `publicUrl`) where guests can pick an open slot and
+// book a meeting; the owner manages these here. Mirrors the web owner UI:
+// no weekly-availability editor on desktop for v1 — the server defaults
+// `weeklyAvailability`, so we ignore it on the wire (ignoreUnknownKeys on
+// the shared Json config drops it). The list route returns a bare JSON
+// ARRAY of BookingLink (see ApiClient.listBookingLinks).
+
+@Serializable
+data class BookingLink(
+    val id: String,
+    val userId: String,
+    val slug: String,
+    val calendarId: String,
+    val title: String,
+    val description: String? = null,
+    val durationMinutes: Int,
+    val minNoticeHours: Int,
+    val maxDaysAhead: Int,
+    val bufferBeforeMin: Int,
+    val bufferAfterMin: Int,
+    val enabled: Boolean,
+    val notifyEmail: Boolean,
+    val createdAt: String,
+    val updatedAt: String,
+    /** Server-rendered public scheduling page URL (e.g.
+     *  https://server/book/<slug>). Shown with a Copy button + open-in-browser. */
+    val publicUrl: String,
+)
+
+/** A single guest booking for a link, from
+ *  GET /api/v1/booking-links/{id}/bookings. Not surfaced in the v1 UI but
+ *  modeled for completeness / future use. `eventId` is null until the
+ *  server materializes the calendar event; `cancelledAt` is null while
+ *  active. */
+@Serializable
+data class Booking(
+    val id: String,
+    val linkId: String,
+    val eventId: String? = null,
+    val guestEmail: String,
+    val guestName: String,
+    val guestMessage: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+    val cancelToken: String,
+    val cancelledAt: String? = null,
+    val createdAt: String,
+)
+
+/** POST /api/v1/booking-links body. `slug` must match
+ *  ^[a-z0-9][a-z0-9-]{0,30}$ (server validates). Buffers + notifyEmail are
+ *  optional (server defaults them); weeklyAvailability is server-defaulted
+ *  and intentionally not exposed in the desktop v1 UI. */
+@Serializable
+data class BookingLinkCreateInput(
+    val slug: String,
+    val title: String,
+    val description: String? = null,
+    val calendarId: String,
+    val durationMinutes: Int,
+    val minNoticeHours: Int,
+    val maxDaysAhead: Int,
+    val bufferBeforeMin: Int? = null,
+    val bufferAfterMin: Int? = null,
+    val notifyEmail: Boolean? = null,
+)
+
+/** PATCH /api/v1/booking-links/{id} body. Any subset of fields; only the
+ *  non-null ones are serialized (explicitNulls=false on the shared Json
+ *  config), so e.g. toggling `enabled` sends just { enabled }. */
+@Serializable
+data class BookingLinkUpdateInput(
+    val slug: String? = null,
+    val title: String? = null,
+    val description: String? = null,
+    val calendarId: String? = null,
+    val durationMinutes: Int? = null,
+    val minNoticeHours: Int? = null,
+    val maxDaysAhead: Int? = null,
+    val bufferBeforeMin: Int? = null,
+    val bufferAfterMin: Int? = null,
+    val enabled: Boolean? = null,
+    val notifyEmail: Boolean? = null,
+)
+
 // ---- Attendees ----
 
 @Serializable
