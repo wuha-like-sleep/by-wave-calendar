@@ -162,4 +162,39 @@ to match the development locale.
     <string name="delete_account_confirm_label">To confirm, type “删除我的账号”</string>
     <string name="delete_account_confirm_mismatch">Type “删除我的账号” exactly</string>
     <string name="delete_account_failed">Couldn\'t delete account</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">Booking links</string>
+    <string name="booking_desc">Create a public booking page — anyone with the link can book a meeting in your available time, and confirmed bookings land on the calendar you choose.</string>
+    <string name="booking_empty">No booking links yet</string>
+    <string name="booking_create">New</string>
+    <string name="booking_create_title">New booking link</string>
+    <string name="booking_created">Booking link created</string>
+    <string name="booking_create_failed">Couldn\'t create booking link</string>
+    <string name="booking_slug">Slug</string>
+    <string name="booking_slug_hint">The suffix of the public URL, e.g. book/your-slug. Lowercase letters, digits and hyphens only.</string>
+    <string name="booking_slug_invalid">Lowercase letters, digits and hyphens only, starting with a letter or digit, max 31 characters.</string>
+    <string name="booking_link_title">Title</string>
+    <string name="booking_link_description">Description</string>
+    <string name="booking_link_description_hint">Optional — what this meeting is about</string>
+    <string name="booking_calendar">Save to calendar</string>
+    <string name="booking_calendar_none">Pick a calendar</string>
+    <string name="booking_duration">Duration (minutes)</string>
+    <string name="booking_duration_value">%1$d min</string>
+    <string name="booking_min_notice">Minimum notice (hours)</string>
+    <string name="booking_max_days">Bookable days ahead</string>
+    <string name="booking_buffer_before">Buffer before (min)</string>
+    <string name="booking_buffer_after">Buffer after (min)</string>
+    <string name="booking_notify_email">Email me on booking</string>
+    <string name="booking_notify_email_desc">Send you an email when someone books.</string>
+    <string name="booking_paused">Paused</string>
+    <string name="booking_copy_link">Copy link</string>
+    <string name="booking_copied">Link copied</string>
+    <string name="booking_open">Open</string>
+    <string name="booking_delete">Delete</string>
+    <string name="booking_delete_title">Delete “%1$s”?</string>
+    <string name="booking_delete_message">The booking page stops working immediately. Bookings already confirmed stay on attendees\' calendars.</string>
+    <string name="booking_deleted">Booking link deleted</string>
+    <string name="booking_delete_failed">Couldn\'t delete booking link</string>
+    <string name="booking_update_failed">Couldn\'t update booking link</string>
 </resources>

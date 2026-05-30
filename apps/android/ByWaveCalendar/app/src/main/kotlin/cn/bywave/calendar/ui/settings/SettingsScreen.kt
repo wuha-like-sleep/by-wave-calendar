@@ -90,6 +90,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     onManageCalendars: () -> Unit = {},
+    onManageBookingLinks: () -> Unit = {},
     onScanDesktopPair: () -> Unit = {},
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
@@ -319,6 +320,15 @@ fun SettingsScreen(
                 ActionRow(
                     label = "管理日历",
                     onClick = onManageCalendars,
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
+                HorizontalDivider()
+                // Booking links (v0.12) — owner-managed public scheduling
+                // pages. Server's /booking-links CRUD existed already; this
+                // is the native UI.
+                ActionRow(
+                    label = stringResource(R.string.booking_title),
+                    onClick = onManageBookingLinks,
                     trailingIcon = Icons.Default.ChevronRight,
                 )
             }

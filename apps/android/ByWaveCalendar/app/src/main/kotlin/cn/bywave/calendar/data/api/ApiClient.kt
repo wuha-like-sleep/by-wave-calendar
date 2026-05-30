@@ -11,6 +11,10 @@ import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
+import cn.bywave.calendar.data.model.Booking
+import cn.bywave.calendar.data.model.BookingLink
+import cn.bywave.calendar.data.model.BookingLinkCreateRequest
+import cn.bywave.calendar.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.data.model.CalendarCreateRequest
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.CalendarUpdateInput
@@ -134,6 +138,41 @@ interface BywaveApi {
         @Path("id") id: String,
         @Path("token") token: String,
     )
+
+    // ---- Booking links (owner-managed scheduling pages) ----
+    //
+    // Bearer-auth, enveloped /api/v1 routes — same shape as the calendar
+    // CRUD above. Each BookingLink carries a `publicUrl` (`<base>/book/
+    // <slug>`) the owner shares; visitors book against it and the owner
+    // sees the resulting appointments via .../bookings.
+
+    /** List every booking link the active user owns (enabled + paused). */
+    @GET("api/v1/booking-links")
+    suspend fun bookingLinks(): List<BookingLink>
+
+    /** Create a booking link. slug must match the server's regex
+     *  (^[a-z0-9][a-z0-9-]{0,30}$); we validate before calling. Server
+     *  replies 201 with the freshly-inserted row. */
+    @POST("api/v1/booking-links")
+    suspend fun createBookingLink(@Body body: BookingLinkCreateRequest): BookingLink
+
+    /** Patch a booking link — any subset of fields. The per-link
+     *  pause/resume toggle sends only `enabled`. Returns the updated row. */
+    @PATCH("api/v1/booking-links/{id}")
+    suspend fun updateBookingLink(
+        @Path("id") id: String,
+        @Body body: BookingLinkUpdateInput,
+    ): BookingLink
+
+    /** Delete a booking link. The public `/book/<slug>` page stops
+     *  resolving; existing bookings are left on attendees' calendars.
+     *  Envelope unwraps to `{ ok: true }`; show a confirm before calling. */
+    @DELETE("api/v1/booking-links/{id}")
+    suspend fun deleteBookingLink(@Path("id") id: String)
+
+    /** List the confirmed appointments made through a booking link. */
+    @GET("api/v1/booking-links/{id}/bookings")
+    suspend fun bookings(@Path("id") id: String): List<Booking>
 
     @GET("api/v1/events")
     suspend fun events(

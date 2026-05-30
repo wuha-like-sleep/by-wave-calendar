@@ -107,6 +107,92 @@ data class ShareToken(
 @Serializable
 data class ShareTokenCreateRequest(val label: String? = null)
 
+// ---- Booking links (owner-managed scheduling pages) ----
+
+/** One row from GET /api/v1/booking-links (and the body returned by
+ *  POST / PATCH .../booking-links). Mirrors the server's bookingLinks
+ *  table + the augmented `publicUrl` (`<base>/book/<slug>`). The server
+ *  also returns `weeklyAvailability` (a JSON object keyed by weekday)
+ *  — the v1 native UI doesn't edit it, so we omit it from the model and
+ *  rely on ignoreUnknownKeys to drop it on decode. createdAt/updatedAt
+ *  are ISO 8601 strings. */
+@Serializable
+data class BookingLink(
+    val id: String,
+    val userId: String,
+    val slug: String,
+    val calendarId: String,
+    val title: String,
+    val description: String? = null,
+    val durationMinutes: Int,
+    val minNoticeHours: Int,
+    val maxDaysAhead: Int,
+    val bufferBeforeMin: Int = 0,
+    val bufferAfterMin: Int = 0,
+    val enabled: Boolean = true,
+    val notifyEmail: Boolean = false,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+    /** Public booking page URL — `<PUBLIC_BASE_URL>/book/<slug>`. */
+    val publicUrl: String? = null,
+)
+
+/** POST /api/v1/booking-links body. `slug` must match
+ *  /^[a-z0-9][a-z0-9-]{0,30}$/ (validated client-side before submit).
+ *  bufferBeforeMin / bufferAfterMin / notifyEmail are optional — the
+ *  server defaults the buffers to 0 and notifyEmail to false. The server
+ *  defaults weeklyAvailability, so the native v1 create flow never sends
+ *  it. Response is a BookingLink row. */
+@Serializable
+data class BookingLinkCreateRequest(
+    val slug: String,
+    val title: String,
+    val description: String? = null,
+    val calendarId: String,
+    val durationMinutes: Int,
+    val minNoticeHours: Int,
+    val maxDaysAhead: Int,
+    val bufferBeforeMin: Int? = null,
+    val bufferAfterMin: Int? = null,
+    val notifyEmail: Boolean? = null,
+)
+
+/** PATCH /api/v1/booking-links/:id body. Server's update schema is the
+ *  create schema partial()'d plus `enabled` — every field optional, only
+ *  those present get changed. We rely on `explicitNulls = false` (set on
+ *  the Json instance) to drop nulls from the wire so absent ≠ null. The
+ *  per-link enabled toggle sends only `enabled`. */
+@Serializable
+data class BookingLinkUpdateInput(
+    val slug: String? = null,
+    val title: String? = null,
+    val description: String? = null,
+    val calendarId: String? = null,
+    val durationMinutes: Int? = null,
+    val minNoticeHours: Int? = null,
+    val maxDaysAhead: Int? = null,
+    val bufferBeforeMin: Int? = null,
+    val bufferAfterMin: Int? = null,
+    val enabled: Boolean? = null,
+    val notifyEmail: Boolean? = null,
+)
+
+/** One row from GET /api/v1/booking-links/:id/bookings — a confirmed
+ *  appointment a visitor made through the public page. Not surfaced in
+ *  the v1 management UI's primary flow but modeled for completeness;
+ *  extra server fields decode away via ignoreUnknownKeys. */
+@Serializable
+data class Booking(
+    val id: String,
+    val bookingLinkId: String,
+    val name: String? = null,
+    val email: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+    val note: String? = null,
+    val createdAt: String? = null,
+)
+
 // ---- Auth ----
 //
 // IMPORTANT: native APPs do NOT call /auth/login (web cookie path —

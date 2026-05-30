@@ -36,6 +36,7 @@ import cn.bywave.calendar.ui.event.AttendeesScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.search.SearchScreen
+import cn.bywave.calendar.ui.settings.BookingLinksScreen
 import cn.bywave.calendar.ui.settings.CalendarListScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
 import cn.bywave.calendar.ui.setup.DesktopPairScannerScreen
@@ -199,6 +200,7 @@ private fun AppRoot() {
                     nav.popBackStack("calendar", inclusive = false)
                 },
                 onManageCalendars = { nav.navigate("calendars") },
+                onManageBookingLinks = { nav.navigate("booking_links") },
                 onScanDesktopPair = { nav.navigate("desktop_pair_scanner") },
             )
         }
@@ -211,6 +213,19 @@ private fun AppRoot() {
             val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             CalendarListScreen(
+                onBack = { nav.popBackStack() },
+                vm = calVm,
+            )
+        }
+
+        composable("booking_links") {
+            // Reuse the calendar-VM from the calendar back-stack entry so
+            // the create form's calendar picker sees the same calendars
+            // the rest of the app already loaded. Booking links themselves
+            // are fetched ad-hoc inside the screen.
+            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
+            BookingLinksScreen(
                 onBack = { nav.popBackStack() },
                 vm = calVm,
             )

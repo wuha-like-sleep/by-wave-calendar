@@ -167,4 +167,39 @@
     <string name="delete_account_confirm_label">为确认，请输入「删除我的账号」</string>
     <string name="delete_account_confirm_mismatch">请精确输入「删除我的账号」</string>
     <string name="delete_account_failed">删除账号失败</string>
+
+    <!-- Booking links (v0.12) -->
+    <string name="booking_title">预约链接</string>
+    <string name="booking_desc">生成一个公开的预约页面 — 任何拿到链接的人都能在你的可约时间里预约一次会面，确认后会写入你选定的日历。</string>
+    <string name="booking_empty">还没有预约链接</string>
+    <string name="booking_create">新建</string>
+    <string name="booking_create_title">新建预约链接</string>
+    <string name="booking_created">已创建预约链接</string>
+    <string name="booking_create_failed">创建预约链接失败</string>
+    <string name="booking_slug">短链标识</string>
+    <string name="booking_slug_hint">公开地址的后缀，例如 book/你的标识；只能用小写字母、数字和连字符</string>
+    <string name="booking_slug_invalid">只能用小写字母、数字和连字符，需以字母或数字开头，最长 31 个字符</string>
+    <string name="booking_link_title">标题</string>
+    <string name="booking_link_description">描述</string>
+    <string name="booking_link_description_hint">可选 — 这次预约是关于什么的</string>
+    <string name="booking_calendar">写入日历</string>
+    <string name="booking_calendar_none">请选择日历</string>
+    <string name="booking_duration">时长（分钟）</string>
+    <string name="booking_duration_value">%1$d 分钟</string>
+    <string name="booking_min_notice">最短提前时间（小时）</string>
+    <string name="booking_max_days">最多可约天数</string>
+    <string name="booking_buffer_before">前缓冲（分钟）</string>
+    <string name="booking_buffer_after">后缓冲（分钟）</string>
+    <string name="booking_notify_email">预约邮件提醒</string>
+    <string name="booking_notify_email_desc">有人预约时给你发邮件通知。</string>
+    <string name="booking_paused">已暂停</string>
+    <string name="booking_copy_link">复制链接</string>
+    <string name="booking_copied">链接已复制</string>
+    <string name="booking_open">打开</string>
+    <string name="booking_delete">删除</string>
+    <string name="booking_delete_title">删除「%1$s」？</string>
+    <string name="booking_delete_message">删除后该预约页面立即失效；已经确认的预约会保留在对方日历里。</string>
+    <string name="booking_deleted">预约链接已删除</string>
+    <string name="booking_delete_failed">删除预约链接失败</string>
+    <string name="booking_update_failed">更新预约链接失败</string>
 </resources>
