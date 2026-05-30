@@ -1,0 +1,15 @@
+<%# Compact header language switcher. POSTs to /locale (sets bwc_locale
+    cookie, works for logged-out users too) and bounces back to the current
+    page via return_to. csrfToken / currentPath / locales / currentLocale are
+    global view locals (src/server.ts). onchange auto-submit — inline JS is
+    permitted by the site CSP (script-src-attr 'unsafe-inline'). %>
+<form method="post" action="/locale" class="m-0">
+  <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
+  <input type="hidden" name="return_to" value="<%= typeof currentPath !== 'undefined' ? currentPath : '' %>" />
+  <select name="locale" onchange="this.form.submit()" aria-label="语言 / Language"
+          class="text-sm rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 cursor-pointer">
+    <% (typeof locales !== 'undefined' ? locales : []).forEach(function(l){ %>
+      <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= l.label %></option>
+    <% }) %>
+  </select>
+</form>

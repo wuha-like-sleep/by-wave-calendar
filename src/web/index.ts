@@ -371,13 +371,11 @@ export async function webRoutes(app: FastifyInstance) {
       httpOnly: false, sameSite: "lax", secure: env.NODE_ENV === "production",
       path: "/", maxAge: LOCALE_COOKIE_TTL_S,
     });
-    // Bounce back to wherever they came from (sanitize: /login is safe;
-    // any other path is rejected to /login).
-    const r = body.data.return_to;
-    if (r === "/login" || r === "/register" || r === "/forgot-password") {
-      return reply.redirect(r);
-    }
-    return reply.redirect("/login");
+    // Bounce back to the page they switched language on. sanitizeReturnTo
+    // only allows same-origin internal paths (no open redirect); falls back
+    // to /app (which itself bounces unauth'd users to /login).
+    const r = sanitizeReturnTo(body.data.return_to);
+    return reply.redirect(r ?? "/app");
   });
 
   app.get("/login", async (req, reply) => {

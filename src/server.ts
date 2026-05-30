@@ -888,6 +888,11 @@ app.addHook("onRequest", async (req, reply) => {
       // `<%- JSON.stringify(x) %>` whenever the payload can contain
       // user-controlled strings (event/calendar fields).
       jsonForScript,
+      // Header language switcher (partials/nav.ejs) posts to /locale and
+      // bounces back here. csrfToken is deterministic per session, so making
+      // it a global is safe even when a route also passes its own.
+      csrfToken: csrfTokenFor(req),
+      currentPath: req.url,
       ...locals,
     });
 });
