@@ -27,3 +27,28 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# ---- Hardening added when enabling R8 (minify on) ----
+
+# Keep ALL fields + the constructor of our @Serializable model classes. The
+# serializer() keeps above let R8 FIND the serializer, but without this R8
+# could still rename/strip the backing fields the (de)serializer reads — a
+# runtime JSON failure that compiles cleanly. Belt-and-suspenders.
+-keepclassmembers @kotlinx.serialization.Serializable class cn.bywave.calendar.** {
+    <fields>;
+    <init>(...);
+}
+
+# Enums are frequently used as serialized values; keep values()/valueOf so
+# kotlinx.serialization can round-trip them.
+-keepclassmembers enum cn.bywave.calendar.** {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
+}
+
+# Reflection-adjacent attributes Kotlin/serialization rely on.
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-dontwarn kotlinx.serialization.**
+
+# Room, DataStore, androidx.security-crypto and ML Kit barcode all ship their
+# own consumer ProGuard rules inside their AARs — no project rules needed.

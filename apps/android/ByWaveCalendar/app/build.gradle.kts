@@ -61,10 +61,14 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false  // start with R8 off — toggle on once we
-                                      // see real APK size pressure + verify
-                                      // Compose/Retrofit/Serialization rules
-                                      // are tight enough not to strip too much.
+            // R8 ON: shrink + obfuscate the release APK (the "加密/混淆" pass).
+            // ⚠️ R8 strips/renames code per the rules in proguard-rules.pro and
+            // can break reflection / serialization at RUNTIME (not at compile).
+            // The SIGNED release APK MUST be smoke-tested on a real device before
+            // shipping — if it crashes, logcat's ClassNotFound / NoSuchMethodError
+            // names the class that needs an extra -keep rule.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
