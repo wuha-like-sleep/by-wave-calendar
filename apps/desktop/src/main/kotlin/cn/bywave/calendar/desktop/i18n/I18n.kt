@@ -131,6 +131,7 @@ object I18n {
         // MenuBar (macOS)
         "menu.appGroup" to "ByWave Calendar",
         "menu.showWindow" to "Show Window",
+        "menu.newEvent" to "New Event…",
         "menu.settings" to "Settings…",
         "menu.checkUpdate" to "Check for Updates…",
         "menu.quit" to "Quit ByWave Calendar",
@@ -379,6 +380,7 @@ object I18n {
 
         "menu.appGroup" to "ByWave Calendar",
         "menu.showWindow" to "显示窗口",
+        "menu.newEvent" to "新建事件…",
         "menu.settings" to "设置…",
         "menu.checkUpdate" to "检查更新…",
         "menu.quit" to "退出 ByWave Calendar",

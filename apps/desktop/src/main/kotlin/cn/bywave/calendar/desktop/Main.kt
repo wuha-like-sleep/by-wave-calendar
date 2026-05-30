@@ -152,6 +152,21 @@ fun main() = application {
         MenuBar {
             Menu(tr("menu.appGroup"), mnemonic = 'B') {
                 Item(tr("menu.showWindow"), onClick = { visible = true })
+                // Quick-add from the menu bar — brings the window forward
+                // and opens the new-event dialog. The ShortcutBus collector
+                // in MainScreen stays mounted while the window is hidden, so
+                // the emitted New action is received even from a hidden app.
+                Item(
+                    tr("menu.newEvent"),
+                    onClick = {
+                        visible = true
+                        ShortcutBus.flow.tryEmit(ShortcutAction.New)
+                    },
+                    shortcut = androidx.compose.ui.input.key.KeyShortcut(
+                        androidx.compose.ui.input.key.Key.N,
+                        meta = true,
+                    ),
+                )
                 Item(
                     tr("menu.settings"),
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.OpenSettings) },
