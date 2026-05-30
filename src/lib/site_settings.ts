@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { updateBrandForEmails } from "./email_templates.js";
+import { updateBrandForEmails, updateEmailBranding } from "./email_templates.js";
 import { isCaptchaProvider, type CaptchaConfig, type CaptchaProvider } from "./captcha/index.js";
 
 export type SettingsView = {
@@ -40,6 +40,9 @@ export type SettingsView = {
   // The secret is NOT here; read it only via getCaptchaConfig().
   captchaProvider: CaptchaProvider;
   captchaSiteKey: string | null;
+  // Email branding (editable in /admin/email-templates).
+  emailBrandColor: string;
+  emailFooterNote: string;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -99,6 +102,8 @@ function toView(r: schema.SiteSettings): SettingsView {
     vapidSubject: r.vapidSubject,
     captchaProvider: isCaptchaProvider(r.captchaProvider) ? r.captchaProvider : "builtin",
     captchaSiteKey: r.captchaSiteKey ?? null,
+    emailBrandColor: r.emailBrandColor || "#4f46e5",
+    emailFooterNote: r.emailFooterNote || "日历共享平台",
   };
 }
 
@@ -113,6 +118,7 @@ export async function getSettings(): Promise<SettingsView> {
   if (!cached) {
     cached = await loadFromDb();
     updateBrandForEmails(cached.siteName);
+    updateEmailBranding({ brandColor: cached.emailBrandColor, footerNote: cached.emailFooterNote });
   }
   return cached;
 }
@@ -173,6 +179,8 @@ export async function updateSettings(patch: Partial<{
   captchaProvider: string;
   captchaSiteKey: string | null;
   captchaSecret: string | null;
+  emailBrandColor: string;
+  emailFooterNote: string;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

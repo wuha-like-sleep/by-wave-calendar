@@ -18,6 +18,9 @@ import {
   passwordResetMail,
   verificationCodeMail,
   welcomeMail,
+  EMAIL_PREVIEW_TEMPLATES,
+  renderPreviewHtml,
+  normalizeHexColor,
 } from "../lib/email_templates.js";
 import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
 import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
@@ -1110,6 +1113,106 @@ export async function adminRoutes(app: FastifyInstance) {
       ? `已发 ${sent.length} 封，失败 ${failed.length} 封（${failed.join(", ")}）—— 检查 SMTP 设置`
       : `已发送 5 封样式邮件到 ${to}，请查收`;
     return reply.redirect("/admin/smtp?success=" + encodeURIComponent(msg));
+  });
+
+  // ---------- Email templates: see + edit brand details + live preview ----------
+  app.get("/admin/email-templates", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const settings = await getSettings();
+    const now = new Date();
+    // Render each template once with the CURRENTLY SAVED branding for the
+    // initial server-side preview (iframe srcdoc). Live edits re-render via the
+    // /preview endpoint below.
+    const previews = EMAIL_PREVIEW_TEMPLATES.map((t) => ({
+      key: t.key,
+      label: t.label,
+      html: renderPreviewHtml(t.key, "you@example.com", now, {}) ?? "",
+    }));
+    return reply.view("admin/email-templates", {
+      title: "邮件模板 · 管理后台",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/email-templates",
+      settings,
+      previews,
+    });
+  });
+
+  // Live preview: render ONE template with DRAFT branding overrides (not saved).
+  // Returns raw HTML; the page fetches this and writes it into the iframe srcdoc.
+  app.get<{ Querystring: { key?: string; name?: string; color?: string; footer?: string } }>(
+    "/admin/email-templates/preview",
+    async (req, reply) => {
+      const user = await requireAdmin(req, reply);
+      if (!user) return;
+      const q = req.query ?? {};
+      const key = typeof q.key === "string" ? q.key : "";
+      const html = renderPreviewHtml(key, "you@example.com", new Date(), {
+        brand: typeof q.name === "string" ? q.name.slice(0, 100) : undefined,
+        brandColor: typeof q.color === "string" ? q.color.slice(0, 16) : undefined,
+        footerNote: typeof q.footer === "string" ? q.footer.slice(0, 100) : undefined,
+      });
+      if (html == null) return reply.code(404).type("text/plain").send("unknown template");
+      // Same-origin HTML for the iframe; no inline scripts so the page CSP is fine.
+      return reply.type("text/html; charset=utf-8").send(html);
+    },
+  );
+
+  app.post("/admin/email-templates", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      siteName: z.string().max(100).optional(),
+      emailBrandColor: z.string().max(16).optional(),
+      emailFooterNote: z.string().max(100).optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/email-templates?error=" + encodeURIComponent("参数无效"));
+    }
+    const color = normalizeHexColor(body.data.emailBrandColor);
+    if (body.data.emailBrandColor && !color) {
+      return reply.redirect("/admin/email-templates?error=" + encodeURIComponent("主题色必须是合法的十六进制颜色，例如 #4f46e5"));
+    }
+    const patch: { siteName?: string; emailBrandColor?: string; emailFooterNote?: string } = {};
+    if (body.data.siteName?.trim()) patch.siteName = body.data.siteName.trim();
+    if (color) patch.emailBrandColor = color;
+    if (body.data.emailFooterNote != null) patch.emailFooterNote = body.data.emailFooterNote.trim() || "日历共享平台";
+    await updateSettings(patch);
+    await audit(req, user.id, "site.email_branding.update", {
+      targetType: "site_settings",
+      details: { brandColor: patch.emailBrandColor ?? null, footerNote: patch.emailFooterNote ?? null },
+    });
+    return reply.redirect("/admin/email-templates?success=" + encodeURIComponent("邮件品牌已保存，下一封邮件即生效"));
+  });
+
+  app.post("/admin/email-templates/send", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ to: z.string().email() }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/email-templates?error=" + encodeURIComponent("请输入合法的邮箱地址"));
+    }
+    const to = body.data.to;
+    const now = new Date();
+    let sent = 0;
+    const failed: string[] = [];
+    for (const t of EMAIL_PREVIEW_TEMPLATES) {
+      try {
+        await sendMail(t.build(to, now));
+        sent++;
+      } catch (err) {
+        req.log.warn({ err, key: t.key }, "email_template_send_failed");
+        failed.push(t.label);
+      }
+    }
+    const msg = failed.length
+      ? `已发 ${sent} 封，失败 ${failed.length} 封（${failed.join("、")}）—— 检查 SMTP 设置`
+      : `已把 ${sent} 种模板邮件发送到 ${to}，请查收`;
+    return reply.redirect("/admin/email-templates?success=" + encodeURIComponent(msg));
   });
 
   // ---------- Theme / appearance ----------

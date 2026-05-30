@@ -1,0 +1,2 @@
+ALTER TABLE "site_settings" ADD COLUMN "email_brand_color" text DEFAULT '#4f46e5' NOT NULL;--> statement-breakpoint
+ALTER TABLE "site_settings" ADD COLUMN "email_footer_note" text DEFAULT '日历共享平台' NOT NULL;

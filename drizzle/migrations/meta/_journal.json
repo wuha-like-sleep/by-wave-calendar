@@ -288,6 +288,13 @@
       "when": 1780166372120,
       "tag": "0040_lame_madame_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780167765472,
+      "tag": "0041_minor_forge",
+      "breakpoints": true
     }
   ]
 }

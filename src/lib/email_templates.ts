@@ -58,12 +58,76 @@ function zoneLabel(tz: string): string {
   return `${tail.replace(/_/g, " ")} 时间`;
 }
 
-// ---------- Brand palette ----------
-// Indigo brand, sourced from src/styles/input.css default palette:
-//   --brand-600: 79 70 229  => #4F46E5 (primary)
-//   --brand-500: 99 102 241 => #6366F1 (accent / gradient end)
-const BRAND_PRIMARY = "#4f46e5";
-const BRAND_ACCENT = "#6366f1";
+// ---------- Brand palette (admin-configurable) ----------
+// Defaults match src/styles/input.css indigo (--brand-600 #4F46E5). Admins can
+// override the primary color + footer tagline in /admin/email-templates;
+// updateEmailBranding() is called from getSettings() so a change takes effect
+// for the next email without a restart. The accent (gradient end / link color)
+// is derived from the primary by mixing toward white.
+const DEFAULT_BRAND_COLOR = "#4f46e5";
+const DEFAULT_FOOTER_NOTE = "日历共享平台";
+let brandColor = DEFAULT_BRAND_COLOR;
+let accentColor = lighten(DEFAULT_BRAND_COLOR, 0.16);
+let footerNote = DEFAULT_FOOTER_NOTE;
+
+/** Mix a #rrggbb color toward white by `amt` (0..1). Invalid input → returned as-is. */
+function lighten(hex: string, amt: number): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const k = Math.max(0, Math.min(1, amt));
+  const mix = (c: number) => Math.round(c + (255 - c) * k);
+  const to2 = (c: number) => c.toString(16).padStart(2, "0");
+  return `#${to2(mix(r))}${to2(mix(g))}${to2(mix(b))}`;
+}
+
+/** Normalize a user hex (#rgb or #rrggbb, with/without #) to #rrggbb, or null if invalid. */
+export function normalizeHexColor(input: string | null | undefined): string | null {
+  if (!input) return null;
+  const s = input.trim();
+  let m = /^#?([0-9a-f]{6})$/i.exec(s);
+  if (m) return `#${m[1]!.toLowerCase()}`;
+  m = /^#?([0-9a-f]{3})$/i.exec(s);
+  if (m) { const c = m[1]!.toLowerCase(); return `#${c[0]}${c[0]}${c[1]}${c[1]}${c[2]}${c[2]}`; }
+  return null;
+}
+
+/** Apply admin-configured brand color + footer tagline (called on settings load). */
+export function updateEmailBranding(opts: { brandColor?: string | null; footerNote?: string | null }): void {
+  brandColor = normalizeHexColor(opts.brandColor) ?? DEFAULT_BRAND_COLOR;
+  accentColor = lighten(brandColor, 0.16);
+  footerNote = opts.footerNote?.trim() || DEFAULT_FOOTER_NOTE;
+}
+
+type EmailBrandingSnapshot = { brand: string; brandColor: string; accentColor: string; footerNote: string };
+function snapshotBranding(): EmailBrandingSnapshot { return { brand, brandColor, accentColor, footerNote }; }
+function restoreBranding(s: EmailBrandingSnapshot): void {
+  brand = s.brand; brandColor = s.brandColor; accentColor = s.accentColor; footerNote = s.footerNote;
+}
+
+/**
+ * Render a template fn with TEMPORARY branding overrides, then restore the
+ * previous values. Used by the admin live-preview so a draft can be rendered
+ * WITHOUT persisting it. SAFE re: concurrency: `render` is fully synchronous
+ * (the *Mail() builders never await), so no other request's code runs between
+ * the override and the restore in `finally`.
+ */
+export function renderWithBranding(
+  overrides: { brand?: string | null; brandColor?: string | null; footerNote?: string | null },
+  render: () => SendArgs,
+): SendArgs {
+  const prev = snapshotBranding();
+  try {
+    if (overrides.brand != null && overrides.brand.trim()) brand = overrides.brand.trim();
+    const c = normalizeHexColor(overrides.brandColor);
+    if (c) { brandColor = c; accentColor = lighten(c, 0.16); }
+    if (overrides.footerNote != null && overrides.footerNote.trim()) footerNote = overrides.footerNote.trim();
+    return render();
+  } finally {
+    restoreBranding(prev);
+  }
+}
 
 // Absolute, publicly-reachable URL to the platform logo. Email clients can't
 // resolve relative paths, so we build a full URL from the site's own public
@@ -107,7 +171,7 @@ function layout(opts: {
         <td align="center">
           <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;background:#ffffff;border-radius:16px;box-shadow:0 1px 3px rgba(15,23,42,0.06);overflow:hidden;">
             <tr>
-              <td style="padding:22px 28px;background:${BRAND_PRIMARY};background:linear-gradient(135deg,${BRAND_PRIMARY},${BRAND_ACCENT});color:#ffffff;">
+              <td style="padding:22px 28px;background:${brandColor};background:linear-gradient(135deg,${brandColor},${accentColor});color:#ffffff;">
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                   <tr>
                     ${logo ? `<td style="vertical-align:middle;padding-right:10px;">
@@ -127,12 +191,12 @@ function layout(opts: {
             </tr>
             <tr>
               <td style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;line-height:1.6;">
-                ${links.length ? `<div style="margin:0 0 8px;">${links.map((l) => `<a href="${l.url}" style="color:${BRAND_PRIMARY};text-decoration:none;">${escape(l.label)}</a>`).join(`<span style="color:#cbd5e1;"> · </span>`)}</div>` : ""}
+                ${links.length ? `<div style="margin:0 0 8px;">${links.map((l) => `<a href="${l.url}" style="color:${brandColor};text-decoration:none;">${escape(l.label)}</a>`).join(`<span style="color:#cbd5e1;"> · </span>`)}</div>` : ""}
                 此邮件由 ${escape(brand)} 自动发送，请勿直接回复。
               </td>
             </tr>
           </table>
-          <div style="margin-top:12px;color:#94a3b8;font-size:12px;">© ${year} ${escape(brand)} · 日历共享平台</div>
+          <div style="margin-top:12px;color:#94a3b8;font-size:12px;">© ${year} ${escape(brand)} · ${escape(footerNote)}</div>
         </td>
       </tr>
     </table>
@@ -176,7 +240,7 @@ export function verificationCodeMail(to: string, code: string): SendArgs {
         ⚠️ 请勿告诉任何人此验证码。如果不是你本人在注册，请忽略此邮件 —— 你的邮箱不会被注册。
       </p>
       <p style="margin:16px 0 0;color:#64748b;font-size:12px;">
-        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
+        来自：<a href="${baseUrl}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return { to, subject: `【${brand}】邮箱验证码 ${code}`, html, text };
@@ -202,7 +266,7 @@ export function loginChallengeMail(to: string, code: string, ctx: { ip: string; 
         IP <code style="font-family:'SF Mono',monospace;">${escape(ctx.ip)}</code> · ${escape(ctx.userAgent.slice(0, 80))}
       </p>
       <p style="margin:16px 0 0;color:#64748b;font-size:12px;">
-        来自：<a href="${env.PUBLIC_BASE_URL.replace(/\/$/, "")}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
+        来自：<a href="${env.PUBLIC_BASE_URL.replace(/\/$/, "")}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return { to, subject: `【${brand}】登录验证码 ${code}`, html, text };
@@ -276,11 +340,11 @@ export function passwordResetMail(to: string, token: string): SendArgs {
         你请求重置 ${escape(brand)} 账号的密码。点击下面按钮设置新密码 —— 链接 <strong>1 小时内有效</strong>，且只能用一次。
       </p>
       <p style="margin:24px 0;">
-        <a href="${link}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">设置新密码</a>
+        <a href="${link}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">设置新密码</a>
       </p>
       <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
         按钮没反应？复制下面链接到浏览器打开：<br/>
-        <a href="${link}" style="color:#6366f1;text-decoration:underline;">${link}</a>
+        <a href="${link}" style="color:${accentColor};text-decoration:underline;">${link}</a>
       </p>
       <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
         ⚠️ 如果不是你本人请求的，忽略此邮件即可 —— 你的账号不会有任何变化。设置新密码后，<strong>所有已登录设备会被强制下线</strong>。
@@ -328,11 +392,11 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
         <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
         ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">地点</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
       </table>
-      ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
+      ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid ${accentColor};border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
       ${ctx.inviteToken ? `
       <p style="margin:18px 0 10px;">
         <a href="${baseUrl}/event-invite/${encodeURIComponent(ctx.inviteToken)}"
-           style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
+           style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
           添加到我的日历
         </a>
       </p>
@@ -343,7 +407,7 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
         点开即可"添加到日历"。如果客户端没自动弹窗，直接双击附件即可导入。
       </p>`}
       <p style="margin:10px 0 0;color:#64748b;font-size:12px;">
-        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
+        来自：<a href="${baseUrl}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return {
@@ -388,7 +452,7 @@ export function eventCancelMail(to: string, ctx: {
         Outlook 日历看到这条会自动把对应事件从你的日历里移除（如果你之前接受过）。
       </p>
       <p style="margin:14px 0 0;color:#64748b;font-size:12px;">
-        来自：<a href="${baseUrl}" style="color:#4f46e5;text-decoration:none;font-weight:500;">${escape(brand)}</a>
+        来自：<a href="${baseUrl}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return {
@@ -416,13 +480,13 @@ export function calendarInviteMail(
       <p style="margin:0 0 14px;color:#475569;line-height:1.6;font-size:14px;">
         <strong>${escape(ctx.inviterName)}</strong> 邀请你加入日历 <strong>「${escape(ctx.calendarName)}」</strong>，权限：<strong>${escape(roleLabel)}</strong>。
       </p>
-      ${ctx.message ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #6366f1;border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.message)}</div>` : ""}
+      ${ctx.message ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid ${accentColor};border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.message)}</div>` : ""}
       <p style="margin:20px 0 14px;">
-        <a href="${acceptUrl}" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请</a>
+        <a href="${acceptUrl}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请</a>
       </p>
       <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
         按钮没反应？复制下面链接到浏览器：<br/>
-        <a href="${acceptUrl}" style="color:#6366f1;text-decoration:underline;">${acceptUrl}</a>
+        <a href="${acceptUrl}" style="color:${accentColor};text-decoration:underline;">${acceptUrl}</a>
       </p>
       <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;">
         邀请 7 天内有效。如果还没注册，按下「接受邀请」会引导你注册同邮箱账号后自动加入。
@@ -459,10 +523,10 @@ export function securityChangeMail(to: string, ctx: { kind: "passkey_added" | "m
         <strong>不是你？</strong> 立即<a href="${baseUrl}/forgot-password" style="color:#9f1239;text-decoration:underline;">重置密码</a>，所有设备会被踢出登录。
       </div>` : `
       <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
-        如果不是你本人操作，立即<a href="${baseUrl}/forgot-password" style="color:#6366f1;text-decoration:underline;">重置密码</a>。
+        如果不是你本人操作，立即<a href="${baseUrl}/forgot-password" style="color:${accentColor};text-decoration:underline;">重置密码</a>。
       </p>`}
       <p style="margin:14px 0 0;">
-        <a href="${baseUrl}/app/settings" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:500;">查看账号设置</a>
+        <a href="${baseUrl}/app/settings" style="display:inline-block;background:${brandColor};color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:500;">查看账号设置</a>
       </p>`,
   });
   return { to, subject: `【${brand}】${label}`, html, text };
@@ -482,7 +546,7 @@ export function welcomeMail(to: string, displayName: string | null): SendArgs {
         你的 ${escape(brand)} 账号已经激活。现在就可以创建日历、添加事件、生成订阅链接分享给朋友和家人。
       </p>
       <p style="margin:16px 0;">
-        <a href="${baseUrl}/app" style="display:inline-block;background:#4f46e5;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">进入控制台</a>
+        <a href="${baseUrl}/app" style="display:inline-block;background:${brandColor};color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:500;">进入控制台</a>
       </p>
       <ul style="margin:16px 0;padding-left:18px;color:#475569;font-size:13px;line-height:1.8;">
         <li>支持 ICS 订阅 —— Apple/Google/Outlook 都能直接订阅你的日历</li>
@@ -518,15 +582,68 @@ export function inviteSignupMail(args: {
         这是一个日历共享平台 —— 创建日历、添加事件，并把订阅链接分享给朋友和家人。
       </p>
       <p style="margin:22px 0 14px;">
-        <a href="${inviteUrl}" style="display:inline-block;background:${BRAND_PRIMARY};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请并注册</a>
+        <a href="${inviteUrl}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请并注册</a>
       </p>
       <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;word-break:break-all;">
         按钮没反应？复制下面链接到浏览器打开：<br/>
-        <a href="${inviteUrl}" style="color:${BRAND_ACCENT};text-decoration:underline;">${inviteUrl}</a>
+        <a href="${inviteUrl}" style="color:${accentColor};text-decoration:underline;">${inviteUrl}</a>
       </p>
       <p style="margin:14px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">
         如果你并不认识邀请人，可以直接忽略这封邮件 —— 不会有任何账号被创建。
       </p>`,
   });
   return { to, subject: `【${name}】邀请你注册`, html, text };
+}
+
+// ---------- Admin preview registry ----------
+// Every user-facing template with representative sample data, so the admin
+// "邮件模板" page can render each one (and the live brand-color preview). The
+// `build` fns are only called when previewing/sending a test — never in normal
+// flows. `now` is injected so the preview is deterministic per request.
+export type EmailPreviewTemplate = {
+  key: string;
+  label: string;
+  build: (to: string, now: Date) => SendArgs;
+};
+
+export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
+  { key: "verification", label: "邮箱验证码（注册）", build: (to) => verificationCodeMail(to, "123456") },
+  { key: "welcome", label: "欢迎邮件", build: (to) => welcomeMail(to, "示例用户") },
+  { key: "passwordReset", label: "密码重置", build: (to) => passwordResetMail(to, "demo-token-not-real-zG7yQpKxL3mN9vBdE2hRsT4uW6f") },
+  { key: "loginChallenge", label: "陌生设备验证码", build: (to) => loginChallengeMail(to, "508231", { ip: "203.0.113.42", userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)" }) },
+  {
+    key: "loginAlert", label: "新登录提醒",
+    build: (to, now) => loginAlertMail(to, {
+      email: to, displayName: "示例用户", loginAt: now, ip: "203.0.113.42",
+      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15",
+      method: "password", location: "上海",
+    }),
+  },
+  { key: "securityChange", label: "安全变更（启用 MFA）", build: (to) => securityChangeMail(to, { kind: "mfa_enabled" }) },
+  {
+    key: "calendarInvite", label: "日历协作邀请",
+    build: (to) => calendarInviteMail(to, {
+      calendarName: "工作日历", inviterName: "示例管理员", role: "editor",
+      message: "把这个加进你的日历，每周一会议都在这里。", token: "demo-invitation-token",
+    }),
+  },
+  {
+    key: "inviteSignup", label: "注册邀请",
+    build: (to) => inviteSignupMail({
+      to, inviteUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/register?invite=demo-token`,
+      siteName: brand, inviterName: "示例管理员",
+    }),
+  },
+];
+
+/** Render a single preview template by key with optional draft branding overrides. Returns full HTML, or null if the key is unknown. */
+export function renderPreviewHtml(
+  key: string,
+  to: string,
+  now: Date,
+  overrides: { brand?: string | null; brandColor?: string | null; footerNote?: string | null },
+): string | null {
+  const tpl = EMAIL_PREVIEW_TEMPLATES.find((t) => t.key === key);
+  if (!tpl) return null;
+  return renderWithBranding(overrides, () => tpl.build(to, now)).html;
 }

@@ -1,0 +1,143 @@
+<%- include('_nav') %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">邮件模板</h1>
+<p class="text-sm text-slate-500 mb-6">所有系统邮件共用同一套品牌外壳（顶部 Logo + 平台名、主题色按钮 / 链接、底部署名）。在这里改主题色和页脚说明，下面的预览会<strong>实时</strong>跟着变；满意后点保存，之后发出的邮件就会用新样式。</p>
+
+<div class="grid gap-6 lg:grid-cols-[minmax(0,340px)_1fr]">
+  <!-- ============ Left: editable details ============ -->
+  <div class="space-y-6">
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-4">品牌细节</h2>
+      <form method="post" action="/admin/email-templates" class="space-y-4">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <div>
+          <label class="block text-sm font-medium text-slate-700">平台名称</label>
+          <input type="text" id="bwc-name" name="siteName" maxlength="100" value="<%= settings.siteName %>"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p class="mt-1 text-xs text-slate-400">显示在邮件顶栏与署名（与 站点设置 同源，这里改也会同步）。</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">主题色</label>
+          <div class="mt-1 flex items-center gap-2">
+            <input type="color" id="bwc-color-picker" value="<%= settings.emailBrandColor %>"
+                   class="h-9 w-12 cursor-pointer rounded border border-slate-300 bg-white p-0.5" />
+            <input type="text" id="bwc-color" name="emailBrandColor" maxlength="16" value="<%= settings.emailBrandColor %>"
+                   class="block w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          </div>
+          <p class="mt-1 text-xs text-slate-400">用于邮件按钮、链接、顶栏渐变。支持 #rrggbb / #rgb。</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">页脚说明</label>
+          <input type="text" id="bwc-footer" name="emailFooterNote" maxlength="100" value="<%= settings.emailFooterNote %>"
+                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <p class="mt-1 text-xs text-slate-400">显示在版权行后面（默认「日历共享平台」）。</p>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">保存品牌设置</button>
+          <button type="button" id="bwc-reset" class="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">恢复默认</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <h2 class="text-lg font-semibold text-slate-900 mb-2">发送测试</h2>
+      <p class="text-sm text-slate-500 mb-3">用<strong>已保存</strong>的品牌设置，把全部模板各发一封到指定邮箱（需已配置 SMTP）。</p>
+      <form method="post" action="/admin/email-templates/send" class="flex items-center gap-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="email" name="to" required placeholder="you@example.com"
+               class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <button type="submit" class="shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">发送</button>
+      </form>
+    </section>
+  </div>
+
+  <!-- ============ Right: live previews ============ -->
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold text-slate-900">模板预览（<%= previews.length %>）</h2>
+      <span id="bwc-preview-status" class="text-xs text-slate-400"></span>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2">
+      <% previews.forEach(function (p) { %>
+        <div class="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div class="px-3 py-2 border-b border-slate-100 text-xs font-medium text-slate-600 bg-slate-50"><%= p.label %></div>
+          <iframe data-bwc-preview="<%= p.key %>" title="<%= p.label %>" sandbox=""
+                  srcdoc="<%= p.html %>"
+                  class="block w-full h-[460px] bg-white" loading="lazy"></iframe>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+(function () {
+  var DEFAULT_COLOR = "#4f46e5";
+  var DEFAULT_FOOTER = "日历共享平台";
+  var nameEl = document.getElementById("bwc-name");
+  var colorEl = document.getElementById("bwc-color");
+  var pickerEl = document.getElementById("bwc-color-picker");
+  var footerEl = document.getElementById("bwc-footer");
+  var statusEl = document.getElementById("bwc-preview-status");
+  var frames = Array.prototype.slice.call(document.querySelectorAll("[data-bwc-preview]"));
+  var hexRe = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/;
+
+  function normHex(v) {
+    v = (v || "").trim();
+    if (!hexRe.test(v)) return null;
+    if (v[0] !== "#") v = "#" + v;
+    if (v.length === 4) v = "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+    return v.toLowerCase();
+  }
+
+  var timer = null;
+  function refresh() {
+    var name = nameEl.value;
+    var color = normHex(colorEl.value) || DEFAULT_COLOR;
+    var footer = footerEl.value;
+    if (statusEl) statusEl.textContent = "更新预览…";
+    var pending = frames.length;
+    frames.forEach(function (f) {
+      var key = f.getAttribute("data-bwc-preview");
+      var url = "/admin/email-templates/preview?key=" + encodeURIComponent(key)
+        + "&name=" + encodeURIComponent(name)
+        + "&color=" + encodeURIComponent(color)
+        + "&footer=" + encodeURIComponent(footer);
+      fetch(url, { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (html) { if (html != null) f.srcdoc = html; })
+        .catch(function () {})
+        .then(function () { if (--pending <= 0 && statusEl) statusEl.textContent = "预览已更新（未保存）"; });
+    });
+  }
+  function debouncedRefresh() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(refresh, 250);
+  }
+
+  // Keep the color picker and hex text field in sync.
+  if (pickerEl) {
+    pickerEl.addEventListener("input", function () {
+      colorEl.value = pickerEl.value;
+      debouncedRefresh();
+    });
+  }
+  colorEl.addEventListener("input", function () {
+    var h = normHex(colorEl.value);
+    if (h && pickerEl) pickerEl.value = h;
+    debouncedRefresh();
+  });
+  nameEl.addEventListener("input", debouncedRefresh);
+  footerEl.addEventListener("input", debouncedRefresh);
+
+  var resetBtn = document.getElementById("bwc-reset");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      colorEl.value = DEFAULT_COLOR;
+      if (pickerEl) pickerEl.value = DEFAULT_COLOR;
+      footerEl.value = DEFAULT_FOOTER;
+      refresh();
+    });
+  }
+})();
+</script>

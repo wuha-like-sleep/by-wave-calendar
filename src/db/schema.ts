@@ -106,6 +106,11 @@ export const siteSettings = pgTable("site_settings", {
   captchaProvider: text("captcha_provider").notNull().default("builtin"),
   captchaSiteKey: text("captcha_site_key"),
   captchaSecret: text("captcha_secret"),
+  // Email branding (admin-editable in /admin/email-templates). brandColor is the
+  // primary accent used in every email header/button/link; footerNote is the
+  // tagline after the copyright line. Both fall back to indigo / 日历共享平台.
+  emailBrandColor: text("email_brand_color").notNull().default("#4f46e5"),
+  emailFooterNote: text("email_footer_note").notNull().default("日历共享平台"),
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),
