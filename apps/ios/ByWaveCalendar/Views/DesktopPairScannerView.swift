@@ -82,9 +82,9 @@ struct DesktopPairScannerView: View {
                     .font(.system(size: 48))
                     .foregroundStyle(.green)
                 Text("已批准").font(.headline)
-                Text(kind == .web
+                Text((kind == .web
                      ? "网页端正在自动登录。可以回到电脑浏览器前继续操作。"
-                     : "电脑端正在自动登录。可以回到电脑前继续操作。")
+                     : "电脑端正在自动登录。可以回到电脑前继续操作。").loc)
                     .font(.subheadline).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                 Button("完成") { dismiss() }
@@ -193,19 +193,19 @@ struct DesktopPairScannerView: View {
     private static func friendlyMessage(_ e: APIError) -> String {
         switch e {
         case .notSignedIn:
-            return "未登录。请先登录后再扫码。"
+            return "未登录。请先登录后再扫码。".loc
         case .network(let inner):
             return inner.localizedDescription
         case .decode(let inner):
-            return "服务器响应解析失败：\(inner.localizedDescription)"
+            return "服务器响应解析失败：%@".locFormat(inner.localizedDescription)
         case .refreshFailed(let status):
-            return "登录已过期 (HTTP \(status))，请重新登录后再试。"
+            return "登录已过期 (HTTP %lld)，请重新登录后再试。".locFormat(status)
         case .server(let status, _):
             switch status {
-            case 404: return "二维码已过期或无效，请让电脑端重新生成。"
-            case 409: return "这个登录码已经被使用过了。"
-            case 403: return "服务器已禁用 APP 登录。"
-            default:  return "服务器返回 \(status)。"
+            case 404: return "二维码已过期或无效，请让电脑端重新生成。".loc
+            case 409: return "这个登录码已经被使用过了。".loc
+            case 403: return "服务器已禁用 APP 登录。".loc
+            default:  return "服务器返回 %lld。".locFormat(status)
             }
         }
     }

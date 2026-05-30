@@ -210,8 +210,8 @@ struct SettingsView: View {
                     .font(.system(size: 14, weight: .semibold))
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text(title.loc).font(.body)
+                Text(subtitle.loc).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }
         .padding(.vertical, 2)
@@ -323,7 +323,7 @@ struct AccountSettingsPage: View {
                             .foregroundStyle(.primary)
                         Spacer()
                         if state.profiles.count > 1 {
-                            Text("\(state.profiles.count) 个账号")
+                            Text("%lld 个账号".locFormat(state.profiles.count))
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Image(systemName: "chevron.right")
@@ -408,7 +408,7 @@ struct AccountSettingsPage: View {
             Task { await openAccountManagement(action) }
         } label: {
             HStack {
-                Label(label, systemImage: systemImage).foregroundStyle(.primary)
+                Label(label.loc, systemImage: systemImage).foregroundStyle(.primary)
                 Spacer()
                 if openingWebFor == action {
                     ProgressView().controlSize(.small)
@@ -430,7 +430,7 @@ struct AccountSettingsPage: View {
             struct Resp: Decodable { let url: String }
             let resp: Resp = try await client.post("/auth/web-session", body: Body(next: action.path))
             guard let u = URL(string: resp.url) else {
-                errorMessage = "服务器返回的 URL 无效"
+                errorMessage = "服务器返回的 URL 无效".loc
                 return
             }
             webURL = u
@@ -519,7 +519,7 @@ struct ChangePasswordPage: View {
                 "/account/password",
                 body: Body(currentPassword: current, newPassword: newPassword),
             )
-            successMessage = "密码已更新 ✓"
+            successMessage = "密码已更新 ✓".loc
             // Small delay so user sees the success message, then close.
             try? await Task.sleep(nanoseconds: 800_000_000)
             onDone()
@@ -542,7 +542,10 @@ struct DeleteAccountPage: View {
     @State private var saving = false
     @State private var errorMessage: String?
 
-    private let confirmPhrase = "删除我的账号"
+    // Localized so the phrase the user must type matches the language
+    // shown in the placeholder. The comparison in `canSubmit` uses this
+    // same localized value, so typing the on-screen phrase always works.
+    private let confirmPhrase = "删除我的账号".loc
 
     private var canSubmit: Bool {
         !saving && !password.isEmpty && confirmation == confirmPhrase
@@ -564,7 +567,7 @@ struct DeleteAccountPage: View {
                     .textContentType(.password)
             }
             Section {
-                TextField("输入「\(confirmPhrase)」", text: $confirmation)
+                TextField("输入「%@」".locFormat(confirmPhrase), text: $confirmation)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
             } header: {
@@ -754,7 +757,7 @@ struct AppearanceSettingsPage: View {
             Section {
                 Picker("主题", selection: $state.appearance) {
                     ForEach(AppearanceMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
+                        Text(mode.label.loc).tag(mode)
                     }
                 }
                 .pickerStyle(.inline)
@@ -834,7 +837,11 @@ struct LanguageSettingsPage: View {
                         showRestartAlert = true
                     } label: {
                         HStack {
-                            Text(item.label).foregroundStyle(.primary)
+                            // 「跟随系统」localizes via its key; language
+                            // endonyms (简体中文 / English) have no key so
+                            // `.loc` returns them unchanged — which is the
+                            // correct behavior for a language picker.
+                            Text(item.label.loc).foregroundStyle(.primary)
                             Spacer()
                             if item.code == loc.current {
                                 Image(systemName: "checkmark").foregroundStyle(.blue)
@@ -1026,8 +1033,8 @@ struct AboutSettingsPage: View {
                         .font(.system(size: 14, weight: .semibold))
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body).foregroundStyle(.primary)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(title.loc).font(.body).foregroundStyle(.primary)
+                    Text(subtitle.loc).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: "arrow.up.right.square")
@@ -1064,7 +1071,7 @@ struct AboutSettingsPage: View {
                         .foregroundStyle(.white)
                         .font(.system(size: 14, weight: .semibold))
                 }
-                Text(title).font(.body).foregroundStyle(.primary)
+                Text(title.loc).font(.body).foregroundStyle(.primary)
                 Spacer()
                 if probingLegal == title {
                     ProgressView().controlSize(.small)

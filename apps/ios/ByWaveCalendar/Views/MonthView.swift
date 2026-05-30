@@ -92,7 +92,7 @@ struct MonthView: View {
                                 }
                             }
                             if dayEvents.count > 5 {
-                                Text("还有 \(dayEvents.count - 5) 个…")
+                                Text("还有 %lld 个…".locFormat(dayEvents.count - 5))
                             }
                             if dayEvents.isEmpty {
                                 Text("无事件").foregroundStyle(.secondary)
@@ -123,7 +123,7 @@ struct MonthView: View {
                             onEventChanged()
                         },
                     )
-                    .navigationTitle(dayTitle(day))
+                    .navigationTitle(dayTitle(day))  // date-formatted, locale-driven
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -136,9 +136,13 @@ struct MonthView: View {
     }
 
     private var weekdayHeader: some View {
-        let labels = ["一", "二", "三", "四", "五", "六", "日"]
+        // Locale-aware weekday abbreviations, Monday-first to match the
+        // grid. Using the current locale's `shortWeekdaySymbols` (instead
+        // of a hardcoded 「一二三…日」 array) means the header follows the
+        // APP language: 一二三…/Mon Tue…/Lun Mar… etc.
+        let labels = Self.localizedWeekdaySymbols
         return HStack(spacing: 0) {
-            ForEach(labels, id: \.self) { label in
+            ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
                 Text(label)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -147,6 +151,15 @@ struct MonthView: View {
         }
         .padding(.vertical, 6)
         .background(Theme.subtleSurface)
+    }
+
+    /// `shortWeekdaySymbols` is Sunday-first; rotate so Monday leads to
+    /// match the Monday-first grid. Driven by the resolved bundle locale.
+    private static var localizedWeekdaySymbols: [String] {
+        var cal = Calendar.current
+        cal.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "zh-Hans")
+        let symbols = cal.shortWeekdaySymbols  // [Sun, Mon, ..., Sat]
+        return Array(symbols[1...]) + symbols[0...0]  // [Mon, ..., Sat, Sun]
     }
 
     private func dayTitle(_ d: Date) -> String {

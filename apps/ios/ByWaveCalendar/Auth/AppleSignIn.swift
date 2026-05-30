@@ -45,31 +45,31 @@ enum AppleSignInError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .userCancelled:
-            return "已取消"
+            return "已取消".loc
         case .missingIdentityToken:
-            return "未能从 Apple 获取登录凭证，请重试"
+            return "未能从 Apple 获取登录凭证，请重试".loc
         case .unexpectedCredential:
-            return "Apple 返回了无法识别的凭证，请重试"
+            return "Apple 返回了无法识别的凭证，请重试".loc
         case .server(let status, let code, let msg):
             // Map the documented server error slugs to friendly text.
             switch code {
             case "apple_token_invalid":
-                return "Apple 登录凭证无效或已过期，请重试"
+                return "Apple 登录凭证无效或已过期，请重试".loc
             case "account_disabled":
-                return "账号已停用，请联系管理员"
+                return "账号已停用，请联系管理员".loc
             case "apple_signin_not_configured":
-                return "该服务器尚未启用 Apple 登录。\n请管理员在服务器设置 SIWA_CLIENT_IDS 后重试。"
+                return "该服务器尚未启用 Apple 登录。\n请管理员在服务器设置 SIWA_CLIENT_IDS 后重试。".loc
             case "apps_disabled":
-                return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。"
+                return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。".loc
             default:
                 if let msg, !msg.isEmpty { return msg }
                 if status == 502 || status == 503 || status == 504 {
-                    return "服务器暂时无法响应（HTTP \(status)），稍后重试。"
+                    return "服务器暂时无法响应（HTTP %lld），稍后重试。".locFormat(status)
                 }
-                return "Apple 登录失败 (HTTP \(status))\(code.map { " - \($0)" } ?? "")"
+                return "Apple 登录失败 (HTTP %lld)".locFormat(status) + (code.map { " - \($0)" } ?? "")
             }
         case .network(let e):
-            return "网络错误：\(e.localizedDescription)"
+            return "网络错误：%@".locFormat(e.localizedDescription)
         }
     }
 }

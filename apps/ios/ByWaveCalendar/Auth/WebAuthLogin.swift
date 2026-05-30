@@ -20,9 +20,9 @@ enum WebAuthError: Error, LocalizedError {
     case underlying(Error)
     var errorDescription: String? {
         switch self {
-        case .userCancelled: return "已取消"
-        case .missingCode: return "服务器没有返回配对码"
-        case .stateMismatch: return "状态不匹配 — 可能被中间人篡改了，请重试"
+        case .userCancelled: return "已取消".loc
+        case .missingCode: return "服务器没有返回配对码".loc
+        case .stateMismatch: return "状态不匹配 — 可能被中间人篡改了，请重试".loc
         case .underlying(let e): return e.localizedDescription
         }
     }

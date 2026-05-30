@@ -19,11 +19,11 @@ enum APIError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notSignedIn: return "请先登录"
-        case .server(let s, let b): return "服务器错误 \(s) — \(b ?? "")"
-        case .decode(let e): return "解析错误：\(e.localizedDescription)"
-        case .network(let e): return "网络错误：\(e.localizedDescription)"
-        case .refreshFailed(let s): return "令牌刷新失败 (HTTP \(s)) — 请重新登录"
+        case .notSignedIn: return "请先登录".loc
+        case .server(let s, let b): return "服务器错误 %lld — %@".locFormat(s, b ?? "")
+        case .decode(let e): return "解析错误：%@".locFormat(e.localizedDescription)
+        case .network(let e): return "网络错误：%@".locFormat(e.localizedDescription)
+        case .refreshFailed(let s): return "令牌刷新失败 (HTTP %lld) — 请重新登录".locFormat(s)
         }
     }
 }

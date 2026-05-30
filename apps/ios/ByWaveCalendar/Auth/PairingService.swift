@@ -61,34 +61,34 @@ enum PairingError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .malformedQR:
-            return "二维码内容无效，请确认从 ByWave Calendar 网页生成"
+            return "二维码内容无效，请确认从 ByWave Calendar 网页生成".loc
         case .invalidServerURL:
-            return "服务器地址无效"
+            return "服务器地址无效".loc
         case .server(let s, let code, let msg):
-            // Map known server error codes to friendly Chinese text.
+            // Map known server error codes to friendly localized text.
             // Falls back to raw HTTP status when the server returns an
             // unknown error code (e.g. proxy 502 / 503).
             switch code {
             case "apps_disabled":
-                return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。"
+                return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。".loc
             case "invalid_or_expired_code":
-                return "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。"
+                return "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。".loc
             case "bad_request":
-                return "配对码格式不对。请确认是 6 位字符（字母 + 数字）。"
+                return "配对码格式不对。请确认是 6 位字符（字母 + 数字）。".loc
             case "csrf_invalid":
                 // Shouldn't reach the APP under v0.7.4+ — exempt list now
                 // includes pair-claim / login-password / refresh. If this
                 // still fires, the server is on an older build that
                 // hasn't pulled the fix.
-                return "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）"
+                return "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）".loc
             default:
                 if let msg, !msg.isEmpty { return msg }
-                if s == 429 { return "请求太频繁，请等一会再试。" }
-                if s == 502 || s == 503 || s == 504 { return "服务器暂时无法响应（HTTP \(s)），稍后重试。" }
-                return "服务器错误 (HTTP \(s))\(code.map { " - \($0)" } ?? "")"
+                if s == 429 { return "请求太频繁，请等一会再试。".loc }
+                if s == 502 || s == 503 || s == 504 { return "服务器暂时无法响应（HTTP %lld），稍后重试。".locFormat(s) }
+                return "服务器错误 (HTTP %lld)".locFormat(s) + (code.map { " - \($0)" } ?? "")
             }
         case .network(let e):
-            return "网络错误：\(e.localizedDescription)"
+            return "网络错误：%@".locFormat(e.localizedDescription)
         }
     }
 }

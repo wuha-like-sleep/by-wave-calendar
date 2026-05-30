@@ -103,7 +103,7 @@ struct AttendeesPage: View {
                     }
                 }
             } header: {
-                Text("当前参与者 (\(attendees.count))")
+                Text("当前参与者 (%lld)".locFormat(attendees.count))
             }
 
             // History — all tokens ever issued for this event.
@@ -112,7 +112,7 @@ struct AttendeesPage: View {
                     ForEach(tokens) { tok in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(tok.recipientEmail).font(.callout)
-                            Text("邀请 \(shortDate(tok.createdAt)) · 到期 \(shortDate(tok.expiresAt))")
+                            Text("邀请 %@ · 到期 %@".locFormat(shortDate(tok.createdAt), shortDate(tok.expiresAt)))
                                 .font(.caption2).foregroundStyle(.tertiary)
                         }
                     }
@@ -131,7 +131,7 @@ struct AttendeesPage: View {
         .task {
             await load()
         }
-        .alert("撤销 \(pendingRevoke ?? "")？", isPresented: Binding(
+        .alert("撤销 %@？".locFormat(pendingRevoke ?? ""), isPresented: Binding(
             get: { pendingRevoke != nil },
             set: { if !$0 { pendingRevoke = nil } },
         )) {
@@ -189,7 +189,7 @@ struct AttendeesPage: View {
             if let warning = resp.warning, let message = resp.message {
                 infoMessage = message + " (" + warning + ")"
             } else {
-                infoMessage = "已邀请 \(email)"
+                infoMessage = "已邀请 %@".locFormat(email)
             }
             newEmail = ""
             await load()
@@ -221,7 +221,7 @@ struct AttendeesPage: View {
                 let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
                 throw APIError.server(status: status, body: nil)
             }
-            infoMessage = "已撤销 \(email)"
+            infoMessage = "已撤销 %@".locFormat(email)
             await load()
         } catch let e as APIError {
             errorMessage = e.localizedDescription
@@ -238,9 +238,9 @@ struct AttendeesPage: View {
 
     private func statusLabel(for tok: AttendeeToken) -> String {
         if let acceptedAt = tok.acceptedAt {
-            return "已接受 · \(shortDate(acceptedAt))"
+            return "已接受 · %@".locFormat(shortDate(acceptedAt))
         }
-        return "已邀请 · 等待回复"
+        return "已邀请 · 等待回复".loc
     }
 
     private func shortDate(_ iso: String) -> String {
@@ -248,8 +248,8 @@ struct AttendeesPage: View {
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let d = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso) else { return iso }
         let display = DateFormatter()
-        display.locale = Locale(identifier: "zh_CN")
-        display.dateFormat = "M月d日 HH:mm"
+        display.locale = Locale.current
+        display.setLocalizedDateFormatFromTemplate("MMMdHHmm")
         return display.string(from: d)
     }
 }

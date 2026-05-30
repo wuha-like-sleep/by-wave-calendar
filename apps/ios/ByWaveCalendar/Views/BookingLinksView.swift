@@ -124,7 +124,7 @@ struct BookingLinksView: View {
                         .background(Color.orange.opacity(0.15), in: Capsule())
                 }
                 Spacer()
-                Text("\(link.durationMinutes) 分钟")
+                Text("%lld 分钟".locFormat(link.durationMinutes))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -151,7 +151,7 @@ struct BookingLinksView: View {
                     if copiedId == link.id { copiedId = nil }
                 }
             } label: {
-                Label(copiedId == link.id ? "已复制" : "复制",
+                Label((copiedId == link.id ? "已复制" : "复制").loc,
                       systemImage: copiedId == link.id ? "checkmark" : "doc.on.doc")
                     .font(.caption)
             }
@@ -622,7 +622,7 @@ enum BookingLinkForm {
         Section {
             Picker("时长", selection: durationMinutes) {
                 ForEach(durationOptions, id: \.self) { m in
-                    Text("\(m) 分钟").tag(m)
+                    Text("%lld 分钟".locFormat(m)).tag(m)
                 }
             }
         } header: {
@@ -632,12 +632,12 @@ enum BookingLinkForm {
         Section {
             Picker("最短提前", selection: minNoticeHours) {
                 ForEach(noticeOptions, id: \.self) { h in
-                    Text("\(h) 小时").tag(h)
+                    Text("%lld 小时".locFormat(h)).tag(h)
                 }
             }
             Picker("最远可约", selection: maxDaysAhead) {
                 ForEach(windowOptions, id: \.self) { d in
-                    Text("\(d) 天").tag(d)
+                    Text("%lld 天".locFormat(d)).tag(d)
                 }
             }
         } header: {
@@ -650,12 +650,12 @@ enum BookingLinkForm {
         Section {
             Picker("前缓冲", selection: bufferBeforeMin) {
                 ForEach(bufferOptions, id: \.self) { m in
-                    Text("\(m) 分钟").tag(m)
+                    Text("%lld 分钟".locFormat(m)).tag(m)
                 }
             }
             Picker("后缓冲", selection: bufferAfterMin) {
                 ForEach(bufferOptions, id: \.self) { m in
-                    Text("\(m) 分钟").tag(m)
+                    Text("%lld 分钟".locFormat(m)).tag(m)
                 }
             }
         } header: {

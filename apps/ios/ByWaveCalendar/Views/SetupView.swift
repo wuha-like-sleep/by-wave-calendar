@@ -224,7 +224,7 @@ struct SetupView: View {
     private var methodPicker: some View {
         Picker("登录方式", selection: $method) {
             ForEach(LoginMethod.allCases) { m in
-                Text(m.rawValue).tag(m)
+                Text(m.rawValue.loc).tag(m)
             }
         }
         .pickerStyle(.segmented)
@@ -414,7 +414,7 @@ struct SetupView: View {
     private func primaryButtonLabel(text: String) -> some View {
         HStack {
             if isWorking { ProgressView().controlSize(.small).tint(.white) }
-            Text(text).font(.body.weight(.semibold))
+            Text(text.loc).font(.body.weight(.semibold))
         }
         .frame(maxWidth: .infinity).padding(.vertical, 14)
         .background(brandGradient)
@@ -442,7 +442,7 @@ struct SetupView: View {
 
     private func loginWithPassword() async {
         guard let url = await normalizedServerURL() else {
-            errorMessage = "服务器地址无效"; return
+            errorMessage = "服务器地址无效".loc; return
         }
         isWorking = true; errorMessage = nil
         defer { isWorking = false }
@@ -465,15 +465,15 @@ struct SetupView: View {
                 let err = body["error"] as? String
                 let msg = body["message"] as? String
                 if err == "invalid_credentials" {
-                    errorMessage = "邮箱或密码错误"
+                    errorMessage = "邮箱或密码错误".loc
                 } else if err == "account_disabled" {
-                    errorMessage = "账号已停用，请联系管理员"
+                    errorMessage = "账号已停用，请联系管理员".loc
                 } else if err == "account_locked" {
-                    errorMessage = msg ?? "登录失败次数过多，请稍后再试。"
+                    errorMessage = msg ?? "登录失败次数过多，请稍后再试。".loc
                 } else if err == "apps_disabled" {
-                    errorMessage = "管理员未启用 APP 同步功能"
+                    errorMessage = "管理员未启用 APP 同步功能".loc
                 } else {
-                    errorMessage = msg ?? "登录失败 (HTTP \(http.statusCode))"
+                    errorMessage = msg ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
                 }
                 return
             }
@@ -505,13 +505,13 @@ struct SetupView: View {
             // because root-presented views can't dismiss themselves.
             dismiss()
         } catch {
-            errorMessage = "网络错误：\(error.localizedDescription)"
+            errorMessage = "网络错误：%@".locFormat(error.localizedDescription)
         }
     }
 
     private func loginViaBrowser() async {
         guard let url = await normalizedServerURL() else {
-            errorMessage = "服务器地址无效"; return
+            errorMessage = "服务器地址无效".loc; return
         }
         isWorking = true; errorMessage = nil
         defer { isWorking = false }
@@ -528,7 +528,7 @@ struct SetupView: View {
 
     private func loginWithApple() async {
         guard let url = await normalizedServerURL() else {
-            errorMessage = "服务器地址无效"; return
+            errorMessage = "服务器地址无效".loc; return
         }
         isWorking = true; errorMessage = nil
         defer { isWorking = false }
@@ -562,17 +562,17 @@ struct SetupView: View {
 
     private func pairFromScan(_ raw: String) async {
         guard let payload = PairingService.parseScanned(raw) else {
-            errorMessage = "二维码不是来自 ByWave Calendar 的"; return
+            errorMessage = "二维码不是来自 ByWave Calendar 的".loc; return
         }
         guard let url = URL(string: payload.url) else {
-            errorMessage = "服务器地址无效"; return
+            errorMessage = "服务器地址无效".loc; return
         }
         await doClaim(serverURL: url, code: payload.code)
     }
 
     private func pairWithCode() async {
         guard let url = await normalizedServerURL() else {
-            errorMessage = "服务器地址无效"; return
+            errorMessage = "服务器地址无效".loc; return
         }
         await doClaim(serverURL: url, code: manualCode.trimmingCharacters(in: .whitespacesAndNewlines))
     }
@@ -684,11 +684,11 @@ struct MfaCodeEntrySheet: View {
                 let err = body["error"] as? String
                 let msg = body["message"] as? String
                 if err == "invalid_code" {
-                    errorMessage = "验证码错误"
+                    errorMessage = "验证码错误".loc
                 } else if err == "mfa_token_expired" {
-                    errorMessage = msg ?? "验证码会话已过期，请重新登录"
+                    errorMessage = msg ?? "验证码会话已过期，请重新登录".loc
                 } else {
-                    errorMessage = msg ?? "登录失败 (HTTP \(http.statusCode))"
+                    errorMessage = msg ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
                 }
                 return
             }

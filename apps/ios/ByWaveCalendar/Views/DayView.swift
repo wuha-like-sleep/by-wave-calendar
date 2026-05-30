@@ -97,9 +97,9 @@ private struct EmptyDayPlaceholder: View {
     }
     private var label: String {
         let cal = Calendar.current
-        if cal.isDateInToday(date) { return "今天没有事件" }
-        if cal.isDateInTomorrow(date) { return "明天没有事件" }
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M月d日"
-        return "\(f.string(from: date)) 没有事件"
+        if cal.isDateInToday(date) { return "今天没有事件".loc }
+        if cal.isDateInTomorrow(date) { return "明天没有事件".loc }
+        let f = DateFormatter(); f.locale = Locale.current; f.setLocalizedDateFormatFromTemplate("MMMd")
+        return "%@ 没有事件".locFormat(f.string(from: date))
     }
 }

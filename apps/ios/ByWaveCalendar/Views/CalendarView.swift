@@ -71,7 +71,7 @@ struct CalendarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .navigationTitle(navTitle)
+            .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -107,7 +107,7 @@ struct CalendarView: View {
                         Button {
                             showingFilter = true
                         } label: {
-                            Label(state.hiddenCalendarIds.isEmpty ? "筛选日历" : "筛选日历 (\(visibleCalCount))",
+                            Label(state.hiddenCalendarIds.isEmpty ? "筛选日历".loc : "筛选日历 (%lld)".locFormat(visibleCalCount),
                                   systemImage: "line.3.horizontal.decrease.circle")
                         }
                         Button {
@@ -252,7 +252,7 @@ struct CalendarView: View {
     private var navBar: some View {
         VStack(spacing: 6) {
             Picker("视图", selection: $mode) {
-                ForEach(ViewMode.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 14)
@@ -354,11 +354,13 @@ struct CalendarView: View {
 
     private func syncedLabel(for date: Date) -> String {
         let secs = Int(Date().timeIntervalSince(date))
-        if secs < 30 { return "已同步" }
-        if secs < 60 { return "\(secs) 秒前同步" }
-        if secs < 3600 { return "\(secs / 60) 分钟前同步" }
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "HH:mm 同步"
-        return f.string(from: date)
+        if secs < 30 { return "已同步".loc }
+        if secs < 60 { return "%lld 秒前同步".locFormat(secs) }
+        if secs < 3600 { return "%lld 分钟前同步".locFormat(secs / 60) }
+        // The trailing「同步」word is localized; the HH:mm time is formatted
+        // separately so the date itself stays locale-neutral (24h clock).
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "HH:mm"
+        return "%@ 同步".locFormat(f.string(from: date))
     }
 
     // MARK: - Navigation

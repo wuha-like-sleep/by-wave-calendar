@@ -237,3 +237,136 @@
 "公开链接" = "Enlace público";
 "复制链接" = "Copiar enlace";
 "在浏览器中打开" = "Abrir en el navegador";
+
+// MARK: - v1.4.1 i18n pass — newly-keyed hardcoded UI strings
+
+// General actions / nav
+"编辑" = "Editar";
+"撤销" = "Revocar";
+"移除" = "Quitar";
+"验证" = "Verificar";
+"验证中…" = "Verificando…";
+"退出登录" = "Cerrar sesión";
+"视图" = "Vista";
+"快捷" = "Accesos directos";
+"复制为新事件" = "Duplicar como nuevo evento";
+"复制标题" = "Copiar título";
+"重复事件" = "Evento recurrente";
+
+// Settings — menu rows / sub-pages
+"管理日历" = "Gestionar calendarios";
+"扫码登录电脑" = "Escanear para iniciar sesión en el ordenador";
+"扫描电脑端二维码" = "Escanear el código QR del ordenador";
+"系统日历 · 提醒 · 当前服务器" = "Calendario del sistema · Recordatorios · Servidor actual";
+"重命名 · 改色 · 默认时区" = "Renombrar · Cambiar color · Zona horaria predeterminada";
+"查看源码 / 提 issue / 加星支持" = "Ver el código / abrir un issue / dar una estrella";
+
+// Account — password / delete
+"密码确认" = "Confirmar contraseña";
+"当前密码" = "Contraseña actual";
+"新密码（至少 8 位）" = "Nueva contraseña (al menos 8 caracteres)";
+"再次输入新密码" = "Repite la nueva contraseña";
+"两次输入的密码不一致" = "Las contraseñas no coinciden";
+"密码已更新 ✓" = "Contraseña actualizada ✓";
+"删除我的账号" = "ELIMINAR MI CUENTA";
+"输入「%@」" = "Escribe «%@»";
+
+// Language / appearance page
+"APP 显示语言" = "Idioma de la app";
+"在系统设置里选" = "Elegir en Ajustes del sistema";
+"「跟随系统」会跟着设备语言走；选具体语言会覆盖系统。切换语言后需要完全关闭并重新打开 APP 才生效（iOS 限制）。" = "«Seguir al sistema» usa el idioma del dispositivo; elegir un idioma concreto lo anula. Tras cambiarlo, cierra la app por completo y vuelve a abrirla para que surta efecto (limitación de iOS).";
+"跳到 iOS 系统设置 → ByWave Calendar → 语言。系统提供的列表更全。" = "Abre Ajustes de iOS → ByWave Calendar → Idioma. La lista del sistema es más completa.";
+"需要重启 APP" = "Es necesario reiniciar";
+"立即切换" = "Cambiar ahora";
+"已保存语言选择。请完全关闭 ByWave Calendar（从应用切换器里向上滑掉），再重新打开，新语言就生效了。" = "Se guardó tu elección de idioma. Cierra ByWave Calendar por completo (deslízala hacia arriba en el selector de apps) y vuelve a abrirla para que el nuevo idioma surta efecto.";
+
+// Manage / create calendars
+"还没有日历" = "Aún no hay calendarios";
+"先在 web 或 APP 上新建一个日历" = "Crea primero un calendario en la web o en la app";
+"例如：工作 / 家庭" = "p. ej.: Trabajo / Familia";
+"例如：工作 / 家庭 / 学习" = "p. ej.: Trabajo / Familia / Estudio";
+"默认时区" = "Zona horaria predeterminada";
+"新建事件时的默认时区；已有事件保留各自的时区。" = "La zona horaria predeterminada de los nuevos eventos; los eventos existentes conservan la suya.";
+"描述会同步到 CalDAV 客户端的日历属性。" = "La descripción se sincroniza con las propiedades del calendario en los clientes CalDAV.";
+
+// Event editor / detail
+"可选 — 例如 上海 / Zoom 会议室" = "Opcional — p. ej.: Madrid / sala de Zoom";
+"打开这一天" = "Abrir este día";
+"%lld 小时 %lld 分钟" = "%lld h %lld min";
+
+// MFA / verification entry
+"6 位验证码" = "Código de 6 dígitos";
+"6 位验证码或备用码" = "Código de 6 dígitos o de respaldo";
+"认证器 6 位验证码" = "Código de 6 dígitos del autenticador";
+"输入验证码" = "Introduce el código";
+"备用码（仅此一次显示）" = "Códigos de respaldo (se muestran una sola vez)";
+"复制全部到剪贴板" = "Copiar todo al portapapeles";
+
+// Search
+"搜索事件" = "Buscar eventos";
+"标题 / 描述 / 地点" = "Título / descripción / lugar";
+
+// Week view drag
+"移动失败" = "No se pudo mover";
+
+// Profile switcher
+"移除这个账号？" = "¿Quitar esta cuenta?";
+
+// Desktop / web pair scanner
+"正在批准…" = "Aprobando…";
+"正在让电脑端登录，请稍候。" = "Iniciando sesión en el ordenador, espera un momento.";
+"已批准" = "Aprobado";
+"网页端正在自动登录。可以回到电脑浏览器前继续操作。" = "La web está iniciando sesión automáticamente. Puedes volver al navegador del ordenador.";
+"电脑端正在自动登录。可以回到电脑前继续操作。" = "El ordenador está iniciando sesión automáticamente. Puedes volver al ordenador.";
+"批准失败" = "Falló la aprobación";
+"二维码无法识别" = "No se reconoce el código QR";
+"这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。" = "Esto no parece un código de inicio de sesión. Asegúrate de escanear el código QR de inicio de sesión del ordenador o de la web.";
+"提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。" = "Sugerencia: el código QR aparece en la pantalla «Iniciar sesión en ByWave Calendar» del ordenador o en la pestaña «Escanear para iniciar sesión» de /login.";
+"未登录。请先登录后再扫码。" = "No has iniciado sesión. Inicia sesión antes de escanear.";
+"服务器响应解析失败：%@" = "No se pudo analizar la respuesta del servidor: %@";
+"登录已过期 (HTTP %lld)，请重新登录后再试。" = "Tu sesión ha caducado (HTTP %lld). Vuelve a iniciar sesión e inténtalo de nuevo.";
+"二维码已过期或无效，请让电脑端重新生成。" = "El código QR ha caducado o no es válido. Pide al ordenador que genere uno nuevo.";
+"这个登录码已经被使用过了。" = "Este código de inicio de sesión ya se ha usado.";
+"服务器已禁用 APP 登录。" = "El servidor ha desactivado el inicio de sesión de la app.";
+"服务器返回 %lld。" = "El servidor devolvió %lld.";
+
+// Sync / relative-time labels
+"%@ 同步" = "Sincronizado a las %@";
+"%@ 开始" = "Empieza a las %@";
+"%@ 没有事件" = "Sin eventos el %@";
+"已同步" = "Sincronizado";
+"%lld 秒前同步" = "Sincronizado hace %lld s";
+"%lld 分钟前同步" = "Sincronizado hace %lld min";
+"筛选日历 (%lld)" = "Filtrar calendarios (%lld)";
+
+// Error / status messages
+"服务器地址无效" = "Dirección del servidor no válida";
+"邮箱或密码错误" = "Correo o contraseña incorrectos";
+"账号已停用，请联系管理员" = "Cuenta desactivada: contacta con el administrador";
+"登录失败次数过多，请稍后再试。" = "Demasiados intentos fallidos. Inténtalo de nuevo más tarde.";
+"管理员未启用 APP 同步功能" = "El administrador no ha habilitado la sincronización de la app";
+"登录失败 (HTTP %lld)" = "Error al iniciar sesión (HTTP %lld)";
+"二维码不是来自 ByWave Calendar 的" = "Este código QR no es de ByWave Calendar";
+"网络错误：%@" = "Error de red: %@";
+"验证码错误" = "Código incorrecto";
+"验证码会话已过期，请重新登录" = "La sesión de verificación ha caducado. Vuelve a iniciar sesión";
+"服务器返回的 URL 无效" = "El servidor devolvió una URL no válida";
+"请先登录" = "Inicia sesión primero";
+"服务器错误 %lld — %@" = "Error del servidor %lld — %@";
+"解析错误：%@" = "Error de análisis: %@";
+"令牌刷新失败 (HTTP %lld) — 请重新登录" = "Error al renovar el token (HTTP %lld); vuelve a iniciar sesión";
+"二维码内容无效，请确认从 ByWave Calendar 网页生成" = "Contenido del QR no válido. Asegúrate de generarlo desde el sitio web de ByWave Calendar";
+"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "El administrador no ha habilitado la sincronización de la app.\nVe al panel web → Administrar → API y apps → activa «Inicio de sesión de la app» y vuelve a intentarlo.";
+"配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。" = "El código de emparejamiento ha caducado o ya se usó.\nVuelve a /app/settings#devices y toca «Emparejar nuevo dispositivo» para generar otro.";
+"配对码格式不对。请确认是 6 位字符（字母 + 数字）。" = "El formato del código de emparejamiento no es correcto. Debe tener 6 caracteres (letras + números).";
+"服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）" = "El servidor debe actualizarse a la versión v0.7.4 o posterior.\n(La protección CSRF de las versiones antiguas bloquea por error las solicitudes de la app.)";
+"请求太频繁，请等一会再试。" = "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo.";
+"服务器暂时无法响应（HTTP %lld），稍后重试。" = "El servidor no responde temporalmente (HTTP %lld). Inténtalo más tarde.";
+"服务器错误 (HTTP %lld)" = "Error del servidor (HTTP %lld)";
+"服务器没有返回配对码" = "El servidor no devolvió un código de emparejamiento";
+"状态不匹配 — 可能被中间人篡改了，请重试" = "El estado no coincide: puede que se haya manipulado. Inténtalo de nuevo";
+"Apple 登录凭证无效或已过期，请重试" = "El token de inicio de sesión de Apple no es válido o ha caducado. Inténtalo de nuevo";
+"该服务器尚未启用 Apple 登录。\n请管理员在服务器设置 SIWA_CLIENT_IDS 后重试。" = "Este servidor no tiene habilitado «Iniciar sesión con Apple».\nPide al administrador que configure SIWA_CLIENT_IDS en el servidor e inténtalo de nuevo.";
+"未能从 Apple 获取登录凭证，请重试" = "No se pudo obtener el token de inicio de sesión de Apple. Inténtalo de nuevo";
+"Apple 返回了无法识别的凭证，请重试" = "Apple devolvió una credencial no reconocida. Inténtalo de nuevo";
+"Apple 登录失败 (HTTP %lld)" = "Error al iniciar sesión con Apple (HTTP %lld)";

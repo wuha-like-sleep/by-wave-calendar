@@ -29,8 +29,8 @@ struct RecurringScopePicker: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(action.title).font(.headline)
-                Text(action.subtitle).font(.callout).foregroundStyle(.secondary)
+                Text(action.title.loc).font(.headline)
+                Text(action.subtitle.loc).font(.callout).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 20).padding(.top, 22).padding(.bottom, 12)
@@ -41,6 +41,8 @@ struct RecurringScopePicker: View {
                 pickButton(.series,   title: "整个系列", detail: action.perSeries, systemImage: "repeat",
                            tint: action == .delete ? .red : nil)
             }
+            // NOTE: `title` / `detail` reach pickButton as plain String values,
+            // so they're localized via `.loc` inside pickButton (not here).
             .padding(.horizontal, 16).padding(.bottom, 16)
 
             Button("取消", role: .cancel) { onCancel() }
@@ -61,8 +63,8 @@ struct RecurringScopePicker: View {
                     .foregroundStyle(tint ?? .accentColor)
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.body.weight(.medium)).foregroundStyle(.primary)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                    Text(title.loc).font(.body.weight(.medium)).foregroundStyle(.primary)
+                    Text(detail.loc).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)

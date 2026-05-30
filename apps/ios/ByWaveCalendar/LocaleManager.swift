@@ -36,11 +36,22 @@ final class LocaleManager: ObservableObject {
     private static let storageKey = "bwc.locale"
 
     /// Supported language tags. Order = order shown in the picker.
-    /// "" represents the「跟随系统」option.
+    /// "" represents the「跟随系统」option. Each non-empty entry MUST have a
+    /// matching <code>.lproj/Localizable.strings bundle — we ship all 8
+    /// below. Labels are endonyms (every language shown in its own name),
+    /// the standard for language pickers. (Previously this list only had
+    /// zh-Hans + en, so users couldn't pick the 6 other languages we'd
+    /// already fully translated — that was the "iOS 语言没做完" report.)
     static let supported: [(code: String, label: String)] = [
         ("",          "跟随系统"),
         ("zh-Hans",   "简体中文"),
+        ("zh-Hant",   "繁體中文"),
         ("en",        "English"),
+        ("ja",        "日本語"),
+        ("ko",        "한국어"),
+        ("es",        "Español"),
+        ("fr",        "Français"),
+        ("de",        "Deutsch"),
     ]
 
     @Published private(set) var current: String
@@ -97,11 +108,46 @@ final class LocaleManager: ObservableObject {
     /// useful for the Settings cell's trailing detail view.
     var currentLabel: String {
         if current.isEmpty {
-            // "跟随系统" + the system-resolved language for context
+            // "跟随系统" + the system-resolved language for context. Resolve
+            // the endonym from `supported` (prefix match: "zh" → zh-Hans,
+            // "ja" → 日本語, …) so every shipped language reads naturally.
             let sys = Locale.current.language.languageCode?.identifier ?? "?"
-            let sysLabel = sys.hasPrefix("zh") ? "简体中文" : sys == "en" ? "English" : sys
+            let sysLabel = Self.supported.first { !$0.code.isEmpty && $0.code.hasPrefix(sys) }?.label ?? sys
             return "跟随系统 · \(sysLabel)"
         }
         return Self.supported.first(where: { $0.code == current })?.label ?? current
+    }
+}
+
+// MARK: - Localization helpers
+//
+// The view layer's convention is `Text("中文")` — SwiftUI auto-resolves a
+// string literal as a LocalizedStringKey through NSLocalizedString, so the
+// Chinese source string IS the lookup key (see Localizable.strings). That
+// only works for *literals*, though: the moment a value is a `String`
+// (a stored property, a switch result, an interpolation, `.navigationTitle`,
+// an error message, etc.) SwiftUI uses the non-localizing `Text(_ verbatim:)`
+// init and the user sees raw Chinese in every other language.
+//
+// These helpers route those non-literal cases through the SAME bundle so
+// they pick up the right .lproj/Localizable.strings translation. Both honor
+// the in-APP `AppleLanguages` override LocaleManager writes, because
+// `String(localized:)` resolves through `Bundle.main` like every other lookup.
+extension String {
+    /// Localize a Chinese source string used as a *key*. Use on String
+    /// values that can't be a plain `Text("…")` literal — `.navigationTitle`,
+    /// `.alert` titles built from a variable, enum-backed labels, etc.
+    /// Returns the original string when no translation exists (so an
+    /// un-keyed string degrades to its Chinese source, never to "").
+    var loc: String {
+        String(localized: String.LocalizationValue(self))
+    }
+
+    /// Localize a `%@`/`%lld`-style format key and fill in its arguments.
+    /// Keeps interpolation out of the lookup key so the dictionary entry
+    /// stays stable across counts/values, e.g.
+    ///   "%lld 分钟".locFormat(min)  →  "5 分钟" / "5 minutes" / …
+    func locFormat(_ args: CVarArg...) -> String {
+        String(format: self.loc, arguments: args)
     }
 }

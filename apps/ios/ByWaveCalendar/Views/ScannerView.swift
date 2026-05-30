@@ -36,7 +36,7 @@ struct ScannerView: View {
             } else {
                 CameraPreview(
                     onResult: { raw in onResult(.success(raw)) },
-                    onError: { _ in onResult(.failure("相机初始化失败")) },
+                    onError: { _ in onResult(.failure("相机初始化失败".loc)) },
                     torchOn: $torchOn,
                 )
                 .ignoresSafeArea()
@@ -129,7 +129,7 @@ struct ScannerView: View {
             HStack {
                 Button {
                     dismiss()
-                    onResult(.failure("已取消"))
+                    onResult(.failure("已取消".loc))
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 28))

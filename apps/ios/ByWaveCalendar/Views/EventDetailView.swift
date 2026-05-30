@@ -123,7 +123,7 @@ struct EventDetailView: View {
                                 .foregroundStyle(.tertiary)
                         }
                     }
-                    .accessibilityLabel(Text("打开链接 \(urlString)"))
+                    .accessibilityLabel(Text("打开链接 %@".locFormat(urlString)))
                 }
             }
 
@@ -145,7 +145,7 @@ struct EventDetailView: View {
                                 Label("邀请人", systemImage: "person.2.fill")
                                     .foregroundStyle(.primary)
                                 Spacer()
-                                Text("\(attendees.count) 人")
+                                Text("%lld 人".locFormat(attendees.count))
                                     .font(.callout).foregroundStyle(.secondary)
                             }
                             // Show first 3 emails inline so users don't
@@ -158,7 +158,7 @@ struct EventDetailView: View {
                                         .lineLimit(1)
                                 }
                                 if attendees.count > 3 {
-                                    Text("还有 \(attendees.count - 3) 个…")
+                                    Text("还有 %lld 个…".locFormat(attendees.count - 3))
                                         .font(.caption)
                                         .foregroundStyle(.tertiary)
                                 }
@@ -303,9 +303,9 @@ struct EventDetailView: View {
         if s <= 0 { return "—" }
         let h = s / 3600
         let m = (s % 3600) / 60
-        if h > 0 && m > 0 { return "\(h) 小时 \(m) 分钟" }
-        if h > 0 { return "\(h) 小时" }
-        return "\(m) 分钟"
+        if h > 0 && m > 0 { return "%lld 小时 %lld 分钟".locFormat(h, m) }
+        if h > 0 { return "%lld 小时".locFormat(h) }
+        return "%lld 分钟".locFormat(m)
     }
 
     private func doDelete(scope: RecurringScope?) async {

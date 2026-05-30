@@ -137,8 +137,8 @@ final class LocalNotifications {
     }
 
     private func bodyLabel(for ev: EventDTO, calendar: CalendarMeta?) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "HH:mm"
-        var body = "\(f.string(from: ev.startsAt)) 开始"
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "HH:mm"
+        var body = "%@ 开始".locFormat(f.string(from: ev.startsAt))
         if let location = ev.location, !location.isEmpty {
             body += " · 📍 \(location)"
         }

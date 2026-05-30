@@ -233,7 +233,7 @@ struct EventEditView: View {
                             Spacer()
                             let count = existing.extra?.attendees?.count ?? 0
                             if count > 0 {
-                                Text("\(count) 人")
+                                Text("%lld 人".locFormat(count))
                                     .font(.callout).foregroundStyle(.secondary)
                             } else {
                                 Text("尚未邀请").font(.callout).foregroundStyle(.tertiary)
@@ -273,9 +273,9 @@ struct EventEditView: View {
         }
         .navigationTitle({
             switch mode {
-            case .create:        return "新建事件"
-            case .duplicateOf:   return "复制为新事件"
-            case .edit:          return "编辑事件"
+            case .create:        return "新建事件".loc
+            case .duplicateOf:   return "复制为新事件".loc
+            case .edit:          return "编辑事件".loc
             }
         }())
         .navigationBarTitleDisplayMode(.inline)
