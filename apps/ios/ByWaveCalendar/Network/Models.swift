@@ -191,3 +191,80 @@ struct PasswordLoginResponse: Decodable {
     let userEmail: String?
     let userName: String?
 }
+
+// MARK: - Booking links (预约链接)
+
+// Owner-managed booking link. Mirrors GET /api/v1/booking-links rows.
+// weeklyAvailability is deliberately omitted for v1 — it's not edited in
+// the iOS UI and Swift's Codable ignores unknown JSON keys by default,
+// so leaving it out keeps decoding clean while the server keeps it intact.
+struct BookingLink: Codable, Identifiable, Hashable {
+    let id: String
+    let userId: String
+    let slug: String
+    let calendarId: String
+    let title: String
+    let description: String?
+    let durationMinutes: Int
+    let minNoticeHours: Int
+    let maxDaysAhead: Int
+    let bufferBeforeMin: Int
+    let bufferAfterMin: Int
+    let enabled: Bool
+    let notifyEmail: Bool
+    let createdAt: Date
+    let updatedAt: Date
+    let publicUrl: String
+}
+
+// A single booking made against a link. Only the fields the iOS UI
+// currently cares about are mirrored; the server round-trips the rest.
+// Listed via GET /api/v1/booking-links/:id/bookings (not yet surfaced in
+// the v1 UI, but the DTO is here so a future "查看预约" page decodes cleanly).
+struct Booking: Codable, Identifiable, Hashable {
+    let id: String
+    let linkId: String
+    let eventId: String?
+    let guestEmail: String
+    let guestName: String
+    let guestMessage: String?
+    let startsAt: Date
+    let endsAt: Date
+    let cancelToken: String
+    let cancelledAt: Date?
+    let createdAt: Date
+}
+
+// Body for POST /api/v1/booking-links (create) — matches the server's
+// createSchema. slug must match ^[a-z0-9][a-z0-9-]{0,30}$. Optional
+// fields are dropped by JSONEncoder when nil so the smallest payload
+// goes over the wire.
+struct BookingLinkCreateInput: Encodable {
+    let slug: String
+    let title: String
+    let description: String?
+    let calendarId: String
+    let durationMinutes: Int
+    let minNoticeHours: Int
+    let maxDaysAhead: Int
+    let bufferBeforeMin: Int?
+    let bufferAfterMin: Int?
+    let notifyEmail: Bool?
+}
+
+// Body for PATCH /api/v1/booking-links/:id — every field optional, server
+// applies whatever's present. nil fields are dropped by JSONEncoder so we
+// can send a one-field patch (e.g. just `enabled`) to toggle a link.
+struct BookingLinkUpdateInput: Encodable {
+    let slug: String?
+    let title: String?
+    let description: String?
+    let calendarId: String?
+    let durationMinutes: Int?
+    let minNoticeHours: Int?
+    let maxDaysAhead: Int?
+    let bufferBeforeMin: Int?
+    let bufferAfterMin: Int?
+    let enabled: Bool?
+    let notifyEmail: Bool?
+}

@@ -169,6 +169,52 @@ final class APIClient {
     }
 }
 
+// MARK: - Booking links (预约链接)
+//
+// Owner management of /api/v1/booking-links. Same envelope-unwrapping
+// generic plumbing as the calendar/share calls above — the server wraps
+// each row in { ok, data } and APIClient.request peels off `data` for us
+// so these decode straight to BookingLink / [BookingLink].
+extension APIClient {
+    // GET /booking-links → the signed-in user's links.
+    func listBookingLinks() async throws -> [BookingLink] {
+        try await get("/booking-links")
+    }
+
+    // POST /booking-links → the inserted row.
+    func createBookingLink(_ input: BookingLinkCreateInput) async throws -> BookingLink {
+        try await post("/booking-links", body: input)
+    }
+
+    // PATCH /booking-links/:id → the updated row. Pass any subset of
+    // fields; nil entries are dropped by JSONEncoder so a one-field
+    // patch (e.g. just `enabled`) is the whole body.
+    func updateBookingLink(id: String, _ input: BookingLinkUpdateInput) async throws -> BookingLink {
+        try await patch("/booking-links/\(id)", body: input)
+    }
+
+    // Convenience for the per-row enabled/paused toggle.
+    @discardableResult
+    func setBookingLinkEnabled(id: String, enabled: Bool) async throws -> BookingLink {
+        try await updateBookingLink(id: id, BookingLinkUpdateInput(
+            slug: nil, title: nil, description: nil, calendarId: nil,
+            durationMinutes: nil, minNoticeHours: nil, maxDaysAhead: nil,
+            bufferBeforeMin: nil, bufferAfterMin: nil, enabled: enabled, notifyEmail: nil,
+        ))
+    }
+
+    // DELETE /booking-links/:id. Server returns { ok: true } (200) rather
+    // than 204, but the void DELETE helper swallows any 2xx body.
+    func deleteBookingLink(id: String) async throws {
+        try await delete("/booking-links/\(id)")
+    }
+
+    // GET /booking-links/:id/bookings → bookings made against a link.
+    func listBookings(forLinkId id: String) async throws -> [Booking] {
+        try await get("/booking-links/\(id)/bookings")
+    }
+}
+
 // Type-erased wrapper for Encodable payloads so we can pass any
 // concrete type into post(...) without making request() generic over input.
 private struct AnyEncodable: Encodable {

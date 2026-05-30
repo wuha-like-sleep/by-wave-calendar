@@ -72,6 +72,16 @@ struct SettingsView: View {
                                subtitle: "重命名 · 改色 · 默认时区",
                                tint: .green)
                     }
+                    // v1.4 — native owner management for booking links so
+                    // others can self-book your time without a browser bounce.
+                    NavigationLink {
+                        BookingLinksView()
+                    } label: {
+                        navRow(icon: "link",
+                               title: "预约链接",
+                               subtitle: "让别人预约你的时间",
+                               tint: .pink)
+                    }
                     NavigationLink {
                         AppearanceSettingsPage()
                     } label: {
