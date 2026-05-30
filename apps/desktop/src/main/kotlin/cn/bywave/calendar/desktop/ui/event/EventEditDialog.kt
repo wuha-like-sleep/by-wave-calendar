@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -327,7 +328,7 @@ private fun DateTimePickerRow(
     var showTime by remember { mutableStateOf(false) }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.width(56.dp), style = MaterialTheme.typography.labelMedium,
+        Text(label, modifier = Modifier.widthIn(min = 56.dp, max = 104.dp), style = MaterialTheme.typography.labelMedium,
              color = MaterialTheme.colorScheme.outline)
         Spacer(Modifier.width(8.dp))
         OutlinedButton(onClick = { showDate = true }, modifier = Modifier.weight(1f)) {

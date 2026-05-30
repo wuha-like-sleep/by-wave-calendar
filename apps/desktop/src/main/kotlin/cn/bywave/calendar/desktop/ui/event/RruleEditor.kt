@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -145,7 +146,7 @@ fun RruleEditor(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 t("rrule.repeat"),
-                modifier = Modifier.width(56.dp),
+                modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -186,7 +187,7 @@ fun RruleEditor(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 t("rrule.interval"),
-                modifier = Modifier.width(56.dp),
+                modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
             )
@@ -209,7 +210,7 @@ fun RruleEditor(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 t("rrule.end"),
-                modifier = Modifier.width(56.dp),
+                modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
             )

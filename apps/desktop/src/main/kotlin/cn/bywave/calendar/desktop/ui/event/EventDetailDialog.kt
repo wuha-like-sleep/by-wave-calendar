@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -127,7 +128,7 @@ private fun MetaRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             label,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.outline,
         )
@@ -145,7 +146,7 @@ private fun UrlRow(label: String, url: String) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Text(
             label,
-            modifier = Modifier.width(56.dp),
+            modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.outline,
         )

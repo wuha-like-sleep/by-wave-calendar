@@ -2268,8 +2268,11 @@ private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit
 
 @Composable
 private fun InfoRow(label: String, value: String, mono: Boolean = false) {
-    // v0.7.6: vertical padding 10→14, label width 110→120 (Chinese
-    // 「显示名」barely fit before).
+    // Label column is weight-based, NOT a fixed width. A fixed 120.dp clipped
+    // / awkwardly wrapped longer translations ("Anzeigename", "ID de l'appareil",
+    // "ID de dispositivo") — that was part of the "切语言后变形" report. Weight
+    // keeps every row's label column the same width (so values still align) while
+    // giving enough room for any language to stay on one line.
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2280,11 +2283,12 @@ private fun InfoRow(label: String, value: String, mono: Boolean = false) {
             label,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.width(120.dp),
+            modifier = Modifier.weight(0.42f),
         )
+        Spacer(Modifier.width(12.dp))
         Text(
             value,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(0.58f),
             // Wider lineHeight so wrapped URLs don't pile on top of
             // each other.
             lineHeight = 22.sp,
