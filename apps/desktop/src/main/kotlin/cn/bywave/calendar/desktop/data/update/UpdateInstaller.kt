@@ -101,7 +101,7 @@ object UpdateInstaller {
             // Win/Linux: defer to Desktop.open(). Windows MSI handles
             // its own upgrade via msiexec; .deb is dpkg territory.
             runCatching { Desktop.getDesktop().open(dmgFile) }
-            _state.value = InstallState.FallbackOpenedInFinder("非 macOS 平台 — 用系统默认安装程序打开")
+            _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"))
             return
         }
         // spawnSwapScript drives state through Mounting → (fallback/Failed
@@ -128,7 +128,7 @@ object UpdateInstaller {
         val os = System.getProperty("os.name").orEmpty().lowercase()
         if (!os.contains("mac") && !os.contains("darwin")) {
             runCatching { Desktop.getDesktop().open(dmgFile) }
-            _state.value = InstallState.FallbackOpenedInFinder("非 macOS 平台 — 用系统默认安装程序打开")
+            _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"))
             return
         }
         _staged.value = dmgFile
@@ -170,20 +170,20 @@ object UpdateInstaller {
             // hdiutil failed — fall back to Finder so the user can mount
             // it manually. NOT a fatal error; their running app stays up.
             if (openFinderOnError) runCatching { Desktop.getDesktop().open(dmgFile) }
-            _state.value = InstallState.FallbackOpenedInFinder("DMG 挂载失败 —— Finder 已打开供手动安装")
+            _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.mountFailed"))
             return false
         }
         val newAppInDmg = File(mountPoint, "ByWaveCalendar.app")
         if (!newAppInDmg.exists()) {
             if (openFinderOnError) runCatching { Desktop.getDesktop().open(File(mountPoint)) }
-            _state.value = InstallState.FallbackOpenedInFinder("DMG 内未找到 ByWaveCalendar.app —— 请检查挂载后的卷")
+            _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.appNotFound"))
             return false
         }
         val currentAppPath = locateCurrentAppPath()
         if (currentAppPath == null) {
             if (openFinderOnError) runCatching { Desktop.getDesktop().open(File(mountPoint)) }
             _state.value = InstallState.FallbackOpenedInFinder(
-                "无法定位当前 APP 安装位置 —— 请从挂载的 DMG 拖到「应用程序」"
+                cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.locateFailed")
             )
             return false
         }
@@ -191,7 +191,10 @@ object UpdateInstaller {
         if (parent == null || !parent.canWrite()) {
             if (openFinderOnError) runCatching { Desktop.getDesktop().open(File(mountPoint)) }
             _state.value = InstallState.FallbackOpenedInFinder(
-                "没有 ${parent?.absolutePath ?: "当前 APP 目录"} 的写权限 —— 请从挂载的 DMG 拖到「应用程序」"
+                cn.bywave.calendar.desktop.i18n.I18n.t(
+                    "update.installer.noWritePermission",
+                    mapOf("path" to (parent?.absolutePath ?: cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.currentAppDir"))),
+                )
             )
             return false
         }
@@ -209,7 +212,12 @@ object UpdateInstaller {
                 .redirectErrorStream(true)
                 .start()
         } catch (e: Exception) {
-            _state.value = InstallState.Failed("无法启动安装脚本：${e.message ?: e::class.simpleName}")
+            _state.value = InstallState.Failed(
+                cn.bywave.calendar.desktop.i18n.I18n.t(
+                    "update.installer.scriptFailed",
+                    mapOf("error" to (e.message ?: e::class.simpleName ?: "")),
+                )
+            )
             return false
         }
         return true

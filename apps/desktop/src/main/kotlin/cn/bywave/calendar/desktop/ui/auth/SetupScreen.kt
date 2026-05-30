@@ -72,10 +72,15 @@ fun SetupScreen(
     // successfully paired with (or typed before crash). Empty on first
     // launch ever (per the open-source / server-agnostic policy: we
     // never hardcode the maintainer's own deployment).
+    // Observe locale so the screen re-renders on language switch. Status
+    // strings set imperatively below are resolved via I18n.t() at the time
+    // they're assigned (transient pairing feedback; the panels themselves
+    // observe locale for their static copy).
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val lastUrl by ProfileStore.lastServerUrl.collectAsState()
     var serverUrl by remember(lastUrl) { mutableStateOf(lastUrl) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var pollMessage by remember { mutableStateOf("等待手机扫码…") }
+    var pollMessage by remember { mutableStateOf(cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollWaiting")) }
     var code by remember { mutableStateOf<String?>(null) }
     var approveUrl by remember { mutableStateOf<String?>(null) }
     var client by remember { mutableStateOf<ApiClient?>(null) }
@@ -88,7 +93,7 @@ fun SetupScreen(
         // "example.com" not "https://example.com".
         var normalized = serverUrl.trim().removeSuffix("/")
         if (normalized.isEmpty()) {
-            errorMessage = "请填写你的 ByWave 服务器地址"
+            errorMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.errorEmptyUrl")
             return
         }
         if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
@@ -107,7 +112,7 @@ fun SetupScreen(
                 approveUrl = resp.approveUrl
                 phase = Phase.ShowingQr
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: "无法连接服务器"
+                errorMessage = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("setup.errorConnect")
                 phase = Phase.ServerUrl
             }
         }
@@ -121,7 +126,7 @@ fun SetupScreen(
         val codeNow = code ?: return@LaunchedEffect
         while (true) {
             when (val s = c.desktopPairStatus(codeNow)) {
-                is ApiClient.PairStatus.Pending -> { pollMessage = "等待手机扫码…" }
+                is ApiClient.PairStatus.Pending -> { pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollWaiting") }
                 is ApiClient.PairStatus.Approved -> {
                     val r = s.resp
                     val profile = Profile(
@@ -139,17 +144,17 @@ fun SetupScreen(
                     return@LaunchedEffect
                 }
                 is ApiClient.PairStatus.Denied -> {
-                    errorMessage = "已在手机上拒绝。如需登录请重新生成二维码。"
+                    errorMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.denied")
                     phase = Phase.ServerUrl
                     return@LaunchedEffect
                 }
                 is ApiClient.PairStatus.Expired -> {
-                    errorMessage = "二维码已过期，请重新生成。"
+                    errorMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.expired")
                     phase = Phase.ServerUrl
                     return@LaunchedEffect
                 }
                 is ApiClient.PairStatus.Error -> {
-                    pollMessage = "网络异常，正在重试… (${s.message})"
+                    pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollRetry", mapOf("message" to s.message))
                 }
             }
             delay(2_000)
@@ -172,7 +177,10 @@ fun SetupScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 CircularProgressIndicator()
-                Text("正在请求二维码…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.requestingQr") },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Phase.ShowingQr -> QrPanel(
                 approveUrl = approveUrl ?: "",
@@ -188,8 +196,14 @@ fun SetupScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("✓ 已登录", style = MaterialTheme.typography.headlineSmall)
-                Text("正在打开你的日历…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "✓ " + remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.signedIn") },
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.openingCalendar") },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -202,18 +216,20 @@ private fun ServerUrlPanel(
     errorMessage: String?,
     onContinue: () -> Unit,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     Column(
         modifier = Modifier.width(420.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            "登录 ByWave Calendar",
+            t("setup.loginTitle"),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "请输入你的 ByWave 服务器地址。下一步会显示一个二维码，用手机扫码即可完成登录。",
+            t("setup.loginSubtitle"),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -221,8 +237,8 @@ private fun ServerUrlPanel(
         OutlinedTextField(
             value = serverUrl,
             onValueChange = onServerUrlChange,
-            label = { Text("服务器地址") },
-            placeholder = { Text("https://example.com 或 example.com") },
+            label = { Text(t("setup.serverUrl")) },
+            placeholder = { Text(t("setup.serverUrlPlaceholder")) },
             singleLine = true,
             isError = errorMessage != null,
             supportingText = errorMessage?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
@@ -232,7 +248,7 @@ private fun ServerUrlPanel(
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = serverUrl.isNotBlank(),
-        ) { Text("生成二维码", style = MaterialTheme.typography.titleSmall) }
+        ) { Text(t("setup.generateQr"), style = MaterialTheme.typography.titleSmall) }
     }
 }
 
@@ -243,18 +259,20 @@ private fun QrPanel(
     pollMessage: String,
     onRestart: () -> Unit,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val qr = remember(approveUrl) { qrBitmap(approveUrl, sizePx = 320) }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text(
-            "用手机扫码登录",
+            t("setup.qrTitle"),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "用任何手机的相机或浏览器扫描下面的二维码，在手机上点「批准」即可登录此电脑。",
+            t("setup.qrSubtitle"),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -271,7 +289,7 @@ private fun QrPanel(
                 .padding(20.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Image(qr, contentDescription = "登录二维码", modifier = Modifier.size(320.dp))
+            Image(qr, contentDescription = t("setup.qrContentDesc"), modifier = Modifier.size(320.dp))
         }
 
         Row(
@@ -287,13 +305,13 @@ private fun QrPanel(
         }
 
         Text(
-            "授权码 $code · 5 分钟内有效",
+            cn.bywave.calendar.desktop.i18n.I18n.t("setup.authCode", mapOf("code" to code)),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.outline,
         )
 
         Spacer(Modifier.height(4.dp))
 
-        TextButton(onClick = onRestart) { Text("重新生成 / 换服务器") }
+        TextButton(onClick = onRestart) { Text(t("setup.regenerate")) }
     }
 }

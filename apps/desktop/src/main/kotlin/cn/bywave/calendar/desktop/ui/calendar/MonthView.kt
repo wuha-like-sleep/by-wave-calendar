@@ -29,6 +29,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -102,11 +103,16 @@ fun MonthView(
 
 @Composable
 private fun WeekdayHeader() {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    // Mon-anchored single-char weekday labels, localized.
+    val labels = remember(locale) {
+        (1..7).map { cn.bywave.calendar.desktop.i18n.I18n.t("weekday.short.$it") }
+    }
     Row(
         modifier = Modifier.fillMaxWidth().height(32.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (label in listOf("一", "二", "三", "四", "五", "六", "日")) {
+        for (label in labels) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = label,

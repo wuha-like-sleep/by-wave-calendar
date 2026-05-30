@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,8 @@ fun DayView(
     onEventDuplicate: (EventDTO) -> Unit = {},
     onEventDelete: (EventDTO) -> Unit = {},
 ) {
+    // Observe locale so the empty-state copy re-renders on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     // Filter to the anchored day (parent passes the whole loaded window,
     // not a per-day slice, so we re-filter here).
     val onDay = remember(events, anchor) {
@@ -62,8 +65,13 @@ fun DayView(
 
     if (onDay.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            val emptyText = remember(locale, anchor) {
+                cn.bywave.calendar.desktop.i18n.I18n.t(
+                    if (anchor == LocalDate.now()) "day.emptyToday" else "day.empty"
+                )
+            }
             Text(
-                text = if (anchor == LocalDate.now()) "今天没有事件" else "无事件",
+                text = emptyText,
                 color = mutedTextColor(),
             )
         }
@@ -100,9 +108,12 @@ private fun EventRow(
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
 ) {
+    // Observe locale so the formatTimeRange() output re-renders on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
     var menuOpen by remember { mutableStateOf(false) }
+    val timeText = remember(locale, event) { formatTimeRange(event) }
 
     Row(
         modifier = Modifier
@@ -144,7 +155,7 @@ private fun EventRow(
                 maxLines = 2,
             )
             Text(
-                text = formatTimeRange(event),
+                text = timeText,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )

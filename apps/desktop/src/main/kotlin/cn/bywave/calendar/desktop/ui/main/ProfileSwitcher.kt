@@ -28,6 +28,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,6 +51,9 @@ fun ProfileSwitcher(
     onRemove: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    // Observe locale so the dropdown labels re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
 
     Column(
         modifier = Modifier
@@ -103,7 +107,7 @@ fun ProfileSwitcher(
                                     Box(modifier = Modifier.size(16.dp)) {
                                         if (isActive) Icon(
                                             Icons.Default.Check,
-                                            contentDescription = "当前账号",
+                                            contentDescription = t("profile.current"),
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(16.dp),
                                         )
@@ -129,7 +133,7 @@ fun ProfileSwitcher(
                                         ) {
                                             Icon(
                                                 Icons.Default.Close,
-                                                contentDescription = "移除账号",
+                                                contentDescription = t("profile.remove"),
                                                 tint = MaterialTheme.colorScheme.outline,
                                                 modifier = Modifier.size(14.dp),
                                             )
@@ -153,7 +157,7 @@ fun ProfileSwitcher(
                                     modifier = Modifier.size(16.dp),
                                 )
                                 Spacer(Modifier.width(8.dp))
-                                Text("添加账号", style = MaterialTheme.typography.bodyMedium)
+                                Text(t("profile.add"), style = MaterialTheme.typography.bodyMedium)
                             }
                         },
                         onClick = {

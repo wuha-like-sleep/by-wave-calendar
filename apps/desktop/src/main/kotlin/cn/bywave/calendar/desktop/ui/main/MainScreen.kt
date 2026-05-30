@@ -211,11 +211,15 @@ fun MainScreen(
     }
 
     val ui by state.ui.collectAsState()
+    // Observe locale so the anchor label (date formatters + agenda range)
+    // and the inline "up to date" dialog re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val anchorLabel = remember(locale, ui.mode, ui.anchor) { anchorLabelFor(ui.mode, ui.anchor) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopBar(
             mode = ui.mode,
-            anchorLabel = anchorLabelFor(ui.mode, ui.anchor),
+            anchorLabel = anchorLabel,
             loading = ui.loading,
             onModeChange = { state.setMode(it) },
             onPrev = { state.previous() },
@@ -386,20 +390,23 @@ fun MainScreen(
         // network call completes before the user can read the dialog).
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
-            title = { androidx.compose.material3.Text("已是最新版本") },
+            title = { androidx.compose.material3.Text(cn.bywave.calendar.desktop.i18n.I18n.t("update.upToDate.title")) },
             text = {
                 androidx.compose.material3.Text(
                     when (forceOutcome) {
-                        UpdateChecker.ForceCheckOutcome.Checking -> "正在检查更新…"
+                        UpdateChecker.ForceCheckOutcome.Checking -> cn.bywave.calendar.desktop.i18n.I18n.t("update.upToDate.checking")
                         is UpdateChecker.ForceCheckOutcome.Error ->
                             (forceOutcome as UpdateChecker.ForceCheckOutcome.Error).message
-                        else -> "当前已经是最新的 v${cn.bywave.calendar.desktop.BuildInfo.VERSION_NAME}。"
+                        else -> cn.bywave.calendar.desktop.i18n.I18n.t(
+                            "update.upToDate.body",
+                            mapOf("version" to cn.bywave.calendar.desktop.BuildInfo.VERSION_NAME),
+                        )
                     },
                 )
             },
             confirmButton = {
                 androidx.compose.material3.TextButton(onClick = { showUpdateDialog = false }) {
-                    androidx.compose.material3.Text("好的")
+                    androidx.compose.material3.Text(cn.bywave.calendar.desktop.i18n.I18n.t("update.upToDate.button"))
                 }
             },
         )
@@ -464,7 +471,10 @@ private fun anchorLabelFor(mode: ViewMode, anchor: java.time.LocalDate): String 
     ViewMode.Week -> formatWeekAnchor(startOfWeek(anchor))
     ViewMode.Month -> formatMonthAnchor(anchor)
     // Agenda spans a 30-day window from the anchor.
-    ViewMode.Agenda -> "${formatWeekAnchor(anchor).substringBefore(" –")} 起 30 天"
+    ViewMode.Agenda -> cn.bywave.calendar.desktop.i18n.I18n.t(
+        "topbar.agendaRange",
+        mapOf("date" to formatWeekAnchor(anchor).substringBefore(" –")),
+    )
 }
 
 @Composable
@@ -588,6 +598,9 @@ private fun Sidebar(
     onAddAccount: () -> Unit,
     onProfileRemove: (String) -> Unit,
 ) {
+    // Observe locale so the section header + empty state re-render on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     Column(
         modifier = Modifier
             .width(260.dp)
@@ -606,7 +619,7 @@ private fun Sidebar(
         Spacer(Modifier.height(16.dp))
 
         Text(
-            "我的日历",
+            t("sidebar.myCalendars"),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 10.dp),
@@ -615,7 +628,7 @@ private fun Sidebar(
 
         if (calendars.isEmpty()) {
             Text(
-                "暂无日历",
+                t("sidebar.empty"),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(start = 10.dp),
@@ -648,6 +661,7 @@ private fun Sidebar(
 
 @Composable
 private fun ErrorBanner(message: String, onRetry: () -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -662,7 +676,9 @@ private fun ErrorBanner(message: String, onRetry: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(12.dp))
-        OutlinedButton(onClick = onRetry) { Text("重试") }
+        OutlinedButton(onClick = onRetry) {
+            Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("error.retry") })
+        }
     }
 }
 

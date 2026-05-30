@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -166,6 +167,8 @@ fun WeekView(
 
 @Composable
 private fun HeaderRow(dayStarts: List<LocalDate>) {
+    // Observe locale so the weekday labels re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     Row(
         modifier = Modifier.fillMaxWidth().height(64.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -178,7 +181,7 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
             ) {
                 val isToday = day == LocalDate.now()
                 Text(
-                    text = weekdayShort(day),
+                    text = remember(locale, day) { weekdayShort(day) },
                     style = MaterialTheme.typography.labelMedium,
                     color = if (isToday) MaterialTheme.colorScheme.primary else mutedTextColor(),
                 )
@@ -322,6 +325,8 @@ private fun EventChip(
     onResize: (EventDTO, Int) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    // Observe locale so the formatTimeRange() output re-renders on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     // Live drag offsets in px. We keep px because detectDragGestures
     // gives px deltas — converting to dp every tick is wasteful. We
     // only round to minutes/days once on drag-end.
@@ -445,7 +450,7 @@ private fun EventChip(
             // than crammed 「title 13:00 – 13:30」).
             if (h > 44.dp) {
                 Text(
-                    text = formatTimeRange(event),
+                    text = remember(locale, event) { formatTimeRange(event) },
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.85f),
                     maxLines = 1,
@@ -495,11 +500,8 @@ private fun EventChip(
 
 // ---- Helpers ----
 
-private fun weekdayShort(d: LocalDate): String = when (d.dayOfWeek.value) {
-    1 -> "周一"; 2 -> "周二"; 3 -> "周三"; 4 -> "周四"
-    5 -> "周五"; 6 -> "周六"; 7 -> "周日"
-    else -> ""
-}
+private fun weekdayShort(d: LocalDate): String =
+    cn.bywave.calendar.desktop.i18n.I18n.t("weekday.medium.${d.dayOfWeek.value}")
 
 /** Cluster overlapping events so we can split column width N ways.
  *  A new event whose start is BEFORE the current cluster's frontier

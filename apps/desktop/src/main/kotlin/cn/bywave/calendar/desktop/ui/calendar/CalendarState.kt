@@ -149,7 +149,7 @@ class CalendarState(
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(
                     loading = false,
-                    error = e.localizedMessage ?: "加载失败",
+                    error = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.loadFailed"),
                 )
             }
         }
@@ -232,7 +232,7 @@ class CalendarState(
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "保存失败")
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.saveFailed"))
             }
         }
     }
@@ -274,7 +274,7 @@ class CalendarState(
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "保存失败")
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.saveFailed"))
             }
         }
     }
@@ -352,7 +352,7 @@ class CalendarState(
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: "删除失败")
+                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.deleteFailed"))
             }
         }
     }

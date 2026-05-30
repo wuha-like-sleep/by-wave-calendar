@@ -144,7 +144,7 @@ class ApiClient(val serverUrl: String) {
                 else -> PairStatus.Error("HTTP ${resp.status.value}")
             }
         } catch (e: Exception) {
-            PairStatus.Error(e.localizedMessage ?: "网络异常")
+            PairStatus.Error(e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("api.networkError"))
         }
     }
 

@@ -139,6 +139,9 @@ fun SettingsScreen(
     onCalendarsChanged: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(SettingsTab.Account) }
+    // Observe locale so the header + close button re-render on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
 
     // Full-screen Surface above MainScreen. Background is the standard
     // app surface (not a semi-transparent scrim) — desktop settings
@@ -159,13 +162,13 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    "设置",
+                    t("settings.title"),
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 18.sp,
                 )
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "关闭设置")
+                    Icon(Icons.Default.Close, contentDescription = t("settings.close"))
                 }
             }
             HorizontalDivider()
@@ -270,19 +273,22 @@ private fun AccountSection(
     onAddAccount: () -> Unit,
     onSignOut: () -> Unit,
 ) {
-    SectionTitle("账户")
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    SectionTitle(t("settings.account.title"))
 
     SectionCard {
-        InfoRow("邮箱", profile.email)
-        if (!profile.displayName.isNullOrEmpty()) InfoRow("显示名", profile.displayName)
-        InfoRow("服务器", profile.serverUrl)
-        InfoRow("设备 ID", profile.deviceId, mono = true)
+        InfoRow(t("settings.account.email"), profile.email)
+        if (!profile.displayName.isNullOrEmpty()) InfoRow(t("settings.account.displayName"), profile.displayName)
+        InfoRow(t("settings.account.server"), profile.serverUrl)
+        InfoRow(t("settings.account.deviceId"), profile.deviceId, mono = true)
     }
 
     Spacer(Modifier.height(32.dp))
-    SectionTitle("账号管理")
+    SectionTitle(t("settings.profileMgmt.title"))
     Text(
-        "切换 / 添加 / 移除 ByWave 服务器。每个账号是独立的服务器+用户组合。",
+        t("settings.profileMgmt.desc"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 12.dp),
@@ -316,10 +322,10 @@ private fun AccountSection(
                     )
                 }
                 if (!isActive) {
-                    TextButton(onClick = { onSwitchProfile(p.deviceId) }) { Text("切换") }
+                    TextButton(onClick = { onSwitchProfile(p.deviceId) }) { Text(t("settings.profileMgmt.switch")) }
                 }
                 TextButton(onClick = { onRemoveProfile(p.deviceId) }) {
-                    Text("移除", color = MaterialTheme.colorScheme.error)
+                    Text(t("settings.profileMgmt.remove"), color = MaterialTheme.colorScheme.error)
                 }
             }
             if (p != profiles.last()) HorizontalDivider()
@@ -328,13 +334,13 @@ private fun AccountSection(
 
     Spacer(Modifier.height(12.dp))
     OutlinedButton(onClick = onAddAccount) {
-        Text("+ 添加服务器")
+        Text(t("settings.profileMgmt.addServer"))
     }
 
     Spacer(Modifier.height(36.dp))
-    SectionTitle("退出当前账号", danger = true)
+    SectionTitle(t("settings.signOut.title"), danger = true)
     Text(
-        "退出会保留本地缓存的事件数据。重新登录同一账号可以接着用。",
+        t("settings.signOut.desc"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 12.dp),
@@ -348,7 +354,7 @@ private fun AccountSection(
     ) {
         Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
-        Text("退出当前账号")
+        Text(t("settings.signOut.button"))
     }
 }
 
@@ -933,7 +939,7 @@ private fun CalendarEditDialog(
                         }.onFailure {
                             api.close()
                             saving = false
-                            errorMsg = it.localizedMessage ?: "操作失败"
+                            errorMsg = it.localizedMessage ?: t("settings.calendars.saveFailed")
                         }
                     }
                 },
@@ -1015,7 +1021,7 @@ private fun CalendarDeleteDialog(
                         }.onFailure {
                             api.close()
                             working = false
-                            errorMsg = it.localizedMessage ?: "删除失败"
+                            errorMsg = it.localizedMessage ?: t("settings.calendars.deleteFailed")
                         }
                     }
                 },
@@ -2178,19 +2184,22 @@ private fun AppearanceSection(profile: Profile) {
 
 @Composable
 private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
-    SectionTitle("关于")
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    SectionTitle(t("settings.about.title"))
     SectionCard {
-        InfoRow("应用", "ByWave Calendar Desktop")
-        InfoRow("版本", "v${BuildInfo.VERSION_NAME} (build ${BuildInfo.VERSION_CODE})")
-        InfoRow("服务器", profile.serverUrl)
-        InfoRow("许可证", "MIT")
-        InfoRow("版权", "© 2026 ByWave")
+        InfoRow(t("settings.about.app"), "ByWave Calendar Desktop")
+        InfoRow(t("settings.about.version"), "v${BuildInfo.VERSION_NAME} (build ${BuildInfo.VERSION_CODE})")
+        InfoRow(t("settings.about.server"), profile.serverUrl)
+        InfoRow(t("settings.about.license"), "MIT")
+        InfoRow(t("settings.about.copyright"), "© 2026 ByWave")
     }
 
     Spacer(Modifier.height(16.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = onCheckUpdate) {
-            Text("检查更新")
+            Text(t("settings.about.checkUpdate"))
         }
         OutlinedButton(onClick = {
             runCatching {
@@ -2199,14 +2208,13 @@ private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
         }) {
             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text("GitHub")
+            Text(t("settings.about.github"))
         }
     }
 
     Spacer(Modifier.height(24.dp))
     Text(
-        "ByWave Calendar 是一个开源的自托管日历共享平台。" +
-            "桌面端用 Compose Multiplatform 构建 —— Mac / Win / Linux 同一份 Kotlin 源码。",
+        t("settings.about.tagline"),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -2296,6 +2304,8 @@ private fun OpenInWebRow(
     subtitle: String,
     danger: Boolean = false,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -2311,7 +2321,7 @@ private fun OpenInWebRow(
                         Desktop.getDesktop().browse(URI(resp.url))
                         api.close()
                     }.onFailure {
-                        errorMsg = it.localizedMessage ?: "打开网页失败"
+                        errorMsg = it.localizedMessage ?: t("openInWeb.openFailed")
                     }
                     working = false
                 }
@@ -2336,7 +2346,7 @@ private fun OpenInWebRow(
         } else {
             Icon(
                 Icons.AutoMirrored.Filled.OpenInNew,
-                contentDescription = "在浏览器打开",
+                contentDescription = t("openInWeb.openInBrowser"),
                 modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2345,9 +2355,9 @@ private fun OpenInWebRow(
     errorMsg?.let { msg ->
         AlertDialog(
             onDismissRequest = { errorMsg = null },
-            title = { Text("打开失败") },
+            title = { Text(t("openInWeb.openFailed.title")) },
             text = { Text(msg) },
-            confirmButton = { TextButton(onClick = { errorMsg = null }) { Text("好的") } },
+            confirmButton = { TextButton(onClick = { errorMsg = null }) { Text(t("openInWeb.ok")) } },
         )
     }
 }
@@ -2357,6 +2367,8 @@ private fun OpenInWebRow(
  *  "在网页管理"). */
 @Composable
 private fun OpenInWebButton(profile: Profile, next: String, label: String) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -2370,7 +2382,7 @@ private fun OpenInWebButton(profile: Profile, next: String, label: String) {
                     Desktop.getDesktop().browse(URI(resp.url))
                     api.close()
                 }.onFailure {
-                    errorMsg = it.localizedMessage ?: "打开网页失败"
+                    errorMsg = it.localizedMessage ?: t("openInWeb.openFailed")
                 }
                 working = false
             }
@@ -2389,9 +2401,9 @@ private fun OpenInWebButton(profile: Profile, next: String, label: String) {
     errorMsg?.let { msg ->
         AlertDialog(
             onDismissRequest = { errorMsg = null },
-            title = { Text("打开失败") },
+            title = { Text(t("openInWeb.openFailed.title")) },
             text = { Text(msg) },
-            confirmButton = { TextButton(onClick = { errorMsg = null }) { Text("好的") } },
+            confirmButton = { TextButton(onClick = { errorMsg = null }) { Text(t("openInWeb.ok")) } },
         )
     }
 }

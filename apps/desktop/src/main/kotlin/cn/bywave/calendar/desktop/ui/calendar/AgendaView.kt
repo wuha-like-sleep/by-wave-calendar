@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +49,14 @@ import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
-private val AGENDA_HEADER_FMT = DateTimeFormatter.ofPattern("M 月 d 日 EEEE")
+// Header date pattern is itself localized (CJK "M 月 d 日 EEEE" vs an
+// en/es/fr/… equivalent). Resolved per call through i18n so it follows
+// the chosen UI language; weekday/month names follow the same locale.
+private fun agendaHeaderFmt(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern(
+        cn.bywave.calendar.desktop.i18n.I18n.t("fmt.monthDayWeekday"),
+        java.util.Locale.forLanguageTag(cn.bywave.calendar.desktop.i18n.I18n.current.value.code),
+    )
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -61,6 +69,8 @@ fun AgendaView(
     onEventDuplicate: (EventDTO) -> Unit,
     onEventDelete: (EventDTO) -> Unit,
 ) {
+    // Observe locale so empty-state copy + date headers re-render on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     // Parse + sort by start instant, then group by local date (sorted).
     // Events whose start timestamp won't parse are dropped (same defensive
     // stance as MonthView).
@@ -80,7 +90,7 @@ fun AgendaView(
     if (grouped.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "接下来没有日程",
+                text = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("agenda.empty") },
                 style = MaterialTheme.typography.bodyMedium,
                 color = mutedTextColor(),
             )
@@ -113,18 +123,22 @@ fun AgendaView(
 
 @Composable
 private fun AgendaDayHeader(date: LocalDate, count: Int) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val today = LocalDate.now()
-    val prefix = when (date) {
-        today -> "今天 · "
-        today.plusDays(1) -> "明天 · "
-        else -> ""
+    val headerText = remember(locale, date) {
+        val prefix = when (date) {
+            today -> cn.bywave.calendar.desktop.i18n.I18n.t("agenda.today") + " · "
+            today.plusDays(1) -> cn.bywave.calendar.desktop.i18n.I18n.t("agenda.tomorrow") + " · "
+            else -> ""
+        }
+        prefix + agendaHeaderFmt().format(date)
     }
     Row(
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = prefix + AGENDA_HEADER_FMT.format(date),
+            text = headerText,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = if (date == today) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
@@ -149,9 +163,12 @@ private fun AgendaRow(
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
 ) {
+    // Observe locale so the formatTimeRange() output re-renders on switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
     var menuOpen by remember { mutableStateOf(false) }
+    val timeText = remember(locale, event) { formatTimeRange(event) }
 
     Row(
         modifier = Modifier
@@ -187,7 +204,7 @@ private fun AgendaRow(
                 maxLines = 2,
             )
             Text(
-                text = formatTimeRange(event),
+                text = timeText,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )

@@ -29,6 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -53,11 +56,12 @@ fun RecurringScopePicker(
     onPick: (RecurringScope) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val title = if (action == RecurringAction.Edit) "保存重复事件" else "删除重复事件"
-    val subtitle = if (action == RecurringAction.Edit)
-        "这是一个重复事件，请选择保存范围："
-    else
-        "这是一个重复事件，请选择删除范围："
+    // Observe locale so dialog copy re-renders on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val isEdit = action == RecurringAction.Edit
+    val title = if (isEdit) t("recur.editTitle") else t("recur.deleteTitle")
+    val subtitle = if (isEdit) t("recur.editSubtitle") else t("recur.deleteSubtitle")
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -74,20 +78,20 @@ fun RecurringScopePicker(
                 Spacer(Modifier.size(4.dp))
                 ScopeRow(
                     icon = Icons.Outlined.LooksOne,
-                    title = "仅此事件",
-                    detail = if (action == RecurringAction.Edit) "只修改这一次" else "只删除这一次",
+                    title = t("recur.thisEvent"),
+                    detail = if (isEdit) t("recur.thisEvent.edit") else t("recur.thisEvent.delete"),
                     onClick = { onPick(RecurringScope.Instance) },
                 )
                 ScopeRow(
                     icon = Icons.AutoMirrored.Filled.ArrowForward,
-                    title = "此事件及后续",
-                    detail = if (action == RecurringAction.Edit) "修改此次及之后" else "删除此次及之后",
+                    title = t("recur.thisAndFuture"),
+                    detail = if (isEdit) t("recur.future.edit") else t("recur.future.delete"),
                     onClick = { onPick(RecurringScope.Future) },
                 )
                 ScopeRow(
                     icon = Icons.Filled.Refresh,
-                    title = "整个系列",
-                    detail = if (action == RecurringAction.Edit) "修改整个系列" else "删除整个系列",
+                    title = t("recur.series"),
+                    detail = if (isEdit) t("recur.series.edit") else t("recur.series.delete"),
                     tint = if (action == RecurringAction.Delete) MaterialTheme.colorScheme.error else null,
                     onClick = { onPick(RecurringScope.Series) },
                 )
@@ -95,7 +99,7 @@ fun RecurringScopePicker(
         },
         confirmButton = { /* picker has its own buttons */ Box {} },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(t("recur.cancel")) }
         },
     )
 }

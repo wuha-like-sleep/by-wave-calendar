@@ -100,7 +100,7 @@ object UpdateDownloader {
                     if (!got.equals(expectedSha256, ignoreCase = true)) {
                         partial.delete()
                         _state.value = DownloadState.Failed(
-                            "下载文件校验失败（sha256 不匹配）。请重试。",
+                            cn.bywave.calendar.desktop.i18n.I18n.t("update.download.checksumFailed"),
                         )
                         return@execute
                     }
@@ -108,13 +108,18 @@ object UpdateDownloader {
                 // Atomic-ish rename: target may exist from a prior attempt.
                 if (target.exists()) target.delete()
                 if (!partial.renameTo(target)) {
-                    _state.value = DownloadState.Failed("无法保存到 ${target.absolutePath}")
+                    _state.value = DownloadState.Failed(
+                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                            "update.download.saveFailed",
+                            mapOf("path" to target.absolutePath),
+                        ),
+                    )
                     return@execute
                 }
                 _state.value = DownloadState.Done(target)
             }
         } catch (e: Exception) {
-            _state.value = DownloadState.Failed(e.localizedMessage ?: "下载失败")
+            _state.value = DownloadState.Failed(e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("update.download.failed"))
         }
     }
 

@@ -48,6 +48,7 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -117,6 +118,9 @@ fun EventEditDialog(
     ) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Observe locale so all form labels re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val initial = remember(mode, calendars) { initialState(mode, calendars) }
     var form by remember(mode) { mutableStateOf(initial) }
 
@@ -124,7 +128,7 @@ fun EventEditDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                if (form.isEdit) "编辑事件" else "新建事件",
+                if (form.isEdit) t("event.edit.titleEdit") else t("event.edit.titleCreate"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -137,7 +141,7 @@ fun EventEditDialog(
                 OutlinedTextField(
                     value = form.summary,
                     onValueChange = { form = form.copy(summary = it) },
-                    label = { Text("标题 *") },
+                    label = { Text(t("event.edit.summary") + " *") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -149,7 +153,7 @@ fun EventEditDialog(
                 )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("全天", modifier = Modifier.weight(1f))
+                    Text(t("event.edit.allDay"), modifier = Modifier.weight(1f))
                     Switch(
                         checked = form.allDay,
                         onCheckedChange = { v ->
@@ -166,7 +170,7 @@ fun EventEditDialog(
                 }
 
                 DateTimePickerRow(
-                    label = "开始",
+                    label = t("event.edit.start"),
                     value = form.start,
                     allDay = form.allDay,
                     onChange = { newStart ->
@@ -175,7 +179,7 @@ fun EventEditDialog(
                     },
                 )
                 DateTimePickerRow(
-                    label = "结束",
+                    label = t("event.edit.end"),
                     value = form.end,
                     allDay = form.allDay,
                     onChange = { newEnd ->
@@ -187,21 +191,21 @@ fun EventEditDialog(
                 OutlinedTextField(
                     value = form.location,
                     onValueChange = { form = form.copy(location = it) },
-                    label = { Text("地点") },
+                    label = { Text(t("event.edit.location")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = form.url,
                     onValueChange = { form = form.copy(url = it) },
-                    label = { Text("链接") },
+                    label = { Text(t("event.edit.url")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = form.description,
                     onValueChange = { form = form.copy(description = it) },
-                    label = { Text("描述") },
+                    label = { Text(t("event.edit.description")) },
                     minLines = 2,
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth(),
@@ -250,11 +254,11 @@ fun EventEditDialog(
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(if (form.isEdit) "保存" else "创建")
+                Text(if (form.isEdit) t("event.edit.save") else t("event.edit.create"))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !saving) { Text("取消") }
+            TextButton(onClick = onDismiss, enabled = !saving) { Text(t("event.edit.cancel")) }
         },
     )
 }
@@ -265,6 +269,7 @@ private fun CalendarPicker(
     selectedId: String,
     onSelect: (String) -> Unit,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     var open by remember { mutableStateOf(false) }
     val selected = calendars.firstOrNull { it.id == selectedId }
 
@@ -280,7 +285,11 @@ private fun CalendarPicker(
                 Spacer(Modifier.width(10.dp))
                 Text(selected.name, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
             } else {
-                Text("选择日历", modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Start)
+                Text(
+                    remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("event.edit.pickCalendar") },
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                )
             }
             Text("▾", color = MaterialTheme.colorScheme.outline)
         }
@@ -312,6 +321,8 @@ private fun DateTimePickerRow(
     allDay: Boolean,
     onChange: (LocalDateTime) -> Unit,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
 
@@ -345,10 +356,10 @@ private fun DateTimePickerRow(
                         onChange(LocalDateTime.of(newDate, value.toLocalTime()))
                     }
                     showDate = false
-                }) { Text("确定") }
+                }) { Text(t("event.edit.confirm")) }
             },
             dismissButton = {
-                TextButton(onClick = { showDate = false }) { Text("取消") }
+                TextButton(onClick = { showDate = false }) { Text(t("event.edit.cancel")) }
             },
         ) {
             DatePicker(state = dpState)
@@ -363,16 +374,16 @@ private fun DateTimePickerRow(
         )
         AlertDialog(
             onDismissRequest = { showTime = false },
-            title = { Text("选择时间") },
+            title = { Text(t("event.edit.pickTime")) },
             text = { TimePicker(state = tpState) },
             confirmButton = {
                 TextButton(onClick = {
                     onChange(LocalDateTime.of(value.toLocalDate(), LocalTime.of(tpState.hour, tpState.minute)))
                     showTime = false
-                }) { Text("确定") }
+                }) { Text(t("event.edit.confirm")) }
             },
             dismissButton = {
-                TextButton(onClick = { showTime = false }) { Text("取消") }
+                TextButton(onClick = { showTime = false }) { Text(t("event.edit.cancel")) }
             },
         )
     }
@@ -384,10 +395,12 @@ private fun AttendeesSection(
     onAdd: (String) -> Unit,
     onRemove: (String) -> Unit,
 ) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     var newEmail by remember { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            "邀请人",
+            t("event.edit.attendees"),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.outline,
         )
@@ -396,7 +409,7 @@ private fun AttendeesSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(email, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                     TextButton(onClick = { onRemove(email) }) {
-                        Text("移除", color = MaterialTheme.colorScheme.error)
+                        Text(t("event.edit.attendeeRemove"), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }
@@ -405,7 +418,7 @@ private fun AttendeesSection(
             OutlinedTextField(
                 value = newEmail,
                 onValueChange = { newEmail = it },
-                placeholder = { Text("邮箱地址") },
+                placeholder = { Text(t("event.edit.attendeeEmail")) },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
@@ -416,7 +429,7 @@ private fun AttendeesSection(
                     newEmail = ""
                 },
                 enabled = newEmail.isNotBlank(),
-            ) { Text("添加") }
+            ) { Text(t("event.edit.attendeeAdd")) }
         }
     }
 }

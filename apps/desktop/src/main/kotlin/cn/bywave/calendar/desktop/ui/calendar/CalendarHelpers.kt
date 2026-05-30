@@ -67,12 +67,32 @@ internal fun startOfWeek(date: LocalDate): LocalDate =
     date.minusDays((date.dayOfWeek.value - DayOfWeek.MONDAY.value).toLong())
 
 // ---- Formatters ----
+//
+// Date-format PATTERNS are themselves localized (the "M 月 d 日" style is
+// Chinese-only; en/ja/ko/es/fr/de get their own pattern via i18n keys
+// fmt.*). Resolving the pattern through I18n.t() at call time means these
+// helpers re-render in the new language the moment the user switches —
+// provided the calling composable observes I18n.current (which the views
+// do). The DateTimeFormatter is rebuilt per call (cheap; avoids caching a
+// stale-locale pattern). The display zone stays the device default.
+
+private fun t(key: String): String = cn.bywave.calendar.desktop.i18n.I18n.t(key)
+private fun t(key: String, vars: Map<String, Any>): String =
+    cn.bywave.calendar.desktop.i18n.I18n.t(key, vars)
+
+private fun fmt(patternKey: String): DateTimeFormatter =
+    DateTimeFormatter.ofPattern(t(patternKey), localeForFormat()).withZone(ZoneId.systemDefault())
+
+/** java.util.Locale to drive month/weekday names inside DateTimeFormatter
+ *  (EEEE / MMM tokens). Mirrors the UI locale. */
+private fun localeForFormat(): java.util.Locale =
+    java.util.Locale.forLanguageTag(cn.bywave.calendar.desktop.i18n.I18n.current.value.code)
 
 private val TIME_FMT: DateTimeFormatter =
     DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
 
 internal fun formatTimeRange(event: EventDTO): String {
-    if (event.allDay) return "全天"
+    if (event.allDay) return t("fmt.timeAllDay")
     val s = parseInstant(event.startsAt) ?: return ""
     val e = parseInstant(event.endsAt) ?: return ""
     val sameDay = toLocalDate(s) == toLocalDate(e)
@@ -80,22 +100,19 @@ internal fun formatTimeRange(event: EventDTO): String {
            else "${TIME_FMT.format(s)} – …"
 }
 
-private val WEEK_ANCHOR_FMT = DateTimeFormatter.ofPattern("M 月 d 日")
-private val MONTH_ANCHOR_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月")
-
 internal fun formatWeekAnchor(weekStart: LocalDate): String {
+    val monthDay = fmt("fmt.monthDay")
     val end = weekStart.plusDays(6)
-    val year = if (weekStart.year == LocalDate.now().year) "" else "${weekStart.year} 年 "
-    return "$year${WEEK_ANCHOR_FMT.format(weekStart)} – ${WEEK_ANCHOR_FMT.format(end)}"
+    val year = if (weekStart.year == LocalDate.now().year) ""
+               else t("fmt.yearPrefix", mapOf("y" to weekStart.year))
+    return "$year${monthDay.format(weekStart)} – ${monthDay.format(end)}"
 }
 
 internal fun formatMonthAnchor(date: LocalDate): String =
-    MONTH_ANCHOR_FMT.format(date)
-
-private val DAY_ANCHOR_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日 EEEE")
+    fmt("fmt.monthAnchor").format(date)
 
 internal fun formatDayAnchor(date: LocalDate): String =
-    DAY_ANCHOR_FMT.format(date)
+    fmt("fmt.dayAnchor").format(date)
 
 // ---- Month grid ----
 
@@ -113,11 +130,8 @@ internal fun monthGridDays(month: YearMonth): List<LocalDate> {
 
 // ---- View modes ----
 
-enum class ViewMode(val label: String) {
-    Day("日"),
-    Week("周"),
-    Month("月"),
-    Agenda("日程"),
+enum class ViewMode {
+    Day, Week, Month, Agenda,
 }
 
 @Composable

@@ -63,6 +63,9 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         ?: return
     val download by UpdateDownloader.state.collectAsState()
     val install by UpdateInstaller.state.collectAsState()
+    // Observe locale so all dialog copy re-renders on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = androidx.compose.runtime.remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val scope = rememberCoroutineScope()
     val asset = UpdateChecker.platform?.let { info.assets[it] }
 
@@ -94,7 +97,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    "桌面端有新版本",
+                    t("update.title"),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -108,18 +111,18 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                 // Version side-by-side
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("当前版本", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        Text(t("update.installed"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         Text("v${BuildInfo.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                     }
                     Text("→", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.outline)
                     Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text("新版本", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Text(t("update.newVersion"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                         Text("v${info.versionName}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
                 if (info.notes.isNotBlank()) {
-                    Text("更新内容", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
+                    Text(t("update.releaseNotes"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
                     Text(
                         info.notes,
                         style = MaterialTheme.typography.bodySmall,
@@ -134,7 +137,10 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                             .padding(top = 4.dp),
                     ) {
                         Text(
-                            "暂无 ${osLabel(UpdateChecker.platform)} 版本",
+                            cn.bywave.calendar.desktop.i18n.I18n.t(
+                                "update.noAssetForPlatform",
+                                mapOf("os" to osLabel(UpdateChecker.platform)),
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -151,8 +157,14 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                                 Text(
-                                    if (d.bytesTotal > 0) "下载中 · ${fmtMB(d.bytesDone)} / ${fmtMB(d.bytesTotal)} · ${pct}%"
-                                    else "下载中 · ${fmtMB(d.bytesDone)}",
+                                    if (d.bytesTotal > 0) cn.bywave.calendar.desktop.i18n.I18n.t(
+                                        "update.progress",
+                                        mapOf("done" to fmtMB(d.bytesDone), "total" to fmtMB(d.bytesTotal), "pct" to pct),
+                                    )
+                                    else cn.bywave.calendar.desktop.i18n.I18n.t(
+                                        "update.progressNoTotal",
+                                        mapOf("done" to fmtMB(d.bytesDone)),
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline,
                                     modifier = Modifier.padding(top = 4.dp),
@@ -175,13 +187,16 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                                 Text(
                                     when (val i = install) {
                                         UpdateInstaller.InstallState.Idle ->
-                                            "已下载 · 准备安装…"
+                                            t("update.install.ready")
                                         UpdateInstaller.InstallState.Mounting ->
-                                            "正在挂载 DMG…"
+                                            t("update.install.mounting")
                                         UpdateInstaller.InstallState.Swapping ->
-                                            "正在安装并重启…"
+                                            t("update.install.swapping")
                                         is UpdateInstaller.InstallState.FallbackOpenedInFinder ->
-                                            "${i.reason}（保留在 ${d.file.parent}）"
+                                            cn.bywave.calendar.desktop.i18n.I18n.t(
+                                                "update.install.fallback",
+                                                mapOf("reason" to i.reason, "dir" to d.file.parent),
+                                            )
                                         is UpdateInstaller.InstallState.Failed ->
                                             i.message
                                     },
@@ -226,10 +241,10 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                     }
                 }) {
                     Text(when {
-                        install is UpdateInstaller.InstallState.FallbackOpenedInFinder -> "重试自动安装"
-                        download is DownloadState.Done -> "重新下载"
-                        download is DownloadState.Failed -> "重试"
-                        else -> "下载并安装"
+                        install is UpdateInstaller.InstallState.FallbackOpenedInFinder -> t("update.retryAuto")
+                        download is DownloadState.Done -> t("update.redownload")
+                        download is DownloadState.Failed -> t("update.retry")
+                        else -> t("update.downloadButton")
                     })
                 }
             }
@@ -237,7 +252,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
         dismissButton = {
             if (download !is DownloadState.Running) {
                 TextButton(onClick = onDismiss) {
-                    Text(if (info.mandatory) "等待安装" else "稍后")
+                    Text(if (info.mandatory) t("update.waitInstall") else t("update.notNow"))
                 }
             }
         },
@@ -246,9 +261,11 @@ fun UpdateDialog(onDismiss: () -> Unit) {
 
 private fun fmtMB(b: Long): String = "%.1f MB".format(b / 1024.0 / 1024.0)
 
-private fun osLabel(p: String?): String = when (p) {
-    "mac" -> "macOS"
-    "win" -> "Windows"
-    "linux" -> "Linux"
-    else -> "当前系统"
-}
+private fun osLabel(p: String?): String = cn.bywave.calendar.desktop.i18n.I18n.t(
+    when (p) {
+        "mac" -> "update.os.mac"
+        "win" -> "update.os.win"
+        "linux" -> "update.os.linux"
+        else -> "update.os.unknown"
+    }
+)

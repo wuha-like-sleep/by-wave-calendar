@@ -13,6 +13,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import cn.bywave.calendar.desktop.data.model.EventDTO
 
 @Composable
@@ -25,21 +28,24 @@ fun EventContextMenu(
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
 ) {
+    // Observe locale so menu item labels re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
         DropdownMenuItem(
-            text = { Text("查看详情") },
+            text = { Text(t("event.menu.view")) },
             onClick = { onDismiss(); onView(event) },
         )
         DropdownMenuItem(
-            text = { Text("编辑") },
+            text = { Text(t("event.detail.edit")) },
             onClick = { onDismiss(); onEdit(event) },
         )
         DropdownMenuItem(
-            text = { Text("复制为新建") },
+            text = { Text(t("event.menu.duplicate")) },
             onClick = { onDismiss(); onDuplicate(event) },
         )
         DropdownMenuItem(
-            text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+            text = { Text(t("event.detail.delete"), color = MaterialTheme.colorScheme.error) },
             onClick = { onDismiss(); onDelete(event) },
         )
     }

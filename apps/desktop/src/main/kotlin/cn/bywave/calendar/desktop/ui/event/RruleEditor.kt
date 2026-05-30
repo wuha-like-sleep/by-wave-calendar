@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -36,13 +37,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 
-enum class RruleFreq(val wire: String, val label: String) {
-    None("", "不重复"),
-    Daily("DAILY", "每天"),
-    Weekly("WEEKLY", "每周"),
-    Monthly("MONTHLY", "每月"),
-    Yearly("YEARLY", "每年"),
+enum class RruleFreq(val wire: String, val labelKey: String) {
+    None("", "rrule.freq.none"),
+    Daily("DAILY", "rrule.freq.daily"),
+    Weekly("WEEKLY", "rrule.freq.weekly"),
+    Monthly("MONTHLY", "rrule.freq.monthly"),
+    Yearly("YEARLY", "rrule.freq.yearly"),
 }
+
+/** Resolve an [RruleFreq]'s display label via i18n. Read at call time so
+ *  it follows the current UI language (the caller observes I18n.current). */
+private fun RruleFreq.label(): String = cn.bywave.calendar.desktop.i18n.I18n.t(labelKey)
 
 enum class RruleEnd { Forever, Until, Count }
 
@@ -129,6 +134,9 @@ fun RruleEditor(
     state: RruleState,
     onChange: (RruleState) -> Unit,
 ) {
+    // Observe locale so all labels/dropdowns re-render on language switch.
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     var freqOpen by remember { mutableStateOf(false) }
     var endOpen by remember { mutableStateOf(false) }
 
@@ -136,7 +144,7 @@ fun RruleEditor(
         // FREQ row
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "重复",
+                t("rrule.repeat"),
                 modifier = Modifier.width(56.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
@@ -144,14 +152,14 @@ fun RruleEditor(
             Spacer(Modifier.width(8.dp))
             Box {
                 OutlinedButton(onClick = { freqOpen = true }) {
-                    Text(state.freq.label)
+                    Text(state.freq.label())
                     Spacer(Modifier.width(8.dp))
                     Text("▾", color = MaterialTheme.colorScheme.outline)
                 }
                 DropdownMenu(expanded = freqOpen, onDismissRequest = { freqOpen = false }) {
                     for (f in RruleFreq.entries) {
                         DropdownMenuItem(
-                            text = { Text(f.label) },
+                            text = { Text(f.label()) },
                             onClick = {
                                 onChange(state.copy(freq = f, passthrough = null))
                                 freqOpen = false
@@ -164,7 +172,7 @@ fun RruleEditor(
 
         if (state.passthrough != null) {
             Text(
-                "包含未支持字段（如 BYDAY / EXDATE），保存时会保留原始规则。如需改写请先把「重复」选成「不重复」再设置。",
+                t("rrule.passthrough"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.padding(start = 64.dp),
@@ -177,7 +185,7 @@ fun RruleEditor(
         // INTERVAL row
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "间隔",
+                t("rrule.interval"),
                 modifier = Modifier.width(56.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
@@ -200,7 +208,7 @@ fun RruleEditor(
         // END row
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "结束",
+                t("rrule.end"),
                 modifier = Modifier.width(56.dp),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
@@ -246,23 +254,26 @@ fun RruleEditor(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("次", style = MaterialTheme.typography.bodyMedium)
+                    Text(t("rrule.times"), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
     }
 }
 
+// Non-composable label helpers: resolve through I18n.t() at call time so
+// they follow the current UI language. Safe because every call site is a
+// composable that observes I18n.current (so a switch triggers recomposition).
 private fun intervalSuffix(f: RruleFreq): String = when (f) {
-    RruleFreq.Daily -> "天"
-    RruleFreq.Weekly -> "周"
-    RruleFreq.Monthly -> "月"
-    RruleFreq.Yearly -> "年"
+    RruleFreq.Daily -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.suffix.day")
+    RruleFreq.Weekly -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.suffix.week")
+    RruleFreq.Monthly -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.suffix.month")
+    RruleFreq.Yearly -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.suffix.year")
     RruleFreq.None -> ""
 }
 
 private fun endLabel(e: RruleEnd): String = when (e) {
-    RruleEnd.Forever -> "永远"
-    RruleEnd.Until -> "截止日期"
-    RruleEnd.Count -> "重复 N 次"
+    RruleEnd.Forever -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.forever")
+    RruleEnd.Until -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.until")
+    RruleEnd.Count -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.count")
 }

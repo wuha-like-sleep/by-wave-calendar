@@ -344,6 +344,9 @@ object I18n {
 
         // Error banner
         "error.retry" to "Retry",
+        "error.loadFailed" to "Failed to load",
+        "error.saveFailed" to "Failed to save",
+        "error.deleteFailed" to "Failed to delete",
 
         // Setup screen (first launch)
         "setup.title" to "Connect to your ByWave server",
@@ -360,6 +363,190 @@ object I18n {
         "settings.reminders.lead" to "Notify",
         "settings.reminders.atStart" to "At start time",
         "settings.reminders.leadMinutes" to "{n} min before",
+
+        // Settings — Calendars (inline action errors)
+        "settings.calendars.saveFailed" to "Couldn't save.",
+        "settings.calendars.deleteFailed" to "Couldn't delete.",
+
+        // Profile switcher (sidebar dropdown)
+        "profile.current" to "Current account",
+        "profile.remove" to "Remove account",
+        "profile.add" to "Add account",
+        "sidebar.myCalendars" to "My calendars",
+
+        // TopBar — agenda range label
+        "topbar.agendaRange" to "{date} · next 30 days",
+
+        // Setup / sign-in screen
+        "setup.pollWaiting" to "Waiting for your phone to scan…",
+        "setup.errorEmptyUrl" to "Please enter your ByWave server URL.",
+        "setup.errorConnect" to "Couldn't reach the server.",
+        "setup.denied" to "Denied on your phone. Generate a new QR code to sign in.",
+        "setup.expired" to "The QR code expired. Please generate a new one.",
+        "setup.pollRetry" to "Network hiccup, retrying… ({message})",
+        "setup.requestingQr" to "Requesting QR code…",
+        "setup.signedIn" to "Signed in",
+        "setup.openingCalendar" to "Opening your calendar…",
+        "setup.loginTitle" to "Sign in to ByWave Calendar",
+        "setup.loginSubtitle" to "Enter your ByWave server URL. The next step shows a QR code — scan it with your phone to finish signing in.",
+        "setup.serverUrlPlaceholder" to "https://example.com or example.com",
+        "setup.generateQr" to "Generate QR code",
+        "setup.qrTitle" to "Scan to sign in",
+        "setup.qrSubtitle" to "Scan the QR code below with any phone's camera or browser, then tap \"Approve\" on your phone to sign in to this computer.",
+        "setup.qrContentDesc" to "Sign-in QR code",
+        "setup.authCode" to "Code {code} · valid for 5 minutes",
+        "setup.regenerate" to "Regenerate / change server",
+
+        // Event editor
+        "event.edit.titleCreate" to "New event",
+        "event.edit.titleEdit" to "Edit event",
+        "event.edit.summary" to "Title",
+        "event.edit.allDay" to "All-day",
+        "event.edit.start" to "Start",
+        "event.edit.end" to "End",
+        "event.edit.location" to "Location",
+        "event.edit.url" to "Link",
+        "event.edit.description" to "Description",
+        "event.edit.save" to "Save",
+        "event.edit.create" to "Create",
+        "event.edit.cancel" to "Cancel",
+        "event.edit.pickCalendar" to "Choose a calendar",
+        "event.edit.pickTime" to "Pick a time",
+        "event.edit.confirm" to "OK",
+        "event.edit.attendees" to "Guests",
+        "event.edit.attendeeRemove" to "Remove",
+        "event.edit.attendeeEmail" to "Email address",
+        "event.edit.attendeeAdd" to "Add",
+
+        // Event detail
+        "event.detail.time" to "Time",
+        "event.detail.calendar" to "Calendar",
+        "event.detail.location" to "Location",
+        "event.detail.timezone" to "Timezone",
+        "event.detail.description" to "Description",
+        "event.detail.url" to "Link",
+        "event.detail.recurrence" to "Repeat",
+        "event.detail.edit" to "Edit",
+        "event.detail.delete" to "Delete",
+        "event.detail.close" to "Close",
+        "event.allDay" to "All-day",
+        // Event right-click context menu
+        "event.menu.view" to "View details",
+        "event.menu.duplicate" to "Duplicate as new",
+
+        // Recurring scope picker
+        "recur.editTitle" to "Save recurring event",
+        "recur.deleteTitle" to "Delete recurring event",
+        "recur.editSubtitle" to "This is a recurring event. Choose what to save:",
+        "recur.deleteSubtitle" to "This is a recurring event. Choose what to delete:",
+        "recur.thisEvent" to "This event only",
+        "recur.thisEvent.edit" to "Change only this one",
+        "recur.thisEvent.delete" to "Delete only this one",
+        "recur.thisAndFuture" to "This and following events",
+        "recur.future.edit" to "Change this and later",
+        "recur.future.delete" to "Delete this and later",
+        "recur.series" to "Entire series",
+        "recur.series.edit" to "Change the whole series",
+        "recur.series.delete" to "Delete the whole series",
+        "recur.cancel" to "Cancel",
+
+        // RRULE editor
+        "rrule.freq.none" to "Does not repeat",
+        "rrule.freq.daily" to "Daily",
+        "rrule.freq.weekly" to "Weekly",
+        "rrule.freq.monthly" to "Monthly",
+        "rrule.freq.yearly" to "Yearly",
+        "rrule.repeat" to "Repeat",
+        "rrule.passthrough" to "Contains unsupported fields (e.g. BYDAY / EXDATE); the original rule is kept on save. To rewrite it, first set \"Repeat\" to \"Does not repeat\".",
+        "rrule.interval" to "Interval",
+        "rrule.end" to "Ends",
+        "rrule.suffix.day" to "day(s)",
+        "rrule.suffix.week" to "week(s)",
+        "rrule.suffix.month" to "month(s)",
+        "rrule.suffix.year" to "year(s)",
+        "rrule.end.forever" to "Never",
+        "rrule.end.until" to "On date",
+        "rrule.end.count" to "After N times",
+        "rrule.times" to "times",
+
+        // Event detail — RRULE summary
+        "event.rrule.daily" to "Daily",
+        "event.rrule.dailyN" to "Every {n} days",
+        "event.rrule.weekly" to "Weekly",
+        "event.rrule.weeklyN" to "Every {n} weeks",
+        "event.rrule.monthly" to "Monthly",
+        "event.rrule.monthlyN" to "Every {n} months",
+        "event.rrule.yearly" to "Yearly",
+        "event.rrule.yearlyN" to "Every {n} years",
+        "event.rrule.until" to "{base} · until {date}",
+        "event.rrule.count" to "{base} · {n} times",
+
+        // Calendar views — empty states & relative day labels
+        "agenda.empty" to "Nothing coming up",
+        "agenda.today" to "Today",
+        "agenda.tomorrow" to "Tomorrow",
+        "day.emptyToday" to "No events today",
+        "day.empty" to "No events",
+
+        // Weekday labels — single char (month grid header)
+        "weekday.short.1" to "Mo",
+        "weekday.short.2" to "Tu",
+        "weekday.short.3" to "We",
+        "weekday.short.4" to "Th",
+        "weekday.short.5" to "Fr",
+        "weekday.short.6" to "Sa",
+        "weekday.short.7" to "Su",
+        // Weekday labels — medium (week view header)
+        "weekday.medium.1" to "Mon",
+        "weekday.medium.2" to "Tue",
+        "weekday.medium.3" to "Wed",
+        "weekday.medium.4" to "Thu",
+        "weekday.medium.5" to "Fri",
+        "weekday.medium.6" to "Sat",
+        "weekday.medium.7" to "Sun",
+
+        // Date format patterns (java.time DateTimeFormatter)
+        "fmt.timeAllDay" to "All-day",
+        "fmt.monthDay" to "MMM d",
+        "fmt.monthDayWeekday" to "EEE, MMM d",
+        "fmt.monthAnchor" to "MMMM yyyy",
+        "fmt.dayAnchor" to "EEEE, MMM d, yyyy",
+        "fmt.yearPrefix" to "{y} ",
+
+        // Update dialog (desktop in-app updater)
+        "update.newVersion" to "New version",
+        "update.noAssetForPlatform" to "No {os} build available yet",
+        "update.progress" to "Downloading · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "Downloading · {done}",
+        "update.install.ready" to "Downloaded · preparing to install…",
+        "update.install.mounting" to "Mounting DMG…",
+        "update.install.swapping" to "Installing and restarting…",
+        "update.install.fallback" to "{reason} (kept in {dir})",
+        "update.retryAuto" to "Retry auto-install",
+        "update.redownload" to "Download again",
+        "update.retry" to "Retry",
+        "update.waitInstall" to "Pending install",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "your system",
+
+        // Update installer (macOS DMG swap) — user-facing failure reasons
+        "update.installer.nonMac" to "Not macOS — opened with the system default installer",
+        "update.installer.mountFailed" to "DMG mount failed — Finder opened for manual install",
+        "update.installer.appNotFound" to "ByWaveCalendar.app not found in the DMG — please check the mounted volume",
+        "update.installer.locateFailed" to "Couldn't locate the current app install — please drag from the mounted DMG to Applications",
+        "update.installer.noWritePermission" to "No write permission for {path} — please drag from the mounted DMG to Applications",
+        "update.installer.currentAppDir" to "the current app directory",
+        "update.installer.scriptFailed" to "Couldn't start the install script: {error}",
+
+        // Update downloader — failure messages
+        "update.download.checksumFailed" to "Downloaded file failed verification (sha256 mismatch). Please retry.",
+        "update.download.saveFailed" to "Couldn't save to {path}",
+        "update.download.failed" to "Download failed",
+
+        // API client — network fallback
+        "api.networkError" to "Network error",
     )
 
     private val zhCN: Map<String, String> = mapOf(
@@ -585,6 +772,9 @@ object I18n {
         "sidebar.empty" to "（暂无日历）",
 
         "error.retry" to "重试",
+        "error.loadFailed" to "加载失败",
+        "error.saveFailed" to "保存失败",
+        "error.deleteFailed" to "删除失败",
 
         "setup.title" to "连接到你的 ByWave 服务器",
         "setup.serverUrl" to "服务器地址",
@@ -600,6 +790,190 @@ object I18n {
         "settings.reminders.lead" to "提前",
         "settings.reminders.atStart" to "事件开始时",
         "settings.reminders.leadMinutes" to "提前 {n} 分钟",
+
+        // 设置 — 日历（内联操作错误）
+        "settings.calendars.saveFailed" to "操作失败",
+        "settings.calendars.deleteFailed" to "删除失败",
+
+        // 账号切换器（侧栏下拉）
+        "profile.current" to "当前账号",
+        "profile.remove" to "移除账号",
+        "profile.add" to "添加账号",
+        "sidebar.myCalendars" to "我的日历",
+
+        // 顶栏 — 日程范围标签
+        "topbar.agendaRange" to "{date} 起 30 天",
+
+        // 登录 / 配对页
+        "setup.pollWaiting" to "等待手机扫码…",
+        "setup.errorEmptyUrl" to "请填写你的 ByWave 服务器地址",
+        "setup.errorConnect" to "无法连接服务器",
+        "setup.denied" to "已在手机上拒绝。如需登录请重新生成二维码。",
+        "setup.expired" to "二维码已过期，请重新生成。",
+        "setup.pollRetry" to "网络异常，正在重试… ({message})",
+        "setup.requestingQr" to "正在请求二维码…",
+        "setup.signedIn" to "已登录",
+        "setup.openingCalendar" to "正在打开你的日历…",
+        "setup.loginTitle" to "登录 ByWave Calendar",
+        "setup.loginSubtitle" to "请输入你的 ByWave 服务器地址。下一步会显示一个二维码，用手机扫码即可完成登录。",
+        "setup.serverUrlPlaceholder" to "https://example.com 或 example.com",
+        "setup.generateQr" to "生成二维码",
+        "setup.qrTitle" to "用手机扫码登录",
+        "setup.qrSubtitle" to "用任何手机的相机或浏览器扫描下面的二维码，在手机上点「批准」即可登录此电脑。",
+        "setup.qrContentDesc" to "登录二维码",
+        "setup.authCode" to "授权码 {code} · 5 分钟内有效",
+        "setup.regenerate" to "重新生成 / 换服务器",
+
+        // 事件编辑
+        "event.edit.titleCreate" to "新建事件",
+        "event.edit.titleEdit" to "编辑事件",
+        "event.edit.summary" to "标题",
+        "event.edit.allDay" to "全天",
+        "event.edit.start" to "开始",
+        "event.edit.end" to "结束",
+        "event.edit.location" to "地点",
+        "event.edit.url" to "链接",
+        "event.edit.description" to "描述",
+        "event.edit.save" to "保存",
+        "event.edit.create" to "创建",
+        "event.edit.cancel" to "取消",
+        "event.edit.pickCalendar" to "选择日历",
+        "event.edit.pickTime" to "选择时间",
+        "event.edit.confirm" to "确定",
+        "event.edit.attendees" to "邀请人",
+        "event.edit.attendeeRemove" to "移除",
+        "event.edit.attendeeEmail" to "邮箱地址",
+        "event.edit.attendeeAdd" to "添加",
+
+        // 事件详情
+        "event.detail.time" to "时间",
+        "event.detail.calendar" to "日历",
+        "event.detail.location" to "地点",
+        "event.detail.timezone" to "时区",
+        "event.detail.description" to "描述",
+        "event.detail.url" to "链接",
+        "event.detail.recurrence" to "重复",
+        "event.detail.edit" to "编辑",
+        "event.detail.delete" to "删除",
+        "event.detail.close" to "关闭",
+        "event.allDay" to "全天",
+        // 事件右键菜单
+        "event.menu.view" to "查看详情",
+        "event.menu.duplicate" to "复制为新建",
+
+        // 重复事件范围选择
+        "recur.editTitle" to "保存重复事件",
+        "recur.deleteTitle" to "删除重复事件",
+        "recur.editSubtitle" to "这是一个重复事件，请选择保存范围：",
+        "recur.deleteSubtitle" to "这是一个重复事件，请选择删除范围：",
+        "recur.thisEvent" to "仅此事件",
+        "recur.thisEvent.edit" to "只修改这一次",
+        "recur.thisEvent.delete" to "只删除这一次",
+        "recur.thisAndFuture" to "此事件及后续",
+        "recur.future.edit" to "修改此次及之后",
+        "recur.future.delete" to "删除此次及之后",
+        "recur.series" to "整个系列",
+        "recur.series.edit" to "修改整个系列",
+        "recur.series.delete" to "删除整个系列",
+        "recur.cancel" to "取消",
+
+        // RRULE 编辑器
+        "rrule.freq.none" to "不重复",
+        "rrule.freq.daily" to "每天",
+        "rrule.freq.weekly" to "每周",
+        "rrule.freq.monthly" to "每月",
+        "rrule.freq.yearly" to "每年",
+        "rrule.repeat" to "重复",
+        "rrule.passthrough" to "包含未支持字段（如 BYDAY / EXDATE），保存时会保留原始规则。如需改写请先把「重复」选成「不重复」再设置。",
+        "rrule.interval" to "间隔",
+        "rrule.end" to "结束",
+        "rrule.suffix.day" to "天",
+        "rrule.suffix.week" to "周",
+        "rrule.suffix.month" to "月",
+        "rrule.suffix.year" to "年",
+        "rrule.end.forever" to "永远",
+        "rrule.end.until" to "截止日期",
+        "rrule.end.count" to "重复 N 次",
+        "rrule.times" to "次",
+
+        // 事件详情 — RRULE 摘要
+        "event.rrule.daily" to "每天",
+        "event.rrule.dailyN" to "每 {n} 天",
+        "event.rrule.weekly" to "每周",
+        "event.rrule.weeklyN" to "每 {n} 周",
+        "event.rrule.monthly" to "每月",
+        "event.rrule.monthlyN" to "每 {n} 个月",
+        "event.rrule.yearly" to "每年",
+        "event.rrule.yearlyN" to "每 {n} 年",
+        "event.rrule.until" to "{base} · 至 {date}",
+        "event.rrule.count" to "{base} · 共 {n} 次",
+
+        // 日历视图 — 空状态 & 相对日期标签
+        "agenda.empty" to "接下来没有日程",
+        "agenda.today" to "今天",
+        "agenda.tomorrow" to "明天",
+        "day.emptyToday" to "今天没有事件",
+        "day.empty" to "无事件",
+
+        // 星期标签 — 单字（月视图表头）
+        "weekday.short.1" to "一",
+        "weekday.short.2" to "二",
+        "weekday.short.3" to "三",
+        "weekday.short.4" to "四",
+        "weekday.short.5" to "五",
+        "weekday.short.6" to "六",
+        "weekday.short.7" to "日",
+        // 星期标签 — 中等（周视图表头）
+        "weekday.medium.1" to "周一",
+        "weekday.medium.2" to "周二",
+        "weekday.medium.3" to "周三",
+        "weekday.medium.4" to "周四",
+        "weekday.medium.5" to "周五",
+        "weekday.medium.6" to "周六",
+        "weekday.medium.7" to "周日",
+
+        // 日期格式（java.time DateTimeFormatter）
+        "fmt.timeAllDay" to "全天",
+        "fmt.monthDay" to "M 月 d 日",
+        "fmt.monthDayWeekday" to "M 月 d 日 EEEE",
+        "fmt.monthAnchor" to "yyyy 年 M 月",
+        "fmt.dayAnchor" to "yyyy 年 M 月 d 日 EEEE",
+        "fmt.yearPrefix" to "{y} 年 ",
+
+        // 更新弹窗（桌面端内置更新器）
+        "update.newVersion" to "新版本",
+        "update.noAssetForPlatform" to "暂无 {os} 版本",
+        "update.progress" to "下载中 · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "下载中 · {done}",
+        "update.install.ready" to "已下载 · 准备安装…",
+        "update.install.mounting" to "正在挂载 DMG…",
+        "update.install.swapping" to "正在安装并重启…",
+        "update.install.fallback" to "{reason}（保留在 {dir}）",
+        "update.retryAuto" to "重试自动安装",
+        "update.redownload" to "重新下载",
+        "update.retry" to "重试",
+        "update.waitInstall" to "等待安装",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "当前系统",
+
+        // 更新安装器（macOS DMG 替换）— 面向用户的失败原因
+        "update.installer.nonMac" to "非 macOS 平台 — 用系统默认安装程序打开",
+        "update.installer.mountFailed" to "DMG 挂载失败 —— Finder 已打开供手动安装",
+        "update.installer.appNotFound" to "DMG 内未找到 ByWaveCalendar.app —— 请检查挂载后的卷",
+        "update.installer.locateFailed" to "无法定位当前 APP 安装位置 —— 请从挂载的 DMG 拖到「应用程序」",
+        "update.installer.noWritePermission" to "没有 {path} 的写权限 —— 请从挂载的 DMG 拖到「应用程序」",
+        "update.installer.currentAppDir" to "当前 APP 目录",
+        "update.installer.scriptFailed" to "无法启动安装脚本：{error}",
+
+        // 更新下载器 — 失败信息
+        "update.download.checksumFailed" to "下载文件校验失败（sha256 不匹配）。请重试。",
+        "update.download.saveFailed" to "无法保存到 {path}",
+        "update.download.failed" to "下载失败",
+
+        // API 客户端 — 网络兜底
+        "api.networkError" to "网络异常",
     )
 
     private val zhTW: Map<String, String> = mapOf(
@@ -707,6 +1081,9 @@ object I18n {
         "sidebar.empty" to "（暫無行事曆）",
 
         "error.retry" to "重試",
+        "error.loadFailed" to "載入失敗",
+        "error.saveFailed" to "儲存失敗",
+        "error.deleteFailed" to "刪除失敗",
 
         "setup.title" to "連線到你的 ByWave 伺服器",
         "setup.serverUrl" to "伺服器位址",
@@ -844,6 +1221,190 @@ object I18n {
         "settings.reminders.lead" to "提前",
         "settings.reminders.atStart" to "事件開始時",
         "settings.reminders.leadMinutes" to "提前 {n} 分鐘",
+
+        // 設定 — 行事曆（內聯操作錯誤）
+        "settings.calendars.saveFailed" to "操作失敗",
+        "settings.calendars.deleteFailed" to "刪除失敗",
+
+        // 帳號切換器（側欄下拉）
+        "profile.current" to "目前帳號",
+        "profile.remove" to "移除帳號",
+        "profile.add" to "新增帳號",
+        "sidebar.myCalendars" to "我的行事曆",
+
+        // 頂欄 — 行程範圍標籤
+        "topbar.agendaRange" to "{date} 起 30 天",
+
+        // 登入 / 配對頁
+        "setup.pollWaiting" to "等待手機掃碼…",
+        "setup.errorEmptyUrl" to "請填寫你的 ByWave 伺服器位址",
+        "setup.errorConnect" to "無法連線到伺服器",
+        "setup.denied" to "已在手機上拒絕。如需登入請重新產生 QR 碼。",
+        "setup.expired" to "QR 碼已過期，請重新產生。",
+        "setup.pollRetry" to "網路異常，正在重試… ({message})",
+        "setup.requestingQr" to "正在請求 QR 碼…",
+        "setup.signedIn" to "已登入",
+        "setup.openingCalendar" to "正在開啟你的行事曆…",
+        "setup.loginTitle" to "登入 ByWave Calendar",
+        "setup.loginSubtitle" to "請輸入你的 ByWave 伺服器位址。下一步會顯示一個 QR 碼，用手機掃碼即可完成登入。",
+        "setup.serverUrlPlaceholder" to "https://example.com 或 example.com",
+        "setup.generateQr" to "產生 QR 碼",
+        "setup.qrTitle" to "用手機掃碼登入",
+        "setup.qrSubtitle" to "用任何手機的相機或瀏覽器掃描下面的 QR 碼，在手機上點「核准」即可登入這台電腦。",
+        "setup.qrContentDesc" to "登入 QR 碼",
+        "setup.authCode" to "授權碼 {code} · 5 分鐘內有效",
+        "setup.regenerate" to "重新產生 / 換伺服器",
+
+        // 事件編輯
+        "event.edit.titleCreate" to "新增事件",
+        "event.edit.titleEdit" to "編輯事件",
+        "event.edit.summary" to "標題",
+        "event.edit.allDay" to "整天",
+        "event.edit.start" to "開始",
+        "event.edit.end" to "結束",
+        "event.edit.location" to "地點",
+        "event.edit.url" to "連結",
+        "event.edit.description" to "描述",
+        "event.edit.save" to "儲存",
+        "event.edit.create" to "建立",
+        "event.edit.cancel" to "取消",
+        "event.edit.pickCalendar" to "選擇行事曆",
+        "event.edit.pickTime" to "選擇時間",
+        "event.edit.confirm" to "確定",
+        "event.edit.attendees" to "邀請人",
+        "event.edit.attendeeRemove" to "移除",
+        "event.edit.attendeeEmail" to "電子郵件地址",
+        "event.edit.attendeeAdd" to "新增",
+
+        // 事件詳情
+        "event.detail.time" to "時間",
+        "event.detail.calendar" to "行事曆",
+        "event.detail.location" to "地點",
+        "event.detail.timezone" to "時區",
+        "event.detail.description" to "描述",
+        "event.detail.url" to "連結",
+        "event.detail.recurrence" to "重複",
+        "event.detail.edit" to "編輯",
+        "event.detail.delete" to "刪除",
+        "event.detail.close" to "關閉",
+        "event.allDay" to "整天",
+        // 事件右鍵選單
+        "event.menu.view" to "查看詳情",
+        "event.menu.duplicate" to "複製為新增",
+
+        // 重複事件範圍選擇
+        "recur.editTitle" to "儲存重複事件",
+        "recur.deleteTitle" to "刪除重複事件",
+        "recur.editSubtitle" to "這是一個重複事件，請選擇儲存範圍：",
+        "recur.deleteSubtitle" to "這是一個重複事件，請選擇刪除範圍：",
+        "recur.thisEvent" to "僅此事件",
+        "recur.thisEvent.edit" to "只修改這一次",
+        "recur.thisEvent.delete" to "只刪除這一次",
+        "recur.thisAndFuture" to "此事件及後續",
+        "recur.future.edit" to "修改此次及之後",
+        "recur.future.delete" to "刪除此次及之後",
+        "recur.series" to "整個系列",
+        "recur.series.edit" to "修改整個系列",
+        "recur.series.delete" to "刪除整個系列",
+        "recur.cancel" to "取消",
+
+        // RRULE 編輯器
+        "rrule.freq.none" to "不重複",
+        "rrule.freq.daily" to "每天",
+        "rrule.freq.weekly" to "每週",
+        "rrule.freq.monthly" to "每月",
+        "rrule.freq.yearly" to "每年",
+        "rrule.repeat" to "重複",
+        "rrule.passthrough" to "包含未支援欄位（如 BYDAY / EXDATE），儲存時會保留原始規則。如需改寫請先把「重複」選成「不重複」再設定。",
+        "rrule.interval" to "間隔",
+        "rrule.end" to "結束",
+        "rrule.suffix.day" to "天",
+        "rrule.suffix.week" to "週",
+        "rrule.suffix.month" to "月",
+        "rrule.suffix.year" to "年",
+        "rrule.end.forever" to "永遠",
+        "rrule.end.until" to "截止日期",
+        "rrule.end.count" to "重複 N 次",
+        "rrule.times" to "次",
+
+        // 事件詳情 — RRULE 摘要
+        "event.rrule.daily" to "每天",
+        "event.rrule.dailyN" to "每 {n} 天",
+        "event.rrule.weekly" to "每週",
+        "event.rrule.weeklyN" to "每 {n} 週",
+        "event.rrule.monthly" to "每月",
+        "event.rrule.monthlyN" to "每 {n} 個月",
+        "event.rrule.yearly" to "每年",
+        "event.rrule.yearlyN" to "每 {n} 年",
+        "event.rrule.until" to "{base} · 至 {date}",
+        "event.rrule.count" to "{base} · 共 {n} 次",
+
+        // 行事曆檢視 — 空狀態 & 相對日期標籤
+        "agenda.empty" to "接下來沒有行程",
+        "agenda.today" to "今天",
+        "agenda.tomorrow" to "明天",
+        "day.emptyToday" to "今天沒有事件",
+        "day.empty" to "無事件",
+
+        // 星期標籤 — 單字（月檢視表頭）
+        "weekday.short.1" to "一",
+        "weekday.short.2" to "二",
+        "weekday.short.3" to "三",
+        "weekday.short.4" to "四",
+        "weekday.short.5" to "五",
+        "weekday.short.6" to "六",
+        "weekday.short.7" to "日",
+        // 星期標籤 — 中等（週檢視表頭）
+        "weekday.medium.1" to "週一",
+        "weekday.medium.2" to "週二",
+        "weekday.medium.3" to "週三",
+        "weekday.medium.4" to "週四",
+        "weekday.medium.5" to "週五",
+        "weekday.medium.6" to "週六",
+        "weekday.medium.7" to "週日",
+
+        // 日期格式（java.time DateTimeFormatter）
+        "fmt.timeAllDay" to "整天",
+        "fmt.monthDay" to "M 月 d 日",
+        "fmt.monthDayWeekday" to "M 月 d 日 EEEE",
+        "fmt.monthAnchor" to "yyyy 年 M 月",
+        "fmt.dayAnchor" to "yyyy 年 M 月 d 日 EEEE",
+        "fmt.yearPrefix" to "{y} 年 ",
+
+        // 更新對話框（桌面端內建更新器）
+        "update.newVersion" to "新版本",
+        "update.noAssetForPlatform" to "暫無 {os} 版本",
+        "update.progress" to "下載中 · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "下載中 · {done}",
+        "update.install.ready" to "已下載 · 準備安裝…",
+        "update.install.mounting" to "正在掛載 DMG…",
+        "update.install.swapping" to "正在安裝並重新啟動…",
+        "update.install.fallback" to "{reason}（保留在 {dir}）",
+        "update.retryAuto" to "重試自動安裝",
+        "update.redownload" to "重新下載",
+        "update.retry" to "重試",
+        "update.waitInstall" to "等待安裝",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "目前系統",
+
+        // 更新安裝器（macOS DMG 替換）— 面向使用者的失敗原因
+        "update.installer.nonMac" to "非 macOS 平台 — 用系統預設安裝程式開啟",
+        "update.installer.mountFailed" to "DMG 掛載失敗 —— Finder 已開啟供手動安裝",
+        "update.installer.appNotFound" to "DMG 內未找到 ByWaveCalendar.app —— 請檢查掛載後的卷宗",
+        "update.installer.locateFailed" to "無法定位目前 APP 安裝位置 —— 請從掛載的 DMG 拖到「應用程式」",
+        "update.installer.noWritePermission" to "沒有 {path} 的寫入權限 —— 請從掛載的 DMG 拖到「應用程式」",
+        "update.installer.currentAppDir" to "目前 APP 目錄",
+        "update.installer.scriptFailed" to "無法啟動安裝指令稿：{error}",
+
+        // 更新下載器 — 失敗訊息
+        "update.download.checksumFailed" to "下載檔案校驗失敗（sha256 不符）。請重試。",
+        "update.download.saveFailed" to "無法儲存到 {path}",
+        "update.download.failed" to "下載失敗",
+
+        // API 用戶端 — 網路兜底
+        "api.networkError" to "網路異常",
     )
 
     private val ja: Map<String, String> = mapOf(
@@ -951,6 +1512,9 @@ object I18n {
         "sidebar.empty" to "（カレンダーなし）",
 
         "error.retry" to "再試行",
+        "error.loadFailed" to "読み込みに失敗しました",
+        "error.saveFailed" to "保存に失敗しました",
+        "error.deleteFailed" to "削除に失敗しました",
 
         "setup.title" to "ByWave サーバーに接続",
         "setup.serverUrl" to "サーバー URL",
@@ -1088,6 +1652,190 @@ object I18n {
         "settings.reminders.lead" to "通知",
         "settings.reminders.atStart" to "開始時刻",
         "settings.reminders.leadMinutes" to "{n} 分前",
+
+        // 設定 — カレンダー（インラインの操作エラー）
+        "settings.calendars.saveFailed" to "操作に失敗しました。",
+        "settings.calendars.deleteFailed" to "削除に失敗しました。",
+
+        // アカウント切り替え（サイドバーのドロップダウン）
+        "profile.current" to "現在のアカウント",
+        "profile.remove" to "アカウントを削除",
+        "profile.add" to "アカウントを追加",
+        "sidebar.myCalendars" to "マイカレンダー",
+
+        // トップバー — 予定リストの範囲ラベル
+        "topbar.agendaRange" to "{date} から 30 日間",
+
+        // サインイン / ペアリング画面
+        "setup.pollWaiting" to "スマートフォンのスキャンを待っています…",
+        "setup.errorEmptyUrl" to "ByWave サーバーの URL を入力してください。",
+        "setup.errorConnect" to "サーバーに接続できませんでした。",
+        "setup.denied" to "スマートフォンで拒否されました。サインインするには QR コードを再生成してください。",
+        "setup.expired" to "QR コードの有効期限が切れました。再生成してください。",
+        "setup.pollRetry" to "ネットワークエラー、再試行中… ({message})",
+        "setup.requestingQr" to "QR コードを取得中…",
+        "setup.signedIn" to "サインインしました",
+        "setup.openingCalendar" to "カレンダーを開いています…",
+        "setup.loginTitle" to "ByWave Calendar にサインイン",
+        "setup.loginSubtitle" to "ByWave サーバーの URL を入力してください。次の手順で QR コードが表示されます。スマートフォンでスキャンするとサインインが完了します。",
+        "setup.serverUrlPlaceholder" to "https://example.com または example.com",
+        "setup.generateQr" to "QR コードを生成",
+        "setup.qrTitle" to "スキャンしてサインイン",
+        "setup.qrSubtitle" to "下の QR コードをスマートフォンのカメラまたはブラウザーでスキャンし、スマートフォンで「承認」をタップするとこのパソコンにサインインできます。",
+        "setup.qrContentDesc" to "サインイン用 QR コード",
+        "setup.authCode" to "認証コード {code} · 5 分間有効",
+        "setup.regenerate" to "再生成 / サーバー変更",
+
+        // イベント編集
+        "event.edit.titleCreate" to "新規イベント",
+        "event.edit.titleEdit" to "イベントを編集",
+        "event.edit.summary" to "タイトル",
+        "event.edit.allDay" to "終日",
+        "event.edit.start" to "開始",
+        "event.edit.end" to "終了",
+        "event.edit.location" to "場所",
+        "event.edit.url" to "リンク",
+        "event.edit.description" to "説明",
+        "event.edit.save" to "保存",
+        "event.edit.create" to "作成",
+        "event.edit.cancel" to "キャンセル",
+        "event.edit.pickCalendar" to "カレンダーを選択",
+        "event.edit.pickTime" to "時刻を選択",
+        "event.edit.confirm" to "OK",
+        "event.edit.attendees" to "ゲスト",
+        "event.edit.attendeeRemove" to "削除",
+        "event.edit.attendeeEmail" to "メールアドレス",
+        "event.edit.attendeeAdd" to "追加",
+
+        // イベント詳細
+        "event.detail.time" to "時間",
+        "event.detail.calendar" to "カレンダー",
+        "event.detail.location" to "場所",
+        "event.detail.timezone" to "タイムゾーン",
+        "event.detail.description" to "説明",
+        "event.detail.url" to "リンク",
+        "event.detail.recurrence" to "繰り返し",
+        "event.detail.edit" to "編集",
+        "event.detail.delete" to "削除",
+        "event.detail.close" to "閉じる",
+        "event.allDay" to "終日",
+        // イベントの右クリックメニュー
+        "event.menu.view" to "詳細を表示",
+        "event.menu.duplicate" to "複製して新規作成",
+
+        // 繰り返しイベントの範囲選択
+        "recur.editTitle" to "繰り返しイベントを保存",
+        "recur.deleteTitle" to "繰り返しイベントを削除",
+        "recur.editSubtitle" to "これは繰り返しイベントです。保存する範囲を選択してください：",
+        "recur.deleteSubtitle" to "これは繰り返しイベントです。削除する範囲を選択してください：",
+        "recur.thisEvent" to "このイベントのみ",
+        "recur.thisEvent.edit" to "この回だけ変更",
+        "recur.thisEvent.delete" to "この回だけ削除",
+        "recur.thisAndFuture" to "このイベント以降",
+        "recur.future.edit" to "この回以降を変更",
+        "recur.future.delete" to "この回以降を削除",
+        "recur.series" to "シリーズ全体",
+        "recur.series.edit" to "シリーズ全体を変更",
+        "recur.series.delete" to "シリーズ全体を削除",
+        "recur.cancel" to "キャンセル",
+
+        // RRULE エディター
+        "rrule.freq.none" to "繰り返さない",
+        "rrule.freq.daily" to "毎日",
+        "rrule.freq.weekly" to "毎週",
+        "rrule.freq.monthly" to "毎月",
+        "rrule.freq.yearly" to "毎年",
+        "rrule.repeat" to "繰り返し",
+        "rrule.passthrough" to "サポート外のフィールド（BYDAY / EXDATE など）が含まれています。保存時に元のルールを保持します。書き換えるには、まず「繰り返し」を「繰り返さない」に設定してください。",
+        "rrule.interval" to "間隔",
+        "rrule.end" to "終了",
+        "rrule.suffix.day" to "日ごと",
+        "rrule.suffix.week" to "週ごと",
+        "rrule.suffix.month" to "か月ごと",
+        "rrule.suffix.year" to "年ごと",
+        "rrule.end.forever" to "無期限",
+        "rrule.end.until" to "終了日",
+        "rrule.end.count" to "N 回繰り返す",
+        "rrule.times" to "回",
+
+        // イベント詳細 — RRULE 概要
+        "event.rrule.daily" to "毎日",
+        "event.rrule.dailyN" to "{n} 日ごと",
+        "event.rrule.weekly" to "毎週",
+        "event.rrule.weeklyN" to "{n} 週間ごと",
+        "event.rrule.monthly" to "毎月",
+        "event.rrule.monthlyN" to "{n} か月ごと",
+        "event.rrule.yearly" to "毎年",
+        "event.rrule.yearlyN" to "{n} 年ごと",
+        "event.rrule.until" to "{base} · {date} まで",
+        "event.rrule.count" to "{base} · 全 {n} 回",
+
+        // カレンダー表示 — 空状態 & 相対日付ラベル
+        "agenda.empty" to "今後の予定はありません",
+        "agenda.today" to "今日",
+        "agenda.tomorrow" to "明日",
+        "day.emptyToday" to "今日の予定はありません",
+        "day.empty" to "予定なし",
+
+        // 曜日ラベル — 1 文字（月表示のヘッダー）
+        "weekday.short.1" to "月",
+        "weekday.short.2" to "火",
+        "weekday.short.3" to "水",
+        "weekday.short.4" to "木",
+        "weekday.short.5" to "金",
+        "weekday.short.6" to "土",
+        "weekday.short.7" to "日",
+        // 曜日ラベル — 中（週表示のヘッダー）
+        "weekday.medium.1" to "月",
+        "weekday.medium.2" to "火",
+        "weekday.medium.3" to "水",
+        "weekday.medium.4" to "木",
+        "weekday.medium.5" to "金",
+        "weekday.medium.6" to "土",
+        "weekday.medium.7" to "日",
+
+        // 日付フォーマット（java.time DateTimeFormatter）
+        "fmt.timeAllDay" to "終日",
+        "fmt.monthDay" to "M 月 d 日",
+        "fmt.monthDayWeekday" to "M 月 d 日 EEEE",
+        "fmt.monthAnchor" to "yyyy 年 M 月",
+        "fmt.dayAnchor" to "yyyy 年 M 月 d 日 EEEE",
+        "fmt.yearPrefix" to "{y} 年 ",
+
+        // 更新ダイアログ（デスクトップ内蔵アップデーター）
+        "update.newVersion" to "新しいバージョン",
+        "update.noAssetForPlatform" to "{os} 版はまだありません",
+        "update.progress" to "ダウンロード中 · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "ダウンロード中 · {done}",
+        "update.install.ready" to "ダウンロード完了 · インストールの準備中…",
+        "update.install.mounting" to "DMG をマウント中…",
+        "update.install.swapping" to "インストールして再起動しています…",
+        "update.install.fallback" to "{reason}（{dir} に保存）",
+        "update.retryAuto" to "自動インストールを再試行",
+        "update.redownload" to "再ダウンロード",
+        "update.retry" to "再試行",
+        "update.waitInstall" to "インストール待ち",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "お使いのシステム",
+
+        // 更新インストーラー（macOS DMG スワップ）— ユーザー向けの失敗理由
+        "update.installer.nonMac" to "macOS ではありません — システム標準のインストーラーで開きました",
+        "update.installer.mountFailed" to "DMG のマウントに失敗しました — 手動インストール用に Finder を開きました",
+        "update.installer.appNotFound" to "DMG 内に ByWaveCalendar.app が見つかりません — マウントしたボリュームを確認してください",
+        "update.installer.locateFailed" to "現在のアプリのインストール場所を特定できません — マウントした DMG からアプリケーションにドラッグしてください",
+        "update.installer.noWritePermission" to "{path} への書き込み権限がありません — マウントした DMG からアプリケーションにドラッグしてください",
+        "update.installer.currentAppDir" to "現在のアプリのディレクトリ",
+        "update.installer.scriptFailed" to "インストールスクリプトを起動できませんでした：{error}",
+
+        // 更新ダウンローダー — 失敗メッセージ
+        "update.download.checksumFailed" to "ダウンロードしたファイルの検証に失敗しました（sha256 不一致）。再試行してください。",
+        "update.download.saveFailed" to "{path} に保存できませんでした",
+        "update.download.failed" to "ダウンロードに失敗しました",
+
+        // API クライアント — ネットワークのフォールバック
+        "api.networkError" to "ネットワークエラー",
     )
 
     private val ko: Map<String, String> = mapOf(
@@ -1195,6 +1943,9 @@ object I18n {
         "sidebar.empty" to "(캘린더 없음)",
 
         "error.retry" to "다시 시도",
+        "error.loadFailed" to "불러오지 못했습니다",
+        "error.saveFailed" to "저장하지 못했습니다",
+        "error.deleteFailed" to "삭제하지 못했습니다",
 
         "setup.title" to "ByWave 서버에 연결",
         "setup.serverUrl" to "서버 URL",
@@ -1332,6 +2083,190 @@ object I18n {
         "settings.reminders.lead" to "알림 시점",
         "settings.reminders.atStart" to "시작 시각",
         "settings.reminders.leadMinutes" to "{n}분 전",
+
+        // 설정 — 캘린더(인라인 작업 오류)
+        "settings.calendars.saveFailed" to "저장하지 못했습니다.",
+        "settings.calendars.deleteFailed" to "삭제하지 못했습니다.",
+
+        // 계정 전환기(사이드바 드롭다운)
+        "profile.current" to "현재 계정",
+        "profile.remove" to "계정 제거",
+        "profile.add" to "계정 추가",
+        "sidebar.myCalendars" to "내 캘린더",
+
+        // 상단 바 — 일정 범위 라벨
+        "topbar.agendaRange" to "{date}부터 30일",
+
+        // 로그인 / 페어링 화면
+        "setup.pollWaiting" to "휴대폰 스캔을 기다리는 중…",
+        "setup.errorEmptyUrl" to "ByWave 서버 URL을 입력하세요.",
+        "setup.errorConnect" to "서버에 연결할 수 없습니다.",
+        "setup.denied" to "휴대폰에서 거부되었습니다. 로그인하려면 QR 코드를 다시 생성하세요.",
+        "setup.expired" to "QR 코드가 만료되었습니다. 다시 생성하세요.",
+        "setup.pollRetry" to "네트워크 오류, 재시도 중… ({message})",
+        "setup.requestingQr" to "QR 코드 요청 중…",
+        "setup.signedIn" to "로그인되었습니다",
+        "setup.openingCalendar" to "캘린더를 여는 중…",
+        "setup.loginTitle" to "ByWave Calendar 로그인",
+        "setup.loginSubtitle" to "ByWave 서버 URL을 입력하세요. 다음 단계에서 QR 코드가 표시됩니다. 휴대폰으로 스캔하면 로그인이 완료됩니다.",
+        "setup.serverUrlPlaceholder" to "https://example.com 또는 example.com",
+        "setup.generateQr" to "QR 코드 생성",
+        "setup.qrTitle" to "스캔하여 로그인",
+        "setup.qrSubtitle" to "아래 QR 코드를 휴대폰 카메라나 브라우저로 스캔한 다음 휴대폰에서 '승인'을 누르면 이 컴퓨터에 로그인됩니다.",
+        "setup.qrContentDesc" to "로그인 QR 코드",
+        "setup.authCode" to "인증 코드 {code} · 5분간 유효",
+        "setup.regenerate" to "다시 생성 / 서버 변경",
+
+        // 일정 편집
+        "event.edit.titleCreate" to "새 일정",
+        "event.edit.titleEdit" to "일정 편집",
+        "event.edit.summary" to "제목",
+        "event.edit.allDay" to "종일",
+        "event.edit.start" to "시작",
+        "event.edit.end" to "종료",
+        "event.edit.location" to "위치",
+        "event.edit.url" to "링크",
+        "event.edit.description" to "설명",
+        "event.edit.save" to "저장",
+        "event.edit.create" to "만들기",
+        "event.edit.cancel" to "취소",
+        "event.edit.pickCalendar" to "캘린더 선택",
+        "event.edit.pickTime" to "시간 선택",
+        "event.edit.confirm" to "확인",
+        "event.edit.attendees" to "참석자",
+        "event.edit.attendeeRemove" to "제거",
+        "event.edit.attendeeEmail" to "이메일 주소",
+        "event.edit.attendeeAdd" to "추가",
+
+        // 일정 상세
+        "event.detail.time" to "시간",
+        "event.detail.calendar" to "캘린더",
+        "event.detail.location" to "위치",
+        "event.detail.timezone" to "시간대",
+        "event.detail.description" to "설명",
+        "event.detail.url" to "링크",
+        "event.detail.recurrence" to "반복",
+        "event.detail.edit" to "편집",
+        "event.detail.delete" to "삭제",
+        "event.detail.close" to "닫기",
+        "event.allDay" to "종일",
+        // 일정 우클릭 메뉴
+        "event.menu.view" to "세부정보 보기",
+        "event.menu.duplicate" to "복제하여 새로 만들기",
+
+        // 반복 일정 범위 선택
+        "recur.editTitle" to "반복 일정 저장",
+        "recur.deleteTitle" to "반복 일정 삭제",
+        "recur.editSubtitle" to "반복 일정입니다. 저장 범위를 선택하세요:",
+        "recur.deleteSubtitle" to "반복 일정입니다. 삭제 범위를 선택하세요:",
+        "recur.thisEvent" to "이 일정만",
+        "recur.thisEvent.edit" to "이번만 수정",
+        "recur.thisEvent.delete" to "이번만 삭제",
+        "recur.thisAndFuture" to "이 일정 및 이후",
+        "recur.future.edit" to "이번 및 이후 수정",
+        "recur.future.delete" to "이번 및 이후 삭제",
+        "recur.series" to "전체 시리즈",
+        "recur.series.edit" to "전체 시리즈 수정",
+        "recur.series.delete" to "전체 시리즈 삭제",
+        "recur.cancel" to "취소",
+
+        // RRULE 편집기
+        "rrule.freq.none" to "반복 안 함",
+        "rrule.freq.daily" to "매일",
+        "rrule.freq.weekly" to "매주",
+        "rrule.freq.monthly" to "매월",
+        "rrule.freq.yearly" to "매년",
+        "rrule.repeat" to "반복",
+        "rrule.passthrough" to "지원하지 않는 필드(BYDAY / EXDATE 등)가 포함되어 있어 저장 시 원래 규칙을 유지합니다. 다시 작성하려면 먼저 '반복'을 '반복 안 함'으로 설정하세요.",
+        "rrule.interval" to "간격",
+        "rrule.end" to "종료",
+        "rrule.suffix.day" to "일마다",
+        "rrule.suffix.week" to "주마다",
+        "rrule.suffix.month" to "개월마다",
+        "rrule.suffix.year" to "년마다",
+        "rrule.end.forever" to "계속",
+        "rrule.end.until" to "종료일",
+        "rrule.end.count" to "N회 반복",
+        "rrule.times" to "회",
+
+        // 일정 상세 — RRULE 요약
+        "event.rrule.daily" to "매일",
+        "event.rrule.dailyN" to "{n}일마다",
+        "event.rrule.weekly" to "매주",
+        "event.rrule.weeklyN" to "{n}주마다",
+        "event.rrule.monthly" to "매월",
+        "event.rrule.monthlyN" to "{n}개월마다",
+        "event.rrule.yearly" to "매년",
+        "event.rrule.yearlyN" to "{n}년마다",
+        "event.rrule.until" to "{base} · {date}까지",
+        "event.rrule.count" to "{base} · 총 {n}회",
+
+        // 캘린더 보기 — 빈 상태 & 상대 날짜 라벨
+        "agenda.empty" to "예정된 일정이 없습니다",
+        "agenda.today" to "오늘",
+        "agenda.tomorrow" to "내일",
+        "day.emptyToday" to "오늘 일정이 없습니다",
+        "day.empty" to "일정 없음",
+
+        // 요일 라벨 — 한 글자(월 보기 헤더)
+        "weekday.short.1" to "월",
+        "weekday.short.2" to "화",
+        "weekday.short.3" to "수",
+        "weekday.short.4" to "목",
+        "weekday.short.5" to "금",
+        "weekday.short.6" to "토",
+        "weekday.short.7" to "일",
+        // 요일 라벨 — 중간(주 보기 헤더)
+        "weekday.medium.1" to "월",
+        "weekday.medium.2" to "화",
+        "weekday.medium.3" to "수",
+        "weekday.medium.4" to "목",
+        "weekday.medium.5" to "금",
+        "weekday.medium.6" to "토",
+        "weekday.medium.7" to "일",
+
+        // 날짜 형식(java.time DateTimeFormatter)
+        "fmt.timeAllDay" to "종일",
+        "fmt.monthDay" to "M월 d일",
+        "fmt.monthDayWeekday" to "M월 d일 EEEE",
+        "fmt.monthAnchor" to "yyyy년 M월",
+        "fmt.dayAnchor" to "yyyy년 M월 d일 EEEE",
+        "fmt.yearPrefix" to "{y}년 ",
+
+        // 업데이트 대화상자(데스크톱 내장 업데이터)
+        "update.newVersion" to "새 버전",
+        "update.noAssetForPlatform" to "아직 {os} 빌드가 없습니다",
+        "update.progress" to "다운로드 중 · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "다운로드 중 · {done}",
+        "update.install.ready" to "다운로드 완료 · 설치 준비 중…",
+        "update.install.mounting" to "DMG 마운트 중…",
+        "update.install.swapping" to "설치하고 다시 시작하는 중…",
+        "update.install.fallback" to "{reason}({dir}에 보관됨)",
+        "update.retryAuto" to "자동 설치 재시도",
+        "update.redownload" to "다시 다운로드",
+        "update.retry" to "다시 시도",
+        "update.waitInstall" to "설치 대기 중",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "현재 시스템",
+
+        // 업데이트 설치기(macOS DMG 교체) — 사용자에게 보이는 실패 사유
+        "update.installer.nonMac" to "macOS가 아닙니다 — 시스템 기본 설치 프로그램으로 열었습니다",
+        "update.installer.mountFailed" to "DMG 마운트 실패 — 수동 설치를 위해 Finder를 열었습니다",
+        "update.installer.appNotFound" to "DMG에서 ByWaveCalendar.app을 찾을 수 없습니다 — 마운트된 볼륨을 확인하세요",
+        "update.installer.locateFailed" to "현재 앱 설치 위치를 찾을 수 없습니다 — 마운트된 DMG에서 응용 프로그램으로 드래그하세요",
+        "update.installer.noWritePermission" to "{path}에 쓰기 권한이 없습니다 — 마운트된 DMG에서 응용 프로그램으로 드래그하세요",
+        "update.installer.currentAppDir" to "현재 앱 디렉터리",
+        "update.installer.scriptFailed" to "설치 스크립트를 시작할 수 없습니다: {error}",
+
+        // 업데이트 다운로더 — 실패 메시지
+        "update.download.checksumFailed" to "다운로드한 파일 검증에 실패했습니다(sha256 불일치). 다시 시도하세요.",
+        "update.download.saveFailed" to "{path}에 저장할 수 없습니다",
+        "update.download.failed" to "다운로드 실패",
+
+        // API 클라이언트 — 네트워크 대체
+        "api.networkError" to "네트워크 오류",
     )
 
     private val es: Map<String, String> = mapOf(
@@ -1439,6 +2374,9 @@ object I18n {
         "sidebar.empty" to "(sin calendarios)",
 
         "error.retry" to "Reintentar",
+        "error.loadFailed" to "No se pudo cargar",
+        "error.saveFailed" to "No se pudo guardar",
+        "error.deleteFailed" to "No se pudo eliminar",
 
         "setup.title" to "Conéctate a tu servidor ByWave",
         "setup.serverUrl" to "URL del servidor",
@@ -1576,6 +2514,190 @@ object I18n {
         "settings.reminders.lead" to "Avisar",
         "settings.reminders.atStart" to "A la hora de inicio",
         "settings.reminders.leadMinutes" to "{n} min antes",
+
+        // Ajustes — Calendarios (errores de acción en línea)
+        "settings.calendars.saveFailed" to "No se pudo guardar.",
+        "settings.calendars.deleteFailed" to "No se pudo eliminar.",
+
+        // Conmutador de cuentas (menú lateral)
+        "profile.current" to "Cuenta actual",
+        "profile.remove" to "Quitar cuenta",
+        "profile.add" to "Añadir cuenta",
+        "sidebar.myCalendars" to "Mis calendarios",
+
+        // Barra superior — etiqueta de rango de agenda
+        "topbar.agendaRange" to "{date} · próximos 30 días",
+
+        // Pantalla de inicio de sesión / emparejamiento
+        "setup.pollWaiting" to "Esperando a que tu teléfono escanee…",
+        "setup.errorEmptyUrl" to "Introduce la URL de tu servidor ByWave.",
+        "setup.errorConnect" to "No se pudo conectar con el servidor.",
+        "setup.denied" to "Denegado en tu teléfono. Genera un nuevo código QR para iniciar sesión.",
+        "setup.expired" to "El código QR caducó. Genera uno nuevo.",
+        "setup.pollRetry" to "Problema de red, reintentando… ({message})",
+        "setup.requestingQr" to "Solicitando código QR…",
+        "setup.signedIn" to "Sesión iniciada",
+        "setup.openingCalendar" to "Abriendo tu calendario…",
+        "setup.loginTitle" to "Inicia sesión en ByWave Calendar",
+        "setup.loginSubtitle" to "Introduce la URL de tu servidor ByWave. El siguiente paso muestra un código QR: escanéalo con tu teléfono para terminar de iniciar sesión.",
+        "setup.serverUrlPlaceholder" to "https://example.com o example.com",
+        "setup.generateQr" to "Generar código QR",
+        "setup.qrTitle" to "Escanea para iniciar sesión",
+        "setup.qrSubtitle" to "Escanea el código QR de abajo con la cámara o el navegador de cualquier teléfono y luego toca \"Aprobar\" en tu teléfono para iniciar sesión en este ordenador.",
+        "setup.qrContentDesc" to "Código QR de inicio de sesión",
+        "setup.authCode" to "Código {code} · válido durante 5 minutos",
+        "setup.regenerate" to "Regenerar / cambiar de servidor",
+
+        // Editor de eventos
+        "event.edit.titleCreate" to "Nuevo evento",
+        "event.edit.titleEdit" to "Editar evento",
+        "event.edit.summary" to "Título",
+        "event.edit.allDay" to "Todo el día",
+        "event.edit.start" to "Inicio",
+        "event.edit.end" to "Fin",
+        "event.edit.location" to "Ubicación",
+        "event.edit.url" to "Enlace",
+        "event.edit.description" to "Descripción",
+        "event.edit.save" to "Guardar",
+        "event.edit.create" to "Crear",
+        "event.edit.cancel" to "Cancelar",
+        "event.edit.pickCalendar" to "Elige un calendario",
+        "event.edit.pickTime" to "Elige una hora",
+        "event.edit.confirm" to "Aceptar",
+        "event.edit.attendees" to "Invitados",
+        "event.edit.attendeeRemove" to "Quitar",
+        "event.edit.attendeeEmail" to "Correo electrónico",
+        "event.edit.attendeeAdd" to "Añadir",
+
+        // Detalle del evento
+        "event.detail.time" to "Hora",
+        "event.detail.calendar" to "Calendario",
+        "event.detail.location" to "Ubicación",
+        "event.detail.timezone" to "Zona horaria",
+        "event.detail.description" to "Descripción",
+        "event.detail.url" to "Enlace",
+        "event.detail.recurrence" to "Repetición",
+        "event.detail.edit" to "Editar",
+        "event.detail.delete" to "Eliminar",
+        "event.detail.close" to "Cerrar",
+        "event.allDay" to "Todo el día",
+        // Menú contextual del evento (clic derecho)
+        "event.menu.view" to "Ver detalles",
+        "event.menu.duplicate" to "Duplicar como nuevo",
+
+        // Selector de alcance de evento recurrente
+        "recur.editTitle" to "Guardar evento recurrente",
+        "recur.deleteTitle" to "Eliminar evento recurrente",
+        "recur.editSubtitle" to "Este es un evento recurrente. Elige qué guardar:",
+        "recur.deleteSubtitle" to "Este es un evento recurrente. Elige qué eliminar:",
+        "recur.thisEvent" to "Solo este evento",
+        "recur.thisEvent.edit" to "Cambiar solo este",
+        "recur.thisEvent.delete" to "Eliminar solo este",
+        "recur.thisAndFuture" to "Este evento y los siguientes",
+        "recur.future.edit" to "Cambiar este y los posteriores",
+        "recur.future.delete" to "Eliminar este y los posteriores",
+        "recur.series" to "Toda la serie",
+        "recur.series.edit" to "Cambiar toda la serie",
+        "recur.series.delete" to "Eliminar toda la serie",
+        "recur.cancel" to "Cancelar",
+
+        // Editor de RRULE
+        "rrule.freq.none" to "No se repite",
+        "rrule.freq.daily" to "Diariamente",
+        "rrule.freq.weekly" to "Semanalmente",
+        "rrule.freq.monthly" to "Mensualmente",
+        "rrule.freq.yearly" to "Anualmente",
+        "rrule.repeat" to "Repetir",
+        "rrule.passthrough" to "Contiene campos no admitidos (p. ej. BYDAY / EXDATE); se conserva la regla original al guardar. Para reescribirla, primero pon \"Repetir\" en \"No se repite\".",
+        "rrule.interval" to "Intervalo",
+        "rrule.end" to "Finaliza",
+        "rrule.suffix.day" to "día(s)",
+        "rrule.suffix.week" to "semana(s)",
+        "rrule.suffix.month" to "mes(es)",
+        "rrule.suffix.year" to "año(s)",
+        "rrule.end.forever" to "Nunca",
+        "rrule.end.until" to "En la fecha",
+        "rrule.end.count" to "Tras N veces",
+        "rrule.times" to "veces",
+
+        // Detalle del evento — resumen de RRULE
+        "event.rrule.daily" to "Diariamente",
+        "event.rrule.dailyN" to "Cada {n} días",
+        "event.rrule.weekly" to "Semanalmente",
+        "event.rrule.weeklyN" to "Cada {n} semanas",
+        "event.rrule.monthly" to "Mensualmente",
+        "event.rrule.monthlyN" to "Cada {n} meses",
+        "event.rrule.yearly" to "Anualmente",
+        "event.rrule.yearlyN" to "Cada {n} años",
+        "event.rrule.until" to "{base} · hasta {date}",
+        "event.rrule.count" to "{base} · {n} veces",
+
+        // Vistas de calendario — estados vacíos y etiquetas de día relativas
+        "agenda.empty" to "No hay nada próximamente",
+        "agenda.today" to "Hoy",
+        "agenda.tomorrow" to "Mañana",
+        "day.emptyToday" to "Hoy no hay eventos",
+        "day.empty" to "Sin eventos",
+
+        // Etiquetas de día — una letra (cabecera de la cuadrícula mensual)
+        "weekday.short.1" to "L",
+        "weekday.short.2" to "M",
+        "weekday.short.3" to "X",
+        "weekday.short.4" to "J",
+        "weekday.short.5" to "V",
+        "weekday.short.6" to "S",
+        "weekday.short.7" to "D",
+        // Etiquetas de día — medias (cabecera de la vista semanal)
+        "weekday.medium.1" to "Lun",
+        "weekday.medium.2" to "Mar",
+        "weekday.medium.3" to "Mié",
+        "weekday.medium.4" to "Jue",
+        "weekday.medium.5" to "Vie",
+        "weekday.medium.6" to "Sáb",
+        "weekday.medium.7" to "Dom",
+
+        // Patrones de formato de fecha (java.time DateTimeFormatter)
+        "fmt.timeAllDay" to "Todo el día",
+        "fmt.monthDay" to "d MMM",
+        "fmt.monthDayWeekday" to "EEE d MMM",
+        "fmt.monthAnchor" to "MMMM yyyy",
+        "fmt.dayAnchor" to "EEEE, d MMM yyyy",
+        "fmt.yearPrefix" to "{y} ",
+
+        // Diálogo de actualización (actualizador integrado del escritorio)
+        "update.newVersion" to "Nueva versión",
+        "update.noAssetForPlatform" to "Aún no hay versión para {os}",
+        "update.progress" to "Descargando · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "Descargando · {done}",
+        "update.install.ready" to "Descargado · preparando la instalación…",
+        "update.install.mounting" to "Montando el DMG…",
+        "update.install.swapping" to "Instalando y reiniciando…",
+        "update.install.fallback" to "{reason} (guardado en {dir})",
+        "update.retryAuto" to "Reintentar instalación automática",
+        "update.redownload" to "Descargar de nuevo",
+        "update.retry" to "Reintentar",
+        "update.waitInstall" to "Instalación pendiente",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "tu sistema",
+
+        // Instalador de actualización (intercambio de DMG en macOS) — motivos de fallo
+        "update.installer.nonMac" to "No es macOS — se abrió con el instalador predeterminado del sistema",
+        "update.installer.mountFailed" to "Falló el montaje del DMG — se abrió Finder para la instalación manual",
+        "update.installer.appNotFound" to "No se encontró ByWaveCalendar.app en el DMG — comprueba el volumen montado",
+        "update.installer.locateFailed" to "No se pudo localizar la instalación actual de la app — arrástrala desde el DMG montado a Aplicaciones",
+        "update.installer.noWritePermission" to "Sin permiso de escritura en {path} — arrastra desde el DMG montado a Aplicaciones",
+        "update.installer.currentAppDir" to "el directorio actual de la app",
+        "update.installer.scriptFailed" to "No se pudo iniciar el script de instalación: {error}",
+
+        // Descargador de actualización — mensajes de fallo
+        "update.download.checksumFailed" to "El archivo descargado no superó la verificación (sha256 no coincide). Reinténtalo.",
+        "update.download.saveFailed" to "No se pudo guardar en {path}",
+        "update.download.failed" to "Falló la descarga",
+
+        // Cliente de API — respaldo de red
+        "api.networkError" to "Error de red",
     )
 
     private val fr: Map<String, String> = mapOf(
@@ -1683,6 +2805,9 @@ object I18n {
         "sidebar.empty" to "(aucun calendrier)",
 
         "error.retry" to "Réessayer",
+        "error.loadFailed" to "Échec du chargement",
+        "error.saveFailed" to "Échec de l'enregistrement",
+        "error.deleteFailed" to "Échec de la suppression",
 
         "setup.title" to "Connectez-vous à votre serveur ByWave",
         "setup.serverUrl" to "URL du serveur",
@@ -1820,6 +2945,190 @@ object I18n {
         "settings.reminders.lead" to "Avertir",
         "settings.reminders.atStart" to "À l'heure de début",
         "settings.reminders.leadMinutes" to "{n} min avant",
+
+        // Réglages — Calendriers (erreurs d'action en ligne)
+        "settings.calendars.saveFailed" to "Impossible d'enregistrer.",
+        "settings.calendars.deleteFailed" to "Impossible de supprimer.",
+
+        // Sélecteur de compte (menu latéral)
+        "profile.current" to "Compte actuel",
+        "profile.remove" to "Retirer le compte",
+        "profile.add" to "Ajouter un compte",
+        "sidebar.myCalendars" to "Mes calendriers",
+
+        // Barre supérieure — libellé de plage de l'agenda
+        "topbar.agendaRange" to "{date} · 30 jours à venir",
+
+        // Écran de connexion / d'appairage
+        "setup.pollWaiting" to "En attente du scan par votre téléphone…",
+        "setup.errorEmptyUrl" to "Saisissez l'URL de votre serveur ByWave.",
+        "setup.errorConnect" to "Impossible de joindre le serveur.",
+        "setup.denied" to "Refusé sur votre téléphone. Générez un nouveau QR code pour vous connecter.",
+        "setup.expired" to "Le QR code a expiré. Veuillez en générer un nouveau.",
+        "setup.pollRetry" to "Problème réseau, nouvelle tentative… ({message})",
+        "setup.requestingQr" to "Demande du QR code…",
+        "setup.signedIn" to "Connecté",
+        "setup.openingCalendar" to "Ouverture de votre calendrier…",
+        "setup.loginTitle" to "Se connecter à ByWave Calendar",
+        "setup.loginSubtitle" to "Saisissez l'URL de votre serveur ByWave. L'étape suivante affiche un QR code — scannez-le avec votre téléphone pour terminer la connexion.",
+        "setup.serverUrlPlaceholder" to "https://example.com ou example.com",
+        "setup.generateQr" to "Générer le QR code",
+        "setup.qrTitle" to "Scannez pour vous connecter",
+        "setup.qrSubtitle" to "Scannez le QR code ci-dessous avec l'appareil photo ou le navigateur de n'importe quel téléphone, puis appuyez sur « Approuver » sur votre téléphone pour vous connecter à cet ordinateur.",
+        "setup.qrContentDesc" to "QR code de connexion",
+        "setup.authCode" to "Code {code} · valable 5 minutes",
+        "setup.regenerate" to "Régénérer / changer de serveur",
+
+        // Éditeur d'événement
+        "event.edit.titleCreate" to "Nouvel événement",
+        "event.edit.titleEdit" to "Modifier l'événement",
+        "event.edit.summary" to "Titre",
+        "event.edit.allDay" to "Journée entière",
+        "event.edit.start" to "Début",
+        "event.edit.end" to "Fin",
+        "event.edit.location" to "Lieu",
+        "event.edit.url" to "Lien",
+        "event.edit.description" to "Description",
+        "event.edit.save" to "Enregistrer",
+        "event.edit.create" to "Créer",
+        "event.edit.cancel" to "Annuler",
+        "event.edit.pickCalendar" to "Choisir un calendrier",
+        "event.edit.pickTime" to "Choisir une heure",
+        "event.edit.confirm" to "OK",
+        "event.edit.attendees" to "Invités",
+        "event.edit.attendeeRemove" to "Retirer",
+        "event.edit.attendeeEmail" to "Adresse e-mail",
+        "event.edit.attendeeAdd" to "Ajouter",
+
+        // Détail de l'événement
+        "event.detail.time" to "Heure",
+        "event.detail.calendar" to "Calendrier",
+        "event.detail.location" to "Lieu",
+        "event.detail.timezone" to "Fuseau horaire",
+        "event.detail.description" to "Description",
+        "event.detail.url" to "Lien",
+        "event.detail.recurrence" to "Répétition",
+        "event.detail.edit" to "Modifier",
+        "event.detail.delete" to "Supprimer",
+        "event.detail.close" to "Fermer",
+        "event.allDay" to "Journée entière",
+        // Menu contextuel de l'événement (clic droit)
+        "event.menu.view" to "Voir les détails",
+        "event.menu.duplicate" to "Dupliquer comme nouveau",
+
+        // Sélecteur de portée d'événement récurrent
+        "recur.editTitle" to "Enregistrer l'événement récurrent",
+        "recur.deleteTitle" to "Supprimer l'événement récurrent",
+        "recur.editSubtitle" to "Ceci est un événement récurrent. Choisissez ce qu'il faut enregistrer :",
+        "recur.deleteSubtitle" to "Ceci est un événement récurrent. Choisissez ce qu'il faut supprimer :",
+        "recur.thisEvent" to "Cet événement uniquement",
+        "recur.thisEvent.edit" to "Modifier uniquement celui-ci",
+        "recur.thisEvent.delete" to "Supprimer uniquement celui-ci",
+        "recur.thisAndFuture" to "Cet événement et les suivants",
+        "recur.future.edit" to "Modifier celui-ci et les suivants",
+        "recur.future.delete" to "Supprimer celui-ci et les suivants",
+        "recur.series" to "Toute la série",
+        "recur.series.edit" to "Modifier toute la série",
+        "recur.series.delete" to "Supprimer toute la série",
+        "recur.cancel" to "Annuler",
+
+        // Éditeur de RRULE
+        "rrule.freq.none" to "Ne se répète pas",
+        "rrule.freq.daily" to "Tous les jours",
+        "rrule.freq.weekly" to "Toutes les semaines",
+        "rrule.freq.monthly" to "Tous les mois",
+        "rrule.freq.yearly" to "Tous les ans",
+        "rrule.repeat" to "Répéter",
+        "rrule.passthrough" to "Contient des champs non pris en charge (p. ex. BYDAY / EXDATE) ; la règle d'origine est conservée à l'enregistrement. Pour la réécrire, réglez d'abord « Répéter » sur « Ne se répète pas ».",
+        "rrule.interval" to "Intervalle",
+        "rrule.end" to "Se termine",
+        "rrule.suffix.day" to "jour(s)",
+        "rrule.suffix.week" to "semaine(s)",
+        "rrule.suffix.month" to "mois",
+        "rrule.suffix.year" to "an(s)",
+        "rrule.end.forever" to "Jamais",
+        "rrule.end.until" to "À une date",
+        "rrule.end.count" to "Après N fois",
+        "rrule.times" to "fois",
+
+        // Détail de l'événement — résumé de RRULE
+        "event.rrule.daily" to "Tous les jours",
+        "event.rrule.dailyN" to "Tous les {n} jours",
+        "event.rrule.weekly" to "Toutes les semaines",
+        "event.rrule.weeklyN" to "Toutes les {n} semaines",
+        "event.rrule.monthly" to "Tous les mois",
+        "event.rrule.monthlyN" to "Tous les {n} mois",
+        "event.rrule.yearly" to "Tous les ans",
+        "event.rrule.yearlyN" to "Tous les {n} ans",
+        "event.rrule.until" to "{base} · jusqu'au {date}",
+        "event.rrule.count" to "{base} · {n} fois",
+
+        // Vues du calendrier — états vides et libellés de jour relatifs
+        "agenda.empty" to "Rien à venir",
+        "agenda.today" to "Aujourd'hui",
+        "agenda.tomorrow" to "Demain",
+        "day.emptyToday" to "Aucun événement aujourd'hui",
+        "day.empty" to "Aucun événement",
+
+        // Libellés de jour — une lettre (en-tête de la grille mensuelle)
+        "weekday.short.1" to "L",
+        "weekday.short.2" to "M",
+        "weekday.short.3" to "M",
+        "weekday.short.4" to "J",
+        "weekday.short.5" to "V",
+        "weekday.short.6" to "S",
+        "weekday.short.7" to "D",
+        // Libellés de jour — moyens (en-tête de la vue semaine)
+        "weekday.medium.1" to "Lun",
+        "weekday.medium.2" to "Mar",
+        "weekday.medium.3" to "Mer",
+        "weekday.medium.4" to "Jeu",
+        "weekday.medium.5" to "Ven",
+        "weekday.medium.6" to "Sam",
+        "weekday.medium.7" to "Dim",
+
+        // Formats de date (java.time DateTimeFormatter)
+        "fmt.timeAllDay" to "Journée entière",
+        "fmt.monthDay" to "d MMM",
+        "fmt.monthDayWeekday" to "EEE d MMM",
+        "fmt.monthAnchor" to "MMMM yyyy",
+        "fmt.dayAnchor" to "EEEE d MMM yyyy",
+        "fmt.yearPrefix" to "{y} ",
+
+        // Boîte de dialogue de mise à jour (mise à jour intégrée au bureau)
+        "update.newVersion" to "Nouvelle version",
+        "update.noAssetForPlatform" to "Pas encore de version {os}",
+        "update.progress" to "Téléchargement · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "Téléchargement · {done}",
+        "update.install.ready" to "Téléchargé · préparation de l'installation…",
+        "update.install.mounting" to "Montage du DMG…",
+        "update.install.swapping" to "Installation et redémarrage…",
+        "update.install.fallback" to "{reason} (conservé dans {dir})",
+        "update.retryAuto" to "Réessayer l'installation automatique",
+        "update.redownload" to "Télécharger à nouveau",
+        "update.retry" to "Réessayer",
+        "update.waitInstall" to "Installation en attente",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "votre système",
+
+        // Programme d'installation des mises à jour (échange de DMG macOS) — motifs d'échec
+        "update.installer.nonMac" to "Pas macOS — ouvert avec le programme d'installation par défaut du système",
+        "update.installer.mountFailed" to "Échec du montage du DMG — Finder ouvert pour une installation manuelle",
+        "update.installer.appNotFound" to "ByWaveCalendar.app introuvable dans le DMG — vérifiez le volume monté",
+        "update.installer.locateFailed" to "Impossible de localiser l'installation actuelle de l'app — glissez-la depuis le DMG monté vers Applications",
+        "update.installer.noWritePermission" to "Pas de droit d'écriture sur {path} — glissez depuis le DMG monté vers Applications",
+        "update.installer.currentAppDir" to "le dossier actuel de l'app",
+        "update.installer.scriptFailed" to "Impossible de lancer le script d'installation : {error}",
+
+        // Téléchargeur de mises à jour — messages d'échec
+        "update.download.checksumFailed" to "Le fichier téléchargé a échoué à la vérification (sha256 ne correspond pas). Veuillez réessayer.",
+        "update.download.saveFailed" to "Impossible d'enregistrer dans {path}",
+        "update.download.failed" to "Échec du téléchargement",
+
+        // Client API — repli réseau
+        "api.networkError" to "Erreur réseau",
     )
 
     private val de: Map<String, String> = mapOf(
@@ -1927,6 +3236,9 @@ object I18n {
         "sidebar.empty" to "(keine Kalender)",
 
         "error.retry" to "Wiederholen",
+        "error.loadFailed" to "Laden fehlgeschlagen",
+        "error.saveFailed" to "Speichern fehlgeschlagen",
+        "error.deleteFailed" to "Löschen fehlgeschlagen",
 
         "setup.title" to "Mit deinem ByWave-Server verbinden",
         "setup.serverUrl" to "Server-URL",
@@ -2064,6 +3376,190 @@ object I18n {
         "settings.reminders.lead" to "Benachrichtigen",
         "settings.reminders.atStart" to "Zur Startzeit",
         "settings.reminders.leadMinutes" to "{n} Min. vorher",
+
+        // Einstellungen — Kalender (Inline-Aktionsfehler)
+        "settings.calendars.saveFailed" to "Speichern fehlgeschlagen.",
+        "settings.calendars.deleteFailed" to "Löschen fehlgeschlagen.",
+
+        // Kontowechsler (Seitenleisten-Dropdown)
+        "profile.current" to "Aktuelles Konto",
+        "profile.remove" to "Konto entfernen",
+        "profile.add" to "Konto hinzufügen",
+        "sidebar.myCalendars" to "Meine Kalender",
+
+        // Obere Leiste — Agenda-Bereichsbeschriftung
+        "topbar.agendaRange" to "{date} · nächste 30 Tage",
+
+        // Anmelde- / Kopplungsbildschirm
+        "setup.pollWaiting" to "Warte auf das Scannen mit deinem Telefon…",
+        "setup.errorEmptyUrl" to "Bitte gib die URL deines ByWave-Servers ein.",
+        "setup.errorConnect" to "Server nicht erreichbar.",
+        "setup.denied" to "Auf deinem Telefon abgelehnt. Erstelle einen neuen QR-Code, um dich anzumelden.",
+        "setup.expired" to "Der QR-Code ist abgelaufen. Bitte erstelle einen neuen.",
+        "setup.pollRetry" to "Netzwerkproblem, wird wiederholt… ({message})",
+        "setup.requestingQr" to "QR-Code wird angefordert…",
+        "setup.signedIn" to "Angemeldet",
+        "setup.openingCalendar" to "Dein Kalender wird geöffnet…",
+        "setup.loginTitle" to "Bei ByWave Calendar anmelden",
+        "setup.loginSubtitle" to "Gib die URL deines ByWave-Servers ein. Im nächsten Schritt wird ein QR-Code angezeigt — scanne ihn mit deinem Telefon, um die Anmeldung abzuschließen.",
+        "setup.serverUrlPlaceholder" to "https://example.com oder example.com",
+        "setup.generateQr" to "QR-Code erstellen",
+        "setup.qrTitle" to "Zum Anmelden scannen",
+        "setup.qrSubtitle" to "Scanne den QR-Code unten mit der Kamera oder dem Browser eines beliebigen Telefons und tippe dann auf deinem Telefon auf „Genehmigen“, um dich an diesem Computer anzumelden.",
+        "setup.qrContentDesc" to "Anmelde-QR-Code",
+        "setup.authCode" to "Code {code} · 5 Minuten gültig",
+        "setup.regenerate" to "Neu erstellen / Server wechseln",
+
+        // Termin-Editor
+        "event.edit.titleCreate" to "Neuer Termin",
+        "event.edit.titleEdit" to "Termin bearbeiten",
+        "event.edit.summary" to "Titel",
+        "event.edit.allDay" to "Ganztägig",
+        "event.edit.start" to "Beginn",
+        "event.edit.end" to "Ende",
+        "event.edit.location" to "Ort",
+        "event.edit.url" to "Link",
+        "event.edit.description" to "Beschreibung",
+        "event.edit.save" to "Speichern",
+        "event.edit.create" to "Erstellen",
+        "event.edit.cancel" to "Abbrechen",
+        "event.edit.pickCalendar" to "Kalender auswählen",
+        "event.edit.pickTime" to "Uhrzeit wählen",
+        "event.edit.confirm" to "OK",
+        "event.edit.attendees" to "Gäste",
+        "event.edit.attendeeRemove" to "Entfernen",
+        "event.edit.attendeeEmail" to "E-Mail-Adresse",
+        "event.edit.attendeeAdd" to "Hinzufügen",
+
+        // Termindetails
+        "event.detail.time" to "Zeit",
+        "event.detail.calendar" to "Kalender",
+        "event.detail.location" to "Ort",
+        "event.detail.timezone" to "Zeitzone",
+        "event.detail.description" to "Beschreibung",
+        "event.detail.url" to "Link",
+        "event.detail.recurrence" to "Wiederholung",
+        "event.detail.edit" to "Bearbeiten",
+        "event.detail.delete" to "Löschen",
+        "event.detail.close" to "Schließen",
+        "event.allDay" to "Ganztägig",
+        // Kontextmenü des Termins (Rechtsklick)
+        "event.menu.view" to "Details anzeigen",
+        "event.menu.duplicate" to "Als neu duplizieren",
+
+        // Auswahl des Geltungsbereichs für Serientermine
+        "recur.editTitle" to "Serientermin speichern",
+        "recur.deleteTitle" to "Serientermin löschen",
+        "recur.editSubtitle" to "Dies ist ein Serientermin. Wähle, was gespeichert werden soll:",
+        "recur.deleteSubtitle" to "Dies ist ein Serientermin. Wähle, was gelöscht werden soll:",
+        "recur.thisEvent" to "Nur dieser Termin",
+        "recur.thisEvent.edit" to "Nur diesen ändern",
+        "recur.thisEvent.delete" to "Nur diesen löschen",
+        "recur.thisAndFuture" to "Dieser und folgende Termine",
+        "recur.future.edit" to "Diesen und spätere ändern",
+        "recur.future.delete" to "Diesen und spätere löschen",
+        "recur.series" to "Gesamte Serie",
+        "recur.series.edit" to "Gesamte Serie ändern",
+        "recur.series.delete" to "Gesamte Serie löschen",
+        "recur.cancel" to "Abbrechen",
+
+        // RRULE-Editor
+        "rrule.freq.none" to "Wiederholt sich nicht",
+        "rrule.freq.daily" to "Täglich",
+        "rrule.freq.weekly" to "Wöchentlich",
+        "rrule.freq.monthly" to "Monatlich",
+        "rrule.freq.yearly" to "Jährlich",
+        "rrule.repeat" to "Wiederholen",
+        "rrule.passthrough" to "Enthält nicht unterstützte Felder (z. B. BYDAY / EXDATE); die ursprüngliche Regel wird beim Speichern beibehalten. Zum Überschreiben zuerst „Wiederholen“ auf „Wiederholt sich nicht“ setzen.",
+        "rrule.interval" to "Intervall",
+        "rrule.end" to "Endet",
+        "rrule.suffix.day" to "Tag(e)",
+        "rrule.suffix.week" to "Woche(n)",
+        "rrule.suffix.month" to "Monat(e)",
+        "rrule.suffix.year" to "Jahr(e)",
+        "rrule.end.forever" to "Nie",
+        "rrule.end.until" to "Am Datum",
+        "rrule.end.count" to "Nach N Malen",
+        "rrule.times" to "Mal",
+
+        // Termindetails — RRULE-Zusammenfassung
+        "event.rrule.daily" to "Täglich",
+        "event.rrule.dailyN" to "Alle {n} Tage",
+        "event.rrule.weekly" to "Wöchentlich",
+        "event.rrule.weeklyN" to "Alle {n} Wochen",
+        "event.rrule.monthly" to "Monatlich",
+        "event.rrule.monthlyN" to "Alle {n} Monate",
+        "event.rrule.yearly" to "Jährlich",
+        "event.rrule.yearlyN" to "Alle {n} Jahre",
+        "event.rrule.until" to "{base} · bis {date}",
+        "event.rrule.count" to "{base} · {n} Mal",
+
+        // Kalenderansichten — leere Zustände und relative Tagesbeschriftungen
+        "agenda.empty" to "Nichts in nächster Zeit",
+        "agenda.today" to "Heute",
+        "agenda.tomorrow" to "Morgen",
+        "day.emptyToday" to "Heute keine Termine",
+        "day.empty" to "Keine Termine",
+
+        // Tagesbeschriftungen — ein Buchstabe (Kopf des Monatsrasters)
+        "weekday.short.1" to "M",
+        "weekday.short.2" to "D",
+        "weekday.short.3" to "M",
+        "weekday.short.4" to "D",
+        "weekday.short.5" to "F",
+        "weekday.short.6" to "S",
+        "weekday.short.7" to "S",
+        // Tagesbeschriftungen — mittel (Kopf der Wochenansicht)
+        "weekday.medium.1" to "Mo",
+        "weekday.medium.2" to "Di",
+        "weekday.medium.3" to "Mi",
+        "weekday.medium.4" to "Do",
+        "weekday.medium.5" to "Fr",
+        "weekday.medium.6" to "Sa",
+        "weekday.medium.7" to "So",
+
+        // Datumsformate (java.time DateTimeFormatter)
+        "fmt.timeAllDay" to "Ganztägig",
+        "fmt.monthDay" to "d. MMM",
+        "fmt.monthDayWeekday" to "EEE, d. MMM",
+        "fmt.monthAnchor" to "MMMM yyyy",
+        "fmt.dayAnchor" to "EEEE, d. MMM yyyy",
+        "fmt.yearPrefix" to "{y} ",
+
+        // Update-Dialog (integrierter Desktop-Updater)
+        "update.newVersion" to "Neue Version",
+        "update.noAssetForPlatform" to "Noch keine {os}-Version verfügbar",
+        "update.progress" to "Wird heruntergeladen · {done} / {total} · {pct}%",
+        "update.progressNoTotal" to "Wird heruntergeladen · {done}",
+        "update.install.ready" to "Heruntergeladen · Installation wird vorbereitet…",
+        "update.install.mounting" to "DMG wird gemountet…",
+        "update.install.swapping" to "Wird installiert und neu gestartet…",
+        "update.install.fallback" to "{reason} (gespeichert in {dir})",
+        "update.retryAuto" to "Automatische Installation wiederholen",
+        "update.redownload" to "Erneut herunterladen",
+        "update.retry" to "Wiederholen",
+        "update.waitInstall" to "Installation ausstehend",
+        "update.os.mac" to "macOS",
+        "update.os.win" to "Windows",
+        "update.os.linux" to "Linux",
+        "update.os.unknown" to "dein System",
+
+        // Update-Installer (macOS-DMG-Tausch) — für Benutzer sichtbare Fehlergründe
+        "update.installer.nonMac" to "Kein macOS — mit dem Standard-Installationsprogramm des Systems geöffnet",
+        "update.installer.mountFailed" to "DMG-Mounten fehlgeschlagen — Finder zur manuellen Installation geöffnet",
+        "update.installer.appNotFound" to "ByWaveCalendar.app im DMG nicht gefunden — bitte das gemountete Volume prüfen",
+        "update.installer.locateFailed" to "Aktueller App-Installationsort nicht gefunden — bitte aus dem gemounteten DMG nach Programme ziehen",
+        "update.installer.noWritePermission" to "Keine Schreibberechtigung für {path} — bitte aus dem gemounteten DMG nach Programme ziehen",
+        "update.installer.currentAppDir" to "das aktuelle App-Verzeichnis",
+        "update.installer.scriptFailed" to "Installationsskript konnte nicht gestartet werden: {error}",
+
+        // Update-Downloader — Fehlermeldungen
+        "update.download.checksumFailed" to "Die heruntergeladene Datei hat die Prüfung nicht bestanden (sha256 stimmt nicht überein). Bitte erneut versuchen.",
+        "update.download.saveFailed" to "Speichern unter {path} nicht möglich",
+        "update.download.failed" to "Download fehlgeschlagen",
+
+        // API-Client — Netzwerk-Fallback
+        "api.networkError" to "Netzwerkfehler",
     )
 
     private val DICTIONARIES: Map<Locale, Map<String, String>> = mapOf(
