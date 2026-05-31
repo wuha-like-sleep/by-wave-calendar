@@ -614,6 +614,10 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       token,
+      // Single-purpose page: render bare chrome (no nav / footer / palette) so
+      // the only thing reachable from a reset link is setting a new password —
+      // even if the browser happens to be logged into an account.
+      bareLayout: true,
     });
   });
 

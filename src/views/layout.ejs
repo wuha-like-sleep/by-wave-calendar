@@ -130,6 +130,23 @@
         setTimeout(bootDone, 2000);
       })();
     </script>
+    <% if (typeof bareLayout !== 'undefined' && bareLayout) { %>
+      <%# Single-purpose pages (e.g. password reset): NO header nav, NO footer,
+          NO command palette — just a non-clickable brand mark + the body, so the
+          page can do exactly one thing and offers no way to navigate elsewhere. %>
+      <main class="flex-1 mx-auto w-full max-w-md px-4 py-12 sm:py-20">
+        <div class="mb-6 flex items-center justify-center gap-2.5">
+          <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
+            <img src="<%= siteLogoUrl %>" alt="" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200" />
+          <% } else { %>
+            <span class="inline-block h-9 w-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700"></span>
+          <% } %>
+          <span class="text-base font-semibold text-slate-900"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
+        </div>
+        <%- include('partials/flash', { flash: flash }) %>
+        <%- body %>
+      </main>
+    <% } else { %>
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>
       <main class="flex-1 min-h-0 flex flex-col">
@@ -176,6 +193,7 @@
         <% } %>
       </div>
     <% } %>
+    <% } %>
     <div id="toast-root" class="fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4 sm:items-end sm:right-4 sm:left-auto pointer-events-none"></div>
 
     <!-- Cmd+K command palette — available on every page so users can jump
@@ -183,7 +201,7 @@
          modal stays in the DOM but hidden; only opens on Cmd/Ctrl-K, "/"
          (when not in an input), or a click on the small "⌘K" hint in the
          nav (auth pages don't render the palette at all). -->
-    <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+    <% if ((typeof currentUser !== 'undefined' && currentUser) && !(typeof bareLayout !== 'undefined' && bareLayout)) { %>
     <div id="bwc-palette" class="hidden fixed inset-0 z-[60] bg-slate-900/40 backdrop-blur-sm flex items-start justify-center pt-[15vh] px-4">
       <div class="w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200">
         <div class="border-b border-slate-100 flex items-center px-4">
@@ -207,7 +225,7 @@
         });
       }
     </script>
-    <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+    <% if ((typeof currentUser !== 'undefined' && currentUser) && !(typeof bareLayout !== 'undefined' && bareLayout)) { %>
     <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>" src="<%= (typeof jsBasePath !== 'undefined' ? jsBasePath : '/static') %>/palette.js?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" defer></script>
     <% } %>
   </body>
