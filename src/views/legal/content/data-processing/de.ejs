@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Datenverarbeitungsrichtlinie</h1>
+  <p class="text-sm text-slate-500 mb-8">Zuletzt aktualisiert: <%= updatedDate %></p>
+
+  <p>Diese <strong>Datenverarbeitungsrichtlinie</strong> ist ein Begleitdokument zur <a href="/privacy" class="text-brand-700 hover:underline">Datenschutzerklärung</a> und erläutert auf strukturiertere Weise, <strong>welche personenbezogenen Daten <%= siteName %></strong> (nachfolgend „der Dienst") <strong>verarbeitet, warum sie verarbeitet werden, wie sie gespeichert werden, wie lange sie aufbewahrt werden, welche Sicherheitsmaßnahmen ergriffen werden, mit welchen Dritten sie geteilt werden und wie es um grenzüberschreitende Übertragungen steht</strong>. Der Dienst ist <strong>selbst gehostete</strong> Open-Source-Software (MIT-Lizenz); der für die Datenverarbeitung Verantwortliche ist der <strong>Betreiber</strong> der Website; der Autor der Software hat keinen Zugriff auf Ihre Daten.</p>
+
+  <h2>1. Verantwortlicher für die Datenverarbeitung und Rollen</h2>
+  <ul>
+    <li><strong>Verantwortlicher für die Datenverarbeitung</strong>: der Betreiber der Website (legt fest, warum und wie Ihre Daten verarbeitet werden; Kontaktangaben werden vom Betreiber ausgefüllt, siehe Fußzeile / <a href="/support" class="text-brand-700 hover:underline">Support-Seite</a>).</li>
+    <li><strong>Autor der Software</strong>: stellt lediglich die Open-Source-Software bereit, betreibt diese Website nicht und hat keinen Zugriff auf Ihre Daten.</li>
+    <li><strong>Drittverarbeiter</strong>: ausschließlich die vom Betreiber selbst konfigurierten und aktivierten Infrastruktur-Dienstleister (siehe Abschnitt 5).</li>
+  </ul>
+
+  <h2>2. Von uns verarbeitete Datenkategorien und Zwecke</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>Datenkategorie</th><th>Konkrete Inhalte</th><th>Verarbeitungszweck</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Kontoidentität</td><td>E-Mail, Passwort-Hash (bcrypt), Anzeigename, optionaler Passkey-Public-Key, TOTP/Backup-Codes, SSO-Identitätskennung</td><td>Kontoregistrierung, Anmeldung, Identitätsprüfung, Kontosicherheit</td></tr>
+        <tr><td>Kalender und Ereignisse</td><td>Kalender-Metadaten, Ereignisse (Titel/Beschreibung/Ort/Links/Zeit/Wiederholungsregeln/Teilnehmer/Erinnerungen), Einladungen und RSVP</td><td>Bereitstellung der Kernfunktionen des Kalenders</td></tr>
+        <tr><td>Geräte-Pairing-Informationen</td><td>Gerätename, Plattform, App-Version, IP und User-Agent bei Pairing/Verbindung</td><td>Mehrgeräte-Synchronisierung, Geräteverwaltung und -trennung, Sicherheitsaudit</td></tr>
+        <tr><td>Push-Abonnement-Token</td><td>Web-Push-Endpunkt; mobiles APNs/FCM-Token (wenn Push aktiviert und das Gerät registriert ist)</td><td>Zustellung von Benachrichtigungen an Ihr Gerät</td></tr>
+        <tr><td>Sitzung und Sicherheit</td><td>Sitzungs-/CSRF-Cookie, Anmeldeverlauf (Zeit/IP/UA), Zähler fehlgeschlagener Anmeldungen</td><td>Aufrechterhaltung des Anmeldestatus, Schutz vor Brute-Force, Erkennung ungewöhnlicher Anmeldungen</td></tr>
+        <tr><td>Abgeleitete Anmeldedaten</td><td>API-Token / App-Passwörter (nur gehasht gespeichert)</td><td>Autorisierung des API-/CalDAV-Zugriffs</td></tr>
+        <tr><td>Audit-Protokolle</td><td>Aufzeichnungen von Administratoraktionen, Aufzeichnungen von Webhook-Zustellungen</td><td>Betrieb und Sicherheitsaudit</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Wir <strong>verarbeiten keine</strong> Informationen wie Standort, Geräte-IMEI/MAC, Kontakte, Fotos oder soziale Beziehungen, die nichts mit der Kalenderfunktion zu tun haben, und führen <strong>kein</strong> Nutzer-Profiling, keine Werbeausrichtung und keine Verhaltensanalyse durch.</p>
+
+  <h2>3. Rechtsgrundlage der Verarbeitung</h2>
+  <ul>
+    <li><strong>Vertragserfüllung / Erbringung des Dienstes</strong>: erforderlich für Kernfunktionen wie Konto, Kalender, Ereignisse und Synchronisierung.</li>
+    <li><strong>Berechtigtes Interesse</strong>: Sicherheitsaudit, Missbrauchsprävention, Erkennung ungewöhnlicher Anmeldungen (sofern Ihre Grundrechte nicht beeinträchtigt werden).</li>
+    <li><strong>Ihre Einwilligung</strong>: optionale Funktionen wie Push-Benachrichtigungen, Systemkalender-Synchronisierung, SSO-Anmeldung – jederzeit widerrufbar.</li>
+    <li><strong>Rechtliche Verpflichtung</strong>: Kooperation, soweit nach geltendem Recht erforderlich (vom Betreiber nach Maßgabe seiner Rechtsordnung zu beurteilen).</li>
+  </ul>
+
+  <h2>4. Speicherort und Aufbewahrungsdauer</h2>
+  <ul>
+    <li><strong>Primärspeicher</strong>: die PostgreSQL-Datenbank auf dem Server des Betreibers (im Eigentum des Betreibers/selbst gehostet, ohne Drittanbieter-SaaS).</li>
+    <li><strong>Lokal auf dem Gerät</strong>: Zugriffsanmeldedaten im iOS-Keychain / in den Android-EncryptedSharedPreferences / in der Desktop-Datei mit Berechtigung 0600 sowie ein Ereignis-Cache für die Offline-Ansicht.</li>
+    <li><strong>Konto + Kalender + Ereignisse</strong>: werden während des Bestehens des Kontos fortlaufend aufbewahrt, bis Sie löschen oder das Konto auflösen.</li>
+    <li><strong>Soft-gelöschte Ereignisse</strong>: werden 90 Tage zur Wiederherstellung aufbewahrt und nach Ablauf physisch gelöscht.</li>
+    <li><strong>Anmeldeverlauf / Audit-Protokolle</strong>: werden vom Betreiber gemäß seiner Betriebsrichtlinie aufbewahrt.</li>
+    <li><strong>Nach Auflösung</strong>: Das Konto und die zugehörigen Daten werden dauerhaft gelöscht; in den regelmäßigen Sicherungen des Betreibers können Reste verbleiben, bis diese Sicherung gemäß ihrer Rotationsstrategie abläuft.</li>
+  </ul>
+
+  <h2>5. Drittverarbeiter (nur vom Betreiber selbst konfiguriert)</h2>
+  <p>Der Dienst <strong>ist standardmäßig auf keinen Dritten angewiesen</strong>. Die folgenden Unterauftragsverarbeiter sind nur dann beteiligt, wenn der Betreiber sie aktiv konfiguriert, und jeder von ihnen hat nur Zugriff auf die für die Erfüllung seiner Funktion erforderlichen Mindestdaten:</p>
+  <ul>
+    <li><strong>SMTP-E-Mail-Dienst</strong>: Zustellung von E-Mails wie Einladungen, Erinnerungen, Anmeldebenachrichtigungen und Passwortzurücksetzungen – E-Mail-Adresse des Empfängers und E-Mail-Text.</li>
+    <li><strong>APNs (Apple) / FCM (Google) Push-Gateways</strong>: Zustellung von Benachrichtigungen, wenn mobiler Push aktiviert ist – Push-Token und Benachrichtigungs-Payload.</li>
+    <li><strong>SSO-Identitätsanbieter (OIDC, z. B. Keycloak, Authelia)</strong>: Identitätsprüfung – Ihre E-Mail-Adresse / Identitätskennung.</li>
+  </ul>
+  <p>Dies umfasst keinerlei Analyse-, Werbe- oder Tracking-Dienste. Der Dienst <strong>verkauft oder teilt keine Daten zu Marketingzwecken an Dritte</strong>. Alle übrigen Datenausgänge (Ereigniseinladungen, ICS-/Widget-Freigabe, Webhook, API) werden durch Ihre aktive Handlung ausgelöst; Einzelheiten siehe Abschnitt 5 der Datenschutzerklärung.</p>
+
+  <h2>6. Sicherheitsmaßnahmen</h2>
+  <ul>
+    <li><strong>Übertragung</strong>: erzwungenes HTTPS / TLS, HSTS aktiviert.</li>
+    <li><strong>Speicherung</strong>: Passwörter mit bcrypt (Cost 12) gehasht; API-Token / App-Passwörter nur gehasht gespeichert; Zugriffstoken mit HMAC-SHA256-JWT signiert.</li>
+    <li><strong>Anwendung</strong>: CSRF-Token, Helmet CSP (Schutz vor XSS), Sperrung für 15 Minuten nach 5 fehlgeschlagenen Anmeldungen, optional MFA / Passkey / SSO.</li>
+    <li><strong>Geräteseitig</strong>: iOS-Keychain / Android-Keystore-Verschlüsselung / Desktop-Datei 0600; sensible Anmeldedaten werden nicht protokolliert.</li>
+    <li><strong>Frontend</strong>: alle Drittanbieter-Ressourcen lokal gehostet, keine ausländischen CDNs geladen.</li>
+    <li><strong>Backup</strong>: regelmäßige Datenbanksicherungen liegen in der Verantwortung des Betreibers.</li>
+  </ul>
+
+  <h2>7. Grenzüberschreitende Datenübertragung</h2>
+  <p>Ob Daten grenzüberschreitend übertragen werden, hängt vollständig davon ab, wo der Betreiber den Server bereitstellt und wo sich die vom Betreiber konfigurierte SMTP-/APNs-/FCM-/SSO-Infrastruktur befindet. Die Software selbst schreibt keinen Serverstandort vor und enthält auch keinerlei integrierte Verbindung, die Daten automatisch aus der Infrastruktur des Betreibers herausleiten würde. Bitte erkundigen Sie sich beim Betreiber der Website nach dem konkreten geografischen Standort seiner Bereitstellung und den grenzüberschreitenden Regelungen.</p>
+
+  <h2>8. Ihre Rechte und deren Ausübung</h2>
+  <ul>
+    <li><strong>Auskunft / Einsicht</strong>: Sehen Sie Ihr Konto, Ihre Kalender, den Anmeldeverlauf, Geräte und Token direkt im Web oder in der App ein.</li>
+    <li><strong>Berichtigung</strong>: Ändern Sie jederzeit E-Mail, Passwort, Anzeigename, Einstellungen zur Zwei-Faktor-Authentifizierung usw.</li>
+    <li><strong>Löschung</strong>: „Einstellungen → Gefahrenzone → Konto löschen" entfernt das Konto und alle zugehörigen Daten dauerhaft (unwiderruflich).</li>
+    <li><strong>Portabilität / Export</strong>: über .ics-Abonnementlinks, CalDAV oder durch den Administrator unter „Admin-Backend → Backup" als JSON exportieren.</li>
+    <li><strong>Einschränkung / Widerspruch</strong>: Sie können optionale Verarbeitungen wie Push, Systemkalender-Synchronisierung und SSO deaktivieren.</li>
+    <li><strong>Widerruf der Einwilligung</strong>: Deaktivieren Sie die entsprechenden Berechtigungen/Funktionen jederzeit in den Systemeinstellungen oder in der App.</li>
+  </ul>
+  <p>Zur Ausübung Ihrer Rechte oder für Beschwerden wenden Sie sich bitte an den Betreiber der Website (Kontaktangaben vom Betreiber auszufüllen). Sie haben außerdem das Recht, sich bei der Datenschutzaufsichtsbehörde Ihrer Rechtsordnung zu beschweren.</p>
+
+  <h2>9. Änderungen der Richtlinie</h2>
+  <p>Diese Richtlinie kann von Zeit zu Zeit aktualisiert werden; nach der Aktualisierung wird dies im Datum „Zuletzt aktualisiert" oben angezeigt; über wesentliche Änderungen informieren wir per E-Mail.</p>
+
+  <h2>10. Kontakt</h2>
+  <ul>
+    <li><strong>Datenverarbeitung der Website / Ausübung von Rechten</strong>: Wenden Sie sich an den Betreiber der Website (Kontaktangaben siehe Fußzeile oder <a href="/support" class="text-brand-700 hover:underline">Support-Seite</a>; vom Betreiber auszufüllen).</li>
+    <li><strong>Auf Ebene von Software / Projekt</strong>: per E-Mail an <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> oder ein Issue auf <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a> eröffnen.</li>
+  </ul>
+</div>

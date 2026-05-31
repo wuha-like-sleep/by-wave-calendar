@@ -1,0 +1,130 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Política de privacidad</h1>
+  <p class="text-sm text-slate-500 mb-8">Última actualización: <%= updatedDate %></p>
+
+  <p>Esta <strong>Política de privacidad</strong> explica cómo <strong><%= siteName %></strong> (en adelante, «el Servicio» o «nosotros») recopila, utiliza, almacena y protege su información a través de la web, la PWA, las apps de iOS / Android / escritorio, CalDAV, la API, el correo electrónico, las suscripciones ICS, los widgets integrados y otros canales. El Servicio es software de código abierto <strong>autoalojado</strong> (licencia MIT), lo que significa que sus datos residen en servidores controlados por <strong>el operador del Servicio</strong> (véanse los datos de contacto en el pie de página), no pasan por ningún SaaS en la nube de terceros ni se transmiten al autor del software. Esta política, junto con la <a href="/data-processing" class="text-brand-700 hover:underline">Política de tratamiento de datos</a> y las <a href="/terms" class="text-brand-700 hover:underline">Condiciones de uso</a> que la acompañan, constituye la explicación completa.</p>
+
+  <h2>1. Información que recopilamos</h2>
+  <h3>1.1 Información de la cuenta</h3>
+  <ul>
+    <li><strong>Dirección de correo electrónico</strong>: la proporciona usted al registrar la cuenta; se utiliza para iniciar sesión, recuperar la contraseña, recibir invitaciones, avisos de inicio de sesión y recordatorios de eventos.</li>
+    <li><strong>Hash de la contraseña</strong>: solo almacenamos el cifrado irreversible mediante bcrypt (cost 12); <strong>nunca almacenamos la contraseña en texto plano</strong>.</li>
+    <li><strong>Nombre visible (opcional)</strong>: el alias que configure en su perfil.</li>
+    <li><strong>Credenciales Passkey / WebAuthn</strong>: cuando activa el inicio de sesión con Passkey, solo se almacena la clave pública; la clave privada permanece siempre en su dispositivo.</li>
+    <li><strong>TOTP / códigos de respaldo (verificación en dos pasos)</strong>: cuando activa la MFA, se almacenan el secreto TOTP y los códigos de respaldo cifrados.</li>
+    <li><strong>Identidad SSO (opcional)</strong>: cuando inicia sesión a través del SSO configurado por el operador (OIDC, por ejemplo Keycloak o Authelia), se almacena el identificador asociado a ese proveedor de identidad.</li>
+  </ul>
+
+  <h3>1.2 Contenido del calendario</h3>
+  <ul>
+    <li><strong>Metadatos del calendario</strong>: nombre del calendario, color, zona horaria y configuración de uso compartido.</li>
+    <li><strong>Eventos</strong>: título, descripción, ubicación, enlaces (URL de reuniones/documentos), hora de inicio/fin, reglas de recurrencia, correo de los asistentes, recordatorios (VALARM) y zona horaria.</li>
+    <li><strong>Invitaciones a eventos</strong>: correo del invitado, estado de RSVP y token de invitación.</li>
+    <li><strong>Eventos eliminados (borrado lógico)</strong>: tras eliminarlos, permanecen en la base de datos durante 90 días para poder restaurarlos mediante «Deshacer eliminación»; después, un cron los elimina físicamente.</li>
+  </ul>
+
+  <h3>1.3 Información de dispositivo y sesión</h3>
+  <ul>
+    <li><strong>Historial de inicio de sesión</strong>: la hora, la IP y el User-Agent de cada inicio de sesión correcto, que se muestran en «Ajustes → Mis sesiones» para que pueda auditar accesos sospechosos.</li>
+    <li><strong>Cookie de sesión</strong>: tras iniciar sesión en la web, el servidor emite una cookie HttpOnly para mantener la sesión activa.</li>
+    <li><strong>Información de emparejamiento de dispositivos (app)</strong>: cuando vincula la app de iOS / Android / escritorio al servidor, se almacenan el nombre del dispositivo, la plataforma, la versión de la app y la IP y el User-Agent de la primera y la última conexión.</li>
+    <li><strong>Token de suscripción a notificaciones push</strong>:
+      <ul>
+        <li><strong>Web Push (navegador)</strong>: cuando autoriza las notificaciones push en el navegador, se almacena el endpoint de suscripción emitido por el navegador.</li>
+        <li><strong>APNs / FCM (móvil)</strong>: el servidor tiene la capacidad de enviar notificaciones push a dispositivos móviles; cuando un dispositivo registra el push, se almacena su token. <strong>La versión actual de la app de iOS no declara capacidad de push y no obtiene ni envía el token de APNs</strong>; solo utiliza la actualización en primer plano y el sondeo en segundo plano para sincronizar los eventos. Si una versión posterior activa el push, se anunciará por separado en las notas de actualización.</li>
+      </ul>
+    </li>
+    <li><strong>Varios perfiles de cuenta (app de iOS)</strong>: cuando vincula varios servidores en la app de iOS, cada perfil de cuenta (dirección del servidor, correo, nombre visible) se almacena de forma independiente en el Keychain local del dispositivo. Estos perfiles no se sincronizan con el servidor; el Keychain de iCloud, cifrado de extremo a extremo, puede sincronizarlos opcionalmente con sus otros dispositivos Apple.</li>
+    <li><strong>Token de API / contraseña de aplicación</strong>: solo se almacena su hash; el texto plano se muestra una única vez al emitirlo.</li>
+  </ul>
+
+  <h3>1.4 Registros de operación / auditoría</h3>
+  <ul>
+    <li>Las operaciones de administración (activar/desactivar cuentas, revocar tokens, modificar ajustes, etc.) se registran en un log de auditoría que incluye el tipo de operación, el operador, el objeto y la IP.</li>
+    <li>Registros de entrega de webhooks externos (estado HTTP, primer 1 KB del cuerpo de la respuesta y si tuvo éxito).</li>
+    <li>Los registros de ejecución del servidor se usan para la resolución de problemas; las credenciales sensibles como tokens de acceso, tokens de push o contraseñas <strong>no se escriben en los registros</strong>.</li>
+  </ul>
+
+  <h2>2. Información que no recopilamos</h2>
+  <ul>
+    <li><strong>No</strong> recopilamos de forma activa su ubicación, el IMEI/MAC del dispositivo, los contactos, la galería de fotos, las relaciones sociales ni ninguna otra información ajena a la función de calendario.</li>
+    <li>El permiso de cámara de las apps de iOS / Android se utiliza <strong>únicamente</strong> para escanear el código QR de inicio de sesión; las imágenes no se suben ni se guardan.</li>
+    <li>El permiso de calendario de la app (si activa «Sincronizar con el calendario del sistema») solo se usa para escribir los eventos del Servicio en el subcalendario del sistema que usted indique; <strong>no lee</strong> el contenido de sus calendarios de iCloud / Google ni de otros calendarios.</li>
+    <li>El permiso de notificaciones de la app se utiliza solo para los recordatorios locales antes del inicio de un evento.</li>
+    <li><strong>No utilizamos</strong> ningún SDK publicitario, de rastreo de comportamiento ni de análisis de terceros; todos los recursos de terceros referenciados en el frontend se alojan localmente y <strong>no se carga ninguna CDN extranjera</strong>.</li>
+  </ul>
+
+  <h2>3. Cómo utilizamos esta información</h2>
+  <ul>
+    <li>Prestar las funciones de calendario: mostrar, editar y recordar eventos, y gestionar el uso compartido de calendarios.</li>
+    <li>Seguridad de la cuenta: detectar inicios de sesión anómalos, verificar inicios de sesión de riesgo, prevenir ataques de fuerza bruta y revocar de inmediato todos los tokens al desactivar una cuenta.</li>
+    <li>Notificaciones por correo: invitaciones, cancelaciones, recordatorios, avisos de inicio de sesión, restablecimiento de contraseña y verificación en dos pasos (enviados a través del SMTP configurado por el propio operador).</li>
+    <li>Integraciones externas: cuando configura un webhook en el panel de administración, los cambios en los eventos se envían a la URL que indique.</li>
+    <li>Sincronización entre dispositivos: la app obtiene los cambios de eventos del servidor mediante sondeo periódico en segundo plano y actualización en primer plano, y <strong>solo sincroniza los eventos a los que usted tiene acceso</strong>.</li>
+  </ul>
+
+  <h2>4. Almacenamiento y seguridad de los datos</h2>
+  <ul>
+    <li>Todos los datos se alojan en el servidor del operador del Servicio, en una base de datos PostgreSQL, protegidos por los permisos de archivo de Linux.</li>
+    <li>La capa de transporte impone cifrado HTTPS / TLS de extremo a extremo, con HSTS activado.</li>
+    <li>Las contraseñas se cifran con hash bcrypt (cost 12), los tokens de acceso se firman como JWT con HMAC-SHA256, el token CSRF previene la falsificación de solicitudes entre sitios y la CSP de Helmet protege contra XSS.</li>
+    <li>Tras 5 intentos fallidos de inicio de sesión, la cuenta se bloquea temporalmente durante 15 minutos.</li>
+    <li>El sitio admite verificación en dos pasos (TOTP), Passkey y SSO (OIDC).</li>
+    <li><strong>Protección local del dispositivo</strong>: iOS guarda las credenciales en el Keychain; Android usa EncryptedSharedPreferences (cifrado mediante Android Keystore); en escritorio, el archivo de credenciales se escribe con permisos 0600 (legible solo por el propietario); en todas las plataformas, los tokens no se escriben en los registros locales.</li>
+    <li>Las copias de seguridad periódicas de la base de datos son responsabilidad del operador.</li>
+  </ul>
+
+  <h2>5. Cómo compartimos los datos</h2>
+  <p><strong>No</strong> vendemos sus datos a terceros ni los usamos para publicidad. La transferencia de datos ocurre en los siguientes casos, siempre dentro del ámbito de una acción iniciada por usted o de una configuración realizada por el operador:</p>
+  <ul>
+    <li><strong>Invitaciones a eventos</strong>: cuando invita a alguien a un evento, esa persona recibe por correo el título, la hora, la ubicación, la descripción del evento y el correo del organizador.</li>
+    <li><strong>Calendarios compartidos</strong>: el enlace de suscripción que usted genera (ICS / widget integrado) expone los eventos del calendario correspondiente, y cualquiera que posea el enlace puede acceder a ellos.</li>
+    <li><strong>Integraciones de terceros</strong>: los webhooks / aplicaciones OAuth / tokens de API que active en el panel de administración accederán a sus datos según su configuración.</li>
+    <li><strong>Envío de correo (SMTP)</strong>: los correos de notificación se envían a través del servidor SMTP configurado por el propio operador.</li>
+    <li><strong>Servicio de push (APNs / FCM)</strong>: cuando el push móvil está activado, el contenido de la notificación se entrega a su dispositivo a través de las pasarelas APNs de Apple / FCM de Google.</li>
+    <li><strong>SSO</strong>: cuando elige el inicio de sesión de terceros (Keycloak, Authelia, etc.), su correo se transmite a ese IdP para completar la autenticación.</li>
+  </ul>
+  <p>Los terceros anteriores se <strong>limitan a la infraestructura que el propio operador configura y activa</strong> (SMTP, APNs/FCM, proveedor de SSO), y no incluyen ningún servicio de análisis, publicidad o rastreo. Para más detalles, consulte la <a href="/data-processing" class="text-brand-700 hover:underline">Política de tratamiento de datos</a>.</p>
+
+  <h2>6. Sus derechos</h2>
+  <ul>
+    <li><strong>Consultar</strong>: acceda a los ajustes web para ver la información de su cuenta, el historial de inicio de sesión, los dispositivos vinculados, los tokens de API, etc.</li>
+    <li><strong>Modificar</strong>: cambie en cualquier momento el correo, la contraseña, el nombre visible y la configuración de verificación en dos pasos.</li>
+    <li><strong>Eliminar</strong>: elimine la cuenta de forma permanente desde «Ajustes → Zona de peligro» en la web o la app. La eliminación borra todos sus calendarios, eventos, suscripciones, dispositivos vinculados y tokens de API. <strong>Esta acción es irreversible</strong>.</li>
+    <li><strong>Exportar / portabilidad</strong>: el administrador puede exportar el JSON de todo el sitio en «Panel de administración → Copia de seguridad»; usted también puede descargar un calendario concreto mediante el enlace de suscripción .ics, o conectar otros clientes a través de CalDAV.</li>
+    <li><strong>Desvincular dispositivos</strong>: desde «Ajustes → Mis dispositivos» puede desvincular en cualquier momento una app concreta, y ese dispositivo pierde el acceso de inmediato.</li>
+  </ul>
+
+  <h2>7. Uso de cookies</h2>
+  <ul>
+    <li><strong>bwc_session</strong>: sesión de inicio de sesión, HttpOnly + Secure + SameSite=Lax.</li>
+    <li><strong>bwc_csrf</strong>: token CSRF, para defenderse de la falsificación de solicitudes entre sitios.</li>
+    <li><strong>bwc_login_chall</strong>: sesión del desafío de código de verificación por correo, caduca a los 10 minutos.</li>
+    <li>Todas las anteriores son <strong>cookies de sesión</strong> imprescindibles para mantener las funciones básicas; no usamos cookies de rastreo de terceros ni cookies publicitarias.</li>
+  </ul>
+
+  <h2>8. Conservación de los datos</h2>
+  <ul>
+    <li><strong>Cuenta + calendarios + eventos</strong>: se conservan mientras exista la cuenta, hasta que elimine los eventos o cancele la cuenta.</li>
+    <li><strong>Eventos eliminados (borrado lógico)</strong>: se conservan 90 días para su restauración y se eliminan físicamente al vencer el plazo.</li>
+    <li><strong>Historial de inicio de sesión / registros de auditoría</strong>: el operador los conserva según su política de operación, para fines de auditoría de seguridad.</li>
+    <li><strong>Tras cancelar la cuenta</strong>: la cuenta y sus datos asociados se eliminan de forma permanente; las <strong>copias de seguridad periódicas de la base de datos</strong> del operador pueden conservar residuos hasta que esas copias venzan según su política de rotación.</li>
+  </ul>
+
+  <h2>9. Transferencias internacionales de datos</h2>
+  <p>El que los datos crucen fronteras depende de dónde despliegue el operador el servidor y de dónde se ubique la infraestructura de SMTP / push / SSO que configure el operador. El software en sí no impone la ubicación del servidor. Si tiene dudas sobre la ubicación geográfica concreta del almacenamiento y el tratamiento de los datos, consulte al operador del sitio.</p>
+
+  <h2>10. Privacidad de los menores</h2>
+  <p>El Servicio no está dirigido a menores de 13 años. Si usted es menor de edad, no envíe información personal. Si el operador detecta que ha recopilado por error información de menores, la eliminará de forma proactiva.</p>
+
+  <h2>11. Cambios en la política</h2>
+  <p>Podemos actualizar esta política de forma periódica; tras la actualización, la fecha de «Última actualización» se mostrará en la parte superior de esta página. Los cambios importantes los notificaremos por correo electrónico.</p>
+
+  <h2>12. Contacto</h2>
+  <p>Si tiene cualquier duda sobre esta política o sus datos:</p>
+  <ul>
+    <li><strong>Cuestiones a nivel de cuenta / datos / servidor del sitio</strong>: contacte con el operador del sitio (datos de contacto en el pie de página o en la <a href="/support" class="text-brand-700 hover:underline">página de soporte técnico</a>; los cumplimenta el operador).</li>
+    <li><strong>Cuestiones a nivel de software / app / proyecto</strong>: contacte con el equipo del proyecto en <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>, o abra una incidencia en <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+  <p>El Servicio es un despliegue autoalojado del software de código abierto by-wave-calendar, cuyo código fuente es totalmente abierto (MIT).</p>
+</div>

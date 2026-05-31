@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Data Processing Policy</h1>
+  <p class="text-sm text-slate-500 mb-8">Last updated: <%= updatedDate %></p>
+
+  <p>This Data Processing Policy is a companion document to the <a href="/privacy" class="text-brand-700 hover:underline">Privacy Policy</a>, describing in a more structured way <strong>what personal data <%= siteName %> (hereinafter "the Service") processes, why it processes it, how it is stored, how long it is kept, what security measures are applied, which third parties it is shared with, and any cross-border arrangements</strong>. The Service is <strong>self-hosted</strong> open-source software (MIT licensed), and the data controller is the site's <strong>operator</strong>; the software's authors do not have access to your data.</p>
+
+  <h2>1. Data Controller and Roles</h2>
+  <ul>
+    <li><strong>Data controller</strong>: the site operator (decides why and how your data is processed; contact details provided by the operator, see the footer / <a href="/support" class="text-brand-700 hover:underline">Support page</a>).</li>
+    <li><strong>Software authors</strong>: only provide the open-source software; they do not operate this site and do not have access to your data.</li>
+    <li><strong>Third-party processors</strong>: limited to infrastructure providers the operator has chosen to configure and enable (see Section 5).</li>
+  </ul>
+
+  <h2>2. Categories of Data We Process and Their Purposes</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>Data category</th><th>Specific content</th><th>Purpose of processing</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Account identity</td><td>Email, password hash (bcrypt), display name, optional Passkey public key, TOTP/backup codes, SSO identity identifier</td><td>Account registration, login, authentication, account security</td></tr>
+        <tr><td>Calendars and events</td><td>Calendar metadata, events (title/description/location/links/times/recurrence rules/attendees/reminders), invitations and RSVPs</td><td>Providing core calendar functionality</td></tr>
+        <tr><td>Device pairing information</td><td>Device name, platform, app version, the IP and User-Agent at pairing/connection time</td><td>Multi-device sync, device management and unbinding, security auditing</td></tr>
+        <tr><td>Push subscription tokens</td><td>Web Push endpoint; mobile APNs/FCM token (when push is enabled and the device registers)</td><td>Delivering notifications to your device</td></tr>
+        <tr><td>Session and security</td><td>Session/CSRF cookies, login history (time/IP/UA), failed login counts</td><td>Maintaining login state, preventing brute-force attacks, detecting anomalous logins</td></tr>
+        <tr><td>Derived credentials</td><td>API tokens / application passwords (stored only as hashes)</td><td>API / CalDAV access authorization</td></tr>
+        <tr><td>Audit logs</td><td>Administrator action records, webhook delivery records</td><td>Operations and security auditing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>We <strong>do not process</strong> location, device IMEI/MAC, contacts, photo library, social connections, or other information unrelated to calendar functionality, and we <strong>do not perform</strong> any user profiling, ad targeting, or behavioral analysis.</p>
+
+  <h2>3. Legal Basis for Processing</h2>
+  <ul>
+    <li><strong>Performance of a contract / provision of the Service</strong>: necessary for core functionality such as accounts, calendars, events, and sync.</li>
+    <li><strong>Legitimate interest</strong>: security auditing, abuse prevention, and anomalous login detection (without infringing on your fundamental rights).</li>
+    <li><strong>Your consent</strong>: optional features such as push notifications, system calendar sync, and SSO login — withdrawable at any time.</li>
+    <li><strong>Legal obligation</strong>: compliance where required by applicable law (as determined by the operator according to their jurisdiction).</li>
+  </ul>
+
+  <h2>4. Storage Location and Retention Periods</h2>
+  <ul>
+    <li><strong>Primary storage</strong>: a PostgreSQL database on the operator's server (operator-owned/self-hosted, not via any third-party SaaS).</li>
+    <li><strong>Local on device</strong>: access credentials in the iOS Keychain / Android EncryptedSharedPreferences / desktop 0600-permission file, plus an event cache for offline viewing.</li>
+    <li><strong>Account + calendars + events</strong>: retained for the duration of the account, until you delete them or close the account.</li>
+    <li><strong>Soft-deleted events</strong>: retained for 90 days to allow recovery, then physically deleted upon expiry.</li>
+    <li><strong>Login history / audit logs</strong>: retained by the operator according to their operational policy.</li>
+    <li><strong>After account closure</strong>: the account and associated data are permanently purged; they may remain in the operator's periodic backups until those backups expire under the rotation policy.</li>
+  </ul>
+
+  <h2>5. Third-Party Processors (only when configured by the operator)</h2>
+  <p>The Service <strong>does not rely on any third party by default</strong>. The following sub-processors are involved only when the operator actively configures them, and each accesses only the minimum data necessary to perform its function:</p>
+  <ul>
+    <li><strong>SMTP email service</strong>: delivers invitations, reminders, login alerts, password resets, and similar emails — recipient email and email body.</li>
+    <li><strong>APNs (Apple) / FCM (Google) push gateways</strong>: deliver notifications when mobile push is enabled — push token and notification payload.</li>
+    <li><strong>SSO identity providers (OIDC, e.g. Keycloak, Authelia)</strong>: authentication — your email / identity identifier.</li>
+  </ul>
+  <p>The above do not include any analytics, advertising, or tracking services. The Service <strong>does not sell or share data with any third party for marketing purposes</strong>. All other outbound data flows (event invitations, ICS/widget sharing, webhooks, API) are triggered by actions you initiate; see Section 5 of the Privacy Policy for details.</p>
+
+  <h2>6. Security Measures</h2>
+  <ul>
+    <li><strong>Transport</strong>: enforced HTTPS / TLS, with HSTS enabled.</li>
+    <li><strong>Storage</strong>: passwords are bcrypt (cost 12) hashed; API tokens / application passwords are stored only as hashes; access tokens are HMAC-SHA256 JWT signed.</li>
+    <li><strong>Application</strong>: CSRF tokens, Helmet CSP (against XSS), 15-minute lockout after 5 failed logins, optional MFA / Passkey / SSO.</li>
+    <li><strong>On device</strong>: iOS Keychain / Android Keystore encryption / desktop 0600 file; sensitive credentials are not written to logs.</li>
+    <li><strong>Frontend</strong>: all third-party resources are hosted locally, with no foreign CDN loaded.</li>
+    <li><strong>Backups</strong>: regular database backups are the operator's responsibility.</li>
+  </ul>
+
+  <h2>7. Cross-Border Data Transfers</h2>
+  <p>Whether data crosses borders depends entirely on where the operator deploys the server and on the location of the SMTP / APNs / FCM / SSO and other infrastructure the operator configures. The software itself does not dictate the server's location, nor does it build in any channel that would automatically transmit data outside the operator's infrastructure. Please consult the site operator about the specific geographic location of their deployment and any cross-border arrangements.</p>
+
+  <h2>8. Your Rights and How to Exercise Them</h2>
+  <ul>
+    <li><strong>Access / view</strong>: view your account, calendars, login history, devices, and tokens directly within the web or app.</li>
+    <li><strong>Rectification</strong>: change your email, password, display name, two-factor authentication settings, and more at any time.</li>
+    <li><strong>Deletion</strong>: "Settings → Danger Zone → Delete Account" permanently purges your account and all associated data (irreversible).</li>
+    <li><strong>Portability / export</strong>: via .ics subscription links, CalDAV, or by having an admin export JSON under "Admin Dashboard → Backup".</li>
+    <li><strong>Restriction / objection</strong>: you can disable optional processing such as push, system calendar sync, and SSO.</li>
+    <li><strong>Withdraw consent</strong>: disable the relevant permission/feature at any time in your system settings or within the app.</li>
+  </ul>
+  <p>To exercise your rights or file a complaint, please contact the site operator (contact details provided by the operator). You also have the right to lodge a complaint with the data protection authority in your jurisdiction.</p>
+
+  <h2>9. Changes to This Policy</h2>
+  <p>This policy may be updated from time to time, with any updates reflected in the "Last updated" date at the top; significant changes will be announced by email.</p>
+
+  <h2>10. Contact</h2>
+  <ul>
+    <li><strong>Site data processing / exercising your rights</strong>: contact the site operator (contact details are in the footer or on the <a href="/support" class="text-brand-700 hover:underline">Support page</a>; provided by the operator).</li>
+    <li><strong>Software / project level</strong>: email <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> or open an issue on <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+</div>

@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">데이터 처리 정책</h1>
+  <p class="text-sm text-slate-500 mb-8">최종 업데이트：<%= updatedDate %></p>
+
+  <p>본 《데이터 처리 정책》은 <a href="/privacy" class="text-brand-700 hover:underline">《개인정보 처리방침》</a>의 부속 문서로서, <strong><%= siteName %></strong>(이하 "본 서비스")이 <strong>어떤 개인 데이터를 처리하는지, 왜 처리하는지, 어떻게 저장하는지, 얼마나 보존하는지, 어떤 보안 조치를 채택하는지, 어떤 제3자와 공유하는지, 그리고 국경 간 상황</strong>을 보다 구조화된 방식으로 설명합니다. 본 서비스는 <strong>자체 호스팅</strong> 오픈소스 소프트웨어(MIT 라이선스)이며, 데이터 관리자는 본 사이트 <strong>운영자</strong>입니다. 본 소프트웨어 작성자는 귀하의 데이터에 접근하지 않습니다.</p>
+
+  <h2>1. 데이터 관리자와 역할</h2>
+  <ul>
+    <li><strong>데이터 관리자</strong>：본 사이트 운영자(귀하의 데이터를 왜, 어떻게 처리할지 결정; 연락처는 운영자가 기재, 푸터 / <a href="/support" class="text-brand-700 hover:underline">기술 지원 페이지</a> 참조).</li>
+    <li><strong>소프트웨어 작성자</strong>：오픈소스 소프트웨어만 제공하며, 본 사이트를 운영하지 않고 귀하의 데이터에 접근하지 않습니다.</li>
+    <li><strong>제3자 처리자</strong>：운영자가 직접 구성하여 활성화한 인프라 서비스 제공자에 한합니다(제5절 참조).</li>
+  </ul>
+
+  <h2>2. 당사가 처리하는 데이터 범주 및 목적</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>데이터 범주</th><th>구체적 내용</th><th>처리 목적</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>계정 신원</td><td>이메일, 비밀번호 해시(bcrypt), 표시 이름, 선택적 Passkey 공개 키, TOTP/백업 코드, SSO 신원 식별자</td><td>계정 등록, 로그인, 신원 검증, 계정 보안</td></tr>
+        <tr><td>캘린더와 일정</td><td>캘린더 메타데이터, 일정(제목/설명/장소/링크/시간/반복 규칙/참석자/알림), 초대와 RSVP</td><td>핵심 캘린더 기능 제공</td></tr>
+        <tr><td>기기 페어링 정보</td><td>기기 이름, 플랫폼, APP 버전, 페어링/연결 시의 IP와 User-Agent</td><td>다중 기기 동기화, 기기 관리 및 연결 해제, 보안 감사</td></tr>
+        <tr><td>푸시 구독 token</td><td>Web Push endpoint; 모바일 APNs/FCM token(푸시가 활성화되고 기기가 등록된 경우)</td><td>귀하의 기기로 알림 전달</td></tr>
+        <tr><td>세션과 보안</td><td>세션/CSRF cookie, 로그인 기록(시간/IP/UA), 로그인 실패 횟수</td><td>로그인 상태 유지, 무차별 대입 방지, 비정상 로그인 탐지</td></tr>
+        <tr><td>자격 증명 파생</td><td>API token / 앱 비밀번호(해시로만 저장)</td><td>API / CalDAV 접근 권한 부여</td></tr>
+        <tr><td>감사 로그</td><td>관리자 작업 기록, Webhook 전송 기록</td><td>운영 및 보안 감사</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>당사는 위치, 기기 IMEI/MAC, 연락처, 사진첩, 소셜 관계 등 캘린더 기능과 무관한 정보를 <strong>처리하지 않으며</strong>, 어떠한 사용자 프로파일링, 광고 타게팅, 행동 분석도 <strong>수행하지 않습니다</strong>.</p>
+
+  <h2>3. 처리의 법적 근거</h2>
+  <ul>
+    <li><strong>계약 이행 / 서비스 제공</strong>：계정, 캘린더, 일정, 동기화 등 핵심 기능에 필수적입니다.</li>
+    <li><strong>정당한 이익</strong>：보안 감사, 오남용 방지, 비정상 로그인 탐지(귀하의 기본 권리를 침해하지 않는 전제 하에서).</li>
+    <li><strong>귀하의 동의</strong>：푸시 알림, 시스템 캘린더 동기화, SSO 로그인 등 선택적 기능 — 언제든지 철회할 수 있습니다.</li>
+    <li><strong>법적 의무</strong>：적용 법률이 요구할 때 협조(운영자가 자신의 법역에 따라 판단).</li>
+  </ul>
+
+  <h2>4. 저장 위치와 보존 기간</h2>
+  <ul>
+    <li><strong>주 저장소</strong>：운영자 서버의 PostgreSQL 데이터베이스(운영자 자체 보유/자체 호스팅, 제3자 SaaS 미경유).</li>
+    <li><strong>기기 로컬</strong>：iOS Keychain / Android EncryptedSharedPreferences / 데스크톱 0600 권한 파일 내의 액세스 자격 증명, 그리고 오프라인 열람용 일정 캐시.</li>
+    <li><strong>계정 + 캘린더 + 일정</strong>：계정 존속 기간 동안 지속 보존되며, 귀하가 삭제하거나 탈퇴할 때까지 유지됩니다.</li>
+    <li><strong>소프트 삭제된 일정</strong>：복구를 위해 90일간 보존되며, 기간 만료 시 물리적으로 삭제됩니다.</li>
+    <li><strong>로그인 기록 / 감사 로그</strong>：운영자가 운영 정책에 따라 보존합니다.</li>
+    <li><strong>탈퇴 후</strong>：계정 및 관련 데이터는 영구적으로 삭제되나, 운영자의 정기 백업에는 해당 백업이 순환 정책에 따라 만료될 때까지 잔존할 수 있습니다.</li>
+  </ul>
+
+  <h2>5. 제3자 처리자(운영자가 직접 구성한 경우에 한함)</h2>
+  <p>본 서비스는 <strong>기본적으로 어떠한 제3자에도 의존하지 않습니다</strong>. 다음 하위 처리자는 운영자가 능동적으로 구성한 경우에만 참여하며, 각자 자신의 기능 수행에 필요한 최소한의 데이터에만 접근합니다:</p>
+  <ul>
+    <li><strong>SMTP 이메일 서비스</strong>：초대, 알림, 로그인 알림, 비밀번호 재설정 등의 메일을 전달 — 수신자 이메일과 메일 본문.</li>
+    <li><strong>APNs(Apple) / FCM(Google) 푸시 게이트웨이</strong>：모바일 푸시가 활성화된 경우 알림을 전달 — 푸시 token과 알림 페이로드.</li>
+    <li><strong>SSO 신원 제공자(OIDC, 예: Keycloak, Authelia)</strong>：신원 검증 — 귀하의 이메일 / 신원 식별자.</li>
+  </ul>
+  <p>위에는 어떠한 분석, 광고, 추적 서비스도 포함되지 않습니다. 본 서비스는 <strong>어떠한 제3자에게도 마케팅 목적으로 데이터를 판매하거나 공유하지 않습니다</strong>. 그 밖의 데이터 외부 전송(일정 초대, ICS/widget 공유, Webhook, API)은 모두 귀하의 능동적 조작으로 트리거되며, 자세한 내용은 《개인정보 처리방침》 제5절을 참조하시기 바랍니다.</p>
+
+  <h2>6. 보안 조치</h2>
+  <ul>
+    <li><strong>전송</strong>：HTTPS / TLS 강제, HSTS 활성화.</li>
+    <li><strong>저장</strong>：비밀번호 bcrypt(cost 12) 해시; API token / 앱 비밀번호는 해시로만 저장; 액세스 토큰은 HMAC-SHA256 JWT 서명.</li>
+    <li><strong>애플리케이션</strong>：CSRF token, Helmet CSP(XSS 방지), 로그인 5회 실패 시 15분 잠금, 선택적 MFA / Passkey / SSO.</li>
+    <li><strong>기기 측</strong>：iOS Keychain / Android Keystore 암호화 / 데스크톱 0600 파일; 민감한 자격 증명은 로그에 기록하지 않음.</li>
+    <li><strong>프런트엔드</strong>：제3자 리소스 전부 로컬화, 해외 CDN 미로드.</li>
+    <li><strong>백업</strong>：정기 데이터베이스 백업은 운영자가 담당.</li>
+  </ul>
+
+  <h2>7. 국경 간 데이터 전송</h2>
+  <p>데이터가 국경을 넘는지 여부는 전적으로 운영자가 서버를 어디에 배포하는지, 그리고 운영자가 구성한 SMTP / APNs / FCM / SSO 등 인프라의 소재지에 따라 결정됩니다. 본 소프트웨어 자체는 서버 위치를 규정하지 않으며, 데이터를 운영자 인프라 밖으로 자동 전송하는 어떠한 경로도 내장하고 있지 않습니다. 배포의 구체적인 지리적 위치와 국경 간 처리 방안에 대해서는 본 사이트 운영자에게 문의하시기 바랍니다.</p>
+
+  <h2>8. 귀하의 권리와 행사 방법</h2>
+  <ul>
+    <li><strong>접근 / 열람</strong>：web 또는 APP 내에서 귀하의 계정, 캘린더, 로그인 기록, 기기, token을 직접 확인할 수 있습니다.</li>
+    <li><strong>정정</strong>：언제든지 이메일, 비밀번호, 표시 이름, 2단계 인증 설정 등을 변경할 수 있습니다.</li>
+    <li><strong>삭제</strong>：「설정 → 위험 구역 → 계정 삭제」에서 계정 및 모든 관련 데이터를 영구적으로 삭제합니다(복구 불가).</li>
+    <li><strong>이동성 / 내보내기</strong>：.ics 구독 링크, CalDAV를 통하거나, admin이 「관리자 화면 → 백업」에서 JSON을 내보냅니다.</li>
+    <li><strong>제한 / 반대</strong>：푸시, 시스템 캘린더 동기화, SSO 등 선택적 처리를 비활성화할 수 있습니다.</li>
+    <li><strong>동의 철회</strong>：시스템 설정 또는 APP 내에서 언제든지 해당 권한/기능을 비활성화할 수 있습니다.</li>
+  </ul>
+  <p>권리를 행사하거나 민원을 제기하시려면 본 사이트 운영자에게 연락하시기 바랍니다(연락처는 운영자가 기재). 귀하는 또한 귀하가 속한 법역의 개인정보 보호 감독 기관에 민원을 제기할 권리가 있습니다.</p>
+
+  <h2>9. 정책 변경</h2>
+  <p>본 정책은 수시로 업데이트될 수 있으며, 업데이트 후에는 상단의 "최종 업데이트" 날짜에 반영됩니다. 중대한 변경 사항은 이메일을 통해 통지됩니다.</p>
+
+  <h2>10. 문의</h2>
+  <ul>
+    <li><strong>사이트 데이터 처리 / 권리 행사</strong>：본 사이트 운영자에게 연락하시기 바랍니다(연락처는 푸터 또는 <a href="/support" class="text-brand-700 hover:underline">기술 지원 페이지</a> 참조; 운영자가 기재).</li>
+    <li><strong>소프트웨어 / 프로젝트 차원</strong>：이메일 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> 또는 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>에 issue 제출.</li>
+  </ul>
+</div>

@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">資料處理政策</h1>
+  <p class="text-sm text-slate-500 mb-8">最近更新：<%= updatedDate %></p>
+
+  <p>本《資料處理政策》是 <a href="/privacy" class="text-brand-700 hover:underline">《隱私權政策》</a> 的配套文件，以更結構化的方式說明 <strong><%= siteName %></strong>（以下簡稱「本服務」）<strong>處理哪些個人資料、為什麼處理、如何儲存、保存多久、採用何種安全措施、與哪些第三方共享、以及跨境情況</strong>。本服務是<strong>自架</strong>的開源軟體（MIT 授權），資料控管者為本站<strong>營運者</strong>；本軟體作者不接觸您的資料。</p>
+
+  <h2>1. 資料控管者與角色</h2>
+  <ul>
+    <li><strong>資料控管者</strong>：本站營運者（決定為何、如何處理您的資料；聯絡方式由營運者填寫，見頁尾 / <a href="/support" class="text-brand-700 hover:underline">技術支援頁</a>）。</li>
+    <li><strong>軟體作者</strong>：僅提供開源軟體，不營運本站、不接觸您的資料。</li>
+    <li><strong>第三方處理者</strong>：僅限營運者自行設定啟用的基礎設施服務商（見第 5 節）。</li>
+  </ul>
+
+  <h2>2. 我們處理的資料類別及目的</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>資料類別</th><th>具體內容</th><th>處理目的</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>帳號身分</td><td>電子郵件、密碼雜湊（bcrypt）、顯示名稱、選填的 Passkey 公開金鑰、TOTP/備用碼、SSO 身分識別碼</td><td>帳號註冊、登入、身分驗證、帳號安全</td></tr>
+        <tr><td>日曆與事件</td><td>日曆中繼資料、事件（標題/描述/地點/連結/時間/重複規則/與會人/提醒）、邀請與 RSVP</td><td>提供核心日曆功能</td></tr>
+        <tr><td>裝置配對資訊</td><td>裝置名稱、平台、APP 版本、配對/連線時的 IP 與 User-Agent</td><td>多裝置同步、裝置管理與解除綁定、安全稽核</td></tr>
+        <tr><td>推播訂閱 token</td><td>Web Push endpoint；行動端 APNs/FCM token（當推播啟用且裝置註冊時）</td><td>向您的裝置投遞通知</td></tr>
+        <tr><td>工作階段與安全</td><td>工作階段/CSRF cookie、登入歷史（時間/IP/UA）、失敗登入計數</td><td>維持登入狀態、防暴力破解、異常登入偵測</td></tr>
+        <tr><td>憑證衍生</td><td>API token / 應用程式密碼（僅雜湊儲存）</td><td>API / CalDAV 存取授權</td></tr>
+        <tr><td>稽核紀錄</td><td>管理員操作紀錄、Webhook 投遞紀錄</td><td>維運與安全稽核</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>我們<strong>不處理</strong>位置、裝置 IMEI/MAC、通訊錄、相簿、社交關係等與日曆功能無關的資訊，也<strong>不進行</strong>任何使用者輪廓分析、廣告定向或行為分析。</p>
+
+  <h2>3. 處理的合法性基礎</h2>
+  <ul>
+    <li><strong>履行合約 / 提供服務</strong>：帳號、日曆、事件、同步等核心功能所必需。</li>
+    <li><strong>合法利益</strong>：安全稽核、防濫用、異常登入偵測（在不損害您基本權利的前提下）。</li>
+    <li><strong>您的同意</strong>：選用功能，如推播通知、系統日曆同步、SSO 登入 —— 可隨時撤回。</li>
+    <li><strong>法律義務</strong>：在適用法律要求時配合（由營運者依其所在法域判斷）。</li>
+  </ul>
+
+  <h2>4. 儲存位置與保存期限</h2>
+  <ul>
+    <li><strong>主儲存</strong>：營運者伺服器上的 PostgreSQL 資料庫（營運者自有/自架，不經第三方 SaaS）。</li>
+    <li><strong>裝置本機</strong>：iOS Keychain / Android EncryptedSharedPreferences / 桌面 0600 權限檔案中的存取憑證，以及用於離線查看的事件快取。</li>
+    <li><strong>帳號 + 日曆 + 事件</strong>：帳號存續期間持續保留，直至您刪除或註銷。</li>
+    <li><strong>軟刪除事件</strong>：保留 90 天供還原，到期實際刪除。</li>
+    <li><strong>登入歷史 / 稽核紀錄</strong>：由營運者按其維運策略保留。</li>
+    <li><strong>註銷後</strong>：帳號及關聯資料被永久清除；營運者的定期備份中可能殘留至該備份按輪替策略到期。</li>
+  </ul>
+
+  <h2>5. 第三方處理者（僅限營運者自行設定）</h2>
+  <p>本服務<strong>預設不依賴任何第三方</strong>。以下子處理者僅在營運者主動設定時才參與，且各自只接觸完成其功能所必需的最小資料：</p>
+  <ul>
+    <li><strong>SMTP 郵件服務</strong>：投遞邀請、提醒、登入提醒、密碼重設等郵件 —— 收件人電子郵件與郵件內文。</li>
+    <li><strong>APNs（Apple）/ FCM（Google）推播閘道</strong>：在行動端推播啟用時投遞通知 —— 推播 token 與通知酬載。</li>
+    <li><strong>SSO 身分提供者（OIDC，如 Keycloak、Authelia）</strong>：身分驗證 —— 您的電子郵件 / 身分識別碼。</li>
+  </ul>
+  <p>以上不包含任何分析、廣告或追蹤服務。本服務<strong>不向任何第三方出售或共享資料用於行銷</strong>。其餘的資料外送（事件邀請、ICS/widget 分享、Webhook、API）均由您主動操作觸發，詳見《隱私權政策》第 5 節。</p>
+
+  <h2>6. 安全措施</h2>
+  <ul>
+    <li><strong>傳輸</strong>：強制 HTTPS / TLS，HSTS 已啟用。</li>
+    <li><strong>儲存</strong>：密碼 bcrypt（cost 12）雜湊；API token / 應用程式密碼僅雜湊儲存；存取權杖 HMAC-SHA256 JWT 簽章。</li>
+    <li><strong>應用程式</strong>：CSRF token、Helmet CSP（防 XSS）、登入失敗 5 次鎖定 15 分鐘、選用 MFA / Passkey / SSO。</li>
+    <li><strong>裝置端</strong>：iOS Keychain / Android Keystore 加密 / 桌面 0600 檔案；敏感憑證不寫紀錄。</li>
+    <li><strong>前端</strong>：第三方資源全部本機化，不載入國外 CDN。</li>
+    <li><strong>備份</strong>：定期資料庫備份由營運者負責。</li>
+  </ul>
+
+  <h2>7. 跨境資料傳輸</h2>
+  <p>資料是否跨境，完全取決於營運者把伺服器部署在何處，以及營運者所設定的 SMTP / APNs / FCM / SSO 等基礎設施所在地。本軟體本身不規定伺服器位置，也不內建任何會自動把資料傳出營運者基礎設施的鏈路。請向本站營運者洽詢其部署的具體地理位置與跨境安排。</p>
+
+  <h2>8. 您的權利與行使方式</h2>
+  <ul>
+    <li><strong>存取 / 查看</strong>：在 web 或 APP 內直接查看您的帳號、日曆、登入歷史、裝置、token。</li>
+    <li><strong>更正</strong>：隨時修改電子郵件、密碼、顯示名稱、雙重驗證設定等。</li>
+    <li><strong>刪除</strong>：「設定 → 危險區 → 刪除帳戶」永久清除帳號及全部關聯資料（無法復原）。</li>
+    <li><strong>可攜 / 匯出</strong>：透過 .ics 訂閱連結、CalDAV，或由 admin 在「管理後台 → 備份」匯出 JSON。</li>
+    <li><strong>限制 / 反對</strong>：可關閉推播、系統日曆同步、SSO 等選用處理。</li>
+    <li><strong>撤回同意</strong>：在系統設定或 APP 內隨時關閉相應權限/功能。</li>
+  </ul>
+  <p>行使權利或提出申訴，請聯絡本站營運者（由營運者填寫聯絡方式）。您也有權向您所在法域的資料保護監管機關申訴。</p>
+
+  <h2>9. 政策變更</h2>
+  <p>本政策可能不定期更新，更新後會在頂部「最近更新」日期體現；重大變更會透過郵件通知。</p>
+
+  <h2>10. 聯絡</h2>
+  <ul>
+    <li><strong>本站資料處理 / 行使權利</strong>：聯絡本站營運者（聯絡方式見頁尾或 <a href="/support" class="text-brand-700 hover:underline">技術支援頁</a>；由營運者填寫）。</li>
+    <li><strong>軟體 / 專案層面</strong>：郵件 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> 或到 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a> 提 issue。</li>
+  </ul>
+</div>

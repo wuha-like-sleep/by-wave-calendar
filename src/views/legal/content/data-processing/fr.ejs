@@ -1,0 +1,92 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Politique de traitement des données</h1>
+  <p class="text-sm text-slate-500 mb-8">Dernière mise à jour : <%= updatedDate %></p>
+
+  <p>La présente Politique de traitement des données accompagne la <a href="/privacy" class="text-brand-700 hover:underline">Politique de confidentialité</a> et décrit, de manière plus structurée, <strong>quelles données personnelles <%= siteName %></strong> (ci-après « le Service ») <strong>traite, pourquoi il les traite, comment il les stocke, combien de temps il les conserve, quelles mesures de sécurité il applique, avec quels tiers il les partage et la situation en matière de transferts transfrontaliers</strong>. Le Service est un logiciel open source <strong>auto-hébergé</strong> (licence MIT) ; le responsable du traitement est l'<strong>exploitant</strong> du site ; l'auteur du logiciel n'a pas accès à vos données.</p>
+
+  <h2>1. Responsable du traitement et rôles</h2>
+  <ul>
+    <li><strong>Responsable du traitement</strong> : l'exploitant du site (il détermine pourquoi et comment vos données sont traitées ; ses coordonnées, renseignées par lui, figurent en pied de page / sur la <a href="/support" class="text-brand-700 hover:underline">page d'assistance technique</a>).</li>
+    <li><strong>Auteur du logiciel</strong> : il se contente de fournir le logiciel open source, n'exploite pas le site et n'a pas accès à vos données.</li>
+    <li><strong>Sous-traitants tiers</strong> : limités aux services d'infrastructure que l'exploitant configure et active lui-même (voir la section 5).</li>
+  </ul>
+
+  <h2>2. Catégories de données que nous traitons et finalités</h2>
+  <div class="overflow-x-auto">
+    <table>
+      <thead>
+        <tr><th>Catégorie de données</th><th>Contenu précis</th><th>Finalité du traitement</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Identité du compte</td><td>E-mail, hachage du mot de passe (bcrypt), nom d'affichage, clé publique Passkey facultative, TOTP/codes de secours, identifiant d'identité SSO</td><td>Création de compte, connexion, authentification, sécurité du compte</td></tr>
+        <tr><td>Calendriers et événements</td><td>Métadonnées de calendrier, événements (titre/description/lieu/lien/heure/règles de récurrence/participants/rappels), invitations et RSVP</td><td>Fournir les fonctionnalités de calendrier essentielles</td></tr>
+        <tr><td>Informations d'appairage d'appareil</td><td>Nom de l'appareil, plateforme, version de l'application, IP et User-Agent lors de l'appairage/de la connexion</td><td>Synchronisation multi-appareils, gestion et dissociation des appareils, audit de sécurité</td></tr>
+        <tr><td>Jeton d'abonnement aux notifications push</td><td>Endpoint Web Push ; jeton APNs/FCM mobile (lorsque les notifications push sont activées et l'appareil enregistré)</td><td>Acheminer les notifications vers votre appareil</td></tr>
+        <tr><td>Session et sécurité</td><td>Cookies de session/CSRF, historique de connexion (heure/IP/UA), compteur de connexions échouées</td><td>Maintenir la session, prévenir les attaques par force brute, détecter les connexions anormales</td></tr>
+        <tr><td>Identifiants dérivés</td><td>Jeton d'API / mot de passe d'application (stockés uniquement sous forme hachée)</td><td>Autorisation d'accès API / CalDAV</td></tr>
+        <tr><td>Journaux d'audit</td><td>Enregistrements des actions d'administration, enregistrements de livraison des webhooks</td><td>Exploitation et audit de sécurité</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Nous <strong>ne traitons pas</strong> votre localisation, l'IMEI/MAC de votre appareil, vos contacts, votre galerie photo, vos relations sociales ni aucune information sans rapport avec les fonctionnalités de calendrier, et nous <strong>ne réalisons aucun</strong> profilage d'utilisateur, ciblage publicitaire ou analyse comportementale.</p>
+
+  <h2>3. Base légale du traitement</h2>
+  <ul>
+    <li><strong>Exécution du contrat / fourniture du service</strong> : indispensable aux fonctionnalités essentielles que sont le compte, les calendriers, les événements et la synchronisation.</li>
+    <li><strong>Intérêt légitime</strong> : audit de sécurité, lutte contre les abus, détection des connexions anormales (sans porter atteinte à vos droits fondamentaux).</li>
+    <li><strong>Votre consentement</strong> : fonctionnalités facultatives telles que les notifications push, la synchronisation avec le calendrier du système, la connexion SSO — révocable à tout moment.</li>
+    <li><strong>Obligation légale</strong> : coopération lorsque le droit applicable l'exige (appréciée par l'exploitant selon sa juridiction).</li>
+  </ul>
+
+  <h2>4. Lieu de stockage et durée de conservation</h2>
+  <ul>
+    <li><strong>Stockage principal</strong> : base de données PostgreSQL sur le serveur de l'exploitant (détenue/auto-hébergée par l'exploitant, sans transiter par un SaaS tiers).</li>
+    <li><strong>Stockage local sur l'appareil</strong> : identifiants d'accès dans le trousseau iOS (Keychain) / Android EncryptedSharedPreferences / fichier à permissions 0600 sur le bureau, ainsi que le cache d'événements pour la consultation hors ligne.</li>
+    <li><strong>Compte + calendriers + événements</strong> : conservés pendant toute la durée de vie du compte, jusqu'à suppression ou résiliation de votre part.</li>
+    <li><strong>Événements supprimés en douceur</strong> : conservés 90 jours en vue d'une restauration, puis physiquement supprimés à l'échéance.</li>
+    <li><strong>Historique de connexion / journaux d'audit</strong> : conservés par l'exploitant selon sa politique d'exploitation.</li>
+    <li><strong>Après résiliation</strong> : le compte et les données associées sont définitivement effacés ; ils peuvent subsister dans les sauvegardes régulières de l'exploitant jusqu'à expiration de celles-ci selon sa politique de rotation.</li>
+  </ul>
+
+  <h2>5. Sous-traitants tiers (uniquement ceux configurés par l'exploitant)</h2>
+  <p>Le Service <strong>ne dépend par défaut d'aucun tiers</strong>. Les sous-traitants ci-dessous n'interviennent que lorsque l'exploitant les configure activement, et chacun n'a accès qu'au minimum de données nécessaire à l'accomplissement de sa fonction :</p>
+  <ul>
+    <li><strong>Service de messagerie SMTP</strong> : livraison des e-mails d'invitation, de rappel, d'alerte de connexion, de réinitialisation de mot de passe, etc. — adresse e-mail du destinataire et corps de l'e-mail.</li>
+    <li><strong>Passerelles de notification push APNs (Apple) / FCM (Google)</strong> : livraison des notifications lorsque les notifications push mobiles sont activées — jeton push et charge utile de la notification.</li>
+    <li><strong>Fournisseur d'identité SSO (OIDC, par exemple Keycloak, Authelia)</strong> : authentification — votre e-mail / identifiant d'identité.</li>
+  </ul>
+  <p>Cela n'inclut aucun service d'analyse, de publicité ou de suivi. Le Service <strong>ne vend ni ne partage de données avec aucun tiers à des fins de marketing</strong>. Les autres transmissions de données vers l'extérieur (invitations à des événements, partage ICS/widget, webhooks, API) sont toutes déclenchées par vos propres actions ; voir la section 5 de la Politique de confidentialité.</p>
+
+  <h2>6. Mesures de sécurité</h2>
+  <ul>
+    <li><strong>Transport</strong> : HTTPS / TLS imposé, HSTS activé.</li>
+    <li><strong>Stockage</strong> : mots de passe hachés avec bcrypt (cost 12) ; jetons d'API / mots de passe d'application stockés uniquement sous forme hachée ; jetons d'accès signés en JWT HMAC-SHA256.</li>
+    <li><strong>Application</strong> : jeton CSRF, CSP Helmet (contre le XSS), verrouillage de 15 minutes après 5 échecs de connexion, MFA / Passkey / SSO en option.</li>
+    <li><strong>Côté appareil</strong> : trousseau iOS (Keychain) / chiffrement Android Keystore / fichier 0600 sur le bureau ; les identifiants sensibles ne sont pas consignés dans les journaux.</li>
+    <li><strong>Front-end</strong> : toutes les ressources tierces sont hébergées localement, aucun CDN étranger n'est chargé.</li>
+    <li><strong>Sauvegardes</strong> : les sauvegardes régulières de la base de données sont à la charge de l'exploitant.</li>
+  </ul>
+
+  <h2>7. Transferts transfrontaliers de données</h2>
+  <p>Le caractère transfrontalier des données dépend entièrement de l'endroit où l'exploitant déploie ses serveurs ainsi que de la localisation des infrastructures SMTP / APNs / FCM / SSO qu'il configure. Le logiciel lui-même n'impose aucun emplacement de serveur et n'intègre aucune liaison susceptible de transmettre automatiquement des données hors de l'infrastructure de l'exploitant. Veuillez vous adresser à l'exploitant du site pour connaître la localisation géographique précise de son déploiement et ses dispositions en matière de transferts transfrontaliers.</p>
+
+  <h2>8. Vos droits et leurs modalités d'exercice</h2>
+  <ul>
+    <li><strong>Accès / consultation</strong> : consultez directement, sur le web ou dans l'application, votre compte, vos calendriers, votre historique de connexion, vos appareils et vos jetons.</li>
+    <li><strong>Rectification</strong> : modifiez à tout moment votre e-mail, votre mot de passe, votre nom d'affichage, vos paramètres d'authentification à deux facteurs, etc.</li>
+    <li><strong>Suppression</strong> : « Paramètres → Zone de danger → Supprimer le compte » efface définitivement le compte et l'ensemble des données associées (irréversible).</li>
+    <li><strong>Portabilité / export</strong> : via un lien d'abonnement .ics, via CalDAV, ou par l'export JSON réalisé par l'administrateur dans « Console d'administration → Sauvegarde ».</li>
+    <li><strong>Limitation / opposition</strong> : vous pouvez désactiver les traitements facultatifs tels que les notifications push, la synchronisation avec le calendrier du système, le SSO, etc.</li>
+    <li><strong>Retrait du consentement</strong> : désactivez à tout moment l'autorisation/la fonctionnalité concernée dans les paramètres du système ou de l'application.</li>
+  </ul>
+  <p>Pour exercer vos droits ou déposer une réclamation, veuillez contacter l'exploitant du site (coordonnées renseignées par l'exploitant). Vous avez également le droit de déposer une réclamation auprès de l'autorité de protection des données de votre juridiction.</p>
+
+  <h2>9. Modifications de la politique</h2>
+  <p>La présente politique peut être mise à jour de manière ponctuelle ; la date de « dernière mise à jour » en haut de page sera alors actualisée ; les changements importants vous seront notifiés par e-mail.</p>
+
+  <h2>10. Contact</h2>
+  <ul>
+    <li><strong>Traitement des données du site / exercice des droits</strong> : contactez l'exploitant du site (coordonnées en pied de page ou sur la <a href="/support" class="text-brand-700 hover:underline">page d'assistance technique</a> ; renseignées par l'exploitant).</li>
+    <li><strong>Au niveau du logiciel / du projet</strong> : par e-mail à <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> ou en ouvrant une issue sur <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+</div>

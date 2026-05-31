@@ -1,0 +1,149 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-brand-50 text-brand-700 shrink-0">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight">Support</h1>
+        <p class="text-sm text-slate-500">Last updated: <%= updatedDate %></p>
+      </div>
+    </div>
+    <p class="text-slate-600 leading-relaxed mt-4">Thank you for using <strong class="font-semibold text-slate-900"><%= siteName %></strong>. The FAQ below can resolve most issues instantly; if your problem persists, choose the contact channel that matches the type of issue.</p>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">Frequently Asked Questions</h2>
+  <div class="space-y-2.5 mb-10">
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔑</span> Can't log in / forgot password</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Click "Forgot password" at the bottom of the login page and follow the link in your email to reset it.</li>
+          <li>If you enabled MFA but can't find your authenticator: log in using the backup codes you downloaded when setting up MFA, then immediately disable and re-enable MFA.</li>
+          <li>If the email doesn't arrive: first check your spam folder; if it's still missing, contact the site operator to resend it.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📱</span> App QR login fails / keeps spinning</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Confirm your phone can open the <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= siteName %></code> website normally (i.e. your phone can reach the server).</li>
+          <li>Go to "Settings → My Devices → Bind New Device" to generate a fresh QR code and try again (old codes expire after 10 minutes).</li>
+          <li>Accounts with MFA enabled must use the "QR login" flow and cannot use the "email + password" quick login.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔄</span> Events not syncing / missing from week view</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Pull down on the calendar list in the app to trigger a pull-to-refresh.</li>
+          <li>Quit the app and reopen it; it automatically re-fetches the latest events on foreground startup.</li>
+          <li>Confirm the event's calendar hasn't been hidden under "Settings → Filter Calendars".</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">👥</span> How to invite others to an event</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Web / iOS: edit the event → "Manage Participants" → enter the person's email → send (on iOS this is only available for already-saved events).</li>
+          <li>They receive an invitation email with an .ics attachment, and after they reply with their RSVP you can see the accepted/declined status in the event details.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📅</span> Subscribing in Apple Calendar / Outlook</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Read-only subscription: on the web, right-click the calendar → "Subscription Link" to generate an ICS address → in Apple Calendar, "File → New Calendar Subscription" and paste it.</li>
+          <li>Two-way sync: use CalDAV, with a dedicated username/password generated under "Settings → Application Passwords".</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> Close account / delete all data</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>On the web or in the app: Settings → Account → Danger Zone → "Delete Account". <strong class="font-semibold text-slate-900">This action is irreversible</strong> and clears all your calendars, events, invitations, and device bindings.</li>
+          <li>If you want to back up before deleting, export an .ics file to your local device before deletion.</li>
+        </ul>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- Contact channels -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">Still not resolved?</h2>
+  <p class="text-sm text-slate-500 mb-4">Choose the entry point that matches the type of issue to get an answer fastest.</p>
+
+  <div class="grid sm:grid-cols-3 gap-3 mb-8">
+    <!-- Operator -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 mb-3" aria-hidden="true">👤</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">Account / data / server</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">Locked accounts, data recovery, maintenance windows, and the like. All data resides on the <strong class="font-medium text-slate-700">site operator's</strong> server, so please contact the operator (contact details in the footer).</p>
+    </div>
+    <!-- GitHub -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white mb-3">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.67.8.56A11.53 11.53 0 0023.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
+      </span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">App / software bug</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">Frontend / app / server-side bugs, feature suggestions, and open-source collaboration.</p>
+      <div class="mt-auto flex flex-col gap-1 text-xs">
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">Submit an Issue ↗</a>
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+      </div>
+    </div>
+    <!-- Email -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-brand-50 text-brand-700 mb-3" aria-hidden="true">✉️</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">Business / media / general</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">Enterprise deployment inquiries, partnerships, and general questions.</p>
+      <a href="mailto:info@by-wave.com" class="mt-auto text-xs text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+    </div>
+  </div>
+
+  <!-- Response times -->
+  <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <h3 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-2"><span aria-hidden="true">⏱️</span> Expected response times</h3>
+    <ul class="text-sm text-slate-600 space-y-1.5">
+      <li><strong class="font-medium text-slate-800">GitHub Issues</strong> — usually a reply within 1–7 days; for urgent security issues, please email us as well.</li>
+      <li><strong class="font-medium text-slate-800">Email</strong> — 1–3 business days (noting the type in the subject line, such as "[Bug] iOS week view…" or "[Business] Enterprise deployment", helps us triage faster).</li>
+      <li><strong class="font-medium text-slate-800">Site account issues</strong> — depends on the site operator, who usually states their expected response time on the homepage / login page.</li>
+    </ul>
+    <p class="text-xs text-slate-400 mt-3">This is an open-source, self-hosted project maintained by volunteers, with no 24/7 support — thank you for understanding.</p>
+  </div>
+
+</div>

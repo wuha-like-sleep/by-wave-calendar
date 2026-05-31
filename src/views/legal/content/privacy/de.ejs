@@ -1,0 +1,130 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Datenschutzerklärung</h1>
+  <p class="text-sm text-slate-500 mb-8">Zuletzt aktualisiert: <%= updatedDate %></p>
+
+  <p>Diese <strong>Datenschutzerklärung</strong> erläutert, wie <strong><%= siteName %></strong> (nachfolgend „der Dienst" oder „wir") über Kanäle wie das Web, PWA, iOS-/Android-/Desktop-Apps, CalDAV, API, E-Mail, ICS-Abonnements und eingebettete Widgets Ihre Informationen erfasst, verwendet, speichert und schützt. Der Dienst ist <strong>selbst gehostete</strong> Open-Source-Software (MIT-Lizenz) – das bedeutet, dass Ihre Daten auf Servern gespeichert werden, die der <strong>Betreiber des Dienstes</strong> kontrolliert (siehe Kontaktangaben in der Fußzeile), ohne über eine Drittanbieter-SaaS-Cloud zu laufen und ohne an die Autoren der Software übermittelt zu werden. Diese Richtlinie bildet zusammen mit der zugehörigen <a href="/data-processing" class="text-brand-700 hover:underline">Datenverarbeitungsrichtlinie</a> und den <a href="/terms" class="text-brand-700 hover:underline">Nutzungsbedingungen</a> eine vollständige Erläuterung.</p>
+
+  <h2>1. Informationen, die wir erfassen</h2>
+  <h3>1.1 Kontoinformationen</h3>
+  <ul>
+    <li><strong>E-Mail-Adresse</strong>: von Ihnen bei der Kontoregistrierung angegeben, verwendet für Anmeldung, Passwortwiederherstellung, Empfang von Einladungen, Anmeldebenachrichtigungen und Ereigniserinnerungen.</li>
+    <li><strong>Passwort-Hash</strong>: Wir speichern ausschließlich den mit bcrypt (Cost 12) gehashten, nicht umkehrbaren Geheimtext und <strong>speichern niemals das Klartextpasswort</strong>.</li>
+    <li><strong>Anzeigename (optional)</strong>: der von Ihnen im Profil festgelegte Spitzname.</li>
+    <li><strong>Passkey-/WebAuthn-Anmeldedaten</strong>: Wenn Sie die Passkey-Anmeldung aktivieren, wird nur der öffentliche Schlüssel gespeichert; der private Schlüssel verbleibt stets auf Ihrem Gerät.</li>
+    <li><strong>TOTP / Backup-Codes (Zwei-Faktor-Authentifizierung)</strong>: Wenn Sie MFA aktivieren, werden das TOTP-Secret und die verschlüsselten Backup-Codes gespeichert.</li>
+    <li><strong>SSO-Identität (optional)</strong>: Wenn Sie sich über das vom Betreiber konfigurierte SSO (OIDC, z. B. Keycloak, Authelia) anmelden, wird die mit diesem Identitätsanbieter verknüpfte Kennung gespeichert.</li>
+  </ul>
+
+  <h3>1.2 Kalenderinhalte</h3>
+  <ul>
+    <li><strong>Kalender-Metadaten</strong>: Kalendername, Farbe, Zeitzone, Freigabeeinstellungen.</li>
+    <li><strong>Ereignisse</strong>: Titel, Beschreibung, Ort, Links (Meeting-/Dokument-URLs), Start-/Endzeit, Wiederholungsregeln, E-Mail-Adressen der Teilnehmer, Erinnerungen (VALARM), Zeitzone.</li>
+    <li><strong>Ereigniseinladungen</strong>: E-Mail-Adresse des Eingeladenen, RSVP-Status, Einladungs-Token.</li>
+    <li><strong>Soft-gelöschte Ereignisse</strong>: Nach dem Löschen bleiben sie 90 Tage lang in der Datenbank erhalten, um eine Wiederherstellung über „Löschen rückgängig machen" zu ermöglichen; danach werden sie per Cron physisch gelöscht.</li>
+  </ul>
+
+  <h3>1.3 Geräte- und Sitzungsinformationen</h3>
+  <ul>
+    <li><strong>Anmeldeverlauf</strong>: Zeitpunkt, IP und User-Agent jeder erfolgreichen Anmeldung, angezeigt unter „Einstellungen → Meine Anmeldungen", damit Sie verdächtige Zugriffe prüfen können.</li>
+    <li><strong>Sitzungs-Cookie</strong>: Nach der Web-Anmeldung stellt der Server ein HttpOnly-Cookie aus, um den Anmeldestatus aufrechtzuerhalten.</li>
+    <li><strong>Geräte-Pairing-Informationen (App)</strong>: Wenn Sie die iOS-/Android-/Desktop-App mit dem Server verbinden, werden Gerätename, Plattform, App-Version sowie die IP und der User-Agent der ersten/letzten Verbindung gespeichert.</li>
+    <li><strong>Push-Abonnement-Token</strong>:
+      <ul>
+        <li><strong>Web Push (Web)</strong>: Wenn Sie im Browser Push-Benachrichtigungen zustimmen, wird der vom Browser ausgestellte Push-Abonnement-Endpunkt gespeichert.</li>
+        <li><strong>Mobil APNs / FCM</strong>: Der Server verfügt über die Fähigkeit, an mobile Geräte zu pushen; wenn ein Gerät Push registriert, wird das Push-Token dieses Geräts gespeichert. <strong>Die aktuell veröffentlichte iOS-App deklariert keine Push-Fähigkeit und ruft kein APNs-Token ab oder lädt es hoch</strong>; sie nutzt lediglich Vordergrundaktualisierung und Hintergrund-Polling zur Synchronisierung von Ereignissen; falls eine spätere Version Push aktiviert, wird dies gesondert in den Update-Hinweisen bekannt gegeben.</li>
+      </ul>
+    </li>
+    <li><strong>Mehrkonten-Profile (iOS-App)</strong>: Wenn Sie in der iOS-App mehrere Server binden, wird jedes Kontoprofil (Serveradresse, E-Mail, Anzeigename) separat lokal im Keychain gespeichert. Diese Profile selbst werden nicht mit dem Server synchronisiert; die iCloud-Keychain-Ende-zu-Ende-Verschlüsselung synchronisiert sie optional mit Ihren eigenen anderen Apple-Geräten.</li>
+    <li><strong>API-Token / App-Passwörter</strong>: nur gehasht gespeichert, der Klartext wird nur einmal bei der Ausstellung angezeigt.</li>
+  </ul>
+
+  <h3>1.4 Betriebs-/Audit-Protokolle</h3>
+  <ul>
+    <li>Administratoraktionen (Aktivieren/Deaktivieren von Konten, Widerrufen von Token, Ändern von Einstellungen usw.) werden in das Audit-Protokoll geschrieben, einschließlich Aktionstyp, Ausführendem, Objekt und IP.</li>
+    <li>Aufzeichnungen über externe Webhook-Zustellungen (HTTP-Status, erste 1 KB des Antworttextes, Erfolg oder Misserfolg).</li>
+    <li>Die Serverlaufzeitprotokolle dienen der Fehlerbehebung; sensible Anmeldedaten wie Zugriffstoken, Push-Token und Passwörter werden <strong>nicht in Protokolle geschrieben</strong>.</li>
+  </ul>
+
+  <h2>2. Informationen, die wir nicht erfassen</h2>
+  <ul>
+    <li>Wir erfassen <strong>nicht</strong> aktiv Ihren Standort, die Geräte-IMEI/MAC, Kontakte, Fotos, soziale Beziehungen oder sonstige Informationen, die nichts mit der Kalenderfunktion zu tun haben.</li>
+    <li>Die Kameraberechtigung der iOS-/Android-App wird <strong>ausschließlich</strong> zum Scannen des Anmelde-QR-Codes verwendet; die Bilder werden nicht hochgeladen oder gespeichert.</li>
+    <li>Die Kalenderberechtigung der App (sofern Sie „In Systemkalender synchronisieren" aktivieren) dient nur dazu, die Ereignisse des Dienstes in den von Ihnen angegebenen Unterkalender des Systemkalenders zu schreiben, und <strong>liest nicht</strong> die Inhalte Ihres iCloud-/Google-/anderen Kalenders.</li>
+    <li>Die Benachrichtigungsberechtigung der App dient nur lokalen Erinnerungen vor Beginn eines Ereignisses.</li>
+    <li>Wir <strong>verwenden keine</strong> Werbe-SDKs, Verhaltens-Tracking-SDKs oder Drittanbieter-Analyse-SDKs; alle vom Frontend referenzierten Drittanbieter-Ressourcen werden lokal gehostet, es werden <strong>keine ausländischen CDNs geladen</strong>.</li>
+  </ul>
+
+  <h2>3. Wie wir diese Informationen verwenden</h2>
+  <ul>
+    <li>Bereitstellung der Kalenderfunktionen: Anzeigen, Bearbeiten, Erinnern an Ereignisse, Verwalten von Kalenderfreigaben.</li>
+    <li>Kontosicherheit: Erkennen ungewöhnlicher Anmeldungen, Verifizierung risikoreicher Anmeldungen, Verhinderung von Brute-Force-Angriffen, sofortiges Widerrufen aller Token beim Deaktivieren eines Kontos.</li>
+    <li>E-Mail-Benachrichtigungen: Einladungen, Absagen, Erinnerungen, Anmeldebenachrichtigungen, Passwortzurücksetzungen, Zwei-Faktor-Authentifizierung (versendet über das vom Betreiber selbst konfigurierte SMTP).</li>
+    <li>Externe Integrationen: Wenn Sie im Admin-Backend einen Webhook konfigurieren, werden Ereignisänderungen an die von Ihnen angegebene URL gesendet.</li>
+    <li>Mehrgeräte-Synchronisierung: Die App ruft Ereignisänderungen vom Server über regelmäßiges Hintergrund-Polling und Vordergrundaktualisierung ab und <strong>synchronisiert nur Ereignisse, auf die Sie selbst Zugriff haben</strong>.</li>
+  </ul>
+
+  <h2>4. Datenspeicherung und Sicherheit</h2>
+  <ul>
+    <li>Alle Daten werden auf den Servern des Betreibers des Dienstes gespeichert, in einer PostgreSQL-Datenbank, geschützt durch Linux-Dateiberechtigungen.</li>
+    <li>Auf der Transportebene wird durchgehend HTTPS / TLS-Verschlüsselung erzwungen, HSTS ist aktiviert.</li>
+    <li>Passwörter werden mit bcrypt (Cost 12) gehasht, Zugriffstoken mit HMAC-SHA256-JWT signiert, CSRF-Token verhindern Cross-Site-Request-Forgery, Helmet CSP schützt vor XSS.</li>
+    <li>Nach 5 fehlgeschlagenen Anmeldeversuchen wird das Konto vorübergehend für 15 Minuten gesperrt.</li>
+    <li>Die Website unterstützt Zwei-Faktor-Authentifizierung (TOTP), Passkeys und SSO (OIDC).</li>
+    <li><strong>Lokaler Geräteschutz</strong>: iOS speichert Anmeldedaten im Keychain; Android verwendet EncryptedSharedPreferences (verschlüsselt mit Android Keystore); auf dem Desktop wird die Anmeldedaten-Datei mit Berechtigung 0600 (nur für den Eigentümer lesbar) geschrieben; auf keiner Plattform werden Token in lokale Protokolle geschrieben.</li>
+    <li>Für regelmäßige Datenbanksicherungen ist der Betreiber verantwortlich.</li>
+  </ul>
+
+  <h2>5. Weitergabe von Daten</h2>
+  <p>Wir verkaufen Ihre Daten <strong>nicht</strong> an Dritte und verwenden sie auch nicht für Werbung. In den folgenden Szenarien findet eine Datenübertragung statt, jeweils im Rahmen Ihrer aktiven Handlung oder der aktiven Konfiguration durch den Betreiber:</p>
+  <ul>
+    <li><strong>Ereigniseinladung</strong>: Wenn Sie jemanden zu einem Ereignis einladen, erhält die Person per E-Mail den Ereignistitel, die Zeit, den Ort, die Beschreibung und die E-Mail-Adresse des Organisators.</li>
+    <li><strong>Kalenderfreigabe</strong>: Von Ihnen aktiv erzeugte Abonnementlinks (ICS / eingebettetes Widget) geben die Ereignisse des entsprechenden Kalenders preis; jeder Inhaber des Links kann darauf zugreifen.</li>
+    <li><strong>Drittanbieter-Integrationen</strong>: Die von Ihnen im Admin-Backend aktivierten Webhooks / OAuth-Apps / API-Token greifen gemäß Ihrer Konfiguration auf Ihre Daten zu.</li>
+    <li><strong>E-Mail-Versand (SMTP)</strong>: Benachrichtigungs-E-Mails werden über den vom Betreiber selbst konfigurierten SMTP-Server versendet.</li>
+    <li><strong>Push-Dienst (APNs / FCM)</strong>: Wenn mobiler Push aktiviert ist, wird der Push-Inhalt über die Apple-APNs-/Google-FCM-Gateways an Ihr Gerät zugestellt.</li>
+    <li><strong>SSO</strong>: Wenn Sie sich für eine Anmeldung über Dritte (Keycloak, Authelia usw.) entscheiden, wird Ihre E-Mail-Adresse zur Identitätsprüfung an diesen IdP übermittelt.</li>
+  </ul>
+  <p>Die oben genannten Dritten sind <strong>auf die vom Betreiber selbst konfigurierte und aktivierte Infrastruktur beschränkt</strong> (SMTP, APNs/FCM, SSO-Anbieter) und umfassen keinerlei Analyse-, Werbe- oder Tracking-Dienste. Einzelheiten siehe <a href="/data-processing" class="text-brand-700 hover:underline">Datenverarbeitungsrichtlinie</a>.</p>
+
+  <h2>6. Ihre Rechte</h2>
+  <ul>
+    <li><strong>Einsehen</strong>: Rufen Sie die Web-Einstellungen auf, um Ihre Kontoinformationen, den Anmeldeverlauf, die gebundenen Geräte, API-Token usw. einzusehen.</li>
+    <li><strong>Ändern</strong>: Ändern Sie jederzeit E-Mail, Passwort, Anzeigename und Einstellungen zur Zwei-Faktor-Authentifizierung.</li>
+    <li><strong>Löschen</strong>: Löschen Sie Ihr Konto im Web oder in der App dauerhaft unter „Einstellungen → Gefahrenzone". Das Löschen entfernt alle Ihre Kalender, Ereignisse, Abonnements, gebundenen Geräte und API-Token. <strong>Dieser Vorgang ist unwiderruflich</strong>.</li>
+    <li><strong>Export / Portabilität</strong>: Der Administrator kann unter „Admin-Backend → Backup" das JSON der gesamten Website exportieren; Sie können einzelne Kalender auch über .ics-Abonnementlinks herunterladen oder über CalDAV mit anderen Clients verbinden.</li>
+    <li><strong>Gerät trennen</strong>: Trennen Sie unter „Einstellungen → Meine Geräte" jederzeit die Bindung einer App; das entsprechende Gerät verliert sofort den Zugriff.</li>
+  </ul>
+
+  <h2>7. Verwendung von Cookies</h2>
+  <ul>
+    <li><strong>bwc_session</strong>: Anmeldesitzung, HttpOnly + Secure + SameSite=Lax.</li>
+    <li><strong>bwc_csrf</strong>: CSRF-Token zur Abwehr von Cross-Site-Request-Forgery.</li>
+    <li><strong>bwc_login_chall</strong>: Challenge-Sitzung für den E-Mail-Verifizierungscode, läuft nach 10 Minuten ab.</li>
+    <li>Bei allen oben genannten handelt es sich um <strong>Sitzungs-Cookies</strong>, die für die Aufrechterhaltung der Grundfunktionen erforderlich sind; wir verwenden keine Tracking-Cookies von Drittanbietern und keine Werbe-Cookies.</li>
+  </ul>
+
+  <h2>8. Datenaufbewahrung</h2>
+  <ul>
+    <li><strong>Konto + Kalender + Ereignisse</strong>: werden während des Bestehens des Kontos fortlaufend aufbewahrt, bis Sie Ereignisse löschen oder Ihr Konto auflösen.</li>
+    <li><strong>Soft-gelöschte Ereignisse</strong>: werden nach dem Löschen 90 Tage zur Wiederherstellung aufbewahrt und nach Ablauf physisch gelöscht.</li>
+    <li><strong>Anmeldeverlauf / Audit-Protokolle</strong>: werden vom Betreiber gemäß seiner Betriebsrichtlinie für Sicherheitsaudits aufbewahrt.</li>
+    <li><strong>Nach Auflösung des Kontos</strong>: Das Konto und die zugehörigen Daten werden dauerhaft gelöscht; in den <strong>regelmäßigen Datenbanksicherungen</strong> des Betreibers können Reste verbleiben, bis die Sicherung gemäß ihrer Rotationsstrategie abläuft.</li>
+  </ul>
+
+  <h2>9. Grenzüberschreitende Datenübertragung</h2>
+  <p>Ob Daten grenzüberschreitend übertragen werden, hängt davon ab, wo der Betreiber den Server bereitstellt und wo sich die vom Betreiber konfigurierte SMTP-/Push-/SSO-Infrastruktur befindet. Die Software selbst schreibt keinen Serverstandort vor. Wenn Sie Fragen zum konkreten geografischen Ort der Datenspeicherung und -verarbeitung haben, wenden Sie sich bitte an den Betreiber der Website.</p>
+
+  <h2>10. Datenschutz für Kinder</h2>
+  <p>Der Dienst richtet sich nicht an Kinder unter 13 Jahren. Falls Sie ein Kind sind, übermitteln Sie bitte keine personenbezogenen Daten. Stellt der Betreiber fest, dass versehentlich Daten von Kindern erfasst wurden, werden diese eigeninitiativ gelöscht.</p>
+
+  <h2>11. Änderungen der Richtlinie</h2>
+  <p>Wir können diese Richtlinie von Zeit zu Zeit aktualisieren; nach der Aktualisierung wird das Datum unter „Zuletzt aktualisiert" oben auf dieser Seite angezeigt. Über wesentliche Änderungen informieren wir Sie per E-Mail.</p>
+
+  <h2>12. Kontakt</h2>
+  <p>Bei Fragen zu dieser Richtlinie oder zu Ihren Daten:</p>
+  <ul>
+    <li><strong>Fragen auf Ebene von Konto / Daten / Server der Website</strong>: Wenden Sie sich an den Betreiber der Website (Kontaktangaben siehe Website-Fußzeile oder <a href="/support" class="text-brand-700 hover:underline">Support-Seite</a>; vom Betreiber auszufüllen).</li>
+    <li><strong>Fragen auf Ebene von Software / App / Projekt</strong>: Wenden Sie sich an die Projektseite <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a> oder eröffnen Sie ein Issue auf <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+  <p>Der Dienst wird selbst gehostet auf Basis der Open-Source-Software by-wave-calendar; der Quellcode der Software ist vollständig offen (MIT).</p>
+</div>

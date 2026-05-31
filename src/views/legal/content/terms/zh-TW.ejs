@@ -1,0 +1,71 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">使用條款</h1>
+  <p class="text-sm text-slate-500 mb-8">最近更新：<%= updatedDate %></p>
+
+  <p>歡迎使用 <strong><%= siteName %></strong>（以下簡稱「本服務」）。繼續使用前，請仔細閱讀以下條款。註冊帳號或繼續存取即表示您已同意這些條款。關於我們如何處理您的資料，請一併參閱 <a href="/privacy" class="text-brand-700 hover:underline">《隱私權政策》</a> 和 <a href="/data-processing" class="text-brand-700 hover:underline">《資料處理政策》</a>。</p>
+
+  <h2>1. 服務說明</h2>
+  <ul>
+    <li>本服務是基於開源軟體 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">by-wave-calendar</a> 的<strong>自架</strong>部署，由站台營運者負責日常維護、備份、升級。</li>
+    <li>本服務提供日曆共享、事件管理、外部 .ics / CalDAV 同步、API 整合、原生 iOS / Android / 桌面 APP 等功能。</li>
+    <li>具體功能可能因伺服器版本不同而異，營運者可隨時啟用 / 關閉某項功能（如原生 APP 同步、第三方 API 等）。</li>
+  </ul>
+
+  <h2>2. 帳戶與責任</h2>
+  <ul>
+    <li>註冊帳號需使用有效的電子郵件。您有責任保護自己的登入憑證 —— 強烈建議開啟雙重驗證（MFA）或 Passkey。</li>
+    <li>如發現帳號遭未經授權存取，請立刻修改密碼 + 撤銷所有 token + 聯絡營運者。</li>
+    <li>請勿與他人共用您的密碼；他人需要協作請用本服務的「邀請」功能。</li>
+    <li>您對在本服務上建立的事件、日曆、邀請內容負完全責任。</li>
+  </ul>
+
+  <h2>3. 可接受使用</h2>
+  <p>使用本服務時，您<strong>不得</strong>：</p>
+  <ul>
+    <li>發布違法、騷擾、仇恨、暴力、色情、侵犯他人版權的內容。</li>
+    <li>用本服務進行垃圾郵件、釣魚、詐騙、傳銷、散布惡意軟體。</li>
+    <li>嘗試未經授權存取本服務的伺服器、資料庫、其他使用者的帳號。</li>
+    <li>透過自動化指令稿對 API 進行超出合理速率的存取（請遵守 admin 設定的速率限制）。</li>
+    <li>繞過本服務的安全機制（CSRF、CSP、登入鎖定、MFA 等）。</li>
+    <li>逆向工程、修改本服務的 APP 後再散布（除非依據開源授權）。</li>
+  </ul>
+
+  <h2>4. 內容所有權</h2>
+  <ul>
+    <li>您在本服務上建立的所有資料（日曆、事件、描述等）的<strong>所有權和版權歸您所有</strong>。</li>
+    <li>您授權本服務在為您提供服務的必要範圍內儲存、處理、顯示這些資料。</li>
+    <li>當您把事件邀請發給他人時，對方可在邀請郵件 + 邀請連結中看到事件內容；這是預期行為。</li>
+    <li>當您透過 .ics 訂閱連結或 widget iframe 公開分享日曆時，您理解這些連結的持有者均可讀取相應內容。</li>
+  </ul>
+
+  <h2>5. 服務可用性</h2>
+  <ul>
+    <li>本服務<strong>不承諾</strong> 100% 可用 —— 維護、升級、網路故障、電力中斷、自然災害都可能導致中斷。</li>
+    <li>本服務可能不定期發布新版本，部分功能可能變更或廢棄；重大變更會提前通知。</li>
+    <li>營運者保留在合理通知下變更、暫停、終止服務的權利。</li>
+  </ul>
+
+  <h2>6. 終止</h2>
+  <ul>
+    <li>您可以隨時在「設定 → 危險區」永久刪除帳號。</li>
+    <li>若您違反本條款，營運者有權暫停或終止您的帳號，必要時移交執法機關。</li>
+    <li>終止後您的資料按《隱私權政策》與《資料處理政策》中的保存策略處理。</li>
+  </ul>
+
+  <h2>7. 免責</h2>
+  <ul>
+    <li>本服務「依現狀」提供，營運者<strong>不承擔</strong>因服務中斷、資料遺失、第三方原因造成的間接損失。</li>
+    <li>請定期透過 .ics 訂閱連結或 admin 後台備份您認為重要的資料。</li>
+    <li>本服務的開源軟體按 LICENSE 檔案中的開源授權提供，不承諾任何明示或默示的擔保。</li>
+  </ul>
+
+  <h2>8. 適用法律</h2>
+  <p>本條款的解釋、效力、履行均適用本服務營運者所在地的法律。如有爭議，先協商解決；協商不成，提交營運者所在地有管轄權的法院。</p>
+
+  <h2>9. 聯絡</h2>
+  <p>對本條款有任何疑問：</p>
+  <ul>
+    <li><strong>本站層面</strong>：聯絡營運者（詳見 <a href="/support" class="text-brand-700 hover:underline">技術支援頁</a>）。</li>
+    <li><strong>專案層面</strong>：郵件 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>。</li>
+  </ul>
+</div>

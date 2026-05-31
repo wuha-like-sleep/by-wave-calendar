@@ -1,0 +1,130 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Privacy Policy</h1>
+  <p class="text-sm text-slate-500 mb-8">Last updated: <%= updatedDate %></p>
+
+  <p>This Privacy Policy explains how <strong><%= siteName %></strong> (hereinafter "the Service" or "we") collects, uses, stores, and protects your information across the web, PWA, iOS / Android / desktop apps, CalDAV, API, email, ICS subscriptions, embedded widgets, and other channels. The Service is <strong>self-hosted</strong> open-source software (MIT licensed) — this means your data resides on servers controlled by <strong>the Service's operator</strong> (see the footer for contact details), does not pass through any third-party SaaS cloud, and is not transmitted to the software's authors. This policy, together with the accompanying <a href="/data-processing" class="text-brand-700 hover:underline">Data Processing Policy</a> and <a href="/terms" class="text-brand-700 hover:underline">Terms of Service</a>, constitutes the complete statement.</p>
+
+  <h2>1. Information We Collect</h2>
+  <h3>1.1 Account Information</h3>
+  <ul>
+    <li><strong>Email address</strong>: provided by you when registering, used for login, password recovery, receiving invitations, login alerts, and event reminders.</li>
+    <li><strong>Password hash</strong>: we store only the irreversible bcrypt (cost 12) hash, and <strong>never store plaintext passwords</strong>.</li>
+    <li><strong>Display name (optional)</strong>: the nickname you set in your profile.</li>
+    <li><strong>Passkey / WebAuthn credentials</strong>: when you enable Passkey login, only the public key is stored; the private key always remains on your device.</li>
+    <li><strong>TOTP / backup codes (two-factor authentication)</strong>: when you enable MFA, the TOTP secret and encrypted backup codes are stored.</li>
+    <li><strong>SSO identity (optional)</strong>: when you log in via SSO configured by the operator (OIDC, e.g. Keycloak, Authelia), the identifier associated with that identity provider is stored.</li>
+  </ul>
+
+  <h3>1.2 Calendar Content</h3>
+  <ul>
+    <li><strong>Calendar metadata</strong>: calendar name, color, time zone, and sharing settings.</li>
+    <li><strong>Events</strong>: title, description, location, links (meeting/document URLs), start/end times, recurrence rules, attendee emails, reminders (VALARM), and time zone.</li>
+    <li><strong>Event invitations</strong>: invitee email, RSVP status, and invitation token.</li>
+    <li><strong>Soft-deleted events</strong>: retained in the database for 90 days after deletion to allow recovery via "Undo Delete"; thereafter physically deleted by a cron job.</li>
+  </ul>
+
+  <h3>1.3 Device and Session Information</h3>
+  <ul>
+    <li><strong>Login history</strong>: the time, IP, and User-Agent of each successful login, shown under "Settings → My Logins" so you can audit suspicious access.</li>
+    <li><strong>Session cookie</strong>: after a web login, the server issues an HttpOnly cookie to keep you logged in.</li>
+    <li><strong>Device pairing information (apps)</strong>: when you bind an iOS / Android / desktop app to a server, the device name, platform, app version, and the IP + User-Agent of the first/most recent connection are stored.</li>
+    <li><strong>Push subscription tokens</strong>:
+      <ul>
+        <li><strong>Web Push</strong>: when you consent to push notifications in your browser, the push subscription endpoint issued by the browser is stored.</li>
+        <li><strong>Mobile APNs / FCM</strong>: the server is capable of pushing to mobile devices; when a device registers for push, that device's push token is stored. <strong>The currently released iOS app does not declare push capability and does not obtain or upload an APNs token</strong>; it only uses foreground refresh and background polling to sync events. If a future version enables push, this will be announced separately in the upgrade notes.</li>
+      </ul>
+    </li>
+    <li><strong>Multi-account profiles (iOS app)</strong>: when you bind multiple servers in the iOS app, each account profile (server address, email, display name) is stored independently in the local Keychain. These profiles themselves are not synced to the server; iCloud Keychain end-to-end encryption optionally syncs them to your own other Apple devices.</li>
+    <li><strong>API tokens / application passwords</strong>: stored only as hashes; the plaintext is shown only once at the time of issuance.</li>
+  </ul>
+
+  <h3>1.4 Operation / Audit Logs</h3>
+  <ul>
+    <li>Administrator actions (enabling/disabling accounts, revoking tokens, changing settings, etc.) are written to an audit log, including the action type, actor, target, and IP.</li>
+    <li>External webhook delivery records (HTTP status, the first 1KB of the response body, whether it succeeded).</li>
+    <li>Server runtime logs are used for troubleshooting; sensitive credentials such as access tokens, push tokens, and passwords <strong>are not written to the logs</strong>.</li>
+  </ul>
+
+  <h2>2. Information We Do Not Collect</h2>
+  <ul>
+    <li>We <strong>do not</strong> proactively collect your location, device IMEI/MAC, contacts, photo library, social connections, or any other information unrelated to calendar functionality.</li>
+    <li>The camera permission of the iOS / Android apps is used <strong>only</strong> to scan login QR codes; images are never uploaded or saved.</li>
+    <li>The apps' calendar permission (if you enable "Sync to system calendar") is used only to write the Service's events into the system sub-calendar you designate, and <strong>does not read</strong> the contents of your iCloud / Google / other calendars.</li>
+    <li>The apps' notification permission is used only for local reminders before an event begins.</li>
+    <li>We <strong>do not use</strong> any advertising SDK, behavioral tracking SDK, or third-party analytics SDK; all third-party resources referenced by the frontend are hosted locally, and <strong>no foreign CDN is loaded</strong>.</li>
+  </ul>
+
+  <h2>3. How We Use This Information</h2>
+  <ul>
+    <li>Provide calendar functionality: displaying, editing, and reminding you of events, and managing calendar sharing.</li>
+    <li>Account security: detecting anomalous logins, risk-based login verification, preventing brute-force attacks, and immediately revoking all tokens when an account is disabled.</li>
+    <li>Email notifications: invitations, cancellations, reminders, login alerts, password resets, and two-factor authentication (sent via SMTP configured by the operator).</li>
+    <li>External integrations: when you configure a webhook in the admin dashboard, event changes are pushed to the URL you specify.</li>
+    <li>Multi-device sync: apps pull event changes from the server via periodic background polling and foreground refresh, <strong>syncing only events you are authorized to access</strong>.</li>
+  </ul>
+
+  <h2>4. Data Storage and Security</h2>
+  <ul>
+    <li>All data is stored on the Service operator's servers in a PostgreSQL database, protected by Linux file permissions.</li>
+    <li>HTTPS / TLS encryption is enforced end-to-end at the transport layer, and HSTS is enabled.</li>
+    <li>Passwords are bcrypt (cost 12) hashed, access tokens are HMAC-SHA256 JWT signed, CSRF tokens guard against cross-site request forgery, and Helmet CSP guards against XSS.</li>
+    <li>After 5 failed login attempts, the account is temporarily locked for 15 minutes.</li>
+    <li>The site supports two-factor authentication (TOTP), Passkey, and SSO (OIDC).</li>
+    <li><strong>Local device protection</strong>: iOS stores credentials in the Keychain; Android uses EncryptedSharedPreferences (encrypted via the Android Keystore); the desktop client writes the credential file with 0600 permissions (readable only by the owner); and tokens on all platforms are never written to local logs.</li>
+    <li>Regular database backups are the operator's responsibility.</li>
+  </ul>
+
+  <h2>5. Data Sharing</h2>
+  <p>We <strong>do not</strong> sell your data to third parties, nor use it for advertising. The following scenarios involve data transmission, all within the scope of actions you initiate or infrastructure the operator configures:</p>
+  <ul>
+    <li><strong>Event invitations</strong>: when you invite someone to an event, they receive the event title, time, location, description, and organizer's email by email.</li>
+    <li><strong>Calendar sharing</strong>: subscription links you generate (ICS / embedded widget) expose the events of the corresponding calendar, accessible to anyone holding the link.</li>
+    <li><strong>Third-party integrations</strong>: webhooks / OAuth apps / API tokens you enable in the admin dashboard access your data according to your configuration.</li>
+    <li><strong>Email delivery (SMTP)</strong>: notification emails are sent via an SMTP server configured by the operator.</li>
+    <li><strong>Push services (APNs / FCM)</strong>: when mobile push is enabled, push content is delivered to your device via the Apple APNs / Google FCM gateways.</li>
+    <li><strong>SSO</strong>: when you choose third-party login (Keycloak, Authelia, etc.), your email is passed to that IdP to complete authentication.</li>
+  </ul>
+  <p>The third parties above are <strong>limited to infrastructure the operator has chosen to configure and enable</strong> (SMTP, APNs/FCM, SSO providers), and do not include any analytics, advertising, or tracking services. See the <a href="/data-processing" class="text-brand-700 hover:underline">Data Processing Policy</a> for details.</p>
+
+  <h2>6. Your Rights</h2>
+  <ul>
+    <li><strong>Access</strong>: go to the web settings to view your account information, login history, bound devices, API tokens, and more.</li>
+    <li><strong>Modify</strong>: change your email, password, display name, and two-factor authentication settings at any time.</li>
+    <li><strong>Delete</strong>: permanently delete your account under "Settings → Danger Zone" on the web or in the app. Deletion clears all your calendars, events, subscriptions, bound devices, and API tokens. <strong>This action is irreversible.</strong></li>
+    <li><strong>Export / portability</strong>: an admin can export the entire site as JSON under "Admin Dashboard → Backup"; you can also download a single calendar via its .ics subscription link, or connect other clients via CalDAV.</li>
+    <li><strong>Unbind devices</strong>: unbind any app under "Settings → My Devices" at any time, and that device immediately loses access.</li>
+  </ul>
+
+  <h2>7. Cookie Usage</h2>
+  <ul>
+    <li><strong>bwc_session</strong>: login session, HttpOnly + Secure + SameSite=Lax.</li>
+    <li><strong>bwc_csrf</strong>: CSRF token, used to defend against cross-site request forgery.</li>
+    <li><strong>bwc_login_chall</strong>: email verification code challenge session, expires in 10 minutes.</li>
+    <li>All of the above are <strong>session cookies</strong> necessary to maintain basic functionality; we do not use third-party tracking cookies, and there are no advertising cookies.</li>
+  </ul>
+
+  <h2>8. Data Retention</h2>
+  <ul>
+    <li><strong>Account + calendars + events</strong>: retained for the duration of the account, until you delete the events or close the account.</li>
+    <li><strong>Soft-deleted events</strong>: retained for 90 days to allow recovery, then physically deleted upon expiry.</li>
+    <li><strong>Login history / audit logs</strong>: retained by the operator according to their operational policy, for security auditing.</li>
+    <li><strong>After account closure</strong>: the account and its associated data are permanently purged; they may still remain in the operator's <strong>periodic database backups</strong> until those backups expire under their rotation policy.</li>
+  </ul>
+
+  <h2>9. Cross-Border Data Transfers</h2>
+  <p>Whether data crosses borders depends on where the operator deploys the server and on the location of the SMTP / push / SSO infrastructure the operator configures. The software itself does not dictate the server's location. If you have questions about the specific geographic location of data storage and processing, please contact the site operator.</p>
+
+  <h2>10. Children's Privacy</h2>
+  <p>The Service is not directed at children under 13. If you are a child, please do not submit personal information. If the operator discovers that children's information has been collected by mistake, they will proactively delete it.</p>
+
+  <h2>11. Changes to This Policy</h2>
+  <p>We may update this policy from time to time, and the "Last updated" date at the top of this page will reflect any updates. We will notify you of significant changes by email.</p>
+
+  <h2>12. Contact</h2>
+  <p>If you have any questions about this policy or your data:</p>
+  <ul>
+    <li><strong>Questions about your site account / data / the server</strong>: contact the site operator (contact details are in the site footer or on the <a href="/support" class="text-brand-700 hover:underline">Support page</a>; provided by the operator).</li>
+    <li><strong>Questions about the software / app / project</strong>: contact the project team at <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>, or open an issue on <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+  <p>The Service is self-hosted, based on the open-source software by-wave-calendar, whose source code is fully open (MIT).</p>
+</div>

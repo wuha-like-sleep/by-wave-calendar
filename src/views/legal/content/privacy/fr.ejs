@@ -1,0 +1,130 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Politique de confidentialité</h1>
+  <p class="text-sm text-slate-500 mb-8">Dernière mise à jour : <%= updatedDate %></p>
+
+  <p>La présente Politique de confidentialité explique comment <strong><%= siteName %></strong> (ci-après « le Service » ou « nous ») collecte, utilise, stocke et protège vos informations à travers ses différents canaux : site web, PWA, applications iOS / Android / bureau, CalDAV, API, e-mail, abonnements ICS, widgets intégrés, etc. Le Service est un logiciel open source <strong>auto-hébergé</strong> (licence MIT) — cela signifie que vos données sont conservées sur des serveurs contrôlés par <strong>l'exploitant du Service</strong> (voir les coordonnées en pied de page), sans transiter par aucun cloud SaaS tiers, et sans être transmises à l'auteur du logiciel. La présente politique forme, avec la <a href="/data-processing" class="text-brand-700 hover:underline">Politique de traitement des données</a> et les <a href="/terms" class="text-brand-700 hover:underline">Conditions d'utilisation</a> qui l'accompagnent, un ensemble explicatif complet.</p>
+
+  <h2>1. Informations que nous collectons</h2>
+  <h3>1.1 Informations de compte</h3>
+  <ul>
+    <li><strong>Adresse e-mail</strong> : fournie par vous lors de la création du compte, elle sert à la connexion, à la réinitialisation du mot de passe, à la réception des invitations, aux alertes de connexion et aux rappels d'événements.</li>
+    <li><strong>Hachage du mot de passe</strong> : nous ne stockons que l'empreinte irréversible obtenue par bcrypt (cost 12) ; nous ne stockons <strong>jamais le mot de passe en clair</strong>.</li>
+    <li><strong>Nom d'affichage (facultatif)</strong> : le pseudonyme que vous définissez dans votre profil.</li>
+    <li><strong>Identifiants Passkey / WebAuthn</strong> : lorsque vous activez la connexion par Passkey, seule la clé publique est stockée ; la clé privée reste toujours sur votre appareil.</li>
+    <li><strong>TOTP / codes de secours (authentification à deux facteurs)</strong> : lorsque vous activez la MFA, le secret TOTP et les codes de secours chiffrés sont stockés.</li>
+    <li><strong>Identité SSO (facultatif)</strong> : lorsque vous vous connectez via le SSO configuré par l'exploitant (OIDC, par exemple Keycloak ou Authelia), l'identifiant associé à ce fournisseur d'identité est stocké.</li>
+  </ul>
+
+  <h3>1.2 Contenu des calendriers</h3>
+  <ul>
+    <li><strong>Métadonnées de calendrier</strong> : nom, couleur, fuseau horaire et paramètres de partage du calendrier.</li>
+    <li><strong>Événements</strong> : titre, description, lieu, lien (URL de réunion/document), heures de début/fin, règles de récurrence, e-mails des participants, rappels (VALARM), fuseau horaire.</li>
+    <li><strong>Invitations à des événements</strong> : e-mail de l'invité, statut RSVP, jeton d'invitation.</li>
+    <li><strong>Événements supprimés en douceur</strong> : conservés dans la base de données pendant 90 jours après leur suppression afin de permettre une restauration via « Annuler la suppression » ; ils sont ensuite physiquement supprimés par une tâche cron.</li>
+  </ul>
+
+  <h3>1.3 Informations sur les appareils et les sessions</h3>
+  <ul>
+    <li><strong>Historique de connexion</strong> : l'heure, l'adresse IP et le User-Agent de chaque connexion réussie, affichés dans « Paramètres → Mes connexions » pour vous permettre d'auditer les accès suspects.</li>
+    <li><strong>Cookie de session</strong> : après une connexion sur le site web, le serveur émet un cookie HttpOnly afin de maintenir la session.</li>
+    <li><strong>Informations d'appairage d'appareil (application)</strong> : lorsque vous associez une application iOS / Android / bureau au serveur, le nom de l'appareil, la plateforme, la version de l'application, ainsi que l'IP et le User-Agent de la première et de la dernière connexion sont stockés.</li>
+    <li><strong>Jeton d'abonnement aux notifications push</strong> :
+      <ul>
+        <li><strong>Web Push (navigateur)</strong> : lorsque vous acceptez les notifications push dans votre navigateur, l'endpoint d'abonnement push émis par le navigateur est stocké.</li>
+        <li><strong>APNs / FCM (mobile)</strong> : le serveur dispose de la capacité d'envoyer des notifications push aux appareils mobiles ; lorsqu'un appareil s'enregistre pour les notifications, son jeton push est stocké. <strong>L'application iOS actuellement publiée ne déclare aucune capacité push et n'obtient ni ne transmet aucun jeton APNs</strong> ; elle utilise uniquement le rafraîchissement au premier plan et une interrogation en arrière-plan pour synchroniser les événements ; si une future version active les notifications push, cela sera annoncé séparément dans les notes de mise à jour.</li>
+      </ul>
+    </li>
+    <li><strong>Profils multi-comptes (application iOS)</strong> : lorsque vous associez plusieurs serveurs dans l'application iOS, chaque profil de compte (adresse du serveur, e-mail, nom d'affichage) est stocké de manière indépendante dans le trousseau (Keychain) local de l'appareil. Ces profils eux-mêmes ne sont pas synchronisés vers le serveur ; le trousseau iCloud chiffré de bout en bout peut, en option, les synchroniser vers vos autres appareils Apple.</li>
+    <li><strong>Jeton d'API / mot de passe d'application</strong> : stocké uniquement sous forme hachée ; la version en clair n'est affichée qu'une seule fois, au moment de l'émission.</li>
+  </ul>
+
+  <h3>1.4 Journaux d'opérations / d'audit</h3>
+  <ul>
+    <li>Les actions d'administration (activation/désactivation de comptes, révocation de jetons, modification de paramètres, etc.) sont consignées dans un journal d'audit comprenant le type d'action, l'auteur, l'objet et l'adresse IP.</li>
+    <li>Les enregistrements de livraison des webhooks externes (statut HTTP, premier kilo-octet du corps de la réponse, succès ou non).</li>
+    <li>Les journaux d'exploitation du serveur servent au dépannage ; les identifiants sensibles tels que les jetons d'accès, les jetons push et les mots de passe <strong>ne sont pas consignés dans les journaux</strong>.</li>
+  </ul>
+
+  <h2>2. Informations que nous ne collectons pas</h2>
+  <ul>
+    <li>Nous <strong>ne collectons pas</strong> activement votre localisation, l'IMEI/MAC de votre appareil, vos contacts, votre galerie photo, vos relations sociales ni aucune information sans rapport avec les fonctionnalités de calendrier.</li>
+    <li>L'autorisation d'accès à la caméra des applications iOS / Android sert <strong>uniquement</strong> à scanner le QR code de connexion ; les images ne sont ni transmises ni enregistrées.</li>
+    <li>L'autorisation d'accès au calendrier de l'application (si vous activez « Synchroniser avec le calendrier du système ») sert uniquement à écrire les événements du Service dans le sous-calendrier système que vous désignez ; elle <strong>ne lit pas</strong> le contenu de vos calendriers iCloud / Google / autres.</li>
+    <li>L'autorisation de notification de l'application sert uniquement aux rappels locaux avant le début d'un événement.</li>
+    <li>Nous <strong>n'utilisons</strong> aucun SDK publicitaire, aucun SDK de suivi comportemental ni aucun SDK d'analyse tiers ; toutes les ressources tierces référencées par le front-end sont hébergées localement, et <strong>aucun CDN étranger n'est chargé</strong>.</li>
+  </ul>
+
+  <h2>3. Comment nous utilisons ces informations</h2>
+  <ul>
+    <li>Fournir les fonctionnalités de calendrier : afficher, modifier et rappeler les événements, gérer le partage des calendriers.</li>
+    <li>Sécurité du compte : détecter les connexions anormales, vérifier les connexions à risque, prévenir les attaques par force brute et révoquer immédiatement tous les jetons lors de la désactivation d'un compte.</li>
+    <li>Notifications par e-mail : invitations, annulations, rappels, alertes de connexion, réinitialisations de mot de passe, authentification à deux facteurs (envoyées via le serveur SMTP configuré par l'exploitant).</li>
+    <li>Intégrations externes : lorsque vous configurez un webhook dans la console d'administration, les modifications d'événements sont transmises à l'URL que vous indiquez.</li>
+    <li>Synchronisation multi-appareils : l'application récupère les modifications d'événements du serveur via une interrogation périodique en arrière-plan et un rafraîchissement au premier plan, en <strong>ne synchronisant que les événements auxquels vous avez vous-même accès</strong>.</li>
+  </ul>
+
+  <h2>4. Stockage et sécurité des données</h2>
+  <ul>
+    <li>Toutes les données sont conservées sur les serveurs de l'exploitant du Service, dans une base de données PostgreSQL protégée par les permissions de fichiers Linux.</li>
+    <li>La couche de transport impose un chiffrement HTTPS / TLS de bout en bout, avec HSTS activé.</li>
+    <li>Les mots de passe sont hachés avec bcrypt (cost 12), les jetons d'accès sont signés en JWT HMAC-SHA256, un jeton CSRF protège contre la falsification de requête intersite, et la CSP de Helmet protège contre le XSS.</li>
+    <li>Après 5 tentatives de connexion infructueuses, le compte est temporairement verrouillé pendant 15 minutes.</li>
+    <li>Le site prend en charge l'authentification à deux facteurs (TOTP), les Passkey et le SSO (OIDC).</li>
+    <li><strong>Protection locale sur l'appareil</strong> : iOS stocke les identifiants dans le trousseau (Keychain) ; Android utilise EncryptedSharedPreferences (chiffrement Android Keystore) ; le client de bureau écrit le fichier d'identifiants avec les permissions 0600 (lisible par le seul propriétaire) ; sur tous les clients, les jetons ne sont jamais consignés dans les journaux locaux.</li>
+    <li>Les sauvegardes régulières de la base de données sont à la charge de l'exploitant.</li>
+  </ul>
+
+  <h2>5. Partage des données</h2>
+  <p>Nous <strong>ne vendons pas</strong> vos données à des tiers et ne les utilisons pas à des fins publicitaires. Les transferts de données ci-dessous ne surviennent que dans le cadre d'actions que vous initiez vous-même ou de configurations mises en place par l'exploitant :</p>
+  <ul>
+    <li><strong>Invitations à des événements</strong> : lorsque vous invitez une personne à un événement, celle-ci reçoit par e-mail le titre, l'heure, le lieu, la description de l'événement ainsi que l'adresse e-mail de l'organisateur.</li>
+    <li><strong>Partage de calendrier</strong> : les liens d'abonnement que vous générez vous-même (ICS / widget intégré) exposent les événements du calendrier concerné, accessibles à tout détenteur du lien.</li>
+    <li><strong>Intégrations tierces</strong> : les webhooks / applications OAuth / jetons d'API que vous activez dans la console d'administration accèdent à vos données selon votre configuration.</li>
+    <li><strong>Envoi d'e-mails (SMTP)</strong> : les e-mails de notification sont envoyés via le serveur SMTP configuré par l'exploitant.</li>
+    <li><strong>Services de notification push (APNs / FCM)</strong> : lorsque les notifications push mobiles sont activées, leur contenu est acheminé vers votre appareil via les passerelles APNs d'Apple / FCM de Google.</li>
+    <li><strong>SSO</strong> : lorsque vous choisissez une connexion tierce (Keycloak, Authelia, etc.), votre adresse e-mail est transmise à ce fournisseur d'identité pour réaliser l'authentification.</li>
+  </ul>
+  <p>Les tiers ci-dessus se <strong>limitent aux infrastructures que l'exploitant configure et active lui-même</strong> (fournisseurs SMTP, APNs/FCM, SSO) et n'incluent aucun service d'analyse, de publicité ou de suivi. Voir la <a href="/data-processing" class="text-brand-700 hover:underline">Politique de traitement des données</a>.</p>
+
+  <h2>6. Vos droits</h2>
+  <ul>
+    <li><strong>Consultation</strong> : accédez aux paramètres du site web pour consulter vos informations de compte, votre historique de connexion, vos appareils associés, vos jetons d'API, etc.</li>
+    <li><strong>Modification</strong> : modifiez à tout moment votre e-mail, votre mot de passe, votre nom d'affichage et vos paramètres d'authentification à deux facteurs.</li>
+    <li><strong>Suppression</strong> : supprimez définitivement votre compte dans « Paramètres → Zone de danger » sur le web ou dans l'application. La suppression efface l'ensemble de vos calendriers, événements, abonnements, appareils associés et jetons d'API. <strong>Cette opération est irréversible</strong>.</li>
+    <li><strong>Export / portabilité</strong> : l'administrateur peut exporter l'intégralité du site au format JSON dans « Console d'administration → Sauvegarde » ; vous pouvez également télécharger un calendrier individuel via un lien d'abonnement .ics, ou le connecter à d'autres clients via CalDAV.</li>
+    <li><strong>Dissociation d'un appareil</strong> : dissociez à tout moment une application dans « Paramètres → Mes appareils » ; l'appareil correspondant perd immédiatement son accès.</li>
+  </ul>
+
+  <h2>7. Utilisation des cookies</h2>
+  <ul>
+    <li><strong>bwc_session</strong> : session de connexion, HttpOnly + Secure + SameSite=Lax.</li>
+    <li><strong>bwc_csrf</strong> : jeton CSRF, destiné à prévenir la falsification de requête intersite.</li>
+    <li><strong>bwc_login_chall</strong> : session de défi du code de vérification par e-mail, expirant au bout de 10 minutes.</li>
+    <li>Les cookies ci-dessus sont des <strong>cookies de session</strong> indispensables au fonctionnement de base ; nous n'utilisons aucun cookie de suivi tiers ni aucun cookie publicitaire.</li>
+  </ul>
+
+  <h2>8. Conservation des données</h2>
+  <ul>
+    <li><strong>Compte + calendriers + événements</strong> : conservés pendant toute la durée de vie du compte, jusqu'à ce que vous supprimiez un événement ou résiliiez votre compte.</li>
+    <li><strong>Événements supprimés en douceur</strong> : conservés 90 jours en vue d'une restauration, puis physiquement supprimés à l'échéance.</li>
+    <li><strong>Historique de connexion / journaux d'audit</strong> : conservés par l'exploitant selon sa politique d'exploitation, à des fins d'audit de sécurité.</li>
+    <li><strong>Après résiliation du compte</strong> : le compte et les données associées sont définitivement effacés ; ils peuvent toutefois subsister dans les <strong>sauvegardes régulières de la base de données</strong> de l'exploitant jusqu'à expiration de celles-ci selon sa politique de rotation.</li>
+  </ul>
+
+  <h2>9. Transferts transfrontaliers de données</h2>
+  <p>Le caractère transfrontalier des données dépend de l'endroit où l'exploitant déploie ses serveurs ainsi que de la localisation des infrastructures SMTP / push / SSO qu'il configure. Le logiciel lui-même n'impose aucun emplacement de serveur. Si vous avez des questions sur la localisation géographique précise du stockage et du traitement de vos données, veuillez vous adresser à l'exploitant du site.</p>
+
+  <h2>10. Confidentialité des enfants</h2>
+  <p>Le Service ne s'adresse pas aux enfants de moins de 13 ans. Si vous êtes un enfant, veuillez ne pas soumettre d'informations personnelles. Si l'exploitant constate qu'il a collecté par erreur des informations relatives à un enfant, il les supprimera de sa propre initiative.</p>
+
+  <h2>11. Modifications de la politique</h2>
+  <p>Nous pouvons mettre à jour la présente politique de manière ponctuelle ; la date de « dernière mise à jour » affichée en haut de cette page sera alors actualisée. Les changements importants vous seront notifiés par e-mail.</p>
+
+  <h2>12. Contact</h2>
+  <p>Pour toute question relative à la présente politique ou à vos données :</p>
+  <ul>
+    <li><strong>Pour les questions relatives au compte, aux données ou au serveur du site</strong> : contactez l'exploitant du site (coordonnées en pied de page ou sur la <a href="/support" class="text-brand-700 hover:underline">page d'assistance technique</a> ; renseignées par l'exploitant).</li>
+    <li><strong>Pour les questions relatives au logiciel, à l'application ou au projet</strong> : contactez l'équipe du projet à <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>, ou ouvrez une issue sur <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a>.</li>
+  </ul>
+  <p>Le Service est auto-hébergé à partir du logiciel open source by-wave-calendar, dont le code source est entièrement ouvert (MIT).</p>
+</div>

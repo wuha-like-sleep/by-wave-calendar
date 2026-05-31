@@ -1,0 +1,130 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">隱私權政策</h1>
+  <p class="text-sm text-slate-500 mb-8">最近更新：<%= updatedDate %></p>
+
+  <p>本《隱私權政策》解釋 <strong><%= siteName %></strong>（以下簡稱「本服務」或「我們」）透過網頁、PWA、iOS / Android / 桌面 APP、CalDAV、API、郵件、ICS 訂閱、嵌入式 widget 等管道收集、使用、儲存和保護您資訊的方式。本服務是<strong>自架</strong>的開源軟體（MIT 授權）—— 這意味著您的資料存放在<strong>本服務的營運者</strong>所控制的伺服器上（具體見頁尾聯絡方式），不經過任何第三方 SaaS 雲端，也不會傳給本軟體的作者。本政策與配套的 <a href="/data-processing" class="text-brand-700 hover:underline">《資料處理政策》</a> 和 <a href="/terms" class="text-brand-700 hover:underline">《使用條款》</a> 一併構成完整說明。</p>
+
+  <h2>1. 我們收集的資訊</h2>
+  <h3>1.1 帳號資訊</h3>
+  <ul>
+    <li><strong>電子郵件地址</strong>：註冊帳號時由您提供，用於登入、找回密碼、接收邀請、登入提醒、事件提醒。</li>
+    <li><strong>密碼雜湊</strong>：我們僅儲存 bcrypt（cost 12）雜湊後的不可逆密文，<strong>永遠不儲存明文密碼</strong>。</li>
+    <li><strong>顯示名稱（選填）</strong>：您在個人資料裡設定的暱稱。</li>
+    <li><strong>Passkey / WebAuthn 憑證</strong>：當您啟用 Passkey 登入時，僅儲存公開金鑰；私密金鑰永遠只在您的裝置裡。</li>
+    <li><strong>TOTP / 備用碼（雙重驗證）</strong>：當您啟用 MFA 時，儲存 TOTP secret 和加密的備用碼。</li>
+    <li><strong>SSO 身分（選填）</strong>：當您透過營運者設定的 SSO（OIDC，例如 Keycloak、Authelia）登入時，儲存與該身分提供者關聯的識別碼。</li>
+  </ul>
+
+  <h3>1.2 日曆內容</h3>
+  <ul>
+    <li><strong>日曆中繼資料</strong>：日曆名稱、顏色、時區、分享設定。</li>
+    <li><strong>事件</strong>：標題、描述、地點、連結（會議/文件 URL）、開始/結束時間、重複規則、與會人 email、提醒（VALARM）、時區。</li>
+    <li><strong>事件邀請</strong>：受邀人 email、RSVP 狀態、邀請 token。</li>
+    <li><strong>軟刪除事件</strong>：刪除後 90 天內仍保留在資料庫中，便於透過「復原刪除」還原；之後由 cron 實際刪除。</li>
+  </ul>
+
+  <h3>1.3 裝置 + 工作階段資訊</h3>
+  <ul>
+    <li><strong>登入歷史</strong>：每次成功登入的時間、IP、User-Agent，用於在「設定 → 我的登入」顯示，便於您稽核可疑存取。</li>
+    <li><strong>工作階段 cookie</strong>：網頁登入後伺服器會簽發 HttpOnly cookie 以保持登入狀態。</li>
+    <li><strong>裝置配對資訊（APP）</strong>：當您把 iOS / Android / 桌面 APP 綁定到伺服器時，儲存裝置名稱、平台、APP 版本、首次/最近一次連線的 IP + User-Agent。</li>
+    <li><strong>推播訂閱 token</strong>：
+      <ul>
+        <li><strong>網頁 Web Push</strong>：當您在瀏覽器上同意推播通知時，儲存瀏覽器簽發的推播訂閱 endpoint。</li>
+        <li><strong>行動端 APNs / FCM</strong>：伺服器具備向行動裝置推播的能力；當某台裝置註冊推播時，會儲存該裝置的推播 token。<strong>目前發布的 iOS APP 並未宣告推播能力、不會取得或上傳 APNs token</strong>，僅使用前景重新整理與背景輪詢同步事件；後續版本若啟用推播，會在升級說明中另行公告。</li>
+      </ul>
+    </li>
+    <li><strong>多帳號設定檔（iOS APP）</strong>：當您在 iOS APP 中綁定多個伺服器時，每個帳號設定檔（伺服器位址、電子郵件、顯示名稱）獨立儲存在本機 Keychain 中。這些設定檔本身不會被同步到伺服器；iCloud Keychain 端對端加密可選地同步到您自己的其它 Apple 裝置。</li>
+    <li><strong>API token / 應用程式密碼</strong>：僅雜湊儲存，明文只在簽發時顯示一次。</li>
+  </ul>
+
+  <h3>1.4 操作 / 稽核紀錄</h3>
+  <ul>
+    <li>管理員操作（啟用/停用帳號、撤銷 token、修改設定等）會寫入稽核紀錄，包含操作類型、操作者、對象、IP。</li>
+    <li>外部 Webhook 投遞紀錄（HTTP 狀態、回應內文前 1KB、是否成功）。</li>
+    <li>伺服器執行紀錄用於排障；存取 token、推播 token、密碼等敏感憑證<strong>不會寫入紀錄</strong>。</li>
+  </ul>
+
+  <h2>2. 我們不收集的資訊</h2>
+  <ul>
+    <li>我們<strong>不會</strong>主動收集您的位置、裝置 IMEI/MAC、通訊錄、相簿、社交關係等任何與日曆功能無關的資訊。</li>
+    <li>iOS / Android APP 的相機權限<strong>僅</strong>用於掃描登入 QR Code；影像不會被上傳或保存。</li>
+    <li>APP 的日曆權限（如果您啟用「同步到系統日曆」）僅用於將本服務的事件寫入您指定的系統日曆子日曆，<strong>不讀取</strong>您 iCloud / Google / 其他日曆的內容。</li>
+    <li>APP 的通知權限僅用於事件開始前的本機提醒。</li>
+    <li>我們<strong>不使用</strong>任何廣告 SDK、行為追蹤 SDK、第三方分析 SDK；前端引用的第三方資源全部本機化托管，<strong>不載入任何國外 CDN</strong>。</li>
+  </ul>
+
+  <h2>3. 我們如何使用這些資訊</h2>
+  <ul>
+    <li>提供日曆功能：顯示、編輯、提醒事件，管理日曆分享。</li>
+    <li>帳號安全：偵測異常登入、風險登入驗證、防止暴力破解、停用帳號時立即撤銷所有 token。</li>
+    <li>郵件通知：邀請、取消、提醒、登入提醒、密碼重設、雙重驗證（透過營運者自行設定的 SMTP 寄送）。</li>
+    <li>外部整合：當您在 admin 後台設定 Webhook 時，事件變更會推播到您指定的 URL。</li>
+    <li>多裝置同步：APP 透過定期背景輪詢與應用程式前景重新整理拉取伺服器的事件變更，<strong>僅同步您自己有權存取的事件</strong>。</li>
+  </ul>
+
+  <h2>4. 資料儲存與安全</h2>
+  <ul>
+    <li>所有資料存放於本服務營運者的伺服器，使用 PostgreSQL 資料庫，受 Linux 檔案權限保護。</li>
+    <li>傳輸層強制 HTTPS / TLS 全程加密，HSTS 已啟用。</li>
+    <li>密碼 bcrypt（cost 12）雜湊，存取權杖 HMAC-SHA256 JWT 簽章，CSRF token 防跨站請求偽造，Helmet CSP 防 XSS。</li>
+    <li>登入嘗試失敗 5 次後暫時鎖定帳號 15 分鐘。</li>
+    <li>站台支援雙因素驗證（TOTP）、Passkey、SSO（OIDC）。</li>
+    <li><strong>裝置本機保護</strong>：iOS 把憑證存入 Keychain；Android 用 EncryptedSharedPreferences（Android Keystore 加密）；桌面端把憑證檔案寫為 0600（僅擁有者可讀）權限；各端 token 均不寫入本機紀錄。</li>
+    <li>定期資料庫備份由營運者負責。</li>
+  </ul>
+
+  <h2>5. 資料共享</h2>
+  <p>我們<strong>不會</strong>把您的資料賣給第三方，也不會用作廣告投放。下列情境會發生資料傳輸，且都在您主動操作或營運者主動設定的範圍內：</p>
+  <ul>
+    <li><strong>事件邀請</strong>：您邀請某人參加事件時，對方會透過郵件收到事件標題、時間、地點、描述、主辦者電子郵件。</li>
+    <li><strong>日曆分享</strong>：您主動產生的訂閱連結（ICS / 嵌入 widget）會公開相應日曆的事件，連結持有者均可存取。</li>
+    <li><strong>第三方整合</strong>：您在 admin 後台啟用的 Webhook / OAuth 應用程式 / API token 會按您的設定存取您的資料。</li>
+    <li><strong>郵件寄送（SMTP）</strong>：透過營運者自行設定的 SMTP 伺服器寄送通知郵件。</li>
+    <li><strong>推播服務（APNs / FCM）</strong>：當行動端推播啟用時，推播內容會經 Apple APNs / Google FCM 閘道投遞到您的裝置。</li>
+    <li><strong>SSO</strong>：當您選擇第三方登入（Keycloak、Authelia 等）時，您的電子郵件會傳給該 IdP 完成身分驗證。</li>
+  </ul>
+  <p>以上第三方<strong>僅限營運者自行設定啟用的基礎設施</strong>（SMTP、APNs/FCM、SSO 提供者），不包含任何分析、廣告或追蹤服務。詳見 <a href="/data-processing" class="text-brand-700 hover:underline">《資料處理政策》</a>。</p>
+
+  <h2>6. 您的權利</h2>
+  <ul>
+    <li><strong>查看</strong>：進入網頁設定查看您的帳號資訊、登入歷史、綁定的裝置、API token 等。</li>
+    <li><strong>修改</strong>：隨時修改電子郵件、密碼、顯示名稱、雙重驗證設定。</li>
+    <li><strong>刪除</strong>：在 web 或 APP 的「設定 → 危險區」永久刪除帳號。刪除會清空您的所有日曆、事件、訂閱、綁定的裝置、API token。<strong>此操作無法復原</strong>。</li>
+    <li><strong>匯出 / 可攜</strong>：admin 可在「管理後台 → 備份」匯出全站 JSON；您也可以透過 .ics 訂閱連結下載單個日曆，或經 CalDAV 對接其它用戶端。</li>
+    <li><strong>解除綁定裝置</strong>：在「設定 → 我的裝置」隨時解除某台 APP 的綁定，對應裝置立即失去存取權限。</li>
+  </ul>
+
+  <h2>7. Cookie 使用</h2>
+  <ul>
+    <li><strong>bwc_session</strong>：登入工作階段，HttpOnly + Secure + SameSite=Lax。</li>
+    <li><strong>bwc_csrf</strong>：CSRF token，用於防禦跨站請求偽造。</li>
+    <li><strong>bwc_login_chall</strong>：郵件驗證碼挑戰工作階段，10 分鐘過期。</li>
+    <li>以上均為維持基本功能所必需的<strong>工作階段型 Cookie</strong>；我們不使用第三方追蹤 cookie，也無廣告 cookie。</li>
+  </ul>
+
+  <h2>8. 資料保存</h2>
+  <ul>
+    <li><strong>帳號 + 日曆 + 事件</strong>：在帳號存續期間持續保留，直到您刪除事件或註銷帳號。</li>
+    <li><strong>軟刪除事件</strong>：刪除後保留 90 天供還原，到期實際刪除。</li>
+    <li><strong>登入歷史 / 稽核紀錄</strong>：由營運者按其維運策略保留，用於安全稽核。</li>
+    <li><strong>註銷帳號後</strong>：帳號及其關聯資料被永久清除；營運者的<strong>定期資料庫備份</strong>中可能仍殘留至備份按其輪替策略到期為止。</li>
+  </ul>
+
+  <h2>9. 跨境資料傳輸</h2>
+  <p>資料是否跨境，取決於營運者把伺服器部署在何處，以及營運者所設定的 SMTP / 推播 / SSO 基礎設施所在地。本軟體本身不規定伺服器位置。若您對資料儲存與處理的具體地理位置有疑問，請洽詢本站營運者。</p>
+
+  <h2>10. 兒童隱私</h2>
+  <p>本服務不針對 13 歲以下兒童。如發現您是兒童，請勿提交個人資訊。如營運者發現錯誤收集了兒童資訊，會主動刪除。</p>
+
+  <h2>11. 政策變更</h2>
+  <p>我們可能不定期更新本政策，更新後會顯示在本頁面頂部「最近更新」日期。重大變更我們會透過郵件通知。</p>
+
+  <h2>12. 聯絡</h2>
+  <p>對本政策、您的資料有任何疑問：</p>
+  <ul>
+    <li><strong>本站帳號 / 資料 / 伺服器層面的問題</strong>：聯絡本站營運者（聯絡方式見站台頁尾或 <a href="/support" class="text-brand-700 hover:underline">技術支援頁</a>；由營運者填寫）。</li>
+    <li><strong>軟體 / APP / 專案層面的問題</strong>：聯絡專案方 <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>，或到 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">GitHub</a> 提 issue。</li>
+  </ul>
+  <p>本服務基於開源軟體 by-wave-calendar 自架，軟體原始碼完全開放（MIT）。</p>
+</div>

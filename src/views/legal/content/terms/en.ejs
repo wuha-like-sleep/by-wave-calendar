@@ -1,0 +1,71 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Terms of Service</h1>
+  <p class="text-sm text-slate-500 mb-8">Last updated: <%= updatedDate %></p>
+
+  <p>Welcome to <strong><%= siteName %></strong> (hereinafter "the Service"). Please read the following terms carefully before continuing. By registering an account or continuing to use the Service, you agree to these terms. For details on how we handle your data, please also see our <a href="/privacy" class="text-brand-700 hover:underline">Privacy Policy</a> and <a href="/data-processing" class="text-brand-700 hover:underline">Data Processing Policy</a>.</p>
+
+  <h2>1. Description of the Service</h2>
+  <ul>
+    <li>The Service is a <strong>self-hosted</strong> deployment of the open-source software <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">by-wave-calendar</a>, with day-to-day maintenance, backups, and upgrades handled by the site operator.</li>
+    <li>The Service provides calendar sharing, event management, external .ics / CalDAV sync, API integration, and native iOS / Android / desktop apps.</li>
+    <li>Specific features may vary depending on the server version, and the operator may enable or disable any given feature at any time (such as native app sync, third-party APIs, etc.).</li>
+  </ul>
+
+  <h2>2. Accounts and Responsibilities</h2>
+  <ul>
+    <li>Registering an account requires a valid email address. You are responsible for protecting your login credentials — we strongly recommend enabling multi-factor authentication (MFA) or a Passkey.</li>
+    <li>If you discover unauthorized access to your account, immediately change your password, revoke all tokens, and contact the operator.</li>
+    <li>Do not share your password with others; if someone needs to collaborate, use the Service's "invite" feature.</li>
+    <li>You are fully responsible for the events, calendars, and invitation content you create on the Service.</li>
+  </ul>
+
+  <h2>3. Acceptable Use</h2>
+  <p>When using the Service, you <strong>must not</strong>:</p>
+  <ul>
+    <li>Post content that is illegal, harassing, hateful, violent, pornographic, or infringes on others' copyrights.</li>
+    <li>Use the Service for spam, phishing, fraud, pyramid schemes, or distributing malware.</li>
+    <li>Attempt unauthorized access to the Service's servers, databases, or other users' accounts.</li>
+    <li>Access the API via automated scripts at rates beyond what is reasonable (please respect the rate limits set by the admin).</li>
+    <li>Bypass the Service's security mechanisms (CSRF, CSP, login lockout, MFA, etc.).</li>
+    <li>Reverse engineer or modify the Service's apps and then redistribute them (except as permitted by the open-source license).</li>
+  </ul>
+
+  <h2>4. Content Ownership</h2>
+  <ul>
+    <li>The <strong>ownership and copyright of all data you create on the Service</strong> (calendars, events, descriptions, etc.) belong to you.</li>
+    <li>You grant the Service permission to store, process, and display this data to the extent necessary to provide the Service to you.</li>
+    <li>When you send an event invitation to someone, they can see the event content in the invitation email and invitation link; this is expected behavior.</li>
+    <li>When you publicly share a calendar via an .ics subscription link or widget iframe, you understand that anyone holding those links can read the corresponding content.</li>
+  </ul>
+
+  <h2>5. Service Availability</h2>
+  <ul>
+    <li>The Service makes <strong>no guarantee</strong> of 100% availability — maintenance, upgrades, network failures, power outages, and natural disasters may all cause interruptions.</li>
+    <li>The Service may release new versions from time to time, and some features may change or be deprecated; significant changes will be announced in advance.</li>
+    <li>The operator reserves the right to change, suspend, or terminate the Service with reasonable notice.</li>
+  </ul>
+
+  <h2>6. Termination</h2>
+  <ul>
+    <li>You may permanently delete your account at any time under "Settings → Danger Zone".</li>
+    <li>If you violate these terms, the operator has the right to suspend or terminate your account and, if necessary, refer the matter to law enforcement.</li>
+    <li>After termination, your data is handled according to the retention policies described in the Privacy Policy and Data Processing Policy.</li>
+  </ul>
+
+  <h2>7. Disclaimer</h2>
+  <ul>
+    <li>The Service is provided "as is", and the operator is <strong>not liable</strong> for indirect losses caused by service interruptions, data loss, or third-party causes.</li>
+    <li>Please regularly back up any data you consider important via .ics subscription links or the admin dashboard.</li>
+    <li>The Service's open-source software is provided under the open-source license in the LICENSE file, with no express or implied warranties of any kind.</li>
+  </ul>
+
+  <h2>8. Governing Law</h2>
+  <p>The interpretation, validity, and performance of these terms are governed by the laws of the jurisdiction where the Service operator is located. In the event of a dispute, the parties shall first attempt to resolve it through negotiation; if negotiation fails, the dispute shall be submitted to a court of competent jurisdiction in the operator's location.</p>
+
+  <h2>9. Contact</h2>
+  <p>If you have any questions about these terms:</p>
+  <ul>
+    <li><strong>At the site level</strong>: contact the operator (see the <a href="/support" class="text-brand-700 hover:underline">Support page</a> for details).</li>
+    <li><strong>At the project level</strong>: email <a href="mailto:info@by-wave.com" class="text-brand-700 hover:underline font-mono">info@by-wave.com</a>.</li>
+  </ul>
+</div>

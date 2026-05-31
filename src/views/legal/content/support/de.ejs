@@ -1,0 +1,149 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-brand-50 text-brand-700 shrink-0">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight">Technischer Support</h1>
+        <p class="text-sm text-slate-500">Zuletzt aktualisiert: <%= updatedDate %></p>
+      </div>
+    </div>
+    <p class="text-slate-600 leading-relaxed mt-4">Vielen Dank, dass Sie <strong class="font-semibold text-slate-900"><%= siteName %></strong> verwenden. Die folgenden häufig gestellten Fragen helfen Ihnen in den meisten Fällen sofort weiter; falls Ihr Problem dennoch nicht gelöst ist, wählen Sie bitte je nach Art des Problems den passenden Kontaktkanal.</p>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">Häufig gestellte Fragen</h2>
+  <div class="space-y-2.5 mb-10">
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔑</span> Anmeldung nicht möglich / Passwort vergessen</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Klicken Sie unten auf der Anmeldeseite auf „Passwort vergessen" und setzen Sie es über den Link in der E-Mail zurück.</li>
+          <li>Zwei-Faktor-Authentifizierung (MFA) aktiviert, aber Authenticator nicht auffindbar: Melden Sie sich mit den bei der MFA-Registrierung heruntergeladenen Backup-Codes an, deaktivieren Sie MFA sofort und aktivieren Sie es erneut.</li>
+          <li>E-Mail nicht erhalten: Prüfen Sie zuerst den Spam-Ordner; falls weiterhin erfolglos, kontaktieren Sie den Betreiber der Website wegen der Zurücksetzungs-E-Mail.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📱</span> QR-Code-Anmeldung der App schlägt fehl / dreht sich endlos</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Stellen Sie sicher, dass Ihr Handy die Website von <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= siteName %></code> normal öffnen kann (d. h. das Handy kann den Server erreichen).</li>
+          <li>Erzeugen Sie unter „Einstellungen → Meine Geräte → Neues Gerät binden" einen neuen QR-Code und versuchen Sie es erneut (der alte Code läuft nach 10 Minuten ab).</li>
+          <li>Konten mit aktivierter MFA müssen den Ablauf „QR-Code-Anmeldung" durchlaufen und können sich nicht über die schnelle Anmeldung mit „E-Mail und Passwort" anmelden.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔄</span> Ereignisse synchronisieren nicht / Ereignisse fehlen in der Wochenansicht</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Ziehen Sie in der Kalenderliste der App nach unten, um ein Pull-to-Refresh auszulösen.</li>
+          <li>Beenden Sie die App und öffnen Sie sie erneut; beim Start im Vordergrund werden die neuesten Ereignisse automatisch erneut abgerufen.</li>
+          <li>Stellen Sie sicher, dass der Kalender, in dem sich das Ereignis befindet, nicht unter „Einstellungen → Kalender filtern" ausgeblendet ist.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">👥</span> Wie lade ich andere zu einem Ereignis ein</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Web / iOS: Ereignis bearbeiten → „Teilnehmer verwalten" → E-Mail-Adresse der Person eingeben → senden (unter iOS nur bei bereits gespeicherten Ereignissen verfügbar).</li>
+          <li>Die Person erhält eine Einladungs-E-Mail mit .ics-Anhang; nach Antwort auf das RSVP können Sie den Annahme-/Ablehnungsstatus in den Ereignisdetails sehen.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📅</span> In Apple Calendar / Outlook abonnieren</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Schreibgeschütztes Abonnement: Öffnen Sie den Kalender im Web, im Rechtsklick-Menü → „Abonnementlink" eine ICS-Adresse erzeugen → in Apple Calendar unter „Ablage → Neues Kalenderabonnement" einfügen.</li>
+          <li>Bidirektionale Synchronisierung: Verwenden Sie bitte CalDAV; Benutzername/Passwort generieren Sie als spezielles Passwort unter „Einstellungen → App-Passwörter".</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> Konto auflösen / alle Daten löschen</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Web oder App: Einstellungen → Konto → Gefahrenzone → „Konto löschen". <strong class="font-semibold text-slate-900">Dieser Vorgang ist unwiderruflich</strong> und entfernt alle Ihre Kalender, Ereignisse, Einladungen und Gerätebindungen.</li>
+          <li>Falls Sie vor dem Löschen sichern möchten, können Sie vorher eine .ics-Datei exportieren und lokal speichern.</li>
+        </ul>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- Contact channels -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">Immer noch nicht gelöst?</h2>
+  <p class="text-sm text-slate-500 mb-4">Wählen Sie je nach Art des Problems den passenden Einstieg, um am schnellsten eine Antwort zu erhalten.</p>
+
+  <div class="grid sm:grid-cols-3 gap-3 mb-8">
+    <!-- Operator -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 mb-3" aria-hidden="true">👤</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">Konto / Daten / Server</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">Gesperrtes Konto, Datenwiederherstellung, Wartungszeiten usw. Die Daten liegen allesamt auf dem Server des <strong class="font-medium text-slate-700">Betreibers der Website</strong>; wenden Sie sich bitte an den Betreiber (Kontaktangaben siehe Fußzeile).</p>
+    </div>
+    <!-- GitHub -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white mb-3">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.67.8.56A11.53 11.53 0 0023.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
+      </span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">App- / Software-Bug</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">Bugs im Frontend / in der App / serverseitig, Funktionsvorschläge, Open-Source-Zusammenarbeit.</p>
+      <div class="mt-auto flex flex-col gap-1 text-xs">
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">Issue einreichen ↗</a>
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+      </div>
+    </div>
+    <!-- Email -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-brand-50 text-brand-700 mb-3" aria-hidden="true">✉️</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">Business / Presse / Allgemeines</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">Beratung zur Unternehmensbereitstellung, Kooperationen, allgemeine Anfragen.</p>
+      <a href="mailto:info@by-wave.com" class="mt-auto text-xs text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+    </div>
+  </div>
+
+  <!-- Response times -->
+  <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <h3 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-2"><span aria-hidden="true">⏱️</span> Erwartete Antwortzeiten</h3>
+    <ul class="text-sm text-slate-600 space-y-1.5">
+      <li><strong class="font-medium text-slate-800">GitHub Issues</strong> – in der Regel Antwort innerhalb von 1–7 Tagen; bei dringenden Sicherheitsproblemen senden Sie bitte gleichzeitig eine E-Mail.</li>
+      <li><strong class="font-medium text-slate-800">E-Mail</strong> – 1–3 Werktage (geben Sie den Typ im E-Mail-Betreff an, z. B. „[Bug] iOS-Wochenansicht…" oder „[Business] Unternehmensbereitstellung", für eine schnellere Zuordnung).</li>
+      <li><strong class="font-medium text-slate-800">Kontoprobleme der Website</strong> – abhängig vom Betreiber der Website; üblicherweise wird auf der Startseite / Anmeldeseite eine erwartete Antwortzeit angegeben.</li>
+    </ul>
+    <p class="text-xs text-slate-400 mt-3">Der Dienst ist ein Open-Source- und selbst gehostetes Projekt, das von Freiwilligen gepflegt wird; es gibt keinen 7×24-Kundendienst, wir bitten um Ihr Verständnis.</p>
+  </div>
+
+</div>

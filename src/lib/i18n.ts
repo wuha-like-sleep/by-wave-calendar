@@ -215,11 +215,16 @@ function pickFromAcceptLanguage(header: string | undefined): LocaleCode | null {
  *  `userLocale` from the closest call site so this stays a pure
  *  function (testable, no DB I/O). */
 export function resolveLocale(opts: {
+  queryLang?: string;
   cookieValue?: string;
   userLocale?: string | null;
   siteDefault?: string;
   acceptLanguage?: string;
 }): LocaleCode {
+  // 0) explicit ?lang= query — highest precedence. Lets the native apps open
+  //    any in-app web page in the app's current language by appending ?lang=xx,
+  //    overriding a stale webview cookie. Transient (does NOT set the cookie).
+  if (isValidLocale(opts.queryLang)) return opts.queryLang;
   // 1) explicit cookie
   if (isValidLocale(opts.cookieValue)) return opts.cookieValue;
   // 2) user preference
@@ -244,7 +249,9 @@ export function resolveLocaleFromRequest(
   userLocale: string | null | undefined,
   siteDefault: string | undefined,
 ): LocaleCode {
+  const q = (req.query as Record<string, unknown> | undefined)?.lang;
   return resolveLocale({
+    queryLang: typeof q === "string" ? q : undefined,
     cookieValue: req.cookies[LOCALE_COOKIE],
     userLocale,
     siteDefault,

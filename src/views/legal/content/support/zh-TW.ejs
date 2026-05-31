@@ -1,0 +1,149 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10">
+
+  <!-- Header -->
+  <div class="mb-8">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-brand-50 text-brand-700 shrink-0">
+        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </span>
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight">技術支援</h1>
+        <p class="text-sm text-slate-500">最近更新：<%= updatedDate %></p>
+      </div>
+    </div>
+    <p class="text-slate-600 leading-relaxed mt-4">感謝您使用 <strong class="font-semibold text-slate-900"><%= siteName %></strong>。下面的常見問題多數能即時幫您解決；仍未解決可按問題類型選擇對應聯絡管道。</p>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-3">常見問題</h2>
+  <div class="space-y-2.5 mb-10">
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔑</span> 登入不了 / 忘記密碼</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>登入頁底部點「忘記密碼」，按郵件裡的連結重設即可。</li>
+          <li>啟用了雙重驗證 (MFA) 但找不到驗證器：用註冊 MFA 時下載的備用碼登入後，立刻關閉再重新啟用。</li>
+          <li>郵件沒收到：先查垃圾郵件匣；仍無果請聯絡站台營運者重設郵件。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📱</span> APP 掃碼登入失敗 / 一直轉圈</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>確認手機能正常開啟 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= siteName %></code> 的網頁（即手機能連通伺服器）。</li>
+          <li>「設定 → 我的裝置 → 綁定新裝置」產生新的 QR Code 再試（舊碼 10 分鐘過期）。</li>
+          <li>啟用了 MFA 的帳號需走「掃碼登入」流程，不能用「電子郵件密碼」快速登入。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔄</span> 事件不同步 / 週檢視缺事件</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>在 APP 日曆清單往下拉，觸發一次下拉重新整理。</li>
+          <li>退出 APP 重新進入；前景啟動時會自動重新拉取最新事件。</li>
+          <li>確認事件所在的日曆沒有被「設定 → 篩選日曆」隱藏。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">👥</span> 如何邀請別人參加事件</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>網頁 / iOS：編輯事件 →「管理參與者」→ 輸入對方電子郵件 → 傳送（iOS 僅在已儲存的事件上可用）。</li>
+          <li>對方會收到帶 .ics 附件的邀請郵件，回覆 RSVP 後您可在事件詳情看到接受/拒絕狀態。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">📅</span> 在 Apple Calendar / Outlook 裡訂閱</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>唯讀訂閱：網頁開啟日曆右鍵選單 →「訂閱連結」產生 ICS 位址 → 在 Apple Calendar「檔案 → 新增日曆訂閱」貼上。</li>
+          <li>雙向同步：請用 CalDAV，使用者名稱/密碼在「設定 → 應用程式密碼」產生專用密碼。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> 註銷帳號 / 刪除所有資料</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>網頁或 APP：設定 → 帳號 → 危險區 →「刪除帳戶」。<strong class="font-semibold text-slate-900">此操作無法復原</strong>，會清空您所有日曆、事件、邀請、裝置綁定。</li>
+          <li>如需先備份再刪除，可在刪除前匯出 .ics 檔案儲存到本機。</li>
+        </ul>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- Contact channels -->
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">仍然沒解決？</h2>
+  <p class="text-sm text-slate-500 mb-4">按問題類型選擇對應入口，最快拿到答案。</p>
+
+  <div class="grid sm:grid-cols-3 gap-3 mb-8">
+    <!-- Operator -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 mb-3" aria-hidden="true">👤</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">帳號 / 資料 / 伺服器</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">帳號被鎖、資料還原、維護時間等。資料都在<strong class="font-medium text-slate-700">本站營運者</strong>的伺服器上，請聯絡營運者（聯絡方式見頁尾）。</p>
+    </div>
+    <!-- GitHub -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white mb-3">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.67.8.56A11.53 11.53 0 0023.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
+      </span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">APP / 軟體 bug</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">前端 / APP / 伺服端的 bug、功能建議、開源協作。</p>
+      <div class="mt-auto flex flex-col gap-1 text-xs">
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">提交 Issue ↗</a>
+        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+      </div>
+    </div>
+    <!-- Email -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
+      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-brand-50 text-brand-700 mb-3" aria-hidden="true">✉️</span>
+      <h3 class="font-semibold text-slate-900 text-sm mb-1">商務 / 媒體 / 通用</h3>
+      <p class="text-xs text-slate-500 leading-relaxed mb-2">企業部署諮詢、合作、通用詢問。</p>
+      <a href="mailto:info@by-wave.com" class="mt-auto text-xs text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+    </div>
+  </div>
+
+  <!-- Response times -->
+  <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <h3 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-2"><span aria-hidden="true">⏱️</span> 回應時間預期</h3>
+    <ul class="text-sm text-slate-600 space-y-1.5">
+      <li><strong class="font-medium text-slate-800">GitHub Issues</strong> —— 一般 1–7 天內回覆；緊急安全問題請同時寄郵件。</li>
+      <li><strong class="font-medium text-slate-800">郵件</strong> —— 1–3 個工作日（郵件標題註明類型，如「[Bug] iOS 週檢視…」「[商務] 企業部署」更快分類）。</li>
+      <li><strong class="font-medium text-slate-800">本站帳號問題</strong> —— 取決於站台營運者，通常會在首頁 / 登入頁給出預期回應時間。</li>
+    </ul>
+    <p class="text-xs text-slate-400 mt-3">本服務是開源 + 自架專案，由志工維護，沒有 7×24 客服，敬請見諒。</p>
+  </div>
+
+</div>

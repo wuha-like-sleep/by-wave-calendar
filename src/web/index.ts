@@ -21,6 +21,7 @@ import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type We
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
+import { resolveLocaleFromRequest, makeT } from "../lib/i18n.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { validateInvite, consumeInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { listTimezones } from "../lib/timezones.js";
@@ -219,44 +220,33 @@ export async function webRoutes(app: FastifyInstance) {
   // Settings + initial signup flow. Updated date is sourced from
   // package.json's version timestamp via getReleaseDate so a server
   // upgrade automatically refreshes the "最近更新" line.
-  app.get("/privacy", async (req, reply) => {
+  // Legal/policy pages are localized into all 8 locales via per-locale content
+  // views at legal/content/<page>/<locale>.ejs. The effective locale honors
+  // ?lang= (so the native apps open these in the app's language), then cookie /
+  // user / site default / Accept-Language. updatedDate tracks the release date.
+  const LEGAL_UPDATED = "2026-05-31";
+  async function renderLegal(req: FastifyRequest, reply: FastifyReply, page: string, titleKey: string) {
     const settings = await getSettings();
-    return reply.view("legal/privacy", {
-      title: "隐私政策",
-      user: await loadUserFromRequest(req),
+    const user = await loadUserFromRequest(req);
+    const locale = resolveLocaleFromRequest(req, user?.locale ?? null, settings.defaultLocale);
+    return reply.view(`legal/content/${page}/${locale}`, {
+      title: makeT(locale)(titleKey),
+      user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-31",
+      updatedDate: LEGAL_UPDATED,
     });
-  });
+  }
+
+  app.get("/privacy", (req, reply) => renderLegal(req, reply, "privacy", "legal.privacy.title"));
 
   // Data Processing Policy — companion to /privacy, structured around
   // what we process, why, retention, security, sub-processors, and
   // cross-border. Linked from the footer + /privacy + /terms.
-  app.get("/data-processing", async (req, reply) => {
-    const settings = await getSettings();
-    return reply.view("legal/data-processing", {
-      title: "数据处理政策",
-      user: await loadUserFromRequest(req),
-      csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
-      siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-31",
-    });
-  });
+  app.get("/data-processing", (req, reply) => renderLegal(req, reply, "data-processing", "legal.dataProcessing.title"));
 
-  app.get("/terms", async (req, reply) => {
-    const settings = await getSettings();
-    return reply.view("legal/terms", {
-      title: "使用条款",
-      user: await loadUserFromRequest(req),
-      csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
-      siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-31",
-    });
-  });
+  app.get("/terms", (req, reply) => renderLegal(req, reply, "terms", "legal.terms.title"));
 
   // Public landing for app downloads — iOS App Store + Android APK +
   // browser fallback. Linked from the footer + landing hero + GitHub
@@ -354,17 +344,7 @@ export async function webRoutes(app: FastifyInstance) {
   // submission — Apple wants a working Support URL that doesn't 404
   // and lets users contact us without an account. Also linked from
   // the site footer alongside /privacy and /terms.
-  app.get("/support", async (req, reply) => {
-    const settings = await getSettings();
-    return reply.view("legal/support", {
-      title: "技术支持",
-      user: await loadUserFromRequest(req),
-      csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
-      siteName: settings.siteName || "ByWave Calendar",
-      updatedDate: "2026-05-31",
-    });
-  });
+  app.get("/support", (req, reply) => renderLegal(req, reply, "support", "legal.support.title"));
 
   // -------- Auth pages --------
   // -------- Anonymous language switcher --------
