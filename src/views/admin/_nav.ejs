@@ -1,36 +1,77 @@
-<nav class="mb-6">
-  <div class="text-sm text-slate-500 mb-3">
-    <a href="/app" class="hover:text-slate-700">日历</a>
-    <span class="px-2">/</span>
-    <span class="text-slate-900">管理后台</span>
-  </div>
-  <div class="-mx-4 sm:mx-0 overflow-x-auto">
-    <ul class="flex gap-1 px-4 sm:px-0 sm:flex-wrap border-b border-slate-200 min-w-max sm:min-w-0">
-      <% [
-        { href: '/admin',       label: '概览' },
-        { href: '/admin/site',  label: '站点' },
-        { href: '/admin/logo',  label: 'Logo' },
-        { href: '/admin/theme', label: '外观' },
-        { href: '/admin/smtp',  label: '邮件 SMTP' },
-        { href: '/admin/email-templates', label: '邮件模板' },
-        { href: '/admin/idp',   label: 'SSO' },
-        { href: '/admin/security', label: '安全' },
-        { href: '/admin/invites', label: '邀请注册' },
-        { href: '/admin/api', label: 'API' },
-        { href: '/admin/oauth-apps', label: 'OAuth 应用' },
-        { href: '/admin/webhooks', label: 'Webhooks' },
-        { href: '/admin/backup', label: '备份' },
-        { href: '/admin/audit', label: '审计日志' },
-        { href: '/admin/users', label: '用户' },
-        { href: '/admin/update', label: '更新' },
-      ].forEach(function(item){ %>
+<%
+  // Admin navigation, grouped. On lg+ it's a left sidebar; below lg it falls
+  // back to the original single-row horizontal strip. This partial OPENS the
+  // shell + content column; every admin view closes it via include('_nav_end').
+  const adminGroups = [
+    { label: '总览', items: [
+      { href: '/admin', label: '概览' },
+    ] },
+    { label: '站点', items: [
+      { href: '/admin/site',  label: '站点' },
+      { href: '/admin/logo',  label: 'Logo' },
+      { href: '/admin/theme', label: '外观' },
+    ] },
+    { label: '用户 & 注册', items: [
+      { href: '/admin/users',   label: '用户' },
+      { href: '/admin/invites', label: '邀请注册' },
+    ] },
+    { label: '邮件', items: [
+      { href: '/admin/smtp',            label: '邮件 SMTP' },
+      { href: '/admin/email-templates', label: '邮件模板' },
+    ] },
+    { label: '安全 & 接入', items: [
+      { href: '/admin/security',   label: '安全' },
+      { href: '/admin/idp',        label: 'SSO' },
+      { href: '/admin/api',        label: 'API' },
+      { href: '/admin/oauth-apps', label: 'OAuth 应用' },
+      { href: '/admin/webhooks',   label: 'Webhooks' },
+    ] },
+    { label: '运维', items: [
+      { href: '/admin/backup', label: '备份' },
+      { href: '/admin/audit',  label: '审计日志' },
+      { href: '/admin/update', label: '更新' },
+    ] },
+  ];
+  const adminFlat = adminGroups.reduce(function (a, g) { return a.concat(g.items); }, []);
+  const _active = typeof activeNav !== 'undefined' ? activeNav : '';
+%>
+<div class="text-sm text-slate-500 mb-4 lg:mb-6">
+  <a href="/app" class="hover:text-slate-700">日历</a>
+  <span class="px-2">/</span>
+  <span class="text-slate-900">管理后台</span>
+</div>
+
+<div class="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">
+  <!-- Desktop: grouped sidebar -->
+  <aside class="hidden lg:block">
+    <nav class="sticky top-6 space-y-5">
+      <% adminGroups.forEach(function (group) { %>
+        <div>
+          <div class="px-3 mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400"><%= group.label %></div>
+          <ul class="space-y-0.5">
+            <% group.items.forEach(function (item) { var on = _active === item.href; %>
+              <li>
+                <a href="<%= item.href %>"
+                   class="block rounded-lg px-3 py-1.5 text-sm transition-colors <%= on ? 'bg-brand-50 text-brand-700 font-medium' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900' %>"><%= item.label %></a>
+              </li>
+            <% }); %>
+          </ul>
+        </div>
+      <% }); %>
+    </nav>
+  </aside>
+
+  <!-- Mobile / tablet: horizontal scroll strip (original affordance) -->
+  <div class="lg:hidden -mx-4 sm:mx-0 overflow-x-auto mb-4">
+    <ul class="flex gap-1 px-4 sm:px-0 border-b border-slate-200 min-w-max">
+      <% adminFlat.forEach(function (item) { var on = _active === item.href; %>
         <li>
           <a href="<%= item.href %>"
-             class="inline-block px-3 sm:px-4 py-2 text-sm <%= activeNav === item.href ? 'text-brand-700 border-b-2 border-brand-600 font-medium' : 'text-slate-600 hover:text-slate-900' %>">
-            <%= item.label %>
-          </a>
+             class="inline-block px-3 py-2 text-sm whitespace-nowrap <%= on ? 'text-brand-700 border-b-2 border-brand-600 font-medium' : 'text-slate-600 hover:text-slate-900' %>"><%= item.label %></a>
         </li>
-      <% }) %>
+      <% }); %>
     </ul>
   </div>
-</nav>
+
+  <!-- Content column — closed by include('_nav_end') at the end of each view. -->
+  <section class="min-w-0">
