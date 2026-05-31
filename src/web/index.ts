@@ -731,18 +731,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (body.data.agreeTerms !== "on") {
       return redirectWith(reply, registerBackUrl, { error: "请先阅读并勾选同意《使用条款》与《隐私政策》" });
     }
-    // Human verification — pluggable provider; block before we spend an
-    // email send / DB write. verifyCaptcha reads the captcha fields straight
-    // out of req.body by name and never throws.
-    const captchaResult = await verifyCaptcha(
-      await getCaptchaConfig(),
-      req.body as Record<string, string | undefined>,
-      req.ip,
-    );
-    if (!captchaResult.ok) {
-      req.log.warn({ reason: captchaResult.reason }, "register_captcha_failed");
-      return redirectWith(reply, registerBackUrl, { error: "人机验证未通过，请刷新页面后重试" });
-    }
+    // Cheap, recoverable input checks FIRST — they must not consume the
+    // single-use captcha. The captcha is verified last (just below), right
+    // before the expensive bcrypt + email send.
     const policyErr = passwordPolicyError(body.data.password);
     if (policyErr) {
       return redirectWith(reply, registerBackUrl, { error: policyErr });
@@ -762,6 +753,20 @@ export async function webRoutes(app: FastifyInstance) {
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
     if (existing.length > 0) {
       return redirectWith(reply, registerBackUrl, { error: "该邮箱已注册" });
+    }
+    // Human verification — pluggable provider. Verified LAST, after the cheap
+    // recoverable checks above, so a weak password / duplicate email doesn't
+    // burn the single-use captcha; and BEFORE the expensive bcrypt hash + email
+    // send below, so a bot can't trigger those without passing it. verifyCaptcha
+    // reads the captcha fields straight out of req.body by name and never throws.
+    const captchaResult = await verifyCaptcha(
+      await getCaptchaConfig(),
+      req.body as Record<string, string | undefined>,
+      req.ip,
+    );
+    if (!captchaResult.ok) {
+      req.log.warn({ reason: captchaResult.reason }, "register_captcha_failed");
+      return redirectWith(reply, registerBackUrl, { error: "人机验证未通过，请刷新页面后重试" });
     }
     const passwordHash = await hashPassword(body.data.password);
 

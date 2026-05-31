@@ -51,6 +51,16 @@ describe("builtin PoW captcha", () => {
     expect(verifyChallenge(ch.token, nonce)).toEqual({ ok: true });
   });
 
+  it("is single-use: replaying the same solved token+nonce is rejected", () => {
+    const ch = issueChallenge(10);
+    const nonce = solvePow(ch.challenge, ch.salt, ch.difficulty);
+    // First redemption succeeds.
+    expect(verifyChallenge(ch.token, nonce)).toEqual({ ok: true });
+    // A replay of the exact same (token, nonce) within its TTL must fail —
+    // this is what stops a bot solving one PoW and reusing it for many signups.
+    expect(verifyChallenge(ch.token, nonce)).toEqual({ ok: false, reason: "replayed" });
+  });
+
   it("rejects a wrong / non-solving nonce", () => {
     const ch = issueChallenge(12);
     // "0" almost certainly does not satisfy 12 leading zero bits.

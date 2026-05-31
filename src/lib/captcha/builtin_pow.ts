@@ -172,6 +172,39 @@ function openToken(token: string): Payload | null {
   return payload as Payload;
 }
 
+// ============================ ANTI-REPLAY (single-use) =====================
+// Remember solved challenges until they expire so the same solved (token,nonce)
+// can't be replayed across many registrations. An entry is recorded ONLY AFTER
+// the PoW work checks out, so each entry costs an attacker a full 2^difficulty
+// solve; entries self-expire at the token's own TTL, bounding memory. The
+// challenge `c` is 16 random bytes minted per GET /register, so it's a natural
+// single-use key.
+//
+// NOTE: in-memory + per-process. In a multi-instance deployment a token could
+// be replayed at most once per instance; the per-IP auth rate limit still
+// bounds total throughput. For the single-process self-hosted server this gives
+// true one-shot semantics. A shared store (Redis/DB) would make it strict
+// across instances if ever needed.
+const spentChallenges = new Map<string, number>(); // challenge -> expiryMs
+const SPENT_SOFT_CAP = 50_000;
+
+function pruneSpent(now: number): void {
+  for (const [k, exp] of spentChallenges) {
+    if (exp <= now) spentChallenges.delete(k);
+  }
+}
+
+/** Record a solved challenge as spent. Returns false if it was already spent
+ *  (a replay) within its TTL. Only call AFTER the work has been verified. */
+function consumeChallenge(challenge: string, exp: number): boolean {
+  const now = Date.now();
+  const prev = spentChallenges.get(challenge);
+  if (prev !== undefined && prev > now) return false; // replay within TTL
+  if (spentChallenges.size > SPENT_SOFT_CAP) pruneSpent(now);
+  spentChallenges.set(challenge, exp);
+  return true;
+}
+
 export type VerifyChallengeResult = { ok: boolean; reason?: string };
 
 /**
@@ -200,6 +233,12 @@ export function verifyChallenge(
   const difficulty = clampDifficulty(payload.d);
   if (!satisfiesDifficulty(payload.c, payload.s, nonce, difficulty)) {
     return { ok: false, reason: "insufficient_work" };
+  }
+  // Single-use: a solved challenge can be redeemed exactly once within its TTL.
+  // This is what stops a bot from solving one PoW and replaying it for many
+  // registrations. Done last, so only genuinely-solved challenges are recorded.
+  if (!consumeChallenge(payload.c, payload.exp)) {
+    return { ok: false, reason: "replayed" };
   }
   return { ok: true };
 }
