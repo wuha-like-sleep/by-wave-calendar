@@ -449,6 +449,9 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "search.statusSearching": "검색 중…",
   "search.statusFailed": "검색에 실패했습니다 — 다시 시도하시겠습니까?",
   "search.statusNoResults": "결과 없음",
+  "search.secCalendars": "캘린더",
+  "search.secBookingLinks": "예약 링크",
+  "search.bookingDisabled": "비활성화됨",
   "search.statusCount": "{count}개 결과",
 
   // common (extended — shared toast / clipboard strings)

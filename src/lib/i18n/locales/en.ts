@@ -456,6 +456,9 @@ export const en = {
   "search.statusSearching": "Searching…",
   "search.statusFailed": "Search failed — try again?",
   "search.statusNoResults": "No results",
+  "search.secCalendars": "Calendars",
+  "search.secBookingLinks": "Booking links",
+  "search.bookingDisabled": "Disabled",
   "search.statusCount": "{count} results",
 
   // common (extended — shared toast / clipboard strings)

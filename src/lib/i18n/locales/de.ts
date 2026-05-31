@@ -449,6 +449,9 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "search.statusSearching": "Wird gesucht…",
   "search.statusFailed": "Suche fehlgeschlagen — erneut versuchen?",
   "search.statusNoResults": "Keine Ergebnisse",
+  "search.secCalendars": "Kalender",
+  "search.secBookingLinks": "Buchungslinks",
+  "search.bookingDisabled": "Deaktiviert",
   "search.statusCount": "{count} Ergebnisse",
 
   // common (extended — shared toast / clipboard strings)

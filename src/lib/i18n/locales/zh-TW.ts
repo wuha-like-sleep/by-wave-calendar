@@ -436,6 +436,9 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "search.statusSearching": "搜尋中…",
   "search.statusFailed": "搜尋失敗，重試一下？",
   "search.statusNoResults": "無結果",
+  "search.secCalendars": "日曆",
+  "search.secBookingLinks": "預約連結",
+  "search.bookingDisabled": "已停用",
   "search.statusCount": "{count} 個結果",
 
   // common (extended — shared toast / clipboard strings)

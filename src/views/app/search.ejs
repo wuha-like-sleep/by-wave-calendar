@@ -29,6 +29,9 @@
     failed: t("search.statusFailed"),
     noResults: t("search.statusNoResults"),
     countTemplate: t("search.statusCount", { count: "__N__" }),
+    secCalendars: t("search.secCalendars"),
+    secBookingLinks: t("search.secBookingLinks"),
+    bookingDisabled: t("search.bookingDisabled"),
   })
 %></script>
 
@@ -85,30 +88,45 @@
       if (!resp.ok) throw new Error("search_failed");
       const data = await resp.json();
       // The /api/v1 envelope wraps the route's response as data.<key>; the
-      // legacy /api alias returns the raw {events:[...]}. Try both.
-      const events = (data && data.events) || (data && data.data && data.data.events) || [];
+      // legacy /api alias returns it raw. Unwrap either.
+      const payload = (data && data.data && typeof data.data === "object") ? data.data : (data || {});
       lastQuery = query;
-      renderResults(events, query);
+      renderResults(payload, query);
     } catch (err) {
       console.error(err);
       status.textContent = BWC_I18N.failed || "";
     }
   }
 
-  function renderResults(events, query) {
-    if (events.length === 0) {
+  // Only hex colors into the inline style (the color is the user's own, but
+  // never splice unvalidated text into a style attribute).
+  function safeColor(c) {
+    return /^#[0-9a-fA-F]{3,8}$/.test(String(c || "")) ? c : "#6366f1";
+  }
+  function sectionHeader(label) {
+    return `<li class="pt-3 pb-1 px-1 text-xs font-semibold uppercase tracking-wide text-slate-400">${escapeHtml(label)}</li>`;
+  }
+
+  function renderResults(payload, query) {
+    const events = payload.events || [];
+    const calendars = payload.calendars || [];
+    const bookingLinks = payload.bookingLinks || [];
+    const total = events.length + calendars.length + bookingLinks.length;
+    if (total === 0) {
       list.innerHTML = "";
       empty.classList.remove("hidden");
       status.textContent = BWC_I18N.noResults || "";
       return;
     }
     empty.classList.add("hidden");
-    status.textContent = (BWC_I18N.countTemplate || "{count}").replace("__N__", String(events.length));
-    list.innerHTML = events.map((e) => `
+    status.textContent = (BWC_I18N.countTemplate || "{count}").replace("__N__", String(total));
+
+    let html = "";
+    html += events.map((e) => `
       <li>
         <a href="/app#event-${encodeURIComponent(e.id)}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition">
           <div class="flex items-start gap-3">
-            <span class="mt-1 inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background:${escapeHtml(e.calendarColor)}"></span>
+            <span class="mt-1 inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background:${safeColor(e.calendarColor)}"></span>
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium text-slate-900 truncate">${highlight(e.summary, query)}</div>
               <div class="mt-0.5 text-xs text-slate-500 truncate">
@@ -121,6 +139,36 @@
         </a>
       </li>
     `).join("");
+
+    if (calendars.length) {
+      html += sectionHeader(BWC_I18N.secCalendars || "日历");
+      html += calendars.map((c) => `
+        <li>
+          <a href="${escapeHtml(c.url || '/app')}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition">
+            <div class="flex items-center gap-3">
+              <span class="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background:${safeColor(c.color)}"></span>
+              <div class="text-sm font-medium text-slate-900 truncate">${highlight(c.name, query)}</div>
+            </div>
+          </a>
+        </li>
+      `).join("");
+    }
+
+    if (bookingLinks.length) {
+      html += sectionHeader(BWC_I18N.secBookingLinks || "预约链接");
+      html += bookingLinks.map((b) => `
+        <li>
+          <a href="${escapeHtml(b.url || '/app/booking-links')}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition ${b.enabled === false ? 'opacity-60' : ''}">
+            <div class="min-w-0">
+              <div class="text-sm font-medium text-slate-900 truncate">${highlight(b.title, query)}</div>
+              <div class="mt-0.5 text-xs text-slate-400 truncate">/${escapeHtml(b.slug)}${b.enabled === false ? ' · ' + escapeHtml(BWC_I18N.bookingDisabled || '已停用') : ''}</div>
+            </div>
+          </a>
+        </li>
+      `).join("");
+    }
+
+    list.innerHTML = html;
   }
 
   input.addEventListener("input", () => {

@@ -55,7 +55,21 @@
     return idx === 0 ? 100 : (50 - idx);
   }
 
-  function render(events, query) {
+  // Only allow hex colors into the inline style (defense-in-depth: the color
+  // comes from the user's own calendar, but never splice unvalidated text into
+  // a style attribute).
+  function safeColor(c) {
+    return /^#[0-9a-fA-F]{3,8}$/.test(String(c || "")) ? c : "";
+  }
+
+  // Build currentResults from the server response (events + calendars + booking
+  // links) merged with the static nav actions. Does NOT touch the DOM — paint()
+  // does that — so arrow-key navigation can re-highlight without re-fetching.
+  function buildResults(data, query) {
+    const events = (data && data.events) || [];
+    const calendars = (data && data.calendars) || [];
+    const bookingLinks = (data && data.bookingLinks) || [];
+
     const filteredNav = !query
       ? staticActions.slice(0, 6)
       : staticActions.map((a) => ({ a, s: matchScore(a.label, query) })).filter((x) => x.s > 0)
@@ -65,21 +79,29 @@
       kind: "event",
       label: e.summary,
       hint: e.calendarName + " · " + new Date(e.startsAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
-      // Right now we don't have a single-event detail page — clicking
-      // an event from the palette navigates to the main app and the
-      // user finds it on the grid. Future: deep-link to /app?event=<id>.
       url: "/app",
       color: e.calendarColor,
     }));
+    const calendarItems = calendars.map((c) => ({
+      kind: "calendar", label: c.name, hint: "日历", url: c.url || "/app", color: c.color,
+    }));
+    const bookingItems = bookingLinks.map((b) => ({
+      kind: "booking", label: b.title, hint: b.enabled === false ? "预约链接 · 已停用" : "预约链接", url: b.url || "/app/booking-links",
+    }));
 
-    currentResults = [...eventItems, ...filteredNav];
+    currentResults = [...eventItems, ...calendarItems, ...bookingItems, ...filteredNav];
+    selectedIdx = Math.min(Math.max(selectedIdx, 0), Math.max(0, currentResults.length - 1));
+  }
+
+  // Paint currentResults into the list with the current selection highlighted.
+  function paint() {
     if (currentResults.length === 0) {
       results.innerHTML = `<li class="px-4 py-6 text-center text-slate-400 text-sm">没有匹配项</li>`;
       return;
     }
-    selectedIdx = Math.min(selectedIdx, currentResults.length - 1);
     results.innerHTML = currentResults.map((r, i) => {
-      const dot = r.color ? `<span class="inline-block h-2.5 w-2.5 rounded-full mr-2 align-middle" style="background:${r.color}"></span>` : `<span class="inline-block w-3 mr-2"></span>`;
+      const col = safeColor(r.color);
+      const dot = col ? `<span class="inline-block h-2.5 w-2.5 rounded-full mr-2 align-middle" style="background:${col}"></span>` : `<span class="inline-block w-3 mr-2"></span>`;
       const sel = i === selectedIdx ? "bg-brand-50 text-brand-900" : "hover:bg-slate-50";
       return `<li data-idx="${i}" class="px-4 py-2.5 cursor-pointer flex items-center justify-between ${sel}">
         <span class="flex items-center min-w-0">${dot}<span class="truncate">${escapeHtml(r.label)}</span></span>
@@ -87,6 +109,8 @@
       </li>`;
     }).join("");
   }
+
+  function render(data, query) { buildResults(data, query); paint(); }
 
   function escapeHtml(s) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -101,7 +125,7 @@
       const r = await fetch(`/api/search?q=${encodeURIComponent(q.trim())}`, { credentials: "same-origin" });
       if (!r.ok) { render([], q); return; }
       const data = await r.json();
-      render(data.events || [], q);
+      render(data || {}, q);
     } catch {
       render([], q);
     }
@@ -135,13 +159,13 @@
     if (e.key === "ArrowDown") {
       e.preventDefault();
       selectedIdx = Math.min(selectedIdx + 1, Math.max(0, currentResults.length - 1));
-      render(currentResults.filter((r) => r.kind === "event"), input.value.trim());
+      paint();
       return;
     }
     if (e.key === "ArrowUp") {
       e.preventDefault();
       selectedIdx = Math.max(selectedIdx - 1, 0);
-      render(currentResults.filter((r) => r.kind === "event"), input.value.trim());
+      paint();
       return;
     }
     if (e.key === "Enter") {

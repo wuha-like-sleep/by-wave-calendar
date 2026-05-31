@@ -437,6 +437,9 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "search.statusSearching": "搜索中…",
   "search.statusFailed": "搜索失败，重试一下？",
   "search.statusNoResults": "无结果",
+  "search.secCalendars": "日历",
+  "search.secBookingLinks": "预约链接",
+  "search.bookingDisabled": "已停用",
   "search.statusCount": "{count} 个结果",
 
   // common (extended — shared toast / clipboard strings)

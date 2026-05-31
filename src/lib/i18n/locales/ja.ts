@@ -449,6 +449,9 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "search.statusSearching": "検索中…",
   "search.statusFailed": "検索に失敗しました — もう一度お試しください",
   "search.statusNoResults": "結果なし",
+  "search.secCalendars": "カレンダー",
+  "search.secBookingLinks": "予約リンク",
+  "search.bookingDisabled": "無効",
   "search.statusCount": "{count} 件の結果",
 
   // common (extended — shared toast / clipboard strings)
