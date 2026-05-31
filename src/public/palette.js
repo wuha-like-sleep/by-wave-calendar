@@ -151,6 +151,17 @@
     }
   }, true);
 
+  // Visible entry points: any [data-bwc-search] element (e.g. the header search
+  // button) opens the palette. It's an <a href="/app/search"> so that on pages
+  // WITHOUT the palette (this script early-returns there) the click still
+  // navigates to the full search page — graceful degradation.
+  document.addEventListener("click", (e) => {
+    const trigger = e.target.closest && e.target.closest("[data-bwc-search]");
+    if (!trigger) return;
+    e.preventDefault();
+    isOpen() ? close() : open();
+  });
+
   // Backdrop click closes
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
 
