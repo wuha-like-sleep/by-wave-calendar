@@ -170,6 +170,22 @@ await app.register(helmet, {
   hsts: env.NODE_ENV === "production" ? { maxAge: 31_536_000, includeSubDomains: true, preload: false } : false,
 });
 
+// ---- Permissions-Policy ----
+// Lock down powerful browser features the web app never uses, and opt out of
+// the ad-targeting APIs. helmet dropped Feature-Policy support, so we set this
+// modern header ourselves — one static value on every response. NOTE: the
+// "扫码登录" flow shows a QR code for the PHONE to scan; the web side uses no
+// camera / getUserMedia / geolocation (timezone is detected via Intl), so a
+// full deny is safe. `fullscreen=(self)` stays allowed as a harmless courtesy.
+const PERMISSIONS_POLICY = [
+  "camera=()", "microphone=()", "geolocation=()", "payment=()", "usb=()",
+  "magnetometer=()", "gyroscope=()", "accelerometer=()", "display-capture=()",
+  "autoplay=()", "interest-cohort=()", "browsing-topics=()", "fullscreen=(self)",
+].join(", ");
+app.addHook("onRequest", async (_req, reply) => {
+  reply.header("Permissions-Policy", PERMISSIONS_POLICY);
+});
+
 // ---- Response compression (perf) ----
 // gzip/brotli for text payloads (HTML, JSON, CSS, JS). Big win on the
 // EJS-rendered calendar pages + the /api/v1/events JSON which can be tens
