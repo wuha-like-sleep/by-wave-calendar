@@ -14,7 +14,10 @@
   <h2 class="text-lg font-semibold text-slate-900 mb-4">已配置的提供方</h2>
 
   <% if (!providers || providers.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-500">还没配置任何 SSO 提供方</div>
+    <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+      <div class="text-3xl mb-2">🔐</div>
+      <div class="text-sm text-slate-500">还没配置任何 SSO 提供方</div>
+    </div>
   <% } else { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100">
       <% providers.forEach(function(p){ %>

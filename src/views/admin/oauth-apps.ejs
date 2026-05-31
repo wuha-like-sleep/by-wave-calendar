@@ -61,7 +61,10 @@
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-3">已注册应用（<%= apps.length %>）</h2>
   <% if (apps.length === 0) { %>
-    <p class="text-sm text-slate-400 text-center py-6">还没注册任何应用</p>
+    <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+      <div class="text-3xl mb-2">🧩</div>
+      <div class="text-sm text-slate-500">还没注册任何应用</div>
+    </div>
   <% } else { %>
     <ul class="divide-y divide-slate-100">
       <% apps.forEach(function(a){ %>
