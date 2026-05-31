@@ -461,6 +461,10 @@ export const ja: Partial<Record<TranslationKey, string>> = {
 
   // /admin/users
   "adminUsers.heading": "ユーザー",
+  "adminUsers.searchPlaceholder": "メール / 名前で検索…",
+  "adminUsers.summary": "{total} 人 · 管理者 {admins} · 無効 {disabled}",
+  "adminUsers.empty": "ユーザーがいません",
+  "adminUsers.emptyFiltered": "「{q}」に一致するユーザーはいません",
   "adminUsers.col.email": "メールアドレス",
   "adminUsers.col.displayName": "表示名",
   "adminUsers.col.verified": "認証済み",

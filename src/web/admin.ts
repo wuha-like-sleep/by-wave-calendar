@@ -23,6 +23,7 @@ import {
   normalizeHexColor,
 } from "../lib/email_templates.js";
 import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
+import { likeNeedle } from "../lib/search_query.js";
 import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
@@ -436,9 +437,27 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/logo?success=" + encodeURIComponent("已删除 Logo"));
   });
 
-  app.get("/admin/users", async (req, reply) => {
+  app.get<{ Querystring: { q?: string } }>("/admin/users", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
+    // Read-only filter: find a user by email / display name. Escaped + capped.
+    const q = (typeof req.query?.q === "string" ? req.query.q : "").trim().slice(0, 100);
+    const whereClause = q
+      ? or(ilike(schema.users.email, likeNeedle(q)), ilike(schema.users.displayName, likeNeedle(q)))
+      : undefined;
+    // Totals for the header summary (reflect the whole base, not the filter).
+    const countRows = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        admins: sql<number>`count(*) filter (where ${schema.users.isAdmin})::int`,
+        disabled: sql<number>`count(*) filter (where ${schema.users.disabledAt} is not null)::int`,
+      })
+      .from(schema.users);
+    const stats = {
+      total: Number(countRows[0]?.total ?? 0),
+      admins: Number(countRows[0]?.admins ?? 0),
+      disabled: Number(countRows[0]?.disabled ?? 0),
+    };
     const rows = await db
       .select({
         id: schema.users.id,
@@ -452,6 +471,7 @@ export async function adminRoutes(app: FastifyInstance) {
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
+      .where(whereClause)
       .orderBy(desc(schema.users.createdAt));
     // Aggregate auxiliary methods: passkey count per user + most-recent login method.
     const userIds = rows.map((r) => r.id);
@@ -488,6 +508,8 @@ export async function adminRoutes(app: FastifyInstance) {
         passkeyCount: passkeyMap.get(r.id) ?? 0,
         lastLoginMethod: methodMap.get(r.id) ?? null,
       })),
+      query: q,
+      stats,
     });
   });
 

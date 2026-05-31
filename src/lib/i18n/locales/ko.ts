@@ -461,6 +461,10 @@ export const ko: Partial<Record<TranslationKey, string>> = {
 
   // /admin/users
   "adminUsers.heading": "사용자",
+  "adminUsers.searchPlaceholder": "이메일 / 이름 검색…",
+  "adminUsers.summary": "{total}명 · 관리자 {admins} · 비활성 {disabled}",
+  "adminUsers.empty": "아직 사용자가 없습니다",
+  "adminUsers.emptyFiltered": "“{q}”와 일치하는 사용자가 없습니다",
   "adminUsers.col.email": "이메일",
   "adminUsers.col.displayName": "표시 이름",
   "adminUsers.col.verified": "인증됨",

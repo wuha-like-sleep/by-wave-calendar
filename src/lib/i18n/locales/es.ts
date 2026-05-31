@@ -461,6 +461,10 @@ export const es: Partial<Record<TranslationKey, string>> = {
 
   // /admin/users
   "adminUsers.heading": "Usuarios",
+  "adminUsers.searchPlaceholder": "Buscar correo / nombre…",
+  "adminUsers.summary": "{total} usuarios · {admins} administradores · {disabled} desactivados",
+  "adminUsers.empty": "Aún no hay usuarios",
+  "adminUsers.emptyFiltered": "Ningún usuario coincide con «{q}»",
   "adminUsers.col.email": "Correo electrónico",
   "adminUsers.col.displayName": "Nombre visible",
   "adminUsers.col.verified": "Verificado",

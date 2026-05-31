@@ -448,6 +448,10 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
 
   // /admin/users
   "adminUsers.heading": "使用者管理",
+  "adminUsers.searchPlaceholder": "搜尋信箱 / 暱稱…",
+  "adminUsers.summary": "共 {total} 個使用者 · {admins} 管理員 · {disabled} 已停用",
+  "adminUsers.empty": "還沒有使用者",
+  "adminUsers.emptyFiltered": "沒有符合「{q}」的使用者",
   "adminUsers.col.email": "信箱",
   "adminUsers.col.displayName": "暱稱",
   "adminUsers.col.verified": "驗證",

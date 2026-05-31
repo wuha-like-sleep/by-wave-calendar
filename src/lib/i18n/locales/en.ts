@@ -468,6 +468,10 @@ export const en = {
 
   // /admin/users
   "adminUsers.heading": "Users",
+  "adminUsers.searchPlaceholder": "Search email / name…",
+  "adminUsers.summary": "{total} users · {admins} admins · {disabled} disabled",
+  "adminUsers.empty": "No users yet",
+  "adminUsers.emptyFiltered": "No users match “{q}”",
   "adminUsers.col.email": "Email",
   "adminUsers.col.displayName": "Display name",
   "adminUsers.col.verified": "Verified",

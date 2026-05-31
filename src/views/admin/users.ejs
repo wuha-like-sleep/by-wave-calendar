@@ -1,6 +1,16 @@
 <%- include('_nav', { activeNav: '/admin/users' }) %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-6"><%= t("adminUsers.heading") %></h1>
+<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminUsers.heading") %></h1>
+    <p class="mt-1 text-sm text-slate-500"><%- t("adminUsers.summary", { total: stats.total, admins: stats.admins, disabled: stats.disabled }) %></p>
+  </div>
+  <form method="get" action="/admin/users" class="relative w-full sm:w-72">
+    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
+    <input type="search" name="q" value="<%= query %>" autocomplete="off" placeholder="<%= t('adminUsers.searchPlaceholder') %>"
+           class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+  </form>
+</div>
 
 <div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
   <table class="min-w-full text-sm">
@@ -16,6 +26,14 @@
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
+      <% if (users.length === 0) { %>
+        <tr>
+          <td colspan="7" class="px-4 py-12 text-center">
+            <div class="text-3xl mb-2">👥</div>
+            <div class="text-sm text-slate-500"><%- query ? t("adminUsers.emptyFiltered", { q: query }) : t("adminUsers.empty") %></div>
+          </td>
+        </tr>
+      <% } %>
       <% users.forEach(function(u){ %>
         <tr>
           <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]">

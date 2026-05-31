@@ -449,6 +449,10 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
 
   // /admin/users
   "adminUsers.heading": "用户管理",
+  "adminUsers.searchPlaceholder": "搜索邮箱 / 昵称…",
+  "adminUsers.summary": "共 {total} 个用户 · {admins} 管理员 · {disabled} 已禁用",
+  "adminUsers.empty": "还没有用户",
+  "adminUsers.emptyFiltered": "没有匹配「{q}」的用户",
   "adminUsers.col.email": "邮箱",
   "adminUsers.col.displayName": "昵称",
   "adminUsers.col.verified": "验证",
