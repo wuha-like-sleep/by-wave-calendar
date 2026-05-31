@@ -24,6 +24,7 @@ import {
 } from "../lib/email_templates.js";
 import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
 import { likeNeedle } from "../lib/search_query.js";
+import { normalizeBimiSvg, bimiDnsRecord } from "../lib/bimi.js";
 import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
@@ -191,10 +192,76 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     const settings = await getSettings();
+    // BIMI section: resolve the active logo (admin-uploaded → bundled default),
+    // build the absolute URL the DNS record must point at (stable, no cache-bust),
+    // and a separate preview URL (cache-busted so the admin sees fresh uploads).
+    const base = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const hasCustomBimi = Boolean(settings.bimiSvgUrl);
+    const bimiPath = settings.bimiSvgUrl || "/static/bimi/logo.svg";
+    const bimiSvgUrl = `${base}${bimiPath}`;
+    const bimi = {
+      hasCustom: hasCustomBimi,
+      svgUrl: bimiSvgUrl,
+      previewUrl: hasCustomBimi ? `${bimiPath}?v=${Date.now()}` : bimiPath,
+      vmcUrl: settings.bimiVmcUrl,
+      record: bimiDnsRecord({ fromAddress: settings.mailFromAddress, svgUrl: bimiSvgUrl, vmcUrl: settings.bimiVmcUrl }),
+    };
     return reply.view("admin/smtp", {
       title: "SMTP 邮件 · 管理后台",
-      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings,
+      user, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req), settings, bimi,
     });
+  });
+
+  // ---------- BIMI inbox-avatar logo ----------
+  // Upload a BIMI-compliant SVG. multipart → no reliable CSRF cookie; gate on admin.
+  app.post("/admin/bimi/logo", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    const file = await req.file();
+    if (!file) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("请选择 SVG 文件") + "#bimi");
+    const isSvg = file.mimetype.toLowerCase().includes("svg") || /\.svg$/i.test(file.filename || "");
+    if (!isSvg) {
+      return reply.redirect("/admin/smtp?error=" + encodeURIComponent("BIMI logo 必须是 SVG（矢量）文件，位图无法用于 BIMI") + "#bimi");
+    }
+    const buf = await file.toBuffer();
+    if (buf.length > 64 * 1024) {
+      return reply.redirect("/admin/smtp?error=" + encodeURIComponent("文件过大") + "#bimi");
+    }
+    const settings = await getSettings();
+    const result = normalizeBimiSvg(buf.toString("utf8"), { title: settings.siteName });
+    if (!result.ok) {
+      return reply.redirect("/admin/smtp?error=" + encodeURIComponent("SVG 不符合 BIMI 规范：" + result.errors.join("；")) + "#bimi");
+    }
+    const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
+    await mkdir(uploadsDir, { recursive: true });
+    await writeFile(path.join(uploadsDir, "bimi.svg"), result.svg, "utf8");
+    await updateSettings({ bimiSvgUrl: "/static/uploads/bimi.svg" });
+    const note = result.normalized ? `（已自动补全 ${result.notes.join("、")}）` : "";
+    return reply.redirect("/admin/smtp?success=" + encodeURIComponent("BIMI logo 已上传" + note) + "#bimi");
+  });
+
+  app.post("/admin/bimi/logo/delete", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const p = path.join(process.cwd(), "src", "public", "uploads", "bimi.svg");
+    await unlink(p).catch(() => undefined);
+    await updateSettings({ bimiSvgUrl: null });
+    return reply.redirect("/admin/smtp?success=" + encodeURIComponent("已恢复为内置默认 logo") + "#bimi");
+  });
+
+  app.post("/admin/bimi/vmc", async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ vmcUrl: z.string().max(500).optional() }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("参数无效") + "#bimi");
+    const raw = (body.data.vmcUrl || "").trim();
+    if (raw && !/^https:\/\//i.test(raw)) {
+      return reply.redirect("/admin/smtp?error=" + encodeURIComponent("VMC 证书 URL 必须以 https:// 开头") + "#bimi");
+    }
+    await updateSettings({ bimiVmcUrl: raw || null });
+    return reply.redirect("/admin/smtp?success=" + encodeURIComponent("已保存证书地址") + "#bimi");
   });
 
   // SSO management. Dual-registered at /admin/sso and /admin/idp because

@@ -114,6 +114,13 @@ export const siteSettings = pgTable("site_settings", {
   // tagline after the copyright line. Both fall back to indigo / 日历共享平台.
   emailBrandColor: text("email_brand_color").notNull().default("#4f46e5"),
   emailFooterNote: text("email_footer_note").notNull().default("日历共享平台"),
+  // BIMI (Brand Indicators for Message Identification): the SVG shown as the
+  // sender avatar in supporting inboxes. bimiSvgUrl points at the admin-uploaded
+  // SVG (served from /static/uploads/bimi.svg); null = use the bundled default at
+  // /static/bimi/logo.svg. bimiVmcUrl is the optional VMC/CMC certificate URL
+  // (required by Gmail/Apple to actually render the logo).
+  bimiSvgUrl: text("bimi_svg_url"),
+  bimiVmcUrl: text("bimi_vmc_url"),
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),

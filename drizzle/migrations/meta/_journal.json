@@ -302,6 +302,13 @@
       "when": 1780198238283,
       "tag": "0042_natural_angel",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1780211194232,
+      "tag": "0043_graceful_xavin",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,9 @@ export type SettingsView = {
   // Email branding (editable in /admin/email-templates).
   emailBrandColor: string;
   emailFooterNote: string;
+  // BIMI inbox-avatar SVG (editable in /admin/smtp). bimiSvgUrl null = bundled default.
+  bimiSvgUrl: string | null;
+  bimiVmcUrl: string | null;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -106,6 +109,8 @@ function toView(r: schema.SiteSettings): SettingsView {
     captchaBuiltinMode: isBuiltinMode(r.captchaBuiltinMode) ? r.captchaBuiltinMode : "invisible",
     emailBrandColor: r.emailBrandColor || "#4f46e5",
     emailFooterNote: r.emailFooterNote || "日历共享平台",
+    bimiSvgUrl: r.bimiSvgUrl ?? null,
+    bimiVmcUrl: r.bimiVmcUrl ?? null,
   };
 }
 
@@ -185,6 +190,8 @@ export async function updateSettings(patch: Partial<{
   captchaBuiltinMode: string;
   emailBrandColor: string;
   emailFooterNote: string;
+  bimiSvgUrl: string | null;
+  bimiVmcUrl: string | null;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)
