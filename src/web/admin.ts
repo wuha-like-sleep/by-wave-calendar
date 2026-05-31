@@ -1195,15 +1195,27 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
-    const body = z.object({ to: z.string().email() }).safeParse(req.body);
+    const body = z.object({
+      to: z.string().email(),
+      // Checkboxes named "templates": one value → string, many → string[].
+      templates: z.union([z.string(), z.array(z.string())]).optional(),
+    }).safeParse(req.body);
     if (!body.success) {
       return reply.redirect("/admin/email-templates?error=" + encodeURIComponent("请输入合法的邮箱地址"));
     }
     const to = body.data.to;
+    // Selective send: only the checked templates. No selection = nothing to do.
+    const wanted = new Set(
+      Array.isArray(body.data.templates) ? body.data.templates : body.data.templates ? [body.data.templates] : [],
+    );
+    const chosen = EMAIL_PREVIEW_TEMPLATES.filter((t) => wanted.has(t.key));
+    if (chosen.length === 0) {
+      return reply.redirect("/admin/email-templates?error=" + encodeURIComponent("请至少勾选一种要发送的模板"));
+    }
     const now = new Date();
     let sent = 0;
     const failed: string[] = [];
-    for (const t of EMAIL_PREVIEW_TEMPLATES) {
+    for (const t of chosen) {
       try {
         await sendMail(t.build(to, now));
         sent++;

@@ -41,12 +41,31 @@
 
     <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
       <h2 class="text-lg font-semibold text-slate-900 mb-2">发送测试</h2>
-      <p class="text-sm text-slate-500 mb-3">用<strong>已保存</strong>的品牌设置，把全部模板各发一封到指定邮箱（需已配置 SMTP）。</p>
-      <form method="post" action="/admin/email-templates/send" class="flex items-center gap-2">
+      <p class="text-sm text-slate-500 mb-3">用<strong>已保存</strong>的品牌设置，把<strong>勾选的</strong>模板各发一封到指定邮箱（需已配置 SMTP）。</p>
+      <form method="post" action="/admin/email-templates/send" class="space-y-3">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <input type="email" name="to" required placeholder="you@example.com"
-               class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        <button type="submit" class="shrink-0 rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">发送</button>
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-medium text-slate-700">选择要发送的模板</span>
+          <label class="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+            <input type="checkbox" checked
+                   onchange="var v=this.checked;this.closest('form').querySelectorAll('input[name=templates]').forEach(function(c){c.checked=v})"
+                   class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600" />
+            全选
+          </label>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
+          <% previews.forEach(function (p) { %>
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+              <input type="checkbox" name="templates" value="<%= p.key %>" checked class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+              <span class="truncate"><%= p.label %></span>
+            </label>
+          <% }); %>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <input type="email" name="to" required placeholder="you@example.com"
+                 class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          <button type="submit" class="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">发送所选</button>
+        </div>
       </form>
     </section>
   </div>
