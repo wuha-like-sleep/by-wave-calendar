@@ -1120,7 +1120,16 @@ struct AboutSettingsPage: View {
         }
         probingLegal = title
         defer { probingLegal = nil }
-        let url = serverURL.appendingPathComponent(serverPath)
+        // Append ?lang= so the operator's now-localized legal pages render in
+        // the app's current language (the server honors ?lang= above cookie /
+        // Accept-Language). "follow system" → omit it and let the server detect.
+        let baseURL = serverURL.appendingPathComponent(serverPath)
+        let url: URL = {
+            guard let lang = Self.serverLangParam(LocaleManager.shared.current),
+                  var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { return baseURL }
+            comps.queryItems = [URLQueryItem(name: "lang", value: lang)]
+            return comps.url ?? baseURL
+        }()
         var req = URLRequest(url: url)
         req.httpMethod = "HEAD"
         req.timeoutInterval = 4
@@ -1139,6 +1148,19 @@ struct AboutSettingsPage: View {
             // Fall through to fallback on any network / SSL error.
         }
         localLegal = LegalSheetItem(title: title, content: fallback)
+    }
+
+    /// Map the in-app language tag (LocaleManager codes) to the server's
+    /// ?lang= locale code. Returns nil for "follow system" ("") so the server
+    /// detects via Accept-Language. Apple uses zh-Hans/zh-Hant; the server
+    /// uses zh-CN/zh-TW. en/ja/ko/es/fr/de already match.
+    private static func serverLangParam(_ code: String) -> String? {
+        switch code {
+        case "": return nil
+        case "zh-Hans": return "zh-CN"
+        case "zh-Hant": return "zh-TW"
+        default: return code
+        }
     }
 }
 

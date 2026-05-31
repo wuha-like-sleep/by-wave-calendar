@@ -852,7 +852,20 @@ private fun openExternal(context: android.content.Context, url: String) {
 private const val PROJECT_DEMO_SITE = "https://rl.lz-ss.com"
 private fun legalUrl(serverUrl: String?, path: String): String {
     val base = serverUrl?.trim()?.trimEnd('/').takeUnless { it.isNullOrEmpty() } ?: PROJECT_DEMO_SITE
-    return base + path
+    // Append ?lang= so the operator's now-localized legal pages open in the
+    // app's current language (the server honors ?lang= above Accept-Language).
+    // "follow system" ("") → omit it and let the server detect.
+    val lang = serverLangParam(cn.bywave.calendar.i18n.LocaleHelper.current.value)
+    return if (lang != null) "$base$path?lang=$lang" else base + path
+}
+
+/** Map the in-app language tag (LocaleHelper codes) to the server's ?lang=
+ *  locale code. Android uses zh-Hans; the server uses zh-CN. zh-TW and
+ *  en/ja/ko/es/fr/de already match. "" (follow system) → null (server detects). */
+private fun serverLangParam(code: String): String? = when (code) {
+    "" -> null
+    "zh-Hans" -> "zh-CN"
+    else -> code
 }
 
 @Composable
