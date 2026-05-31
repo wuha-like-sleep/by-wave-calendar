@@ -121,7 +121,7 @@ export async function getSettings(): Promise<SettingsView> {
   if (!cached) {
     cached = await loadFromDb();
     updateBrandForEmails(cached.siteName);
-    updateEmailBranding({ brandColor: cached.emailBrandColor, footerNote: cached.emailFooterNote });
+    updateEmailBranding({ brandColor: cached.emailBrandColor, footerNote: cached.emailFooterNote, logoUrl: cached.logoUrl });
   }
   return cached;
 }

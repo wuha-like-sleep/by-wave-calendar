@@ -69,6 +69,9 @@ const DEFAULT_FOOTER_NOTE = "日历共享平台";
 let brandColor = DEFAULT_BRAND_COLOR;
 let accentColor = lighten(DEFAULT_BRAND_COLOR, 0.16);
 let footerNote = DEFAULT_FOOTER_NOTE;
+// The admin-uploaded logo (settings.logoUrl), if any. Used in the email header
+// + as the sender-side mark. May be relative; resolved to absolute at use.
+let uploadedLogoUrl: string | null = null;
 
 /** Mix a #rrggbb color toward white by `amt` (0..1). Invalid input → returned as-is. */
 function lighten(hex: string, amt: number): string {
@@ -93,11 +96,13 @@ export function normalizeHexColor(input: string | null | undefined): string | nu
   return null;
 }
 
-/** Apply admin-configured brand color + footer tagline (called on settings load). */
-export function updateEmailBranding(opts: { brandColor?: string | null; footerNote?: string | null }): void {
+/** Apply admin-configured brand color + footer tagline + uploaded logo
+ *  (called on settings load). */
+export function updateEmailBranding(opts: { brandColor?: string | null; footerNote?: string | null; logoUrl?: string | null }): void {
   brandColor = normalizeHexColor(opts.brandColor) ?? DEFAULT_BRAND_COLOR;
   accentColor = lighten(brandColor, 0.16);
   footerNote = opts.footerNote?.trim() || DEFAULT_FOOTER_NOTE;
+  uploadedLogoUrl = opts.logoUrl?.trim() || null;
 }
 
 type EmailBrandingSnapshot = { brand: string; brandColor: string; accentColor: string; footerNote: string };
@@ -137,6 +142,14 @@ export function renderWithBranding(
 // unusable, in which case layout() falls back to a text-only brand title.
 function brandLogoUrl(): string | null {
   const base = (env.PUBLIC_BASE_URL || "").trim().replace(/\/$/, "");
+  // Prefer the admin-uploaded logo (settings.logoUrl). It's usually relative
+  // (e.g. "/static/uploads/logo.png?v=…"); email clients can't resolve relative
+  // URLs, so make it absolute against PUBLIC_BASE_URL. Fall back to the bundled
+  // app icon when no custom logo is set.
+  if (uploadedLogoUrl) {
+    if (/^https?:\/\//i.test(uploadedLogoUrl)) return uploadedLogoUrl;
+    if (base) return base + (uploadedLogoUrl.startsWith("/") ? uploadedLogoUrl : "/" + uploadedLogoUrl);
+  }
   if (!base) return null;
   return `${base}/static/icons/icon-512.png`;
 }

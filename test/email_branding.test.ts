@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeHexColor,
   renderPreviewHtml,
+  updateEmailBranding,
   EMAIL_PREVIEW_TEMPLATES,
 } from "../src/lib/email_templates.js";
 
@@ -56,5 +57,24 @@ describe("renderPreviewHtml — draft branding override", () => {
       expect(html!.length, t.key).toBeGreaterThan(200);
       expect(html!, t.key).toContain("<!doctype html>");
     }
+  });
+
+  it("uses the admin-uploaded logo (made absolute) in the email header when set", () => {
+    try {
+      updateEmailBranding({ logoUrl: "/static/uploads/logo.png?v=9" });
+      const html = renderPreviewHtml("welcome", "x@example.com", NOW, {})!;
+      // Relative upload path is preserved and embedded (resolved absolute).
+      expect(html).toContain("/static/uploads/logo.png?v=9");
+      // The bundled fallback icon must NOT be used when a custom logo exists.
+      expect(html).not.toContain("/static/icons/icon-512.png");
+    } finally {
+      updateEmailBranding({}); // reset module state for other tests
+    }
+  });
+
+  it("falls back to the bundled icon when no custom logo is set", () => {
+    updateEmailBranding({});
+    const html = renderPreviewHtml("welcome", "x@example.com", NOW, {})!;
+    expect(html).toContain("/static/icons/icon-512.png");
   });
 });
