@@ -186,6 +186,24 @@ app.addHook("onRequest", async (_req, reply) => {
   reply.header("Permissions-Policy", PERMISSIONS_POLICY);
 });
 
+// ---- noindex on sensitive surfaces ----
+// Keep authenticated app/admin pages, auth flows, and tokenized links out of
+// search-engine indexes. The X-Robots-Tag header is authoritative even if a
+// crawler ignores robots.txt or stumbles onto a deep link (e.g. a forwarded
+// password-reset URL). Public marketing/legal pages (/, /download, /about,
+// /privacy, /terms, /support) are NOT listed, so they stay indexable.
+const NOINDEX_PREFIXES = [
+  "/app", "/admin", "/api", "/login", "/register", "/forgot-password",
+  "/reset-password", "/verify-email", "/locale", "/booking", "/embed",
+  "/invite", "/event-invite", "/oauth", "/sign-out",
+];
+app.addHook("onRequest", async (req, reply) => {
+  const p = (req.url.split("?")[0] || "/");
+  if (NOINDEX_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"))) {
+    reply.header("X-Robots-Tag", "noindex, nofollow");
+  }
+});
+
 // ---- Response compression (perf) ----
 // gzip/brotli for text payloads (HTML, JSON, CSS, JS). Big win on the
 // EJS-rendered calendar pages + the /api/v1/events JSON which can be tens
@@ -443,6 +461,32 @@ const JS_BASE_PATH = env.NODE_ENV === "production" ? "/static/_built" : "/static
 // installs read `short_name` (and "name" as fallback) — without this
 // every install shows "ByWave-Calendar" no matter how the admin
 // branded the site.
+// Crawler directives. Disallow authenticated / auth-flow / tokenized surfaces;
+// everything else (landing, /download, /about, legal pages) stays crawlable.
+// Mirrors the X-Robots-Tag noindex header set above — robots.txt asks crawlers
+// not to fetch, the header tells them not to index what they do fetch.
+app.get("/robots.txt", { config: { rateLimit: false } }, async (_req, reply) => {
+  reply.type("text/plain; charset=utf-8");
+  return [
+    "User-agent: *",
+    "Disallow: /app",
+    "Disallow: /admin",
+    "Disallow: /api",
+    "Disallow: /login",
+    "Disallow: /register",
+    "Disallow: /forgot-password",
+    "Disallow: /reset-password",
+    "Disallow: /verify-email",
+    "Disallow: /booking",
+    "Disallow: /embed",
+    "Disallow: /invite",
+    "Disallow: /event-invite",
+    "Disallow: /oauth",
+    "Disallow: /locale",
+    "",
+  ].join("\n");
+});
+
 app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, reply) => {
   const settings = await getSettings();
   const siteName = (settings.siteName || "ByWave-Calendar").trim() || "ByWave-Calendar";
