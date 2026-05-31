@@ -1,0 +1,14 @@
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>ByWave</title>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#g)"/>
+  <rect x="8" y="11" width="16" height="14" rx="2" fill="#ffffff"/>
+  <rect x="8" y="11" width="16" height="4" fill="#312e81"/>
+  <circle cx="12" cy="9" r="1.5" fill="#ffffff"/>
+  <circle cx="20" cy="9" r="1.5" fill="#ffffff"/>
+</svg>
