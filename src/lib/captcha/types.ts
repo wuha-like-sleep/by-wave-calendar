@@ -19,6 +19,19 @@
 
 export type CaptchaProvider = "none" | "builtin" | "turnstile" | "recaptcha" | "hcaptcha";
 
+/**
+ * UX mode for the "builtin" provider. The server-side PoW verification is
+ * IDENTICAL for both — this only changes when the work runs on the client:
+ *   - "invisible"   → solves automatically on page load (no click). Default.
+ *   - "interactive" → shows a checkbox the user must click; solving starts on
+ *                     click. For operators who want a visible "I'm human" step.
+ */
+export type BuiltinMode = "invisible" | "interactive";
+export const BUILTIN_MODES: readonly BuiltinMode[] = ["invisible", "interactive"] as const;
+export function isBuiltinMode(v: unknown): v is BuiltinMode {
+  return v === "invisible" || v === "interactive";
+}
+
 export const CAPTCHA_PROVIDERS: readonly CaptchaProvider[] = [
   "none",
   "builtin",
@@ -40,6 +53,8 @@ export type CaptchaConfig = {
   provider: CaptchaProvider;
   siteKey?: string | null;
   secret?: string | null;
+  /** Only meaningful for provider === "builtin". Defaults to "invisible". */
+  builtinMode?: BuiltinMode;
 };
 
 /**
@@ -53,6 +68,8 @@ export type ClientRender = {
   siteKey?: string | null;
   /** Present only when provider === "builtin". */
   builtin?: {
+    /** "invisible" (auto-solve, no click) | "interactive" (click to start). */
+    mode: BuiltinMode;
     /**
      * Signed, opaque token. The client echoes it back UNCHANGED on submit; it
      * carries the (challenge, salt, difficulty, expiry) tuple, signed. The

@@ -44,6 +44,7 @@
       <div>
         <% if (captcha.provider === "builtin") { %>
           <div data-bwc-captcha="builtin"
+               data-mode="<%= captcha.builtin.mode %>"
                data-token="<%= captcha.builtin.token %>"
                data-challenge="<%= captcha.builtin.challenge %>"
                data-salt="<%= captcha.builtin.salt %>"

@@ -95,6 +95,7 @@
   };
   const thirdPartyProviders = ["turnstile", "recaptcha", "hcaptcha"];
   const captchaThirdParty = thirdPartyProviders.indexOf(settings.captchaProvider) !== -1;
+  const captchaBuiltin = settings.captchaProvider === "builtin";
 %>
 <form method="post" action="/admin/security/captcha" id="captcha" class="space-y-6 mt-6">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -109,12 +110,25 @@
       <div>
         <label class="block text-sm font-medium text-slate-700">验证方式</label>
         <select name="captchaProvider"
-                onchange="document.getElementById('captcha-thirdparty').style.display = (this.value==='turnstile'||this.value==='recaptcha'||this.value==='hcaptcha') ? '' : 'none'"
+                onchange="var v=this.value;document.getElementById('captcha-thirdparty').style.display=(v==='turnstile'||v==='recaptcha'||v==='hcaptcha')?'':'none';document.getElementById('captcha-builtin').style.display=(v==='builtin')?'':'none'"
                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
           <% captchaProviders.forEach(function (p) { %>
             <option value="<%= p %>" <%= settings.captchaProvider === p ? "selected" : "" %>><%= captchaLabels[p] || p %></option>
           <% }); %>
         </select>
+      </div>
+
+      <div id="captcha-builtin" style="<%= captchaBuiltin ? '' : 'display:none' %>" class="space-y-2 rounded-xl bg-slate-50 border border-slate-200 p-4">
+        <div class="text-sm font-medium text-slate-700">内置验证体验</div>
+        <label class="flex items-start gap-2 cursor-pointer">
+          <input type="radio" name="captchaBuiltinMode" value="invisible" <%= settings.captchaBuiltinMode !== 'interactive' ? 'checked' : '' %> class="mt-0.5 accent-brand-600" />
+          <span class="text-sm text-slate-700"><strong>无感</strong> —— 打开注册页后自动在后台完成验证，用户无需点击（推荐）。</span>
+        </label>
+        <label class="flex items-start gap-2 cursor-pointer">
+          <input type="radio" name="captchaBuiltinMode" value="interactive" <%= settings.captchaBuiltinMode === 'interactive' ? 'checked' : '' %> class="mt-0.5 accent-brand-600" />
+          <span class="text-sm text-slate-700"><strong>手动</strong> —— 显示一个「点击进行人机验证」的勾选框，用户点一下才开始验证。</span>
+        </label>
+        <p class="text-xs text-slate-400">两种模式的<strong>服务端校验完全相同</strong>（都是 Proof-of-Work），只是前端体验不同。</p>
       </div>
 
       <div id="captcha-thirdparty" style="<%= captchaThirdParty ? '' : 'display:none' %>" class="space-y-4 rounded-xl bg-slate-50 border border-slate-200 p-4">

@@ -9,7 +9,7 @@ import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { getSettings, updateSettings } from "../lib/site_settings.js";
-import { CAPTCHA_PROVIDERS, isCaptchaProvider } from "../lib/captcha/index.js";
+import { CAPTCHA_PROVIDERS, isCaptchaProvider, isBuiltinMode } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
 import {
   calendarInviteMail,
@@ -921,13 +921,16 @@ export async function adminRoutes(app: FastifyInstance) {
       captchaProvider: z.string(),
       captchaSiteKey: z.string().max(500).optional(),
       captchaSecret: z.string().max(2000).optional(),
+      captchaBuiltinMode: z.string().optional(),
     }).safeParse(req.body);
     if (!body.success || !isCaptchaProvider(body.data.captchaProvider)) {
       return reply.redirect("/admin/security?error=" + encodeURIComponent("无效的人机验证配置") + "#captcha");
     }
-    const patch: { captchaProvider: string; captchaSiteKey: string | null; captchaSecret?: string | null } = {
+    const patch: { captchaProvider: string; captchaSiteKey: string | null; captchaSecret?: string | null; captchaBuiltinMode: string } = {
       captchaProvider: body.data.captchaProvider,
       captchaSiteKey: body.data.captchaSiteKey?.trim() || null,
+      // Builtin UX mode (radio). Default to "invisible" for any unexpected value.
+      captchaBuiltinMode: isBuiltinMode(body.data.captchaBuiltinMode) ? body.data.captchaBuiltinMode : "invisible",
     };
     // Blank secret on save = keep the stored one (like the SSO client secret);
     // only overwrite when a non-empty value is submitted.

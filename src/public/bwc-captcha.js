@@ -315,7 +315,15 @@
       verifying: container.getAttribute("data-label-verifying") || "正在验证…",
       passed: container.getAttribute("data-label-passed") || "已通过人机验证",
       failed: container.getAttribute("data-label-failed") || "验证失败，请刷新页面重试",
+      click: container.getAttribute("data-label-click") || "点击进行人机验证",
     };
+  }
+
+  // Empty checkbox icon for the interactive (click-to-verify) mode.
+  function uncheckedSvg() {
+    return '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">' +
+      '<rect x="3" y="3" width="18" height="18" rx="4" fill="#fff" stroke="#94a3b8" stroke-width="2"/>' +
+      '</svg>';
   }
 
   // --------------------------------------------------------------------------
@@ -323,11 +331,20 @@
   // --------------------------------------------------------------------------
   function initBuiltin(container, form) {
     var L = labels(container);
-    var ui = buildShell(container, L.verifying);
     var token = container.getAttribute("data-token") || "";
     var challenge = container.getAttribute("data-challenge") || "";
     var salt = container.getAttribute("data-salt") || "";
     var difficulty = parseInt(container.getAttribute("data-difficulty") || "16", 10);
+    var mode = container.getAttribute("data-mode") === "interactive" ? "interactive" : "invisible";
+
+    // Either mode shows a verifying shell first; build it now so we can fail into it.
+    var ui = buildShell(container, mode === "interactive" ? L.click : L.verifying);
+    if (mode === "interactive") {
+      ui.icon.innerHTML = uncheckedSvg();
+      ui.box.style.cursor = "pointer";
+      ui.box.setAttribute("role", "button");
+      ui.box.setAttribute("tabindex", "0");
+    }
     if (!token || !challenge || !salt || !(difficulty > 0)) { setFailed(ui, L.failed); return; }
 
     // Echo the (unmodified) signed token back immediately; the nonce lands once
@@ -344,8 +361,11 @@
       reenable = function () { submitBtn.disabled = false; };
     }
 
-    var start = Date.now();
-    function run() {
+    // Run the PoW solve, then flip to the green "passed" state + re-enable submit.
+    // Shared by both modes — the only difference is WHEN this is triggered.
+    function solveAndPass() {
+      setVerifying(ui, L.verifying);
+      var start = Date.now();
       solvePow(challenge, salt, difficulty).then(function (nonce) {
         setHidden(form, FIELD.nonce, nonce);
         // brief minimum spinner so the transition reads as "verified", not flicker
@@ -357,8 +377,31 @@
         }, delay);
       });
     }
+
     var schedule = window.requestIdleCallback || function (fn) { setTimeout(fn, 0); };
-    schedule(run);
+
+    if (mode === "interactive") {
+      // Manual mode: wait for an explicit click/keypress, THEN solve.
+      var started = false;
+      function trigger() {
+        if (started) return;
+        started = true;
+        ui.box.style.cursor = "default";
+        ui.box.removeAttribute("role");
+        ui.box.removeAttribute("tabindex");
+        schedule(solveAndPass);
+      }
+      ui.box.addEventListener("click", trigger);
+      ui.box.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.keyCode === 13 || e.keyCode === 32) {
+          e.preventDefault();
+          trigger();
+        }
+      });
+    } else {
+      // Invisible mode: solve automatically on idle, no interaction.
+      schedule(solveAndPass);
+    }
   }
 
   // --------------------------------------------------------------------------

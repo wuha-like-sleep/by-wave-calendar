@@ -1,0 +1,1 @@
+ALTER TABLE "site_settings" ADD COLUMN "captcha_builtin_mode" text DEFAULT 'invisible' NOT NULL;

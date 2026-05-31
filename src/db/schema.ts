@@ -106,6 +106,9 @@ export const siteSettings = pgTable("site_settings", {
   captchaProvider: text("captcha_provider").notNull().default("builtin"),
   captchaSiteKey: text("captcha_site_key"),
   captchaSecret: text("captcha_secret"),
+  // Builtin PoW UX mode: "invisible" (auto-solve, no click) | "interactive"
+  // (click-to-verify). Server-side verification is identical for both.
+  captchaBuiltinMode: text("captcha_builtin_mode").notNull().default("invisible"),
   // Email branding (admin-editable in /admin/email-templates). brandColor is the
   // primary accent used in every email header/button/link; footerNote is the
   // tagline after the copyright line. Both fall back to indigo / 日历共享平台.

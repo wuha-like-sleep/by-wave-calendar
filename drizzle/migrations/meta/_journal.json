@@ -295,6 +295,13 @@
       "when": 1780167765472,
       "tag": "0041_minor_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1780198238283,
+      "tag": "0042_natural_angel",
+      "breakpoints": true
     }
   ]
 }

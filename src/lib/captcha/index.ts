@@ -14,8 +14,8 @@ import { issueChallenge, verifyChallenge } from "./builtin_pow.js";
 import { verifyHcaptcha, verifyRecaptcha, verifyTurnstile } from "./providers.js";
 import type { CaptchaConfig, ClientRender, VerifyResult } from "./types.js";
 
-export type { CaptchaConfig, CaptchaProvider, ClientRender, VerifyResult } from "./types.js";
-export { CAPTCHA_PROVIDERS, isCaptchaProvider } from "./types.js";
+export type { CaptchaConfig, CaptchaProvider, ClientRender, VerifyResult, BuiltinMode } from "./types.js";
+export { CAPTCHA_PROVIDERS, isCaptchaProvider, BUILTIN_MODES, isBuiltinMode } from "./types.js";
 export { issueChallenge, verifyChallenge, DEFAULT_DIFFICULTY } from "./builtin_pow.js";
 
 // ----------------------------------------------------------------------------
@@ -57,6 +57,7 @@ export function getClientRender(config: CaptchaConfig): ClientRender {
       return {
         provider: "builtin",
         builtin: {
+          mode: config.builtinMode === "interactive" ? "interactive" : "invisible",
           token: ch.token,
           challenge: ch.challenge,
           salt: ch.salt,

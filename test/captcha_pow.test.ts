@@ -169,6 +169,12 @@ describe("captcha façade", () => {
     expect(ok).toEqual({ ok: true });
   });
 
+  it("builtin getClientRender carries the UX mode (default invisible)", () => {
+    expect(getClientRender({ provider: "builtin" }).builtin!.mode).toBe("invisible");
+    expect(getClientRender({ provider: "builtin", builtinMode: "invisible" }).builtin!.mode).toBe("invisible");
+    expect(getClientRender({ provider: "builtin", builtinMode: "interactive" }).builtin!.mode).toBe("interactive");
+  });
+
   it("builtin façade rejects a missing nonce", async () => {
     const render = getClientRender({ provider: "builtin" });
     const r = await verifyCaptcha({ provider: "builtin" }, { [FIELD.challenge]: render.builtin!.token });

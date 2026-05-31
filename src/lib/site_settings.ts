@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { updateBrandForEmails, updateEmailBranding } from "./email_templates.js";
-import { isCaptchaProvider, type CaptchaConfig, type CaptchaProvider } from "./captcha/index.js";
+import { isCaptchaProvider, isBuiltinMode, type CaptchaConfig, type CaptchaProvider, type BuiltinMode } from "./captcha/index.js";
 
 export type SettingsView = {
   siteName: string;
@@ -40,6 +40,7 @@ export type SettingsView = {
   // The secret is NOT here; read it only via getCaptchaConfig().
   captchaProvider: CaptchaProvider;
   captchaSiteKey: string | null;
+  captchaBuiltinMode: BuiltinMode;
   // Email branding (editable in /admin/email-templates).
   emailBrandColor: string;
   emailFooterNote: string;
@@ -102,6 +103,7 @@ function toView(r: schema.SiteSettings): SettingsView {
     vapidSubject: r.vapidSubject,
     captchaProvider: isCaptchaProvider(r.captchaProvider) ? r.captchaProvider : "builtin",
     captchaSiteKey: r.captchaSiteKey ?? null,
+    captchaBuiltinMode: isBuiltinMode(r.captchaBuiltinMode) ? r.captchaBuiltinMode : "invisible",
     emailBrandColor: r.emailBrandColor || "#4f46e5",
     emailFooterNote: r.emailFooterNote || "日历共享平台",
   };
@@ -111,7 +113,8 @@ function toView(r: schema.SiteSettings): SettingsView {
 export async function getCaptchaConfig(): Promise<CaptchaConfig> {
   const [row] = await db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)).limit(1);
   const provider: CaptchaProvider = isCaptchaProvider(row?.captchaProvider) ? row!.captchaProvider : "builtin";
-  return { provider, siteKey: row?.captchaSiteKey ?? null, secret: row?.captchaSecret ?? null };
+  const builtinMode: BuiltinMode = isBuiltinMode(row?.captchaBuiltinMode) ? row!.captchaBuiltinMode : "invisible";
+  return { provider, siteKey: row?.captchaSiteKey ?? null, secret: row?.captchaSecret ?? null, builtinMode };
 }
 
 export async function getSettings(): Promise<SettingsView> {
@@ -179,6 +182,7 @@ export async function updateSettings(patch: Partial<{
   captchaProvider: string;
   captchaSiteKey: string | null;
   captchaSecret: string | null;
+  captchaBuiltinMode: string;
   emailBrandColor: string;
   emailFooterNote: string;
 }>): Promise<void> {
