@@ -43,6 +43,9 @@ export async function mfaRoutes(app: FastifyInstance) {
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
+      // Mid-login, single purpose: bare chrome so the half-authenticated
+      // session can't reach the nav or the ⌘K palette before MFA is satisfied.
+      bareLayout: true,
     });
   });
 

@@ -518,6 +518,7 @@ export async function webRoutes(app: FastifyInstance) {
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
+      bareLayout: true, // single-purpose: enter the device verification code, nothing else
     });
   });
 
@@ -801,6 +802,7 @@ export async function webRoutes(app: FastifyInstance) {
       flash: flashFromQuery(req),
       email,
       mailerEnabled: await isMailerEnabled(),
+      bareLayout: true, // single-purpose: enter the email verification code, nothing else
     });
   });
 
