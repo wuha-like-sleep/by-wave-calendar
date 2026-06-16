@@ -1,0 +1,71 @@
+<%- include('_nav', { activeNav: '/admin/users' }) %>
+
+<div class="mb-5">
+  <a href="/admin/users" class="text-sm text-slate-500 hover:text-slate-700">← 返回用户管理</a>
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mt-2">合并账号</h1>
+  <p class="mt-1 text-sm text-slate-500">把<strong>源账号</strong>的全部数据迁移到<strong>目标账号</strong>,然后删除源账号。用于修复「同一个人有两套账号(SSO + 个人)不同步」。</p>
+</div>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 max-w-2xl">
+  <form method="get" action="/admin/users/merge" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">源账号 <span class="text-xs text-slate-400">(会被删除)</span></span>
+      <input type="text" name="source" value="<%= sourceInput %>" placeholder="邮箱 或 用户 ID" required
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1">目标账号 <span class="text-xs text-slate-400">(数据并入它)</span></span>
+      <input type="text" name="target" value="<%= targetInput %>" placeholder="邮箱 或 用户 ID" required
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <div class="sm:col-span-2">
+      <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">预览合并</button>
+    </div>
+  </form>
+</section>
+
+<% if (error) { %>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 max-w-2xl"><%= error %></div>
+<% } %>
+
+<% if (source && target && summary) { %>
+  <section class="rounded-2xl border border-red-200 bg-red-50/40 p-5 sm:p-6 max-w-2xl">
+    <h2 class="text-lg font-semibold text-red-900 mb-3">确认合并(不可撤销)</h2>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4 text-sm">
+      <div class="rounded-lg bg-white border border-slate-200 p-3">
+        <div class="text-xs text-slate-400 mb-1">源账号(将删除)</div>
+        <div class="font-medium text-slate-900 break-all"><%= source.email %></div>
+        <div class="text-xs text-slate-500"><%= source.displayName || '—' %></div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-3">
+        <div class="text-xs text-slate-400 mb-1">目标账号(保留)</div>
+        <div class="font-medium text-slate-900 break-all"><%= target.email %></div>
+        <div class="text-xs text-slate-500"><%= target.displayName || '—' %></div>
+      </div>
+    </div>
+
+    <div class="rounded-lg bg-white border border-slate-200 p-3 mb-4 text-sm">
+      <div class="text-xs text-slate-400 mb-2">将从源账号迁移到目标账号:</div>
+      <ul class="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
+        <li>日历:<strong><%= summary.calendars %></strong></li>
+        <li>事件:<strong><%= summary.events %></strong></li>
+        <li>预约链接:<strong><%= summary.bookingLinks %></strong></li>
+        <li>日历成员关系:<strong><%= summary.memberships %></strong></li>
+        <li>SSO 绑定身份:<strong><%= summary.identities %></strong></li>
+      </ul>
+      <div class="text-xs text-slate-400 mt-2">源账号的会话 / 设备 / API Token / Passkey / 应用密码等登录凭证会随源账号一并删除(不迁移)。</div>
+    </div>
+
+    <form method="post" action="/admin/users/merge"
+          data-confirm="确定把 <%= source.email %> 合并进 <%= target.email %> 并删除源账号?此操作不可撤销。"
+          data-confirm-danger="1" data-confirm-ok="执行合并">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <input type="hidden" name="sourceId" value="<%= source.id %>" />
+      <input type="hidden" name="targetId" value="<%= target.id %>" />
+      <button type="submit" class="rounded-lg bg-red-600 px-5 py-2 text-sm font-medium text-white hover:bg-red-700">执行合并 · 删除源账号</button>
+    </form>
+  </section>
+<% } %>
+
+<%- include('_nav_end') %>

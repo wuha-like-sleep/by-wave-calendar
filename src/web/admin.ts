@@ -504,6 +504,55 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/logo?success=" + encodeURIComponent("已删除 Logo"));
   });
 
+  // ---------- Merge duplicate accounts ----------
+  // Dry-run preview: resolve both refs and show what would move. Read-only.
+  app.get<{ Querystring: { source?: string; target?: string } }>("/admin/users/merge", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const { resolveUserRef, mergeSummary } = await import("../lib/account_merge.js");
+    const source = await resolveUserRef(req.query.source || "");
+    const target = await resolveUserRef(req.query.target || "");
+    let summary: Awaited<ReturnType<typeof mergeSummary>> | null = null;
+    let error: string | null = null;
+    if (!req.query.source && !req.query.target) {
+      error = null; // initial blank form
+    } else if (!source || !target) {
+      error = "源账号或目标账号未找到（用邮箱或用户 ID）";
+    } else if (source.id === target.id) {
+      error = "源账号和目标账号相同";
+    } else if (source.isAdmin) {
+      error = "源账号是管理员，不允许被合并（请先取消其管理员身份）";
+    } else {
+      summary = await mergeSummary(source.id);
+    }
+    return reply.view("admin/merge", {
+      title: "合并账号 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/users",
+      sourceInput: req.query.source || "",
+      targetInput: req.query.target || "",
+      source, target, summary, error,
+    });
+  });
+
+  app.post("/admin/users/merge", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ sourceId: z.string().uuid(), targetId: z.string().uuid() }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/users?error=" + encodeURIComponent("参数无效"));
+    const { mergeAccounts } = await import("../lib/account_merge.js");
+    const res = await mergeAccounts(body.data.sourceId, body.data.targetId);
+    if (!res.ok) return reply.redirect("/admin/users/merge?error=" + encodeURIComponent(res.error));
+    await audit(req, u.id, "account.merge", {
+      targetType: "user", targetId: body.data.targetId,
+      details: { source: body.data.sourceId, ...res.summary },
+    });
+    return reply.redirect("/admin/users?success=" + encodeURIComponent("账号已合并，源账号已删除"));
+  });
+
   app.get<{ Querystring: { q?: string } }>("/admin/users", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
