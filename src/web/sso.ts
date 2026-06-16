@@ -3,8 +3,9 @@ import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { createSession } from "../lib/session.js";
+import { createSession, loadSession } from "../lib/session.js";
 import { getProviderBySlug, listEnabledProvidersPublic } from "../lib/sso_providers.js";
+import { findUserIdByIdentity, linkIdentity } from "../lib/identities.js";
 import {
   buildAuthorizeUrl,
   exchangeCode,
@@ -44,15 +45,19 @@ export async function ssoRoutes(app: FastifyInstance) {
   app.get("/auth/sso/login", handleLegacyLogin);
   app.get("/auth/idp/login", handleLegacyLogin);
 
-  const handleProviderLogin = async (req: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
+  const handleProviderLogin = async (req: FastifyRequest<{ Params: { slug: string }; Querystring: { link?: string } }>, reply: FastifyReply) => {
     const slug = req.params.slug;
     const prov = await getProviderBySlug(slug);
     if (!prov || !prov.enabled) return reply.code(404).type("text/plain").send("Provider not found");
+    // Link mode: a logged-in user is BINDING this SSO identity to their current
+    // account (rather than logging in/switching). Only honored when a session
+    // actually exists; the callback re-checks the session as the authority.
+    const linkMode = req.query.link === "1" && Boolean(await loadSession(req));
     try {
       const state = randomState();
       const nonce = randomState();
       const { verifier, challenge } = generatePkce();
-      const cookieValue = Buffer.from(JSON.stringify({ slug, state, nonce, verifier })).toString("base64url");
+      const cookieValue = Buffer.from(JSON.stringify({ slug, state, nonce, verifier, link: linkMode })).toString("base64url");
       reply.setCookie(STATE_COOKIE, cookieValue, {
         httpOnly: true,
         sameSite: "lax",
@@ -73,8 +78,8 @@ export async function ssoRoutes(app: FastifyInstance) {
       return reply.redirect("/login?error=" + encodeURIComponent("SSO 配置异常：" + (err instanceof Error ? err.message : "未知错误")));
     }
   };
-  app.get<{ Params: { slug: string } }>("/auth/sso/:slug/login", handleProviderLogin);
-  app.get<{ Params: { slug: string } }>("/auth/idp/:slug/login", handleProviderLogin);
+  app.get<{ Params: { slug: string }; Querystring: { link?: string } }>("/auth/sso/:slug/login", handleProviderLogin);
+  app.get<{ Params: { slug: string }; Querystring: { link?: string } }>("/auth/idp/:slug/login", handleProviderLogin);
 
   const handleCallback = async (
     req: FastifyRequest<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>,
@@ -88,7 +93,7 @@ export async function ssoRoutes(app: FastifyInstance) {
       if (!cookie) return reply.redirect("/login?error=" + encodeURIComponent("SSO 会话已过期，请重试"));
       reply.clearCookie(STATE_COOKIE, { path: "/" });
 
-      let parsed: { slug: string; state: string; nonce: string; verifier: string };
+      let parsed: { slug: string; state: string; nonce: string; verifier: string; link?: boolean };
       try {
         parsed = JSON.parse(Buffer.from(cookie, "base64url").toString("utf8"));
       } catch {
@@ -115,28 +120,58 @@ export async function ssoRoutes(app: FastifyInstance) {
         });
         const info = await fetchUserinfo(parsed.slug, tokens.access_token);
         const email = (info.email ?? "").toLowerCase().trim();
+        const subject = (info.sub ?? "").trim();
         if (!email) {
           return reply.redirect("/login?error=" + encodeURIComponent("SSO 用户没有 email，无法登录"));
         }
+        if (!subject) {
+          return reply.redirect("/login?error=" + encodeURIComponent("SSO 令牌缺少 sub，无法识别身份"));
+        }
 
-        // Find or create the user.
-        let [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+        // ---- Link mode: bind this SSO identity to the CURRENT account. ----
+        // The session cookie survives the OIDC round-trip, so re-read it here
+        // as the authority (the state cookie only flags intent). We do NOT
+        // switch/create accounts in this branch.
+        if (parsed.link) {
+          const session = await loadSession(req);
+          if (!session) {
+            return reply.redirect("/login?error=" + encodeURIComponent("绑定失败：请先登录后再绑定 SSO"));
+          }
+          const linked = await linkIdentity({ userId: session.user.id, provider: parsed.slug, subject, email });
+          if (!linked.ok) {
+            return reply.redirect("/app/settings/security?error=" + encodeURIComponent("该 SSO 身份已绑定到别的账号"));
+          }
+          if (session.user.ssoProviderSlug !== parsed.slug) {
+            await db.update(schema.users).set({ ssoProviderSlug: parsed.slug, updatedAt: new Date() }).where(eq(schema.users.id, session.user.id));
+          }
+          return reply.redirect("/app/settings/security?success=" + encodeURIComponent("已绑定 SSO 登录方式"));
+        }
+
+        // ---- Normal login: resolve by (provider, subject) → email → create. ----
+        let user: schema.User | undefined;
+        const byIdentityUserId = await findUserIdByIdentity(parsed.slug, subject);
+        if (byIdentityUserId) {
+          [user] = await db.select().from(schema.users).where(eq(schema.users.id, byIdentityUserId)).limit(1);
+        }
         if (!user) {
-          // SSO users have no local password — the IdP is the source of truth.
-          // But the password_hash column is notNull, so we store a real bcrypt
-          // hash of a random ~256-bit value. The hash IS valid bcrypt, just
-          // unguessable, so any future "compare against passwordHash" code
-          // path can't accidentally succeed against an SSO-only account.
-          // (Earlier this was a raw base64 string — bcrypt.compare would
-          // safely return false against that, but it violated the column's
-          // contract and would have been catastrophic if a future bug ever
-          // bypassed the bcrypt check.)
+          // Fall back to email — preserves the historical "same email = same
+          // account" behavior — and auto-link the subject so subsequent logins
+          // match by subject even if the IdP later changes the email.
+          [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
+          if (user) {
+            await linkIdentity({ userId: user.id, provider: parsed.slug, subject, email });
+          }
+        }
+        if (!user) {
+          // Brand-new SSO user. SSO accounts have no local password — the IdP is
+          // the source of truth — but password_hash is notNull, so store a valid
+          // bcrypt hash of a random ~256-bit value (unguessable; any future
+          // "compare against passwordHash" path safely fails).
           const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
           const [created] = await db
             .insert(schema.users)
             .values({
               email,
-              // SSO IdP already verified the email — skip our own verification flow.
               emailVerified: true,
               passwordHash: stubPassword,
               displayName: info.name || info.preferred_username || null,
@@ -148,15 +183,16 @@ export async function ssoRoutes(app: FastifyInstance) {
           await db.insert(schema.calendars).values({
             ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
           });
-        } else {
-          // Disabled-account gate: stop the SSO flow BEFORE writing any login
-          // event row or sending a success email, otherwise a disabled user
-          // can keep triggering "you just signed in" alerts indefinitely.
-          if (!userIsActive(user)) {
-            return reply.redirect("/login?error=" + encodeURIComponent("账号已被管理员停用"));
-          }
-          // Existing user signing in via SSO — flip verified flag if it wasn't
-          // already and record which provider this account uses for login.
+          await linkIdentity({ userId: user.id, provider: parsed.slug, subject, email });
+        }
+
+        // Disabled-account gate: stop BEFORE writing any login event / alert,
+        // otherwise a disabled user can keep triggering "you just signed in".
+        if (!userIsActive(user)) {
+          return reply.redirect("/login?error=" + encodeURIComponent("账号已被管理员停用"));
+        }
+        // Keep the email-verified flag + last-used provider fresh.
+        {
           const patch: Partial<schema.User> = {};
           if (!user.emailVerified) patch.emailVerified = true;
           if (user.ssoProviderSlug !== parsed.slug) patch.ssoProviderSlug = parsed.slug;

@@ -1908,6 +1908,12 @@ export async function webRoutes(app: FastifyInstance) {
     const caldavBaseUrl = `${baseUrl}/caldav/`;
     const siteSettings = await getSettings();
 
+    // Linked SSO identities + available providers (for the "登录方式" block).
+    const { listIdentities } = await import("../lib/identities.js");
+    const { listEnabledProvidersPublic } = await import("../lib/sso_providers.js");
+    const linkedIdentities = await listIdentities(user.id);
+    const ssoProviders = await listEnabledProvidersPublic();
+
     return reply.view("app/settings", {
       title: "设置",
       user,
@@ -1930,6 +1936,13 @@ export async function webRoutes(app: FastifyInstance) {
       newAppLabel: newLabel,
       caldavBaseUrl,
       appsEnabled: siteSettings.appsEnabled,
+      linkedIdentities: linkedIdentities.map((i) => ({
+        id: i.id,
+        provider: i.provider,
+        email: i.email,
+        createdAtLocal: localTime(i.createdAt),
+      })),
+      ssoProviders,
       currentTab,
     });
   }
@@ -2211,6 +2224,33 @@ export async function webRoutes(app: FastifyInstance) {
     await db.delete(schema.users).where(eq(schema.users.id, user.id));
     await destroySession(req, reply);
     return redirectWith(reply, "/", { success: "账号已永久删除。感谢你曾经使用 ByWave Calendar。" });
+  });
+
+  // Unlink an SSO login identity from the current account. Guards against
+  // locking out an SSO-only account: refuse to remove the LAST identity when
+  // the user also has no passkey (they'd have no usable way back in).
+  app.post<{ Params: { id: string } }>("/app/settings/identities/:id/unlink", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/settings/security");
+    const { listIdentities, unlinkIdentity } = await import("../lib/identities.js");
+    const ids = await listIdentities(user.id);
+    if (ids.length <= 1) {
+      const pk = await db
+        .select({ id: schema.webauthnCredentials.id })
+        .from(schema.webauthnCredentials)
+        .where(eq(schema.webauthnCredentials.userId, user.id))
+        .limit(1);
+      if (pk.length === 0) {
+        return redirectWith(reply, "/app/settings/security", {
+          error: "这是你唯一的登录方式，解绑前请先添加 Passkey、或确保能用密码 / 邮箱找回登录",
+        });
+      }
+    }
+    await unlinkIdentity(user.id, id.data);
+    return redirectWith(reply, "/app/settings/security", { success: "已解绑该 SSO 登录方式" });
   });
 
   app.post("/app/settings/password", async (req, reply) => {

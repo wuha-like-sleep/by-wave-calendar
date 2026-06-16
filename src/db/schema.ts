@@ -335,6 +335,23 @@ export const ssoProviders = pgTable("sso_providers", {
   slugUnique: uniqueIndex("sso_providers_slug_unique").on(t.slug),
 }));
 
+// Linked external login identities (one person ⇒ one ByWave account with
+// possibly several ways to sign in). A user who has both an SSO login and a
+// personal email/password account can bind them so any login method lands on
+// the same account. SSO callback resolves by (provider, subject) first, then
+// falls back to email. `subject` is the IdP's stable `sub` claim.
+export const userIdentities = pgTable("user_identities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),   // sso_providers.slug
+  subject: text("subject").notNull(),      // IdP `sub`
+  email: text("email"),                    // email seen at link time (informational)
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  providerSubjectUnique: uniqueIndex("user_identities_provider_subject_unique").on(t.provider, t.subject),
+  userIdx: index("user_identities_user_idx").on(t.userId),
+}));
+
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -736,6 +753,8 @@ export type LoginEvent = typeof loginEvents.$inferSelect;
 export type NewLoginEvent = typeof loginEvents.$inferInsert;
 export type SsoProvider = typeof ssoProviders.$inferSelect;
 export type NewSsoProvider = typeof ssoProviders.$inferInsert;
+export type UserIdentity = typeof userIdentities.$inferSelect;
+export type NewUserIdentity = typeof userIdentities.$inferInsert;
 export type BookingLink = typeof bookingLinks.$inferSelect;
 export type NewBookingLink = typeof bookingLinks.$inferInsert;
 export type Booking = typeof bookings.$inferSelect;
