@@ -79,6 +79,12 @@
     </div>
   </div>
 
+  <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 mb-4 text-xs text-slate-500 space-y-0.5">
+    <div class="font-medium text-slate-600">存储位置</div>
+    <div>内置默认图标(随安装自带,无需配置):<code class="px-1 bg-white rounded border border-slate-200 break-all"><%= bimi.defaultUrl %></code></div>
+    <div>你上传的图标会存到服务器本地:<code class="px-1 bg-white rounded border border-slate-200"><%= bimi.uploadDiskPath %></code></div>
+  </div>
+
   <form method="post" action="/admin/bimi/logo" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
     <input type="file" name="file" accept=".svg,image/svg+xml" required
            class="flex-1 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100" />

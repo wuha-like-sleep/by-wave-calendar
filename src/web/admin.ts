@@ -205,6 +205,10 @@ export async function adminRoutes(app: FastifyInstance) {
       previewUrl: hasCustomBimi ? `${bimiPath}?v=${Date.now()}` : bimiPath,
       vmcUrl: settings.bimiVmcUrl,
       record: bimiDnsRecord({ fromAddress: settings.mailFromAddress, svgUrl: bimiSvgUrl, vmcUrl: settings.bimiVmcUrl }),
+      // Storage transparency: the bundled default ships with the install; an
+      // admin-uploaded SVG is written to the server's local uploads dir.
+      defaultUrl: `${base}/static/bimi/logo.svg`,
+      uploadDiskPath: "src/public/uploads/bimi.svg",
     };
     return reply.view("admin/smtp", {
       title: "SMTP 邮件 · 管理后台",

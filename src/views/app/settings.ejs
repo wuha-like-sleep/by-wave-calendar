@@ -694,8 +694,8 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 </section>
 
 <section id="login-methods" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('login-methods')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">登录方式 · SSO 绑定</h2>
-  <p class="text-xs text-slate-500 mb-4">把 SSO(如 Keycloak)登录绑定到当前账号 —— 这样无论用密码还是 SSO 登录,都进同一个账号,不会变成两套数据。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">登录方式 · 绑定 SSO 账户与个人账户</h2>
+  <p class="text-xs text-slate-500 mb-4">把你的 <strong>SSO 账户</strong>(如 Keycloak)和这个<strong>个人账户</strong>绑定在一起 —— 绑定后,无论用 SSO 还是邮箱密码登录,都进入同一个账号,不会出现两套互不同步的数据。</p>
 
   <% if (linkedIdentities && linkedIdentities.length > 0) { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100 mb-4">
