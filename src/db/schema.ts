@@ -121,6 +121,17 @@ export const siteSettings = pgTable("site_settings", {
   // (required by Gmail/Apple to actually render the logo).
   bimiSvgUrl: text("bimi_svg_url"),
   bimiVmcUrl: text("bimi_vmc_url"),
+  // External IdP (Keycloak) as an API auth source — ByWave acts as an OAuth
+  // resource server. When on, /api/v1 accepts access tokens issued by an
+  // enabled SSO provider (validated via its JWKS). A token authenticated by
+  // an ordinary user client can ONLY act as that user's own account; only
+  // client IDs listed in idpApiServiceClients (a trusted server-to-server
+  // integration, e.g. the meeting platform) may pass an X-Account header to
+  // act on behalf of any account. autoProvision creates a missing account on
+  // first service-token access (for bulk "开通").
+  idpApiEnabled: boolean("idp_api_enabled").notNull().default(false),
+  idpApiServiceClients: text("idp_api_service_clients").notNull().default(""),
+  idpApiAutoProvision: boolean("idp_api_auto_provision").notNull().default(false),
   // Master switch for the third-party API: when off, /api/* rejects Bearer
   // tokens (session-cookie calls from the in-app JS still work fine).
   apiEnabled: boolean("api_enabled").notNull().default(false),

@@ -178,6 +178,27 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
       throw new Error("invalid_token");
     }
 
+    // External IdP (Keycloak) access token — ByWave as OAuth resource server.
+    // Keycloak access tokens are RS256 JWTs that also start with "eyJ", so they
+    // match the device-token regex below; we MUST resolve them here first.
+    // resolveExternalIdpUser returns matched:false unless the token's `iss`
+    // equals a configured SSO provider issuer, so our own device JWTs fall
+    // straight through to the device path.
+    if (/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(token)) {
+      const { resolveExternalIdpUser } = await import("./external_idp.js");
+      const res = await resolveExternalIdpUser(token, req);
+      if (res.matched) {
+        if (res.user) {
+          req.user = res.user;
+          (req as unknown as { authVia: string }).authVia = "idp:" + res.provider;
+          return res.user;
+        }
+        reply.code(res.code).send({ error: res.error });
+        throw new Error(res.error);
+      }
+      // matched:false → not one of our IdPs; fall through to device-token path.
+    }
+
     // Device access token (JWT, HS256 — issued via /api/v1/devices/pair-claim
     // or /api/v1/auth/refresh). Used by native iOS / Android / desktop apps.
     // The token's `did` claim points to a `devices` row — if that row was

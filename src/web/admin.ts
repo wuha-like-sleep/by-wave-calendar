@@ -863,7 +863,36 @@ export async function adminRoutes(app: FastifyInstance) {
       issuedToken,
       issuedLabel,
       baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+      idpApi: {
+        enabled: settings.idpApiEnabled,
+        serviceClients: settings.idpApiServiceClients,
+        autoProvision: settings.idpApiAutoProvision,
+        ssoConfigured: providers.length > 0,
+      },
     });
+  });
+
+  // External IdP (Keycloak) resource-server API config. See src/lib/external_idp.ts.
+  app.post("/admin/api/idp", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      enabled: z.string().optional(),
+      serviceClients: z.string().max(2000).optional(),
+      autoProvision: z.string().optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.redirect("/admin/api?error=" + encodeURIComponent("参数无效") + "#idp");
+    // Normalize the client list to a clean comma-separated string.
+    const clients = (body.data.serviceClients || "")
+      .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).join(", ");
+    await updateSettings({
+      idpApiEnabled: body.data.enabled === "on",
+      idpApiServiceClients: clients,
+      idpApiAutoProvision: body.data.autoProvision === "on",
+    });
+    await audit(req, u.id, "idp_api.update", { targetType: "site_settings" });
+    return reply.redirect("/admin/api?success=" + encodeURIComponent("外部 IdP API 设置已保存") + "#idp");
   });
 
   app.post("/admin/api/toggle", async (req, reply) => {

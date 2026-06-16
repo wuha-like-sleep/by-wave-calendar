@@ -47,6 +47,10 @@ export type SettingsView = {
   // BIMI inbox-avatar SVG (editable in /admin/smtp). bimiSvgUrl null = bundled default.
   bimiSvgUrl: string | null;
   bimiVmcUrl: string | null;
+  // External IdP (Keycloak) API auth — see schema.ts.
+  idpApiEnabled: boolean;
+  idpApiServiceClients: string;
+  idpApiAutoProvision: boolean;
 };
 
 // In-memory cache. Reset via reload() after admin updates.
@@ -111,6 +115,9 @@ function toView(r: schema.SiteSettings): SettingsView {
     emailFooterNote: r.emailFooterNote || "日历共享平台",
     bimiSvgUrl: r.bimiSvgUrl ?? null,
     bimiVmcUrl: r.bimiVmcUrl ?? null,
+    idpApiEnabled: r.idpApiEnabled,
+    idpApiServiceClients: r.idpApiServiceClients || "",
+    idpApiAutoProvision: r.idpApiAutoProvision,
   };
 }
 
@@ -192,6 +199,9 @@ export async function updateSettings(patch: Partial<{
   emailFooterNote: string;
   bimiSvgUrl: string | null;
   bimiVmcUrl: string | null;
+  idpApiEnabled: boolean;
+  idpApiServiceClients: string;
+  idpApiAutoProvision: boolean;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

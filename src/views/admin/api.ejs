@@ -245,6 +245,46 @@
   </form>
 </section>
 
+<section id="idp" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1">外部 IdP(Keycloak)API 接入</h2>
+  <p class="text-sm text-slate-500 mb-4">让外部平台用 Keycloak 签发的访问令牌直接调用本站 <code class="px-1 bg-slate-100 rounded">/api/v1</code>(ByWave 作为 OAuth resource server,用 Keycloak 的 JWKS 校验令牌)。</p>
+
+  <% if (!idpApi.ssoConfigured) { %>
+    <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 mb-4">
+      还没有启用任何 SSO 提供方。请先到 <a href="/admin/idp" class="underline">SSO 设置</a> 配置好 Keycloak,这里才能生效。
+    </div>
+  <% } %>
+
+  <form method="post" action="/admin/api/idp" class="space-y-4 max-w-2xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="flex items-start gap-2">
+      <input type="checkbox" name="enabled" <%= idpApi.enabled ? 'checked' : '' %> class="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm"><span class="font-medium text-slate-700">接受 Keycloak 令牌调用 API</span><span class="block text-xs text-slate-500 mt-0.5">关闭时,所有外部 IdP 令牌一律 403。需先在「API」总开关打开的前提下生效。</span></span>
+    </label>
+    <label class="block text-sm">
+      <span class="block font-medium text-slate-700 mb-1">受信任的服务端 Client ID <span class="text-xs text-slate-400">(逗号分隔,可空)</span></span>
+      <input type="text" name="serviceClients" value="<%= idpApi.serviceClients %>" placeholder="meeting-platform, another-service"
+             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <span class="text-xs text-slate-400 mt-1 block">这些 Keycloak client 签发的令牌,可带 <code class="px-1 bg-slate-100 rounded">X-Account</code> 头代<strong>任意</strong>账号读写(给会议平台这类服务端集成用)。<strong>普通用户登录令牌</strong>只能操作自己邮箱对应的账号,带 X-Account 指别人会被拒。</span>
+    </label>
+    <label class="flex items-start gap-2">
+      <input type="checkbox" name="autoProvision" <%= idpApi.autoProvision ? 'checked' : '' %> class="mt-0.5 h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm"><span class="font-medium text-slate-700">自动开通账号</span><span class="block text-xs text-slate-500 mt-0.5">受信任服务端用 X-Account 指定一个还<strong>不存在</strong>的邮箱时,自动创建 ByWave 账号(批量开通用;无密码,只能经 IdP 进)。</span></span>
+    </label>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存外部 IdP 设置</button>
+  </form>
+
+  <div class="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500 space-y-1">
+    <div class="font-medium text-slate-700">外部平台怎么调用:</div>
+    <pre class="overflow-x-auto rounded bg-slate-50 border border-slate-200 p-3 font-mono"># 服务端先用 Keycloak client 拿到 access_token,再:
+curl -H "Authorization: Bearer &lt;keycloak_access_token&gt;" \
+     -H "X-Account: user@example.com" \
+     <%= baseUrl %>/api/v1/events</pre>
+    <div>· 令牌的 <code class="px-1 bg-slate-100 rounded">iss</code> 必须匹配某个已启用的 SSO 提供方,签名用其 JWKS 校验。</div>
+    <div>· 普通用户令牌不需要 X-Account,只能读写自己账号。</div>
+  </div>
+</section>
+
 <section class="rounded-2xl border border-slate-200 bg-slate-50 p-5 sm:p-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminApi.examples.heading") %></h2>
   <p class="text-sm text-slate-500 mb-3"><%= t("adminApi.examples.headerHint") %> <code class="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-xs font-mono">Authorization: Bearer &lt;token&gt;</code></p>
