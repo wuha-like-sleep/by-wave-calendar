@@ -144,7 +144,10 @@ export async function ssoRoutes(app: FastifyInstance) {
           if (session.user.ssoProviderSlug !== parsed.slug) {
             await db.update(schema.users).set({ ssoProviderSlug: parsed.slug, updatedAt: new Date() }).where(eq(schema.users.id, session.user.id));
           }
-          return reply.redirect("/app/settings/security?success=" + encodeURIComponent("已绑定 SSO 登录方式"));
+          // created=false ⇒ this identity was already the user's own — re-binding
+          // yourself is a no-op; say so instead of a misleading "已绑定".
+          const msg = linked.created ? "已绑定 SSO 登录方式" : "这个 SSO 账户已经是你的登录方式了";
+          return reply.redirect("/app/settings/security?success=" + encodeURIComponent(msg));
         }
 
         // ---- Normal login: resolve by (provider, subject) → email → create. ----

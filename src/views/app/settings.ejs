@@ -720,15 +720,23 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     </div>
   <% } %>
 
-  <% if (ssoProviders && ssoProviders.length > 0) { %>
+  <%
+     // Only offer providers the user hasn't linked yet — re-binding the SSO you
+     // already logged in with ("自己绑定自己") is a pointless no-op, so hide it.
+     var linkedSlugs = (linkedIdentities || []).map(function(i){ return i.provider; });
+     var bindable = (ssoProviders || []).filter(function(p){ return linkedSlugs.indexOf(p.slug) === -1; });
+  %>
+  <% if (bindable.length > 0) { %>
     <div class="flex flex-wrap gap-2">
-      <% ssoProviders.forEach(function(p){ %>
+      <% bindable.forEach(function(p){ %>
         <a href="/auth/idp/<%= encodeURIComponent(p.slug) %>/login?link=1"
            class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
           ➕ 绑定 <%= p.label || p.slug %>
         </a>
       <% }) %>
     </div>
+  <% } else if (ssoProviders && ssoProviders.length > 0) { %>
+    <p class="text-xs text-slate-400">已绑定全部可用的 SSO 登录方式。</p>
   <% } else { %>
     <p class="text-xs text-slate-400">站点未启用任何 SSO 提供方,无可绑定项。</p>
   <% } %>
