@@ -665,6 +665,17 @@ export const en = {
   "error.notFoundMessage": "What you're looking for doesn't exist or has been removed.",
   "error.internal": "Internal server error",
   "error.backHome": "Back to home",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "Login methods · link SSO and password accounts",
+  "settings.loginMethods.desc": "Link your <strong>SSO account</strong> (e.g. Keycloak) with this <strong>password account</strong> — once linked, signing in either way lands on the same account, so you won't end up with two out-of-sync copies.",
+  "settings.loginMethods.empty": "No SSO login linked yet",
+  "settings.loginMethods.linkedOn": "linked",
+  "settings.loginMethods.unbind": "Unlink",
+  "settings.loginMethods.unbindConfirm": "After unlinking, you can no longer sign in to this account via this SSO. Continue?",
+  "settings.loginMethods.bind": "Link {provider}",
+  "settings.loginMethods.allBound": "All available SSO providers are linked.",
+  "settings.loginMethods.noProviders": "No SSO provider is enabled on this site, nothing to link.",
 } satisfies Record<string, string>;
 
 /** Every translation key the app knows about, derived from the English

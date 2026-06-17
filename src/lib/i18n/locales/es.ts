@@ -658,4 +658,15 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "Lo que busca no existe o ha sido eliminado.",
   "error.internal": "Error interno del servidor",
   "error.backHome": "Volver al inicio",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "Métodos de acceso · vincular cuenta SSO y cuenta personal",
+  "settings.loginMethods.desc": "Vincula tu <strong>cuenta SSO</strong> (p. ej. Keycloak) con esta <strong>cuenta personal</strong>: una vez vinculadas, inicies sesión por SSO o por correo y contraseña, entrarás en la misma cuenta y no tendrás dos copias desincronizadas.",
+  "settings.loginMethods.empty": "Aún no has vinculado ningún acceso SSO",
+  "settings.loginMethods.linkedOn": "vinculado el",
+  "settings.loginMethods.unbind": "Desvincular",
+  "settings.loginMethods.unbindConfirm": "Tras desvincular, ya no podrás iniciar sesión en esta cuenta con este SSO. ¿Continuar?",
+  "settings.loginMethods.bind": "Vincular {provider}",
+  "settings.loginMethods.allBound": "Todos los proveedores SSO disponibles están vinculados.",
+  "settings.loginMethods.noProviders": "Este sitio no tiene ningún proveedor SSO habilitado.",
 };

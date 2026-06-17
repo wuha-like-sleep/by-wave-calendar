@@ -694,8 +694,8 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 </section>
 
 <section id="login-methods" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('login-methods')) { %> style="display:none"<% } %>>
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">登录方式 · 绑定 SSO 账户与个人账户</h2>
-  <p class="text-xs text-slate-500 mb-4">把你的 <strong>SSO 账户</strong>(如 Keycloak)和这个<strong>个人账户</strong>绑定在一起 —— 绑定后,无论用 SSO 还是邮箱密码登录,都进入同一个账号,不会出现两套互不同步的数据。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("settings.loginMethods.title") %></h2>
+  <p class="text-xs text-slate-500 mb-4"><%- t("settings.loginMethods.desc") %></p>
 
   <% if (linkedIdentities && linkedIdentities.length > 0) { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100 mb-4">
@@ -703,12 +703,12 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
         <li class="py-3 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900">🔗 <%= idn.provider %></div>
-            <div class="text-xs text-slate-400 truncate"><%= idn.email || '—' %> · 绑定于 <%- idn.createdAtLocal %></div>
+            <div class="text-xs text-slate-400 truncate"><%= idn.email || '—' %> · <%= t("settings.loginMethods.linkedOn") %> <%- idn.createdAtLocal %></div>
           </div>
           <form method="post" action="/app/settings/identities/<%= idn.id %>/unlink" class="m-0"
-                data-confirm="解绑后将无法再用这个 SSO 登录到本账号,确定?" data-confirm-danger="1" data-confirm-ok="解绑">
+                data-confirm="<%= t('settings.loginMethods.unbindConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.loginMethods.unbind') %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="text-xs text-red-600 hover:text-red-700">解绑</button>
+            <button type="submit" class="text-xs text-red-600 hover:text-red-700"><%= t("settings.loginMethods.unbind") %></button>
           </form>
         </li>
       <% }) %>
@@ -716,7 +716,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   <% } else { %>
     <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-6 text-center mb-4">
       <div class="text-2xl mb-1">🔗</div>
-      <div class="text-sm text-slate-500">还没绑定任何 SSO 登录方式</div>
+      <div class="text-sm text-slate-500"><%= t("settings.loginMethods.empty") %></div>
     </div>
   <% } %>
 
@@ -731,14 +731,14 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       <% bindable.forEach(function(p){ %>
         <a href="/auth/idp/<%= encodeURIComponent(p.slug) %>/login?link=1"
            class="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          ➕ 绑定 <%= p.label || p.slug %>
+          ➕ <%= t("settings.loginMethods.bind", { provider: p.label || p.slug }) %>
         </a>
       <% }) %>
     </div>
   <% } else if (ssoProviders && ssoProviders.length > 0) { %>
-    <p class="text-xs text-slate-400">已绑定全部可用的 SSO 登录方式。</p>
+    <p class="text-xs text-slate-400"><%= t("settings.loginMethods.allBound") %></p>
   <% } else { %>
-    <p class="text-xs text-slate-400">站点未启用任何 SSO 提供方,无可绑定项。</p>
+    <p class="text-xs text-slate-400"><%= t("settings.loginMethods.noProviders") %></p>
   <% } %>
 </section>
 

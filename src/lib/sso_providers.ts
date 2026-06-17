@@ -4,6 +4,15 @@ import { resetOidcCache } from "./sso.js";
 
 export type SsoProvider = schema.SsoProvider;
 
+// Invalidate every provider-derived cache after a mutation so an issuer / client
+// change takes effect immediately. resetOidcCache covers the OIDC discovery
+// cache; the external-IdP resource server keeps its own provider + JWKS cache,
+// reset via a dynamic import to avoid a static cycle (external_idp imports this).
+function resetProviderCaches(slug: string): void {
+  resetOidcCache(slug);
+  void import("./external_idp.js").then((m) => m.resetExternalIdpCache()).catch(() => undefined);
+}
+
 export type PublicSsoProvider = {
   id: string;
   slug: string;
@@ -57,7 +66,7 @@ export async function createProvider(input: {
     sortOrder: input.sortOrder ?? 0,
   }).returning();
   if (!row) throw new Error("provider insert failed");
-  resetOidcCache(input.slug);
+  resetProviderCaches(input.slug);
   return row;
 }
 
@@ -74,10 +83,10 @@ export async function updateProvider(id: string, patch: Partial<{
   for (const k of Object.keys(set)) if (set[k] === undefined) delete set[k];
   if (Object.keys(set).length === 1) return; // only updatedAt — no real change
   const [row] = await db.update(schema.ssoProviders).set(set).where(eq(schema.ssoProviders.id, id)).returning({ slug: schema.ssoProviders.slug });
-  if (row) resetOidcCache(row.slug);
+  if (row) resetProviderCaches(row.slug);
 }
 
 export async function deleteProvider(id: string): Promise<void> {
   const [row] = await db.delete(schema.ssoProviders).where(eq(schema.ssoProviders.id, id)).returning({ slug: schema.ssoProviders.slug });
-  if (row) resetOidcCache(row.slug);
+  if (row) resetProviderCaches(row.slug);
 }

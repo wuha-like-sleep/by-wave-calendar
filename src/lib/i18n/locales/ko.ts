@@ -658,4 +658,15 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "찾으시는 페이지가 존재하지 않거나 제거되었습니다.",
   "error.internal": "내부 서버 오류",
   "error.backHome": "홈으로 돌아가기",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "로그인 방식 · SSO 계정과 개인 계정 연결",
+  "settings.loginMethods.desc": "당신의 <strong>SSO 계정</strong>(예: Keycloak)과 이 <strong>개인 계정</strong>을 연결합니다. 연결하면 SSO든 이메일+비밀번호든 같은 계정으로 로그인되어 데이터가 두 벌로 나뉘지 않습니다.",
+  "settings.loginMethods.empty": "아직 연결된 SSO 로그인이 없습니다",
+  "settings.loginMethods.linkedOn": "연결일",
+  "settings.loginMethods.unbind": "연결 해제",
+  "settings.loginMethods.unbindConfirm": "연결을 해제하면 이 SSO로 이 계정에 로그인할 수 없습니다. 계속할까요?",
+  "settings.loginMethods.bind": "{provider} 연결",
+  "settings.loginMethods.allBound": "사용 가능한 모든 SSO 공급자가 연결되었습니다.",
+  "settings.loginMethods.noProviders": "이 사이트에는 활성화된 SSO 공급자가 없습니다.",
 };

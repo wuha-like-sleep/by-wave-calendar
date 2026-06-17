@@ -644,4 +644,15 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "你存取的內容不存在或已被移除。",
   "error.internal": "伺服器內部錯誤",
   "error.backHome": "回到首頁",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "登入方式 · 綁定 SSO 帳戶與個人帳戶",
+  "settings.loginMethods.desc": "把你的 <strong>SSO 帳戶</strong>(如 Keycloak)和這個<strong>個人帳戶</strong>綁定在一起 —— 綁定後,無論用 SSO 還是電子郵件密碼登入,都進入同一個帳號,不會出現兩套互不同步的資料。",
+  "settings.loginMethods.empty": "還沒綁定任何 SSO 登入方式",
+  "settings.loginMethods.linkedOn": "綁定於",
+  "settings.loginMethods.unbind": "解除綁定",
+  "settings.loginMethods.unbindConfirm": "解除綁定後將無法再用這個 SSO 登入本帳號,確定?",
+  "settings.loginMethods.bind": "綁定 {provider}",
+  "settings.loginMethods.allBound": "已綁定全部可用的 SSO 登入方式。",
+  "settings.loginMethods.noProviders": "站點未啟用任何 SSO 提供方,無可綁定項。",
 };

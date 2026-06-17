@@ -658,4 +658,15 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "Ce que vous cherchez n'existe pas ou a été supprimé.",
   "error.internal": "Erreur interne du serveur",
   "error.backHome": "Retour à l'accueil",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "Méthodes de connexion · lier le compte SSO et le compte personnel",
+  "settings.loginMethods.desc": "Liez votre <strong>compte SSO</strong> (par ex. Keycloak) à ce <strong>compte personnel</strong> : une fois liés, que vous vous connectiez par SSO ou par e-mail et mot de passe, vous arrivez sur le même compte, sans deux copies désynchronisées.",
+  "settings.loginMethods.empty": "Aucune connexion SSO liée pour l'instant",
+  "settings.loginMethods.linkedOn": "lié le",
+  "settings.loginMethods.unbind": "Délier",
+  "settings.loginMethods.unbindConfirm": "Après déliaison, vous ne pourrez plus vous connecter à ce compte via ce SSO. Continuer ?",
+  "settings.loginMethods.bind": "Lier {provider}",
+  "settings.loginMethods.allBound": "Tous les fournisseurs SSO disponibles sont liés.",
+  "settings.loginMethods.noProviders": "Ce site n'a aucun fournisseur SSO activé.",
 };

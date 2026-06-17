@@ -54,7 +54,17 @@
         <li>日历成员关系:<strong><%= summary.memberships %></strong></li>
         <li>SSO 绑定身份:<strong><%= summary.identities %></strong></li>
       </ul>
-      <div class="text-xs text-slate-400 mt-2">源账号的会话 / 设备 / API Token / Passkey / 应用密码等登录凭证会随源账号一并删除(不迁移)。</div>
+    </div>
+
+    <div class="rounded-lg bg-white border border-red-200 p-3 mb-4 text-sm">
+      <div class="text-xs text-red-500 mb-2">将随源账号<strong>一并删除(不迁移)</strong>的登录凭证:</div>
+      <ul class="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-700">
+        <li>设备(已绑定 APP):<strong><%= deleteCounts.devices %></strong></li>
+        <li>API Token:<strong><%= deleteCounts.apiTokens %></strong></li>
+        <li>Passkey:<strong><%= deleteCounts.passkeys %></strong></li>
+        <li>应用密码:<strong><%= deleteCounts.appPasswords %></strong></li>
+      </ul>
+      <div class="text-xs text-slate-400 mt-2">外加源账号的会话 / 推送订阅(数量从略)。这些都不会带到目标账号 —— 用户用目标账号自己的凭证登录即可。</div>
     </div>
 
     <form method="post" action="/admin/users/merge"

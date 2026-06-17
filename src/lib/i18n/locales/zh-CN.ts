@@ -645,4 +645,15 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "你访问的内容不存在或已被移除。",
   "error.internal": "服务器内部错误",
   "error.backHome": "回到首页",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "登录方式 · 绑定 SSO 账户与个人账户",
+  "settings.loginMethods.desc": "把你的 <strong>SSO 账户</strong>(如 Keycloak)和这个<strong>个人账户</strong>绑定在一起 —— 绑定后,无论用 SSO 还是邮箱密码登录,都进入同一个账号,不会出现两套互不同步的数据。",
+  "settings.loginMethods.empty": "还没绑定任何 SSO 登录方式",
+  "settings.loginMethods.linkedOn": "绑定于",
+  "settings.loginMethods.unbind": "解绑",
+  "settings.loginMethods.unbindConfirm": "解绑后将无法再用这个 SSO 登录到本账号,确定?",
+  "settings.loginMethods.bind": "绑定 {provider}",
+  "settings.loginMethods.allBound": "已绑定全部可用的 SSO 登录方式。",
+  "settings.loginMethods.noProviders": "站点未启用任何 SSO 提供方,无可绑定项。",
 };

@@ -64,6 +64,18 @@ export async function mergeSummary(sourceId: string): Promise<MergeSummary> {
   };
 }
 
+// Credentials that are DELETED with the source (ON DELETE CASCADE) — shown in
+// the preview so the admin knows these don't carry over to the target.
+export type MergeDeleteCounts = { devices: number; apiTokens: number; passkeys: number; appPasswords: number };
+
+export async function mergeDeleteCounts(sourceId: string): Promise<MergeDeleteCounts> {
+  const [dev] = await db.select({ c: sql<number>`count(*)::int` }).from(schema.devices).where(eq(schema.devices.userId, sourceId));
+  const [tok] = await db.select({ c: sql<number>`count(*)::int` }).from(schema.apiTokens).where(eq(schema.apiTokens.userId, sourceId));
+  const [pk] = await db.select({ c: sql<number>`count(*)::int` }).from(schema.webauthnCredentials).where(eq(schema.webauthnCredentials.userId, sourceId));
+  const [ap] = await db.select({ c: sql<number>`count(*)::int` }).from(schema.appPasswords).where(eq(schema.appPasswords.userId, sourceId));
+  return { devices: dev?.c ?? 0, apiTokens: tok?.c ?? 0, passkeys: pk?.c ?? 0, appPasswords: ap?.c ?? 0 };
+}
+
 export type MergeResult = { ok: true; summary: MergeSummary } | { ok: false; error: string };
 
 export async function mergeAccounts(sourceId: string, targetId: string): Promise<MergeResult> {

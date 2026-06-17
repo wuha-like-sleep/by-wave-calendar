@@ -658,4 +658,15 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "error.notFoundMessage": "お探しのものは存在しないか、削除されました。",
   "error.internal": "内部サーバーエラー",
   "error.backHome": "ホームに戻る",
+
+  // SSO account linking (settings → security)
+  "settings.loginMethods.title": "ログイン方法 · SSOアカウントと個人アカウントの連携",
+  "settings.loginMethods.desc": "あなたの <strong>SSOアカウント</strong>(Keycloak など)とこの<strong>個人アカウント</strong>を連携します。連携後は、SSO でもメール+パスワードでも同じアカウントにログインでき、データが二重になりません。",
+  "settings.loginMethods.empty": "まだ SSO ログインを連携していません",
+  "settings.loginMethods.linkedOn": "連携日",
+  "settings.loginMethods.unbind": "連携解除",
+  "settings.loginMethods.unbindConfirm": "連携を解除すると、この SSO でこのアカウントにログインできなくなります。続行しますか?",
+  "settings.loginMethods.bind": "{provider} を連携",
+  "settings.loginMethods.allBound": "利用可能な SSO はすべて連携済みです。",
+  "settings.loginMethods.noProviders": "このサイトでは SSO プロバイダーが有効になっていません。",
 };

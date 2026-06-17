@@ -513,10 +513,11 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { source?: string; target?: string } }>("/admin/users/merge", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return;
-    const { resolveUserRef, mergeSummary } = await import("../lib/account_merge.js");
+    const { resolveUserRef, mergeSummary, mergeDeleteCounts } = await import("../lib/account_merge.js");
     const source = await resolveUserRef(req.query.source || "");
     const target = await resolveUserRef(req.query.target || "");
     let summary: Awaited<ReturnType<typeof mergeSummary>> | null = null;
+    let deleteCounts: Awaited<ReturnType<typeof mergeDeleteCounts>> | null = null;
     let error: string | null = null;
     if (!req.query.source && !req.query.target) {
       error = null; // initial blank form
@@ -528,6 +529,7 @@ export async function adminRoutes(app: FastifyInstance) {
       error = "源账号是管理员，不允许被合并（请先取消其管理员身份）";
     } else {
       summary = await mergeSummary(source.id);
+      deleteCounts = await mergeDeleteCounts(source.id);
     }
     return reply.view("admin/merge", {
       title: "合并账号 · 管理后台",
@@ -535,7 +537,7 @@ export async function adminRoutes(app: FastifyInstance) {
       activeNav: "/admin/users",
       sourceInput: req.query.source || "",
       targetInput: req.query.target || "",
-      source, target, summary, error,
+      source, target, summary, deleteCounts, error,
     });
   });
 
