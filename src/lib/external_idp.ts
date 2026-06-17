@@ -159,10 +159,18 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
 
   let payload: Record<string, unknown>;
   try {
-    const res = await jwtVerify(token, jwks, { issuer: iss, algorithms: IDP_ALGS });
+    // clockTolerance absorbs small skew between Keycloak and this server so a
+    // freshly-issued / about-to-expire token isn't spuriously rejected.
+    const res = await jwtVerify(token, jwks, { issuer: iss, algorithms: IDP_ALGS, clockTolerance: 30 });
     payload = res.payload as Record<string, unknown>;
   } catch {
     return { matched: true, user: null, provider: prov.slug, code: 401, error: "idp_token_invalid" };
+  }
+  // Only ACCESS tokens are valid API credentials. Reject ID tokens (typ:"ID"):
+  // they're minted for the client, not as a bearer credential to a resource
+  // server — accepting them would needlessly widen the credential surface.
+  if (payload.typ === "ID") {
+    return { matched: true, user: null, provider: prov.slug, code: 401, error: "idp_id_token_rejected" };
   }
 
   // 4. Authorized-party check. The token must speak for either the provider's
