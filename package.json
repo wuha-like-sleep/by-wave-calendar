@@ -25,7 +25,8 @@
     "release": "bash scripts/release.sh",
     "clean:icloud": "find . -name '* 2*' -not -path '*/node_modules/.cache/*' -print -delete 2>/dev/null; find . -name '.DS_Store' -delete 2>/dev/null; echo done",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:int": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
@@ -61,6 +62,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/ejs": "^3.1.5",
     "@types/node": "^22.10.1",
