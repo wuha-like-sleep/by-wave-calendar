@@ -20,6 +20,7 @@
 // provider issuer, so the caller can fall through to the device-token path.
 
 import { createRemoteJWKSet, jwtVerify, decodeJwt } from "jose";
+import { randomBytes } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -27,6 +28,12 @@ import { listAllProviders } from "./sso_providers.js";
 import { discoverOidc } from "./sso.js";
 import { getSettings } from "./site_settings.js";
 import { userIsActive } from "./user_state.js";
+import { hashPassword } from "./password.js";
+
+// Asymmetric algorithms only — Keycloak signs access tokens with RS256 by
+// default. Pinning this (vs letting jose accept whatever the JWK advertises)
+// blocks any algorithm-confusion shenanigans (e.g. a forged HS* token).
+const IDP_ALGS = ["RS256", "RS384", "RS512", "PS256", "PS384", "PS512", "ES256", "ES384", "ES512"];
 
 type RemoteJWKS = ReturnType<typeof createRemoteJWKSet>;
 const jwksByIssuer = new Map<string, RemoteJWKS>();
@@ -152,7 +159,7 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
 
   let payload: Record<string, unknown>;
   try {
-    const res = await jwtVerify(token, jwks, { issuer: iss });
+    const res = await jwtVerify(token, jwks, { issuer: iss, algorithms: IDP_ALGS });
     payload = res.payload as Record<string, unknown>;
   } catch {
     return { matched: true, user: null, provider: prov.slug, code: 401, error: "idp_token_invalid" };
@@ -197,14 +204,17 @@ async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
 }
 
 async function provisionAccount(email: string, displayName: string | null): Promise<schema.User | undefined> {
-  // Password login is disabled for provisioned accounts: store an unusable
-  // hash so the only way in is via the IdP. (passwordHash is NOT NULL.)
+  // No local password — the IdP is the source of truth. passwordHash is NOT
+  // NULL, so (like the SSO signup path) store a REAL bcrypt hash of a random
+  // ~256-bit value: valid bcrypt, unguessable, and safe even if some future
+  // code path ever compares against it. (Never store a non-bcrypt sentinel.)
+  const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
   const [created] = await db
     .insert(schema.users)
     .values({
       email,
       emailVerified: true,
-      passwordHash: "!idp-provisioned",
+      passwordHash: stubPassword,
       displayName: displayName || email.split("@")[0] || email,
     })
     .onConflictDoNothing()
