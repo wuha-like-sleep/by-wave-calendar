@@ -116,7 +116,7 @@ export function decideTarget(opts: {
 
 export type ExternalResolve =
   | { matched: false }
-  | { matched: true; user: schema.User; provider: string }
+  | { matched: true; user: schema.User; provider: string; serviceClient: string | null; provisioned: boolean }
   | { matched: true; user: null; provider: string | null; code: number; error: string };
 
 export async function resolveExternalIdpUser(token: string, req: FastifyRequest): Promise<ExternalResolve> {
@@ -177,7 +177,8 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
   //    own login client (ordinary user token) or a configured service client.
   const serviceClients = parseClientList(settings.idpApiServiceClients);
   const clientIds = tokenClientIds(payload);
-  const isServiceClient = clientIds.some((c) => serviceClients.has(c));
+  const matchedServiceClient = clientIds.find((c) => serviceClients.has(c)) ?? null;
+  const isServiceClient = matchedServiceClient !== null;
   const isLoginClient = clientIds.includes(prov.clientId);
   if (!isServiceClient && !isLoginClient) {
     return { matched: true, user: null, provider: prov.slug, code: 403, error: "idp_audience_rejected" };
@@ -192,13 +193,16 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
   }
 
   let user = await lookupUser(decided.target);
+  let provisioned = false;
   if (!user && isServiceClient && settings.idpApiAutoProvision && decided.target.includes("@")) {
     // Bulk-provision: create a ByWave account for this email on first access.
-    user = await provisionAccount(decided.target.toLowerCase(), typeof payload.name === "string" ? payload.name : null);
+    const r = await provisionAccount(decided.target.toLowerCase(), typeof payload.name === "string" ? payload.name : null);
+    user = r.user;
+    provisioned = r.created;
   }
   if (!user) return { matched: true, user: null, provider: prov.slug, code: 404, error: "account_not_found" };
   if (!userIsActive(user)) return { matched: true, user: null, provider: prov.slug, code: 403, error: "account_disabled" };
-  return { matched: true, user, provider: prov.slug };
+  return { matched: true, user, provider: prov.slug, serviceClient: matchedServiceClient, provisioned };
 }
 
 async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
@@ -211,7 +215,7 @@ async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
   return u;
 }
 
-async function provisionAccount(email: string, displayName: string | null): Promise<schema.User | undefined> {
+async function provisionAccount(email: string, displayName: string | null): Promise<{ user: schema.User | undefined; created: boolean }> {
   // No local password — the IdP is the source of truth. passwordHash is NOT
   // NULL, so (like the SSO signup path) store a REAL bcrypt hash of a random
   // ~256-bit value: valid bcrypt, unguessable, and safe even if some future
@@ -234,9 +238,9 @@ async function provisionAccount(email: string, displayName: string | null): Prom
       color: "#6366f1",
       timezone: "Asia/Shanghai",
     });
-    return created;
+    return { user: created, created: true };
   }
-  // Lost a race — re-read.
+  // Lost a race — re-read (the account exists, but WE didn't create it).
   const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-  return existing;
+  return { user: existing, created: false };
 }

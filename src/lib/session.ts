@@ -191,6 +191,22 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
         if (res.user) {
           req.user = res.user;
           (req as unknown as { authVia: string }).authVia = "idp:" + res.provider;
+          // Tag service-client (cross-account) access so the onResponse hook can
+          // log every mutation for forensics — this is the most powerful auth
+          // path, so its writes must leave a trail.
+          if (res.serviceClient) {
+            (req as unknown as { idpServiceClient?: string; idpActedAs?: string }).idpServiceClient = res.serviceClient;
+            (req as unknown as { idpActedAs?: string }).idpActedAs = res.user.email;
+          }
+          // Auto-provisioning a real account is significant + infrequent →
+          // record it in the admin audit log (not just server logs).
+          if (res.provisioned) {
+            const { audit } = await import("./audit.js");
+            void audit(req, res.user.id, "idp.account_provisioned", {
+              targetType: "user", targetId: res.user.id,
+              details: { client: res.serviceClient, email: res.user.email },
+            }).catch(() => undefined);
+          }
           return res.user;
         }
         reply.code(res.code).send({ error: res.error });

@@ -204,6 +204,30 @@ app.addHook("onRequest", async (req, reply) => {
   }
 });
 
+// ---- forensic trail for IdP service-client (cross-account) mutations ----
+// A trusted Keycloak service token can act on ANY account via X-Account — the
+// most powerful auth path. requireUser() tags such requests; here we log every
+// successful mutation (POST/PUT/PATCH/DELETE) it makes so there's an immutable
+// server-log record of "client X wrote to account Y". Reads are omitted (high
+// volume, low risk); account provisioning is separately written to the admin
+// audit log. No DB write here → no audit-table bloat.
+app.addHook("onResponse", async (req, reply) => {
+  const sc = (req as unknown as { idpServiceClient?: string }).idpServiceClient;
+  if (!sc) return;
+  const m = req.method;
+  if (m === "GET" || m === "HEAD" || m === "OPTIONS") return;
+  req.log.info(
+    {
+      idpServiceClient: sc,
+      account: (req as unknown as { idpActedAs?: string }).idpActedAs,
+      method: m,
+      path: req.url.split("?")[0],
+      status: reply.statusCode,
+    },
+    "idp_service_mutation",
+  );
+});
+
 // ---- Response compression (perf) ----
 // gzip/brotli for text payloads (HTML, JSON, CSS, JS). Big win on the
 // EJS-rendered calendar pages + the /api/v1/events JSON which can be tens
