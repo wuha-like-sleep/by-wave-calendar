@@ -204,6 +204,22 @@ app.addHook("onRequest", async (req, reply) => {
   }
 });
 
+// ---- admin-uploaded SVGs: never render as a top-level document ----
+// /static/uploads/*.svg is admin-supplied (e.g. the BIMI logo). The upload
+// validator strips scripts, but it's a regex denylist; as defense-in-depth
+// (atop the nonce-locked global CSP) force these to DOWNLOAD on direct
+// navigation so a crafted SVG can't execute as a same-origin document. <img>
+// embedding (admin preview) and programmatic fetch (BIMI validators, email)
+// are unaffected — Content-Disposition only governs top-level navigation.
+app.addHook("onSend", async (req, reply, payload) => {
+  const p = (req.url.split("?")[0] || "");
+  if (p.startsWith("/static/uploads/") && p.endsWith(".svg")) {
+    reply.header("Content-Disposition", "attachment");
+    reply.header("X-Content-Type-Options", "nosniff");
+  }
+  return payload;
+});
+
 // ---- forensic trail for IdP service-client (cross-account) mutations ----
 // A trusted Keycloak service token can act on ANY account via X-Account — the
 // most powerful auth path. requireUser() tags such requests; here we log every

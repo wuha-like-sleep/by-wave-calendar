@@ -6,6 +6,8 @@ import { hashPassword, passwordPolicyError, verifyPassword, verifyPasswordTiming
 import { createSession, destroySession, requireUser } from "../lib/session.js";
 import { userIsActive } from "../lib/user_state.js";
 import { ok, err } from "../lib/api_response.js";
+import { env } from "../env.js";
+import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 
 // Tightened schema — same length range as the web flow; the web routes
 // additionally enforce passwordPolicyError on the way in. Without this
@@ -58,7 +60,11 @@ export async function authRoutes(app: FastifyInstance) {
     return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
   });
 
-  app.post("/auth/login", async (req, reply) => {
+  app.post("/auth/login", {
+    // Per-route auth limiter — the global 120/min was the only brake on this
+    // path, letting it be used to brute-force around the account lockout.
+    config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
     // Login loosens the password length floor — passwordPolicyError is
     // for NEW passwords only; legacy ones may pre-date the policy bump.
     const loginBody = z.object({
@@ -72,11 +78,21 @@ export async function authRoutes(app: FastifyInstance) {
       await verifyPasswordTimingSafe(loginBody.password);
       return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
     }
+    // Account lockout — mirror the web /login path so the JSON API can't be
+    // used to brute-force around the lockout (or keep hitting a web-locked
+    // account). Same brake on both surfaces.
+    if (isLocked(user)) {
+      return err(req, reply, 401, "account_locked", "账号已临时锁定，请稍后再试或重置密码");
+    }
     const passOk = await verifyPassword(loginBody.password, user.passwordHash);
-    if (!passOk) return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
+    if (!passOk) {
+      await recordFailedLogin(user);
+      return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
+    }
     // Disabled-account gate: return the same 401 so we don't leak the
     // disabled-vs-doesn't-exist distinction.
     if (!userIsActive(user)) return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
+    await resetFailedLogin(user.id);
     await createSession(reply, user.id);
     return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
   });

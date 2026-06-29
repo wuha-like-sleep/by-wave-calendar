@@ -1768,8 +1768,22 @@ export async function adminRoutes(app: FastifyInstance) {
       enabled: schema.oauthClients.enabled,
       createdAt: schema.oauthClients.createdAt,
     }).from(schema.oauthClients).orderBy(asc(schema.oauthClients.createdAt));
-    const issuedSecret = typeof (req.query as { secret?: string }).secret === "string" ? (req.query as { secret: string }).secret : null;
-    const issuedClientId = typeof (req.query as { cid?: string }).cid === "string" ? (req.query as { cid: string }).cid : null;
+    // One-time client secret comes from a short-lived signed cookie (set on
+    // create), never the URL. Read once, then clear.
+    let issuedSecret: string | null = null;
+    let issuedClientId: string | null = null;
+    const rawSecretCookie = req.cookies["bwc_oauth_secret"];
+    if (rawSecretCookie) {
+      const unsigned = req.unsignCookie(rawSecretCookie);
+      if (unsigned.valid && unsigned.value) {
+        try {
+          const j = JSON.parse(unsigned.value) as { s?: unknown; c?: unknown };
+          issuedSecret = typeof j.s === "string" ? j.s : null;
+          issuedClientId = typeof j.c === "string" ? j.c : null;
+        } catch { /* malformed — ignore */ }
+      }
+      reply.clearCookie("bwc_oauth_secret", { path: "/admin/oauth-apps" });
+    }
     return reply.view("admin/oauth-apps", {
       title: "OAuth 应用 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
@@ -1811,7 +1825,13 @@ export async function adminRoutes(app: FastifyInstance) {
       allowedScopes: allowed,
     });
     await audit(req, me.id, "oauth_app.create", { targetType: "oauth_client", targetId: created.id, details: { name: body.data.name } });
-    return reply.redirect(`/admin/oauth-apps?secret=${encodeURIComponent(created.clientSecret)}&cid=${encodeURIComponent(created.clientId)}&success=${encodeURIComponent("应用已创建")}`);
+    // Hand the one-time secret back via a short-lived signed cookie, NOT the URL
+    // query — a query param lands in browser history, server access logs, and the
+    // Referer header. The GET below reads it once and clears it.
+    reply.setCookie("bwc_oauth_secret", JSON.stringify({ s: created.clientSecret, c: created.clientId }), {
+      httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/admin/oauth-apps", maxAge: 120, signed: true,
+    });
+    return reply.redirect("/admin/oauth-apps?success=" + encodeURIComponent("应用已创建，密钥仅显示一次，请立即复制"));
   });
 
   app.post("/admin/oauth-apps/:id/toggle", async (req, reply) => {
