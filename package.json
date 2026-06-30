@@ -52,7 +52,7 @@
     "ical-generator": "^7.2.0",
     "jose": "^6.2.3",
     "nanoid": "^5.0.9",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^9.0.1",
     "otplib": "^13.4.0",
     "pino-pretty": "^11.3.0",
     "postgres": "^3.4.5",
