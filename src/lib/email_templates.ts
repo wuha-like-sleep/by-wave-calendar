@@ -14,13 +14,28 @@ export function getBrandName(): string {
   return brand;
 }
 
+// UI language for outbound emails. Follows site_settings.defaultLocale (pushed
+// via updateEmailLocale on each settings load) so a self-hosted deploy's emails
+// match its configured default language. We branch zh vs en only: any "zh*"
+// locale → zh, everything else → en (ja/ko/es/fr/de fall back to English copy
+// for now — the table below is the single place to extend per-language).
+let emailLocale: "zh" | "en" = "zh";
+export function updateEmailLocale(locale: string | null | undefined): void {
+  emailLocale = (locale || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+/** Current email UI language ("zh" | "en"). Exposed for the admin preview. */
+export function getEmailLocale(): "zh" | "en" {
+  return emailLocale;
+}
+
 // Format a Date for display in a specific IANA zone. Used by every email
 // that surfaces an event time so the recipient sees the wall-clock time
 // the organizer intended (e.g. "上海下午6点", not the organizer's UTC
 // equivalent re-interpreted in the receiver's locale).
 function formatInZone(d: Date, tz: string, allDay: boolean): string {
+  const dl = emailLocale === "en" ? "en-US" : "zh-CN";
   try {
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat(dl, {
       timeZone: tz,
       year: "numeric", month: "2-digit", day: "2-digit",
       hour: allDay ? undefined : "2-digit",
@@ -29,7 +44,7 @@ function formatInZone(d: Date, tz: string, allDay: boolean): string {
     }).format(d);
   } catch (_e) {
     // Bad/unknown TZ — fall back to UTC so the email still renders.
-    return new Intl.DateTimeFormat("zh-CN", {
+    return new Intl.DateTimeFormat(dl, {
       timeZone: "UTC",
       year: "numeric", month: "2-digit", day: "2-digit",
       hour: allDay ? undefined : "2-digit",
@@ -57,10 +72,13 @@ const TZ_LABELS: Record<string, string> = {
   "UTC": "UTC",
 };
 function zoneLabel(tz: string): string {
+  const tail = (tz.split("/").pop() ?? tz).replace(/_/g, " ");
+  // English emails: "Shanghai Time" / "New York Time" reads naturally from the
+  // IANA tail, so we skip the Chinese label map entirely.
+  if (emailLocale === "en") return tz === "UTC" ? "UTC" : `${tail} Time`;
   if (TZ_LABELS[tz]) return TZ_LABELS[tz];
   // Fallback: extract trailing component, replace underscores with space.
-  const tail = tz.split("/").pop() ?? tz;
-  return `${tail.replace(/_/g, " ")} 时间`;
+  return `${tail} 时间`;
 }
 
 // ---------- Brand palette (admin-configurable) ----------
@@ -389,6 +407,7 @@ export type EventInviteCtx = {
   icsBody: string; // full VCALENDAR text with METHOD:REQUEST
   inviteToken?: string; // opaque token → /event-invite/:token page that imports into the recipient's chosen calendar
   meetingUrl?: string | null; // a join/conference link → renders the "meeting" variant
+  meetingPassword?: string | null; // optional join passcode, surfaced under the button
 };
 
 // A meeting (vs a plain event) when the link points at a known conferencing
@@ -406,49 +425,79 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
   // trust an inbound value — guard the scheme so no javascript:/data: slips in).
   const meetingUrl = ctx.meetingUrl && /^https?:\/\//i.test(ctx.meetingUrl) ? ctx.meetingUrl : null;
   const isMeeting = !!meetingUrl && looksLikeMeetingUrl(meetingUrl);
-  const heading = isMeeting ? "📹 会议邀请" : "📅 事件邀请";
-  const joinLabel = isMeeting ? "📹 加入会议" : "🔗 打开链接";
-  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n${meetingUrl ? `${isMeeting ? "会议链接" : "链接"}：${meetingUrl}\n` : ""}${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入后将按你日历的时区显示。`;
+  // Optional join passcode. Strip control chars / line breaks so it can't break
+  // the text/plain body or smuggle markup; escape() guards the HTML side.
+  const passcode = (ctx.meetingPassword || "").replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 100) || null;
+
+  // ---- Language follows the platform default (emailLocale: zh | en) ----
+  const en = emailLocale === "en";
+  const orgH = escape(ctx.organizerName);
+  const what = en
+    ? (isMeeting ? "this meeting" : (ctx.allDay ? "this all-day event" : "this event"))
+    : (isMeeting ? "这场会议" : (ctx.allDay ? "这场全天活动" : "这场活动"));
+  const heading = en ? (isMeeting ? "📹 Meeting invitation" : "📅 Event invitation")
+                     : (isMeeting ? "📹 会议邀请" : "📅 事件邀请");
+  const joinLabel = en ? (isMeeting ? "📹 Join meeting" : "🔗 Open link")
+                       : (isMeeting ? "📹 加入会议" : "🔗 打开链接");
+  const linkLbl = en ? (isMeeting ? "Meeting link" : "Link") : (isMeeting ? "会议链接" : "链接");
+  const lbl = en
+    ? { start: "Start", end: "End", location: "Location", passcode: "Passcode", from: "From", addBtn: "Add to my calendar" }
+    : { start: "开始", end: "结束", location: "地点", passcode: "入会密码", from: "来自", addBtn: "添加到我的日历" };
+  const invitedSentence = en ? `${orgH} invited you to ${what}.` : `${orgH} 邀请你参加${what}。`;
+  const addHintH = en
+    ? `Tap the button above to open ${escape(brand)} on the web and choose which calendar to add it to — or use the attached .ics in any external client.`
+    : `点上面按钮跳转 ${escape(brand)} 网页，可选择加入哪个日历；或者用附件 .ics 加到任何外部客户端。`;
+  const icsHintH = en
+    ? `The attached <strong>invite.ics</strong> is recognized by Apple / Google / Outlook — open it to add to your calendar. If your client doesn't prompt automatically, double-click the attachment to import.`
+    : `附件中的 <strong>invite.ics</strong> 可以直接被 Apple / Google / Outlook 日历识别 —— 点开即可“添加到日历”。如果客户端没自动弹窗，直接双击附件即可导入。`;
+
+  const text = en
+    ? `${ctx.organizerName} invited you to: ${ctx.summary}\nTime: ${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)} (${tzLabel})\n${meetingUrl ? `${linkLbl}: ${meetingUrl}\n` : ""}${passcode ? `${lbl.passcode}: ${passcode}\n` : ""}${ctx.location ? `${lbl.location}: ${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\nThe attached .ics file will display in your calendar's time zone once imported.`
+    : `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n${meetingUrl ? `${linkLbl}：${meetingUrl}\n` : ""}${passcode ? `${lbl.passcode}：${passcode}\n` : ""}${ctx.location ? `${lbl.location}：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入后将按你日历的时区显示。`;
   const html = baseLayout({
     title: ctx.summary,
-    preheader: `${ctx.organizerName} 邀请你参加 ${ctx.summary}`,
+    preheader: en ? `${ctx.organizerName} invited you to ${ctx.summary}` : `${ctx.organizerName} 邀请你参加 ${ctx.summary}`,
     body: `
       <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${heading}</h1>
       <p style="margin:0 0 6px;color:#0f172a;font-size:16px;font-weight:600;">${escape(ctx.summary)}</p>
       <p style="margin:0 0 14px;color:#475569;font-size:14px;">
-        ${escape(ctx.organizerName)} 邀请你参加${isMeeting ? "这场会议" : (ctx.allDay ? "这场全天活动" : "这场活动")}。
+        ${invitedSentence}
       </p>
       ${meetingUrl ? `
       <p style="margin:8px 0 4px;">
-        <a href="${escape(meetingUrl)}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">${joinLabel}</a>
+        <a href="${escape(meetingUrl)}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">${joinLabel}</a>
       </p>
-      <p style="margin:2px 0 12px;color:#94a3b8;font-size:12px;word-break:break-all;">${escape(meetingUrl)}</p>
+      <p style="margin:2px 0 ${passcode ? "8px" : "12px"};color:#94a3b8;font-size:12px;word-break:break-all;">${escape(meetingUrl)}</p>
       ` : ""}
+      ${passcode ? `
+      <div style="margin:0 0 14px;padding:10px 14px;background:#f1f5f9;border-radius:8px;display:inline-block;">
+        <span style="color:#64748b;font-size:12px;">${lbl.passcode}</span>
+        <div style="font-family:Menlo,Consolas,monospace;font-size:18px;font-weight:700;letter-spacing:2px;color:#0f172a;margin-top:2px;">${escape(passcode)}</div>
+      </div>` : ""}
       <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 14px;">
-        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">开始</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
-        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
-        ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">地点</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">${lbl.start}</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">${lbl.end}</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
+        ${ctx.location ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px;">${lbl.location}</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(ctx.location)}</td></tr>` : ""}
       </table>
       ${ctx.description ? `<div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border-left:3px solid ${accentColor};border-radius:6px;color:#334155;font-size:13px;line-height:1.6;white-space:pre-wrap;">${escape(ctx.description)}</div>` : ""}
       ${ctx.inviteToken ? `
       <p style="margin:18px 0 10px;">
         <a href="${baseUrl}/event-invite/${encodeURIComponent(ctx.inviteToken)}"
            style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">
-          添加到我的日历
+          ${lbl.addBtn}
         </a>
       </p>
-      <p style="margin:8px 0 14px;color:#94a3b8;font-size:12px;">点上面按钮跳转 ${escape(brand)} 网页，可选择加入哪个日历；或者用附件 .ics 加到任何外部客户端。</p>
+      <p style="margin:8px 0 14px;color:#94a3b8;font-size:12px;">${addHintH}</p>
       ` : `
       <p style="margin:18px 0 10px;color:#475569;font-size:13px;line-height:1.6;">
-        附件中的 <strong>invite.ics</strong> 可以直接被 Apple / Google / Outlook 日历识别 ——
-        点开即可"添加到日历"。如果客户端没自动弹窗，直接双击附件即可导入。
+        ${icsHintH}
       </p>`}
       <p style="margin:10px 0 0;color:#64748b;font-size:12px;">
-        来自：<a href="${baseUrl}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
+        ${lbl.from}${en ? ": " : "："}<a href="${baseUrl}" style="color:${brandColor};text-decoration:none;font-weight:500;">${escape(brand)}</a>
       </p>`,
   });
   return {
-    to, subject: `${isMeeting ? "【会议】" : "【邀请】"}${ctx.summary}`,
+    to, subject: `${en ? (isMeeting ? "[Meeting] " : "[Invitation] ") : (isMeeting ? "【会议】" : "【邀请】")}${ctx.summary}`,
     html, text,
     icalEvent: { method: "REQUEST", content: ctx.icsBody },
     attachments: [{ filename: "invite.ics", content: ctx.icsBody, contentType: "text/calendar; charset=utf-8; method=REQUEST" }],
@@ -684,6 +733,7 @@ export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
         location: "线上", startsAt: start, endsAt: end, allDay: false,
         uid: "preview-meeting@bywave", timezone: "Asia/Shanghai",
         meetingUrl: "https://meeting.tencent.com/dm/AbCdEf123456",
+        meetingPassword: "086420",
         icsBody: ics,
       });
     },

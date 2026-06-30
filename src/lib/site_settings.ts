@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { updateBrandForEmails, updateEmailBranding } from "./email_templates.js";
+import { updateBrandForEmails, updateEmailBranding, updateEmailLocale } from "./email_templates.js";
 import { isCaptchaProvider, isBuiltinMode, type CaptchaConfig, type CaptchaProvider, type BuiltinMode } from "./captcha/index.js";
 
 export type SettingsView = {
@@ -134,6 +134,7 @@ export async function getSettings(): Promise<SettingsView> {
     cached = await loadFromDb();
     updateBrandForEmails(cached.siteName);
     updateEmailBranding({ brandColor: cached.emailBrandColor, footerNote: cached.emailFooterNote, logoUrl: cached.logoUrl });
+    updateEmailLocale(cached.defaultLocale);
   }
   return cached;
 }

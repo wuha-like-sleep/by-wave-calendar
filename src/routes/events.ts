@@ -25,6 +25,10 @@ const extraSchema = z.object({
   // silently dropping it on the server because the schema didn't list
   // it. Result: link saved → forgotten → user thinks the field is broken.
   url: z.string().url().max(2000).optional(),
+  // Optional meeting join passcode (some conferencing links need one). Kept
+  // next to `url`; the invite email surfaces it under the join button so
+  // attendees can copy it. Plain string — not validated as a URL.
+  meetingPassword: z.string().max(100).optional(),
   // Web event-editor reminder block — array of { trigger, action,
   // description }. Same "silently stripped" story as `url` above. We
   // don't deeply validate the alarm shape here (CalDAV/.ics has a much
@@ -375,6 +379,7 @@ export async function eventRoutes(app: FastifyInstance) {
           // "上海下午6点" rather than the server's UTC equivalent.
           timezone: extra.timezone ?? null,
           meetingUrl: (row.extra as { url?: string } | null)?.url ?? null,
+          meetingPassword: (row.extra as { meetingPassword?: string } | null)?.meetingPassword ?? null,
           icsBody: ics,
           inviteToken,
         })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));

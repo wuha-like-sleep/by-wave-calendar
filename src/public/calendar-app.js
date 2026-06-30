@@ -972,6 +972,9 @@
     // Link field (separate from notes — stored at extra.url).
     const urlInput = form.querySelector('[name="url"]');
     if (urlInput) urlInput.value = payload.url || "";
+    // Meeting join passcode (extra.meetingPassword).
+    const pwInput = form.querySelector('[name="meetingPassword"]');
+    if (pwInput) pwInput.value = payload.meetingPassword || "";
     // Recurrence (RRULE) — preserve the stored rule if it's one of our presets.
     const rruleSelect = form.querySelector('[name="rrule"]');
     if (rruleSelect) {
@@ -1199,6 +1202,7 @@
       location: fresh.location,
       description: fresh.description,
       url: extra.url || "",
+      meetingPassword: extra.meetingPassword || "",
       // Show the clicked occurrence's start/end (not the master's) so
       // editing "仅此次" starts from the right slot. fresh.startsAt is
       // the master; info.event.start is the occurrence.
@@ -1266,6 +1270,7 @@
         timezone: data.timezone || undefined,
         attendees: attendees.length ? attendees : undefined,
         url: (data.url || "").trim() || undefined,
+        meetingPassword: (data.meetingPassword || "").trim() || undefined,
         alarms: data.reminder ? [{ trigger: data.reminder, action: "DISPLAY", description: data.summary }] : undefined,
       },
     };
