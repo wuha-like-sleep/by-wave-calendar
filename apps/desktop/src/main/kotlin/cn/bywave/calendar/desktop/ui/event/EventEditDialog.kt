@@ -90,6 +90,7 @@ private data class FormState(
     val location: String,
     val description: String,
     val url: String,
+    val meetingPassword: String,
     val start: LocalDateTime,
     val end: LocalDateTime,
     val allDay: Boolean,
@@ -200,6 +201,13 @@ fun EventEditDialog(
                     value = form.url,
                     onValueChange = { form = form.copy(url = it) },
                     label = { Text(t("event.edit.url")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = form.meetingPassword,
+                    onValueChange = { form = form.copy(meetingPassword = it) },
+                    label = { Text(t("event.edit.meetingPassword")) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -455,6 +463,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 location = "",
                 description = "",
                 url = "",
+                meetingPassword = "",
                 start = start,
                 end = start.plusHours(1),
                 allDay = false,
@@ -477,6 +486,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 location = s.location.orEmpty(),
                 description = s.description.orEmpty(),
                 url = s.extra?.url.orEmpty(),
+                meetingPassword = s.extra?.meetingPassword.orEmpty(),
                 start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
                 end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
                 allDay = s.allDay,
@@ -505,6 +515,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 location = s.location.orEmpty(),
                 description = s.description.orEmpty(),
                 url = s.extra?.url.orEmpty(),
+                meetingPassword = s.extra?.meetingPassword.orEmpty(),
                 start = newStart,
                 end = newStart.plusMinutes(durationMin),
                 allDay = s.allDay,
@@ -521,15 +532,17 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
     val endIso = ISO_OFFSET.format(form.end.atZone(zone))
 
     val urlTrim = form.url.trim()
+    val pwTrim = form.meetingPassword.trim()
     val attendees = form.attendees.takeIf { it.isNotEmpty() }
     // Always emit timezone for timed events; emit url + attendees when
     // present. allDay events skip the timezone field (it's irrelevant
     // and the server stores allDay times as date-only).
     val extra = when {
-        urlTrim.isNotEmpty() || attendees != null -> EventExtra(
+        urlTrim.isNotEmpty() || pwTrim.isNotEmpty() || attendees != null -> EventExtra(
             timezone = if (!form.allDay) zone.id else null,
             attendees = attendees,
             url = urlTrim.ifEmpty { null },
+            meetingPassword = pwTrim.ifEmpty { null },
         )
         !form.allDay -> EventExtra(timezone = zone.id)
         else -> null

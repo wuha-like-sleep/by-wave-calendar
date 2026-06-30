@@ -62,6 +62,8 @@
     <string name="event_location_hint">선택 사항 — 예: 상하이 / Zoom</string>
     <string name="event_link">링크</string>
     <string name="event_link_hint">https://… (회의 링크 / 문서 URL)</string>
+    <string name="event_meeting_password">회의 비밀번호</string>
+    <string name="event_meeting_password_hint">선택 사항 — 회의 비밀번호</string>
     <string name="event_description">메모</string>
     <string name="event_description_hint">안건, 핵심 내용, 메모…</string>
     <string name="event_delete_confirm_title">일정을 삭제할까요?</string>

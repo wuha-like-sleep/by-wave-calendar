@@ -35,6 +35,7 @@ data class EventExtraDTO(
     val attendees: List<String>? = null,
     val category: String? = null,
     val url: String? = null,
+    val meetingPassword: String? = null,
 )
 
 /** GET /api/v1/events response envelope (the `data` payload after we
@@ -120,6 +121,7 @@ data class EventExtra(
     val attendees: List<String>? = null,
     val category: String? = null,
     val url: String? = null,
+    val meetingPassword: String? = null,
 )
 
 // ---- Global search ----

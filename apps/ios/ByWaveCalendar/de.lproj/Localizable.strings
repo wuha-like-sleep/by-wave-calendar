@@ -155,6 +155,9 @@
 "链接" = "Link";
 "https://… (会议链接 / 文档地址等)" = "https://… (Meeting-Link / Dokument-URL)";
 "打开链接 %@" = "Link öffnen %@";
+"入会密码" = "Meeting-Passwort";
+"可选 — 例如 Zoom 入会密码" = "Optional — z. B. Zoom-Meeting-Passwort";
+"复制入会密码" = "Meeting-Passwort kopieren";
 "可选" = "Optional";
 "邀请人" = "Teilnehmer";
 "管理参与者" = "Teilnehmer verwalten";

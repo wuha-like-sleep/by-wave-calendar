@@ -64,6 +64,8 @@ struct EventEditView: View {
     @State private var timezone: String = TimeZone.current.identifier
     // v1.3.3 — Meeting/document URL, stored at extra.url server-side.
     @State private var url: String = ""
+    // Optional meeting passcode, stored at extra.meetingPassword server-side.
+    @State private var meetingPassword: String = ""
     // attendees are no longer collected here — see AttendeesPage which
     // appears as a NavigationLink ONLY for already-saved events. Matches
     // the web flow ("保存事件后会出现「管理参与者」入口").
@@ -129,6 +131,10 @@ struct EventEditView: View {
             // this populated; new iOS-created events start empty.
             if let storedURL = e.extra?.url, !storedURL.isEmpty {
                 _url = State(initialValue: storedURL)
+            }
+            // Preload meeting passcode from extra, same as URL above.
+            if let storedPassword = e.extra?.meetingPassword, !storedPassword.isEmpty {
+                _meetingPassword = State(initialValue: storedPassword)
             }
         } else {
             // Sensible default for "new event": next half-hour, 60min
@@ -265,6 +271,16 @@ struct EventEditView: View {
                 Text("链接")
             }
 
+            // Optional meeting passcode, stored at extra.meetingPassword.
+            // Mirrors the 「链接」row above; surfaced in EventDetailView.
+            Section {
+                TextField("可选 — 例如 Zoom 入会密码", text: $meetingPassword)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+            } header: {
+                Text("入会密码")
+            }
+
             if let errorMessage {
                 Section {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
@@ -381,8 +397,10 @@ struct EventEditView: View {
         let tz = allDay ? nil : (timezone.isEmpty ? nil : timezone)
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         let urlValue = trimmedURL.isEmpty ? nil : trimmedURL
-        if tz == nil && urlValue == nil { return nil }
-        return EventExtra(timezone: tz, attendees: nil, category: nil, url: urlValue)
+        let trimmedPassword = meetingPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        let passwordValue = trimmedPassword.isEmpty ? nil : trimmedPassword
+        if tz == nil && urlValue == nil && passwordValue == nil { return nil }
+        return EventExtra(timezone: tz, attendees: nil, category: nil, url: urlValue, meetingPassword: passwordValue)
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is

@@ -98,6 +98,9 @@ fun EventDetailDialog(
                 event.extra?.url?.takeIf { it.isNotBlank() }?.let { url ->
                     UrlRow(label = t("event.detail.url"), url = url)
                 }
+                event.extra?.meetingPassword?.takeIf { it.isNotBlank() }?.let {
+                    MetaRow(label = t("event.detail.meetingPassword"), value = it)
+                }
                 if (event.rrule != null) {
                     MetaRow(label = t("event.detail.recurrence"), value = formatRrule(event.rrule))
                 }

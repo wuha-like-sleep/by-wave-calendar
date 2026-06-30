@@ -127,6 +127,30 @@ struct EventDetailView: View {
                 }
             }
 
+            // Meeting passcode — extra.meetingPassword, set on the event
+            // editor's 「入会密码」row. Read-only here: selectable text plus
+            // a copy button so users can paste it into a Zoom join prompt.
+            if let password = current.extra?.meetingPassword, !password.isEmpty {
+                Section("入会密码") {
+                    HStack(spacing: 8) {
+                        Image(systemName: "key.fill")
+                            .foregroundStyle(.secondary)
+                        Text(password)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                        Spacer()
+                        Button {
+                            UIPasteboard.general.string = password
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                                .foregroundStyle(.tint)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(Text("复制入会密码"))
+                    }
+                }
+            }
+
             // Attendees (v1.3.2) — EventDetailView used to skip this
             // section entirely. Events created on the web with invitees
             // would land here with current.extra.attendees populated, but

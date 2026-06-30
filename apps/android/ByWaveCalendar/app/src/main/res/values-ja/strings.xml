@@ -62,6 +62,8 @@
     <string name="event_location_hint">任意 — 例: 上海 / Zoom</string>
     <string name="event_link">リンク</string>
     <string name="event_link_hint">https://… (会議リンク / ドキュメント URL)</string>
+    <string name="event_meeting_password">会議パスコード</string>
+    <string name="event_meeting_password_hint">任意 — 会議のパスコード</string>
     <string name="event_description">メモ</string>
     <string name="event_description_hint">議題、要点、メモ…</string>
     <string name="event_delete_confirm_title">予定を削除しますか？</string>

@@ -69,6 +69,7 @@ data class EventEditUiState(
     val location: String = "",
     val description: String = "",
     val url: String = "",
+    val meetingPassword: String = "",
     val start: LocalDateTime = nextHalfHour(),
     val end: LocalDateTime = nextHalfHour().plusHours(1),
     val allDay: Boolean = false,
@@ -117,6 +118,7 @@ class EventEditViewModel : ViewModel() {
                     location = s.location.orEmpty(),
                     description = s.description.orEmpty(),
                     url = s.extra?.url.orEmpty(),
+                    meetingPassword = s.extra?.meetingPassword.orEmpty(),
                     start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
                     end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
                     allDay = s.allDay,
@@ -145,6 +147,7 @@ class EventEditViewModel : ViewModel() {
                     location = s.location.orEmpty(),
                     description = s.description.orEmpty(),
                     url = s.extra?.url.orEmpty(),
+                    meetingPassword = s.extra?.meetingPassword.orEmpty(),
                     start = newStart,
                     end = newStart.plusMinutes(durationMin),
                     allDay = s.allDay,
@@ -157,6 +160,7 @@ class EventEditViewModel : ViewModel() {
     fun onLocation(v: String) = _state.update { it.copy(location = v) }
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
     fun onUrl(v: String) = _state.update { it.copy(url = v) }
+    fun onMeetingPassword(v: String) = _state.update { it.copy(meetingPassword = v) }
     fun onCalendar(id: String) = _state.update { it.copy(calendarId = id) }
     fun onAllDay(v: Boolean) = _state.update {
         // When toggling to all-day, snap to date boundaries; when
@@ -204,8 +208,9 @@ class EventEditViewModel : ViewModel() {
                 val endIso = ISO.format(s.end.atZone(zone))
 
                 val urlTrim = s.url.trim()
-                val extra = if (urlTrim.isNotEmpty()) {
-                    EventExtra(timezone = zone.id, url = urlTrim)
+                val pwTrim = s.meetingPassword.trim()
+                val extra = if (urlTrim.isNotEmpty() || pwTrim.isNotEmpty()) {
+                    EventExtra(timezone = zone.id, url = urlTrim.ifEmpty { null }, meetingPassword = pwTrim.ifEmpty { null })
                 } else if (!s.allDay) {
                     EventExtra(timezone = zone.id)
                 } else null

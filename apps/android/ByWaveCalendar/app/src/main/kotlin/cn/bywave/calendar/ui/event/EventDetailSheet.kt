@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Repeat
@@ -186,6 +187,14 @@ private fun EventDetailContent(
                     modifier = Modifier.size(16.dp),
                 )
             }
+        }
+
+        if (!event.extra?.meetingPassword.isNullOrBlank()) {
+            DetailRow(
+                icon = Icons.Default.Lock,
+                label = "入会密码",
+                value = event.extra!!.meetingPassword!!,
+            )
         }
 
         val attendees = event.extra?.attendees.orEmpty()

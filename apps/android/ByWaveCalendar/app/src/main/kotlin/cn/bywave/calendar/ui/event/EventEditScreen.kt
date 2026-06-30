@@ -201,6 +201,15 @@ fun EventEditScreen(
             )
 
             OutlinedTextField(
+                value = state.meetingPassword,
+                onValueChange = vm::onMeetingPassword,
+                label = { Text(stringResource(R.string.event_meeting_password)) },
+                placeholder = { Text(stringResource(R.string.event_meeting_password_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            OutlinedTextField(
                 value = state.description,
                 onValueChange = vm::onDescription,
                 label = { Text(stringResource(R.string.event_description)) },

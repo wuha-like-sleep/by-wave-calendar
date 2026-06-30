@@ -69,6 +69,8 @@
     <string name="event_location_hint">可选 — 例如 上海 / Zoom 会议室</string>
     <string name="event_link">链接</string>
     <string name="event_link_hint">https://… (会议链接 / 文档地址等)</string>
+    <string name="event_meeting_password">入会密码</string>
+    <string name="event_meeting_password_hint">可选 · 会议有密码时填写</string>
     <string name="event_description">备注</string>
     <string name="event_description_hint">议程、要点、注意事项……</string>
     <string name="event_delete_confirm_title">删除事件？</string>

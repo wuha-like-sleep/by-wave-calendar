@@ -57,6 +57,9 @@ struct EventExtraDTO: Codable, Hashable {
     // the web event-editor writes to via `name="url"`. Optional so old
     // events (and other clients) decode cleanly.
     let url: String?
+    // Optional meeting passcode, e.g. Zoom 入会密码. Stored at
+    // extra.meetingPassword. Optional so old events decode cleanly.
+    let meetingPassword: String?
 }
 
 // The /api/v1/events endpoint returns { calendars: [...], events: [...] }.
@@ -75,12 +78,14 @@ struct EventExtra: Encodable {
     let attendees: [String]?
     let category: String?
     let url: String?
+    let meetingPassword: String?
 
     var isEmpty: Bool {
         (timezone?.isEmpty ?? true)
             && (attendees?.isEmpty ?? true)
             && (category?.isEmpty ?? true)
             && (url?.isEmpty ?? true)
+            && (meetingPassword?.isEmpty ?? true)
     }
 }
 

@@ -67,6 +67,8 @@ to match the development locale.
     <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
     <string name="event_link">Link</string>
     <string name="event_link_hint">https://… (meeting link / document URL)</string>
+    <string name="event_meeting_password">Meeting password</string>
+    <string name="event_meeting_password_hint">Optional — passcode for the meeting</string>
     <string name="event_description">Notes</string>
     <string name="event_description_hint">Agenda, takeaways, notes…</string>
     <string name="event_delete_confirm_title">Delete event?</string>

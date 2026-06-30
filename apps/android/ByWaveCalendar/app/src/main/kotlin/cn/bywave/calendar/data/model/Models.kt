@@ -41,6 +41,8 @@ data class EventExtraDTO(
     val category: String? = null,
     /** Meeting / document link added in v1.3.3. */
     val url: String? = null,
+    /** Optional meeting passcode (入会密码). */
+    val meetingPassword: String? = null,
 )
 
 /** GET /api/v1/events response envelope. */
@@ -347,6 +349,7 @@ data class EventExtra(
     val attendees: List<String>? = null,
     val category: String? = null,
     val url: String? = null,
+    val meetingPassword: String? = null,
 )
 
 // ---- Native account management ----

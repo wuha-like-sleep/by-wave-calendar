@@ -62,6 +62,8 @@
     <string name="event_location_hint">Opcional — p. ej. Shanghái / Zoom</string>
     <string name="event_link">Enlace</string>
     <string name="event_link_hint">https://… (enlace de reunión / URL de documento)</string>
+    <string name="event_meeting_password">Contraseña de la reunión</string>
+    <string name="event_meeting_password_hint">Opcional — código de acceso</string>
     <string name="event_description">Notas</string>
     <string name="event_description_hint">Agenda, conclusiones, notas…</string>
     <string name="event_delete_confirm_title">¿Eliminar evento?</string>
