@@ -3,6 +3,17 @@
 // DESCRIPTION, LOCATION, DTSTART/DTEND (date + datetime, UTC + floating),
 // CREATED, LAST-MODIFIED, DTSTAMP, RRULE.
 
+import { getBrandName } from "./email_templates.js";
+
+// PRODID identifies the generating product. Derive it from the site brand so a
+// self-hosted / white-labelled deploy stamps ITS OWN name into every .ics it
+// emits, not "ByWave-Calendar". RFC 5545 allows UTF-8 here; we only strip the
+// few chars that would break the property line, and fall back to a default.
+export function prodIdLine(part: "CalDAV" | "Invite"): string {
+  const name = getBrandName().replace(/[;,\\\r\n]/g, " ").trim() || "ByWave-Calendar";
+  return `PRODID:-//${name}//${part}//EN`;
+}
+
 export type IcalAttendee = { email: string; cn?: string | null; role?: string | null; partstat?: string | null };
 export type IcalAlarm = { trigger: string; action?: string | null; description?: string | null };
 
@@ -185,7 +196,7 @@ export function serializeCalendar(events: IcalEvent[], calendarName: string): st
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//ByWave-Calendar//CalDAV//EN",
+    prodIdLine("CalDAV"),
     "CALSCALE:GREGORIAN",
     `X-WR-CALNAME:${escapeText(calendarName)}`,
     inner,
@@ -205,7 +216,7 @@ export function invitationIcs(opts: {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//ByWave-Calendar//Invite//EN",
+    prodIdLine("Invite"),
     "CALSCALE:GREGORIAN",
     `METHOD:${opts.method ?? "REQUEST"}`,
     ...(opts.calendarName ? [`X-WR-CALNAME:${escapeText(opts.calendarName)}`] : []),
@@ -242,7 +253,7 @@ export function wrapSingleEvent(event: IcalEvent, calendarName: string = ""): st
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//ByWave-Calendar//CalDAV//EN",
+    prodIdLine("CalDAV"),
     "CALSCALE:GREGORIAN",
     ...(calendarName ? [`X-WR-CALNAME:${escapeText(calendarName)}`] : []),
     serializeEvent(event),

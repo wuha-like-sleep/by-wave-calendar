@@ -8,6 +8,11 @@ let brand: string = env.MAIL_FROM_NAME;
 export function updateBrandForEmails(siteName: string | null | undefined): void {
   brand = siteName?.trim() || env.MAIL_FROM_NAME;
 }
+/** Current site brand name (siteName, or MAIL_FROM_NAME default). Used by the
+ *  .ics serializer so a self-hosted/white-labelled deploy stamps its own name. */
+export function getBrandName(): string {
+  return brand;
+}
 
 // Format a Date for display in a specific IANA zone. Used by every email
 // that surfaces an event time so the recipient sees the wall-clock time
@@ -603,7 +608,7 @@ export function inviteSignupMail(args: {
   const { to, inviteUrl, siteName } = args;
   const name = (siteName || "").trim() || brand;
   const inviter = args.inviterName?.trim();
-  const text = `${inviter ? `${inviter} 邀请你加入 ${name}` : `邀请你加入 ${name}`}\n\n${name} 是一个日历共享平台，可以创建日历、添加事件、生成订阅链接分享给朋友和家人。\n点击下面链接完成注册（链接可能有时效，请尽快使用）：\n${inviteUrl}\n\n如果你并不认识邀请人，可以直接忽略这封邮件。`;
+  const text = `${inviter ? `${inviter} 邀请你加入 ${name}` : `邀请你加入 ${name}`}\n\n${name}（${footerNote}）可以创建日历、添加事件、生成订阅链接分享给朋友和家人。\n点击下面链接完成注册（链接可能有时效，请尽快使用）：\n${inviteUrl}\n\n如果你并不认识邀请人，可以直接忽略这封邮件。`;
   const html = layout({
     title: `${inviter ? `${inviter} 邀请你加入 ${name}` : `邀请你加入 ${name}`}`,
     preheader: `${inviter ? `${inviter} 邀请你注册 ${name}` : `邀请你注册 ${name}`}`,
@@ -611,7 +616,7 @@ export function inviteSignupMail(args: {
       <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;font-weight:600;">✉️ 注册邀请</h1>
       <p style="margin:0 0 14px;color:#475569;line-height:1.6;font-size:14px;">
         ${inviter ? `<strong>${escape(inviter)}</strong> 邀请你加入 <strong>${escape(name)}</strong>。` : `你被邀请加入 <strong>${escape(name)}</strong>。`}
-        这是一个日历共享平台 —— 创建日历、添加事件，并把订阅链接分享给朋友和家人。
+        ${escape(footerNote)} —— 创建日历、添加事件，并把订阅链接分享给朋友和家人。
       </p>
       <p style="margin:22px 0 14px;">
         <a href="${inviteUrl}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">接受邀请并注册</a>

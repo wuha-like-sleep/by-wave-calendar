@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
-import { extractVeventBlock, invitationIcs, parseEvent, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
 import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
@@ -295,7 +295,7 @@ function rowToVCalendar(row: schema.Event, calName: string, partstatByEmail?: Ma
   return [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//ByWave-Calendar//CalDAV//EN",
+    prodIdLine("CalDAV"),
     "CALSCALE:GREGORIAN",
     `X-WR-CALNAME:${calName.replace(/[\r\n]/g, " ")}`,
     vevent,
