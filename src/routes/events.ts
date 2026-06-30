@@ -374,6 +374,7 @@ export async function eventRoutes(app: FastifyInstance) {
           // Pass the event's stored timezone so the email shows
           // "上海下午6点" rather than the server's UTC equivalent.
           timezone: extra.timezone ?? null,
+          meetingUrl: (row.extra as { url?: string } | null)?.url ?? null,
           icsBody: ics,
           inviteToken,
         })).catch((err) => req.log.warn({ err, to: trimmed }, "event_invite_mail_failed"));
@@ -666,6 +667,7 @@ export async function eventRoutes(app: FastifyInstance) {
         allDay: event.allDay,
         uid: event.uid,
         timezone: (event.extra as { timezone?: string } | null)?.timezone ?? null,
+        meetingUrl: (event.extra as { url?: string } | null)?.url ?? null,
         icsBody: ics,
         inviteToken,
       }));

@@ -383,23 +383,42 @@ export type EventInviteCtx = {
   timezone?: string | null;
   icsBody: string; // full VCALENDAR text with METHOD:REQUEST
   inviteToken?: string; // opaque token → /event-invite/:token page that imports into the recipient's chosen calendar
+  meetingUrl?: string | null; // a join/conference link → renders the "meeting" variant
 };
+
+// A meeting (vs a plain event) when the link points at a known conferencing
+// host — covers the common global + CN platforms. Drives the 📹 / 加入会议 styling.
+function looksLikeMeetingUrl(url: string): boolean {
+  return /(?:zoom\.us|meet\.google\.com|teams\.(?:microsoft|live)\.com|webex\.com|meeting\.tencent\.com|voovmeeting\.com|feishu\.cn|larksuite\.com|dingtalk\.com|whereby\.com|gotomeeting\.com|bluejeans\.com|meet\.jit\.si)/i.test(url);
+}
 
 export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
   const tz = ctx.timezone || "Asia/Shanghai";
   const fmt = (d: Date) => formatInZone(d, tz, !!ctx.allDay);
   const tzLabel = zoneLabel(tz);
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入后将按你日历的时区显示。`;
+  // Only http(s) links become a button (the API validates extra.url, but never
+  // trust an inbound value — guard the scheme so no javascript:/data: slips in).
+  const meetingUrl = ctx.meetingUrl && /^https?:\/\//i.test(ctx.meetingUrl) ? ctx.meetingUrl : null;
+  const isMeeting = !!meetingUrl && looksLikeMeetingUrl(meetingUrl);
+  const heading = isMeeting ? "📹 会议邀请" : "📅 事件邀请";
+  const joinLabel = isMeeting ? "📹 加入会议" : "🔗 打开链接";
+  const text = `${ctx.organizerName} 邀请你参加：${ctx.summary}\n时间：${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}（${tzLabel}）\n${meetingUrl ? `${isMeeting ? "会议链接" : "链接"}：${meetingUrl}\n` : ""}${ctx.location ? `地点：${ctx.location}\n` : ""}${ctx.description ? `\n${ctx.description}\n` : ""}\n附件中是 .ics 文件，导入后将按你日历的时区显示。`;
   const html = baseLayout({
     title: ctx.summary,
     preheader: `${ctx.organizerName} 邀请你参加 ${ctx.summary}`,
     body: `
-      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">📅 事件邀请</h1>
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${heading}</h1>
       <p style="margin:0 0 6px;color:#0f172a;font-size:16px;font-weight:600;">${escape(ctx.summary)}</p>
       <p style="margin:0 0 14px;color:#475569;font-size:14px;">
-        ${escape(ctx.organizerName)} 邀请你参加这场${ctx.allDay ? "全天活动" : "活动"}。
+        ${escape(ctx.organizerName)} 邀请你参加${isMeeting ? "这场会议" : (ctx.allDay ? "这场全天活动" : "这场活动")}。
       </p>
+      ${meetingUrl ? `
+      <p style="margin:8px 0 4px;">
+        <a href="${escape(meetingUrl)}" style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">${joinLabel}</a>
+      </p>
+      <p style="margin:2px 0 12px;color:#94a3b8;font-size:12px;word-break:break-all;">${escape(meetingUrl)}</p>
+      ` : ""}
       <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:8px 0 14px;">
         <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:60px;">开始</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.startsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
         <tr><td style="padding:6px 0;color:#64748b;font-size:13px;">结束</td><td style="padding:6px 0;color:#0f172a;font-size:13px;">${escape(fmt(ctx.endsAt))} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span></td></tr>
@@ -424,7 +443,7 @@ export function eventInviteMail(to: string, ctx: EventInviteCtx): SendArgs {
       </p>`,
   });
   return {
-    to, subject: `【邀请】${ctx.summary}`,
+    to, subject: `${isMeeting ? "【会议】" : "【邀请】"}${ctx.summary}`,
     html, text,
     icalEvent: { method: "REQUEST", content: ctx.icsBody },
     attachments: [{ filename: "invite.ics", content: ctx.icsBody, contentType: "text/calendar; charset=utf-8; method=REQUEST" }],
@@ -646,6 +665,23 @@ export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
       to, inviteUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/register?invite=demo-token`,
       siteName: brand, inviterName: "示例管理员",
     }),
+  },
+  {
+    key: "meetingInvite", label: "会议邀请（含加入链接）",
+    build: (to, now) => {
+      const start = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const dt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ByWave//Preview//EN\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:preview-meeting@bywave\r\nDTSTAMP:${dt(now)}\r\nDTSTART:${dt(start)}\r\nDTEND:${dt(end)}\r\nSUMMARY:产品周会\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+      return eventInviteMail(to, {
+        organizerEmail: "host@example.com", organizerName: "示例主持人",
+        summary: "产品周会", description: "议程：上周进展 / 本周计划 / 风险项",
+        location: "线上", startsAt: start, endsAt: end, allDay: false,
+        uid: "preview-meeting@bywave", timezone: "Asia/Shanghai",
+        meetingUrl: "https://meeting.tencent.com/dm/AbCdEf123456",
+        icsBody: ics,
+      });
+    },
   },
 ];
 
