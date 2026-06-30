@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traducciones al español (cadenas del área de eventos). -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">Guardar evento recurrente</string>
+    <string name="scope_delete_title">Eliminar evento recurrente</string>
+    <string name="scope_save_subtitle">Este es un evento recurrente. Elige qué guardar:</string>
+    <string name="scope_delete_subtitle">Este es un evento recurrente. Elige qué eliminar:</string>
+    <string name="scope_this_only">Solo este evento</string>
+    <string name="scope_this_only_edit">Cambiar solo este</string>
+    <string name="scope_this_only_delete">Eliminar solo este</string>
+    <string name="scope_this_future">Este y los siguientes</string>
+    <string name="scope_this_future_edit">Cambiar este y los siguientes</string>
+    <string name="scope_this_future_delete">Eliminar este y los siguientes</string>
+    <string name="scope_series">Toda la serie</string>
+    <string name="scope_series_edit">Cambiar toda la serie</string>
+    <string name="scope_series_delete">Eliminar toda la serie</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">Copiar como evento nuevo</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">Atrás</string>
+    <string name="attendees_invite_section">Invitar a un nuevo asistente</string>
+    <string name="attendees_invite_button">Invitar</string>
+    <string name="attendees_current_count">Asistentes actuales (%1$d)</string>
+    <string name="attendees_empty_title">Aún no hay nadie</string>
+    <string name="attendees_empty_subtitle">Escribe un correo arriba para invitar al primer asistente</string>
+    <string name="attendees_revoke">Revocar invitación</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">Introduce un correo válido</string>
+    <string name="attendees_err_invite_failed">Error al invitar</string>
+    <string name="attendees_err_revoke_failed">Error al revocar</string>
+    <string name="attendees_err_load_failed">Error al cargar los asistentes</string>
+    <string name="attendees_err_not_logged_in">No has iniciado sesión</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">Eliminando…</string>
+    <string name="eventedit_confirm">Aceptar</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">No has iniciado sesión</string>
+    <string name="eventedit_err_save_failed">Error al guardar</string>
+    <string name="eventedit_err_delete_failed">Error al eliminar</string>
+</resources>

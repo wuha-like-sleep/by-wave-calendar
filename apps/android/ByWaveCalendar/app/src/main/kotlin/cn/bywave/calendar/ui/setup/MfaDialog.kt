@@ -24,8 +24,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 
 @Composable
 fun MfaDialog(
@@ -46,11 +48,11 @@ fun MfaDialog(
 
     AlertDialog(
         onDismissRequest = { if (!busy) onCancel() },
-        title = { Text("二次验证") },
+        title = { Text(stringResource(R.string.mfa_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "请输入认证器 App 上当前显示的 6 位验证码。",
+                    text = stringResource(R.string.mfa_prompt),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -61,7 +63,7 @@ fun MfaDialog(
                         // Restrict to digits + max 6 chars.
                         code = v.filter { it.isDigit() }.take(6)
                     },
-                    placeholder = { Text("000000") },
+                    placeholder = { Text(stringResource(R.string.mfa_placeholder)) },
                     singleLine = true,
                     enabled = !busy,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
@@ -84,12 +86,12 @@ fun MfaDialog(
                 if (busy) {
                     CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp)
                 } else {
-                    Text("验证")
+                    Text(stringResource(R.string.mfa_verify))
                 }
             }
         },
         dismissButton = {
-            TextButton(onClick = onCancel, enabled = !busy) { Text("取消") }
+            TextButton(onClick = onCancel, enabled = !busy) { Text(stringResource(R.string.mfa_cancel)) }
         },
     )
 }

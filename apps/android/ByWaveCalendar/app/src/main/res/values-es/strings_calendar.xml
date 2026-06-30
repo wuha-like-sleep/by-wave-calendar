@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calendar-area UI strings — Spanish. -->
+<resources>
+    <string name="cal_cd_search">Buscar</string>
+    <string name="cal_cd_refresh">Actualizar</string>
+    <string name="cal_cd_prev">Anterior</string>
+    <string name="cal_cd_next">Siguiente</string>
+    <string name="cal_switch_account">Cambiar de cuenta</string>
+    <string name="cal_delete_message">«%1$s» se eliminará de forma permanente. Esta acción no se puede deshacer.</string>
+    <string name="day_empty_subtitle">Toca + abajo a la derecha para crear un evento</string>
+</resources>

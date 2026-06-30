@@ -108,7 +108,7 @@ fun ScannerScreen(
         ) {
             Icon(
                 Icons.Default.Close,
-                contentDescription = "取消",
+                contentDescription = stringResource(R.string.scanner_cancel),
                 tint = Color.White.copy(alpha = 0.95f),
                 modifier = Modifier.size(28.dp),
             )
@@ -146,7 +146,7 @@ private fun PermissionPrompt(onRequest: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = "打开 设置 → 应用 → ByWave Calendar → 权限 开启相机权限",
+                text = stringResource(R.string.scanner_camera_permission_steps),
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.bodySmall,
             )

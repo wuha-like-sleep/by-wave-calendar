@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 繁體中文翻譯（事件相關字串）。 -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">儲存重複事件</string>
+    <string name="scope_delete_title">刪除重複事件</string>
+    <string name="scope_save_subtitle">這是一個重複事件，請選擇儲存範圍：</string>
+    <string name="scope_delete_subtitle">這是一個重複事件，請選擇刪除範圍：</string>
+    <string name="scope_this_only">僅此事件</string>
+    <string name="scope_this_only_edit">只修改這一次</string>
+    <string name="scope_this_only_delete">只刪除這一次</string>
+    <string name="scope_this_future">此事件及後續</string>
+    <string name="scope_this_future_edit">修改此次及之後</string>
+    <string name="scope_this_future_delete">刪除此次及之後</string>
+    <string name="scope_series">整個系列</string>
+    <string name="scope_series_edit">修改整個系列</string>
+    <string name="scope_series_delete">刪除整個系列</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">複製為新事件</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">返回</string>
+    <string name="attendees_invite_section">邀請新參與者</string>
+    <string name="attendees_invite_button">邀請</string>
+    <string name="attendees_current_count">目前參與者 (%1$d)</string>
+    <string name="attendees_empty_title">還沒有人</string>
+    <string name="attendees_empty_subtitle">在上方輸入電子郵件邀請第一位參與者</string>
+    <string name="attendees_revoke">撤銷邀請</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">請輸入有效的電子郵件</string>
+    <string name="attendees_err_invite_failed">邀請失敗</string>
+    <string name="attendees_err_revoke_failed">撤銷失敗</string>
+    <string name="attendees_err_load_failed">載入參與者失敗</string>
+    <string name="attendees_err_not_logged_in">尚未登入</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">刪除中…</string>
+    <string name="eventedit_confirm">確定</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">尚未登入</string>
+    <string name="eventedit_err_save_failed">儲存失敗</string>
+    <string name="eventedit_err_delete_failed">刪除失敗</string>
+</resources>

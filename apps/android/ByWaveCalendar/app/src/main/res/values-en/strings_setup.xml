@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
+    <string name="pairscan_not_signed_in">Not signed in. Please sign in first, then scan.</string>
+    <string name="pairscan_approve_failed">Approval failed</string>
+    <string name="pairscan_approving_title">Approving…</string>
+    <string name="pairscan_approving_body">Signing the computer in, please wait.</string>
+    <string name="pairscan_approved_title">✓ Approved</string>
+    <string name="pairscan_approved_web_body">The web browser is signing in automatically. You can return to your computer browser to continue.</string>
+    <string name="pairscan_approved_desktop_body">The computer is signing in automatically. You can return to your computer to continue.</string>
+    <string name="pairscan_done">Done</string>
+    <string name="pairscan_failed_title">Approval failed</string>
+    <string name="pairscan_close">Close</string>
+    <string name="pairscan_unrecognized_title">QR code not recognized</string>
+    <string name="pairscan_unrecognized_body">This doesn\'t look like a login code. Make sure you\'re scanning the login QR code from the desktop or web app.</string>
+    <string name="pairscan_unrecognized_hint">Tip: the desktop \"Sign in to ByWave Calendar\" screen and the \"Scan to sign in\" tab on the web /login page both show a QR code.</string>
+
+    <!-- MFA TOTP dialog (MfaDialog) -->
+    <string name="mfa_title">Two-factor verification</string>
+    <string name="mfa_prompt">Enter the current 6-digit code shown in your authenticator app.</string>
+    <string name="mfa_placeholder">000000</string>
+    <string name="mfa_verify">Verify</string>
+    <string name="mfa_cancel">Cancel</string>
+
+    <!-- Scanner screen (ScannerScreen) -->
+    <string name="scanner_cancel">Cancel</string>
+    <string name="scanner_camera_permission_steps">Open Settings → Apps → ByWave Calendar → Permissions to grant camera access</string>
+
+    <!-- Setup view model status / error strings (SetupViewModel) -->
+    <string name="setupvm_qr_invalid">Invalid QR code format</string>
+    <string name="setupvm_missing_token">Server response is missing a token</string>
+    <string name="setupvm_qr_login_failed">QR sign-in failed. Use your account and password, or generate a new QR code.</string>
+    <string name="setupvm_login_failed">Sign-in failed. Check the server address, network, and your credentials.</string>
+    <string name="setupvm_mfa_invalid_length">Enter the 6-digit code</string>
+    <string name="setupvm_mfa_missing_token">MFA response is missing a token</string>
+    <string name="setupvm_mfa_code_error">Incorrect code</string>
+
+    <!-- Global event search (SearchScreen) -->
+    <string name="search2_placeholder">Search events…</string>
+    <string name="search2_clear">Clear</string>
+    <string name="search2_back">Back</string>
+    <string name="search2_empty_prompt_title">Type a keyword to start searching</string>
+    <string name="search2_empty_prompt_subtitle">Searches titles, notes, and locations</string>
+    <string name="search2_no_results_title">No matching events</string>
+    <string name="search2_no_results_subtitle">Try a different keyword</string>
+
+</resources>

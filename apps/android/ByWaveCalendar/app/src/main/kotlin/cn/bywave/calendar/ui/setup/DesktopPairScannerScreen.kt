@@ -36,9 +36,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import kotlinx.coroutines.launch
@@ -67,6 +69,12 @@ fun DesktopPairScannerScreen(
     var result by remember { mutableStateOf<ApproveResult>(ApproveResult.Idle) }
     val scope = rememberCoroutineScope()
 
+    // Hoisted here because the approve flow below runs inside a
+    // non-composable coroutine lambda where stringResource() can't be
+    // called. Captured by value into that lambda.
+    val notSignedInMsg = stringResource(R.string.pairscan_not_signed_in)
+    val approveFailedMsg = stringResource(R.string.pairscan_approve_failed)
+
     // ScannerScreen fires onResult exactly once (it locks after first
     // detection). After we settle the approve call, the AlertDialog
     // handles the rest of the flow.
@@ -82,7 +90,7 @@ fun DesktopPairScannerScreen(
                 try {
                     val profiles = BywaveApp.instance.profiles
                     val profile = profiles.active()
-                        ?: throw IllegalStateException("未登录，请先登录后再扫码")
+                        ?: throw IllegalStateException(notSignedInMsg)
                     val client = ApiClient.forProfile(profile, profiles)
                     when (parsed.kind) {
                         PairKind.DESKTOP -> client.api.desktopPairApprove(
@@ -92,7 +100,7 @@ fun DesktopPairScannerScreen(
                     }
                     result = ApproveResult.Success(parsed.kind)
                 } catch (e: Exception) {
-                    result = ApproveResult.Error(e.localizedMessage ?: "批准失败")
+                    result = ApproveResult.Error(e.localizedMessage ?: approveFailedMsg)
                 }
             }
         },
@@ -104,46 +112,46 @@ fun DesktopPairScannerScreen(
         ApproveResult.Idle -> Unit
         ApproveResult.Sending -> AlertDialog(
             onDismissRequest = {},
-            title = { Text("正在批准…", fontWeight = FontWeight.SemiBold) },
-            text = { Text("正在让电脑端登录，请稍候。") },
+            title = { Text(stringResource(R.string.pairscan_approving_title), fontWeight = FontWeight.SemiBold) },
+            text = { Text(stringResource(R.string.pairscan_approving_body)) },
             confirmButton = {},
         )
         is ApproveResult.Success -> AlertDialog(
             onDismissRequest = onClose,
-            title = { Text("✓ 已批准", fontWeight = FontWeight.SemiBold) },
+            title = { Text(stringResource(R.string.pairscan_approved_title), fontWeight = FontWeight.SemiBold) },
             text = {
                 Text(
                     if (r.kind == PairKind.WEB)
-                        "网页端正在自动登录。可以回到电脑浏览器前继续操作。"
+                        stringResource(R.string.pairscan_approved_web_body)
                     else
-                        "电脑端正在自动登录。可以回到电脑前继续操作。",
+                        stringResource(R.string.pairscan_approved_desktop_body),
                 )
             },
-            confirmButton = { TextButton(onClick = onClose) { Text("完成") } },
+            confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.pairscan_done)) } },
         )
         is ApproveResult.Error -> AlertDialog(
             onDismissRequest = onClose,
-            title = { Text("批准失败", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error) },
+            title = { Text(stringResource(R.string.pairscan_failed_title), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error) },
             text = { Text(r.message) },
-            confirmButton = { TextButton(onClick = onClose) { Text("关闭") } },
+            confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.pairscan_close)) } },
         )
         ApproveResult.NotDesktopPair -> AlertDialog(
             onDismissRequest = onClose,
-            title = { Text("二维码无法识别", fontWeight = FontWeight.SemiBold) },
+            title = { Text(stringResource(R.string.pairscan_unrecognized_title), fontWeight = FontWeight.SemiBold) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 ) {
-                    Text("这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。")
+                    Text(stringResource(R.string.pairscan_unrecognized_body))
                     Text(
-                        "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示一个二维码。",
+                        stringResource(R.string.pairscan_unrecognized_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
-            confirmButton = { TextButton(onClick = onClose) { Text("关闭") } },
+            confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.pairscan_close)) } },
         )
     }
 }

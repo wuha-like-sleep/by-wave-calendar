@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traductions françaises (chaînes liées aux événements). -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">Enregistrer l\'événement récurrent</string>
+    <string name="scope_delete_title">Supprimer l\'événement récurrent</string>
+    <string name="scope_save_subtitle">Ceci est un événement récurrent. Choisissez ce qu\'il faut enregistrer :</string>
+    <string name="scope_delete_subtitle">Ceci est un événement récurrent. Choisissez ce qu\'il faut supprimer :</string>
+    <string name="scope_this_only">Cet événement uniquement</string>
+    <string name="scope_this_only_edit">Modifier seulement celui-ci</string>
+    <string name="scope_this_only_delete">Supprimer seulement celui-ci</string>
+    <string name="scope_this_future">Cet événement et les suivants</string>
+    <string name="scope_this_future_edit">Modifier celui-ci et les suivants</string>
+    <string name="scope_this_future_delete">Supprimer celui-ci et les suivants</string>
+    <string name="scope_series">Toute la série</string>
+    <string name="scope_series_edit">Modifier toute la série</string>
+    <string name="scope_series_delete">Supprimer toute la série</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">Copier comme nouvel événement</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">Retour</string>
+    <string name="attendees_invite_section">Inviter un nouveau participant</string>
+    <string name="attendees_invite_button">Inviter</string>
+    <string name="attendees_current_count">Participants actuels (%1$d)</string>
+    <string name="attendees_empty_title">Personne pour l\'instant</string>
+    <string name="attendees_empty_subtitle">Saisissez un e-mail ci-dessus pour inviter le premier participant</string>
+    <string name="attendees_revoke">Révoquer l\'invitation</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">Veuillez saisir un e-mail valide</string>
+    <string name="attendees_err_invite_failed">Échec de l\'invitation</string>
+    <string name="attendees_err_revoke_failed">Échec de la révocation</string>
+    <string name="attendees_err_load_failed">Échec du chargement des participants</string>
+    <string name="attendees_err_not_logged_in">Non connecté</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">Suppression…</string>
+    <string name="eventedit_confirm">OK</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">Non connecté</string>
+    <string name="eventedit_err_save_failed">Échec de l\'enregistrement</string>
+    <string name="eventedit_err_delete_failed">Échec de la suppression</string>
+</resources>

@@ -30,8 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
 
 @Composable
@@ -44,12 +46,12 @@ fun ProfileSwitcherDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("切换账号") },
+        title = { Text(stringResource(R.string.profilesw_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 if (profiles.isEmpty()) {
                     Text(
-                        text = "还没有绑定账号",
+                        text = stringResource(R.string.profilesw_no_profiles),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 16.dp),
                     )
@@ -73,7 +75,7 @@ fun ProfileSwitcherDialog(
                     Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.size(12.dp))
                     Text(
-                        text = "添加另一个账号",
+                        text = stringResource(R.string.profilesw_add_account),
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium,
                     )
@@ -81,7 +83,7 @@ fun ProfileSwitcherDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) }
         },
     )
 }
@@ -127,7 +129,7 @@ private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit)
         if (isActive) {
             Icon(
                 Icons.Default.Check,
-                contentDescription = "当前账号",
+                contentDescription = stringResource(R.string.profilesw_active_desc),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }

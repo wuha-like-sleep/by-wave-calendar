@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calendar-area UI strings — English. -->
+<resources>
+    <string name="cal_cd_search">Search</string>
+    <string name="cal_cd_refresh">Refresh</string>
+    <string name="cal_cd_prev">Previous</string>
+    <string name="cal_cd_next">Next</string>
+    <string name="cal_switch_account">Switch account</string>
+    <string name="cal_delete_message">\"%1$s\" will be permanently deleted. This cannot be undone.</string>
+    <string name="day_empty_subtitle">Tap + at the bottom right to create an event</string>
+</resources>

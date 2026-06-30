@@ -118,7 +118,7 @@ fun EventEditScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onDismiss, enabled = !state.saving && !state.deleting) {
-                        Icon(Icons.Default.Close, contentDescription = "取消")
+                        Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_cancel))
                     }
                 },
                 actions = {
@@ -127,7 +127,7 @@ fun EventEditScreen(
                         enabled = state.canSubmit,
                     ) {
                         if (state.saving) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Default.Check, contentDescription = "保存")
+                        else Icon(Icons.Default.Check, contentDescription = stringResource(R.string.action_save))
                     }
                 },
             )
@@ -244,7 +244,7 @@ fun EventEditScreen(
                     if (state.deleting) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.size(8.dp))
-                        Text("删除中…")
+                        Text(stringResource(R.string.eventedit_deleting))
                     } else {
                         Icon(Icons.Default.Delete, contentDescription = null)
                         Spacer(Modifier.size(8.dp))
@@ -419,10 +419,10 @@ private fun DateTimeRow(
                         .atZone(ZoneOffset.UTC).toLocalDate()
                     onChange(picked, value.toLocalTime())
                     showDate = false
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.eventedit_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDate = false }) { Text("取消") }
+                TextButton(onClick = { showDate = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         ) { DatePicker(state = state) }
     }
@@ -441,10 +441,10 @@ private fun DateTimeRow(
                 TextButton(onClick = {
                     onChange(value.toLocalDate(), LocalTime.of(state.hour, state.minute))
                     showTime = false
-                }) { Text("确定") }
+                }) { Text(stringResource(R.string.eventedit_confirm)) }
             },
             dismissButton = {
-                TextButton(onClick = { showTime = false }) { Text("取消") }
+                TextButton(onClick = { showTime = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }

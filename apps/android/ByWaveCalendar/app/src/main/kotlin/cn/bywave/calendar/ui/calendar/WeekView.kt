@@ -58,6 +58,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 private val HOUR_HEIGHT = 56.dp
 private val TIME_GUTTER = 44.dp
@@ -309,11 +311,10 @@ private fun EventChip(
 
 // ---- Helpers ----
 
-private fun weekdayShort(d: LocalDate): String = when (d.dayOfWeek.value) {
-    1 -> "周一"; 2 -> "周二"; 3 -> "周三"; 4 -> "周四"
-    5 -> "周五"; 6 -> "周六"; 7 -> "周日"
-    else -> ""
-}
+// Short weekday label in the device's locale (e.g. "Mon" / "周一" / "月").
+// Locale-aware via java.time display names — no hand-translated arrays.
+private fun weekdayShort(d: LocalDate): String =
+    d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
 
 /** Cluster events that overlap in time so we can split column width.
  *  A new event whose start is BEFORE the cluster's current end becomes

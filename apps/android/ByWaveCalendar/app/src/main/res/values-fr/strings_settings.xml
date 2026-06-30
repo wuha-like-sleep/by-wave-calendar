@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">Retour</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">Calendriers</string>
+    <string name="settings2_manage_calendars">Gérer les calendriers</string>
+    <string name="settings2_section_desktop">Ordinateur</string>
+    <string name="settings2_scan_desktop">Scanner pour se connecter sur l\'ordinateur</string>
+    <string name="settings2_scan_desktop_sub">Scannez le code QR sur votre ordinateur</string>
+    <string name="settings2_section_system">Système</string>
+    <string name="settings2_go_system">Ouvrir les réglages système</string>
+    <string name="settings2_check_update">Rechercher des mises à jour</string>
+    <string name="settings2_checking">Vérification…</string>
+    <string name="settings2_up_to_date">Vous avez la dernière version (v%1$s)</string>
+    <string name="settings2_update_found">Une nouvelle version est disponible — invite de mise à jour affichée</string>
+    <string name="settings2_not_signed_in">Connectez-vous à un compte avant de rechercher des mises à jour</string>
+    <string name="settings2_check_failed">Échec de la vérification : %1$s</string>
+    <string name="settings2_version">Version</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">Gérer les calendriers</string>
+    <string name="callist_empty">Aucun calendrier pour le moment</string>
+    <string name="callist_edit">Modifier</string>
+    <string name="callist_edit_title">Modifier le calendrier</string>
+    <string name="callist_saved">Enregistré</string>
+    <string name="callist_save_failed">Échec de l\'enregistrement</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">Changer de compte</string>
+    <string name="profilesw_no_profiles">Aucun compte ajouté pour le moment</string>
+    <string name="profilesw_add_account">Ajouter un autre compte</string>
+    <string name="profilesw_active_desc">Compte actuel</string>
+</resources>

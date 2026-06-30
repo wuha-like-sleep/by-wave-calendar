@@ -13,6 +13,7 @@ package cn.bywave.calendar.ui.event
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
@@ -31,7 +32,11 @@ data class AttendeesUiState(
 )
 
 class AttendeesViewModel : ViewModel() {
-    private val profiles = BywaveApp.instance.profiles
+    // Application singleton doubles as a Context for resolving localized
+    // user-facing error strings (this VM extends plain ViewModel, so it
+    // has no built-in getApplication()).
+    private val app = BywaveApp.instance
+    private val profiles = app.profiles
     private val _state = MutableStateFlow(AttendeesUiState())
     val state: StateFlow<AttendeesUiState> = _state.asStateFlow()
 
@@ -48,7 +53,7 @@ class AttendeesViewModel : ViewModel() {
     fun invite() {
         val email = _state.value.emailInput.trim()
         if (!isValidEmail(email)) {
-            _state.update { it.copy(errorMessage = "请输入合法邮箱") }
+            _state.update { it.copy(errorMessage = app.getString(R.string.attendees_err_invalid_email)) }
             return
         }
         _state.update { it.copy(sending = true, errorMessage = null) }
@@ -61,7 +66,7 @@ class AttendeesViewModel : ViewModel() {
                 load()  // refetch to pick up server-side normalization
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(sending = false, errorMessage = e.localizedMessage ?: "邀请失败")
+                    it.copy(sending = false, errorMessage = e.localizedMessage ?: app.getString(R.string.attendees_err_invite_failed))
                 }
             }
         }
@@ -79,7 +84,7 @@ class AttendeesViewModel : ViewModel() {
                 load()
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(attendees = previous, errorMessage = e.localizedMessage ?: "撤销失败")
+                    it.copy(attendees = previous, errorMessage = e.localizedMessage ?: app.getString(R.string.attendees_err_revoke_failed))
                 }
             }
         }
@@ -96,7 +101,7 @@ class AttendeesViewModel : ViewModel() {
                 }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(loading = false, errorMessage = e.localizedMessage ?: "加载邀请人失败")
+                    it.copy(loading = false, errorMessage = e.localizedMessage ?: app.getString(R.string.attendees_err_load_failed))
                 }
             }
         }
@@ -104,7 +109,7 @@ class AttendeesViewModel : ViewModel() {
 
     private fun client(): ApiClient? {
         val profile = profiles.active() ?: run {
-            _state.update { it.copy(errorMessage = "未登录") }
+            _state.update { it.copy(errorMessage = app.getString(R.string.attendees_err_not_logged_in)) }
             return null
         }
         return ApiClient.forProfile(profile, profiles)

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deutsche Übersetzungen (Zeichenketten für den Ereignisbereich). -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">Wiederkehrendes Ereignis speichern</string>
+    <string name="scope_delete_title">Wiederkehrendes Ereignis löschen</string>
+    <string name="scope_save_subtitle">Dies ist ein wiederkehrendes Ereignis. Wähle, was gespeichert werden soll:</string>
+    <string name="scope_delete_subtitle">Dies ist ein wiederkehrendes Ereignis. Wähle, was gelöscht werden soll:</string>
+    <string name="scope_this_only">Nur dieses Ereignis</string>
+    <string name="scope_this_only_edit">Nur dieses ändern</string>
+    <string name="scope_this_only_delete">Nur dieses löschen</string>
+    <string name="scope_this_future">Dieses und folgende Ereignisse</string>
+    <string name="scope_this_future_edit">Dieses und folgende ändern</string>
+    <string name="scope_this_future_delete">Dieses und folgende löschen</string>
+    <string name="scope_series">Gesamte Serie</string>
+    <string name="scope_series_edit">Gesamte Serie ändern</string>
+    <string name="scope_series_delete">Gesamte Serie löschen</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">Als neues Ereignis kopieren</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">Zurück</string>
+    <string name="attendees_invite_section">Neuen Teilnehmer einladen</string>
+    <string name="attendees_invite_button">Einladen</string>
+    <string name="attendees_current_count">Aktuelle Teilnehmer (%1$d)</string>
+    <string name="attendees_empty_title">Noch niemand</string>
+    <string name="attendees_empty_subtitle">Gib oben eine E-Mail ein, um den ersten Teilnehmer einzuladen</string>
+    <string name="attendees_revoke">Einladung widerrufen</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">Bitte gib eine gültige E-Mail ein</string>
+    <string name="attendees_err_invite_failed">Einladung fehlgeschlagen</string>
+    <string name="attendees_err_revoke_failed">Widerruf fehlgeschlagen</string>
+    <string name="attendees_err_load_failed">Teilnehmer konnten nicht geladen werden</string>
+    <string name="attendees_err_not_logged_in">Nicht angemeldet</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">Wird gelöscht…</string>
+    <string name="eventedit_confirm">OK</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">Nicht angemeldet</string>
+    <string name="eventedit_err_save_failed">Speichern fehlgeschlagen</string>
+    <string name="eventedit_err_delete_failed">Löschen fehlgeschlagen</string>
+</resources>

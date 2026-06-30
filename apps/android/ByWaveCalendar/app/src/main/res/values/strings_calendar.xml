@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Calendar-area UI strings (CalendarScreen / Week / Month / Day views).
+    Default (Simplified Chinese). Locale variants live in
+    values-<lang>/strings_calendar.xml. Resource names are cal_/day_
+    prefixed to stay unique against the shared strings.xml.
+-->
+<resources>
+    <string name="cal_cd_search">搜索</string>
+    <string name="cal_cd_refresh">刷新</string>
+    <string name="cal_cd_prev">上一个</string>
+    <string name="cal_cd_next">下一个</string>
+    <string name="cal_switch_account">切换账号</string>
+    <string name="cal_delete_message">「%1$s」将被永久删除，此操作不可恢复。</string>
+    <string name="day_empty_subtitle">点按右下角 + 新建一个事件</string>
+</resources>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Event-area strings (default / 简体中文). Covers RecurringScopePicker,
+    EventActionsSheet, AttendeesScreen, EventEditScreen and the two event
+    ViewModels. Kept in a separate file from strings.xml to avoid merge
+    conflicts with the existing event_* keys there.
+-->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">保存重复事件</string>
+    <string name="scope_delete_title">删除重复事件</string>
+    <string name="scope_save_subtitle">这是一个重复事件，请选择保存范围：</string>
+    <string name="scope_delete_subtitle">这是一个重复事件，请选择删除范围：</string>
+    <string name="scope_this_only">仅此事件</string>
+    <string name="scope_this_only_edit">只修改这一次</string>
+    <string name="scope_this_only_delete">只删除这一次</string>
+    <string name="scope_this_future">此事件及后续</string>
+    <string name="scope_this_future_edit">修改此次及之后</string>
+    <string name="scope_this_future_delete">删除此次及之后</string>
+    <string name="scope_series">整个系列</string>
+    <string name="scope_series_edit">修改整个系列</string>
+    <string name="scope_series_delete">删除整个系列</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">复制为新事件</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">返回</string>
+    <string name="attendees_invite_section">邀请新参与者</string>
+    <string name="attendees_invite_button">邀请</string>
+    <string name="attendees_current_count">当前参与者 (%1$d)</string>
+    <string name="attendees_empty_title">还没有人</string>
+    <string name="attendees_empty_subtitle">在上方输入邮箱邀请第一位参与者</string>
+    <string name="attendees_revoke">撤销邀请</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">请输入合法邮箱</string>
+    <string name="attendees_err_invite_failed">邀请失败</string>
+    <string name="attendees_err_revoke_failed">撤销失败</string>
+    <string name="attendees_err_load_failed">加载邀请人失败</string>
+    <string name="attendees_err_not_logged_in">未登录</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">删除中…</string>
+    <string name="eventedit_confirm">确定</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">未登录</string>
+    <string name="eventedit_err_save_failed">保存失败</string>
+    <string name="eventedit_err_delete_failed">删除失败</string>
+</resources>

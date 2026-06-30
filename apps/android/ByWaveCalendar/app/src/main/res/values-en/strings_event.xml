@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English translations for the event-area strings. -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">Save recurring event</string>
+    <string name="scope_delete_title">Delete recurring event</string>
+    <string name="scope_save_subtitle">This is a recurring event. Choose what to save:</string>
+    <string name="scope_delete_subtitle">This is a recurring event. Choose what to delete:</string>
+    <string name="scope_this_only">This event only</string>
+    <string name="scope_this_only_edit">Change only this one</string>
+    <string name="scope_this_only_delete">Delete only this one</string>
+    <string name="scope_this_future">This and following events</string>
+    <string name="scope_this_future_edit">Change this and later</string>
+    <string name="scope_this_future_delete">Delete this and later</string>
+    <string name="scope_series">Entire series</string>
+    <string name="scope_series_edit">Change the whole series</string>
+    <string name="scope_series_delete">Delete the whole series</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">Copy as new event</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">Back</string>
+    <string name="attendees_invite_section">Invite a new attendee</string>
+    <string name="attendees_invite_button">Invite</string>
+    <string name="attendees_current_count">Current attendees (%1$d)</string>
+    <string name="attendees_empty_title">No one yet</string>
+    <string name="attendees_empty_subtitle">Enter an email above to invite the first attendee</string>
+    <string name="attendees_revoke">Revoke invitation</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">Please enter a valid email</string>
+    <string name="attendees_err_invite_failed">Invitation failed</string>
+    <string name="attendees_err_revoke_failed">Failed to revoke</string>
+    <string name="attendees_err_load_failed">Failed to load attendees</string>
+    <string name="attendees_err_not_logged_in">Not signed in</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">Deleting…</string>
+    <string name="eventedit_confirm">OK</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">Not signed in</string>
+    <string name="eventedit_err_save_failed">Failed to save</string>
+    <string name="eventedit_err_delete_failed">Failed to delete</string>
+</resources>

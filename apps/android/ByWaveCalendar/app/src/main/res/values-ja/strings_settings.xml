@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">戻る</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">カレンダー</string>
+    <string name="settings2_manage_calendars">カレンダーを管理</string>
+    <string name="settings2_section_desktop">デスクトップ</string>
+    <string name="settings2_scan_desktop">スキャンしてPCにログイン</string>
+    <string name="settings2_scan_desktop_sub">PC側のQRコードをスキャン</string>
+    <string name="settings2_section_system">システム</string>
+    <string name="settings2_go_system">システム設定を開く</string>
+    <string name="settings2_check_update">アップデートを確認</string>
+    <string name="settings2_checking">確認中…</string>
+    <string name="settings2_up_to_date">最新バージョンです (v%1$s)</string>
+    <string name="settings2_update_found">新しいバージョンが見つかりました。更新案内を表示しました</string>
+    <string name="settings2_not_signed_in">更新を確認する前にいずれかのアカウントにログインしてください</string>
+    <string name="settings2_check_failed">確認に失敗しました：%1$s</string>
+    <string name="settings2_version">バージョン</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">カレンダーを管理</string>
+    <string name="callist_empty">カレンダーがまだありません</string>
+    <string name="callist_edit">編集</string>
+    <string name="callist_edit_title">カレンダーを編集</string>
+    <string name="callist_saved">保存しました</string>
+    <string name="callist_save_failed">保存に失敗しました</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">アカウントを切り替え</string>
+    <string name="profilesw_no_profiles">アカウントがまだありません</string>
+    <string name="profilesw_add_account">別のアカウントを追加</string>
+    <string name="profilesw_active_desc">現在のアカウント</string>
+</resources>

@@ -50,10 +50,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.calendarColor
@@ -88,7 +90,7 @@ fun SearchScreen(
                     OutlinedTextField(
                         value = state.query,
                         onValueChange = vm::onQuery,
-                        placeholder = { Text("搜索事件…") },
+                        placeholder = { Text(stringResource(R.string.search2_placeholder)) },
                         singleLine = true,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -96,7 +98,7 @@ fun SearchScreen(
                         trailingIcon = {
                             if (state.query.isNotEmpty()) {
                                 IconButton(onClick = { vm.onQuery("") }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "清空")
+                                    Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.search2_clear))
                                 }
                             }
                         },
@@ -108,7 +110,7 @@ fun SearchScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.search2_back))
                     }
                 },
             )
@@ -118,13 +120,13 @@ fun SearchScreen(
             when {
                 state.query.isBlank() -> EmptyState(
                     icon = Icons.Default.Search,
-                    title = "输入关键字开始搜索",
-                    subtitle = "搜索范围覆盖标题、备注和地点",
+                    title = stringResource(R.string.search2_empty_prompt_title),
+                    subtitle = stringResource(R.string.search2_empty_prompt_subtitle),
                 )
                 state.results.isEmpty() -> EmptyState(
                     icon = Icons.Default.SearchOff,
-                    title = "没有匹配的事件",
-                    subtitle = "换个关键字再试试",
+                    title = stringResource(R.string.search2_no_results_title),
+                    subtitle = stringResource(R.string.search2_no_results_subtitle),
                 )
                 else -> ResultsList(
                     results = state.results,

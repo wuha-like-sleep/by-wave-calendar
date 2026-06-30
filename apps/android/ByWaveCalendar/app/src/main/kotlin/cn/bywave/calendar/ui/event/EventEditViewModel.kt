@@ -19,6 +19,7 @@ package cn.bywave.calendar.ui.event
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventCreateInput
@@ -83,7 +84,11 @@ data class EventEditUiState(
 }
 
 class EventEditViewModel : ViewModel() {
-    private val profiles = BywaveApp.instance.profiles
+    // Application singleton doubles as a Context for resolving localized
+    // user-facing error strings (this VM extends plain ViewModel, so it
+    // has no built-in getApplication()).
+    private val app = BywaveApp.instance
+    private val profiles = app.profiles
     private val _state = MutableStateFlow(EventEditUiState())
     val state: StateFlow<EventEditUiState> = _state.asStateFlow()
 
@@ -200,7 +205,7 @@ class EventEditViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val profile = profiles.active() ?: error("未登录")
+                val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
                 val client = ApiClient.forProfile(profile, profiles)
 
                 val zone = ZoneId.systemDefault()
@@ -249,7 +254,7 @@ class EventEditViewModel : ViewModel() {
                 _state.update { it.copy(saving = false, finished = true) }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(saving = false, errorMessage = e.localizedMessage ?: "保存失败")
+                    it.copy(saving = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_save_failed))
                 }
             }
         }
@@ -262,13 +267,13 @@ class EventEditViewModel : ViewModel() {
 
         viewModelScope.launch {
             try {
-                val profile = profiles.active() ?: error("未登录")
+                val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id, scope, recurrenceId)
                 _state.update { it.copy(deleting = false, finished = true) }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(deleting = false, errorMessage = e.localizedMessage ?: "删除失败")
+                    it.copy(deleting = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_delete_failed))
                 }
             }
         }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">뒤로</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">캘린더</string>
+    <string name="settings2_manage_calendars">캘린더 관리</string>
+    <string name="settings2_section_desktop">데스크톱</string>
+    <string name="settings2_scan_desktop">스캔하여 PC에 로그인</string>
+    <string name="settings2_scan_desktop_sub">PC의 QR 코드를 스캔하세요</string>
+    <string name="settings2_section_system">시스템</string>
+    <string name="settings2_go_system">시스템 설정으로 이동</string>
+    <string name="settings2_check_update">업데이트 확인</string>
+    <string name="settings2_checking">확인 중…</string>
+    <string name="settings2_up_to_date">최신 버전입니다 (v%1$s)</string>
+    <string name="settings2_update_found">새 버전이 있습니다. 업데이트 안내를 표시했습니다</string>
+    <string name="settings2_not_signed_in">업데이트를 확인하기 전에 계정에 로그인하세요</string>
+    <string name="settings2_check_failed">확인 실패: %1$s</string>
+    <string name="settings2_version">버전</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">캘린더 관리</string>
+    <string name="callist_empty">아직 캘린더가 없습니다</string>
+    <string name="callist_edit">편집</string>
+    <string name="callist_edit_title">캘린더 편집</string>
+    <string name="callist_saved">저장됨</string>
+    <string name="callist_save_failed">저장 실패</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">계정 전환</string>
+    <string name="profilesw_no_profiles">아직 추가된 계정이 없습니다</string>
+    <string name="profilesw_add_account">다른 계정 추가</string>
+    <string name="profilesw_active_desc">현재 계정</string>
+</resources>

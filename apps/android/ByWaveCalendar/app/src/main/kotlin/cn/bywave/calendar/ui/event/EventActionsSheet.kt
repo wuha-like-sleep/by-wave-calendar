@@ -36,8 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.calendarColor
@@ -82,13 +84,13 @@ fun EventActionsSheet(
             }
             HorizontalDivider()
 
-            ActionItem(icon = Icons.Default.Edit, label = "编辑", onClick = onEdit)
-            ActionItem(icon = Icons.Default.ContentCopy, label = "复制为新事件", onClick = onDuplicate)
-            ActionItem(icon = Icons.Default.People, label = "邀请人", onClick = onOpenAttendees)
+            ActionItem(icon = Icons.Default.Edit, label = stringResource(R.string.event_detail_edit), onClick = onEdit)
+            ActionItem(icon = Icons.Default.ContentCopy, label = stringResource(R.string.eventactions_duplicate), onClick = onDuplicate)
+            ActionItem(icon = Icons.Default.People, label = stringResource(R.string.event_detail_attendees), onClick = onOpenAttendees)
             HorizontalDivider()
             ActionItem(
                 icon = Icons.Default.Delete,
-                label = "删除",
+                label = stringResource(R.string.action_delete),
                 danger = true,
                 onClick = onDelete,
             )

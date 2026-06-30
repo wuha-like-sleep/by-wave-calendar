@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
+    <string name="pairscan_not_signed_in">Vous n\'êtes pas connecté. Connectez-vous d\'abord, puis scannez</string>
+    <string name="pairscan_approve_failed">Échec de l\'approbation</string>
+    <string name="pairscan_approving_title">Approbation…</string>
+    <string name="pairscan_approving_body">Connexion de l\'ordinateur en cours, veuillez patienter.</string>
+    <string name="pairscan_approved_title">✓ Approuvé</string>
+    <string name="pairscan_approved_web_body">La version web se connecte automatiquement. Vous pouvez revenir au navigateur de l\'ordinateur pour continuer.</string>
+    <string name="pairscan_approved_desktop_body">L\'ordinateur se connecte automatiquement. Vous pouvez revenir à l\'ordinateur pour continuer.</string>
+    <string name="pairscan_done">Terminé</string>
+    <string name="pairscan_failed_title">Échec de l\'approbation</string>
+    <string name="pairscan_close">Fermer</string>
+    <string name="pairscan_unrecognized_title">Code QR non reconnu</string>
+    <string name="pairscan_unrecognized_body">Cela ne ressemble pas à un code de connexion. Assurez-vous de scanner le code QR de connexion de l\'application de bureau ou web.</string>
+    <string name="pairscan_unrecognized_hint">Astuce : l\'écran « Se connecter à ByWave Calendar » du bureau et l\'onglet « Scanner pour se connecter » de la page web /login affichent tous deux un code QR.</string>
+
+    <!-- MFA TOTP dialog (MfaDialog) -->
+    <string name="mfa_title">Vérification en deux étapes</string>
+    <string name="mfa_prompt">Saisissez le code à 6 chiffres actuellement affiché dans votre application d\'authentification.</string>
+    <string name="mfa_placeholder">000000</string>
+    <string name="mfa_verify">Vérifier</string>
+    <string name="mfa_cancel">Annuler</string>
+
+    <!-- Scanner screen (ScannerScreen) -->
+    <string name="scanner_cancel">Annuler</string>
+    <string name="scanner_camera_permission_steps">Ouvrez Paramètres → Applications → ByWave Calendar → Autorisations pour accorder l\'accès à la caméra</string>
+
+    <!-- Setup view model status / error strings (SetupViewModel) -->
+    <string name="setupvm_qr_invalid">Format de code QR non valide</string>
+    <string name="setupvm_missing_token">Il manque un token dans la réponse du serveur</string>
+    <string name="setupvm_qr_login_failed">Échec de la connexion par QR. Utilisez votre compte et votre mot de passe, ou générez un nouveau code QR.</string>
+    <string name="setupvm_login_failed">Échec de la connexion. Vérifiez l\'adresse du serveur, le réseau et vos identifiants.</string>
+    <string name="setupvm_mfa_invalid_length">Saisissez le code à 6 chiffres</string>
+    <string name="setupvm_mfa_missing_token">Il manque un token dans la réponse MFA</string>
+    <string name="setupvm_mfa_code_error">Code incorrect</string>
+
+    <!-- Global event search (SearchScreen) -->
+    <string name="search2_placeholder">Rechercher des événements…</string>
+    <string name="search2_clear">Effacer</string>
+    <string name="search2_back">Retour</string>
+    <string name="search2_empty_prompt_title">Saisissez un mot-clé pour commencer la recherche</string>
+    <string name="search2_empty_prompt_subtitle">Recherche dans les titres, les notes et les lieux</string>
+    <string name="search2_no_results_title">Aucun événement correspondant</string>
+    <string name="search2_no_results_subtitle">Essayez un autre mot-clé</string>
+
+</resources>

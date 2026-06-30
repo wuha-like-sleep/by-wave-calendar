@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">Atrás</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">Calendarios</string>
+    <string name="settings2_manage_calendars">Gestionar calendarios</string>
+    <string name="settings2_section_desktop">Escritorio</string>
+    <string name="settings2_scan_desktop">Escanear para iniciar sesión en el ordenador</string>
+    <string name="settings2_scan_desktop_sub">Escanea el código QR de tu ordenador</string>
+    <string name="settings2_section_system">Sistema</string>
+    <string name="settings2_go_system">Abrir ajustes del sistema</string>
+    <string name="settings2_check_update">Buscar actualizaciones</string>
+    <string name="settings2_checking">Comprobando…</string>
+    <string name="settings2_up_to_date">Tienes la última versión (v%1$s)</string>
+    <string name="settings2_update_found">Hay una nueva versión: se muestra el aviso de actualización</string>
+    <string name="settings2_not_signed_in">Inicia sesión en una cuenta antes de buscar actualizaciones</string>
+    <string name="settings2_check_failed">Error al comprobar: %1$s</string>
+    <string name="settings2_version">Versión</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">Gestionar calendarios</string>
+    <string name="callist_empty">Aún no hay calendarios</string>
+    <string name="callist_edit">Editar</string>
+    <string name="callist_edit_title">Editar calendario</string>
+    <string name="callist_saved">Guardado</string>
+    <string name="callist_save_failed">Error al guardar</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">Cambiar de cuenta</string>
+    <string name="profilesw_no_profiles">Aún no hay cuentas añadidas</string>
+    <string name="profilesw_add_account">Añadir otra cuenta</string>
+    <string name="profilesw_active_desc">Cuenta actual</string>
+</resources>

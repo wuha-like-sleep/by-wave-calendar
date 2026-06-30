@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">返回</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">日历</string>
+    <string name="settings2_manage_calendars">管理日历</string>
+    <string name="settings2_section_desktop">桌面端</string>
+    <string name="settings2_scan_desktop">扫码登录电脑</string>
+    <string name="settings2_scan_desktop_sub">扫描电脑端二维码</string>
+    <string name="settings2_section_system">系统</string>
+    <string name="settings2_go_system">去系统设置</string>
+    <string name="settings2_check_update">检查更新</string>
+    <string name="settings2_checking">正在检查…</string>
+    <string name="settings2_up_to_date">已是最新版 (v%1$s)</string>
+    <string name="settings2_update_found">发现新版本，已弹出更新提示</string>
+    <string name="settings2_not_signed_in">请先登录任一账号再检查更新</string>
+    <string name="settings2_check_failed">检查失败：%1$s</string>
+    <string name="settings2_version">版本</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">管理日历</string>
+    <string name="callist_empty">还没有日历</string>
+    <string name="callist_edit">编辑</string>
+    <string name="callist_edit_title">编辑日历</string>
+    <string name="callist_saved">已保存</string>
+    <string name="callist_save_failed">保存失败</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">切换账号</string>
+    <string name="profilesw_no_profiles">还没有绑定账号</string>
+    <string name="profilesw_add_account">添加另一个账号</string>
+    <string name="profilesw_active_desc">当前账号</string>
+</resources>

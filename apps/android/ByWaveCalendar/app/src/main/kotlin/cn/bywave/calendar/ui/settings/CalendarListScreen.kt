@@ -128,10 +128,10 @@ fun CalendarListScreen(
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             TopAppBar(
-                title = { Text("管理日历") },
+                title = { Text(stringResource(R.string.callist_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.nav_back))
                     }
                 },
                 actions = {
@@ -148,7 +148,7 @@ fun CalendarListScreen(
             if (state.calendars.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.CalendarMonth,
-                    title = "还没有日历",
+                    title = stringResource(R.string.callist_empty),
                     action = {
                         OutlinedButton(onClick = { creating = true }) {
                             Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -188,7 +188,7 @@ fun CalendarListScreen(
                                 )
                             }
                         }
-                        Text(text = "编辑", style = MaterialTheme.typography.labelMedium, color = mutedTextColor())
+                        Text(text = stringResource(R.string.callist_edit), style = MaterialTheme.typography.labelMedium, color = mutedTextColor())
                     }
                     if (i < state.calendars.size - 1) HorizontalDivider()
                 }
@@ -449,7 +449,7 @@ private fun EditCalendarSheet(
                 )
                 Spacer(Modifier.size(8.dp))
                 Text(
-                    text = "编辑日历",
+                    text = stringResource(R.string.callist_edit_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -516,10 +516,10 @@ private fun EditCalendarSheet(
                                         ?.takeIf { it.isNotBlank() },
                                 )
                                 client.api.updateCalendar(calendar.id, body)
-                                snackbar.showSnackbar("已保存")
+                                snackbar.showSnackbar(context.getString(R.string.callist_saved))
                                 onSaved()
                             } catch (e: Exception) {
-                                error = serverErrorMessage(e) ?: "保存失败"
+                                error = serverErrorMessage(e) ?: context.getString(R.string.callist_save_failed)
                             } finally {
                                 busy = false
                             }

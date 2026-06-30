@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 日本語翻訳（イベント関連の文字列）。 -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">繰り返しイベントを保存</string>
+    <string name="scope_delete_title">繰り返しイベントを削除</string>
+    <string name="scope_save_subtitle">これは繰り返しイベントです。保存する範囲を選択してください:</string>
+    <string name="scope_delete_subtitle">これは繰り返しイベントです。削除する範囲を選択してください:</string>
+    <string name="scope_this_only">このイベントのみ</string>
+    <string name="scope_this_only_edit">この回だけ変更</string>
+    <string name="scope_this_only_delete">この回だけ削除</string>
+    <string name="scope_this_future">このイベント以降</string>
+    <string name="scope_this_future_edit">この回以降を変更</string>
+    <string name="scope_this_future_delete">この回以降を削除</string>
+    <string name="scope_series">シリーズ全体</string>
+    <string name="scope_series_edit">シリーズ全体を変更</string>
+    <string name="scope_series_delete">シリーズ全体を削除</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">新しいイベントとして複製</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">戻る</string>
+    <string name="attendees_invite_section">新しい参加者を招待</string>
+    <string name="attendees_invite_button">招待</string>
+    <string name="attendees_current_count">現在の参加者 (%1$d)</string>
+    <string name="attendees_empty_title">まだ誰もいません</string>
+    <string name="attendees_empty_subtitle">上にメールアドレスを入力して最初の参加者を招待しましょう</string>
+    <string name="attendees_revoke">招待を取り消す</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">有効なメールアドレスを入力してください</string>
+    <string name="attendees_err_invite_failed">招待に失敗しました</string>
+    <string name="attendees_err_revoke_failed">取り消しに失敗しました</string>
+    <string name="attendees_err_load_failed">参加者の読み込みに失敗しました</string>
+    <string name="attendees_err_not_logged_in">ログインしていません</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">削除中…</string>
+    <string name="eventedit_confirm">OK</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">ログインしていません</string>
+    <string name="eventedit_err_save_failed">保存に失敗しました</string>
+    <string name="eventedit_err_delete_failed">削除に失敗しました</string>
+</resources>

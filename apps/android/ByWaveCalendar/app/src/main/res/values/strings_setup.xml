@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
+    <string name="pairscan_not_signed_in">未登录，请先登录后再扫码</string>
+    <string name="pairscan_approve_failed">批准失败</string>
+    <string name="pairscan_approving_title">正在批准…</string>
+    <string name="pairscan_approving_body">正在让电脑端登录，请稍候。</string>
+    <string name="pairscan_approved_title">✓ 已批准</string>
+    <string name="pairscan_approved_web_body">网页端正在自动登录。可以回到电脑浏览器前继续操作。</string>
+    <string name="pairscan_approved_desktop_body">电脑端正在自动登录。可以回到电脑前继续操作。</string>
+    <string name="pairscan_done">完成</string>
+    <string name="pairscan_failed_title">批准失败</string>
+    <string name="pairscan_close">关闭</string>
+    <string name="pairscan_unrecognized_title">二维码无法识别</string>
+    <string name="pairscan_unrecognized_body">这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。</string>
+    <string name="pairscan_unrecognized_hint">提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示一个二维码。</string>
+
+    <!-- MFA TOTP dialog (MfaDialog) -->
+    <string name="mfa_title">二次验证</string>
+    <string name="mfa_prompt">请输入认证器 App 上当前显示的 6 位验证码。</string>
+    <string name="mfa_placeholder">000000</string>
+    <string name="mfa_verify">验证</string>
+    <string name="mfa_cancel">取消</string>
+
+    <!-- Scanner screen (ScannerScreen) -->
+    <string name="scanner_cancel">取消</string>
+    <string name="scanner_camera_permission_steps">打开 设置 → 应用 → ByWave Calendar → 权限 开启相机权限</string>
+
+    <!-- Setup view model status / error strings (SetupViewModel) -->
+    <string name="setupvm_qr_invalid">二维码格式不正确</string>
+    <string name="setupvm_missing_token">服务器响应缺少 token</string>
+    <string name="setupvm_qr_login_failed">扫码登录失败，请改用账号密码或重新生成二维码</string>
+    <string name="setupvm_login_failed">登录失败，请检查服务器地址、网络、账号密码</string>
+    <string name="setupvm_mfa_invalid_length">请输入 6 位验证码</string>
+    <string name="setupvm_mfa_missing_token">MFA 响应缺少 token</string>
+    <string name="setupvm_mfa_code_error">验证码错误</string>
+
+    <!-- Global event search (SearchScreen) -->
+    <string name="search2_placeholder">搜索事件…</string>
+    <string name="search2_clear">清空</string>
+    <string name="search2_back">返回</string>
+    <string name="search2_empty_prompt_title">输入关键字开始搜索</string>
+    <string name="search2_empty_prompt_subtitle">搜索范围覆盖标题、备注和地点</string>
+    <string name="search2_no_results_title">没有匹配的事件</string>
+    <string name="search2_no_results_subtitle">换个关键字再试试</string>
+
+</resources>

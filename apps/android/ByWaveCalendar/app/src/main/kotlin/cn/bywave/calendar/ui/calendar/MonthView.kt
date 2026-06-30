@@ -36,8 +36,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.TextStyle
+import java.util.Locale
 
 @Composable
 fun MonthView(
@@ -95,7 +98,16 @@ private fun WeekdayHeader() {
         modifier = Modifier.fillMaxWidth().height(28.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (label in listOf("一", "二", "三", "四", "五", "六", "日")) {
+        // Mon-anchored narrow weekday labels in the device's locale
+        // (e.g. "M…S" / "一…日" / "月…日") — no hand-translated arrays.
+        val labels = remember {
+            val mondayFirst = listOf(
+                DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+                DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY,
+            )
+            mondayFirst.map { it.getDisplayName(TextStyle.NARROW, Locale.getDefault()) }
+        }
+        for (label in labels) {
             Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Text(
                     text = label,

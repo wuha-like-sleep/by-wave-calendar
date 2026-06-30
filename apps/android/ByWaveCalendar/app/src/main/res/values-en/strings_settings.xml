@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Shared -->
+    <string name="nav_back">Back</string>
+
+    <!-- SettingsScreen -->
+    <string name="settings2_section_calendars">Calendars</string>
+    <string name="settings2_manage_calendars">Manage calendars</string>
+    <string name="settings2_section_desktop">Desktop</string>
+    <string name="settings2_scan_desktop">Scan to sign in on computer</string>
+    <string name="settings2_scan_desktop_sub">Scan the QR code on your computer</string>
+    <string name="settings2_section_system">System</string>
+    <string name="settings2_go_system">Open system settings</string>
+    <string name="settings2_check_update">Check for updates</string>
+    <string name="settings2_checking">Checking…</string>
+    <string name="settings2_up_to_date">You\'re on the latest version (v%1$s)</string>
+    <string name="settings2_update_found">A new version is available — update prompt shown</string>
+    <string name="settings2_not_signed_in">Sign in to an account before checking for updates</string>
+    <string name="settings2_check_failed">Check failed: %1$s</string>
+    <string name="settings2_version">Version</string>
+
+    <!-- CalendarListScreen -->
+    <string name="callist_title">Manage calendars</string>
+    <string name="callist_empty">No calendars yet</string>
+    <string name="callist_edit">Edit</string>
+    <string name="callist_edit_title">Edit calendar</string>
+    <string name="callist_saved">Saved</string>
+    <string name="callist_save_failed">Save failed</string>
+
+    <!-- ProfileSwitcherDialog -->
+    <string name="profilesw_title">Switch account</string>
+    <string name="profilesw_no_profiles">No accounts added yet</string>
+    <string name="profilesw_add_account">Add another account</string>
+    <string name="profilesw_active_desc">Current account</string>
+</resources>

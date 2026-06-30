@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.model.LoginRequest
@@ -45,6 +46,10 @@ class SetupViewModel : ViewModel() {
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
     private val jsonLenient = Json { ignoreUnknownKeys = true }
 
+    /** Localized string via the Application context (BywaveApp is an
+     *  Application, so it's a valid Context — no AndroidViewModel needed). */
+    private fun str(resId: Int): String = BywaveApp.instance.getString(resId)
+
     fun onServerChange(v: String) = _state.update { it.copy(server = v, errorMessage = null) }
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
@@ -59,7 +64,7 @@ class SetupViewModel : ViewModel() {
         val payload = runCatching {
             jsonLenient.decodeFromString(PairPayload.serializer(), raw)
         }.getOrNull() ?: run {
-            _state.update { it.copy(errorMessage = "二维码格式不正确") }
+            _state.update { it.copy(errorMessage = str(R.string.setupvm_qr_invalid)) }
             return
         }
         // Pre-fill server URL + start the claim. The QR-pair flow doesn't
@@ -83,7 +88,7 @@ class SetupViewModel : ViewModel() {
                 val email = resp.userEmail.orEmpty()
                 completeLogin(payload.url, email, resp) ?: run {
                     _state.update {
-                        it.copy(busy = false, errorMessage = "服务器响应缺少 token")
+                        it.copy(busy = false, errorMessage = str(R.string.setupvm_missing_token))
                     }
                     return@launch
                 }
@@ -94,7 +99,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = e.localizedMessage ?: "扫码登录失败，请改用账号密码或重新生成二维码",
+                        errorMessage = e.localizedMessage ?: str(R.string.setupvm_qr_login_failed),
                     )
                 }
             }
@@ -128,7 +133,7 @@ class SetupViewModel : ViewModel() {
                 }
 
                 completeLogin(server, s.email, resp) ?: run {
-                    _state.update { it.copy(busy = false, errorMessage = "服务器响应缺少 token") }
+                    _state.update { it.copy(busy = false, errorMessage = str(R.string.setupvm_missing_token)) }
                     return@launch
                 }
                 _state.update { it.copy(busy = false, signedIn = true) }
@@ -136,7 +141,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = e.localizedMessage ?: "登录失败，请检查服务器地址、网络、账号密码",
+                        errorMessage = e.localizedMessage ?: str(R.string.setupvm_login_failed),
                     )
                 }
             }
@@ -146,7 +151,7 @@ class SetupViewModel : ViewModel() {
     fun verifyMfa(code: String) {
         val token = _state.value.mfaToken ?: return
         if (code.length != 6 || code.any { !it.isDigit() }) {
-            _state.update { it.copy(errorMessage = "请输入 6 位验证码") }
+            _state.update { it.copy(errorMessage = str(R.string.setupvm_mfa_invalid_length)) }
             return
         }
         _state.update { it.copy(busy = true, errorMessage = null) }
@@ -157,13 +162,13 @@ class SetupViewModel : ViewModel() {
                 val api = ApiClient.forSetup(server)
                 val resp = api.verifyMfa(MfaVerifyRequest(mfaToken = token, code = code))
                 completeLogin(server, _state.value.email, resp) ?: run {
-                    _state.update { it.copy(busy = false, errorMessage = "MFA 响应缺少 token") }
+                    _state.update { it.copy(busy = false, errorMessage = str(R.string.setupvm_mfa_missing_token)) }
                     return@launch
                 }
                 _state.update { it.copy(busy = false, signedIn = true, mfaToken = null) }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(busy = false, errorMessage = e.localizedMessage ?: "验证码错误")
+                    it.copy(busy = false, errorMessage = e.localizedMessage ?: str(R.string.setupvm_mfa_code_error))
                 }
             }
         }

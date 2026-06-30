@@ -55,10 +55,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.event.EventActionsSheet
 import cn.bywave.calendar.ui.event.EventDetailSheet
@@ -105,18 +107,18 @@ fun CalendarScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("日历") },
+                title = { Text(stringResource(R.string.calendar_title)) },
                 navigationIcon = {
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "设置")
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                 },
                 actions = {
                     IconButton(onClick = onOpenSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "搜索")
+                        Icon(Icons.Default.Search, contentDescription = stringResource(R.string.cal_cd_search))
                     }
                     IconButton(onClick = { vm.reload() }, enabled = !state.loading) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cal_cd_refresh))
                     }
                     // Avatar badge — opens the profile switcher. Shows
                     // a small green dot when there's more than one
@@ -132,7 +134,7 @@ fun CalendarScreen(
                             .size(Sizing.minTouchTarget)
                             .clip(CircleShape)
                             .clickable(
-                                onClickLabel = "切换账号",
+                                onClickLabel = stringResource(R.string.cal_switch_account),
                             ) { showSwitcher = true },
                         contentAlignment = Alignment.Center,
                     ) {
@@ -175,7 +177,7 @@ fun CalendarScreen(
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onCreateEvent()
             }) {
-                Icon(Icons.Default.Add, contentDescription = "新建事件")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.event_new))
             }
         },
     ) { innerPadding ->
@@ -266,17 +268,17 @@ fun CalendarScreen(
     if (pd != null) {
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除事件？") },
-            text = { Text("「${pd.summary}」将被永久删除，此操作不可恢复。") },
+            title = { Text(stringResource(R.string.event_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.cal_delete_message, pd.summary)) },
             confirmButton = {
                 TextButton(onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     pendingDelete = null
                     vm.deleteEvent(pd.id)
-                }) { Text("删除") }
+                }) { Text(stringResource(R.string.action_delete)) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -331,7 +333,11 @@ private fun CalendarBody(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            val options = listOf(ViewMode.Day to "日", ViewMode.Week to "周", ViewMode.Month to "月")
+            val options = listOf(
+                ViewMode.Day to stringResource(R.string.calendar_day),
+                ViewMode.Week to stringResource(R.string.calendar_week),
+                ViewMode.Month to stringResource(R.string.calendar_month),
+            )
             options.forEachIndexed { index, (mode, label) ->
                 SegmentedButton(
                     selected = state.mode == mode,
@@ -349,7 +355,7 @@ private fun CalendarBody(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onPrev) {
-                Icon(Icons.Default.ChevronLeft, contentDescription = "上一个")
+                Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(R.string.cal_cd_prev))
             }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onToday) {
@@ -361,14 +367,14 @@ private fun CalendarBody(
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onNext) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "下一个")
+                Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.cal_cd_next))
             }
         }
 
         val statusText = when {
-            state.loading -> "同步中…"
+            state.loading -> stringResource(R.string.calendar_syncing)
             state.errorMessage != null -> state.errorMessage
-            else -> "已同步"
+            else -> stringResource(R.string.calendar_synced)
         }
         Text(
             text = statusText,

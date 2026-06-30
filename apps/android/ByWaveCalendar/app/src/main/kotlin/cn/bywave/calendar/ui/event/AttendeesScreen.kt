@@ -38,9 +38,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import cn.bywave.calendar.R
 import cn.bywave.calendar.ui.components.EmptyState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,7 +62,7 @@ fun AttendeesScreen(
                 title = {
                     Column {
                         Text(
-                            text = "邀请人",
+                            text = stringResource(R.string.event_detail_attendees),
                             style = MaterialTheme.typography.titleMedium,
                         )
                         if (eventTitle.isNotBlank()) {
@@ -75,7 +77,7 @@ fun AttendeesScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.attendees_back))
                     }
                 },
             )
@@ -88,7 +90,7 @@ fun AttendeesScreen(
 
             // Invite input row
             Text(
-                text = "邀请新参与者",
+                text = stringResource(R.string.attendees_invite_section),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -113,7 +115,7 @@ fun AttendeesScreen(
                     if (state.sending) CircularProgressIndicator(
                         modifier = Modifier.size(18.dp), strokeWidth = 2.dp,
                     )
-                    else Text("邀请")
+                    else Text(stringResource(R.string.attendees_invite_button))
                 }
             }
             val errMsg = state.errorMessage  // delegated state doesn't smart-cast
@@ -131,7 +133,7 @@ fun AttendeesScreen(
 
             // Current attendees list
             Text(
-                text = "当前参与者 (${state.attendees.size})",
+                text = stringResource(R.string.attendees_current_count, state.attendees.size),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp),
@@ -144,8 +146,8 @@ fun AttendeesScreen(
             } else if (state.attendees.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.GroupAdd,
-                    title = "还没有人",
-                    subtitle = "在上方输入邮箱邀请第一位参与者",
+                    title = stringResource(R.string.attendees_empty_title),
+                    subtitle = stringResource(R.string.attendees_empty_subtitle),
                 )
             } else {
                 LazyColumn(
@@ -166,7 +168,7 @@ fun AttendeesScreen(
                             IconButton(onClick = { vm.revoke(email) }) {
                                 Icon(
                                     Icons.Default.PersonRemove,
-                                    contentDescription = "撤销邀请",
+                                    contentDescription = stringResource(R.string.attendees_revoke),
                                     tint = MaterialTheme.colorScheme.error,
                                 )
                             }

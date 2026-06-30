@@ -29,8 +29,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.components.EmptyState
@@ -50,8 +52,9 @@ fun DayView(
     if (events.isEmpty()) {
         EmptyState(
             icon = Icons.Outlined.EventNote,
-            title = if (anchor == LocalDate.now()) "今天没有事件" else "无事件",
-            subtitle = "点按右下角 + 新建一个事件",
+            title = if (anchor == LocalDate.now()) stringResource(R.string.calendar_no_events_today)
+                    else stringResource(R.string.calendar_no_events),
+            subtitle = stringResource(R.string.day_empty_subtitle),
         )
         return
     }
@@ -108,7 +111,8 @@ private fun EventRow(
                 maxLines = 2,
             )
             Text(
-                text = formatTimeRange(event),
+                text = if (event.allDay) stringResource(R.string.event_allday)
+                       else formatTimeRange(event),
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )

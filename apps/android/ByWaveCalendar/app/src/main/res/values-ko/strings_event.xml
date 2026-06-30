@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 한국어 번역(이벤트 관련 문자열). -->
+<resources>
+    <!-- RecurringScopePicker -->
+    <string name="scope_save_title">반복 일정 저장</string>
+    <string name="scope_delete_title">반복 일정 삭제</string>
+    <string name="scope_save_subtitle">반복 일정입니다. 저장 범위를 선택하세요:</string>
+    <string name="scope_delete_subtitle">반복 일정입니다. 삭제 범위를 선택하세요:</string>
+    <string name="scope_this_only">이 일정만</string>
+    <string name="scope_this_only_edit">이번만 변경</string>
+    <string name="scope_this_only_delete">이번만 삭제</string>
+    <string name="scope_this_future">이 일정 및 이후</string>
+    <string name="scope_this_future_edit">이번 및 이후 변경</string>
+    <string name="scope_this_future_delete">이번 및 이후 삭제</string>
+    <string name="scope_series">전체 시리즈</string>
+    <string name="scope_series_edit">전체 시리즈 변경</string>
+    <string name="scope_series_delete">전체 시리즈 삭제</string>
+
+    <!-- EventActionsSheet -->
+    <string name="eventactions_duplicate">새 일정으로 복사</string>
+
+    <!-- AttendeesScreen -->
+    <string name="attendees_back">뒤로</string>
+    <string name="attendees_invite_section">새 참석자 초대</string>
+    <string name="attendees_invite_button">초대</string>
+    <string name="attendees_current_count">현재 참석자 (%1$d)</string>
+    <string name="attendees_empty_title">아직 아무도 없습니다</string>
+    <string name="attendees_empty_subtitle">위에 이메일을 입력해 첫 참석자를 초대하세요</string>
+    <string name="attendees_revoke">초대 취소</string>
+
+    <!-- AttendeesViewModel -->
+    <string name="attendees_err_invalid_email">유효한 이메일을 입력하세요</string>
+    <string name="attendees_err_invite_failed">초대에 실패했습니다</string>
+    <string name="attendees_err_revoke_failed">취소에 실패했습니다</string>
+    <string name="attendees_err_load_failed">참석자를 불러오지 못했습니다</string>
+    <string name="attendees_err_not_logged_in">로그인되지 않음</string>
+
+    <!-- EventEditScreen -->
+    <string name="eventedit_deleting">삭제 중…</string>
+    <string name="eventedit_confirm">확인</string>
+
+    <!-- EventEditViewModel -->
+    <string name="eventedit_err_not_logged_in">로그인되지 않음</string>
+    <string name="eventedit_err_save_failed">저장에 실패했습니다</string>
+    <string name="eventedit_err_delete_failed">삭제에 실패했습니다</string>
+</resources>

@@ -131,7 +131,7 @@ fun SettingsScreen(
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.nav_back))
                     }
                 },
             )
@@ -316,9 +316,9 @@ fun SettingsScreen(
             // Calendars (v0.8.2) — rename / change timezone. Server's
             // PATCH /calendars/:id supported this all along; the missing
             // UI was the only reason "导入的日历" names were stuck.
-            Section(title = "日历") {
+            Section(title = stringResource(R.string.settings2_section_calendars)) {
                 ActionRow(
-                    label = "管理日历",
+                    label = stringResource(R.string.settings2_manage_calendars),
                     onClick = onManageCalendars,
                     trailingIcon = Icons.Default.ChevronRight,
                 )
@@ -337,22 +337,22 @@ fun SettingsScreen(
             // dedicated APP entry. Phone-to-phone pairing happens during
             // initial setup (the SetupScreen), which logged-in users can
             // also reach via "添加账号" in the profile switcher.
-            Section(title = "桌面端") {
+            Section(title = stringResource(R.string.settings2_section_desktop)) {
                 ActionRow(
                     icon = Icons.Default.QrCodeScanner,
-                    label = "扫码登录电脑",
-                    trailing = "扫描电脑端二维码",
+                    label = stringResource(R.string.settings2_scan_desktop),
+                    trailing = stringResource(R.string.settings2_scan_desktop_sub),
                     onClick = onScanDesktopPair,
                     trailingIcon = Icons.Default.ChevronRight,
                 )
             }
 
             // System
-            Section(title = "系统") {
+            Section(title = stringResource(R.string.settings2_section_system)) {
                 ActionRow(
                     icon = Icons.Default.Language,
                     label = stringResource(R.string.settings_language),
-                    trailing = "去系统设置",
+                    trailing = stringResource(R.string.settings2_go_system),
                     onClick = {
                         // App-specific language settings (Android 13+) —
                         // falls back to general APP info page on older.
@@ -410,7 +410,7 @@ fun SettingsScreen(
                 // nothing when there's no newer version, and people
                 // wonder if their tap registered.
                 ActionRow(
-                    label = if (checkingForUpdate) "正在检查…" else "检查更新",
+                    label = if (checkingForUpdate) stringResource(R.string.settings2_checking) else stringResource(R.string.settings2_check_update),
                     onClick = if (checkingForUpdate) ({}) else ({
                         UpdateChecker.clearDismissal()
                         checkingForUpdate = true
@@ -419,13 +419,13 @@ fun SettingsScreen(
                                 val result = UpdateChecker.checkNow(context.applicationContext)
                                 val msg = when (result) {
                                     is cn.bywave.calendar.update.UserCheckResult.UpToDate ->
-                                        "已是最新版 (v${BuildConfig.VERSION_NAME})"
+                                        context.getString(R.string.settings2_up_to_date, BuildConfig.VERSION_NAME)
                                     is cn.bywave.calendar.update.UserCheckResult.UpdateFound ->
-                                        "发现新版本，已弹出更新提示"
+                                        context.getString(R.string.settings2_update_found)
                                     is cn.bywave.calendar.update.UserCheckResult.NotSignedIn ->
-                                        "请先登录任一账号再检查更新"
+                                        context.getString(R.string.settings2_not_signed_in)
                                     is cn.bywave.calendar.update.UserCheckResult.Failed ->
-                                        "检查失败：${result.message}"
+                                        context.getString(R.string.settings2_check_failed, result.message)
                                 }
                                 snackbarHostState.showSnackbar(msg)
                             } finally {
@@ -441,7 +441,7 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("版本", modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.settings2_version), modifier = Modifier.weight(1f))
                     Text(
                         text = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                         color = mutedTextColor(),

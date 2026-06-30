@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
+    <string name="pairscan_not_signed_in">尚未登入，請先登入後再掃碼</string>
+    <string name="pairscan_approve_failed">核准失敗</string>
+    <string name="pairscan_approving_title">正在核准…</string>
+    <string name="pairscan_approving_body">正在讓電腦端登入，請稍候。</string>
+    <string name="pairscan_approved_title">✓ 已核准</string>
+    <string name="pairscan_approved_web_body">網頁端正在自動登入。可以回到電腦瀏覽器前繼續操作。</string>
+    <string name="pairscan_approved_desktop_body">電腦端正在自動登入。可以回到電腦前繼續操作。</string>
+    <string name="pairscan_done">完成</string>
+    <string name="pairscan_failed_title">核准失敗</string>
+    <string name="pairscan_close">關閉</string>
+    <string name="pairscan_unrecognized_title">無法辨識此 QR 碼</string>
+    <string name="pairscan_unrecognized_body">這個 QR 碼不像登入碼。請確認掃描的是電腦端或網頁端的登入 QR 碼。</string>
+    <string name="pairscan_unrecognized_hint">提示：電腦端「登入 ByWave Calendar」或網頁 /login 的「掃碼登入」分頁都會顯示一個 QR 碼。</string>
+
+    <!-- MFA TOTP dialog (MfaDialog) -->
+    <string name="mfa_title">兩步驟驗證</string>
+    <string name="mfa_prompt">請輸入驗證器 App 上目前顯示的 6 位數驗證碼。</string>
+    <string name="mfa_placeholder">000000</string>
+    <string name="mfa_verify">驗證</string>
+    <string name="mfa_cancel">取消</string>
+
+    <!-- Scanner screen (ScannerScreen) -->
+    <string name="scanner_cancel">取消</string>
+    <string name="scanner_camera_permission_steps">開啟 設定 → 應用程式 → ByWave Calendar → 權限 開啟相機權限</string>
+
+    <!-- Setup view model status / error strings (SetupViewModel) -->
+    <string name="setupvm_qr_invalid">QR 碼格式不正確</string>
+    <string name="setupvm_missing_token">伺服器回應缺少 token</string>
+    <string name="setupvm_qr_login_failed">掃碼登入失敗，請改用帳號密碼或重新產生 QR 碼</string>
+    <string name="setupvm_login_failed">登入失敗，請檢查伺服器位址、網路、帳號密碼</string>
+    <string name="setupvm_mfa_invalid_length">請輸入 6 位數驗證碼</string>
+    <string name="setupvm_mfa_missing_token">MFA 回應缺少 token</string>
+    <string name="setupvm_mfa_code_error">驗證碼錯誤</string>
+
+    <!-- Global event search (SearchScreen) -->
+    <string name="search2_placeholder">搜尋事件…</string>
+    <string name="search2_clear">清除</string>
+    <string name="search2_back">返回</string>
+    <string name="search2_empty_prompt_title">輸入關鍵字開始搜尋</string>
+    <string name="search2_empty_prompt_subtitle">搜尋範圍涵蓋標題、備註和地點</string>
+    <string name="search2_no_results_title">沒有符合的事件</string>
+    <string name="search2_no_results_subtitle">換個關鍵字再試試</string>
+
+</resources>

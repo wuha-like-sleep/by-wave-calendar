@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
+    <string name="pairscan_not_signed_in">ログインしていません。先にログインしてからスキャンしてください</string>
+    <string name="pairscan_approve_failed">承認に失敗しました</string>
+    <string name="pairscan_approving_title">承認中…</string>
+    <string name="pairscan_approving_body">パソコンをログインさせています。しばらくお待ちください。</string>
+    <string name="pairscan_approved_title">✓ 承認しました</string>
+    <string name="pairscan_approved_web_body">ウェブ版が自動的にログインしています。パソコンのブラウザに戻って操作を続けられます。</string>
+    <string name="pairscan_approved_desktop_body">パソコンが自動的にログインしています。パソコンに戻って操作を続けられます。</string>
+    <string name="pairscan_done">完了</string>
+    <string name="pairscan_failed_title">承認に失敗しました</string>
+    <string name="pairscan_close">閉じる</string>
+    <string name="pairscan_unrecognized_title">QRコードを認識できません</string>
+    <string name="pairscan_unrecognized_body">これはログインコードではないようです。パソコン版またはウェブ版のログインQRコードをスキャンしているか確認してください。</string>
+    <string name="pairscan_unrecognized_hint">ヒント：パソコン版の「ByWave Calendar にログイン」やウェブ /login の「QRでログイン」タブにQRコードが表示されます。</string>
+
+    <!-- MFA TOTP dialog (MfaDialog) -->
+    <string name="mfa_title">二段階認証</string>
+    <string name="mfa_prompt">認証アプリに表示されている現在の6桁のコードを入力してください。</string>
+    <string name="mfa_placeholder">000000</string>
+    <string name="mfa_verify">確認</string>
+    <string name="mfa_cancel">キャンセル</string>
+
+    <!-- Scanner screen (ScannerScreen) -->
+    <string name="scanner_cancel">キャンセル</string>
+    <string name="scanner_camera_permission_steps">設定 → アプリ → ByWave Calendar → 権限 を開いてカメラへのアクセスを許可してください</string>
+
+    <!-- Setup view model status / error strings (SetupViewModel) -->
+    <string name="setupvm_qr_invalid">QRコードの形式が正しくありません</string>
+    <string name="setupvm_missing_token">サーバーの応答にトークンがありません</string>
+    <string name="setupvm_qr_login_failed">QRログインに失敗しました。アカウントとパスワードを使うか、QRコードを再生成してください</string>
+    <string name="setupvm_login_failed">ログインに失敗しました。サーバーアドレス、ネットワーク、アカウントとパスワードを確認してください</string>
+    <string name="setupvm_mfa_invalid_length">6桁のコードを入力してください</string>
+    <string name="setupvm_mfa_missing_token">MFAの応答にトークンがありません</string>
+    <string name="setupvm_mfa_code_error">コードが正しくありません</string>
+
+    <!-- Global event search (SearchScreen) -->
+    <string name="search2_placeholder">予定を検索…</string>
+    <string name="search2_clear">クリア</string>
+    <string name="search2_back">戻る</string>
+    <string name="search2_empty_prompt_title">キーワードを入力して検索を開始</string>
+    <string name="search2_empty_prompt_subtitle">タイトル、メモ、場所を検索します</string>
+    <string name="search2_no_results_title">一致する予定がありません</string>
+    <string name="search2_no_results_subtitle">別のキーワードで試してください</string>
+
+</resources>

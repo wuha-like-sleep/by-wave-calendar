@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
@@ -69,6 +70,8 @@ import cn.bywave.calendar.ui.theme.Radii
 import cn.bywave.calendar.ui.theme.Sizing
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,7 +150,7 @@ private fun EventDetailContent(
         DetailRow(
             icon = Icons.Default.Schedule,
             label = stringResource(R.string.event_detail_time),
-            value = formatTimeBlock(event, stringResource(R.string.event_allday)),
+            value = formatTimeBlock(event, LocalConfiguration.current.locales[0], stringResource(R.string.event_allday)),
         )
 
         if (!event.location.isNullOrBlank()) {
@@ -378,15 +381,23 @@ private fun DetailRow(icon: ImageVector, label: String, value: String) {
     }
 }
 
-private val FULL_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日 HH:mm")
-    .withZone(ZoneId.systemDefault())
-private val DAY_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")
-    .withZone(ZoneId.systemDefault())
+// Locale-aware date/time so a non-Chinese app language renders e.g.
+// "Jul 2, 2026, 2:30 PM" / "2026年7月2日 14:30" instead of a hardcoded
+// Chinese pattern. Follows the in-app language (AppCompat per-app locale
+// → Configuration.locales), passed in from the composable.
+private fun dateTimeFmt(locale: Locale): DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withLocale(locale).withZone(ZoneId.systemDefault())
+private fun dateFmt(locale: Locale): DateTimeFormatter =
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+        .withLocale(locale).withZone(ZoneId.systemDefault())
 
-private fun formatTimeBlock(event: EventDTO, allDayLabel: String): String {
+private fun formatTimeBlock(event: EventDTO, locale: Locale, allDayLabel: String): String {
     val s = parseInstant(event.startsAt)
     val e = parseInstant(event.endsAt)
     if (s == null || e == null) return "—"
-    if (event.allDay) return "${DAY_FMT.format(s)}（$allDayLabel）"
-    return "${FULL_FMT.format(s)}\n至 ${FULL_FMT.format(e)}"
+    if (event.allDay) return "${dateFmt(locale).format(s)} ($allDayLabel)"
+    val fmt = dateTimeFmt(locale)
+    // En-dash range separator — language-neutral, needs no translation.
+    return "${fmt.format(s)}\n– ${fmt.format(e)}"
 }
