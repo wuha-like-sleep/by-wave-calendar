@@ -195,4 +195,15 @@
     <string name="booking_deleted">Enlace de reserva eliminado</string>
     <string name="booking_delete_failed">No se pudo eliminar el enlace de reserva</string>
     <string name="booking_update_failed">No se pudo actualizar el enlace de reserva</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">Evento recurrente</string>
+    <string name="event_detail_time">Hora</string>
+    <string name="event_detail_attendees_count">Invitados (%1$d)</string>
+    <string name="event_detail_attendees_more">%1$d más…</string>
+    <string name="event_detail_attendees">Invitados</string>
+    <string name="event_detail_attendees_empty">Sin invitados · toca para añadir</string>
+    <string name="event_detail_rrule">Regla de repetición</string>
+    <string name="event_detail_edit">Editar</string>
+    <string name="copied_to_clipboard">Copiado</string>
 </resources>

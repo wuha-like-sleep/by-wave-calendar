@@ -195,4 +195,15 @@
     <string name="booking_deleted">予約リンクを削除しました</string>
     <string name="booking_delete_failed">予約リンクを削除できませんでした</string>
     <string name="booking_update_failed">予約リンクを更新できませんでした</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">繰り返しの予定</string>
+    <string name="event_detail_time">時間</string>
+    <string name="event_detail_attendees_count">参加者（%1$d 人）</string>
+    <string name="event_detail_attendees_more">他 %1$d 件…</string>
+    <string name="event_detail_attendees">参加者</string>
+    <string name="event_detail_attendees_empty">招待者なし · タップして追加</string>
+    <string name="event_detail_rrule">繰り返しルール</string>
+    <string name="event_detail_edit">編集</string>
+    <string name="copied_to_clipboard">コピーしました</string>
 </resources>

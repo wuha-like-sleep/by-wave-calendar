@@ -195,4 +195,15 @@
     <string name="booking_deleted">Buchungslink gelöscht</string>
     <string name="booking_delete_failed">Buchungslink konnte nicht gelöscht werden</string>
     <string name="booking_update_failed">Buchungslink konnte nicht aktualisiert werden</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">Wiederkehrender Termin</string>
+    <string name="event_detail_time">Zeit</string>
+    <string name="event_detail_attendees_count">Teilnehmer (%1$d)</string>
+    <string name="event_detail_attendees_more">%1$d weitere…</string>
+    <string name="event_detail_attendees">Teilnehmer</string>
+    <string name="event_detail_attendees_empty">Keine Teilnehmer · zum Hinzufügen tippen</string>
+    <string name="event_detail_rrule">Wiederholungsregel</string>
+    <string name="event_detail_edit">Bearbeiten</string>
+    <string name="copied_to_clipboard">Kopiert</string>
 </resources>

@@ -200,4 +200,15 @@ to match the development locale.
     <string name="booking_deleted">Booking link deleted</string>
     <string name="booking_delete_failed">Couldn\'t delete booking link</string>
     <string name="booking_update_failed">Couldn\'t update booking link</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">Recurring event</string>
+    <string name="event_detail_time">Time</string>
+    <string name="event_detail_attendees_count">Attendees (%1$d)</string>
+    <string name="event_detail_attendees_more">%1$d more…</string>
+    <string name="event_detail_attendees">Attendees</string>
+    <string name="event_detail_attendees_empty">No attendees · tap to add</string>
+    <string name="event_detail_rrule">Recurrence rule</string>
+    <string name="event_detail_edit">Edit</string>
+    <string name="copied_to_clipboard">Copied</string>
 </resources>

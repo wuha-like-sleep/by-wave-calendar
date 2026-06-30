@@ -205,4 +205,15 @@
     <string name="booking_deleted">预约链接已删除</string>
     <string name="booking_delete_failed">删除预约链接失败</string>
     <string name="booking_update_failed">更新预约链接失败</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">重复事件</string>
+    <string name="event_detail_time">时间</string>
+    <string name="event_detail_attendees_count">邀请人（%1$d 人）</string>
+    <string name="event_detail_attendees_more">还有 %1$d 个…</string>
+    <string name="event_detail_attendees">邀请人</string>
+    <string name="event_detail_attendees_empty">尚未邀请 · 点击添加</string>
+    <string name="event_detail_rrule">重复规则</string>
+    <string name="event_detail_edit">编辑</string>
+    <string name="copied_to_clipboard">已复制</string>
 </resources>

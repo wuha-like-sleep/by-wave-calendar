@@ -141,6 +141,9 @@ struct EventDetailView: View {
                         Spacer()
                         Button {
                             UIPasteboard.general.string = password
+                            // Success haptic so the copy registers without a toast,
+                            // matching the feedback other copy actions give.
+                            UINotificationFeedbackGenerator().notificationOccurred(.success)
                         } label: {
                             Image(systemName: "doc.on.doc")
                                 .foregroundStyle(.tint)

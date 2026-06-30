@@ -205,4 +205,15 @@
     <string name="booking_deleted">預約連結已刪除</string>
     <string name="booking_delete_failed">無法刪除預約連結</string>
     <string name="booking_update_failed">無法更新預約連結</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">重複事件</string>
+    <string name="event_detail_time">時間</string>
+    <string name="event_detail_attendees_count">邀請人（%1$d 人）</string>
+    <string name="event_detail_attendees_more">還有 %1$d 個…</string>
+    <string name="event_detail_attendees">邀請人</string>
+    <string name="event_detail_attendees_empty">尚未邀請 · 點擊新增</string>
+    <string name="event_detail_rrule">重複規則</string>
+    <string name="event_detail_edit">編輯</string>
+    <string name="copied_to_clipboard">已複製</string>
 </resources>

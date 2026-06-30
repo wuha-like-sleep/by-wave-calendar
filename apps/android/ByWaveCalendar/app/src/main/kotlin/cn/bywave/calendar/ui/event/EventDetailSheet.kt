@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
@@ -50,10 +51,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.calendarColor
@@ -96,6 +101,7 @@ private fun EventDetailContent(
     onOpenAttendees: () -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
 
@@ -132,16 +138,24 @@ private fun EventDetailContent(
             if (event.rrule != null) {
                 Icon(
                     Icons.Default.Repeat,
-                    contentDescription = "重复事件",
+                    contentDescription = stringResource(R.string.event_detail_recurring_badge),
                     tint = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }
 
-        DetailRow(icon = Icons.Default.Schedule, label = "时间", value = formatTimeBlock(event))
+        DetailRow(
+            icon = Icons.Default.Schedule,
+            label = stringResource(R.string.event_detail_time),
+            value = formatTimeBlock(event, stringResource(R.string.event_allday)),
+        )
 
         if (!event.location.isNullOrBlank()) {
-            DetailRow(icon = Icons.Default.LocationOn, label = "地点", value = event.location)
+            DetailRow(
+                icon = Icons.Default.LocationOn,
+                label = stringResource(R.string.event_location),
+                value = event.location,
+            )
         }
 
         if (!event.extra?.url.isNullOrBlank()) {
@@ -169,7 +183,7 @@ private fun EventDetailContent(
                 Spacer(Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "链接",
+                        text = stringResource(R.string.event_link),
                         style = MaterialTheme.typography.labelSmall,
                         color = mutedTextColor(),
                     )
@@ -190,11 +204,40 @@ private fun EventDetailContent(
         }
 
         if (!event.extra?.meetingPassword.isNullOrBlank()) {
-            DetailRow(
-                icon = Icons.Default.Lock,
-                label = "入会密码",
-                value = event.extra!!.meetingPassword!!,
-            )
+            val passcode = event.extra!!.meetingPassword!!
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(Radii.fieldShape)
+                    .clickable {
+                        clipboard.setText(AnnotatedString(passcode))
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.copied_to_clipboard),
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                    .heightIn(min = Sizing.minTouchTarget)
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, tint = mutedTextColor())
+                Spacer(Modifier.size(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.event_meeting_password),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mutedTextColor(),
+                    )
+                    Text(text = passcode, style = MaterialTheme.typography.bodyMedium)
+                }
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    tint = mutedTextColor(),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
 
         val attendees = event.extra?.attendees.orEmpty()
@@ -215,7 +258,7 @@ private fun EventDetailContent(
                 Spacer(Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "邀请人（${attendees.size} 人）",
+                        text = stringResource(R.string.event_detail_attendees_count, attendees.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = mutedTextColor(),
                     )
@@ -224,7 +267,7 @@ private fun EventDetailContent(
                     }
                     if (attendees.size > 3) {
                         Text(
-                            text = "还有 ${attendees.size - 3} 个…",
+                            text = stringResource(R.string.event_detail_attendees_more, attendees.size - 3),
                             style = MaterialTheme.typography.labelSmall,
                             color = mutedTextColor(),
                         )
@@ -252,12 +295,12 @@ private fun EventDetailContent(
                 Spacer(Modifier.size(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "邀请人",
+                        text = stringResource(R.string.event_detail_attendees),
                         style = MaterialTheme.typography.labelSmall,
                         color = mutedTextColor(),
                     )
                     Text(
-                        text = "尚未邀请 · 点击添加",
+                        text = stringResource(R.string.event_detail_attendees_empty),
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedTextColor(),
                     )
@@ -274,7 +317,7 @@ private fun EventDetailContent(
         if (!event.description.isNullOrBlank()) {
             Column {
                 Text(
-                    text = "备注",
+                    text = stringResource(R.string.event_description),
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
                 )
@@ -289,7 +332,7 @@ private fun EventDetailContent(
         if (!event.rrule.isNullOrBlank()) {
             Column {
                 Text(
-                    text = "重复规则",
+                    text = stringResource(R.string.event_detail_rrule),
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
                 )
@@ -312,7 +355,7 @@ private fun EventDetailContent(
         ) {
             Icon(androidx.compose.material.icons.Icons.Default.Edit, contentDescription = null)
             Spacer(Modifier.size(8.dp))
-            Text("编辑")
+            Text(stringResource(R.string.event_detail_edit))
         }
 
         Spacer(Modifier.height(8.dp))
@@ -340,10 +383,10 @@ private val FULL_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日 HH:mm")
 private val DAY_FMT = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")
     .withZone(ZoneId.systemDefault())
 
-private fun formatTimeBlock(event: EventDTO): String {
+private fun formatTimeBlock(event: EventDTO, allDayLabel: String): String {
     val s = parseInstant(event.startsAt)
     val e = parseInstant(event.endsAt)
     if (s == null || e == null) return "—"
-    if (event.allDay) return "${DAY_FMT.format(s)}（全天）"
+    if (event.allDay) return "${DAY_FMT.format(s)}（$allDayLabel）"
     return "${FULL_FMT.format(s)}\n至 ${FULL_FMT.format(e)}"
 }

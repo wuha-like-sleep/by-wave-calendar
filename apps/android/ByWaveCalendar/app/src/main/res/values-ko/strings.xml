@@ -195,4 +195,15 @@
     <string name="booking_deleted">예약 링크가 삭제되었습니다</string>
     <string name="booking_delete_failed">예약 링크를 삭제할 수 없습니다</string>
     <string name="booking_update_failed">예약 링크를 업데이트할 수 없습니다</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">반복 일정</string>
+    <string name="event_detail_time">시간</string>
+    <string name="event_detail_attendees_count">참석자 (%1$d명)</string>
+    <string name="event_detail_attendees_more">외 %1$d명…</string>
+    <string name="event_detail_attendees">참석자</string>
+    <string name="event_detail_attendees_empty">참석자 없음 · 탭하여 추가</string>
+    <string name="event_detail_rrule">반복 규칙</string>
+    <string name="event_detail_edit">편집</string>
+    <string name="copied_to_clipboard">복사됨</string>
 </resources>

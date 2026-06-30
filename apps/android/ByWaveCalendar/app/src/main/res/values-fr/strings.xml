@@ -195,4 +195,15 @@
     <string name="booking_deleted">Lien de réservation supprimé</string>
     <string name="booking_delete_failed">Impossible de supprimer le lien de réservation</string>
     <string name="booking_update_failed">Impossible de mettre à jour le lien de réservation</string>
+
+    <!-- Event detail sheet -->
+    <string name="event_detail_recurring_badge">Événement récurrent</string>
+    <string name="event_detail_time">Heure</string>
+    <string name="event_detail_attendees_count">Invités (%1$d)</string>
+    <string name="event_detail_attendees_more">%1$d de plus…</string>
+    <string name="event_detail_attendees">Invités</string>
+    <string name="event_detail_attendees_empty">Aucun invité · appuyez pour ajouter</string>
+    <string name="event_detail_rrule">Règle de récurrence</string>
+    <string name="event_detail_edit">Modifier</string>
+    <string name="copied_to_clipboard">Copié</string>
 </resources>
