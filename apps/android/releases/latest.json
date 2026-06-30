@@ -1,13 +1,13 @@
 {
-  "versionCode": 15,
-  "versionName": "0.9.3",
-  "filename": "bywave-calendar-0.9.3.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.3/bywave-calendar-0.9.3.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.9.3/bywave-calendar-0.9.3.apk",
-  "sha256": "2ed74344199173102a15a8ef095cc2a832446dfe97c321b94adb0c658e5150c4",
-  "sizeBytes": 36937207,
-  "releasedAt": "2026-05-30T11:28:57Z",
-  "notes": "Android v0.9.3\n\n• 6 种次要语言（繁体中文 / 日本語 / 한국어 / Español / Français / Deutsch）补齐到 100%，预约链接等界面不再回退英文\n• 含 v0.9.2 的预约链接管理、创建事件幂等（根治重复）、自动更新 GitHub 兜底",
+  "versionCode": 16,
+  "versionName": "0.10.0",
+  "filename": "bywave-calendar-0.10.0.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.0/bywave-calendar-0.10.0.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.0/bywave-calendar-0.10.0.apk",
+  "sha256": "169a11ff6677b5babb927797ce6fefc59f2799dd8fb1172dea993c3c0a88249a",
+  "sizeBytes": 24826864,
+  "releasedAt": "2026-06-30T15:07:03Z",
+  "notes": "本次更新（v0.10.0）：\n• 新增「入会密码」：创建会议时可填写入会密码，详情页一键复制\n• 事件详情页完整多语言化（时间/地点/链接/邀请人等不再只显示中文）\n• 设置、日历、事件、扫码登录等页面系统性补齐多语言\n• 日期时间按所选语言本地化显示\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
