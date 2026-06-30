@@ -921,6 +921,24 @@
     });
   }
 
+  // The 入会密码 field is meeting-specific: only reveal it when 分类 = 会议.
+  // Toggled on modal open + on every category change. The save handler also
+  // drops the passcode unless category === "meeting", so a lingering value in
+  // the hidden input is never persisted for a non-meeting event.
+  function syncMeetingPasswordField() {
+    const form = $("#form-event");
+    if (!form) return;
+    const cat = form.querySelector('[name="category"]');
+    const wrap = form.querySelector("#field-meeting-password");
+    if (!cat || !wrap) return;
+    // Hidden for non-meetings — UNLESS a passcode is already set (e.g. an event
+    // created on a native client, which has no category picker), so an existing
+    // passcode is never silently hidden and then dropped on save.
+    const input = wrap.querySelector('[name="meetingPassword"]');
+    const hasValue = !!(input && input.value.trim());
+    wrap.classList.toggle("hidden", cat.value !== "meeting" && !hasValue);
+  }
+
   function openEventModal(payload) {
     const form = $("#form-event");
     form.reset();
@@ -955,7 +973,14 @@
     lastStartsAt = form.querySelector('[name="startsAt"]').value;
     lastStartsAtDate = form.querySelector('[name="startsAtDate"]').value;
     form.querySelector('[name="allDay"]').checked = !!payload.allDay;
-    form.querySelector('[name="category"]').value = payload.category || "";
+    const catSel = form.querySelector('[name="category"]');
+    catSel.value = payload.category || "";
+    // Bind the category→passcode-visibility listener once. The initial
+    // visibility sync runs further down, AFTER the passcode input is populated.
+    if (catSel && !catSel.dataset.mpBound) {
+      catSel.dataset.mpBound = "1";
+      catSel.addEventListener("change", syncMeetingPasswordField);
+    }
     // Attendees: hidden field holds the comma-joined list (preserved across
     // saves); summary text + manage link surface in the modal.
     const attendees = Array.isArray(payload.attendees) ? payload.attendees : [];
@@ -975,6 +1000,8 @@
     // Meeting join passcode (extra.meetingPassword).
     const pwInput = form.querySelector('[name="meetingPassword"]');
     if (pwInput) pwInput.value = payload.meetingPassword || "";
+    // Category + passcode are both set now → compute the field's visibility.
+    syncMeetingPasswordField();
     // Recurrence (RRULE) — preserve the stored rule if it's one of our presets.
     const rruleSelect = form.querySelector('[name="rrule"]');
     if (rruleSelect) {
