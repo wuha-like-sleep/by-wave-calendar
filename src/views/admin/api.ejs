@@ -282,6 +282,15 @@ curl -H "Authorization: Bearer &lt;keycloak_access_token&gt;" \
      <%= baseUrl %>/api/v1/events</pre>
     <div>· 令牌的 <code class="px-1 bg-slate-100 rounded">iss</code> 必须匹配某个已启用的 SSO 提供方,签名用其 JWKS 校验。</div>
     <div>· 普通用户令牌不需要 X-Account,只能读写自己账号。</div>
+
+    <div class="font-medium text-slate-700 mt-3">批量管理账号(仅服务端 client,<strong>不带 X-Account</strong>):</div>
+    <pre class="overflow-x-auto rounded bg-slate-50 border border-slate-200 p-3 font-mono"># 列出账号(把会议平台用户名册同步到 ByWave)
+curl -H "Authorization: Bearer &lt;service_token&gt;" "<%= baseUrl %>/api/v1/accounts?limit=200&q=keyword"
+# 主动开通账号(需勾选上方「自动开通账号」;已存在则返回 created:false)
+curl -X POST -H "Authorization: Bearer &lt;service_token&gt;" -H "Content-Type: application/json" \
+     -d '{"email":"u@example.com","displayName":"U"}' <%= baseUrl %>/api/v1/accounts</pre>
+    <div>· <code class="px-1 bg-slate-100 rounded">/api/v1/accounts</code> 只接受白名单<strong>服务端 client</strong> 令牌,普通用户令牌会被拒(防止有人列举/创建账号)。</div>
+    <div>· 日历变动会自动推送到你注册的 <a href="/admin/webhooks" class="underline">Webhook</a>(<code class="px-1 bg-slate-100 rounded">event.created/updated/deleted</code>),会议平台据此实时同步。</div>
   </div>
 </section>
 

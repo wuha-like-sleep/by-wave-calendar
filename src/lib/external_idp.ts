@@ -119,30 +119,36 @@ export type ExternalResolve =
   | { matched: true; user: schema.User; provider: string; serviceClient: string | null; provisioned: boolean }
   | { matched: true; user: null; provider: string | null; code: number; error: string };
 
-export async function resolveExternalIdpUser(token: string, req: FastifyRequest): Promise<ExternalResolve> {
-  // 1. Cheap unverified decode to read `iss` — no trust extended yet.
+// Shared token verification: decode → match enabled provider by iss → feature
+// gate → JWKS signature/iss/exp/alg → reject ID tokens → authorized-party. The
+// SINGLE source of truth used by both the per-user resolver and the
+// service-client (platform) path, so those security checks can never drift.
+type IdpVerified =
+  | { state: "not_idp" }
+  | { state: "rejected"; provider: string | null; code: number; error: string }
+  | { state: "ok"; provider: string; payload: Record<string, unknown>; serviceClient: string | null; isLoginClient: boolean };
+
+async function verifyIdpToken(token: string): Promise<IdpVerified> {
   let unverified: ReturnType<typeof decodeJwt>;
   try {
     unverified = decodeJwt(token);
   } catch {
-    return { matched: false };
+    return { state: "not_idp" };
   }
   const iss = typeof unverified.iss === "string" ? stripSlash(unverified.iss) : null;
-  if (!iss) return { matched: false };
+  if (!iss) return { state: "not_idp" };
 
   const provs = await enabledProviders();
   const prov = provs.find((p) => p.issuer === iss);
-  if (!prov) return { matched: false }; // not one of our IdPs → let device path try
+  if (!prov) return { state: "not_idp" }; // not one of our IdPs → caller falls through
 
-  // 2. Feature gate. Require BOTH the master third-party-API switch and the
-  //    external-IdP sub-toggle, so the「API」master switch is a single kill
-  //    switch for every Bearer integration.
+  // Feature gate — master「API」switch + the external-IdP sub-toggle.
   const settings = await getSettings();
   if (!settings.apiEnabled || !settings.idpApiEnabled) {
-    return { matched: true, user: null, provider: prov.slug, code: 403, error: "idp_api_disabled" };
+    return { state: "rejected", provider: prov.slug, code: 403, error: "idp_api_disabled" };
   }
 
-  // 3. Verify signature + iss + exp via the provider's JWKS.
+  // Verify signature + iss + exp via the provider's JWKS.
   let jwks = jwksByIssuer.get(iss);
   if (!jwks) {
     let jwksUri: string | undefined;
@@ -150,59 +156,82 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
       const conf = (await discoverOidc(prov.slug)) as { jwks_uri?: string };
       jwksUri = conf.jwks_uri;
     } catch {
-      return { matched: true, user: null, provider: prov.slug, code: 503, error: "idp_discovery_failed" };
+      return { state: "rejected", provider: prov.slug, code: 503, error: "idp_discovery_failed" };
     }
-    if (!jwksUri) return { matched: true, user: null, provider: prov.slug, code: 503, error: "idp_no_jwks" };
+    if (!jwksUri) return { state: "rejected", provider: prov.slug, code: 503, error: "idp_no_jwks" };
     jwks = createRemoteJWKSet(new URL(jwksUri));
     jwksByIssuer.set(iss, jwks);
   }
 
   let payload: Record<string, unknown>;
   try {
-    // clockTolerance absorbs small skew between Keycloak and this server so a
-    // freshly-issued / about-to-expire token isn't spuriously rejected.
+    // clockTolerance absorbs small skew between Keycloak and this server.
     const res = await jwtVerify(token, jwks, { issuer: iss, algorithms: IDP_ALGS, clockTolerance: 30 });
     payload = res.payload as Record<string, unknown>;
   } catch {
-    return { matched: true, user: null, provider: prov.slug, code: 401, error: "idp_token_invalid" };
+    return { state: "rejected", provider: prov.slug, code: 401, error: "idp_token_invalid" };
   }
-  // Only ACCESS tokens are valid API credentials. Reject ID tokens (typ:"ID"):
-  // they're minted for the client, not as a bearer credential to a resource
-  // server — accepting them would needlessly widen the credential surface.
+  // Only ACCESS tokens are valid API credentials — reject ID tokens (typ:"ID").
   if (payload.typ === "ID") {
-    return { matched: true, user: null, provider: prov.slug, code: 401, error: "idp_id_token_rejected" };
+    return { state: "rejected", provider: prov.slug, code: 401, error: "idp_id_token_rejected" };
   }
 
-  // 4. Authorized-party check. The token must speak for either the provider's
-  //    own login client (ordinary user token) or a configured service client.
+  // Authorized-party check: login client (ordinary user) or a configured
+  // service client. Anything else from the same realm is rejected.
   const serviceClients = parseClientList(settings.idpApiServiceClients);
   const clientIds = tokenClientIds(payload);
-  const matchedServiceClient = clientIds.find((c) => serviceClients.has(c)) ?? null;
-  const isServiceClient = matchedServiceClient !== null;
+  const serviceClient = clientIds.find((c) => serviceClients.has(c)) ?? null;
   const isLoginClient = clientIds.includes(prov.clientId);
-  if (!isServiceClient && !isLoginClient) {
-    return { matched: true, user: null, provider: prov.slug, code: 403, error: "idp_audience_rejected" };
+  if (!serviceClient && !isLoginClient) {
+    return { state: "rejected", provider: prov.slug, code: 403, error: "idp_audience_rejected" };
   }
+  return { state: "ok", provider: prov.slug, payload, serviceClient, isLoginClient };
+}
 
-  // 5. Resolve the target account under the security model.
+export async function resolveExternalIdpUser(token: string, req: FastifyRequest): Promise<ExternalResolve> {
+  const v = await verifyIdpToken(token);
+  if (v.state === "not_idp") return { matched: false };
+  if (v.state === "rejected") return { matched: true, user: null, provider: v.provider, code: v.code, error: v.error };
+
+  const { provider, payload, serviceClient } = v;
+  const isServiceClient = serviceClient !== null;
+  const settings = await getSettings();
+
+  // Resolve the target account under the security model.
   const emailClaim = typeof payload.email === "string" ? payload.email : null;
   const accountHeader = typeof req.headers["x-account"] === "string" ? (req.headers["x-account"] as string) : null;
   const decided = decideTarget({ isServiceClient, emailClaim, accountHeader });
   if ("error" in decided) {
-    return { matched: true, user: null, provider: prov.slug, code: 400, error: decided.error };
+    return { matched: true, user: null, provider, code: 400, error: decided.error };
   }
 
   let user = await lookupUser(decided.target);
   let provisioned = false;
   if (!user && isServiceClient && settings.idpApiAutoProvision && decided.target.includes("@")) {
     // Bulk-provision: create a ByWave account for this email on first access.
-    const r = await provisionAccount(decided.target.toLowerCase(), typeof payload.name === "string" ? payload.name : null);
+    const r = await provisionAccountByEmail(decided.target.toLowerCase(), typeof payload.name === "string" ? payload.name : null);
     user = r.user;
     provisioned = r.created;
   }
-  if (!user) return { matched: true, user: null, provider: prov.slug, code: 404, error: "account_not_found" };
-  if (!userIsActive(user)) return { matched: true, user: null, provider: prov.slug, code: 403, error: "account_disabled" };
-  return { matched: true, user, provider: prov.slug, serviceClient: matchedServiceClient, provisioned };
+  if (!user) return { matched: true, user: null, provider, code: 404, error: "account_not_found" };
+  if (!userIsActive(user)) return { matched: true, user: null, provider, code: 403, error: "account_disabled" };
+  return { matched: true, user, provider, serviceClient, provisioned };
+}
+
+// Platform (service-client) authentication: verify a Keycloak service token
+// WITHOUT requiring an X-Account / user resolution. Used by the account
+// management endpoints (list / bulk-provision). Only tokens whose azp/aud is a
+// configured service client pass — ordinary user (login-client) tokens are
+// rejected, so a regular user can never list or provision accounts.
+export type ServiceClientAuth = { provider: string; client: string };
+export async function verifyServiceClient(
+  token: string,
+): Promise<{ ok: true; auth: ServiceClientAuth } | { ok: false; code: number; error: string }> {
+  const v = await verifyIdpToken(token);
+  if (v.state === "not_idp") return { ok: false, code: 401, error: "not_an_idp_token" };
+  if (v.state === "rejected") return { ok: false, code: v.code, error: v.error };
+  if (!v.serviceClient) return { ok: false, code: 403, error: "service_client_required" };
+  return { ok: true, auth: { provider: v.provider, client: v.serviceClient } };
 }
 
 async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
@@ -215,7 +244,7 @@ async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
   return u;
 }
 
-async function provisionAccount(email: string, displayName: string | null): Promise<{ user: schema.User | undefined; created: boolean }> {
+export async function provisionAccountByEmail(email: string, displayName: string | null): Promise<{ user: schema.User | undefined; created: boolean }> {
   // No local password — the IdP is the source of truth. passwordHash is NOT
   // NULL, so (like the SSO signup path) store a REAL bcrypt hash of a random
   // ~256-bit value: valid bcrypt, unguessable, and safe even if some future
