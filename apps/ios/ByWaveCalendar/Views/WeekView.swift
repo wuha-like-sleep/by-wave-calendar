@@ -370,28 +370,41 @@ struct WeekView: View {
         .gesture(dragGesture(for: p))
     }
 
-    // Resize gesture — fires on the bottom-edge handle. No long-press
-    // needed (the handle is small + dedicated) so it's a plain drag.
-    // minimumDistance kept deliberately high (12pt) so a light tap/tick
-    // near the handle doesn't accidentally nudge the event's end time.
+    // Resize gesture — fires on the bottom-edge handle. Gated behind a
+    // short long-press (0.3s) BEFORE the drag, exactly like move: a plain
+    // vertical SCROLL over the handle used to start a resize by accident
+    // while the user was just browsing their day. Requiring a deliberate
+    // press-then-drag means a scroll (which never holds) can no longer
+    // steal into a resize.
     private func resizeGesture(for p: PositionedEvent) -> some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { drag in
-                if dragState?.eventId != p.event.id || dragState?.mode != .resize {
-                    dragState = DragState(
-                        eventId: p.event.id,
-                        mode: .resize,
-                        origStart: p.event.startsAt,
-                        origEnd: p.event.endsAt,
-                        origDayIdx: dayIndex(for: p.event.startsAt) ?? 0,
-                        dx: 0, dy: 0,
-                    )
-                    UISelectionFeedbackGenerator().selectionChanged()
+        LongPressGesture(minimumDuration: 0.3)
+            .sequenced(before: DragGesture(minimumDistance: 8))
+            .onChanged { value in
+                switch value {
+                case .first:
+                    // Press in progress; nothing visible until the drag begins.
+                    return
+                case .second(true, let drag):
+                    guard let drag else { return }
+                    if dragState?.eventId != p.event.id || dragState?.mode != .resize {
+                        dragState = DragState(
+                            eventId: p.event.id,
+                            mode: .resize,
+                            origStart: p.event.startsAt,
+                            origEnd: p.event.endsAt,
+                            origDayIdx: dayIndex(for: p.event.startsAt) ?? 0,
+                            dx: 0, dy: 0,
+                        )
+                        UISelectionFeedbackGenerator().selectionChanged()
+                    }
+                    dragState?.dy = drag.translation.height
+                default:
+                    return
                 }
-                dragState?.dy = drag.translation.height
             }
             .onEnded { _ in
-                guard let s = dragState else { return }
+                // Only commit if we actually entered the resize drag phase.
+                guard let s = dragState, s.mode == .resize else { dragState = nil; return }
                 dragState = nil
                 // Convert dy to minutes, snap 15-min, apply to endsAt only.
                 let rawMin = (s.dy / hourHeight) * 60.0
