@@ -346,8 +346,17 @@ export async function* applyUploadedUpdate(
       const bad = entries.find(isUnsafeTarEntry);
       if (bad) throw new Error(`检测到不安全的路径条目（可能是 zip-slip 攻击）：${bad}`);
 
+      // 忽略 macOS 打包时可能夹带的元数据：AppleDouble `._*` 与 `.DS_Store`。
+      // 它们无害（apply 只拷已知目录，不会带上它们），但会让「顶层单目录」体检
+      // 误判——在 iCloud/带扩展属性的目录上用 tar 打包极易出现 `._<name>`。
+      const isMacMeta = (e: string): boolean => {
+        const base = e.split("/").pop() ?? "";
+        return base === ".DS_Store" || base.startsWith("._");
+      };
+      const meaningful = entries.filter((e) => !isMacMeta(e));
+
       // 顶层目录应为 by-wave-calendar-v<version>/ —— 校验只有一个顶层目录且符合命名。
-      const topLevel = new Set(entries.map((e) => e.split("/")[0]).filter(Boolean));
+      const topLevel = new Set(meaningful.map((e) => e.split("/")[0]).filter(Boolean));
       if (topLevel.size !== 1) {
         throw new Error(`tarball 顶层应只有一个目录，实际有 ${topLevel.size} 个：${[...topLevel].join(", ")}`);
       }

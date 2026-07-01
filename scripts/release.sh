@@ -51,12 +51,16 @@ cp    package-lock.json "$STAGE/package-lock.json"
 cp    .env.example     "$STAGE/.env.example"
 cp    README.md        "$STAGE/README.md"
 
-# Strip macOS metadata files
+# Strip macOS metadata files (.DS_Store + any stray AppleDouble ._* on disk)
 find "$STAGE" -name ".DS_Store" -delete
+find "$STAGE" -name "._*" -delete
 
 # 包不带 node_modules（让服务器跑 npm ci --omit=dev 自己装生产依赖）
 echo "[release] taring..."
-tar -czf "${OUT_DIR}/${NAME}.tar.gz" -C "$OUT_DIR" "$NAME"
+# COPYFILE_DISABLE=1 阻止 macOS 的 tar 夹带 AppleDouble（._*）元数据 —— ~/Desktop
+# 在 iCloud 下、文件带扩展属性，否则包顶层会多出 ._<name>，让服务端「顶层单目录」
+# 体检误判为两个目录而拒绝。签名在此之后进行，覆盖的就是这份干净的 tarball。
+COPYFILE_DISABLE=1 tar -czf "${OUT_DIR}/${NAME}.tar.gz" -C "$OUT_DIR" "$NAME"
 rm -rf "$STAGE"
 
 TARBALL="${OUT_DIR}/${NAME}.tar.gz"
