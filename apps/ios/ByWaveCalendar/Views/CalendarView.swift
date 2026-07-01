@@ -198,14 +198,18 @@ struct CalendarView: View {
             // when the gesture is decisively horizontal (avoids stealing
             // List scroll). Translation > 60 pt → snap to prev/next.
             .gesture(
-                DragGesture(minimumDistance: 18)
+                DragGesture(minimumDistance: 24)
                     .onEnded { value in
                         let h = value.translation.width
                         let v = value.translation.height
-                        // Ignore vertical-dominant gestures (List scroll, sheet pull-down).
-                        if abs(h) < abs(v) * 1.2 { return }
-                        if h < -60 { shiftAnchor(by: 1) }
-                        else if h > 60 { shiftAnchor(by: -1) }
+                        // Only navigate on a DECISIVELY horizontal swipe: the
+                        // horizontal component must clearly dominate the vertical
+                        // (≥1.8×), and travel a good distance (70pt). Stricter than
+                        // before so diagonal / near-vertical drags and light flicks
+                        // don't accidentally flip the week/month.
+                        if abs(h) < abs(v) * 1.8 { return }
+                        if h < -70 { shiftAnchor(by: 1) }
+                        else if h > 70 { shiftAnchor(by: -1) }
                     },
             )
         }

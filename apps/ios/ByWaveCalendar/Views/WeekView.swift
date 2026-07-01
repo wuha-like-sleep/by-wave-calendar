@@ -372,8 +372,10 @@ struct WeekView: View {
 
     // Resize gesture — fires on the bottom-edge handle. No long-press
     // needed (the handle is small + dedicated) so it's a plain drag.
+    // minimumDistance kept deliberately high (12pt) so a light tap/tick
+    // near the handle doesn't accidentally nudge the event's end time.
     private func resizeGesture(for p: PositionedEvent) -> some Gesture {
-        DragGesture(minimumDistance: 4)
+        DragGesture(minimumDistance: 12)
             .onChanged { drag in
                 if dragState?.eventId != p.event.id || dragState?.mode != .resize {
                     dragState = DragState(
@@ -413,7 +415,9 @@ struct WeekView: View {
     // tied to dragState. On release, snap and commit.
     private func dragGesture(for p: PositionedEvent) -> some Gesture {
         LongPressGesture(minimumDuration: 0.4)
-            .sequenced(before: DragGesture(minimumDistance: 0))
+            // Require a clear 10pt drag AFTER the long-press before we start
+            // moving — a micro-jitter while holding shouldn't nudge the time.
+            .sequenced(before: DragGesture(minimumDistance: 10))
             .onChanged { value in
                 switch value {
                 case .first:
