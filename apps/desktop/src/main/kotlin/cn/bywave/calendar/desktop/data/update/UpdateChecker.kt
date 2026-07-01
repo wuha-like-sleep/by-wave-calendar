@@ -97,9 +97,15 @@ object UpdateChecker {
      *  manifest as a fallback. Throttled to once per 6 hours; pass
      *  force=true to override (e.g. user clicked "check for updates"
      *  in settings). */
-    suspend fun check(serverUrl: String, force: Boolean = false) {
+    /** Outcome of a check: an update is available, we're confirmed
+     *  up-to-date (reached ≥1 manifest source, nothing newer), or we
+     *  couldn't reach ANY source. The last case must NEVER be surfaced
+     *  to the user as 「已是最新版本」 — that's the bug this type fixes. */
+    enum class CheckResult { UpdateAvailable, UpToDate, Unreachable }
+
+    suspend fun check(serverUrl: String, force: Boolean = false): CheckResult {
         val now = System.currentTimeMillis()
-        if (!force && now - lastCheckAt < THROTTLE_MS) return
+        if (!force && now - lastCheckAt < THROTTLE_MS) return CheckResult.UpToDate
         lastCheckAt = now
 
         // 1) Primary: user's own ByWave server.
@@ -107,7 +113,7 @@ object UpdateChecker {
         if (fromServer != null && fromServer.versionCode > BuildInfo.VERSION_CODE) {
             _available.value = fromServer
             System.err.println("[ByWave Updater] update found via server: v${fromServer.versionName} (code ${fromServer.versionCode})")
-            return
+            return CheckResult.UpdateAvailable
         }
 
         // 2) Fallback: GitHub raw manifest. We try this on EVERY check
@@ -119,14 +125,18 @@ object UpdateChecker {
         if (fromGithub != null && fromGithub.versionCode > BuildInfo.VERSION_CODE) {
             _available.value = fromGithub
             System.err.println("[ByWave Updater] update found via github fallback: v${fromGithub.versionName} (code ${fromGithub.versionCode})")
-            return
+            return CheckResult.UpdateAvailable
         }
 
-        // No newer version anywhere — clear whatever was previously
-        // surfaced (e.g. a stale "0.7.3 → 0.7.4" prompt when the user
-        // is now running 0.7.4).
+        // Clear any previously-surfaced prompt (e.g. a stale "0.7.3 → 0.7.4").
         _available.value = null
-        System.err.println("[ByWave Updater] up to date — server returned ${fromServer?.versionCode ?: "null"}, github returned ${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}")
+        // fetchManifest returns null for BOTH a network error AND a legit 404.
+        // So if NEITHER source yielded a manifest we CANNOT confirm we're
+        // current — report a check FAILURE rather than falsely claim
+        // 「已是最新版本」. Only when ≥1 source actually answered is it truly latest.
+        val reached = fromServer != null || fromGithub != null
+        System.err.println("[ByWave Updater] ${if (reached) "up to date" else "UNREACHABLE"} — server=${fromServer?.versionCode ?: "null"}, github=${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}")
+        return if (reached) CheckResult.UpToDate else CheckResult.Unreachable
     }
 
     /** Fetch + parse manifest from one source. Returns null on network
@@ -182,16 +192,16 @@ object UpdateChecker {
      *  can show a transient confirmation/error chip. */
     suspend fun forceCheck(serverUrl: String) {
         _lastForceCheckOutcome.value = ForceCheckOutcome.Checking
-        val before = _available.value
-        check(serverUrl, force = true)
-        val after = _available.value
-        _lastForceCheckOutcome.value = when {
-            after != null -> ForceCheckOutcome.UpdateFound
-            // No exception path here — `check()` swallows network
-            // errors. If we wanted distinguish "network failed" from
-            // "no update", we'd need check() to return a tagged
-            // result. For now treat silence as "up to date".
-            else -> if (before == null) ForceCheckOutcome.UpToDate else ForceCheckOutcome.UpToDate
+        // check() now returns a tagged result, so we can tell a genuine
+        // "already latest" apart from "couldn't reach any update source"
+        // (network down / server + GitHub both unreachable). The latter shows
+        // an error instead of falsely reassuring the user they're up to date.
+        _lastForceCheckOutcome.value = when (check(serverUrl, force = true)) {
+            CheckResult.UpdateAvailable -> ForceCheckOutcome.UpdateFound
+            CheckResult.UpToDate -> ForceCheckOutcome.UpToDate
+            CheckResult.Unreachable -> ForceCheckOutcome.Error(
+                cn.bywave.calendar.desktop.i18n.I18n.t("update.check.unreachable"),
+            )
         }
     }
 

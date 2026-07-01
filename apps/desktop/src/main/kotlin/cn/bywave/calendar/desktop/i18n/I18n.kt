@@ -331,6 +331,7 @@ object I18n {
         "update.upToDate.title" to "You're up to date",
         "update.upToDate.body" to "You're already running the latest version (v{version}).",
         "update.upToDate.checking" to "Checking for updates…",
+        "update.check.unreachable" to "Could not reach the update server. Check your connection and try again.",
         "update.upToDate.button" to "OK",
         // Download-in-background + apply-on-restart (Chrome/VS Code style):
         // the new version downloads silently and applies when the user
@@ -764,6 +765,7 @@ object I18n {
         "update.upToDate.title" to "已是最新版本",
         "update.upToDate.body" to "当前已经是最新的 v{version}。",
         "update.upToDate.checking" to "正在检查更新…",
+        "update.check.unreachable" to "无法连接更新服务器，请检查网络后重试。",
         "update.upToDate.button" to "好的",
         // 后台下载 + 退出时应用（Chrome / VS Code 风格）：新版本静默
         // 下载完成后，退出时自动安装；横幅也提供「立即重启」立刻应用。
@@ -1079,6 +1081,7 @@ object I18n {
         "update.upToDate.title" to "已是最新版本",
         "update.upToDate.body" to "目前已經是最新的 v{version}。",
         "update.upToDate.checking" to "正在檢查更新…",
+        "update.check.unreachable" to "無法連線更新伺服器，請檢查網路後重試。",
         "update.upToDate.button" to "好的",
 
         "sidebar.calendars" to "行事曆",
@@ -1512,6 +1515,7 @@ object I18n {
         "update.upToDate.title" to "最新の状態です",
         "update.upToDate.body" to "すでに最新バージョン (v{version}) を使用しています。",
         "update.upToDate.checking" to "アップデートを確認中…",
+        "update.check.unreachable" to "アップデートサーバーに接続できません。ネットワークを確認して再試行してください。",
         "update.upToDate.button" to "OK",
 
         "sidebar.calendars" to "カレンダー",
@@ -1945,6 +1949,7 @@ object I18n {
         "update.upToDate.title" to "최신 상태입니다",
         "update.upToDate.body" to "이미 최신 버전(v{version})을 사용 중입니다.",
         "update.upToDate.checking" to "업데이트 확인 중…",
+        "update.check.unreachable" to "업데이트 서버에 연결할 수 없습니다. 네트워크를 확인한 후 다시 시도하세요.",
         "update.upToDate.button" to "확인",
 
         "sidebar.calendars" to "캘린더",
@@ -2378,6 +2383,7 @@ object I18n {
         "update.upToDate.title" to "Estás al día",
         "update.upToDate.body" to "Ya estás usando la última versión (v{version}).",
         "update.upToDate.checking" to "Buscando actualizaciones…",
+        "update.check.unreachable" to "No se pudo conectar con el servidor de actualizaciones. Comprueba tu conexión e inténtalo de nuevo.",
         "update.upToDate.button" to "Aceptar",
 
         "sidebar.calendars" to "Calendarios",
@@ -2811,6 +2817,7 @@ object I18n {
         "update.upToDate.title" to "Vous êtes à jour",
         "update.upToDate.body" to "Vous utilisez déjà la dernière version (v{version}).",
         "update.upToDate.checking" to "Recherche de mises à jour…",
+        "update.check.unreachable" to "Impossible de joindre le serveur de mise à jour. Vérifiez votre connexion et réessayez.",
         "update.upToDate.button" to "OK",
 
         "sidebar.calendars" to "Calendriers",
@@ -3244,6 +3251,7 @@ object I18n {
         "update.upToDate.title" to "Du bist auf dem neuesten Stand",
         "update.upToDate.body" to "Du verwendest bereits die neueste Version (v{version}).",
         "update.upToDate.checking" to "Suche nach Updates…",
+        "update.check.unreachable" to "Update-Server nicht erreichbar. Prüfe deine Verbindung und versuche es erneut.",
         "update.upToDate.button" to "OK",
 
         "sidebar.calendars" to "Kalender",
