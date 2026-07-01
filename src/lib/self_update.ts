@@ -424,9 +424,12 @@ export async function* applyUploadedUpdate(
     }
 
     // ---- 5) db migrate ----
+    // 必须用编译好的 dist/scripts/migrate.js（和 install.sh 生产迁移一致）。
+    // 上一步 `npm ci --omit=dev` 已把 tsx 等 dev 依赖删掉,所以绝不能用
+    // `npm run db:migrate`(= tsx scripts/migrate.ts) —— 那会因缺 tsx 而报错。
     yield { type: "start", step: "db migrate", index: 4, total };
     try {
-      const { stdout, stderr } = await run(npmBin, ["run", "db:migrate"]);
+      const { stdout, stderr } = await run("node", ["dist/scripts/migrate.js"]);
       yield { type: "done", step: "db migrate", index: 4, total, ok: true, output: (stdout + (stderr ? "\n[stderr]\n" + stderr : "")).slice(0, 8000) };
     } catch (err) {
       yield fail("db migrate", 4, err instanceof Error ? err.message : String(err));
