@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { mkdir, writeFile, unlink, mkdtemp, rm } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { db, schema } from "../db/client.js";
@@ -25,7 +27,7 @@ import {
 import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
 import { likeNeedle } from "../lib/search_query.js";
 import { normalizeBimiSvg, bimiDnsRecord } from "../lib/bimi.js";
-import { addRemote, applyUpdate, applyUpdateStream, checkForUpdates, listRemotes, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
+import { addRemote, applyUpdate, applyUpdateStream, applyUploadedUpdate, checkForUpdates, listRemotes, MAX_UPLOAD_BYTES, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
@@ -1601,6 +1603,164 @@ export async function adminRoutes(app: FastifyInstance) {
       void restartProcess().catch(() => undefined);
     }, 800);
     return reply;
+  });
+
+  // ---------- 离线 / 手动更新：上传已签名的 release tarball ----------
+  // 管理员上传 scripts/release.sh 产出的 <tarball>.tar.gz + <tarball>.sig。
+  // 服务器先 ed25519 验签（安全闸门），通过才解压 → 体检 → 覆盖已知文件 →
+  // npm ci → db migrate，全程 SSE 流式回传进度。任何失败都不会留下半应用的树。
+  //
+  // 安全：multipart 请求不带可靠 CSRF cookie，因此和 BIMI / 备份导入一样，靠
+  // requireAdmin（登录 + 管理员 + 同源 CORS）做闸。体积上限 100MB 在 parts()
+  // 的 per-request limits + 落盘时的硬字节计数双重设防。
+  app.post("/admin/update/upload", {
+    config: { rateLimit: { max: 5, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireAdmin(req, reply);
+    if (!user) return;
+
+    if (!req.isMultipart()) {
+      return reply.code(400).send({ ok: false, error: "请求必须是 multipart/form-data" });
+    }
+    if (updateInFlight) {
+      return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 启动）` });
+    }
+
+    // 落盘到临时目录：tarball 直接流式写盘（大文件不进内存），sig 作为第二个文件
+    // 或 `signature` 字段读入。size 上限双保险：parts() 的 fileSize + 我们自己计数。
+    let stagingDir: string | null = null;
+    let tarballPath: string | null = null;
+    let sigBase64: string | null = null;
+    let tarballName = "";
+    let aborted: string | null = null;
+
+    try {
+      stagingDir = await mkdtemp(path.join(tmpdir(), "bwc-upload-"));
+      tarballPath = path.join(stagingDir, "update.tar.gz");
+
+      // per-request 覆盖全局 2MB 限制：允许 tarball 到 100MB，最多 2 个文件
+      // （tarball + 可选的 .sig），少量字段（signature）。
+      const parts = req.parts({
+        limits: {
+          fileSize: MAX_UPLOAD_BYTES,
+          files: 2,
+          fields: 5,
+          fieldSize: 1024 * 1024, // signature base64 很小，1MB 绰绰有余
+        },
+      });
+
+      let sawTarball = false;
+      for await (const part of parts) {
+        if (aborted) break;
+        if (part.type === "file") {
+          const fname = part.filename || "";
+          const isSig = /\.sig$/i.test(fname) || part.fieldname === "signature";
+          if (isSig) {
+            // .sig 作为文件上传：读成 base64 文本（内容本身就是 base64）。
+            const buf = await part.toBuffer();
+            sigBase64 = buf.toString("utf8").trim();
+          } else {
+            // 视为 tarball：流式写盘，硬计数字节，超限即中止。
+            sawTarball = true;
+            tarballName = fname;
+            let bytes = 0;
+            const ws = createWriteStream(tarballPath);
+            try {
+              await new Promise<void>((resolve, reject) => {
+                part.file.on("data", (chunk: Buffer) => {
+                  bytes += chunk.length;
+                  if (bytes > MAX_UPLOAD_BYTES) {
+                    reject(new Error("文件过大（>100MB）"));
+                  }
+                });
+                part.file.on("limit", () => reject(new Error("文件过大（>100MB）")));
+                part.file.on("error", reject);
+                ws.on("error", reject);
+                ws.on("finish", () => resolve());
+                part.file.pipe(ws);
+              });
+            } catch (err) {
+              ws.destroy();
+              aborted = err instanceof Error ? err.message : String(err);
+              // 继续 drain 掉 part.file 以免连接挂死
+              part.file.resume();
+            }
+            // @fastify/multipart：若 fileSize 触顶，part.file.truncated 会是 true
+            if (!aborted && (part.file as unknown as { truncated?: boolean }).truncated) {
+              aborted = "文件过大（>100MB）";
+            }
+          }
+        } else if (part.type === "field") {
+          if (part.fieldname === "signature" && typeof part.value === "string") {
+            sigBase64 = String(part.value).trim();
+          }
+          // 其它字段（如 _csrf）忽略
+        }
+      }
+
+      if (aborted) {
+        await audit(req, user.id, "update.upload_rejected", { details: { reason: aborted, file: tarballName.slice(0, 200) } });
+        return reply.code(413).send({ ok: false, error: aborted });
+      }
+      if (!sawTarball || !tarballPath) {
+        return reply.code(400).send({ ok: false, error: "缺少更新包文件（.tar.gz）" });
+      }
+      if (!sigBase64) {
+        await audit(req, user.id, "update.upload_rejected", { details: { reason: "missing_signature", file: tarballName.slice(0, 200) } });
+        return reply.code(400).send({ ok: false, error: "缺少签名（请上传对应的 .sig 文件，或填入 signature 字段）" });
+      }
+
+      // 拿到锁，开始应用。SSE 流式回传每一步进度。
+      updateInFlight = { startedAt: new Date(), actorEmail: user.email };
+      await audit(req, user.id, "update.upload_apply_start", { details: { file: tarballName.slice(0, 200) } });
+
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+      const write = (data: unknown) => reply.raw.write(`data: ${JSON.stringify(data)}\n\n`);
+
+      let finalOk = false;
+      let sigVerifyFailed = false;
+      try {
+        for await (const ev of applyUploadedUpdate(tarballPath, sigBase64)) {
+          write(ev);
+          // 单独识别「验签失败」以便打专门的审计条目（安全事件）。
+          if (ev.type === "done" && ev.step === "verify signature" && !ev.ok) {
+            sigVerifyFailed = true;
+          }
+          if (ev.type === "final") finalOk = ev.ok;
+        }
+      } catch (err) {
+        write({ type: "final", ok: false, error: err instanceof Error ? err.message : "未知错误" });
+      } finally {
+        if (sigVerifyFailed) {
+          await audit(req, user.id, "update.upload_signature_rejected", { details: { file: tarballName.slice(0, 200) } });
+        } else {
+          await audit(req, user.id, finalOk ? "update.upload_apply_done" : "update.upload_apply_failed", { details: { file: tarballName.slice(0, 200) } });
+        }
+        reply.raw.end();
+        updateInFlight = null;
+      }
+      return reply;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // 若还没开始 SSE（headers 未发），返回 JSON 错误；否则连接已被上面接管。
+      updateInFlight = null;
+      await audit(req, user.id, "update.upload_apply_failed", { details: { error: msg.slice(0, 500) } });
+      if (!reply.raw.headersSent) {
+        return reply.code(500).send({ ok: false, error: msg });
+      }
+      try { reply.raw.end(); } catch { /* ignore */ }
+      return reply;
+    } finally {
+      // 清理临时上传目录（tarball + sig）。解压出来的 staging 由 applyUploadedUpdate 自己清。
+      if (stagingDir) {
+        await rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
   });
 
   // ---------- Outbound webhooks ----------

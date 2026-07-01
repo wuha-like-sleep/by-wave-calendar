@@ -157,6 +157,60 @@
   </div>
 </section>
 
+<!-- ============ 离线 / 手动更新：上传已签名的更新包 ============ -->
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="mb-3">
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-indigo-50 text-indigo-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 0l-4 4m4-4l4 4"/><path d="M3 15v4a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/></svg>
+      </span>
+      <h2 class="text-base font-semibold text-slate-900"><%= t("adminUpdate.upload.heading") %></h2>
+    </div>
+    <p class="text-xs text-slate-500 mt-1"><%= t("adminUpdate.upload.desc") %></p>
+  </div>
+
+  <div class="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 text-xs text-indigo-900 mb-4 flex gap-2">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+    <span><%- t("adminUpdate.upload.note") %></span>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1" for="upload-tarball"><%= t("adminUpdate.upload.tarballLabel") %></label>
+      <input type="file" id="upload-tarball" accept=".gz,.tgz,application/gzip,application/x-gzip"
+        class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200 cursor-pointer" />
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1" for="upload-sig"><%= t("adminUpdate.upload.sigLabel") %></label>
+      <input type="file" id="upload-sig" accept=".sig,text/plain"
+        class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-medium file:text-slate-700 hover:file:bg-slate-200 cursor-pointer" />
+      <p class="text-[11px] text-slate-400 mt-1"><%= t("adminUpdate.upload.sigHint") %></p>
+    </div>
+  </div>
+
+  <div class="flex justify-end">
+    <button type="button" id="btn-upload-apply"
+      class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+      <%= t("adminUpdate.upload.button") %>
+    </button>
+  </div>
+
+  <!-- 上传更新执行进度（结构镜像在线更新的进度块） -->
+  <div id="upload-box" class="hidden mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <div class="flex items-center justify-between mb-2">
+      <div class="text-sm font-medium text-slate-700"><%= t("adminUpdate.progress.heading") %></div>
+      <div id="upload-progress-label" class="text-xs font-mono text-slate-500">0 / 0</div>
+    </div>
+    <div class="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden mb-3">
+      <div id="upload-progress-bar" class="h-full bg-indigo-600 transition-all duration-300 ease-out" style="width: 0%"></div>
+    </div>
+    <div id="upload-progress-current" class="text-xs text-slate-500 mb-3 flex items-center gap-1.5"></div>
+    <ul id="upload-logs" class="space-y-2 text-xs"></ul>
+    <div id="upload-final" class="mt-3 text-sm font-medium"></div>
+  </div>
+</section>
+
 <!-- ============ 维护操作 ============ -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-base font-semibold text-slate-900 mb-1"><%= t("adminUpdate.maint.heading") %></h2>
@@ -227,6 +281,18 @@ JSON.stringify({
   progressPrep: t("adminUpdate.progress.prep"),
   progressExpandHint: t("adminUpdate.progress.expandHint"),
   progressNoOutput: t("adminUpdate.progress.noOutput"),
+  uploadButton: t("adminUpdate.upload.button"),
+  uploadButtonRunning: t("adminUpdate.upload.buttonRunning"),
+  uploadRetry: t("adminUpdate.upload.retry"),
+  uploadMissingTarball: t("adminUpdate.upload.missingTarball"),
+  uploadMissingSig: t("adminUpdate.upload.missingSig"),
+  uploadConfirmTitle: t("adminUpdate.upload.confirmTitle"),
+  uploadConfirmMessage: t("adminUpdate.upload.confirmMessage"),
+  uploadConfirmOk: t("adminUpdate.upload.confirmOk"),
+  uploadSuccessFinal: t("adminUpdate.upload.successFinal"),
+  uploadFailedFinal: t("adminUpdate.upload.failedFinal"),
+  uploadRejectedFinal: t("adminUpdate.upload.rejectedFinal"),
+  uploadConnectFailed: t("adminUpdate.upload.connectFailed"),
 }) %></script>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
@@ -494,6 +560,120 @@ JSON.stringify({
     }
     setTimeout(() => { restartBtn.disabled = false; restartBtn.innerHTML = orig; }, 3000);
   });
+
+  // ---- 离线 / 手动更新：上传已签名的更新包 ----
+  const uploadApplyBtn = document.getElementById('btn-upload-apply');
+  if (uploadApplyBtn) {
+    const tarballInput = document.getElementById('upload-tarball');
+    const sigInput = document.getElementById('upload-sig');
+    const uploadBox = document.getElementById('upload-box');
+
+    function handleUploadEvent(ev) {
+      const logsEl = document.getElementById('upload-logs');
+      const finalEl = document.getElementById('upload-final');
+      const bar = document.getElementById('upload-progress-bar');
+      const label = document.getElementById('upload-progress-label');
+      const current = document.getElementById('upload-progress-current');
+      let rejected = false;
+      if (ev.type === 'start') {
+        label.textContent = (ev.index + 1) + ' / ' + ev.total;
+        current.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(ev.step);
+        bar.style.width = ((ev.index + 0.4) / ev.total * 100) + '%';
+      } else if (ev.type === 'done') {
+        bar.style.width = ((ev.index + 1) / ev.total * 100) + '%';
+        if (ev.step === 'verify signature' && !ev.ok) rejected = true;
+        const li = document.createElement('li');
+        li.className = 'rounded-md border ' + (ev.ok ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50') + ' overflow-hidden';
+        li.innerHTML =
+          '<details ' + (ev.ok ? '' : 'open') + '>' +
+            '<summary class="cursor-pointer flex items-center gap-2 px-3 py-2 text-sm">' +
+              '<span class="' + (ev.ok ? 'text-emerald-700' : 'text-red-700') + ' font-semibold">' + (ev.ok ? '✓' : '✗') + '</span>' +
+              '<span class="font-medium ' + (ev.ok ? 'text-emerald-900' : 'text-red-900') + '">' + escapeHtml(ev.step) + '</span>' +
+              '<span class="text-xs text-slate-400 ml-auto">' + escapeHtml(BWC_I18N.progressExpandHint) + '</span>' +
+            '</summary>' +
+            '<pre class="px-3 pb-3 mt-1 text-xs whitespace-pre-wrap break-all text-slate-700 max-h-60 overflow-y-auto">' + escapeHtml(ev.output || BWC_I18N.progressNoOutput) + '</pre>' +
+          '</details>';
+        logsEl.appendChild(li);
+        li.dataset.rejected = rejected ? '1' : '';
+      } else if (ev.type === 'final') {
+        bar.style.width = '100%';
+        current.innerHTML = '';
+        if (ev.ok) {
+          finalEl.innerHTML = '<span class="text-emerald-700">' + escapeHtml(BWC_I18N.uploadSuccessFinal) + '</span>';
+          uploadApplyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.applyRestarting);
+          autoRestartAndReload();
+        } else {
+          // 区分「验签被拒」与「其它步骤失败」的最终文案。
+          const sigRejected = !!logsEl.querySelector('li[data-rejected="1"]');
+          finalEl.innerHTML = '<span class="text-red-700">' + escapeHtml(sigRejected ? BWC_I18N.uploadRejectedFinal : BWC_I18N.uploadFailedFinal) + '</span>';
+          uploadApplyBtn.disabled = false;
+          uploadApplyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> ' + escapeHtml(BWC_I18N.uploadRetry);
+          bar.classList.remove('bg-indigo-600');
+          bar.classList.add('bg-red-600');
+        }
+      }
+    }
+
+    uploadApplyBtn.addEventListener('click', async () => {
+      const tarball = tarballInput.files && tarballInput.files[0];
+      const sig = sigInput.files && sigInput.files[0];
+      if (!tarball) { window.bwc && window.bwc.toast(BWC_I18N.uploadMissingTarball, 'error'); return; }
+      if (!sig) { window.bwc && window.bwc.toast(BWC_I18N.uploadMissingSig, 'error'); return; }
+      if (!(await window.bwc.confirm({ title: BWC_I18N.uploadConfirmTitle, message: BWC_I18N.uploadConfirmMessage, danger: true, confirmLabel: BWC_I18N.uploadConfirmOk }))) return;
+
+      uploadApplyBtn.disabled = true;
+      uploadApplyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.uploadButtonRunning);
+      uploadBox.classList.remove('hidden');
+      const logsEl = document.getElementById('upload-logs');
+      const finalEl = document.getElementById('upload-final');
+      const bar = document.getElementById('upload-progress-bar');
+      const label = document.getElementById('upload-progress-label');
+      const current = document.getElementById('upload-progress-current');
+      logsEl.innerHTML = '';
+      finalEl.textContent = '';
+      bar.style.width = '0%';
+      bar.classList.remove('bg-red-600');
+      bar.classList.add('bg-indigo-600');
+      label.textContent = '0 / 0';
+      current.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-9-9"/></svg> ' + escapeHtml(BWC_I18N.progressPrep);
+
+      try {
+        const form = new FormData();
+        form.append('_csrf', csrf);
+        form.append('tarball', tarball, tarball.name);
+        form.append('signature', sig, sig.name); // .sig 作为第二个文件上传
+        const resp = await fetch('/admin/update/upload', {
+          method: 'POST', credentials: 'same-origin', body: form,
+        });
+        if (!resp.ok || !resp.body) {
+          // 非 SSE 错误（如 400/409/413/500 JSON）
+          let msg = 'HTTP ' + resp.status;
+          try { const j = await resp.json(); if (j && j.error) msg = j.error; } catch (_e) {}
+          throw new Error(msg);
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf('\n\n')) >= 0) {
+            const chunk = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            const line = chunk.split('\n').filter((l) => l.startsWith('data: ')).map((l) => l.slice(6)).join('');
+            if (!line) continue;
+            try { handleUploadEvent(JSON.parse(line)); } catch (_e) {}
+          }
+        }
+      } catch (err) {
+        finalEl.innerHTML = '<span class="text-red-700">' + escapeHtml(fmt(BWC_I18N.uploadConnectFailed, { error: err.message })) + '</span>';
+        uploadApplyBtn.disabled = false;
+        uploadApplyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> ' + escapeHtml(BWC_I18N.uploadRetry);
+      }
+    });
+  }
 
   function escapeHtml(s) {
     return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');

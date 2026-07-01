@@ -659,6 +659,26 @@ export const en = {
   "adminUpdate.help.restart": "<strong class=\"text-slate-800\">Restart service</strong> · Equivalent to <code class=\"bg-slate-100 px-1 rounded text-xs\">pm2 restart {pm2Name}</code>; used after cert renewal or .env edits.",
   "adminUpdate.help.envOverride": "Remote override: <code class=\"bg-slate-100 px-1 rounded text-xs\">UPDATE_REMOTE</code> / <code class=\"bg-slate-100 px-1 rounded text-xs\">UPDATE_BRANCH</code> env vars.",
 
+  // adminUpdate — manual / offline upload update
+  "adminUpdate.upload.heading": "Upload update file (offline / manual)",
+  "adminUpdate.upload.desc": "For servers without git access. Upload the signed release tarball produced by scripts/release.sh.",
+  "adminUpdate.upload.tarballLabel": "Update package (.tar.gz)",
+  "adminUpdate.upload.sigLabel": "Signature (.sig)",
+  "adminUpdate.upload.sigHint": "Pick the .sig file that release.sh produced next to the tarball.",
+  "adminUpdate.upload.button": "Verify & apply",
+  "adminUpdate.upload.buttonRunning": "Applying…",
+  "adminUpdate.upload.retry": "Retry",
+  "adminUpdate.upload.note": "The file must be the <strong>signed</strong> tarball from <code class=\"bg-slate-100 px-1 rounded text-xs\">scripts/release.sh</code>. An unsigned or tampered file is rejected before anything is applied — signature verification is a mandatory security gate.",
+  "adminUpdate.upload.missingTarball": "Please choose the update package (.tar.gz).",
+  "adminUpdate.upload.missingSig": "Please choose the signature (.sig) file.",
+  "adminUpdate.upload.confirmTitle": "Apply uploaded update",
+  "adminUpdate.upload.confirmMessage": "The server will verify the signature, then overwrite code files, reinstall prod deps, and run migrations. Only proceed with a tarball you built and signed.",
+  "adminUpdate.upload.confirmOk": "Verify & apply",
+  "adminUpdate.upload.successFinal": "✓ Update applied — restarting the service; the page will refresh automatically when it's back.",
+  "adminUpdate.upload.failedFinal": "✗ A step failed; see the log above. Nothing was left half-applied.",
+  "adminUpdate.upload.rejectedFinal": "✗ Rejected: the signature did not verify. The file is unsigned or tampered — nothing was applied.",
+  "adminUpdate.upload.connectFailed": "Upload failed: {error}",
+
   // error
   "error.title": "Something went wrong",
   "error.notFoundTitle": "Page not found",
