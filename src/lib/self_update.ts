@@ -232,20 +232,28 @@ export async function applyUpdate(remoteOverride?: string): Promise<{ logs: Upda
 // 上传体积上限（路由层也会再挡一次；这里作为常量供路由复用）。
 export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
 
-// 公钥落点：仓库内 deploy/update-signing-pub.pem。相对本模块解析，避免依赖 CWD
-// （生产里 CWD 是项目根，但模块文件在 dist/lib/ 下，所以要回溯到项目根）。
+// 公钥落点：项目根 deploy/update-signing-pub.pem。服务端(dev 与生产)都从项目根启动,
+// 所以 CWD 是最可靠的锚点。编译后本模块在 dist/src/lib/ 下、tsx 直跑在 src/lib/ 下,
+// 层级不同,故再叠加两种模块相对路径兜底,按顺序取第一个存在的。
 const __dirname_self = path.dirname(fileURLToPath(import.meta.url));
-// dist/lib/self_update.js → ../../deploy ；src/lib/self_update.ts（tsx 直跑）→ 同样回溯两级。
-const PUBLIC_KEY_PATH = path.resolve(__dirname_self, "..", "..", "deploy", "update-signing-pub.pem");
+const PUBLIC_KEY_CANDIDATES = [
+  path.resolve(process.cwd(), "deploy", "update-signing-pub.pem"),
+  path.resolve(__dirname_self, "..", "..", "..", "deploy", "update-signing-pub.pem"), // 编译后 dist/src/lib → 根
+  path.resolve(__dirname_self, "..", "..", "deploy", "update-signing-pub.pem"),         // tsx 直跑 src/lib → 根
+];
 
 // 模块加载时读入公钥 PEM。读不到就置 null —— verifyUpdateSignature 会因此对所有
 // 输入返回 false（fail-closed：没有可信公钥时，宁可拒绝一切更新，也不放行）。
 const SIGNING_PUBLIC_KEY_PEM: string | null = (() => {
-  try {
-    return readFileSync(PUBLIC_KEY_PATH, "utf8");
-  } catch {
-    return null;
+  for (const p of PUBLIC_KEY_CANDIDATES) {
+    try {
+      return readFileSync(p, "utf8");
+    } catch {
+      // 试下一个候选路径
+    }
   }
+  console.error("[self_update] 未找到更新签名公钥 deploy/update-signing-pub.pem —— 手动更新将拒绝所有上传");
+  return null;
 })();
 
 /**
