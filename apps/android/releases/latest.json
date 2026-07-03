@@ -1,13 +1,13 @@
 {
-  "versionCode": 16,
-  "versionName": "0.10.0",
-  "filename": "bywave-calendar-0.10.0.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.0/bywave-calendar-0.10.0.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.0/bywave-calendar-0.10.0.apk",
-  "sha256": "169a11ff6677b5babb927797ce6fefc59f2799dd8fb1172dea993c3c0a88249a",
+  "versionCode": 17,
+  "versionName": "0.10.1",
+  "filename": "bywave-calendar-0.10.1.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.1/bywave-calendar-0.10.1.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.1/bywave-calendar-0.10.1.apk",
+  "sha256": "51f2257ab336bd0c1e3c159a087d380d4f5bfe05a3bb7501e91cb16a38824b13",
   "sizeBytes": 24826864,
-  "releasedAt": "2026-06-30T15:07:03Z",
-  "notes": "本次更新（v0.10.0）：\n• 新增「入会密码」：创建会议时可填写入会密码，详情页一键复制\n• 事件详情页完整多语言化（时间/地点/链接/邀请人等不再只显示中文）\n• 设置、日历、事件、扫码登录等页面系统性补齐多语言\n• 日期时间按所选语言本地化显示\n",
+  "releasedAt": "2026-07-03T05:20:07Z",
+  "notes": "本次更新（v0.10.1）：\n• 长按事件时新增触感反馈，操作更跟手（与新建/删除的手感一致）\n• 提醒在系统精确闹钟受限而降级时可诊断，减少「提醒晚了几分钟」难排查\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
