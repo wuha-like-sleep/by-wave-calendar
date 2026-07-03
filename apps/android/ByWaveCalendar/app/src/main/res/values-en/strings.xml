@@ -214,4 +214,6 @@ to match the development locale.
     <string name="quickadd_hint">Try: 明天 下午3点 牙医 (Chinese)</string>
     <string name="quickadd_failed">Couldn\'t parse — fill in manually</string>
     <string name="quickadd_cd">Parse</string>
+    <string name="action_undo">Undo</string>
+    <string name="event_deleted">Deleted</string>
 </resources>

@@ -209,4 +209,6 @@
     <string name="quickadd_hint">Ej.: 明天 下午3点 牙医 (chino)</string>
     <string name="quickadd_failed">No se pudo interpretar; escríbelo a mano</string>
     <string name="quickadd_cd">Interpretar</string>
+    <string name="action_undo">Deshacer</string>
+    <string name="event_deleted">Eliminado</string>
 </resources>

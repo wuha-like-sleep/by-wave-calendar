@@ -219,4 +219,6 @@
     <string name="quickadd_hint">试试：明天 下午3点 牙医</string>
     <string name="quickadd_failed">没识别出来，请手动填写</string>
     <string name="quickadd_cd">智能识别</string>
+    <string name="action_undo">撤销</string>
+    <string name="event_deleted">已删除</string>
 </resources>

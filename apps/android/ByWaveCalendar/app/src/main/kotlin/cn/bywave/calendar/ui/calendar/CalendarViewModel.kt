@@ -37,6 +37,9 @@ data class CalendarUiState(
     val events: List<EventDTO> = emptyList(),
     val calendars: List<CalendarMeta> = emptyList(),
     val errorMessage: String? = null,
+    /** Set right after a NON-recurring delete succeeds → drives the "已删除 ·
+     *  撤销" snackbar. One-shot: cleared when the snackbar is acted on/dismissed. */
+    val undoDeleteId: String? = null,
     val lastSyncedAt: Instant? = null,
     val fetchedFrom: LocalDate? = null,
     val fetchedTo: LocalDate? = null,
@@ -105,12 +108,34 @@ class CalendarViewModel : ViewModel() {
                 val profile = profiles.active() ?: return@launch
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id, scope, recurrenceId)
+                // Offer undo only for plain (non-recurring) deletes; restoring a
+                // scoped recurring delete (EXDATE / split) by id wouldn't cleanly
+                // reverse it, so we don't tempt the user with a broken undo.
+                if (scope == null) _state.update { it.copy(undoDeleteId = id) }
                 load()
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = e.localizedMessage ?: "删除失败") }
             }
         }
     }
+
+    /** Undo the last non-recurring delete via the restore endpoint. */
+    fun restoreLastDelete() {
+        val id = _state.value.undoDeleteId ?: return
+        _state.update { it.copy(undoDeleteId = null) }
+        viewModelScope.launch {
+            try {
+                val profile = profiles.active() ?: return@launch
+                val client = ApiClient.forProfile(profile, profiles)
+                client.api.restoreEvent(id)
+                load()
+            } catch (e: Exception) {
+                _state.update { it.copy(errorMessage = e.localizedMessage ?: "撤销失败") }
+            }
+        }
+    }
+
+    fun clearUndo() = _state.update { it.copy(undoDeleteId = null) }
 
     /** Sign out the currently active profile only. If there are
      *  other profiles, ProfileStore picks the next-most-recent as the

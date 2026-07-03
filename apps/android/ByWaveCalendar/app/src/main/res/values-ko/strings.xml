@@ -209,4 +209,6 @@
     <string name="quickadd_hint">예: 明天 下午3点 牙医 (중국어)</string>
     <string name="quickadd_failed">인식하지 못했습니다. 직접 입력해 주세요</string>
     <string name="quickadd_cd">인식</string>
+    <string name="action_undo">실행 취소</string>
+    <string name="event_deleted">삭제됨</string>
 </resources>

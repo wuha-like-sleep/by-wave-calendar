@@ -209,4 +209,6 @@
     <string name="quickadd_hint">Z. B.: 明天 下午3点 牙医 (Chinesisch)</string>
     <string name="quickadd_failed">Nicht erkannt – bitte manuell eingeben</string>
     <string name="quickadd_cd">Erkennen</string>
+    <string name="action_undo">Rückgängig</string>
+    <string name="event_deleted">Gelöscht</string>
 </resources>

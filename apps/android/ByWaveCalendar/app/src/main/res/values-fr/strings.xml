@@ -209,4 +209,6 @@
     <string name="quickadd_hint">Ex. : 明天 下午3点 牙医 (chinois)</string>
     <string name="quickadd_failed">Analyse impossible ; saisie manuelle</string>
     <string name="quickadd_cd">Analyser</string>
+    <string name="action_undo">Annuler</string>
+    <string name="event_deleted">Supprimé</string>
 </resources>

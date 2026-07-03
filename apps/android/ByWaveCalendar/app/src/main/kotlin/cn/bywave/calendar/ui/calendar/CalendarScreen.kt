@@ -36,6 +36,11 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.Icon
@@ -104,7 +109,24 @@ fun CalendarScreen(
     var pendingRecurringDelete by remember { mutableStateOf<EventDTO?>(null) }
     var showSwitcher by remember { mutableStateOf(false) }
 
+    // Undo-delete snackbar (parity with web). deleteEvent sets undoDeleteId for
+    // non-recurring deletes; act on it → restore, dismiss → clear the one-shot.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val undoLabel = stringResource(R.string.action_undo)
+    val deletedMsg = stringResource(R.string.event_deleted)
+    LaunchedEffect(state.undoDeleteId) {
+        if (state.undoDeleteId != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = deletedMsg,
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) vm.restoreLastDelete() else vm.clearUndo()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.calendar_title)) },

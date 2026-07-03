@@ -210,6 +210,10 @@ interface BywaveApi {
         @Query("recurrenceId") recurrenceId: String? = null,
     )
 
+    // Undo a soft-delete — restores the event by id (parity with web's undo toast).
+    @POST("api/v1/events/{id}/restore")
+    suspend fun restoreEvent(@Path("id") id: String): EventDTO
+
     @GET("api/v1/events/{id}/attendees")
     suspend fun attendees(@Path("id") id: String): AttendeesResponse
 
