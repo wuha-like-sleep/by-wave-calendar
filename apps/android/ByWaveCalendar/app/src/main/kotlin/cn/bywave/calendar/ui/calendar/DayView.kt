@@ -7,6 +7,8 @@ package cn.bywave.calendar.ui.calendar
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,13 +87,20 @@ private fun EventRow(
 ) {
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
+    val haptic = LocalHapticFeedback.current
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(Radii.cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onLongClick()
+                },
+            )
             .heightIn(min = Sizing.minTouchTarget)
             .padding(Spacing.md),
         verticalAlignment = Alignment.CenterVertically,

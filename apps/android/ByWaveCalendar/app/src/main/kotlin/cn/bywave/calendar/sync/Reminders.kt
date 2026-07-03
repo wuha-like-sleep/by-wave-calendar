@@ -18,6 +18,7 @@
 package cn.bywave.calendar.sync
 
 import android.app.AlarmManager
+import android.util.Log
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -79,7 +80,10 @@ class Reminders(private val context: Context) {
             } catch (_: SecurityException) {
                 // Android 12+ requires SCHEDULE_EXACT_ALARM for some
                 // setExact calls; fall back to setWindow with a tight
-                // tolerance so we still fire approximately on time.
+                // tolerance so we still fire approximately on time. Log it so
+                // a "my reminder was a few minutes late" report is diagnosable
+                // instead of a silent downgrade.
+                Log.w("Reminders", "SCHEDULE_EXACT_ALARM denied; using setWindow for event ${ev.id}")
                 alarms.setWindow(AlarmManager.RTC_WAKEUP, fireAt, 60_000L, pending)
                 scheduled++
             }
