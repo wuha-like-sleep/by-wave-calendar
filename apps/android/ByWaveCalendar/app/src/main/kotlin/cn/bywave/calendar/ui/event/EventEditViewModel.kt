@@ -39,7 +39,13 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 sealed class EventEditMode {
-    data class Create(val seedStart: LocalDateTime? = null) : EventEditMode()
+    // seedEnd/seedSummary let the natural-language quick-add prefill a full
+    // event (parsed summary + start + end), not just a start.
+    data class Create(
+        val seedStart: LocalDateTime? = null,
+        val seedEnd: LocalDateTime? = null,
+        val seedSummary: String? = null,
+    ) : EventEditMode()
     data class Edit(val source: EventDTO) : EventEditMode()
     /** "Copy as new event" — same fields as source but a brand new id
      *  + next-half-hour start. Lands at the server as a fresh POST. */
@@ -103,8 +109,9 @@ class EventEditViewModel : ViewModel() {
                     clientUid = newClientUid(),
                     calendars = calendars,
                     calendarId = calendars.firstOrNull()?.id.orEmpty(),
+                    summary = mode.seedSummary.orEmpty(),
                     start = start,
-                    end = start.plusHours(1),
+                    end = mode.seedEnd ?: start.plusHours(1),
                 )
             }
             is EventEditMode.Edit -> {

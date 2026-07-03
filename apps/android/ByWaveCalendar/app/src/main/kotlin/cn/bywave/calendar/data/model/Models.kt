@@ -305,6 +305,24 @@ data class AttendeeInviteRequest(val email: String)
 @Serializable
 data class AttendeeRevokeRequest(val email: String)
 
+// ---- Natural-language quick-add ----
+
+@Serializable
+data class ParseEventInput(
+    val text: String,
+    /** Caller's current LOCAL wall-clock "YYYY-MM-DDTHH:mm:ss" so the server
+     *  resolves 明天 / 周五 / etc. in the user's timezone, not its own. */
+    val now: String? = null,
+)
+
+@Serializable
+data class ParseEventResult(
+    val summary: String,
+    /** naive local wall-clock "YYYY-MM-DDTHH:mm:ss" */
+    val startsAt: String,
+    val endsAt: String,
+)
+
 // ---- Edit / create ----
 
 @Serializable

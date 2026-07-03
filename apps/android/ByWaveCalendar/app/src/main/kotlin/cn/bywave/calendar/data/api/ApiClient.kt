@@ -23,6 +23,8 @@ import cn.bywave.calendar.data.model.DeleteAccountRequest
 import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.data.model.ParseEventInput
+import cn.bywave.calendar.data.model.ParseEventResult
 import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.EventsResponse
 import cn.bywave.calendar.data.model.LoginRequest
@@ -182,6 +184,12 @@ interface BywaveApi {
 
     @POST("api/v1/events")
     suspend fun createEvent(@Body body: EventCreateInput): EventDTO
+
+    // Natural-language quick-add — server parses a phrase into event fields.
+    // Requires server ≥ 1.6.4; older servers 404 (caller falls back to a blank
+    // create form).
+    @POST("api/v1/parse-event")
+    suspend fun parseEvent(@Body body: ParseEventInput): ParseEventResult
 
     @PATCH("api/v1/events/{id}")
     suspend fun updateEvent(
