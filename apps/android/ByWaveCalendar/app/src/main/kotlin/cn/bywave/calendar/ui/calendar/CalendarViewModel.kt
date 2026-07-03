@@ -5,6 +5,7 @@
 
 package cn.bywave.calendar.ui.calendar
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
@@ -116,10 +117,18 @@ class CalendarViewModel : ViewModel() {
      *  new active; if this was the last one, activeId becomes null. */
     fun signOutActive() {
         viewModelScope.launch {
-            val active = profiles.active() ?: return@launch
-            repository.wipeProfile(active.id)
-            ApiClient.invalidate(active.id)
-            profiles.remove(active.id)
+            try {
+                val active = profiles.active() ?: return@launch
+                // Best-effort cache wipe — a Room hiccup here must NOT crash the
+                // app (unguarded, this launch had no handler) nor leave the user
+                // stuck signed in, so swallow it and still invalidate + remove.
+                runCatching { repository.wipeProfile(active.id) }
+                    .onFailure { Log.w("SignOut", "wipeProfile failed: ${it.message}") }
+                ApiClient.invalidate(active.id)
+                profiles.remove(active.id)
+            } catch (e: Exception) {
+                _state.update { it.copy(errorMessage = e.localizedMessage ?: "退出登录失败") }
+            }
         }
     }
 
