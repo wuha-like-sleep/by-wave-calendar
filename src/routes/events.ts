@@ -12,6 +12,7 @@ import { expandEvent } from "../lib/rrule_expand.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
+import { parseNaturalLanguageEvent } from "../lib/nl_parse.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -220,6 +221,23 @@ export async function eventRoutes(app: FastifyInstance) {
       .limit(20);
     const conflicts = rows.filter((r) => !body.data.excludeId || r.id !== body.data.excludeId);
     return reply.send({ conflicts });
+  });
+
+  // Natural-language quick-add. A client POSTs a phrase (e.g. "明天 下午3点 牙医")
+  // plus its own local `now`, and gets back structured fields to prefill the
+  // create form. Parsing lives in one shared server module (nl_parse) so web /
+  // iOS / Android / desktop all behave identically instead of each reimplementing
+  // it. `now` is the caller's local wall-clock so results are timezone-correct
+  // regardless of the server's zone; we never touch the DB here.
+  app.post("/parse-event", async (req, reply) => {
+    await requireUser(req, reply);
+    const body = z.object({
+      text: z.string().min(1).max(500),
+      now: z.string().max(40).optional(),
+    }).parse(req.body ?? {});
+    const parsed = parseNaturalLanguageEvent(body.text, body.now);
+    if (!parsed) return reply.code(422).send({ error: "unparseable" });
+    return reply.send(parsed);
   });
 
   app.post("/events", async (req, reply) => {
