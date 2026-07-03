@@ -167,8 +167,10 @@ private fun ResultsList(
                 )
             }
             items(items = items, key = { "${it.id}@${it.startsAt}" }) { ev ->
-                ResultRow(event = ev, calendars = calendars, onClick = { onEventClick(ev) })
-                HorizontalDivider()
+                Column(Modifier.animateItem()) {
+                    ResultRow(event = ev, calendars = calendars, onClick = { onEventClick(ev) })
+                    HorizontalDivider()
+                }
             }
         }
         item { Spacer(Modifier.size(24.dp)) }

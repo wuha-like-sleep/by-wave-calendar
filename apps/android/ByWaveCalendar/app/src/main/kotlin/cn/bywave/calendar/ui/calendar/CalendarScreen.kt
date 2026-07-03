@@ -188,6 +188,7 @@ fun CalendarScreen(
             onPrev = { vm.shiftAnchor(-1) },
             onNext = { vm.shiftAnchor(+1) },
             onToday = { vm.goToday() },
+            onRetry = { vm.reload() },
             onEventClick = { selectedEvent = it },
             onEventLongPress = { actionsForEvent = it },
             onDayClick = { day ->
@@ -317,6 +318,7 @@ private fun CalendarBody(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onToday: () -> Unit,
+    onRetry: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
     onEventLongPress: (EventDTO) -> Unit,
     onDayClick: (java.time.LocalDate) -> Unit,
@@ -371,9 +373,12 @@ private fun CalendarBody(
             }
         }
 
+        val retryLabel = stringResource(R.string.action_retry)
         val statusText = when {
             state.loading -> stringResource(R.string.calendar_syncing)
-            state.errorMessage != null -> state.errorMessage
+            // Sync failed — surface it AND make the whole line a tap-to-retry
+            // affordance (previously the error just sat there, dead).
+            state.errorMessage != null -> "${state.errorMessage} · $retryLabel"
             else -> stringResource(R.string.calendar_synced)
         }
         Text(
@@ -381,7 +386,10 @@ private fun CalendarBody(
             style = MaterialTheme.typography.bodySmall,
             color = if (state.errorMessage != null) MaterialTheme.colorScheme.error
                     else mutedTextColor(),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (state.errorMessage != null) Modifier.clickable { onRetry() } else Modifier)
+                .padding(horizontal = 16.dp, vertical = 2.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
 

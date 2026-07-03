@@ -71,6 +71,9 @@ fun DayView(
                 calendars = calendars,
                 onClick = { onEventClick(ev) },
                 onLongClick = { onEventLongPress(ev) },
+                // Smoothly animate rows in/out/reorder as events sync in or
+                // get edited — the list is keyed, so this is safe + jank-free.
+                modifier = Modifier.animateItem(),
             )
         }
         item { Spacer(Modifier.height(24.dp)) }
@@ -84,13 +87,14 @@ private fun EventRow(
     calendars: List<CalendarMeta>,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
     val haptic = LocalHapticFeedback.current
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(Radii.cardShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
