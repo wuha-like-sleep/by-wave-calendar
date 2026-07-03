@@ -206,4 +206,7 @@
     <string name="event_detail_rrule">繰り返しルール</string>
     <string name="event_detail_edit">編集</string>
     <string name="copied_to_clipboard">コピーしました</string>
+    <string name="quickadd_hint">例：明天 下午3点 牙医（中国語）</string>
+    <string name="quickadd_failed">解析できませんでした。手動で入力してください</string>
+    <string name="quickadd_cd">解析</string>
 </resources>

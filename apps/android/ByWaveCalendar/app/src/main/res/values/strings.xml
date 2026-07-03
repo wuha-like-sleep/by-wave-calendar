@@ -216,4 +216,7 @@
     <string name="event_detail_rrule">重复规则</string>
     <string name="event_detail_edit">编辑</string>
     <string name="copied_to_clipboard">已复制</string>
+    <string name="quickadd_hint">试试：明天 下午3点 牙医</string>
+    <string name="quickadd_failed">没识别出来，请手动填写</string>
+    <string name="quickadd_cd">智能识别</string>
 </resources>

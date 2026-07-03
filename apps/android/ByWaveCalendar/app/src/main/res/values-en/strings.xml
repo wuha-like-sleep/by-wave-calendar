@@ -211,4 +211,7 @@ to match the development locale.
     <string name="event_detail_rrule">Recurrence rule</string>
     <string name="event_detail_edit">Edit</string>
     <string name="copied_to_clipboard">Copied</string>
+    <string name="quickadd_hint">Try: 明天 下午3点 牙医 (Chinese)</string>
+    <string name="quickadd_failed">Couldn\'t parse — fill in manually</string>
+    <string name="quickadd_cd">Parse</string>
 </resources>

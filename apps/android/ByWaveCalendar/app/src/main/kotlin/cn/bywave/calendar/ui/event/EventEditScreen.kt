@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -138,6 +140,32 @@ fun EventEditScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.size(4.dp))
+
+            // Natural-language quick-add (create only) — type a phrase like
+            // "明天 下午3点 牙医", tap 识别, and summary/start/end fill in via the
+            // shared server parser (server ≥ 1.6.4; older servers fail softly).
+            if (!state.isEdit) {
+                var quickText by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = quickText,
+                    onValueChange = { quickText = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.quickadd_hint)) },
+                    trailingIcon = {
+                        if (state.parsing) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            TextButton(
+                                onClick = { vm.quickParse(quickText) },
+                                enabled = quickText.isNotBlank(),
+                            ) { Text(stringResource(R.string.quickadd_cd)) }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { vm.quickParse(quickText) }),
+                )
+            }
 
             // Title
             OutlinedTextField(

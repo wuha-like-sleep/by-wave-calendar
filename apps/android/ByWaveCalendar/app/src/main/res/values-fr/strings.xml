@@ -206,4 +206,7 @@
     <string name="event_detail_rrule">Règle de récurrence</string>
     <string name="event_detail_edit">Modifier</string>
     <string name="copied_to_clipboard">Copié</string>
+    <string name="quickadd_hint">Ex. : 明天 下午3点 牙医 (chinois)</string>
+    <string name="quickadd_failed">Analyse impossible ; saisie manuelle</string>
+    <string name="quickadd_cd">Analyser</string>
 </resources>

@@ -26,6 +26,7 @@ import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventExtra
 import cn.bywave.calendar.data.model.EventUpdateInput
+import cn.bywave.calendar.data.model.ParseEventInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,6 +82,7 @@ data class EventEditUiState(
     val end: LocalDateTime = nextHalfHour().plusHours(1),
     val allDay: Boolean = false,
     val saving: Boolean = false,
+    val parsing: Boolean = false,
     val deleting: Boolean = false,
     val errorMessage: String? = null,
     val finished: Boolean = false,
@@ -173,6 +175,37 @@ class EventEditViewModel : ViewModel() {
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
     fun onUrl(v: String) = _state.update { it.copy(url = v) }
     fun onMeetingPassword(v: String) = _state.update { it.copy(meetingPassword = v) }
+
+    /** Natural-language quick-add: send the phrase to the shared server parser
+     *  and fill summary + start + end in place. Needs server ≥ 1.6.4; on any
+     *  failure (incl. 404 on older servers) we just clear the spinner + show a
+     *  hint and leave the form so the user can still fill it by hand. */
+    fun quickParse(text: String) {
+        val phrase = text.trim()
+        if (phrase.isEmpty()) return
+        _state.update { it.copy(parsing = true, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
+                val client = ApiClient.forProfile(profile, profiles)
+                val now = LocalDateTime.now().withNano(0).toString() // naive local wall-clock
+                val r = client.api.parseEvent(ParseEventInput(phrase, now))
+                val start = LocalDateTime.parse(r.startsAt)
+                val end = LocalDateTime.parse(r.endsAt)
+                _state.update {
+                    it.copy(
+                        summary = if (r.summary.isNotBlank()) r.summary else it.summary,
+                        start = start,
+                        end = end,
+                        parsing = false,
+                        errorMessage = null,
+                    )
+                }
+            } catch (_: Exception) {
+                _state.update { it.copy(parsing = false, errorMessage = app.getString(R.string.quickadd_failed)) }
+            }
+        }
+    }
     fun onCalendar(id: String) = _state.update { it.copy(calendarId = id) }
     fun onAllDay(v: Boolean) = _state.update {
         // When toggling to all-day, snap to date boundaries; when
