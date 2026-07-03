@@ -77,6 +77,23 @@ data class CalendarUpdateInput(
     val timezone: String? = null,
 )
 
+// ---- Natural-language quick-add ----
+
+@Serializable
+data class ParseEventInput(
+    val text: String,
+    /** Caller's current LOCAL wall-clock "YYYY-MM-DDTHH:mm:ss" so the server
+     *  resolves 明天 / 周五 in the user's timezone, not its own. */
+    val now: String? = null,
+)
+
+@Serializable
+data class ParseEventResult(
+    val summary: String,
+    val startsAt: String,
+    val endsAt: String,
+)
+
 // ---- Event create / update / delete ----
 
 @Serializable

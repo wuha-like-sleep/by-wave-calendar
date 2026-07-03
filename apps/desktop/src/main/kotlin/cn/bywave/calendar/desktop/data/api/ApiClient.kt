@@ -35,6 +35,8 @@ import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
 import cn.bywave.calendar.desktop.data.model.DevicesResponse
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.ParseEventInput
+import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.EventsResponse
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
@@ -368,6 +370,34 @@ class ApiClient(val serverUrl: String) {
         if (!resp.status.isSuccess()) {
             val body = runCatching { resp.bodyAsText() }.getOrDefault("")
             throw ApiException(resp.status.value, "delete failed: ${resp.status} $body")
+        }
+    }
+
+    /** POST /api/v1/parse-event — natural-language quick-add. `now` is the
+     *  caller's local wall-clock so 明天 / 周五 resolve in the user's zone.
+     *  Server ≥ 1.6.4; older servers 404 (caller falls back to a blank form). */
+    suspend fun parseEvent(text: String, now: String? = null): ParseEventResult {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/parse-event",
+            body = ParseEventInput(text, now),
+            bodySerializer = ParseEventInput.serializer(),
+            respSerializer = ParseEventResult.serializer(),
+        )
+    }
+
+    /** POST /api/v1/events/{id}/restore — undo a soft-delete. No body; the
+     *  caller reloads afterwards (parity with web's undo toast). */
+    suspend fun restoreEvent(id: String) {
+        val resp = withRefresh {
+            val token = ProfileStore.accessToken()
+            client.post("$baseUrl/api/v1/events/$id/restore") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
+            throw ApiException(resp.status.value, "restore failed: ${resp.status} $body")
         }
     }
 
