@@ -1,13 +1,13 @@
 {
-  "versionCode": 17,
-  "versionName": "0.10.1",
-  "filename": "bywave-calendar-0.10.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.1/bywave-calendar-0.10.1.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.1/bywave-calendar-0.10.1.apk",
-  "sha256": "51f2257ab336bd0c1e3c159a087d380d4f5bfe05a3bb7501e91cb16a38824b13",
+  "versionCode": 18,
+  "versionName": "0.10.2",
+  "filename": "bywave-calendar-0.10.2.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.2/bywave-calendar-0.10.2.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.2/bywave-calendar-0.10.2.apk",
+  "sha256": "68991e91c5833f739d6ddb6dc41aa93d1980dfc7dcf8c9853e36877829af58a9",
   "sizeBytes": 24826864,
-  "releasedAt": "2026-07-03T05:20:07Z",
-  "notes": "本次更新（v0.10.1）：\n• 长按事件时新增触感反馈，操作更跟手（与新建/删除的手感一致）\n• 提醒在系统精确闹钟受限而降级时可诊断，减少「提醒晚了几分钟」难排查\n",
+  "releasedAt": "2026-07-03T06:00:39Z",
+  "notes": "本次更新（v0.10.2）：\n• 列表更顺滑：事件同步/编辑/删除时平滑过渡，不再瞬间跳变\n• 同步失败可一键重试：顶部状态条点一下即可重新加载\n• 退出登录更稳：即使清缓存出错也不会崩溃、能正常登出\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
