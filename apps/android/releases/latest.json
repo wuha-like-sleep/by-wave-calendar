@@ -1,13 +1,13 @@
 {
-  "versionCode": 18,
-  "versionName": "0.10.2",
-  "filename": "bywave-calendar-0.10.2.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.2/bywave-calendar-0.10.2.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.10.2/bywave-calendar-0.10.2.apk",
-  "sha256": "68991e91c5833f739d6ddb6dc41aa93d1980dfc7dcf8c9853e36877829af58a9",
-  "sizeBytes": 24826864,
-  "releasedAt": "2026-07-03T06:00:39Z",
-  "notes": "本次更新（v0.10.2）：\n• 列表更顺滑：事件同步/编辑/删除时平滑过渡，不再瞬间跳变\n• 同步失败可一键重试：顶部状态条点一下即可重新加载\n• 退出登录更稳：即使清缓存出错也不会崩溃、能正常登出\n",
+  "versionCode": 19,
+  "versionName": "0.11.0",
+  "filename": "bywave-calendar-0.11.0.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.11.0/bywave-calendar-0.11.0.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.11.0/bywave-calendar-0.11.0.apk",
+  "sha256": "3078fe6108b68722862bfcc501cadf0720cda2fbfb5bbefc6b19a977f6db0da4",
+  "sizeBytes": 24845636,
+  "releasedAt": "2026-07-03T09:35:53Z",
+  "notes": "本次更新（v0.11.0）：\n• 自然语言快速新建：新建事件时，输入一句「明天 下午3点 牙医」，点「识别」即可自动填好标题和起止时间（需服务器已更新到 1.6.4；旧服务器会提示手动填写）\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
