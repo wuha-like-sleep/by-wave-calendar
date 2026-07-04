@@ -332,6 +332,7 @@ fun MainScreen(
                 if (create != null) state.create(create)
             },
             onDismiss = { state.closeSheet() },
+            onQuickParse = { state.parseEvent(it) },
         )
         is ActiveSheet.Duplicate -> EventEditDialog(
             mode = EventEditMode.Duplicate(sheet.source),

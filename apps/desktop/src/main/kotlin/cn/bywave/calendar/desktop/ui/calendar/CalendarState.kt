@@ -17,6 +17,7 @@ import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -235,6 +236,15 @@ class CalendarState(
                 _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.saveFailed"))
             }
         }
+    }
+
+    /** Natural-language quick-add: parse a phrase into event fields via the
+     *  shared server endpoint. `now` = local wall-clock so 明天/周五 resolve in
+     *  the user's zone. Returns null on any failure (incl. old-server 404) so
+     *  the dialog just leaves the form untouched. */
+    suspend fun parseEvent(text: String): ParseEventResult? {
+        val now = java.time.LocalDateTime.now().withNano(0).toString()
+        return runCatching { client.parseEvent(text, now) }.getOrNull()
     }
 
     /** Update an event. If `sourceRrule` is non-null we park the update

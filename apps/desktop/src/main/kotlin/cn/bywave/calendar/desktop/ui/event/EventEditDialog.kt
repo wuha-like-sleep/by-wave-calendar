@@ -45,6 +45,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
@@ -119,6 +121,8 @@ fun EventEditDialog(
         update: EventUpdateInput?,
     ) -> Unit,
     onDismiss: () -> Unit,
+    /** Natural-language quick-add (create mode only). Null = feature off. */
+    onQuickParse: (suspend (String) -> cn.bywave.calendar.desktop.data.model.ParseEventResult?)? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -140,6 +144,45 @@ fun EventEditDialog(
                 modifier = Modifier.width(520.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                // Natural-language quick-add (create only): type a phrase like
+                // "明天 下午3点 牙医", parse it, and fill summary/start/end.
+                if (!form.isEdit && onQuickParse != null) {
+                    val qScope = rememberCoroutineScope()
+                    var quickText by remember { mutableStateOf("") }
+                    var parsing by remember { mutableStateOf(false) }
+                    OutlinedTextField(
+                        value = quickText,
+                        onValueChange = { quickText = it },
+                        label = { Text(t("event.edit.quickadd")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            if (parsing) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                TextButton(
+                                    onClick = {
+                                        if (quickText.isBlank()) return@TextButton
+                                        qScope.launch {
+                                            parsing = true
+                                            val r = onQuickParse(quickText)
+                                            parsing = false
+                                            if (r != null) {
+                                                form = form.copy(
+                                                    summary = if (r.summary.isNotBlank()) r.summary else form.summary,
+                                                    start = java.time.LocalDateTime.parse(r.startsAt),
+                                                    end = java.time.LocalDateTime.parse(r.endsAt),
+                                                )
+                                            }
+                                        }
+                                    },
+                                    enabled = quickText.isNotBlank(),
+                                ) { Text(t("event.edit.quickadd.parse")) }
+                            }
+                        },
+                    )
+                }
+
                 OutlinedTextField(
                     value = form.summary,
                     onValueChange = { form = form.copy(summary = it) },
