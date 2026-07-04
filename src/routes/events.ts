@@ -3,6 +3,7 @@ import { z } from "zod";
 import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser } from "../lib/session.js";
+import { fetchEventMastersInWindow } from "../lib/events_query.js";
 import { newEventUid, newInvitationToken } from "../lib/ids.js";
 import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
@@ -87,25 +88,29 @@ export async function eventRoutes(app: FastifyInstance) {
     const fromDate = new Date(q.data.from);
     const toDate = new Date(q.data.to);
 
-    const owned = await db
-      .select({
-        id: schema.calendars.id,
-        name: schema.calendars.name,
-        color: schema.calendars.color,
-        timezone: schema.calendars.timezone,
-      })
-      .from(schema.calendars)
-      .where(eq(schema.calendars.ownerId, user.id));
-    const shared = await db
-      .select({
-        id: schema.calendars.id,
-        name: schema.calendars.name,
-        color: schema.calendars.color,
-        timezone: schema.calendars.timezone,
-      })
-      .from(schema.calendars)
-      .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
-      .where(eq(schema.calendarMembers.userId, user.id));
+    // Owned + shared calendars are independent lookups — fetch them in
+    // parallel so the request waits one DB round-trip, not two.
+    const [owned, shared] = await Promise.all([
+      db
+        .select({
+          id: schema.calendars.id,
+          name: schema.calendars.name,
+          color: schema.calendars.color,
+          timezone: schema.calendars.timezone,
+        })
+        .from(schema.calendars)
+        .where(eq(schema.calendars.ownerId, user.id)),
+      db
+        .select({
+          id: schema.calendars.id,
+          name: schema.calendars.name,
+          color: schema.calendars.color,
+          timezone: schema.calendars.timezone,
+        })
+        .from(schema.calendars)
+        .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
+        .where(eq(schema.calendarMembers.userId, user.id)),
+    ]);
 
     const ownedIds = new Set(owned.map((c) => c.id));
     const visibleIds = new Set([...ownedIds, ...shared.map((c) => c.id)]);
@@ -117,30 +122,10 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     if (allowed.length === 0) return reply.send({ calendars: visible, events: [] });
 
-    // Pull master rows. For non-recurring events the existing
-    // window filter `startsAt <= toDate AND endsAt >= fromDate` is correct.
-    // For recurring events (rrule IS NOT NULL), we have to also accept any
-    // master whose startsAt is BEFORE the window — its later occurrences
-    // could still fall inside [fromDate, toDate]. So we union two queries:
-    //   non-recurring overlapping the window, OR recurring with startsAt < toDate.
-    const rows = await db
-      .select()
-      .from(schema.events)
-      .where(
-        and(
-          inArray(schema.events.calendarId, allowed),
-          lte(schema.events.startsAt, toDate),
-          // Master row that STARTS before window is fine — only filter out
-          // non-recurring masters that ALSO ended before the window.
-          // SQL: (endsAt >= fromDate OR rrule IS NOT NULL)
-          // Drizzle doesn't have a clean `or` import here, so we widen
-          // to all events ending after fromDate-1y, then JS-filter below.
-          // This stays cheap because allowed[] already scopes to user.
-          gte(schema.events.endsAt, new Date(fromDate.getTime() - 365 * 24 * 60 * 60 * 1000)),
-          isNull(schema.events.deletedAt),
-        ),
-      )
-      .orderBy(asc(schema.events.startsAt));
+    // Pull the master rows that can contribute an occurrence to the window.
+    // See fetchEventMastersInWindow for the (subtle) recurring-vs-non-recurring
+    // predicate; expandEvent() below trims/materializes each row.
+    const rows = await fetchEventMastersInWindow(allowed, fromDate, toDate);
 
     // Expand RRULE master rows into per-occurrence entries. Non-recurring
     // events come through unchanged. Each occurrence carries the same id
