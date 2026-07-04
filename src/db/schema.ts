@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -511,11 +512,12 @@ export const events = pgTable("events", {
   // entirely from the index.
   calDeletedIdx: index("events_cal_deleted_idx").on(t.calendarId, t.deletedAt),
   // Reminders cron runs every minute and scans all rows where rrule IS NOT NULL.
-  // Partial index keeps the index small (only recurring masters).
-  rruleIdx: index("events_rrule_idx").on(t.rrule),
-  // Soft-delete purge cron queries deleted_at < cutoff. Without this it
-  // sequentially scans the whole table once a day.
-  deletedAtIdx: index("events_deleted_at_idx").on(t.deletedAt),
+  // PARTIAL index (WHERE rrule IS NOT NULL) so it only holds recurring masters —
+  // the vast majority of rows are non-recurring and don't belong in it.
+  rruleIdx: index("events_rrule_idx").on(t.rrule).where(sql`${t.rrule} IS NOT NULL`),
+  // Soft-delete purge cron queries deleted_at < cutoff. PARTIAL index
+  // (WHERE deleted_at IS NOT NULL) keeps it tiny — almost every row is live.
+  deletedAtIdx: index("events_deleted_at_idx").on(t.deletedAt).where(sql`${t.deletedAt} IS NOT NULL`),
 }));
 
 export const calendarMembers = pgTable("calendar_members", {
