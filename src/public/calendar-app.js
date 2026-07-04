@@ -9,8 +9,31 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  function openModal(id) { $(id).classList.remove("hidden"); $(id).classList.add("flex"); }
-  function closeModal(id) { $(id).classList.add("hidden"); $(id).classList.remove("flex"); }
+  // Animated modal show/hide. The CSS (input.css "Modal motion") keeps modals
+  // in a closed state (opacity/transform) by default and reveals them on the
+  // `.is-open` class; so EVERY show path must call openModal(). Accepts an id
+  // string ("#modal-x") or the element itself.
+  const MODAL_LEAVE_MS = 340; // ≥ the longest CSS leave transition
+  function openModal(id) {
+    const el = typeof id === "string" ? $(id) : id;
+    if (!el) return;
+    el.classList.remove("hidden");
+    el.classList.add("flex");
+    void el.offsetWidth;          // reflow so the enter transition starts closed
+    el.classList.add("is-open");
+  }
+  function closeModal(id) {
+    const el = typeof id === "string" ? $(id) : id;
+    if (!el || el.classList.contains("hidden")) return;
+    el.classList.remove("is-open");  // play the leave transition
+    setTimeout(() => {
+      // A re-open during the leave animation re-adds is-open — don't hide then.
+      if (!el.classList.contains("is-open")) {
+        el.classList.add("hidden");
+        el.classList.remove("flex");
+      }
+    }, MODAL_LEAVE_MS);
+  }
 
   // ---------- helpers used by event modal + drag/drop ----------
 
@@ -117,15 +140,26 @@
 
   function isMobile() { return window.matchMedia("(max-width: 767px)").matches; }
 
+  const DRAWER_LEAVE_MS = 300; // ≥ the CSS drawer/backdrop leave transition
   function showOnMobile() {
     MOBILE_OPEN.forEach(c => sidebar.classList.add(c));
+    sidebar.classList.add("bwc-drawer");
     HIDDEN.forEach(c => sidebar.classList.remove(c));
     backdrop.classList.remove("hidden");
+    void sidebar.offsetWidth;                 // reflow → slide/fade start off-screen
+    sidebar.classList.add("is-open");
+    backdrop.classList.add("is-open");
   }
   function hideOnMobile() {
-    MOBILE_OPEN.forEach(c => sidebar.classList.remove(c));
-    sidebar.classList.add("hidden");
-    backdrop.classList.add("hidden");
+    sidebar.classList.remove("is-open");       // slide out + fade backdrop
+    backdrop.classList.remove("is-open");
+    setTimeout(() => {
+      if (sidebar.classList.contains("is-open")) return; // re-opened mid-leave
+      MOBILE_OPEN.forEach(c => sidebar.classList.remove(c));
+      sidebar.classList.remove("bwc-drawer");
+      sidebar.classList.add("hidden");
+      backdrop.classList.add("hidden");
+    }, DRAWER_LEAVE_MS);
   }
   function showOnDesktop() {
     sidebar.classList.remove("hidden");
@@ -548,8 +582,7 @@
     // Don't fire when a modal is open — let Escape close it instead.
     const openModalEl = document.querySelector("[id^='modal-']:not(.hidden)");
     if (openModalEl && e.key === "Escape") {
-      openModalEl.classList.add("hidden");
-      openModalEl.classList.remove("flex");
+      closeModal(openModalEl);
       return;
     }
     if (openModalEl) return;
@@ -2108,7 +2141,7 @@
 
     function openTzModal(picker) {
       activePicker = picker;
-      modal.classList.remove("hidden");
+      openModal(modal);
       search.value = "";
       renderList("");
       // Focus the search field on desktop; on mobile we don't auto-focus
@@ -2126,7 +2159,7 @@
     }
 
     function closeTzModal() {
-      modal.classList.add("hidden");
+      closeModal(modal);
       activePicker = null;
     }
 

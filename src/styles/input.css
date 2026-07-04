@@ -153,6 +153,72 @@ details > summary::-webkit-details-marker { display: none; }
   footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
 
+/* ---------- Modal + drawer + FAB motion ----------
+   Every modal is a full-screen backdrop container ([id^="modal-"]) whose single
+   child is the panel card. The JS (openModal/closeModal) un-hides the element,
+   forces a reflow, then toggles `.is-open` so these transitions play from the
+   closed state — and removes `.is-open` (letting the leave transition run) a
+   beat before re-hiding. NB: because the closed state below is the default,
+   EVERY show path must go through openModal(), or the panel renders invisible.
+
+   Desktop modals are centered → scale/lift "pop"; mobile modals are bottom
+   sheets (items-end) → slide up from below the fold. */
+[id^="modal-"] {
+  opacity: 0;
+  transition: opacity 220ms ease-out;
+}
+[id^="modal-"].is-open { opacity: 1; }
+
+[id^="modal-"] > * {
+  opacity: 0;
+  transform: translateY(18px) scale(0.97);
+  transform-origin: center;
+  /* gentle overshoot on the way in → a lively, spring-ish "pop" */
+  transition: transform 300ms cubic-bezier(0.34, 1.32, 0.5, 1), opacity 220ms ease-out;
+}
+[id^="modal-"].is-open > * { opacity: 1; transform: none; }
+
+@media (max-width: 639px) {
+  [id^="modal-"] > * {
+    transform: translateY(100%);
+    /* clean ease-out for the sheet — no overshoot past the top edge */
+    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out;
+  }
+}
+
+/* Sidebar (mobile drawer) — backdrop fades, drawer slides in from the left. */
+#cal-sidebar-backdrop {
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+#cal-sidebar-backdrop.is-open { opacity: 1; }
+#cal-sidebar.bwc-drawer {
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateX(-100%);
+}
+#cal-sidebar.bwc-drawer.is-open { transform: translateX(0); }
+
+/* FAB + primary action buttons — tactile press feedback. */
+#btn-new-event-fab {
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 180ms ease-out;
+}
+#btn-new-event-fab:hover { transform: scale(1.06); }
+#btn-new-event-fab:active { transform: scale(0.92); }
+#btn-new-event:active,
+#form-event button[type="submit"]:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  [id^="modal-"],
+  [id^="modal-"] > *,
+  #cal-sidebar-backdrop,
+  #cal-sidebar.bwc-drawer,
+  #btn-new-event-fab {
+    transition: none !important;
+  }
+  [id^="modal-"] > *,
+  #cal-sidebar.bwc-drawer.is-open { transform: none !important; }
+}
+
 /* Toast UI Calendar tweaks to match our theme */
 .toastui-calendar-week-view,
 .toastui-calendar-month {
