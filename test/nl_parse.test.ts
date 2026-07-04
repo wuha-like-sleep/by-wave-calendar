@@ -65,4 +65,79 @@ describe("parseNaturalLanguageEvent", () => {
     const a = parseNaturalLanguageEvent("明天 下午3点 x", "2026-07-03T10:00:00");
     expect(a?.startsAt).toBe("2026-07-04T15:00:00");
   });
+
+  // ---- connected input (no spaces between tokens) ----
+  it("parses fully connected input '明天下午三点开会'", () => {
+    expect(parseNaturalLanguageEvent("明天下午三点开会", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-04T15:00:00",
+      endsAt: "2026-07-04T16:00:00",
+    });
+  });
+
+  it("大后天 wins over its 后天 substring (no whitespace guard)", () => {
+    // 大后天 = +3 days → 2026-07-06, not +2.
+    expect(parseNaturalLanguageEvent("大后天体检", NOW)?.startsAt).toBe("2026-07-06T09:00:00");
+  });
+
+  // ---- Chinese numerals ----
+  it("Chinese-numeral hour '晚上八点半'", () => {
+    expect(parseNaturalLanguageEvent("晚上八点半 吃饭", NOW)).toEqual({
+      summary: "吃饭",
+      startsAt: "2026-07-03T20:30:00",
+      endsAt: "2026-07-03T21:30:00",
+    });
+  });
+
+  it("Chinese-numeral hour ≥10 '十点二十'", () => {
+    // 10:20 today already passed? no, 10:20 > 10:00 now → stays today.
+    expect(parseNaturalLanguageEvent("十点二十 晨跑", NOW)?.startsAt).toBe("2026-07-03T10:20:00");
+  });
+
+  it("二十三点 (24h Chinese numeral)", () => {
+    expect(parseNaturalLanguageEvent("明天二十三点 值班", NOW)?.startsAt).toBe("2026-07-04T23:00:00");
+  });
+
+  // ---- 刻 quarters ----
+  it("'3点一刻' → :15 and '3点三刻' → :45", () => {
+    expect(parseNaturalLanguageEvent("明天3点一刻 x", NOW)?.startsAt).toBe("2026-07-04T03:15:00");
+    expect(parseNaturalLanguageEvent("明天3点三刻 x", NOW)?.startsAt).toBe("2026-07-04T03:45:00");
+  });
+
+  // ---- colon time ----
+  it("colon time '15:30'", () => {
+    expect(parseNaturalLanguageEvent("明天15:30 复盘", NOW)?.startsAt).toBe("2026-07-04T15:30:00");
+  });
+
+  // ---- Chinese durations ----
+  it("'两小时' duration", () => {
+    const r = parseNaturalLanguageEvent("明天10点 两小时 团建", NOW);
+    expect(r?.startsAt).toBe("2026-07-04T10:00:00");
+    expect(r?.endsAt).toBe("2026-07-04T12:00:00");
+  });
+
+  it("'一个半小时' duration → 90min", () => {
+    const r = parseNaturalLanguageEvent("明天10点 一个半小时 workshop", NOW);
+    expect(r?.endsAt).toBe("2026-07-04T11:30:00");
+  });
+
+  it("'半小时' duration → 30min", () => {
+    const r = parseNaturalLanguageEvent("明天10点 半小时 站会", NOW);
+    expect(r?.endsAt).toBe("2026-07-04T10:30:00");
+  });
+
+  // ---- 周末 ----
+  it("周末 → upcoming Saturday", () => {
+    // NOW is 2026-07-03 (Fri) → Saturday is +1 → 2026-07-04.
+    expect(parseNaturalLanguageEvent("周末爬山", NOW)?.startsAt).toBe("2026-07-04T09:00:00");
+  });
+
+  it("下下周一 → +14 over 周一", () => {
+    expect(parseNaturalLanguageEvent("下下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-20T10:00:00");
+  });
+
+  it("does not treat a numeral inside a word as a time ('三国杀')", () => {
+    // 三 without a 点/时 marker must not become 03:00.
+    expect(parseNaturalLanguageEvent("三国杀", NOW)).toBeNull();
+  });
 });

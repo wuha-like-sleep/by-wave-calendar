@@ -1052,21 +1052,59 @@
   }
 
   // ---------- Natural-language event parser ----------
-  // Parses inputs like "明天下午3点 牙医" or "周五10点 1小时 团建" into
+  // Parses inputs like "明天下午三点开会" or "周五10点 1小时 团建" into
   // { summary, startsAt, endsAt }. Returns null if it can't pull out at
   // least one date+time. Pure regex — no LLM, no API call, runs entirely
-  // in the user's browser, works offline.
+  // in the user's browser, works offline. Kept behaviour-identical to the
+  // server parser in src/lib/nl_parse.ts (guarded by test/nl_parse.test.ts)
+  // so web / iOS / Android / desktop all understand the same phrasings.
+  const NL_CN_DIGIT = {
+    "零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
+    "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
+  };
+  // Chinese numeral → number, 0..59 (also accepts an ASCII-digit string).
+  function nlCnNum(s) {
+    if (/^[0-9]+$/.test(s)) return Number(s);
+    if (s === "十") return 10;
+    const i = s.indexOf("十");
+    if (i === -1) {
+      let n = 0;
+      for (const ch of s) {
+        if (!(ch in NL_CN_DIGIT)) return NaN;
+        n = n * 10 + NL_CN_DIGIT[ch];
+      }
+      return n;
+    }
+    const before = s.slice(0, i), after = s.slice(i + 1);
+    const tens = before === "" ? 1 : (before in NL_CN_DIGIT ? NL_CN_DIGIT[before] : NaN);
+    const ones = after === "" ? 0 : (after in NL_CN_DIGIT ? NL_CN_DIGIT[after] : NaN);
+    if (isNaN(tens) || isNaN(ones)) return NaN;
+    return tens * 10 + ones;
+  }
+  // Minutes half of a "X点Y" token: 半→30, 一刻/三刻→15/45, else the numeral.
+  function nlMinToken(g) {
+    if (!g) return 0;
+    if (g === "半") return 30;
+    if (g.endsWith("刻")) { const q = nlCnNum(g.slice(0, -1)); return isNaN(q) ? 0 : q * 15; }
+    const n = nlCnNum(g.replace(/分$/, ""));
+    return isNaN(n) ? 0 : n;
+  }
+  const NL_NUM = "[0-9零〇一二两三四五六七八九十]";
+
   function parseNaturalLanguageEvent(text) {
     if (!text || typeof text !== "string") return null;
-    let remaining = " " + text.trim() + " ";  // pad so word boundaries are easy
+    // Pad so the spaced "半" fallback still works; token rules no longer
+    // require whitespace, so connected input like "明天下午三点开会" parses too.
+    let remaining = " " + text.trim() + " ";
 
-    // Step 1: pull out the date.
+    // Step 1: date. Longer words first (大后天 ⊃ 后天) since there are no
+    // whitespace guards to keep them apart.
     const now = new Date();
     const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     let dateOffset = null;
     const dateRules = [
-      [/\s今天\s/, 0], [/\s明天\s/, 1], [/\s后天\s/, 2], [/\s大后天\s/, 3],
-      [/\s昨天\s/, -1], [/\s前天\s/, -2],
+      [/大后天/, 3], [/后天/, 2], [/明天/, 1], [/今天/, 0],
+      [/前天/, -2], [/昨天/, -1],
     ];
     for (const [re, off] of dateRules) {
       if (re.test(remaining)) {
@@ -1075,21 +1113,21 @@
         break;
       }
     }
-    // 周一..周日 / 周天 — relative to current week, snap to NEXT occurrence
-    // (excluding today). "本周X" / "下周X" / "周X" — same with "下" forcing +7.
-    const weekdayMap = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 0, "天": 0 };
-    const wkRe = /\s(本周|下周|周)([一二三四五六日天])\s/;
+    // 周一..周日 / 周天 / 周末 → NEXT occurrence (never today); 下周X +7, 下下周X +14.
+    const weekdayMap = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 0, "天": 0, "末": 6 };
+    const wkRe = /(下下周|下周|本周|这周|周)([一二三四五六日天末])/;
     const wkMatch = remaining.match(wkRe);
     if (wkMatch && dateOffset === null) {
       const target = weekdayMap[wkMatch[2]];
       let diff = (target - now.getDay() + 7) % 7;
       if (diff === 0) diff = 7;   // 周X always means upcoming, not today
       if (wkMatch[1] === "下周") diff += 7;
+      else if (wkMatch[1] === "下下周") diff += 14;
       dateOffset = diff;
       remaining = remaining.replace(wkRe, " ");
     }
     // X月X日 / X月X号
-    const mdRe = /\s(\d{1,2})月(\d{1,2})[日号]?\s/;
+    const mdRe = /(\d{1,2})月(\d{1,2})[日号]?/;
     const mdMatch = remaining.match(mdRe);
     if (mdMatch && dateOffset === null) {
       const m = Number(mdMatch[1]) - 1;
@@ -1100,27 +1138,30 @@
       remaining = remaining.replace(mdRe, " ");
     }
 
-    // Step 2: pull out the time.
+    // Step 2: time. Colon form ("15:30") first, then 点/时 form with an
+    // optional period prefix and ASCII-or-Chinese numerals + 半/刻/分 minutes.
     let hours = null, mins = 0;
-    // X点 / X点X分 / X时X分
-    const tRe = /\s(早上|上午|中午|下午|晚上|凌晨)?(\d{1,2})(?:[点时:：](\d{1,2})?分?)?\s/;
-    const tMatch = remaining.match(tRe);
-    if (tMatch) {
+    const NL_PERIOD = "(早上|上午|中午|下午|晚上|凌晨)?";
+    const colonRe = new RegExp(NL_PERIOD + "([0-9]{1,2})[:：]([0-9]{2})");
+    const dianRe = new RegExp(
+      NL_PERIOD + "(" + NL_NUM + "{1,3})[点时](半|" + NL_NUM + "{1,3}刻|[0-9]{1,2}分?|" + NL_NUM + "{1,3}分?)?",
+    );
+    let tMatch = remaining.match(colonRe);
+    let matchedRe = tMatch ? colonRe : null;
+    if (!tMatch) { tMatch = remaining.match(dianRe); if (tMatch) matchedRe = dianRe; }
+    if (tMatch && matchedRe) {
       const period = tMatch[1];
-      let h = Number(tMatch[2]);
-      const m = tMatch[3] ? Number(tMatch[3]) : 0;
-      // Period normalization. "下午1点" = 13:00; "晚上11点" = 23:00.
-      // No period: keep h as-is (24-hour).
+      let h = nlCnNum(tMatch[2]);
+      const m = matchedRe === colonRe ? Number(tMatch[3]) : nlMinToken(tMatch[3]);
       if (period === "下午" || period === "晚上") { if (h < 12) h += 12; }
       else if (period === "凌晨") { if (h === 12) h = 0; }
       else if (period === "中午") { h = 12; }
-      // "早上/上午" + 12 — Chinese ambiguity, leave 12 as noon.
-      if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+      if (!isNaN(h) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
         hours = h; mins = m;
-        remaining = remaining.replace(tRe, " ");
+        remaining = remaining.replace(matchedRe, " ");
       }
     }
-    // "半点" e.g. "下午3点半"
+    // "半点" with the 半 split off by whitespace, e.g. "下午3点 半".
     const halfRe = /\s半\s/;
     if (halfRe.test(remaining) && hours !== null && mins === 0) {
       mins = 30;
@@ -1130,20 +1171,35 @@
     // Need at least a date OR time to count this as a successful parse.
     if (dateOffset === null && hours === null) return null;
 
-    // Step 3: duration.
-    let durationMin = 60;  // default
-    const durRe = /\s(\d+(?:\.\d+)?)\s?(小时|h|hours?|分钟|min|minutes?)\s/i;
-    const durMatch = remaining.match(durRe);
-    if (durMatch) {
-      const n = Number(durMatch[1]);
-      const unit = durMatch[2].toLowerCase();
-      durationMin = (unit.startsWith("小时") || unit === "h" || unit.startsWith("hour"))
-        ? Math.round(n * 60)
-        : Math.round(n);
-      remaining = remaining.replace(durRe, " ");
+    // Step 3: duration. "X个半小时" (X·60+30), then plain "X小时/X分钟"
+    // (ASCII or Chinese, optional 个), then a bare "半小时" fallback.
+    let durationMin = 60;
+    let durSet = false;
+    const durHalfRe = new RegExp("([0-9]+|" + NL_NUM + "+)个?半个?小时");
+    const durHalfM = remaining.match(durHalfRe);
+    if (durHalfM) {
+      const n = nlCnNum(durHalfM[1]);
+      if (!isNaN(n)) { durationMin = n * 60 + 30; durSet = true; remaining = remaining.replace(durHalfRe, " "); }
     }
-    const halfHourRe = /\s半小时\s/;
-    if (halfHourRe.test(remaining)) { durationMin = 30; remaining = remaining.replace(halfHourRe, " "); }
+    if (!durSet) {
+      const durRe = new RegExp("([0-9]+(?:\\.[0-9]+)?|" + NL_NUM + "+)\\s?个?\\s?(小时|h|hours?|分钟|min|minutes?)", "i");
+      const durMatch = remaining.match(durRe);
+      if (durMatch) {
+        const n = /^[0-9.]+$/.test(durMatch[1]) ? Number(durMatch[1]) : nlCnNum(durMatch[1]);
+        const unit = durMatch[2].toLowerCase();
+        if (!isNaN(n)) {
+          durationMin = (unit.startsWith("小时") || unit === "h" || unit.startsWith("hour"))
+            ? Math.round(n * 60)
+            : Math.round(n);
+          durSet = true;
+          remaining = remaining.replace(durRe, " ");
+        }
+      }
+    }
+    if (!durSet) {
+      const halfHourRe = /半个?小时/;
+      if (halfHourRe.test(remaining)) { durationMin = 30; remaining = remaining.replace(halfHourRe, " "); }
+    }
 
     // Step 4: build the date.
     const startsAt = new Date(day);
@@ -1159,39 +1215,61 @@
     const endsAt = new Date(startsAt.getTime() + durationMin * 60000);
 
     // Step 5: the remaining text is the summary.
-    const summary = remaining.replace(/[，。、；：,;:]+/g, " ").trim();
+    const summary = remaining.replace(/[，。、；：,;:]+/g, " ").replace(/\s+/g, " ").trim();
     return { summary, startsAt, endsAt };
   }
 
-  // Wire the natural-language input. Pressing Enter (or blur after change)
-  // populates the form fields with the parsed values. Shows a short hint
-  // so the user sees we understood them.
+  // Wire the natural-language input. As the user types we show a LIVE
+  // (debounced) preview of what we understood — but only touch the form
+  // fields on an explicit commit (Enter or blur), so a half-typed phrase
+  // never rewrites the form underneath them. Failures stay quiet during
+  // typing and only nudge on commit.
   {
     const nlInput = $("#nl-input");
     const nlHint = $("#nl-hint");
-    function applyNl() {
+    const fmtDate = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
+    const fmtTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    function showParsed(parsed, commit) {
       if (!nlInput || !nlHint) return;
-      const parsed = parseNaturalLanguageEvent(nlInput.value);
       if (!parsed) {
-        nlHint.classList.remove("hidden");
-        nlHint.style.color = "rgb(100 116 139)";
-        nlHint.textContent = "没看懂时间，试试「明天下午3点 牙医」";
+        if (commit && nlInput.value.trim()) {
+          nlHint.classList.remove("hidden");
+          nlHint.style.color = "rgb(100 116 139)";
+          nlHint.textContent = "没看懂时间，试试「明天下午三点 开会」";
+        } else {
+          nlHint.classList.add("hidden");
+          nlHint.textContent = "";
+        }
         return;
       }
-      const form = $("#form-event");
-      if (parsed.summary) form.querySelector('[name="summary"]').value = parsed.summary;
-      form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(parsed.startsAt);
-      form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(parsed.endsAt);
-      const fmt = (d) => `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      if (commit) {
+        const form = $("#form-event");
+        if (parsed.summary) form.querySelector('[name="summary"]').value = parsed.summary;
+        form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(parsed.startsAt);
+        form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(parsed.endsAt);
+      }
+      // "7月4日 15:00–16:30 · 开会" — collapse the end to just a time when it's
+      // the same calendar day, so the duration reads at a glance.
+      const sameDay = parsed.startsAt.toDateString() === parsed.endsAt.toDateString();
+      const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
       nlHint.classList.remove("hidden");
       nlHint.style.color = "rgb(67 56 202)"; // brand-700
-      nlHint.textContent = `✓ ${fmt(parsed.startsAt)} 开始 · ${parsed.summary || "无标题"}`;
+      nlHint.textContent = `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${parsed.summary || "无标题"}`;
+    }
+    function applyNl(commit) {
+      if (!nlInput) return;
+      showParsed(parseNaturalLanguageEvent(nlInput.value), commit);
     }
     if (nlInput) {
-      nlInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); applyNl(); }
+      let debounce;
+      nlInput.addEventListener("input", () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => applyNl(false), 200); // live preview only
       });
-      nlInput.addEventListener("blur", () => { if (nlInput.value.trim()) applyNl(); });
+      nlInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); clearTimeout(debounce); applyNl(true); }
+      });
+      nlInput.addEventListener("blur", () => { clearTimeout(debounce); if (nlInput.value.trim()) applyNl(true); });
     }
   }
 
