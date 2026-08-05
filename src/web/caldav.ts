@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
@@ -26,10 +26,36 @@ function etagOf(t: Date | string): string {
   return `"${crypto.createHash("md5").update(v).digest("hex")}"`;
 }
 
-function calendarCtag(updates: Date[]): string {
-  if (updates.length === 0) return etagOf("empty");
-  const latest = updates.reduce((acc, d) => (d > acc ? d : acc), new Date(0));
-  return etagOf(latest);
+// Collection ctag for one or more calendars, via SQL aggregate.
+//
+// MUST include soft-deleted rows: cancelEvent bumps updatedAt when it sets
+// deletedAt, and that bump is the ONLY signal a deletion ever emits. The old
+// implementation hashed max(updatedAt) over live rows only, so a web-side
+// delete left the ctag unchanged and Apple Calendar (which polls getctag to
+// decide whether to re-sync) never removed the event from the phone.
+// The live-row count is hashed in as a belt-and-braces second signal, and
+// this also replaces loading every event into memory just to fold their
+// timestamps (the home PROPFIND did that once per calendar per poll).
+async function calendarCtags(calIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (calIds.length === 0) return out;
+  const rows = await db
+    .select({
+      calendarId: schema.events.calendarId,
+      maxUpdated: sql<string | null>`max(${schema.events.updatedAt})::text`,
+      liveCount: sql<number>`count(*) filter (where ${schema.events.deletedAt} is null)::int`,
+    })
+    .from(schema.events)
+    .where(inArray(schema.events.calendarId, calIds))
+    .groupBy(schema.events.calendarId);
+  for (const r of rows) {
+    out.set(r.calendarId, etagOf(`${r.maxUpdated ?? "empty"}|${r.liveCount}`));
+  }
+  // Calendars with zero event rows produce no group — give them a stable tag.
+  for (const id of calIds) {
+    if (!out.has(id)) out.set(id, etagOf("empty|0"));
+  }
+  return out;
 }
 
 const XML_DECL = '<?xml version="1.0" encoding="utf-8"?>';
@@ -415,14 +441,14 @@ async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
 
   if (depth !== "0") {
     const cals = await db.select().from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
+    const ctags = await calendarCtags(cals.map(c => c.id));
     for (const c of cals) {
-      const events = await loadAllEventsOf(c.id);
       entries.push(responseEntry(calendarHref(user.id, c.id), {
         resourcetype: '<collection/><C:calendar/>',
         displayname: c.name,
         supportedCalendarComponentSet: ["VEVENT"],
         supportedReportSet: true,
-        ctag: calendarCtag(events.map(e => e.updatedAt)),
+        ctag: ctags.get(c.id)!,
         ownerHref: principalHref(user.id),
         calendarColor: c.color,
         calendarDescription: c.description ?? undefined,
@@ -452,7 +478,7 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
     displayname: cal.name,
     supportedCalendarComponentSet: ["VEVENT"],
     supportedReportSet: true,
-    ctag: calendarCtag(events.map(e => e.updatedAt)),
+    ctag: (await calendarCtags([cal.id])).get(cal.id)!,
     ownerHref: principalHref(user.id),
     calendarColor: cal.color,
     calendarDescription: cal.description ?? undefined,
@@ -486,20 +512,29 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
 
   // calendar-multiget: client lists explicit hrefs
   if (/<C:calendar-multiget[\s>]/i.test(bodyStr) || /calendar-multiget/i.test(bodyStr)) {
-    // Extract <href>...</href> entries from the request body
+    // Extract <href>...</href> entries from the request body. Keep the
+    // original href strings — requested-but-missing resources must be
+    // answered with a 404 <response> under this exact href so the client
+    // drops its local copy (this is how a web-side delete propagates when
+    // the client re-fetches by href).
     const hrefMatches = Array.from(bodyStr.matchAll(/<(?:[A-Za-z0-9]+:)?href[^>]*>([^<]+)<\/(?:[A-Za-z0-9]+:)?href>/g));
-    const wantedUids = hrefMatches.map(m => {
-      const href = (m[1] ?? "").trim();
-      const match = href.match(/\/([^/]+)\.ics$/);
-      return match?.[1] ?? null;
-    }).filter((x): x is string => !!x);
+    const wanted = hrefMatches
+      .map(m => {
+        const href = (m[1] ?? "").trim();
+        const match = href.match(/\/([^/]+)\.ics$/);
+        return match?.[1] ? { href, uid: match[1] } : null;
+      })
+      .filter((x): x is { href: string; uid: string } => !!x);
+    const wantedUids = wanted.map(w => w.uid);
 
+    // Soft-deleted rows are excluded on purpose: returning them here
+    // would resurrect deleted events on the client.
     const events = wantedUids.length === 0
       ? await loadAllEventsOf(cal.id)
       : (await db
           .select()
           .from(schema.events)
-          .where(and(eq(schema.events.calendarId, cal.id))))
+          .where(and(eq(schema.events.calendarId, cal.id), isNull(schema.events.deletedAt))))
           .filter(e => wantedUids.includes(e.uid));
 
     // Batch-load RSVP statuses for all matched events so the response
@@ -509,6 +544,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     // hundreds of events at once on first sync) the multistatus XML
     // was easily 10MB+, all held in memory at once. Generator yields
     // one <response> at a time; streamMultistatus flushes each.
+    const foundUids = new Set(events.map(e => e.uid));
     await streamMultistatus(reply, (function* () {
       for (const e of events) {
         let entry: string;
@@ -526,6 +562,12 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
           continue;
         }
         yield entry;
+      }
+      // 404 entries for requested hrefs that don't exist (or are deleted) —
+      // echo the client's own href verbatim so it can match them up.
+      for (const w of wanted) {
+        if (foundUids.has(w.uid)) continue;
+        yield `<response>\n    <href>${xmlEscape(w.href)}</href>\n    <status>HTTP/1.1 404 Not Found</status>\n  </response>`;
       }
     })());
     return;
@@ -597,7 +639,9 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
     .from(schema.events)
     .where(and(eq(schema.events.calendarId, cal.id), eq(schema.events.uid, params.uid ?? "")))
     .limit(1);
-  if (!event) return reply.code(404).send("Not Found");
+  // Soft-deleted counts as gone — serving it would resurrect the event
+  // on clients that re-fetch by href after a web-side delete.
+  if (!event || event.deletedAt) return reply.code(404).send("Not Found");
 
   const statusMap = await loadAttendeeStatuses([event.id]);
   let ics: string;
