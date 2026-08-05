@@ -23,7 +23,10 @@ struct MonthView: View {
     private let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.firstWeekday = 2  // Monday-first to match the web
-        c.locale = Locale(identifier: "zh_CN")
+        // Grid math uses the explicit firstWeekday above; the locale only
+        // feeds any symbol lookups, so it must follow the app language
+        // (was hardcoded zh_CN → leaked Chinese in non-zh UI).
+        c.locale = Locale.current
         return c
     }()
 

@@ -377,3 +377,13 @@
 /* Accessibility — calendar nav chevrons */
 "上一页" = "Anterior";
 "下一页" = "Siguiente";
+
+// v1.6.2 — 撤销删除 + 自然语言快速新建
+"已删除「%@」" = "Se eliminó “%@”";
+"撤销删除" = "Deshacer";
+"快速新建" = "Creación rápida";
+"试试：明天下午3点和老王开会" = "Prueba: reunión mañana a las 15:00";
+"填入" = "Rellenar";
+"没看懂，换个说法试试" = "No se pudo interpretar. Prueba con otras palabras";
+"删除后 5 秒内可撤销。" = "Puedes deshacer durante 5 segundos después de eliminar.";
+"删除后 5 秒内可撤销。重复事件请进详情删除。" = "Puedes deshacer durante 5 segundos después de eliminar. Los eventos recurrentes se eliminan desde el detalle.";

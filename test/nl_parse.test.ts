@@ -59,6 +59,83 @@ describe("parseNaturalLanguageEvent", () => {
     expect(parseNaturalLanguageEvent("", NOW)).toBeNull();
   });
 
+  // ---- 口语化扩充 (v1.6.7) ----
+
+  it("今晚 → 今天晚上", () => {
+    expect(parseNaturalLanguageEvent("今晚8点 聚餐", NOW)).toEqual({
+      summary: "聚餐",
+      startsAt: "2026-07-03T20:00:00",
+      endsAt: "2026-07-03T21:00:00",
+    });
+  });
+
+  it("礼拜五/星期五 normalize to 周五 (Fri now → next Fri)", () => {
+    expect(parseNaturalLanguageEvent("礼拜五 9点 打球", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("星期五 9点 打球", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+  });
+
+  it("做礼拜 in summary is NOT eaten by the weekday rule", () => {
+    const r = parseNaturalLanguageEvent("明天 上午10点 去教堂做礼拜", NOW);
+    expect(r?.summary).toBe("去教堂做礼拜");
+  });
+
+  it("三天后", () => {
+    expect(parseNaturalLanguageEvent("三天后 交报告", NOW)?.startsAt).toBe("2026-07-06T09:00:00");
+  });
+
+  it("下周 alone → next week's Monday", () => {
+    expect(parseNaturalLanguageEvent("下周 述职", NOW)?.startsAt).toBe("2026-07-06T09:00:00");
+  });
+
+  it("下个月5号", () => {
+    expect(parseNaturalLanguageEvent("下个月5号 还信用卡", NOW)?.startsAt).toBe("2026-08-05T09:00:00");
+  });
+
+  it("bare 15号 → this month when still ahead", () => {
+    expect(parseNaturalLanguageEvent("15号 交房租", NOW)?.startsAt).toBe("2026-07-15T09:00:00");
+  });
+
+  it("bare 1号 already passed → next month", () => {
+    expect(parseNaturalLanguageEvent("1号 交房租", NOW)?.startsAt).toBe("2026-08-01T09:00:00");
+  });
+
+  it("时间区间 下午3点到5点 → duration 2h", () => {
+    expect(parseNaturalLanguageEvent("明天下午3点到5点 培训", NOW)).toEqual({
+      summary: "培训",
+      startsAt: "2026-07-04T15:00:00",
+      endsAt: "2026-07-04T17:00:00",
+    });
+  });
+
+  it("时间区间 end inherits start period + 半", () => {
+    expect(parseNaturalLanguageEvent("明天下午3点半到5点 复盘", NOW)).toEqual({
+      summary: "复盘",
+      startsAt: "2026-07-04T15:30:00",
+      endsAt: "2026-07-04T17:00:00",
+    });
+  });
+
+  it("period without hour → colloquial default (下午 → 15:00)", () => {
+    expect(parseNaturalLanguageEvent("明天下午 开会", NOW)?.startsAt).toBe("2026-07-04T15:00:00");
+  });
+
+  it("中午一点 means 13:00, not 12:00", () => {
+    expect(parseNaturalLanguageEvent("中午一点 午饭", NOW)?.startsAt).toBe("2026-07-03T13:00:00");
+  });
+
+  it("傍晚6点 / 夜里11点 pm handling", () => {
+    expect(parseNaturalLanguageEvent("明天傍晚6点 散步", NOW)?.startsAt).toBe("2026-07-04T18:00:00");
+    expect(parseNaturalLanguageEvent("明天夜里11点 追剧", NOW)?.startsAt).toBe("2026-07-04T23:00:00");
+  });
+
+  it("俩钟头 duration", () => {
+    expect(parseNaturalLanguageEvent("明天10点 俩钟头 培训", NOW)).toEqual({
+      summary: "培训",
+      startsAt: "2026-07-04T10:00:00",
+      endsAt: "2026-07-04T12:00:00",
+    });
+  });
+
   it("is timezone-neutral: server TZ does not shift the wall-clock result", () => {
     // Same inputs must yield the same wall-clock string regardless of where
     // the server runs — we anchor everything to the caller's `now`.

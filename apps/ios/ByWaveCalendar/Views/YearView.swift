@@ -18,7 +18,7 @@ struct YearView: View {
     private let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
         c.firstWeekday = 2
-        c.locale = Locale(identifier: "zh_CN")
+        c.locale = Locale.current  // symbols follow app language (was zh_CN)
         return c
     }()
 
@@ -77,9 +77,11 @@ private struct MonthCard: View {
     let isCurrentMonth: Bool
 
     private var monthName: String {
+        // CLDR template so each language names months its own way
+        // ("8月" / "Aug" / "août") — was hardcoded "M月" (zh leak).
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "M月"
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("MMM")
         return f.string(from: anchor)
     }
 

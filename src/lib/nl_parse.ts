@@ -113,6 +113,20 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   // connected input like "明天下午三点开会" parses too.
   let remaining = " " + text.trim() + " ";
 
+  // Colloquial normalization — fold spoken variants onto the canonical
+  // tokens the rules below understand. Lookaheads keep the replacements
+  // from mangling summary text (去教堂做礼拜 must NOT become 做周).
+  remaining = remaining
+    .replace(/(星期|礼拜)(?=[一二三四五六日天末])/g, "周")
+    .replace(/(?<=[下本这])(星期|礼拜)/g, "周")
+    .replace(/今晚/g, "今天晚上")
+    .replace(/明晚/g, "明天晚上")
+    .replace(/今早/g, "今天早上")
+    .replace(/明早/g, "明天早上")
+    .replace(/钟头/g, "小时")
+    .replace(/俩(?=个?(小时|分钟))/g, "两")
+    .replace(/仨(?=个?(小时|分钟))/g, "三");
+
   const nowAnchor = anchorNow(now);
   // Midnight of "today" in the caller's wall-clock.
   const day = new Date(Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth(), nowAnchor.getUTCDate()));
@@ -145,6 +159,26 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     dateOffset = diff;
     remaining = remaining.replace(wkRe, " ");
   }
+  // "下周/下下周" alone (no weekday) → that week's Monday.
+  const bareWeekRe = /(下下周|下周)(?![一二三四五六日天末])/;
+  const bareWeekM = remaining.match(bareWeekRe);
+  if (bareWeekM && dateOffset === null) {
+    let diff = (1 - dow + 7) % 7;
+    if (diff === 0) diff = 7;
+    if (bareWeekM[1] === "下下周") diff += 7;
+    dateOffset = diff;
+    remaining = remaining.replace(bareWeekRe, " ");
+  }
+  // "X天后 / X天以后" relative offset.
+  const daysLaterRe = new RegExp("(" + NUM + "{1,3})天[以之]?后");
+  const daysLaterM = remaining.match(daysLaterRe);
+  if (daysLaterM && dateOffset === null) {
+    const n = cnNum(daysLaterM[1]!);
+    if (!isNaN(n) && n > 0 && n < 400) {
+      dateOffset = n;
+      remaining = remaining.replace(daysLaterRe, " ");
+    }
+  }
   // X月X日 / X月X号
   const mdRe = /(\d{1,2})月(\d{1,2})[日号]?/;
   const mdMatch = remaining.match(mdRe);
@@ -156,6 +190,29 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
     remaining = remaining.replace(mdRe, " ");
   }
+  // "下个月X号 / 这个月X号" month-relative dates.
+  const relMonthRe = /(下下个月|下个月|这个月|本月)(\d{1,2})[日号]/;
+  const relMonthM = remaining.match(relMonthRe);
+  if (relMonthM && dateOffset === null) {
+    const addMonths = relMonthM[1] === "下下个月" ? 2 : relMonthM[1] === "下个月" ? 1 : 0;
+    const d = Number(relMonthM[2]);
+    const tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + addMonths, d);
+    dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
+    remaining = remaining.replace(relMonthRe, " ");
+  }
+  // Bare "X号" → this month, or next month when already passed
+  // ("15号交房租"). Digits-only on purpose — 三号楼 stays in the summary.
+  const bareDayRe = /(?<![0-9月])([0-9]{1,2})号/;
+  const bareDayM = remaining.match(bareDayRe);
+  if (bareDayM && dateOffset === null) {
+    const d = Number(bareDayM[1]);
+    if (d >= 1 && d <= 31) {
+      let tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth(), d);
+      if (tgt < day.getTime()) tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + 1, d);
+      dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
+      remaining = remaining.replace(bareDayRe, " ");
+    }
+  }
 
   // Step 2: time. Two forms, tried in order:
   //   colon:  "15:30", "下午3:30"
@@ -163,24 +220,73 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   // Both accept an optional period prefix and ASCII-or-Chinese numerals.
   let hours: number | null = null;
   let mins = 0;
-  const PERIOD = "(早上|上午|中午|下午|晚上|凌晨)?";
-  const colonRe = new RegExp(PERIOD + "([0-9]{1,2})[:：]([0-9]{2})");
-  const dianRe = new RegExp(
-    PERIOD + "(" + NUM + "{1,3})[点时](半|" + NUM + "{1,3}刻|[0-9]{1,2}分?|" + NUM + "{1,3}分?)?",
-  );
-  let tMatch = remaining.match(colonRe);
-  let matchedRe: RegExp | null = tMatch ? colonRe : null;
-  if (!tMatch) { tMatch = remaining.match(dianRe); if (tMatch) matchedRe = dianRe; }
-  if (tMatch && matchedRe) {
-    const period = tMatch[1];
-    let h = cnNum(tMatch[2]!);
-    const m = matchedRe === colonRe ? Number(tMatch[3]) : parseMinToken(tMatch[3]);
-    if (period === "下午" || period === "晚上") { if (h < 12) h += 12; }
-    else if (period === "凌晨") { if (h === 12) h = 0; }
-    else if (period === "中午") { h = 12; }
-    if (!isNaN(h) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-      hours = h; mins = m;
-      remaining = remaining.replace(matchedRe, " ");
+  const PERIOD = "(早上|清晨|一早|上午|中午|下午|傍晚|晚上|夜里|半夜|凌晨)?";
+  // Resolve an hour under its period word. 中午一点 must give 13, not
+  // 12 — the old code forced 中午→12 unconditionally.
+  function applyPeriod(period: string | undefined, h: number): number {
+    switch (period) {
+      case "下午": case "傍晚": case "晚上": case "夜里":
+        return h < 12 ? h + 12 : h;
+      case "凌晨": case "半夜":
+        return h === 12 ? 0 : h;
+      case "中午":
+        return h <= 3 ? h + 12 : h;   // 中午12点=12, 中午一点=13, 中午11点=11
+      default:
+        return h;
+    }
+  }
+  const TIME_TOKEN = "(" + NUM + "{1,3})[点时](半|" + NUM + "{1,3}刻|[0-9]{1,2}分?|" + NUM + "{1,3}分?)?";
+  // Range form first — "下午3点到5点" / "3点半至5点" — so the single-time
+  // rule below doesn't eat the start and leave "到5点" in the summary.
+  let durationFromRange: number | null = null;
+  const rangeRe = new RegExp(PERIOD + TIME_TOKEN + "[到至~—-]" + PERIOD + TIME_TOKEN);
+  const rMatch = remaining.match(rangeRe);
+  if (rMatch) {
+    const [, p1, h1raw, m1raw, p2, h2raw, m2raw] = rMatch;
+    const h1 = applyPeriod(p1, cnNum(h1raw!));
+    const m1 = parseMinToken(m1raw);
+    // End inherits the start's period when it has none (下午3点到5点 → 17).
+    let h2 = applyPeriod(p2 ?? p1, cnNum(h2raw!));
+    const m2 = parseMinToken(m2raw);
+    if (!isNaN(h1) && !isNaN(h2) && h1 >= 0 && h1 <= 23 && h2 >= 0 && h2 <= 23) {
+      if (h2 * 60 + m2 <= h1 * 60 + m1 && h2 < 12) h2 += 12; // 10点到2点 → 14
+      const dur = (h2 * 60 + m2) - (h1 * 60 + m1);
+      if (dur > 0) {
+        hours = h1; mins = m1;
+        durationFromRange = dur;
+        remaining = remaining.replace(rangeRe, " ");
+      }
+    }
+  }
+  if (hours === null) {
+    const colonRe = new RegExp(PERIOD + "([0-9]{1,2})[:：]([0-9]{2})");
+    const dianRe = new RegExp(PERIOD + TIME_TOKEN);
+    let tMatch = remaining.match(colonRe);
+    let matchedRe: RegExp | null = tMatch ? colonRe : null;
+    if (!tMatch) { tMatch = remaining.match(dianRe); if (tMatch) matchedRe = dianRe; }
+    if (tMatch && matchedRe) {
+      const period = tMatch[1];
+      const h = applyPeriod(period, cnNum(tMatch[2]!));
+      const m = matchedRe === colonRe ? Number(tMatch[3]) : parseMinToken(tMatch[3]);
+      if (!isNaN(h) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
+        hours = h; mins = m;
+        remaining = remaining.replace(matchedRe, " ");
+      }
+    }
+  }
+  // Period word with no explicit hour — "明天下午开会" should land at a
+  // sensible colloquial default instead of the generic 09:00.
+  if (hours === null) {
+    const periodDefaults: [RegExp, number][] = [
+      [/凌晨|半夜/, 6], [/早上|清晨|一早/, 9], [/上午/, 10], [/中午/, 12],
+      [/下午/, 15], [/傍晚/, 18], [/晚上|夜里/, 20],
+    ];
+    for (const [re, h] of periodDefaults) {
+      if (re.test(remaining)) {
+        hours = h; mins = 0;
+        remaining = remaining.replace(re, " ");
+        break;
+      }
     }
   }
   // "半点" with the 半 split off by whitespace, e.g. "下午3点 半".
@@ -197,8 +303,9 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   // (ASCII or Chinese, optional 个), then a bare "半小时" fallback.
   let durationMin = 60;
   let durSet = false;
+  if (durationFromRange !== null) { durationMin = durationFromRange; durSet = true; }
   const durHalfRe = new RegExp("([0-9]+|" + NUM + "+)个?半个?小时");
-  const durHalfM = remaining.match(durHalfRe);
+  const durHalfM = durSet ? null : remaining.match(durHalfRe);
   if (durHalfM) {
     const n = cnNum(durHalfM[1]!);
     if (!isNaN(n)) { durationMin = n * 60 + 30; durSet = true; remaining = remaining.replace(durHalfRe, " "); }

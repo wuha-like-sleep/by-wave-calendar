@@ -57,7 +57,7 @@ struct DayView: View {
                 if let id = pendingDeleteId { Task { await delete(id: id) } }
             }
         } message: {
-            Text("此操作不可恢复。重复事件请进详情删除。")
+            Text("删除后 5 秒内可撤销。重复事件请进详情删除。")
         }
         .sheet(item: $pendingDuplicate) { ev in
             NavigationStack {
@@ -77,6 +77,12 @@ struct DayView: View {
     private func delete(id: String) async {
         do {
             try await APIClient(state: state).delete("/events/\(id)")
+            // Swipe-delete is only offered for non-recurring events
+            // (onDelete is nil when rrule != nil), so this is always a
+            // restorable soft-delete → offer undo.
+            if let ev = events.first(where: { $0.id == id }) {
+                state.noteEventDeleted(id: id, summary: ev.summary)
+            }
             onEventChanged()
         } catch {
             // Silent — parent reload will surface any inconsistency.

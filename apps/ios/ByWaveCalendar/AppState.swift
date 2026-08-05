@@ -40,6 +40,16 @@ enum AppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// One just-deleted event, offered for undo via the snackbar in
+/// CalendarView (对齐 Android 0.11.1 的「已删除 · 撤销」). `token`
+/// distinguishes successive deletes so the 5s auto-dismiss timer of an
+/// older snackbar can't dismiss a newer one.
+struct PendingUndoDelete: Equatable {
+    let eventId: String
+    let summary: String
+    let token: UUID
+}
+
 @MainActor
 final class AppState: ObservableObject {
     // MARK: - Published state
@@ -82,6 +92,16 @@ final class AppState: ObservableObject {
     /// .unknown which optimistically enables every feature (so a brand
     /// new server we haven't probed yet doesn't get UI hidden).
     @Published var serverCapabilities: ServerCapabilities = .unknown
+
+    /// Set right after a successful series-scope delete; CalendarView
+    /// overlays the undo snackbar while non-nil. Instance/future-scoped
+    /// deletes of recurring events never set this — POST /restore can't
+    /// undo an exdate/UNTIL edit, only a soft-delete.
+    @Published var pendingUndoDelete: PendingUndoDelete?
+
+    func noteEventDeleted(id: String, summary: String) {
+        pendingUndoDelete = PendingUndoDelete(eventId: id, summary: summary, token: UUID())
+    }
 
     /// Hidden calendar IDs — cross-profile to match legacy behavior.
     /// Could become per-profile in a future refactor but most users

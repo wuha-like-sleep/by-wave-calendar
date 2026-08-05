@@ -215,6 +215,49 @@ extension APIClient {
     }
 }
 
+// MARK: - 撤销删除 + 自然语言快速新建 (v1.6.2, 对齐 web/Android/桌面)
+extension APIClient {
+    /// POST /events/:id/restore — un-soft-deletes a just-deleted event.
+    /// Server-side this is idempotent, so double-tapping 撤销 is harmless.
+    /// Returns the restored row (bare JSON, no envelope).
+    @discardableResult
+    func restoreEvent(id: String) async throws -> EventDTO {
+        try await post("/events/\(id)/restore", body: EmptyJSONBody())
+    }
+
+    /// POST /parse-event — the server-shared natural-language parser, so
+    /// iOS parses "明天下午3点开会" exactly like web/Android/desktop do.
+    /// `now` is the caller's LOCAL wall-clock ("YYYY-MM-DDTHH:mm:ss", no
+    /// zone) — the server anchors relative dates ("明天") to it, keeping
+    /// results correct regardless of the server's own timezone.
+    func parseQuickEvent(text: String, now: String) async throws -> QuickParsedEvent {
+        try await post("/parse-event", body: ["text": text, "now": now])
+    }
+}
+
+struct EmptyJSONBody: Encodable {}
+
+/// Response of POST /parse-event. startsAt/endsAt are NAIVE local
+/// wall-clock strings ("YYYY-MM-DDTHH:mm:ss") — deliberately not ISO
+/// with offset, so decode them with a local-zone DateFormatter, never
+/// JSONDecoder.iso().
+struct QuickParsedEvent: Decodable {
+    let summary: String
+    let startsAt: String
+    let endsAt: String
+
+    /// Map a naive wall-clock string into a Date in the given zone
+    /// (defaults to the device zone — same interpretation the web
+    /// client uses when it fills its form).
+    static func localDate(_ s: String, in zone: TimeZone = .current) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = zone
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return f.date(from: s)
+    }
+}
+
 // Type-erased wrapper for Encodable payloads so we can pass any
 // concrete type into post(...) without making request() generic over input.
 private struct AnyEncodable: Encodable {

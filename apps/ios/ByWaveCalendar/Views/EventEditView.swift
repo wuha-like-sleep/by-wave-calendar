@@ -4,6 +4,24 @@
 // a NavigationStack so Save / Cancel can live in the toolbar.
 
 import SwiftUI
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+#if canImport(FoundationModels)
+// 快速新建的 Apple 智能通道 (iOS 26+)。Guided generation 强制模型输出
+// 这个结构,免去手写 JSON 解析。@Guide 文案是给模型看的,不本地化。
+@available(iOS 26.0, *)
+@Generable
+struct AIQuickEvent {
+    @Guide(description: "事件标题,去掉时间词只留事件本体,保留输入的语言")
+    var summary: String
+    @Guide(description: "开始时间,本地时间,格式 yyyy-MM-dd'T'HH:mm:ss,不带时区")
+    var startsAt: String
+    @Guide(description: "结束时间,同格式;输入未提及时长时取开始时间加一小时")
+    var endsAt: String
+}
+#endif
 
 enum EventEditMode {
     case create
@@ -161,8 +179,42 @@ struct EventEditView: View {
         }
     }
 
+    // 自然语言快速填写 (v1.6.2, 对齐 web/Android/桌面 — 同一个服务器端点,
+    // 三端解析行为一致)。仅新建/复制模式;编辑已有事件时隐藏。
+    @State private var quickText = ""
+    @State private var quickParsing = false
+    @State private var quickError: String?
+
     var body: some View {
         Form {
+            if mode.isCreate {
+                Section {
+                    HStack(spacing: 8) {
+                        TextField("试试：明天下午3点和老王开会", text: $quickText)
+                            .autocorrectionDisabled(true)
+                            .onSubmit { Task { await parseQuick() } }
+                        Button {
+                            Task { await parseQuick() }
+                        } label: {
+                            if quickParsing {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Text("填入").font(.callout.weight(.medium))
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(quickParsing || quickText.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    if let quickError {
+                        Text(quickError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                } header: {
+                    Text("快速新建")
+                }
+            }
+
             Section {
                 TextField("事件标题", text: $summary, axis: .vertical)
                     .lineLimit(1...3)
@@ -319,6 +371,104 @@ struct EventEditView: View {
     // Used by the .onChange handler to compute the start-time delta and
     // shift end accordingly. Tracks the value seen at the previous frame.
     @State private var oldStartValue: Date?
+
+    /// Quick-add parse. Tries the on-device Apple Intelligence model first
+    /// (iOS 26+, eligible device — handles any language, nothing leaves the
+    /// phone), then falls back to the server-shared /parse-event endpoint
+    /// so老设备/模型未就绪时行为与 web/Android/桌面一致。
+    private func parseQuick() async {
+        let text = quickText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !quickParsing else { return }
+        quickParsing = true
+        quickError = nil
+        defer { quickParsing = false }
+
+        if let (aiSummary, aiStart, aiEnd) = await parseQuickWithAppleAI(text: text) {
+            applyParsed(summary: aiSummary, start: aiStart, end: aiEnd)
+            return
+        }
+
+        // Local wall-clock "now" — the server anchors 明天/下周三 to this,
+        // NOT to its own clock (server may be in another timezone).
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        do {
+            let parsed = try await APIClient(state: state)
+                .parseQuickEvent(text: text, now: f.string(from: Date()))
+            guard let s = QuickParsedEvent.localDate(parsed.startsAt),
+                  let e = QuickParsedEvent.localDate(parsed.endsAt)
+            else {
+                quickError = "没看懂，换个说法试试".loc
+                return
+            }
+            applyParsed(summary: parsed.summary, start: s, end: e)
+        } catch let err as APIError {
+            if case .server(let status, _) = err, status == 422 {
+                quickError = "没看懂，换个说法试试".loc
+            } else {
+                quickError = err.localizedDescription
+            }
+        } catch {
+            quickError = error.localizedDescription
+        }
+    }
+
+    private func applyParsed(summary parsedSummary: String, start s: Date, end e: Date) {
+        withAnimation {
+            let trimmed = parsedSummary.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty { summary = trimmed }
+            allDay = false
+            startsAt = s
+            endsAt = max(e, s.addingTimeInterval(60))
+            // The user got an explicit end from the parser — break the
+            // start→end linkage so tweaking start won't shift it again.
+            endLinkedToStart = false
+            oldStartValue = s
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    /// On-device parse via the iOS 26 Foundation Models framework (Apple
+    /// Intelligence). Returns nil whenever anything is off — old OS, model
+    /// unavailable/not downloaded, hallucinated dates, past-dated result —
+    /// so the caller silently falls back to the server parser.
+    private func parseQuickWithAppleAI(text: String) async -> (String, Date, Date)? {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else { return nil }
+        guard SystemLanguageModel.default.availability == .available else { return nil }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        let weekdayFmt = DateFormatter()
+        weekdayFmt.locale = Locale(identifier: "zh_CN")
+        weekdayFmt.dateFormat = "EEEE"
+        let now = Date()
+        let instructions = """
+        你是日历助手,把用户的一句自然语言变成一个日程事件。
+        现在的本地时间是 \(f.string(from: now))(\(weekdayFmt.string(from: now)))。
+        「明天」「下周三」等相对时间都以此为准,结果时间必须不早于现在。
+        只提取用户说的内容,不要编造地点或参与者。
+        """
+        do {
+            let session = LanguageModelSession(instructions: instructions)
+            let r = try await session.respond(to: text, generating: AIQuickEvent.self)
+            guard let s = QuickParsedEvent.localDate(r.content.startsAt),
+                  let e = QuickParsedEvent.localDate(r.content.endsAt),
+                  !r.content.summary.trimmingCharacters(in: .whitespaces).isEmpty,
+                  // Sanity: reject hallucinated past dates (>1 day behind now).
+                  s > now.addingTimeInterval(-86_400)
+            else { return nil }
+            return (r.content.summary, s, max(e, s.addingTimeInterval(60)))
+        } catch {
+            return nil
+        }
+        #else
+        return nil
+        #endif
+    }
 
     private func save() async {
         saving = true

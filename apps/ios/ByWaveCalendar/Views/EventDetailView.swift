@@ -306,12 +306,15 @@ struct EventDetailView: View {
                 Task { await doDelete(scope: nil) }
             }
         } message: {
-            Text("此操作不可恢复。")
+            Text("删除后 5 秒内可撤销。")
         }
     }
 
     private var allDayLabel: String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy年M月d日"
+        // Locale-aware (was hardcoded zh_CN "yyyy年M月d日" — leaked Chinese
+        // dates into non-zh UI).
+        let f = DateFormatter(); f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("yMMMd")
         let cal = Calendar.current
         if cal.isDate(current.startsAt, inSameDayAs: current.endsAt) {
             return f.string(from: current.startsAt)
@@ -320,8 +323,8 @@ struct EventDetailView: View {
     }
 
     private func absoluteTime(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN")
-        f.dateFormat = "yyyy年M月d日 HH:mm"
+        let f = DateFormatter(); f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("yMMMdHm")  // 24h time, localized field order
         return f.string(from: d)
     }
 
@@ -351,6 +354,11 @@ struct EventDetailView: View {
                 path += "?scope=\(scope.rawValue)&recurrenceId=\(encoded)"
             }
             try await client.delete(path)
+            // Offer undo only for whole-event (series) deletes — those are
+            // plain soft-deletes the /restore endpoint can reverse.
+            if scope == nil || scope == .series {
+                state.noteEventDeleted(id: current.id, summary: current.summary)
+            }
             onChanged()
             dismiss()
         } catch let e as APIError {

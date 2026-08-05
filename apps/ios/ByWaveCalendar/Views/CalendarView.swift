@@ -71,6 +71,12 @@ struct CalendarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面) — floats over
+            // whatever view mode is active; auto-dismisses after 5s.
+            .overlay(alignment: .bottom) {
+                undoDeleteBar
+                    .animation(.snappy, value: state.pendingUndoDelete)
+            }
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -172,8 +178,14 @@ struct CalendarView: View {
                     EventEditView(
                         mode: .create,
                         calendars: calendars,
-                        onSaved: { _ in
+                        onSaved: { saved in
                             showingCreate = false
+                            // 动线: jump to the day the new event lives on,
+                            // so「明天下午3点开会」lands you ON tomorrow
+                            // instead of leaving you staring at today.
+                            withAnimation {
+                                anchor = Calendar.current.startOfDay(for: saved.startsAt)
+                            }
                             Task { await load(force: true) }
                         },
                         onCancel: { showingCreate = false },
@@ -350,22 +362,25 @@ struct CalendarView: View {
     }
 
     private var anchorLabel: String {
+        // CLDR templates so the header follows the app language — was
+        // hardcoded zh_CN patterns ("yyyy年M月d日") which leaked Chinese
+        // into every other language's UI.
         let f = DateFormatter()
-        f.locale = Locale(identifier: "zh_CN")
+        f.locale = Locale.current
         switch mode {
         case .day:
-            f.dateFormat = "yyyy年M月d日 EEEE"
+            f.setLocalizedDateFormatFromTemplate("yMMMdEEEE")
             return f.string(from: anchor)
         case .week:
             let start = startOfWeek(anchor)
             let end = Calendar.current.date(byAdding: .day, value: 6, to: start)!
-            f.dateFormat = "M月d日"
+            f.setLocalizedDateFormatFromTemplate("MMMd")
             return "\(f.string(from: start)) – \(f.string(from: end))"
         case .month:
-            f.dateFormat = "yyyy年M月"
+            f.setLocalizedDateFormatFromTemplate("yMMMM")
             return f.string(from: anchor)
         case .year:
-            f.dateFormat = "yyyy年"
+            f.setLocalizedDateFormatFromTemplate("y")
             return f.string(from: anchor)
         }
     }
@@ -451,6 +466,66 @@ struct CalendarView: View {
     }
 
     // MARK: - Cache hydration
+    // MARK: - 撤销删除 (v1.6.2)
+
+    @State private var restoringDeleted = false
+
+    @ViewBuilder
+    private var undoDeleteBar: some View {
+        if let pending = state.pendingUndoDelete {
+            HStack(spacing: 12) {
+                Text("已删除「%@」".locFormat(pending.summary))
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Button {
+                    Task { await restoreDeleted(pending) }
+                } label: {
+                    if restoringDeleted {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("撤销删除").font(.subheadline.weight(.semibold))
+                    }
+                }
+                .disabled(restoringDeleted)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: pending.token) {
+                // Auto-dismiss after 5s — unless a newer delete replaced
+                // this snackbar (token differs) or the user already undid.
+                //
+                // MUST bail on cancellation: the nav-pop transition that
+                // brings the calendar back re-identifies this subtree and
+                // cancels the task. `try?` would swallow that and fall
+                // through to the clear below, killing the bar before the
+                // user ever sees it (the original v1.6.2 bug).
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                if state.pendingUndoDelete?.token == pending.token {
+                    withAnimation { state.pendingUndoDelete = nil }
+                }
+            }
+        }
+    }
+
+    private func restoreDeleted(_ pending: PendingUndoDelete) async {
+        restoringDeleted = true
+        defer { restoringDeleted = false }
+        do {
+            try await APIClient(state: state).restoreEvent(id: pending.eventId)
+            withAnimation { state.pendingUndoDelete = nil }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            await load(force: true)
+        } catch {
+            errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
+        }
+    }
+
     private func loadFromCache() async {
         let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
         // EventCache is now off the main actor (v1.0.1) — disk I/O +
