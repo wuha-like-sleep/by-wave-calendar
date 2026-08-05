@@ -28,7 +28,13 @@
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>zh-Hans</string>
+		<string>zh-Hant</string>
 		<string>en</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>es</string>
+		<string>fr</string>
+		<string>de</string>
 	</array>
 	<!--
 	Lets iOS mix-and-match resources across .lproj bundles so partial
@@ -36,5 +42,12 @@
 	-->
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
+	<!--
+	Only standard HTTPS (ATS) is used — exempt from export compliance.
+	Declaring it here skips the manual encryption questionnaire on
+	every App Store Connect upload.
+	-->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

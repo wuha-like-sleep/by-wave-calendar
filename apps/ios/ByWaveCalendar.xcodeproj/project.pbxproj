@@ -34,6 +34,7 @@
 		1F0001000000000000000019 /* LocalNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000019 /* LocalNotifications.swift */; };
 		1F000100000000000000001A /* PushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001A /* PushService.swift */; };
 		1F000100000000000000001B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001B /* Assets.xcassets */; };
+		1F00010000000000000000A1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */; };
 		1F000100000000000000001C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001C /* Theme.swift */; };
 		1F000100000000000000001E /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001E /* Profile.swift */; };
 		1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001F /* ProfileSwitcherView.swift */; };
@@ -80,6 +81,7 @@
 		1B0001000000000000000019 /* LocalNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotifications.swift; sourceTree = "<group>"; };
 		1B000100000000000000001A /* PushService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushService.swift; sourceTree = "<group>"; };
 		1B000100000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1B000100000000000000001C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1B000100000000000000001D /* ByWaveCalendar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ByWaveCalendar.entitlements; sourceTree = "<group>"; };
 		1B000100000000000000001E /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -140,6 +142,7 @@
 				1E0001000000000000000007 /* Sync */,
 				1E0001000000000000000005 /* Views */,
 				1B000100000000000000001B /* Assets.xcassets */,
+				1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */,
 				1B000100000000000000001D /* ByWaveCalendar.entitlements */,
 			);
 			path = ByWaveCalendar;
@@ -288,6 +291,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1F000100000000000000001B /* Assets.xcassets in Resources */,
+				1F00010000000000000000A1 /* PrivacyInfo.xcprivacy in Resources */,
 				1F0001000000000000000026 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
