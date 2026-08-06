@@ -135,9 +135,9 @@
           </div>
           <div class="flex gap-2 flex-shrink-0 flex-wrap">
             <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-                    onclick="window.bwc.copy('<%= tok.url %>')"><%= t("calendar.share.copyIcs") %></button>
+                    data-bwc-copy="<%= tok.url %>"><%= t("calendar.share.copyIcs") %></button>
             <button type="button" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50"
-                    onclick="window.bwc.copy('&lt;iframe src=&quot;<%= tok.url.replace('/ics/', '/embed/').replace('.ics', '') %>&quot; width=&quot;100%&quot; height=&quot;600&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;')"><%= t("calendar.share.copyEmbed") %></button>
+                    data-bwc-copy="&lt;iframe src=&quot;<%= tok.url.replace('/ics/', '/embed/').replace('.ics', '') %>&quot; width=&quot;100%&quot; height=&quot;600&quot; frameborder=&quot;0&quot;&gt;&lt;/iframe&gt;"><%= t("calendar.share.copyEmbed") %></button>
             <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens/<%= tok.token %>/revoke" class="m-0" data-confirm="<%= t('calendar.share.revokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('calendar.share.revokeOk') %>">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs text-red-700 hover:bg-red-50"><%= t("calendar.share.revoke") %></button>
@@ -283,7 +283,7 @@
         <input type="checkbox" id="event-show-past" class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600" />
         <%= t("calendar.events.showPast") %>
       </label>
-      <button type="button" onclick="document.getElementById('new-event-form').classList.toggle('hidden')"
+      <button type="button" data-bwc-toggle="#new-event-form"
               class="inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
         <%= t("calendar.events.newButton") %>
@@ -319,7 +319,7 @@
                 class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
     </div>
     <div class="sm:col-span-2 flex justify-end gap-2">
-      <button type="button" onclick="document.getElementById('new-event-form').classList.add('hidden')"
+      <button type="button" data-bwc-hide="#new-event-form"
               class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("common.cancel") %></button>
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.events.add") %></button>
     </div>

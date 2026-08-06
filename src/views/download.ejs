@@ -175,15 +175,15 @@
 
       <!-- Three-platform chip row — primary highlighted, others grey/disabled -->
       <div class="grid grid-cols-3 gap-1.5 pt-1">
-        <a href="<%= desktopMacUrl || '#' %>" <% if (!desktopMacUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+        <a href="<%= desktopMacUrl || '#' %>" <% if (!desktopMacUrl) { %>aria-disabled="true"<% } %>
            class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopMacUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
           macOS
         </a>
-        <a href="<%= desktopWinUrl || '#' %>" <% if (!desktopWinUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+        <a href="<%= desktopWinUrl || '#' %>" <% if (!desktopWinUrl) { %>aria-disabled="true"<% } %>
            class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopWinUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
           Windows
         </a>
-        <a href="<%= desktopLinuxUrl || '#' %>" <% if (!desktopLinuxUrl) { %>aria-disabled="true" onclick="return false"<% } %>
+        <a href="<%= desktopLinuxUrl || '#' %>" <% if (!desktopLinuxUrl) { %>aria-disabled="true"<% } %>
            class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopLinuxUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
           Linux
         </a>

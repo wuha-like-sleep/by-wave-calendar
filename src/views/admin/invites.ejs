@@ -104,7 +104,7 @@
                 <div class="flex flex-wrap items-center justify-end gap-2">
                   <% if (st.key === "active") { %>
                     <button type="button"
-                            onclick="navigator.clipboard.writeText('<%= url %>').then(()=>{this.textContent='已复制';setTimeout(()=>{this.textContent='复制链接';},1500);})"
+                            data-bwc-copy="<%= url %>"
                             class="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">复制链接</button>
                     <form method="post" action="/admin/invites/<%= inv.token %>/email" class="inline-flex items-center gap-1">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -114,7 +114,7 @@
                       <button type="submit" class="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">发邮件</button>
                     </form>
                     <form method="post" action="/admin/invites/<%= inv.token %>/revoke" class="inline"
-                          onsubmit="return confirm('撤销后该链接立即失效，确定吗？');">
+                          data-confirm="撤销后该链接立即失效，确定吗？" data-confirm-danger="1">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                       <button type="submit" class="rounded-md border border-rose-200 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50">撤销</button>
                     </form>

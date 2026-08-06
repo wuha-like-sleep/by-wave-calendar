@@ -11,7 +11,7 @@
       English form (labelEn) so the chrome stays script-consistent —
       Latin-scripted native names (Deutsch, Español…) are kept as-is. %>
   <% const uiIsCjk = typeof currentLocale !== 'undefined' && ['zh-CN', 'zh-TW', 'ja'].includes(currentLocale); %>
-  <select name="locale" onchange="this.form.submit()" aria-label="<%= t("nav.languageLabel") %>"
+  <select name="locale" data-bwc-autosubmit aria-label="<%= t("nav.languageLabel") %>"
           class="text-sm rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 cursor-pointer">
     <% (typeof locales !== 'undefined' ? locales : []).forEach(function(l){ %>
       <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= (uiIsCjk || !/[぀-ヿ一-鿿]/.test(l.label)) ? l.label : l.labelEn %></option>

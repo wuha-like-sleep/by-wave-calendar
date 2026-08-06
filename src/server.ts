@@ -166,9 +166,15 @@ await app.register(helmet, {
       // whitelisted but load NOTHING unless an admin opts into that provider in
       // Admin/安全. The default "builtin" PoW captcha is same-origin only.
       "script-src": ["'self'", "https://challenges.cloudflare.com", "https://www.google.com", "https://www.gstatic.com", "https://js.hcaptcha.com", "https://newassets.hcaptcha.com", (req: unknown, _res: unknown) => `'nonce-${(req as { cspNonce: string }).cspNonce}'`],
-      // Inline event handlers (onclick / onsubmit) on existing templates;
-      // refactoring 27 of them is its own batch.
-      "script-src-attr": ["'unsafe-inline'"],
+      // No inline event handlers anywhere in src/views — every onclick= /
+      // onchange= was replaced by a delegated listener in public/app.js
+      // (data-bwc-copy / -toggle / -hide / -autosubmit / -checkall / -switch,
+      // plus the existing data-confirm). Keeping script-src-attr at 'none'
+      // means an injected `<img onerror=…>` cannot execute even if some
+      // sanitizer upstream is bypassed — which is exactly the payload shape
+      // the bundled-DOMPurify advisory was about.
+      // test/no_inline_handlers.test.ts fails the build if one creeps back in.
+      "script-src-attr": ["'none'"],
       // Tailwind utilities + style="background: ..." color swatches need this.
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:"],

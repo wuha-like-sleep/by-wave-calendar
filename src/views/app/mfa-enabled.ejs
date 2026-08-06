@@ -19,7 +19,10 @@
       <% }) %>
     </div>
     <div class="mt-4 flex flex-col sm:flex-row gap-2">
-      <button type="button" onclick="window.bwc.copy('<%= backupCodes.join("\\n") %>')"
+      <%# Real newlines here (not the "\n" escape the old inline handler needed,
+          which only became a newline once the JS string literal was parsed) —
+          the attribute value is used verbatim. %>
+      <button type="button" data-bwc-copy="<%= backupCodes.join("\n") %>"
               class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
         复制全部
       </button>

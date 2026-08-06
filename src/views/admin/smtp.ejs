@@ -111,7 +111,7 @@
         </table>
       </div>
       <button type="button" class="mt-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"
-              onclick="window.bwc && window.bwc.copy && window.bwc.copy('<%= bimi.record.value %>')">复制记录值</button>
+              data-bwc-copy="<%= bimi.record.value %>">复制记录值</button>
     <% } else { %>
       <p class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">请先在上方「发件人邮箱」填入<strong>你自己域名</strong>的地址(如 <code class="px-1 bg-white/60 rounded">noreply@your-domain.com</code>),保存后这里会自动算出该添加的 DNS 记录。</p>
     <% } %>

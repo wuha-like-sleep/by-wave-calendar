@@ -27,7 +27,7 @@
             <div class="mt-1 flex items-center gap-2">
               <code class="text-xs text-slate-500 truncate flex-1 bg-slate-50 px-2 py-1 rounded"><%= l.publicUrl %></code>
               <button type="button" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                      onclick="window.bwc && window.bwc.copy('<%= l.publicUrl %>')">复制</button>
+                      data-bwc-copy="<%= l.publicUrl %>">复制</button>
             </div>
             <% if (l.description) { %><div class="mt-1 text-xs text-slate-500"><%= l.description %></div><% } %>
             <%# Notification status — small inline indicator + toggle.

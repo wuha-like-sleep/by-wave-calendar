@@ -122,7 +122,7 @@
     <input type="hidden" name="return_to" value="/login" />
     <label for="locale-switch">🌐</label>
     <select name="locale" id="locale-switch"
-            onchange="this.form.submit()"
+            data-bwc-autosubmit
             class="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs">
       <% locales.forEach(function(l){ %>
         <option value="<%= l.code %>" <%= currentLocale === l.code ? "selected" : "" %>>

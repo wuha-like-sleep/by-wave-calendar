@@ -4,7 +4,7 @@
     <p class="mt-1 text-sm text-slate-500"><%= t("dashboard.calendarCount", { count: calendars.length }) %></p>
   </div>
   <button type="button"
-          onclick="document.getElementById('new-cal-form').classList.toggle('hidden')"
+          data-bwc-toggle="#new-cal-form"
           class="inline-flex items-center justify-center gap-1 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-brand-700">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
     <%= t("dashboard.newCalendar") %>

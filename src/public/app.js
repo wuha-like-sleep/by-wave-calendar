@@ -210,5 +210,77 @@
   // long-operation overlay should use a dedicated component (toast
   // for short, modal for blocking), not hijack the boot splash.
 
+  // ---------- Declarative behaviours ----------
+  // These delegated listeners replace the onclick=/onchange= attributes the
+  // templates used to carry. With none left, the CSP drops
+  // `script-src-attr 'unsafe-inline'` — so an injected `<img onerror=…>`
+  // cannot execute even if some sanitizer upstream is bypassed. Adding a new
+  // inline handler to a template will therefore silently stop working; use
+  // one of the attributes below, or a nonce'd <script>, instead.
+
+  // data-bwc-copy="text" — copy to clipboard (toast feedback via copy()).
+  document.body.addEventListener("click", function (e) {
+    const el = e.target.closest && e.target.closest("[data-bwc-copy]");
+    if (!el) return;
+    e.preventDefault();
+    copy(el.dataset.bwcCopy);
+  });
+
+  // data-bwc-toggle="#id" — toggle .hidden on the target.
+  // data-bwc-hide="#id"   — force .hidden on the target.
+  document.body.addEventListener("click", function (e) {
+    const el = e.target.closest && e.target.closest("[data-bwc-toggle],[data-bwc-hide]");
+    if (!el) return;
+    const sel = el.dataset.bwcToggle || el.dataset.bwcHide;
+    const target = sel && document.querySelector(sel);
+    if (!target) return;
+    e.preventDefault();
+    if (el.dataset.bwcToggle !== undefined) target.classList.toggle("hidden");
+    else target.classList.add("hidden");
+  });
+
+  // Disabled links (no download URL configured yet) — swallow the click.
+  // Previously `onclick="return false"`.
+  document.body.addEventListener("click", function (e) {
+    const a = e.target.closest && e.target.closest('a[aria-disabled="true"]');
+    if (a) e.preventDefault();
+  });
+
+  // data-bwc-autosubmit — submit the owning form when the control changes.
+  // Used by the language switcher and the login page's locale <select>.
+  document.body.addEventListener("change", function (e) {
+    const el = e.target;
+    if (!el || !el.dataset || el.dataset.bwcAutosubmit === undefined) return;
+    const form = el.form || (el.closest && el.closest("form"));
+    if (!form) return;
+    if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.submit();
+  });
+
+  // data-bwc-checkall="selector" — master checkbox drives every match inside
+  // the same form (falls back to the document if it isn't in one).
+  document.body.addEventListener("change", function (e) {
+    const el = e.target;
+    if (!el || !el.dataset || !el.dataset.bwcCheckall) return;
+    const scope = (el.closest && el.closest("form")) || document;
+    scope.querySelectorAll(el.dataset.bwcCheckall).forEach(function (c) {
+      c.checked = el.checked;
+    });
+  });
+
+  // data-bwc-switch on a <select> + data-bwc-when="v1 v2" on panels:
+  // show only the panels whose value list contains the current selection.
+  // Panels are hidden with inline style (not .hidden) because their initial
+  // state is server-rendered the same way.
+  document.body.addEventListener("change", function (e) {
+    const sel = e.target;
+    if (!sel || !sel.dataset || sel.dataset.bwcSwitch === undefined) return;
+    const scope = (sel.closest && sel.closest("form")) || document;
+    scope.querySelectorAll("[data-bwc-when]").forEach(function (panel) {
+      const values = String(panel.dataset.bwcWhen || "").split(/\s+/).filter(Boolean);
+      panel.style.display = values.indexOf(sel.value) >= 0 ? "" : "none";
+    });
+  });
+
   window.bwc = { toast, copy, confirm: confirmDialog };
 })();

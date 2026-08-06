@@ -48,7 +48,7 @@
           <span class="text-sm font-medium text-slate-700">选择要发送的模板</span>
           <label class="inline-flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
             <input type="checkbox" checked
-                   onchange="var v=this.checked;this.closest('form').querySelectorAll('input[name=templates]').forEach(function(c){c.checked=v})"
+                   data-bwc-checkall="input[name=templates]"
                    class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600" />
             全选
           </label>
