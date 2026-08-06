@@ -10,6 +10,7 @@
 
 <br/>
 
+[![CI](https://github.com/wuha-like-sleep/by-wave-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/wuha-like-sleep/by-wave-calendar/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/package-json/v/wuha-like-sleep/by-wave-calendar?label=server&color=2563eb)](package.json)
 [![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-下載用戶端)
