@@ -35,10 +35,10 @@ group = "cn.bywave.calendar.desktop"
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 20). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 21). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.0.15"
+version = "1.0.16"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.

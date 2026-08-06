@@ -97,9 +97,19 @@ object UpdateInstaller {
         _staged.value = null
 
         val os = System.getProperty("os.name").orEmpty().lowercase()
+        // Windows:真·自动更新 —— 派生一个 .cmd,等本进程退出后跑
+        // msiexec 静默升级再把 APP 拉起来(此前只是 Desktop.open() 把
+        // 安装向导丢给用户手点,所以「自动更新」在 Windows 上等于没有)。
+        if (os.contains("win")) {
+            if (spawnWindowsUpdateScript(dmgFile, relaunch = true)) {
+                _state.value = InstallState.Swapping
+                Thread.sleep(300)
+                exitProcess(0)
+            }
+            return   // spawn 失败时已回落到 Desktop.open(),APP 继续运行
+        }
         if (!os.contains("mac") && !os.contains("darwin")) {
-            // Win/Linux: defer to Desktop.open(). Windows MSI handles
-            // its own upgrade via msiexec; .deb is dpkg territory.
+            // Linux: .deb 是 dpkg/系统包管理器的地盘,交给默认处理程序。
             runCatching { Desktop.getDesktop().open(dmgFile) }
             _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"))
             return
@@ -126,13 +136,17 @@ object UpdateInstaller {
      *  staging). */
     fun stage(dmgFile: File) {
         val os = System.getProperty("os.name").orEmpty().lowercase()
-        if (!os.contains("mac") && !os.contains("darwin")) {
-            runCatching { Desktop.getDesktop().open(dmgFile) }
-            _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"))
+        // Windows 现在和 macOS 一样支持「退出后自动更新」:只存文件 + 装
+        // 钩子,不再在后台下载完成的瞬间冷不丁弹出安装向导(那是 1.0.15
+        // 之前 Windows 用户看到的行为,既突兀又容易被当成病毒)。
+        if (os.contains("mac") || os.contains("darwin") || os.contains("win")) {
+            _staged.value = dmgFile
+            registerShutdownHook()
             return
         }
-        _staged.value = dmgFile
-        registerShutdownHook()
+        // Linux:没有原地升级路径,交给系统处理程序。
+        runCatching { Desktop.getDesktop().open(dmgFile) }
+        _state.value = InstallState.FallbackOpenedInFinder(cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"))
     }
 
     /** Register (once) the apply-on-quit hook. Runs on a plain thread at
@@ -146,11 +160,68 @@ object UpdateInstaller {
         if (hookRegistered) return
         hookRegistered = true
         Runtime.getRuntime().addShutdownHook(Thread {
-            val f = _staged.value
-            if (f != null) {
-                runCatching { spawnSwapScript(f, relaunch = false, openFinderOnError = false) }
+            val f = _staged.value ?: return@Thread
+            val os = System.getProperty("os.name").orEmpty().lowercase()
+            runCatching {
+                if (os.contains("win")) spawnWindowsUpdateScript(f, relaunch = false)
+                else spawnSwapScript(f, relaunch = false, openFinderOnError = false)
             }
         })
+    }
+
+    /** Windows 原地升级。写一个 .cmd 到 %TEMP% 并 detach 派生:
+     *    1) 等 2 秒,让本 JVM 完全退出 —— MSI 升级要删/换正在运行的
+     *       exe 和 jar,进程没走干净会被 Windows 文件锁挡住;
+     *    2) `msiexec /i … /passive /norestart` 执行升级。MSI 里
+     *       upgradeUuid 固定,Windows 据此识别为「大版本升级」而不是
+     *       并排装第二份。/passive 只显示进度条不需要点下一步;若安装
+     *       范围是 per-machine 会弹一次 UAC(这是系统强制,躲不掉);
+     *    3) 升级完把 APP 拉起来(relaunch=true 时);
+     *    4) 脚本删掉自己。
+     *  日志写到 %TEMP%\bywave-update.log,出问题能事后查。
+     *  返回 true = 脚本已派生(调用方随后退出进程);false = 派生失败,
+     *  已回落到 Desktop.open() 让用户手动装,APP 继续运行。 */
+    private fun spawnWindowsUpdateScript(msiFile: File, relaunch: Boolean): Boolean {
+        return try {
+            // 当前 exe 路径:jpackage 生成的启动器(…\ByWaveCalendar.exe)。
+            // 取不到就不重启 —— 宁可让用户自己点开,也不要拉起个错的东西。
+            val exe = ProcessHandle.current().info().command().orElse(null)
+            val tmp = File(System.getProperty("java.io.tmpdir"))
+            val log = File(tmp, "bywave-update.log").absolutePath
+            val script = File(tmp, "bywave-update-${System.nanoTime()}.cmd")
+            val relaunchLine = if (relaunch && exe != null) "start \"\" \"$exe\"" else "rem no relaunch"
+            script.writeText(
+                buildString {
+                    appendLine("@echo off")
+                    appendLine("echo [%DATE% %TIME%] bywave update start >> \"$log\"")
+                    // 等 JVM 退出,释放文件锁。
+                    appendLine("timeout /t 2 /nobreak >nul")
+                    appendLine("msiexec /i \"${msiFile.absolutePath}\" /passive /norestart /L*v \"$log\"")
+                    appendLine("if errorlevel 1 (")
+                    appendLine("  echo [%DATE% %TIME%] msiexec failed errorlevel=%errorlevel% >> \"$log\"")
+                    // 静默升级失败(用户取消 UAC 等)→ 打开安装包让他手动装。
+                    appendLine("  start \"\" \"${msiFile.absolutePath}\"")
+                    appendLine(") else (")
+                    appendLine("  echo [%DATE% %TIME%] bywave update ok >> \"$log\"")
+                    appendLine("  $relaunchLine")
+                    appendLine(")")
+                    appendLine("del \"%~f0\"")
+                },
+                Charsets.US_ASCII,   // .cmd 用 ANSI 读;路径里的非 ASCII 由引号包住的绝对路径承载
+            )
+            ProcessBuilder("cmd", "/c", "start", "/min", "", script.absolutePath)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+            true
+        } catch (e: Exception) {
+            System.err.println("[ByWave Updater] windows spawn failed: ${e.message}")
+            runCatching { Desktop.getDesktop().open(msiFile) }
+            _state.value = InstallState.FallbackOpenedInFinder(
+                cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"),
+            )
+            false
+        }
     }
 
     /** Shared macOS mount → locate → preconditions → write + spawn swap
