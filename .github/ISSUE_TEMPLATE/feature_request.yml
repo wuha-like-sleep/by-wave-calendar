@@ -1,0 +1,21 @@
+name: 功能建议 / Feature request
+description: 希望增加或改进某个功能 / Suggest an improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决什么问题 / What problem are you solving
+      description: 先说场景,不要直接说方案 —— 场景清楚了往往有更好的做法
+      placeholder: 我把日历分享给同事后,想知道谁看过,但现在没有任何记录
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你设想的做法 / What you have in mind
+  - type: dropdown
+    id: scope
+    attributes:
+      label: 涉及哪端 / Which part
+      multiple: true
+      options: [服务端 Server, 网页 Web, iOS, Android, 桌面端 Desktop, CalDAV / ICS, API]

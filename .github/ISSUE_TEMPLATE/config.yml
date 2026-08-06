@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 在线 Demo / Live demo
+    url: https://rl.lz-ss.com
+    about: 先在 Demo 上确认问题是否复现
+  - name: 安全问题 / Security issue
+    url: https://github.com/wuha-like-sleep/by-wave-calendar/blob/main/SECURITY.md
+    about: 请勿公开提交,按 SECURITY.md 的方式私下联系

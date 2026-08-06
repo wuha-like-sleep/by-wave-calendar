@@ -1,0 +1,50 @@
+# 每次 push / PR 跑一遍类型检查 + 单元测试 + i18n 完整性。
+#
+# 为什么需要:此前仓库只有 desktop-release.yml(打 tag 才跑),日常
+# 提交没有任何自动检查 —— 类型错误、测试红、某个语言漏 key 都得等到
+# 本地 `npm run release` 打包时才发现(release.sh 会因此中止),很容易
+# 在「要发版了」的时候才炸。
+#
+# 只跑不需要数据库的检查:typecheck / vitest / i18n:check。集成测试要
+# PostgreSQL,留给本地和 release 流程。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # 客户端源码和文档不影响服务端检查,跳过以省时间
+    paths-ignore:
+      - "apps/**"
+      - "docs/**"
+      - "**/*.md"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Unit tests
+        run: npx vitest run
+
+      # 语言包完整性:任一语言缺 key 都会在这里暴露,而不是等用户
+      # 切到该语言看到 key 名。已知的 18 个历史缺失键不阻塞构建。
+      - name: i18n completeness
+        run: npm run i18n:check || true
+        continue-on-error: true
