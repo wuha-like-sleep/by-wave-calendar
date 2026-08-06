@@ -38,6 +38,9 @@ import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
 import { loadUserFromRequest } from "./lib/session.js";
+// Double-writeHead crash guards — see lib/reply_guard.ts. Removing either
+// call site brings back an unauthenticated remote crash.
+import { replyAlreadySent, isBenignDoubleWrite } from "./lib/reply_guard.js";
 // Safe JSON-for-<script> serializer (XSS hardening) — escapes the chars that
 // could break out of an inline <script>. Used by the view-locals injector
 // below so templates can do `<%- jsonForScript(x) %>` instead of the unsafe
@@ -67,6 +70,30 @@ const app = Fastify({
   trustProxy: true,
   bodyLimit: 2 * 1024 * 1024, // 2 MB (CalDAV PUTs can be larger than typical APIs)
   ...(httpsOptions ? { https: httpsOptions } : {}),
+});
+
+// ---- last-resort process guard ----
+// setErrorHandler's replyAlreadySent() check closes today's known trigger for
+// the double-writeHead crash (see lib/reply_guard.ts for the full mechanism),
+// but a single unauthenticated request must never again be able to stop the
+// server — so we also survive the error itself and keep serving. Everything
+// else stays fatal on purpose: a clean exit lets PM2 restart into a good state.
+process.on("uncaughtException", (err) => {
+  if (isBenignDoubleWrite(err)) {
+    app.log.error({ err }, "double_write_survived");
+    return;
+  }
+  app.log.fatal({ err }, "uncaught_exception");
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  if (isBenignDoubleWrite(reason)) {
+    app.log.error({ err: reason }, "double_write_survived");
+    return;
+  }
+  app.log.fatal({ err: reason }, "unhandled_rejection");
+  process.exit(1);
 });
 
 // Custom HTTP methods used by WebDAV / CalDAV
@@ -1034,7 +1061,11 @@ await app.register(caldavRoutes);
 
 // ---- Error handler ----
 app.setErrorHandler(async (err: FastifyError, req, reply) => {
-  if (err.message === "unauthorized") return;
+  // ---- reply-already-sent guard (do not remove) ----
+  // The response is already on the wire; touching `reply` — or returning
+  // `undefined`, which Fastify reads as "unhandled" — crashes the process.
+  // Returning the sent reply marks the error handled. See lib/reply_guard.ts.
+  if (replyAlreadySent(reply)) return reply;
   if (err.validation) return reply.code(400).send({ error: "validation_failed", details: err.validation });
   if (err.statusCode === 429) {
     return reply.code(429).send({ error: "too_many_requests", message: err.message });
