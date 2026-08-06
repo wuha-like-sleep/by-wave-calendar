@@ -4,6 +4,10 @@ import { db, schema } from "../db/client.js";
 import { buildIcsFeed } from "../services/ics.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
+import path from "node:path";
+import ejs from "ejs";
+import { makeT, resolveLocaleFromRequest } from "../lib/i18n.js";
+import { jsonForScript } from "../lib/script_json.js";
 
 export async function icsRoutes(app: FastifyInstance) {
   app.get<{ Params: { token: string } }>("/ics/:token", async (req, reply) => {
@@ -110,7 +114,15 @@ export async function icsRoutes(app: FastifyInstance) {
         "connect-src 'self'; " +
         "font-src 'self' data:; " +
         "frame-ancestors *");
-    return reply.view("embed", {
+    // ⚠️ 不能走 reply.view:@fastify/view 配了全局 layout,会把任何视图
+    // 都塞进 layout.ejs 的 <body> 里。embed.ejs 自带完整 <html>(iframe
+    // 组件必须是独立文档,不能带站点导航/页脚),套上 layout 后不仅结构
+    // 嵌套错误,还因为没传 title 直接 500 —— 也就是说嵌入组件此前一直
+    // 是坏的。这里手工渲染模板并原样返回。
+    const locale = resolveLocaleFromRequest(req, null, settings.defaultLocale);
+    const html = await ejs.renderFile(
+      path.join(process.cwd(), "src", "views", "embed.ejs"),
+      {
       calendar,
       events: rows.map((e) => ({
         id: e.id,
@@ -121,10 +133,14 @@ export async function icsRoutes(app: FastifyInstance) {
         endsAt: e.endsAt.toISOString(),
         allDay: e.allDay,
       })),
-      publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
-      // Layout is bypassed (we use our own minimal <html>), so the
-      // standard view-locals injector still adds csrfToken/etc but
-      // nothing in embed.ejs reads them.
-    });
+        publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+        currentLocale: locale,
+        t: makeT(locale),
+        cspNonce: (req.raw as unknown as { cspNonce?: string }).cspNonce ?? "",
+        jsonForScript,
+      },
+      { async: true },
+    );
+    return reply.type("text/html; charset=utf-8").send(html);
   });
 }
