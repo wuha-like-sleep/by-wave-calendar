@@ -74,6 +74,17 @@ data class PendingEdit(
 data class PendingDelete(
     val sourceId: String,
     val sourceStartsAt: String,
+    val summary: String,
+)
+
+/** One just-deleted event offered for undo via the MainScreen snackbar
+ *  (parity with web/iOS/Android — the 1.0.14 release note promised this
+ *  but only the API half had landed). `token` distinguishes successive
+ *  deletes so a stale auto-dismiss can't kill a newer snackbar. */
+data class UndoDelete(
+    val eventId: String,
+    val summary: String,
+    val token: Long,
 )
 
 data class CalendarUiState(
@@ -88,6 +99,7 @@ data class CalendarUiState(
     val formError: String? = null,
     val pendingScopeEdit: PendingEdit? = null,
     val pendingScopeDelete: PendingDelete? = null,
+    val undoDelete: UndoDelete? = null,
 )
 
 class CalendarState(
@@ -294,11 +306,11 @@ class CalendarState(
     fun delete(event: EventDTO) {
         if (event.rrule != null) {
             _ui.value = _ui.value.copy(
-                pendingScopeDelete = PendingDelete(event.id, event.startsAt),
+                pendingScopeDelete = PendingDelete(event.id, event.startsAt, event.summary),
             )
             return
         }
-        sendDelete(event.id, scope = null, recurrenceId = null)
+        sendDelete(event.id, scope = null, recurrenceId = null, summary = event.summary)
     }
 
     fun resolveScopeDelete(scope: String?) {
@@ -309,6 +321,7 @@ class CalendarState(
             id = pending.sourceId,
             scope = scope,
             recurrenceId = if (scope == "series") null else pending.sourceStartsAt,
+            summary = pending.summary,
         )
     }
 
@@ -354,16 +367,46 @@ class CalendarState(
         update(event.id, event.rrule, event.startsAt, body)
     }
 
-    private fun sendDelete(id: String, scope: String?, recurrenceId: String?) {
+    private fun sendDelete(id: String, scope: String?, recurrenceId: String?, summary: String? = null) {
         this.scope.launch {
             _ui.value = _ui.value.copy(saving = true, formError = null)
             try {
                 client.deleteEvent(id, scope, recurrenceId)
-                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                // Whole-event (series) deletes are plain soft-deletes the
+                // /restore endpoint can reverse — offer undo. Instance/
+                // future scopes edit the master (exdate/UNTIL) and can't
+                // be undone by restore, so no snackbar for those.
+                val undo = if ((scope == null || scope == "series") && summary != null)
+                    UndoDelete(eventId = id, summary = summary, token = System.nanoTime())
+                else null
+                _ui.value = _ui.value.copy(saving = false, activeSheet = null, undoDelete = undo ?: _ui.value.undoDelete)
                 load()
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.deleteFailed"))
             }
+        }
+    }
+
+    /** Undo the last delete (snackbar action). Restore is idempotent
+     *  server-side, so a double-click is harmless. */
+    fun undoLastDelete() {
+        val undo = _ui.value.undoDelete ?: return
+        this.scope.launch {
+            try {
+                client.restoreEvent(undo.eventId)
+                _ui.value = _ui.value.copy(undoDelete = null)
+                load()
+            } catch (e: Exception) {
+                _ui.value = _ui.value.copy(formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.deleteFailed"))
+            }
+        }
+    }
+
+    /** Auto-dismiss from the snackbar timer. Token-guarded so a stale
+     *  timer can't dismiss a newer snackbar. */
+    fun dismissUndoDelete(token: Long) {
+        if (_ui.value.undoDelete?.token == token) {
+            _ui.value = _ui.value.copy(undoDelete = null)
         }
     }
 

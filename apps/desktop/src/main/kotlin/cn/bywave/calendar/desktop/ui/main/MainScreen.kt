@@ -40,7 +40,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -306,6 +308,14 @@ fun MainScreen(
                 }
                 if (ui.error != null) {
                     ErrorBanner(message = ui.error!!, onRetry = { state.load() })
+                }
+                ui.undoDelete?.let { undo ->
+                    UndoDeleteSnackbar(
+                        undo = undo,
+                        onUndo = { state.undoLastDelete() },
+                        onTimeout = { state.dismissUndoDelete(undo.token) },
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                    )
                 }
             }
         }
@@ -680,6 +690,47 @@ private fun ErrorBanner(message: String, onRetry: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         OutlinedButton(onClick = onRetry) {
             Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("error.retry") })
+        }
+    }
+}
+
+/** Bottom snackbar offering undo for the last delete (parity with
+ *  web/iOS/Android). Auto-dismisses after 5s; keying the timer on the
+ *  token restarts it per delete, and cancellation on removal is safe —
+ *  Kotlin's delay() throws CancellationException, which propagates out
+ *  of LaunchedEffect instead of falling through to onTimeout. */
+@Composable
+private fun UndoDeleteSnackbar(
+    undo: cn.bywave.calendar.desktop.ui.calendar.UndoDelete,
+    onUndo: () -> Unit,
+    onTimeout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    LaunchedEffect(undo.token) {
+        kotlinx.coroutines.delay(5_000)
+        onTimeout()
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                remember(locale, undo) {
+                    cn.bywave.calendar.desktop.i18n.I18n.t("undo.deleted", mapOf("name" to undo.summary))
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.width(12.dp))
+            TextButton(onClick = onUndo) {
+                Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("undo.action") })
+            }
         }
     }
 }

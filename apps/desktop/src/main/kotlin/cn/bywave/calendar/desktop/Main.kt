@@ -190,10 +190,10 @@ fun main() = application {
                 ))
             }
         }
-        // v0.2 stays light-only; v0.3 reads OS dark-mode pref via
-        // currentSystemTheme(). The brand palette stays identical
-        // between modes — only neutral surfaces flip.
-        MaterialTheme(colorScheme = LightColors) {
+        // Follow the OS dark-mode preference — DarkColors has been in
+        // the file since v0.2 but was never wired up. The brand palette
+        // stays identical between modes; only neutral surfaces flip.
+        MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) DarkColors else LightColors) {
             Root()
         }
     }

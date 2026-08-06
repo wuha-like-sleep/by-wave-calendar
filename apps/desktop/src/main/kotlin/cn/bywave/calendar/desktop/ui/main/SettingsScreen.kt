@@ -2218,6 +2218,30 @@ private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
         }
     }
 
+    // 法律 — aligned with the mobile apps' Settings → 法律 section. The
+    // pages live on the user's own server (localized EJS); ?lang= makes
+    // them open in the same language the desktop APP is currently using.
+    Spacer(Modifier.height(24.dp))
+    SectionTitle(t("settings.about.legal"))
+    SectionCard {
+        val langCode = cn.bywave.calendar.desktop.i18n.I18n.current.value.code
+        val base = profile.serverUrl.trimEnd('/')
+        listOf(
+            "legal.privacy" to "/privacy",
+            "legal.terms" to "/terms",
+            "legal.dataProcessing" to "/data-processing",
+            "legal.openSource" to "/open-source",
+        ).forEach { (key, path) ->
+            TextButton(onClick = {
+                runCatching { Desktop.getDesktop().browse(URI("$base$path?lang=$langCode")) }
+            }) {
+                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(t(key))
+            }
+        }
+    }
+
     Spacer(Modifier.height(24.dp))
     Text(
         t("settings.about.tagline"),

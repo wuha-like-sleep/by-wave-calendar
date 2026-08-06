@@ -68,12 +68,24 @@ object I18n {
                 }
             }
         }
-        // No saved preference — sniff JVM default. Apple devices often
-        // report "en" / "en-US" / "zh-CN" / "zh-Hans-CN" etc.; we only
-        // distinguish English vs everything else (treating everything
-        // else as Chinese, since that's the project's primary audience).
-        val sys = java.util.Locale.getDefault().language ?: "zh"
-        _current.value = if (sys.startsWith("en")) Locale.EN else Locale.ZH_CN
+        // No saved preference — sniff the JVM default properly. The old
+        // logic mapped everything non-English to ZH_CN, which gave a
+        // Japanese/Korean/German… machine a Chinese UI despite full
+        // dictionaries existing. Match by language (+ script/region for
+        // Traditional Chinese) and fall back to English, then ZH_CN only
+        // for Chinese-simplified systems.
+        val sys = java.util.Locale.getDefault()
+        val lang = sys.language ?: ""
+        _current.value = when {
+            lang == "zh" && (sys.script == "Hant" || sys.country in setOf("TW", "HK", "MO")) -> Locale.ZH_TW
+            lang == "zh" -> Locale.ZH_CN
+            lang == "ja" -> Locale.JA
+            lang == "ko" -> Locale.KO
+            lang == "es" -> Locale.ES
+            lang == "fr" -> Locale.FR
+            lang == "de" -> Locale.DE
+            else -> Locale.EN
+        }
     }
 
     /** Switch UI language. Persists to disk so the choice survives
@@ -108,6 +120,13 @@ object I18n {
     private val en: Map<String, String> = mapOf(
         // App-level
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "Deleted \"{name}\"",
+        "undo.action" to "Undo",
+        "settings.about.legal" to "Legal",
+        "legal.privacy" to "Privacy Policy",
+        "legal.terms" to "Terms of Use",
+        "legal.dataProcessing" to "Data Processing Policy",
+        "legal.openSource" to "Open Source Licenses",
 
         // TopBar / nav
         "topbar.today" to "Today",
@@ -556,6 +575,13 @@ object I18n {
 
     private val zhCN: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "已删除「{name}」",
+        "undo.action" to "撤销",
+        "settings.about.legal" to "法律",
+        "legal.privacy" to "隐私政策",
+        "legal.terms" to "使用条款",
+        "legal.dataProcessing" to "数据处理政策",
+        "legal.openSource" to "开源许可",
 
         "topbar.today" to "今天",
         "topbar.prevDay" to "前一天",
@@ -988,6 +1014,13 @@ object I18n {
 
     private val zhTW: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "已刪除「{name}」",
+        "undo.action" to "復原",
+        "settings.about.legal" to "法律",
+        "legal.privacy" to "隱私政策",
+        "legal.terms" to "使用條款",
+        "legal.dataProcessing" to "資料處理政策",
+        "legal.openSource" to "開源授權",
 
         "topbar.today" to "今天",
         "topbar.prevDay" to "前一天",
@@ -1424,6 +1457,13 @@ object I18n {
 
     private val ja: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "「{name}」を削除しました",
+        "undo.action" to "元に戻す",
+        "settings.about.legal" to "法的情報",
+        "legal.privacy" to "プライバシーポリシー",
+        "legal.terms" to "利用規約",
+        "legal.dataProcessing" to "データ処理ポリシー",
+        "legal.openSource" to "オープンソースライセンス",
 
         "topbar.today" to "今日",
         "topbar.prevDay" to "前日",
@@ -1860,6 +1900,13 @@ object I18n {
 
     private val ko: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "\"{name}\" 삭제됨",
+        "undo.action" to "실행 취소",
+        "settings.about.legal" to "법적 고지",
+        "legal.privacy" to "개인정보 처리방침",
+        "legal.terms" to "이용 약관",
+        "legal.dataProcessing" to "데이터 처리 방침",
+        "legal.openSource" to "오픈소스 라이선스",
 
         "topbar.today" to "오늘",
         "topbar.prevDay" to "이전 날",
@@ -2296,6 +2343,13 @@ object I18n {
 
     private val es: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "Se eliminó \"{name}\"",
+        "undo.action" to "Deshacer",
+        "settings.about.legal" to "Legal",
+        "legal.privacy" to "Política de privacidad",
+        "legal.terms" to "Términos de uso",
+        "legal.dataProcessing" to "Política de tratamiento de datos",
+        "legal.openSource" to "Licencias de código abierto",
 
         "topbar.today" to "Hoy",
         "topbar.prevDay" to "Día anterior",
@@ -2732,6 +2786,13 @@ object I18n {
 
     private val fr: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "« {name} » supprimé",
+        "undo.action" to "Annuler",
+        "settings.about.legal" to "Mentions légales",
+        "legal.privacy" to "Politique de confidentialité",
+        "legal.terms" to "Conditions d'utilisation",
+        "legal.dataProcessing" to "Politique de traitement des données",
+        "legal.openSource" to "Licences open source",
 
         "topbar.today" to "Aujourd'hui",
         "topbar.prevDay" to "Jour précédent",
@@ -3168,6 +3229,13 @@ object I18n {
 
     private val de: Map<String, String> = mapOf(
         "app.name" to "ByWave Calendar",
+        "undo.deleted" to "\"{name}\" gelöscht",
+        "undo.action" to "Rückgängig",
+        "settings.about.legal" to "Rechtliches",
+        "legal.privacy" to "Datenschutzerklärung",
+        "legal.terms" to "Nutzungsbedingungen",
+        "legal.dataProcessing" to "Datenverarbeitungsrichtlinie",
+        "legal.openSource" to "Open-Source-Lizenzen",
 
         "topbar.today" to "Heute",
         "topbar.prevDay" to "Vorheriger Tag",

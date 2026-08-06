@@ -36,6 +36,10 @@ data class EventExtraDTO(
     val category: String? = null,
     val url: String? = null,
     val meetingPassword: String? = null,
+    // Per-event reminders, edited on web. Kept as raw JSON so the desktop
+    // round-trips them untouched — the server REPLACES extra wholesale on
+    // PATCH, so dropping this field here silently wiped web-set alarms.
+    val alarms: kotlinx.serialization.json.JsonElement? = null,
 )
 
 /** GET /api/v1/events response envelope (the `data` payload after we
@@ -139,6 +143,7 @@ data class EventExtra(
     val category: String? = null,
     val url: String? = null,
     val meetingPassword: String? = null,
+    val alarms: kotlinx.serialization.json.JsonElement? = null,
 )
 
 // ---- Global search ----

@@ -98,6 +98,10 @@ private data class FormState(
     val allDay: Boolean,
     val rrule: RruleState,
     val attendees: List<String>,
+    // Source event's extra (edit/duplicate) — merged back on save so
+    // fields this form doesn't edit (alarms, category, the original
+    // timezone) survive the server's replace-wholesale PATCH.
+    val sourceExtra: cn.bywave.calendar.desktop.data.model.EventExtraDTO? = null,
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank()
@@ -535,6 +539,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(s.rrule),
                 attendees = s.extra?.attendees.orEmpty(),
+                sourceExtra = s.extra,
             )
         }
         is EventEditMode.Duplicate -> {
@@ -564,6 +569,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(null),   // intentionally clear
                 attendees = s.extra?.attendees.orEmpty(),
+                sourceExtra = s.extra,
             )
         }
     }
@@ -577,18 +583,27 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
     val urlTrim = form.url.trim()
     val pwTrim = form.meetingPassword.trim()
     val attendees = form.attendees.takeIf { it.isNotEmpty() }
-    // Always emit timezone for timed events; emit url + attendees when
-    // present. allDay events skip the timezone field (it's irrelevant
-    // and the server stores allDay times as date-only).
-    val extra = when {
-        urlTrim.isNotEmpty() || pwTrim.isNotEmpty() || attendees != null -> EventExtra(
-            timezone = if (!form.allDay) zone.id else null,
+    // MERGE with the source event's extra — the server replaces `extra`
+    // wholesale on PATCH, so anything we don't echo back is destroyed.
+    // Pre-1.0.15 this rebuilt extra from form fields only, which silently
+    // wiped web-set alarms + category and overwrote the event's original
+    // timezone with the desktop's local zone on every edit.
+    val src = form.sourceExtra
+    val extra = run {
+        val merged = EventExtra(
+            // Timed events: keep the event's own zone; fall back to the
+            // desktop zone only when the event never had one (create).
+            timezone = if (!form.allDay) (src?.timezone ?: zone.id) else src?.timezone,
             attendees = attendees,
+            category = src?.category,
             url = urlTrim.ifEmpty { null },
             meetingPassword = pwTrim.ifEmpty { null },
+            alarms = src?.alarms,
         )
-        !form.allDay -> EventExtra(timezone = zone.id)
-        else -> null
+        val allNull = merged.timezone == null && merged.attendees == null &&
+            merged.category == null && merged.url == null &&
+            merged.meetingPassword == null && merged.alarms == null
+        if (allNull) null else merged
     }
 
     val rrule = form.rrule.toRrule()
