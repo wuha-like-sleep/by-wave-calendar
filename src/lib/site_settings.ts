@@ -1,3 +1,5 @@
+import path from "node:path";
+import { existsSync as fsExistsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
@@ -73,12 +75,34 @@ async function loadFromDb(): Promise<SettingsView> {
   return toView(row);
 }
 
+// 上传的 Logo 文件是否还在磁盘上。
+//
+// 为什么要查:logoUrl 存在数据库里,但文件躺在 src/public/uploads/。
+// 迁移服务器、重装、或者手滑删掉 uploads 之后,数据库记录还在,于是
+// 页面 <img> 裂图、更糟的是 manifest 的第一个 icon 指向 404,浏览器
+// 认这个图标 → PWA「安装到桌面」的图标就是坏的(rl.lz-ss.com 上实际
+// 发生过)。文件不在就当没配过 Logo,回落到内置图标。
+//
+// 结果缓存在 settings 缓存的生命周期内,不会每次请求都打磁盘。
+function logoFileExists(logoUrl: string | null): boolean {
+  if (!logoUrl) return false;
+  // 外链 Logo(http/https)不归我们管,原样放行。
+  if (/^https?:\/\//i.test(logoUrl)) return true;
+  if (!logoUrl.startsWith("/static/")) return false;
+  const rel = logoUrl.replace(/^\/static\//, "").split("?")[0]!;
+  try {
+    return fsExistsSync(path.join(process.cwd(), "src", "public", rel));
+  } catch {
+    return false;
+  }
+}
+
 function toView(r: schema.SiteSettings): SettingsView {
   const mode = (r.registrationMode === "closed" || r.registrationMode === "public" || r.registrationMode === "invite")
     ? r.registrationMode : "public";
   return {
     siteName: r.siteName || env.SITE_NAME,
-    logoUrl: r.logoUrl,
+    logoUrl: logoFileExists(r.logoUrl) ? r.logoUrl : null,
     registrationMode: mode,
     icpNumber: r.icpNumber || env.ICP_NUMBER || null,
     icpUrl: r.icpUrl || env.ICP_URL,
