@@ -41,10 +41,21 @@ jobs:
         run: npx tsc -p tsconfig.json --noEmit
 
       - name: Unit tests
+        # env.ts 对必填项做 zod 校验,缺了就 process.exit(1) —— CI 里没有
+        # .env,所以喂一组假值让模块能 import。这些测试不连数据库,
+        # DATABASE_URL 只需格式合法。
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+          SESSION_SECRET: ci-only-secret-not-used-anywhere-0123456789
+          PUBLIC_BASE_URL: http://127.0.0.1:3000
         run: npx vitest run
 
       # 语言包完整性:任一语言缺 key 都会在这里暴露,而不是等用户
       # 切到该语言看到 key 名。已知的 18 个历史缺失键不阻塞构建。
       - name: i18n completeness
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+          SESSION_SECRET: ci-only-secret-not-used-anywhere-0123456789
+          PUBLIC_BASE_URL: http://127.0.0.1:3000
         run: npm run i18n:check || true
         continue-on-error: true
