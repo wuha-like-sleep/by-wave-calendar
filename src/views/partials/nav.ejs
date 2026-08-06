@@ -13,25 +13,25 @@
 
       <% if (user) { %>
         <nav class="hidden md:flex items-center gap-1 text-sm text-slate-600">
-          <a href="/app" class="px-3 py-1.5 rounded-md hover:bg-slate-100">日历</a>
-          <a href="/app/settings" class="px-3 py-1.5 rounded-md hover:bg-slate-100">设置</a>
+          <a href="/app" class="px-3 py-1.5 rounded-md hover:bg-slate-100"><%= t("nav.calendar") %></a>
+          <a href="/app/settings" class="px-3 py-1.5 rounded-md hover:bg-slate-100"><%= t("nav.settings") %></a>
           <% if (user.isAdmin) { %>
-            <a href="/admin" class="px-3 py-1.5 rounded-md text-amber-700 hover:bg-amber-50">管理后台</a>
+            <a href="/admin" class="px-3 py-1.5 rounded-md text-amber-700 hover:bg-amber-50"><%= t("nav.admin") %></a>
           <% } %>
         </nav>
         <div class="flex items-center gap-2">
-          <a href="/app/search" data-bwc-search title="搜索事件（快捷键 ⌘K 或 / ）"
+          <a href="/app/search" data-bwc-search title="<%= t("nav.searchTitle") %>"
              class="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-             aria-label="搜索">
+             aria-label="<%= t("nav.search") %>">
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <span class="hidden lg:inline">搜索事件</span>
+            <span class="hidden lg:inline"><%= t("search.heading") %></span>
             <kbd class="hidden lg:inline rounded border border-slate-300 bg-white px-1 text-[11px] leading-tight text-slate-400">⌘K</kbd>
           </a>
           <%- include('lang-switcher') %>
           <span class="hidden sm:inline text-sm text-slate-500"><%= user.displayName || user.email %></span>
           <form method="post" action="/sign-out" class="m-0">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50">退出</button>
+            <button type="submit" class="text-sm px-3 py-1.5 rounded-md border border-slate-200 hover:bg-slate-50"><%= t("nav.signOut") %></button>
           </form>
           <button type="button" class="md:hidden p-2 rounded-md hover:bg-slate-100" onclick="document.getElementById('mobile-menu').classList.toggle('hidden')" aria-label="menu">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -40,9 +40,9 @@
       <% } else { %>
         <div class="flex items-center gap-2 text-sm">
           <%- include('lang-switcher') %>
-          <a href="/login" class="px-3 py-1.5 rounded-md text-slate-700 hover:bg-slate-100">登录</a>
+          <a href="/login" class="px-3 py-1.5 rounded-md text-slate-700 hover:bg-slate-100"><%= t("nav.signIn") %></a>
           <% if (registrationOpen) { %>
-            <a href="/register" class="px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow-sm">注册</a>
+            <a href="/register" class="px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow-sm"><%= t("nav.register") %></a>
           <% } %>
         </div>
       <% } %>
@@ -50,11 +50,11 @@
 
     <% if (user) { %>
       <nav id="mobile-menu" class="md:hidden hidden pb-3 flex-col gap-1 text-sm text-slate-700">
-        <a href="/app/search" data-bwc-search class="px-3 py-2 rounded-md hover:bg-slate-100">搜索事件</a>
-        <a href="/app" class="px-3 py-2 rounded-md hover:bg-slate-100">日历</a>
-        <a href="/app/settings" class="px-3 py-2 rounded-md hover:bg-slate-100">设置</a>
+        <a href="/app/search" data-bwc-search class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("search.heading") %></a>
+        <a href="/app" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.calendar") %></a>
+        <a href="/app/settings" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.settings") %></a>
         <% if (user.isAdmin) { %>
-          <a href="/admin" class="px-3 py-2 rounded-md text-amber-700 hover:bg-amber-50">管理后台</a>
+          <a href="/admin" class="px-3 py-2 rounded-md text-amber-700 hover:bg-amber-50"><%= t("nav.admin") %></a>
         <% } %>
       </nav>
     <% } %>

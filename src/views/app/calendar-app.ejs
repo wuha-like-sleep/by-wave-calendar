@@ -3,31 +3,31 @@
 <div id="calendar-app" class="flex-1 min-h-0 flex flex-col">
   <!-- Top toolbar -->
   <header class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-3 border-b border-slate-200 bg-white sticky top-14 z-30">
-    <button type="button" id="btn-toggle-sidebar" class="p-2 rounded-md hover:bg-slate-100" aria-label="侧栏">
+    <button type="button" id="btn-toggle-sidebar" class="p-2 rounded-md hover:bg-slate-100" aria-label="<%= t("app.toolbar.sidebar") %>">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
-    <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 min-h-[36px]">今天</button>
+    <button type="button" id="btn-today" class="rounded-lg border border-slate-200 bg-white px-3 py-2 sm:py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 min-h-[36px]"><%= t("app.toolbar.today") %></button>
     <div class="inline-flex items-center">
       <!-- Touch targets: 36×36 minimum (was 28×28). Apple HIG / Material both
            recommend 44px for ideal touch; 36px is the sane minimum that
            still fits two arrows + the date label on a 360px-wide screen. -->
-      <button type="button" id="btn-prev" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="上一段">
+      <button type="button" id="btn-prev" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="<%= t("app.toolbar.prev") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <button type="button" id="btn-next" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="下一段">
+      <button type="button" id="btn-next" class="p-2 rounded-md hover:bg-slate-100 min-w-[36px] min-h-[36px] flex items-center justify-center" aria-label="<%= t("app.toolbar.next") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
     </div>
     <h2 id="period-label" class="text-sm sm:text-lg font-semibold text-slate-900 flex-1 min-w-0 truncate">…</h2>
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-      <button type="button" data-view="month" class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">月</button>
-      <button type="button" data-view="week"  class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">周</button>
-      <button type="button" data-view="day"   class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]">日</button>
+      <button type="button" data-view="month" class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]"><%= t("app.toolbar.viewMonth") %></button>
+      <button type="button" data-view="week"  class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]"><%= t("app.toolbar.viewWeek") %></button>
+      <button type="button" data-view="day"   class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]"><%= t("app.toolbar.viewDay") %></button>
     </div>
     <!-- Sync status chip (offline indicator + pending outbox count).
          Hidden by default; calendar-app.js shows it when state changes.
          Click → opens the conflict modal when there are stuck items. -->
-    <button type="button" id="sync-chip" class="hidden inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" title="离线/同步状态">
+    <button type="button" id="sync-chip" class="hidden inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium" title="<%= t("app.toolbar.syncStatus") %>">
       <span id="sync-chip-dot" class="inline-block h-1.5 w-1.5 rounded-full"></span>
       <span id="sync-chip-text"></span>
     </button>
@@ -35,7 +35,7 @@
          since this lives in a cramped wrapping toolbar. -->
     <button type="button" id="btn-new-event" class="hidden sm:inline-flex items-center gap-1 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      <span>新建事件</span>
+      <span><%= t("app.toolbar.newEvent") %></span>
     </button>
   </header>
 
@@ -45,27 +45,27 @@
        binds the same handler to both ids). -->
   <button type="button" id="btn-new-event-fab"
           class="sm:hidden fixed bottom-5 right-5 z-30 h-14 w-14 rounded-full bg-brand-600 text-white shadow-lg flex items-center justify-center hover:bg-brand-700 active:scale-95 transition-transform"
-          aria-label="新建事件">
+          aria-label="<%= t("app.toolbar.newEvent") %>">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
   </button>
 
   <!-- Floating shortcuts hint -->
-  <button type="button" id="btn-shortcuts" class="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-brand-600" aria-label="键盘快捷键" title="键盘快捷键 (按 ?)">
+  <button type="button" id="btn-shortcuts" class="hidden lg:inline-flex fixed bottom-4 right-4 z-30 items-center justify-center h-9 w-9 rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:bg-slate-50 hover:text-brand-600" aria-label="<%= t("app.shortcuts.title") %>" title="<%= t("app.shortcuts.titleHint") %>">
     <span class="text-base font-bold">?</span>
   </button>
   <div id="shortcuts-panel" class="hidden fixed bottom-16 right-4 z-30 w-72 rounded-2xl border border-slate-200 bg-white shadow-lg p-4">
-    <h3 class="text-sm font-semibold text-slate-900 mb-3">键盘快捷键</h3>
+    <h3 class="text-sm font-semibold text-slate-900 mb-3"><%= t("app.shortcuts.title") %></h3>
     <ul class="space-y-2 text-xs text-slate-600">
-      <li class="flex justify-between"><span>切换到月视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">M</kbd></li>
-      <li class="flex justify-between"><span>切换到周视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">W</kbd></li>
-      <li class="flex justify-between"><span>切换到日视图</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">D</kbd></li>
-      <li class="flex justify-between"><span>跳到今天</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">T</kbd></li>
-      <li class="flex justify-between"><span>上一段</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">←</kbd></li>
-      <li class="flex justify-between"><span>下一段</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">→</kbd></li>
-      <li class="flex justify-between"><span>新建事件</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">N</kbd></li>
-      <li class="flex justify-between"><span>关闭弹窗</span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">Esc</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.shortcuts.toMonth") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">M</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.shortcuts.toWeek") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">W</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.shortcuts.toDay") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">D</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.shortcuts.jumpToday") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">T</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.toolbar.prev") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">←</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.toolbar.next") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">→</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.toolbar.newEvent") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">N</kbd></li>
+      <li class="flex justify-between"><span><%= t("app.shortcuts.closeModal") %></span><kbd class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-700">Esc</kbd></li>
     </ul>
-    <p class="mt-3 text-[10px] text-slate-400">在输入框里输字时快捷键暂停。</p>
+    <p class="mt-3 text-[10px] text-slate-400"><%= t("app.shortcuts.pausedHint") %></p>
   </div>
 
   <div class="flex-1 min-h-0 flex relative">
@@ -79,8 +79,8 @@
     <aside id="cal-sidebar"
            class="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
       <div class="md:hidden flex items-center justify-between p-3 border-b border-slate-100">
-        <span class="text-sm font-semibold text-slate-700">日历</span>
-        <button type="button" id="btn-close-sidebar" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <span class="text-sm font-semibold text-slate-700"><%= t("nav.calendar") %></span>
+        <button type="button" id="btn-close-sidebar" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
@@ -88,17 +88,17 @@
       <!-- Mini date picker (month / year) -->
       <div id="mini-cal" class="p-3 border-b border-slate-100">
         <div class="flex items-center justify-between mb-2">
-          <button type="button" id="mini-prev" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="上一个">
+          <button type="button" id="mini-prev" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="<%= t("app.mini.prev") %>">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <button type="button" id="mini-period" class="text-sm font-semibold text-slate-700 hover:text-brand-700 px-2 py-1 rounded-md hover:bg-slate-50" aria-label="切换月/年视图">2026 五月</button>
-          <button type="button" id="mini-next" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="下一个">
+          <button type="button" id="mini-period" class="text-sm font-semibold text-slate-700 hover:text-brand-700 px-2 py-1 rounded-md hover:bg-slate-50" aria-label="<%= t("app.mini.toggleView") %>">…</button>
+          <button type="button" id="mini-next" class="p-1 rounded-md hover:bg-slate-100 text-slate-500" aria-label="<%= t("app.mini.next") %>">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
         </div>
         <div id="mini-month-view" class="text-center text-[11px]">
           <div class="grid grid-cols-7 gap-0.5 mb-1 text-slate-400">
-            <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+            <span><%= t("app.weekday.mon") %></span><span><%= t("app.weekday.tue") %></span><span><%= t("app.weekday.wed") %></span><span><%= t("app.weekday.thu") %></span><span><%= t("app.weekday.fri") %></span><span><%= t("app.weekday.sat") %></span><span><%= t("app.weekday.sun") %></span>
           </div>
           <div id="mini-month-grid" class="grid grid-cols-7 gap-0.5"></div>
         </div>
@@ -107,17 +107,17 @@
 
       <div class="p-3 border-b border-slate-100">
         <div class="flex items-center justify-between mb-2 relative">
-          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide">我的日历</h3>
-          <button type="button" id="btn-cal-menu-trigger" class="text-brand-600 hover:text-brand-700 p-1" aria-label="新建或导入日历">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wide"><%= t("app.sidebar.myCalendars") %></h3>
+          <button type="button" id="btn-cal-menu-trigger" class="text-brand-600 hover:text-brand-700 p-1" aria-label="<%= t("app.sidebar.addCalendar") %>">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
           </button>
           <div id="cal-add-popover" class="hidden absolute right-0 top-7 z-30 w-44 rounded-lg border border-slate-200 bg-white shadow-lg py-1">
-            <button type="button" data-action="create" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">📅 创建日历</button>
-            <button type="button" data-action="import" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">📥 导入日历</button>
+            <button type="button" data-action="create" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.sidebar.createCalendar") %></button>
+            <button type="button" data-action="import" class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.sidebar.importCalendar") %></button>
           </div>
         </div>
         <% if (calendars.length > 5) { %>
-          <input type="search" id="cal-search" placeholder="搜索日历…"
+          <input type="search" id="cal-search" placeholder="<%= t("app.sidebar.searchPlaceholder") %>"
                  class="mb-2 w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs focus:bg-white focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200" />
         <% } %>
         <ul id="cal-list" class="space-y-1">
@@ -129,7 +129,7 @@
               <span class="inline-block h-2.5 w-2.5 rounded-full flex-shrink-0" style="background: <%= cal.color %>"></span>
               <span class="text-sm text-slate-700 flex-1 truncate"><%= cal.name %></span>
               <button type="button" class="opacity-0 group-hover:opacity-100 md:opacity-0 text-slate-400 hover:text-slate-700 p-1"
-                      data-cal-menu="<%= cal.id %>" aria-label="日历选项">
+                      data-cal-menu="<%= cal.id %>" aria-label="<%= t("app.sidebar.calOptions") %>">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
               </button>
             </li>
@@ -137,34 +137,34 @@
         </ul>
         <% if (calendars.length === 0) { %>
           <div class="text-center py-4 text-xs">
-            <p class="text-slate-400 mb-2">还没有日历</p>
+            <p class="text-slate-400 mb-2"><%= t("app.sidebar.noCalendars") %></p>
             <button type="button" id="empty-create-cal" class="inline-flex items-center gap-1 rounded-md bg-brand-50 text-brand-700 px-2 py-1 hover:bg-brand-100 font-medium">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-              创建第一个
+              <%= t("app.sidebar.createFirst") %>
             </button>
           </div>
         <% } %>
       </div>
 
       <div class="p-3 mt-auto text-xs text-slate-400 space-y-1 border-t border-slate-100">
-        <a href="/app/calendars" class="block py-1.5 hover:text-slate-700">📁 日历卡片视图</a>
-        <a href="/app/booking-links" class="block py-1.5 hover:text-slate-700">📅 预约链接</a>
-        <a href="/app/settings" class="block py-1.5 hover:text-slate-700">⚙️ 账号设置</a>
+        <a href="/app/calendars" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.cardView") %></a>
+        <a href="/app/booking-links" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.bookingLinks") %></a>
+        <a href="/app/settings" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.accountSettings") %></a>
         <% if (user.isAdmin) { %>
-          <a href="/admin" class="block py-1.5 text-amber-700 hover:text-amber-900">🛠️ 管理后台</a>
+          <a href="/admin" class="block py-1.5 text-amber-700 hover:text-amber-900"><%= t("app.sidebar.admin") %></a>
         <% } %>
       </div>
     </aside>
 
     <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
     <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
-      <!-- "下一个事件" banner. Hidden when no upcoming event in next 24h
-           OR the next event is the one currently in progress. JS toggles
-           the .hidden class + fills in #next-event-text. -->
+      <%# "Next event" banner. Hidden when no upcoming event in next 24h
+          OR the next event is the one currently in progress. JS toggles
+          the .hidden class + fills in #next-event-text. %>
       <div id="next-event-banner" class="hidden mx-3 sm:mx-5 mt-2 flex items-center gap-2 rounded-lg border border-brand-100 bg-gradient-to-r from-brand-50/70 to-violet-50/70 px-3 py-1.5 text-sm">
         <span class="text-base">🔔</span>
         <span id="next-event-text" class="flex-1 min-w-0 text-slate-700 truncate"></span>
-        <button type="button" id="next-event-jump" class="text-xs text-brand-700 hover:text-brand-800 font-medium flex-shrink-0">跳转</button>
+        <button type="button" id="next-event-jump" class="text-xs text-brand-700 hover:text-brand-800 font-medium flex-shrink-0"><%= t("app.banner.jump") %></button>
       </div>
       <%# First-run onboarding nudge. calendar-app.js shows this only
           when the API returns zero events on the very first load, and
@@ -172,12 +172,12 @@
           come back if the user navigates to an empty week later. %>
       <div id="empty-state" class="hidden mx-3 sm:mx-5 mt-2 rounded-2xl border border-dashed border-slate-300 bg-white px-4 sm:px-6 py-6 text-center">
         <div class="text-4xl mb-2">📅</div>
-        <h3 class="text-base font-semibold text-slate-900">第一次用？</h3>
-        <p class="mt-1 text-sm text-slate-500 max-w-md mx-auto">点右下角的 + 新建第一个事件，或者从 .ics / CalDAV 把现有日历导进来。</p>
+        <h3 class="text-base font-semibold text-slate-900"><%= t("app.empty.title") %></h3>
+        <p class="mt-1 text-sm text-slate-500 max-w-md mx-auto"><%= t("app.empty.desc") %></p>
         <div class="mt-4 flex flex-wrap justify-center gap-2">
-          <button type="button" id="empty-new-event" class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">新建第一个事件</button>
-          <button type="button" id="empty-import" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">导入 .ics / 订阅</button>
-          <a href="/app/settings#caldav-connect" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50">手机 CalDAV 同步</a>
+          <button type="button" id="empty-new-event" class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"><%= t("app.empty.newEvent") %></button>
+          <button type="button" id="empty-import" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.empty.import") %></button>
+          <a href="/app/settings#caldav-connect" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.empty.caldav") %></a>
         </div>
       </div>
       <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem);"></div>
@@ -189,16 +189,16 @@
 <div id="modal-event" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-      <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900">新建事件</h3>
+      <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900"><%= t("app.toolbar.newEvent") %></h3>
       <div class="flex items-center gap-2">
-        <!-- "进入编辑" toggle, only visible when modal opens in view mode
-             (i.e. user clicked an existing event). Edit mode hides it. -->
+        <%# "Enter edit" toggle, only visible when modal opens in view mode
+            (i.e. user clicked an existing event). Edit mode hides it. %>
         <button type="button" id="btn-enter-edit"
           class="hidden inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-          编辑
+          <%= t("app.event.editButton") %>
         </button>
-        <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+        <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
@@ -206,11 +206,12 @@
     <form id="form-event" class="p-5 space-y-4">
       <input type="hidden" name="id" />
 
-      <!-- Natural-language quick-fill: 输入"明天下午3点牙医"自动解析成事件 -->
+      <%# Natural-language quick-fill: parses phrases like "明天下午3点牙医"
+          (or "15:30 dentist") into an event. %>
       <div class="rounded-lg bg-gradient-to-r from-brand-50 to-violet-50 border border-brand-100 p-2.5">
         <label class="flex items-center gap-2">
           <span class="text-base">🪄</span>
-          <input type="text" id="nl-input" placeholder="试试：明天下午三点开会，或 下周一10点复盘两小时"
+          <input type="text" id="nl-input" placeholder="<%= t("app.event.nlPlaceholder") %>"
                  class="flex-1 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none border-0" />
           <kbd class="hidden sm:inline-block text-xs text-slate-400 bg-white/60 rounded px-1.5 py-0.5">Enter</kbd>
         </label>
@@ -218,17 +219,17 @@
       </div>
 
       <!-- Title (prominent) -->
-      <input type="text" name="summary" required maxlength="500" placeholder="事件标题"
+      <input type="text" name="summary" required maxlength="500" placeholder="<%= t("app.event.titlePlaceholder") %>"
              class="w-full text-lg font-medium rounded-lg border-0 border-b border-slate-200 px-0 py-2 focus:border-brand-500 focus:outline-none focus:ring-0" />
 
       <!-- All-day + Calendar + Category in a row -->
       <div class="flex flex-wrap items-center gap-3">
         <label class="inline-flex items-center gap-1.5 text-sm text-slate-700">
           <input type="checkbox" name="allDay" class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-          全天
+          <%= t("app.event.allDay") %>
         </label>
         <div class="flex items-center gap-1.5 text-sm">
-          <span class="text-slate-500">日历</span>
+          <span class="text-slate-500"><%= t("nav.calendar") %></span>
           <select name="calendarId" required class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
             <% calendars.forEach(function(cal){ %>
               <option value="<%= cal.id %>" data-color="<%= cal.color %>"><%= cal.name %></option>
@@ -236,15 +237,15 @@
           </select>
         </div>
         <div class="flex items-center gap-1.5 text-sm">
-          <span class="text-slate-500">分类</span>
+          <span class="text-slate-500"><%= t("app.event.category") %></span>
           <select name="category" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
-            <option value="">无</option>
-            <option value="work">工作</option>
-            <option value="personal">个人</option>
-            <option value="family">家庭</option>
-            <option value="health">健康</option>
-            <option value="travel">出行</option>
-            <option value="meeting">会议</option>
+            <option value=""><%= t("app.event.none") %></option>
+            <option value="work"><%= t("app.event.categoryWork") %></option>
+            <option value="personal"><%= t("app.event.categoryPersonal") %></option>
+            <option value="family"><%= t("app.event.categoryFamily") %></option>
+            <option value="health"><%= t("app.event.categoryHealth") %></option>
+            <option value="travel"><%= t("app.event.categoryTravel") %></option>
+            <option value="meeting"><%= t("app.event.categoryMeeting") %></option>
           </select>
         </div>
       </div>
@@ -252,26 +253,26 @@
       <!-- Repeat + Reminder -->
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <div class="flex items-center gap-1.5">
-          <span class="text-slate-500">重复</span>
+          <span class="text-slate-500"><%= t("app.event.repeat") %></span>
           <select name="rrule" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
-            <option value="">不重复</option>
-            <option value="FREQ=DAILY">每天</option>
-            <option value="FREQ=WEEKLY">每周</option>
-            <option value="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR">每个工作日</option>
-            <option value="FREQ=MONTHLY">每月</option>
-            <option value="FREQ=YEARLY">每年</option>
+            <option value=""><%= t("app.event.repeatNone") %></option>
+            <option value="FREQ=DAILY"><%= t("app.event.repeatDaily") %></option>
+            <option value="FREQ=WEEKLY"><%= t("app.event.repeatWeekly") %></option>
+            <option value="FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"><%= t("app.event.repeatWeekdays") %></option>
+            <option value="FREQ=MONTHLY"><%= t("app.event.repeatMonthly") %></option>
+            <option value="FREQ=YEARLY"><%= t("app.event.repeatYearly") %></option>
           </select>
         </div>
         <div class="flex items-center gap-1.5">
-          <span class="text-slate-500">提醒</span>
+          <span class="text-slate-500"><%= t("app.event.reminder") %></span>
           <select name="reminder" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
-            <option value="">无</option>
-            <option value="-PT5M">开始前 5 分钟</option>
-            <option value="-PT15M" selected>开始前 15 分钟</option>
-            <option value="-PT30M">开始前 30 分钟</option>
-            <option value="-PT1H">开始前 1 小时</option>
-            <option value="-PT2H">开始前 2 小时</option>
-            <option value="-P1D">开始前 1 天</option>
+            <option value=""><%= t("app.event.none") %></option>
+            <option value="-PT5M"><%= t("app.event.reminderMinutes", { n: 5 }) %></option>
+            <option value="-PT15M" selected><%= t("app.event.reminderMinutes", { n: 15 }) %></option>
+            <option value="-PT30M"><%= t("app.event.reminderMinutes", { n: 30 }) %></option>
+            <option value="-PT1H"><%= t("app.event.reminder1Hour") %></option>
+            <option value="-PT2H"><%= t("app.event.reminder2Hours") %></option>
+            <option value="-P1D"><%= t("app.event.reminder1Day") %></option>
           </select>
         </div>
       </div>
@@ -279,93 +280,94 @@
       <!-- Time -->
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="time-row">
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">开始</label>
+          <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.starts") %></label>
           <input type="datetime-local" name="startsAt" required step="300"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">结束</label>
+          <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.ends") %></label>
           <input type="datetime-local" name="endsAt" required step="300"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
-      <!-- Timezone hint: shows the event's wall-clock in its stored zone
-           when the user's browser is in a different zone (e.g. you're in
-           Shanghai editing an event tagged as America/New_York → see
-           "原始: 09:00 (纽约时间)" so you don't accidentally interpret
-           the inputs as 9 AM Beijing time). Populated by calendar-app.js
-           on every modal open / time / timezone change. -->
+      <%# Timezone hint: shows the event's wall-clock in its stored zone
+          when the user's browser is in a different zone (e.g. you're in
+          Shanghai editing an event tagged as America/New_York → see the
+          original wall time in New York) so the inputs aren't misread as
+          local time. Populated by calendar-app.js on every modal open /
+          time / timezone change. %>
       <p id="tz-hint" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5 hidden"></p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 hidden" id="date-row">
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">开始日期</label>
+          <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.startDate") %></label>
           <input type="date" name="startsAtDate"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">结束日期</label>
+          <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.endDate") %></label>
           <input type="date" name="endsAtDate"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
 
-      <!-- Timezone picker — custom combobox, NOT a <datalist>. The
-           datalist approach let users free-type any string, which broke
-           events when they typed Chinese names like "上海" expecting it
-           to be valid (it isn't — only IANA ids work). This widget
-           always commits a valid IANA id. data-tz-picker wires up the
-           JS in calendar-app.js. -->
+      <%# Timezone picker — custom combobox, NOT a <datalist>. The
+          datalist approach let users free-type any string, which broke
+          events when they typed city names (e.g. Chinese "上海")
+          expecting them to be valid (they aren't — only IANA ids work).
+          This widget always commits a valid IANA id. data-tz-picker
+          wires up the JS in calendar-app.js, which also fills in the
+          visible label from the localized timezone list. %>
       <div data-tz-picker>
-        <label class="block text-xs font-medium text-slate-600 mb-1">时区</label>
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.timezone") %></label>
         <input type="hidden" name="timezone" value="Asia/Shanghai" />
         <button type="button" data-tz-trigger
                 class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 hover:bg-slate-50">
-          <span data-tz-label class="truncate text-slate-900">上海（UTC+8）</span>
+          <span data-tz-label class="truncate text-slate-900">…</span>
           <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
         </button>
-        <p class="mt-1 text-xs text-slate-400">点击搜索：上海 / Tokyo / 纽约 / America/Toronto</p>
+        <p class="mt-1 text-xs text-slate-400"><%= t("app.event.tzSearchHint") %></p>
       </div>
 
       <!-- Location -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">地点</label>
-        <input type="text" name="location" maxlength="500" placeholder="可选"
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.location") %></label>
+        <input type="text" name="location" maxlength="500" placeholder="<%= t("app.event.optional") %>"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
       <!-- Attendees (managed on a separate page for richer invite/revoke flow) -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">参与者</label>
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.attendees") %></label>
         <input type="hidden" name="attendees" />
         <div id="attendee-summary" class="flex items-center gap-2 text-sm text-slate-600">
-          <span id="attendee-summary-text">尚未邀请任何人</span>
-          <a id="attendee-manage-link" href="#" class="hidden ml-auto text-xs text-brand-600 hover:text-brand-700 font-medium">管理参与者 →</a>
+          <span id="attendee-summary-text"><%= t("app.js.attendees.none") %></span>
+          <a id="attendee-manage-link" href="#" class="hidden ml-auto text-xs text-brand-600 hover:text-brand-700 font-medium"><%= t("app.event.manageAttendees") %></a>
         </div>
       </div>
 
       <!-- Notes + Link split into two -->
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">备注</label>
-        <textarea name="description" maxlength="5000" rows="3" placeholder="议程、要点、注意事项……"
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.notes") %></label>
+        <textarea name="description" maxlength="5000" rows="3" placeholder="<%= t("app.event.notesPlaceholder") %>"
                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       </div>
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">链接 <span class="text-slate-400">(会议链接 / 文档地址等)</span></label>
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.link") %> <span class="text-slate-400"><%= t("app.event.linkHint") %></span></label>
         <input type="url" name="url" maxlength="2000" placeholder="https://…"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
-      <!-- Only shown when 分类 = 会议 (toggled by syncMeetingPasswordField). -->
+      <%# Only shown when category = meeting (toggled by syncMeetingPasswordField). %>
       <div id="field-meeting-password" class="hidden">
-        <label class="block text-xs font-medium text-slate-600 mb-1">入会密码 <span class="text-slate-400">(可选 · 会议有密码时填写，会写进邀请邮件)</span></label>
-        <input type="text" name="meetingPassword" maxlength="100" placeholder="如 086420" autocomplete="off"
+        <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.meetingPassword") %> <span class="text-slate-400"><%= t("app.event.meetingPasswordHint") %></span></label>
+        <input type="text" name="meetingPassword" maxlength="100" placeholder="<%= t("app.event.meetingPasswordPlaceholder") %>" autocomplete="off"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
       <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-slate-100">
-        <button type="button" id="btn-delete-event" class="hidden text-sm text-red-600 hover:text-red-700 self-start sm:self-auto">删除</button>
+        <button type="button" id="btn-delete-event" class="hidden text-sm text-red-600 hover:text-red-700 self-start sm:self-auto"><%= t("common.delete") %></button>
         <div class="flex gap-2 sm:ml-auto">
-          <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
-          <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+          <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("common.cancel") %></button>
+          <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
         </div>
       </div>
     </form>
@@ -376,65 +378,64 @@
 <div id="modal-calendar" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-slate-900">创建日历</h3>
-      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <h3 class="text-lg font-semibold text-slate-900"><%= t("app.calendar.createTitle") %></h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="px-5 pt-3 border-b border-slate-100 flex gap-4">
-      <button type="button" data-cal-tab="general" class="cal-tab pb-2 border-b-2 border-brand-600 text-sm font-medium text-brand-700">一般</button>
-      <button type="button" data-cal-tab="share" class="cal-tab pb-2 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700">共享</button>
+      <button type="button" data-cal-tab="general" class="cal-tab pb-2 border-b-2 border-brand-600 text-sm font-medium text-brand-700"><%= t("app.calendar.tabGeneral") %></button>
+      <button type="button" data-cal-tab="share" class="cal-tab pb-2 border-b-2 border-transparent text-sm font-medium text-slate-500 hover:text-slate-700"><%= t("app.calendar.tabShare") %></button>
     </div>
     <form id="form-calendar" class="p-5 space-y-4">
       <div data-cal-pane="general" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">名称<span class="text-red-500 ml-0.5">*</span></label>
+          <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.calendar.name") %><span class="text-red-500 ml-0.5">*</span></label>
           <input type="text" name="name" required maxlength="200"
                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1">描述</label>
-          <textarea name="description" maxlength="2000" rows="2" placeholder="添加描述"
+          <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.calendar.description") %></label>
+          <textarea name="description" maxlength="2000" rows="2" placeholder="<%= t("app.calendar.descPlaceholder") %>"
                     class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-2">颜色</label>
+          <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("app.calendar.color") %></label>
           <div class="flex flex-wrap gap-1.5" data-color-picker="form-calendar"></div>
           <input type="hidden" name="color" value="#6366f1" />
         </div>
         <div data-tz-picker>
-          <label class="block text-sm font-medium text-slate-700 mb-1">时区</label>
+          <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.event.timezone") %></label>
           <input type="hidden" name="timezone" value="Asia/Shanghai" />
           <button type="button" data-tz-trigger
                   class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
-            <span data-tz-label class="truncate text-slate-900">上海（UTC+8）</span>
+            <span data-tz-label class="truncate text-slate-900">…</span>
             <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
           </button>
         </div>
       </div>
       <div data-cal-pane="share" class="hidden space-y-3">
         <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500 leading-relaxed">
-          创建完成后可在日历右键菜单的「订阅链接」中生成订阅地址，分享给 Apple / Google / Outlook 客户端只读订阅。<br/>
-          邮箱邀请协作（指定成员可读 / 可编辑）将在下一版本上线。
+          <%- t("app.calendar.shareNote") %>
         </div>
       </div>
       <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
-        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存</button>
+        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("common.cancel") %></button>
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Modal: Timezone picker. Shared across every [data-tz-picker]
-     element on the page. Search filters by Chinese label, IANA id, or
-     UTC offset; selecting commits a known-valid IANA id to the hidden
-     <input name="timezone"> in the picker that opened the modal. -->
+<%# Modal: Timezone picker. Shared across every [data-tz-picker]
+    element on the page. Search filters by localized label, IANA id, or
+    UTC offset; selecting commits a known-valid IANA id to the hidden
+    <input name="timezone"> in the picker that opened the modal. %>
 <div id="modal-tz" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col max-h-[85vh]">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-      <h3 class="text-base font-semibold text-slate-900">选择时区</h3>
-      <button type="button" data-tz-close class="p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <h3 class="text-base font-semibold text-slate-900"><%= t("app.tz.title") %></h3>
+      <button type="button" data-tz-close class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
@@ -442,7 +443,7 @@
       <div class="relative">
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
         <input id="tz-search" type="search" inputmode="search" autocomplete="off"
-               placeholder="搜索：上海 / Tokyo / Toronto / +8"
+               placeholder="<%= t("app.tz.searchPlaceholder") %>"
                class="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
     </div>
@@ -454,29 +455,31 @@
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   // Inject the curated + IANA timezone list as JSON for the JS picker.
   // Shipped inline because the calendar-app.js bundle doesn't get
-  // template variables; ~5KB gzipped, acceptable.
-  window.bwcTimezones = <%- JSON.stringify(timezones) %>;
+  // template variables; ~5KB gzipped, acceptable. Labels are already
+  // localized server-side (listTimezones(locale)).
+  window.bwcTimezones = <%- jsonForScript(timezones) %>;
 </script>
 
-<!-- Modal: Sync conflicts. Opens when the user clicks the sync chip
-     while it's showing stuck-in-outbox items (5+ retry failures). Lists
-     each conflict with original timestamp + last error + 重试/丢弃 buttons. -->
+<%# Modal: Sync conflicts. Opens when the user clicks the sync chip
+    while it's showing stuck-in-outbox items (5+ retry failures). Lists
+    each conflict with original timestamp + last error + retry/discard
+    buttons. %>
 <div id="modal-conflicts" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-      <h3 class="text-lg font-semibold text-slate-900">同步冲突</h3>
-      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <h3 class="text-lg font-semibold text-slate-900"><%= t("app.conflicts.title") %></h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="p-5">
-      <p class="text-sm text-slate-600 mb-4">下面这些**本地编辑**没能同步到服务器（重试 5 次后放弃）。可能是断网恢复后服务器拒绝了变更，或者别的设备已经改过同一个事件。</p>
+      <p class="text-sm text-slate-600 mb-4"><%= t("app.conflicts.desc") %></p>
       <ul id="conflicts-list" class="space-y-3"></ul>
-      <p id="conflicts-empty" class="hidden text-center text-sm text-slate-400 py-6">🎉 没有冲突项</p>
+      <p id="conflicts-empty" class="hidden text-center text-sm text-slate-400 py-6"><%= t("app.conflicts.empty") %></p>
     </div>
     <div class="px-5 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-      <button type="button" id="btn-conflicts-retry-all" class="text-sm text-brand-700 hover:text-brand-800 hover:underline">全部重试</button>
-      <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">关闭</button>
+      <button type="button" id="btn-conflicts-retry-all" class="text-sm text-brand-700 hover:text-brand-800 hover:underline"><%= t("app.conflicts.retryAll") %></button>
+      <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.common.close") %></button>
     </div>
   </div>
 </div>
@@ -485,19 +488,19 @@
 <div id="modal-import" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
-      <h3 class="text-lg font-semibold text-slate-900">导入日历</h3>
-      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <h3 class="text-lg font-semibold text-slate-900"><%= t("app.import.title") %></h3>
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <form id="form-import" class="p-5 space-y-4">
       <!-- Source type -->
       <div>
-        <label class="block text-sm font-medium text-slate-700 mb-2">导入来源</label>
+        <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("app.import.source") %></label>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="source" value="file" checked class="accent-brand-600" />
-            <span class="text-sm">📁 文件</span>
+            <span class="text-sm"><%= t("app.import.sourceFile") %></span>
           </label>
           <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="source" value="url-once" class="accent-brand-600" />
@@ -505,64 +508,64 @@
           </label>
           <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="source" value="sub" class="accent-brand-600" />
-            <span class="text-sm">🔁 订阅</span>
+            <span class="text-sm"><%= t("app.import.sourceSub") %></span>
           </label>
           <label class="import-source-card flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50">
             <input type="radio" name="source" value="paste" class="accent-brand-600" />
-            <span class="text-sm">📝 粘贴</span>
+            <span class="text-sm"><%= t("app.import.sourcePaste") %></span>
           </label>
         </div>
-        <p class="mt-2 text-xs text-slate-400" id="import-source-hint">从本地选择一个 .ics 文件上传（最大 5MB）。支持 Google / Apple / Outlook / 群晖 等任意标准 iCalendar 文件。</p>
+        <p class="mt-2 text-xs text-slate-400" id="import-source-hint"><%= t("app.js.import.hintFile") %></p>
       </div>
 
       <!-- Source body: shown one at a time -->
       <div data-source-pane="file">
-        <label class="block text-sm font-medium text-slate-700 mb-1">文件<span class="text-red-500 ml-0.5">*</span></label>
+        <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.file") %><span class="text-red-500 ml-0.5">*</span></label>
         <input type="file" name="file" accept=".ics,text/calendar"
                class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
       </div>
       <div data-source-pane="url-once" class="hidden">
-        <label class="block text-sm font-medium text-slate-700 mb-1">远程 URL<span class="text-red-500 ml-0.5">*</span></label>
-        <input type="url" name="url" placeholder="https:// 或 webcal://"
+        <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.remoteUrl") %><span class="text-red-500 ml-0.5">*</span></label>
+        <input type="url" name="url" placeholder="https:// / webcal://"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-        <p class="mt-1 text-xs text-slate-400">一次性拉取，不自动同步。</p>
+        <p class="mt-1 text-xs text-slate-400"><%= t("app.import.urlOnceNote") %></p>
       </div>
       <div data-source-pane="sub" class="hidden space-y-2">
-        <label class="block text-sm font-medium text-slate-700 mb-1">订阅 URL<span class="text-red-500 ml-0.5">*</span></label>
-        <input type="url" name="url" placeholder="https:// 或 webcal://"
+        <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.subUrl") %><span class="text-red-500 ml-0.5">*</span></label>
+        <input type="url" name="url" placeholder="https:// / webcal://"
                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <div class="flex flex-col sm:flex-row gap-2">
-          <input type="text" name="label" maxlength="60" placeholder="备注（如：公司日历）"
+          <input type="text" name="label" maxlength="60" placeholder="<%= t("app.import.labelPlaceholder") %>"
                  class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <select name="refreshMinutes"
                   class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
-            <option value="60">每小时同步</option>
-            <option value="360" selected>每 6 小时</option>
-            <option value="720">每 12 小时</option>
-            <option value="1440">每天</option>
-            <option value="10080">每周</option>
+            <option value="60"><%= t("app.import.refreshHourly") %></option>
+            <option value="360" selected><%= t("app.import.refresh6h") %></option>
+            <option value="720"><%= t("app.import.refresh12h") %></option>
+            <option value="1440"><%= t("app.import.refreshDaily") %></option>
+            <option value="10080"><%= t("app.import.refreshWeekly") %></option>
           </select>
         </div>
       </div>
       <div data-source-pane="paste" class="hidden">
-        <label class="block text-sm font-medium text-slate-700 mb-1">ICS 文本<span class="text-red-500 ml-0.5">*</span></label>
+        <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.icsText") %><span class="text-red-500 ml-0.5">*</span></label>
         <textarea name="text" rows="5" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;…"
                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       </div>
 
       <!-- Destination -->
       <div class="pt-2 border-t border-slate-100">
-        <label class="block text-sm font-medium text-slate-700 mb-2">导入到</label>
+        <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("app.import.destination") %></label>
         <div class="space-y-2">
           <label class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-200">
             <input type="radio" name="destination" value="new" checked class="mt-0.5 accent-brand-600" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-slate-900">导入到全新日历</div>
+              <div class="text-sm font-medium text-slate-900"><%= t("app.import.destNew") %></div>
               <div data-dest-pane="new" class="mt-2 space-y-2">
-                <input type="text" name="newName" maxlength="200" placeholder="日历名称（默认沿用文件中的名称）"
+                <input type="text" name="newName" maxlength="200" placeholder="<%= t("app.import.newNamePlaceholder") %>"
                        class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
                 <div>
-                  <span class="block text-xs text-slate-500 mb-1">颜色</span>
+                  <span class="block text-xs text-slate-500 mb-1"><%= t("app.calendar.color") %></span>
                   <div class="flex flex-wrap gap-1.5" data-color-picker="form-import"></div>
                   <input type="hidden" name="newColor" value="#6366f1" />
                 </div>
@@ -572,7 +575,7 @@
           <label class="flex items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 cursor-pointer hover:bg-slate-50 has-[:checked]:bg-brand-50 has-[:checked]:border-brand-200">
             <input type="radio" name="destination" value="existing" class="mt-0.5 accent-brand-600" />
             <div class="flex-1">
-              <div class="text-sm font-medium text-slate-900">导入到现有日历</div>
+              <div class="text-sm font-medium text-slate-900"><%= t("app.import.destExisting") %></div>
               <select name="existingCalendarId" data-dest-pane="existing" class="hidden mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
                 <% calendars.forEach(function(cal){ %>
                   <option value="<%= cal.id %>"><%= cal.name %></option>
@@ -582,13 +585,13 @@
           </label>
         </div>
         <% if (calendars.length === 0) { %>
-          <p class="mt-2 text-xs text-slate-400">（你还没有任何日历，将自动创建一个）</p>
+          <p class="mt-2 text-xs text-slate-400"><%= t("app.import.noCalendarsNote") %></p>
         <% } %>
       </div>
 
       <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
-        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">取消</button>
-        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">导入</button>
+        <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("common.cancel") %></button>
+        <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("app.import.submit") %></button>
       </div>
     </form>
   </div>
@@ -602,66 +605,66 @@
         <span id="cal-menu-color" class="inline-block h-4 w-4 rounded-full flex-shrink-0"></span>
         <h3 id="cal-menu-name" class="text-lg font-semibold text-slate-900 truncate"></h3>
       </div>
-      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="关闭">
+      <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
       </button>
     </div>
     <div class="p-5 space-y-5">
-      <!-- Edit calendar properties — added in v1.3.6 because users with
-           imported calendars were stuck with the auto-generated "导入的
-           日历" name forever, and there was no way to change the default
-           timezone after creation. The server's PATCH /calendars/:id has
-           supported all these fields since day one; only the UI was
-           missing. -->
+      <%# Edit calendar properties — added in v1.3.6 because users with
+          imported calendars were stuck with the auto-generated
+          "Imported calendar" name forever, and there was no way to
+          change the default timezone after creation. The server's
+          PATCH /calendars/:id has supported all these fields since day
+          one; only the UI was missing. %>
       <section>
-        <h4 class="text-sm font-semibold text-slate-800 mb-3">日历属性</h4>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3"><%= t("app.calMenu.properties") %></h4>
         <form id="form-edit-calendar" class="space-y-3">
           <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">名称<span class="text-red-500 ml-0.5">*</span></label>
+            <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calendar.name") %><span class="text-red-500 ml-0.5">*</span></label>
             <input type="text" name="name" required maxlength="200"
                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           </div>
           <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">描述</label>
-            <textarea name="description" maxlength="2000" rows="2" placeholder="可选"
+            <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calendar.description") %></label>
+            <textarea name="description" maxlength="2000" rows="2" placeholder="<%= t("app.event.optional") %>"
                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
           </div>
           <div>
-            <label class="block text-xs font-medium text-slate-600 mb-2">颜色</label>
+            <label class="block text-xs font-medium text-slate-600 mb-2"><%= t("app.calendar.color") %></label>
             <div class="flex flex-wrap gap-1.5" data-color-picker="form-edit-calendar"></div>
             <input type="hidden" name="color" value="#6366f1" />
           </div>
           <div data-tz-picker>
-            <label class="block text-xs font-medium text-slate-600 mb-1">默认时区</label>
+            <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calMenu.defaultTimezone") %></label>
             <input type="hidden" name="timezone" value="" />
             <button type="button" data-tz-trigger
                     class="w-full flex items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
               <span data-tz-label class="truncate text-slate-900">—</span>
               <svg class="h-4 w-4 flex-none text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06z" clip-rule="evenodd"/></svg>
             </button>
-            <p class="mt-1 text-xs text-slate-400">新建事件时的默认时区；已有事件保留各自的时区</p>
+            <p class="mt-1 text-xs text-slate-400"><%= t("app.calMenu.tzNote") %></p>
           </div>
           <div class="flex justify-end gap-2 pt-1">
             <button type="submit" id="btn-save-calendar" disabled
                     class="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed">
-              保存
+              <%= t("common.save") %>
             </button>
           </div>
         </form>
       </section>
       <section>
-        <h4 class="text-sm font-semibold text-slate-800 mb-3">订阅链接</h4>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3"><%= t("app.calMenu.subscribeLinks") %></h4>
         <form id="form-new-share-token" class="flex gap-2 mb-3">
-          <input type="text" name="label" maxlength="100" placeholder="备注（如：给家人）"
+          <input type="text" name="label" maxlength="100" placeholder="<%= t("app.calMenu.labelPlaceholder") %>"
                  class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-          <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">生成</button>
+          <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("app.calMenu.generate") %></button>
         </form>
         <ul id="share-tokens-list" class="space-y-2 text-sm"></ul>
       </section>
       <section>
-        <h4 class="text-sm font-semibold text-slate-800 mb-3">操作</h4>
+        <h4 class="text-sm font-semibold text-slate-800 mb-3"><%= t("app.calMenu.actions") %></h4>
         <div class="flex flex-wrap gap-2">
-          <button type="button" id="btn-delete-calendar" class="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50">删除整个日历</button>
+          <button type="button" id="btn-delete-calendar" class="rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-700 hover:bg-red-50"><%= t("app.calMenu.deleteCalendar") %></button>
         </div>
       </section>
     </div>
@@ -675,14 +678,20 @@
       name: c.name,
       color: c.color,
       timezone: c.timezone,
-      // Needed by the "日历属性" editor in #modal-cal-menu — without it
-      // the description field would always reload empty even if the
-      // calendar had one. Added v1.3.6.
+      // Needed by the calendar-properties editor in #modal-cal-menu —
+      // without it the description field would always reload empty even
+      // if the calendar had one. Added v1.3.6.
       description: c.description,
     })),
     publicBaseUrl: publicBaseUrl,
     csrfToken: csrfToken,
   }) %>;
+  // i18n bridge for the client bundle: BWC_LOCALE feeds Intl date
+  // formatting; BWC_T carries every app.js.* string from the server
+  // dictionaries (see clientStrings in src/lib/i18n.ts). calendar-app.js
+  // reads both through its T() helper.
+  window.BWC_LOCALE = <%- jsonForScript(currentLocale) %>;
+  window.BWC_T = <%- jsonForScript(jsStrings) %>;
 </script>
 <% const calV = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
 <% const calJs = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>

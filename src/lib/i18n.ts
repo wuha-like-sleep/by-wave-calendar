@@ -264,3 +264,17 @@ export function resolveLocaleFromRequest(
 export function makeT(locale: LocaleCode): (key: string, vars?: Record<string, string | number>) => string {
   return (key, vars) => translate(locale, key, vars);
 }
+
+/** Resolve every key under a prefix into a flat { key: translated } map.
+ *  Used to hand a locale's strings to CLIENT-SIDE code that can't call
+ *  the server-side t() — e.g. /app injects `window.BWC_T` with all
+ *  `app.js.*` strings so calendar-app.js can localize toasts, modals,
+ *  and dynamically-built markup. `{name}`-style placeholders are left
+ *  intact; the client substitutes them at call time. */
+export function clientStrings(locale: LocaleCode, prefix = "app.js."): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(en) as TranslationKey[]) {
+    if (key.startsWith(prefix)) out[key] = translate(locale, key);
+  }
+  return out;
+}

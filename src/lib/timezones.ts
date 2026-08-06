@@ -2,82 +2,86 @@
 // `Intl.supportedValuesOf('timeZone')` at module load) so the user can
 // pick anywhere in the world — picking a city from a curated list of
 // 20 is too restrictive for a globally-deployed calendar. Curated
-// zones with Chinese labels are sorted to the top of the list so the
+// zones with localized labels are sorted to the top of the list so the
 // common case (Asia/Shanghai etc.) is one keystroke away.
 //
 // The current UTC offset is computed at runtime so DST shifts are accurate
 // (e.g. America/New_York shows UTC-5 in winter, UTC-4 in summer).
 
-// Curated entries with friendly Chinese labels. These appear first in
-// the listTimezones() output and are tagged so the client UI can render
-// them visually (e.g. as quick-pick chips at the top).
-const CURATED: { id: string; label: string }[] = [
-  // ---- 大中华区 ----
+import { translate, type LocaleCode } from "./i18n.js";
+
+// Curated entries with friendly localized labels. The label is an i18n
+// key under app.tz.city.* (translated per-request in listTimezones), so
+// a German user sees "Peking" and a zh-CN user sees 北京. These appear
+// first in the listTimezones() output and are tagged so the client UI
+// can render them visually (e.g. as quick-pick chips at the top).
+const CURATED: { id: string; labelKey: string }[] = [
+  // ---- Greater China ----
   // IANA 只有 Asia/Shanghai 一个 zone 代表整个中国大陆（历史合并）。
   // 北京/上海/广州/深圳 用户写不同 label 但都映射到同一个 id，方便搜索时
   // 输入哪个城市名都能匹配到。
-  { id: "Asia/Shanghai",     label: "上海" },
-  { id: "Asia/Shanghai",     label: "北京" },
-  { id: "Asia/Shanghai",     label: "广州" },
-  { id: "Asia/Shanghai",     label: "深圳" },
-  { id: "Asia/Shanghai",     label: "成都" },
-  { id: "Asia/Hong_Kong",    label: "香港" },
-  { id: "Asia/Macau",        label: "澳门" },
-  { id: "Asia/Taipei",       label: "台北" },
-  { id: "Asia/Urumqi",       label: "乌鲁木齐 (新疆)" },
+  { id: "Asia/Shanghai",     labelKey: "app.tz.city.shanghai" },
+  { id: "Asia/Shanghai",     labelKey: "app.tz.city.beijing" },
+  { id: "Asia/Shanghai",     labelKey: "app.tz.city.guangzhou" },
+  { id: "Asia/Shanghai",     labelKey: "app.tz.city.shenzhen" },
+  { id: "Asia/Shanghai",     labelKey: "app.tz.city.chengdu" },
+  { id: "Asia/Hong_Kong",    labelKey: "app.tz.city.hongkong" },
+  { id: "Asia/Macau",        labelKey: "app.tz.city.macau" },
+  { id: "Asia/Taipei",       labelKey: "app.tz.city.taipei" },
+  { id: "Asia/Urumqi",       labelKey: "app.tz.city.urumqi" },
 
-  // ---- 亚太 ----
-  { id: "Asia/Tokyo",        label: "东京" },
-  { id: "Asia/Seoul",        label: "首尔" },
-  { id: "Asia/Singapore",    label: "新加坡" },
-  { id: "Asia/Kuala_Lumpur", label: "吉隆坡" },
-  { id: "Asia/Bangkok",      label: "曼谷" },
-  { id: "Asia/Jakarta",      label: "雅加达" },
-  { id: "Asia/Manila",       label: "马尼拉" },
-  { id: "Asia/Ho_Chi_Minh",  label: "胡志明市" },
-  { id: "Asia/Kolkata",      label: "印度（加尔各答）" },
-  { id: "Asia/Karachi",      label: "卡拉奇" },
-  { id: "Asia/Dubai",        label: "迪拜" },
-  { id: "Asia/Riyadh",       label: "利雅得" },
+  // ---- Asia-Pacific ----
+  { id: "Asia/Tokyo",        labelKey: "app.tz.city.tokyo" },
+  { id: "Asia/Seoul",        labelKey: "app.tz.city.seoul" },
+  { id: "Asia/Singapore",    labelKey: "app.tz.city.singapore" },
+  { id: "Asia/Kuala_Lumpur", labelKey: "app.tz.city.kualaLumpur" },
+  { id: "Asia/Bangkok",      labelKey: "app.tz.city.bangkok" },
+  { id: "Asia/Jakarta",      labelKey: "app.tz.city.jakarta" },
+  { id: "Asia/Manila",       labelKey: "app.tz.city.manila" },
+  { id: "Asia/Ho_Chi_Minh",  labelKey: "app.tz.city.hoChiMinh" },
+  { id: "Asia/Kolkata",      labelKey: "app.tz.city.kolkata" },
+  { id: "Asia/Karachi",      labelKey: "app.tz.city.karachi" },
+  { id: "Asia/Dubai",        labelKey: "app.tz.city.dubai" },
+  { id: "Asia/Riyadh",       labelKey: "app.tz.city.riyadh" },
 
-  // ---- 大洋洲 ----
-  { id: "Australia/Sydney",   label: "悉尼（夏令时）" },
-  { id: "Australia/Melbourne", label: "墨尔本（夏令时）" },
-  { id: "Australia/Brisbane",  label: "布里斯班" },
-  { id: "Australia/Perth",     label: "珀斯" },
-  { id: "Australia/Adelaide",  label: "阿德莱德" },
-  { id: "Pacific/Auckland",   label: "奥克兰（夏令时）" },
+  // ---- Oceania ----
+  { id: "Australia/Sydney",    labelKey: "app.tz.city.sydney" },
+  { id: "Australia/Melbourne", labelKey: "app.tz.city.melbourne" },
+  { id: "Australia/Brisbane",  labelKey: "app.tz.city.brisbane" },
+  { id: "Australia/Perth",     labelKey: "app.tz.city.perth" },
+  { id: "Australia/Adelaide",  labelKey: "app.tz.city.adelaide" },
+  { id: "Pacific/Auckland",    labelKey: "app.tz.city.auckland" },
 
-  // ---- 欧洲 ----
-  { id: "Europe/London",     label: "伦敦（夏令时）" },
-  { id: "Europe/Paris",      label: "巴黎（夏令时）" },
-  { id: "Europe/Berlin",     label: "柏林（夏令时）" },
-  { id: "Europe/Madrid",     label: "马德里" },
-  { id: "Europe/Rome",       label: "罗马" },
-  { id: "Europe/Amsterdam",  label: "阿姆斯特丹" },
-  { id: "Europe/Zurich",     label: "苏黎世" },
-  { id: "Europe/Stockholm",  label: "斯德哥尔摩" },
-  { id: "Europe/Moscow",     label: "莫斯科" },
-  { id: "Europe/Istanbul",   label: "伊斯坦布尔" },
+  // ---- Europe ----
+  { id: "Europe/London",     labelKey: "app.tz.city.london" },
+  { id: "Europe/Paris",      labelKey: "app.tz.city.paris" },
+  { id: "Europe/Berlin",     labelKey: "app.tz.city.berlin" },
+  { id: "Europe/Madrid",     labelKey: "app.tz.city.madrid" },
+  { id: "Europe/Rome",       labelKey: "app.tz.city.rome" },
+  { id: "Europe/Amsterdam",  labelKey: "app.tz.city.amsterdam" },
+  { id: "Europe/Zurich",     labelKey: "app.tz.city.zurich" },
+  { id: "Europe/Stockholm",  labelKey: "app.tz.city.stockholm" },
+  { id: "Europe/Moscow",     labelKey: "app.tz.city.moscow" },
+  { id: "Europe/Istanbul",   labelKey: "app.tz.city.istanbul" },
 
-  // ---- 美洲 ----
-  { id: "America/New_York",    label: "纽约（夏令时）" },
-  { id: "America/Toronto",     label: "多伦多（夏令时）" },
-  { id: "America/Chicago",     label: "芝加哥（夏令时）" },
-  { id: "America/Denver",      label: "丹佛（夏令时）" },
-  { id: "America/Los_Angeles", label: "洛杉矶（夏令时）" },
-  { id: "America/Vancouver",   label: "温哥华（夏令时）" },
-  { id: "America/Mexico_City", label: "墨西哥城" },
-  { id: "America/Sao_Paulo",   label: "圣保罗" },
-  { id: "America/Buenos_Aires", label: "布宜诺斯艾利斯" },
+  // ---- Americas ----
+  { id: "America/New_York",    labelKey: "app.tz.city.newYork" },
+  { id: "America/Toronto",     labelKey: "app.tz.city.toronto" },
+  { id: "America/Chicago",     labelKey: "app.tz.city.chicago" },
+  { id: "America/Denver",      labelKey: "app.tz.city.denver" },
+  { id: "America/Los_Angeles", labelKey: "app.tz.city.losAngeles" },
+  { id: "America/Vancouver",   labelKey: "app.tz.city.vancouver" },
+  { id: "America/Mexico_City", labelKey: "app.tz.city.mexicoCity" },
+  { id: "America/Sao_Paulo",   labelKey: "app.tz.city.saoPaulo" },
+  { id: "America/Buenos_Aires", labelKey: "app.tz.city.buenosAires" },
 
-  // ---- 非洲 ----
-  { id: "Africa/Cairo",      label: "开罗" },
-  { id: "Africa/Johannesburg", label: "约翰内斯堡" },
-  { id: "Africa/Lagos",      label: "拉各斯" },
+  // ---- Africa ----
+  { id: "Africa/Cairo",        labelKey: "app.tz.city.cairo" },
+  { id: "Africa/Johannesburg", labelKey: "app.tz.city.johannesburg" },
+  { id: "Africa/Lagos",        labelKey: "app.tz.city.lagos" },
 
   // ---- UTC ----
-  { id: "UTC",               label: "协调世界时 UTC" },
+  { id: "UTC",               labelKey: "app.tz.city.utc" },
 ];
 
 // Pull the full IANA list from the JS runtime so we don't have to ship
@@ -117,19 +121,21 @@ function currentOffset(id: string): string {
 export type TimezoneOption = { id: string; label: string; offset: string; curated: boolean };
 
 // Return ALL IANA zones, with the curated ones first (in their hand-picked
-// order so 上海 stays at the top) and the rest alphabetically. Each entry
-// carries `curated: true/false` so the UI can render the curated ones as
-// a quick-pick row above the searchable input.
-export function listTimezones(): TimezoneOption[] {
+// order so Shanghai stays at the top) and the rest alphabetically. Each
+// entry carries `curated: true/false` so the UI can render the curated ones
+// as a quick-pick row above the searchable input. Curated labels are
+// localized into the given locale (defaults to zh-CN, the site's hard
+// fallback, for callers that don't resolve a request locale).
+export function listTimezones(locale: LocaleCode = "zh-CN"): TimezoneOption[] {
   const curatedIds = new Set(CURATED.map((z) => z.id));
-  const curated: TimezoneOption[] = CURATED.map(({ id, label }) => ({
-    id, label, offset: currentOffset(id), curated: true,
+  const curated: TimezoneOption[] = CURATED.map(({ id, labelKey }) => ({
+    id, label: translate(locale, labelKey), offset: currentOffset(id), curated: true,
   }));
   const rest = allIanaZones()
     .filter((id) => !curatedIds.has(id))
     .sort()
     .map<TimezoneOption>((id) => ({
-      // No friendly Chinese label for these — show the IANA id (e.g.
+      // No friendly localized label for these — show the IANA id (e.g.
       // "America/Toronto"). The offset is appended in the UI.
       id, label: id, offset: currentOffset(id), curated: false,
     }));

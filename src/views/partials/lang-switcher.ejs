@@ -6,10 +6,15 @@
 <form method="post" action="/locale" class="m-0">
   <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
   <input type="hidden" name="return_to" value="<%= typeof currentPath !== 'undefined' ? currentPath : '' %>" />
-  <select name="locale" onchange="this.form.submit()" aria-label="语言 / Language"
+  <%# Option labels: native names (label) in CJK UIs; in non-CJK UIs the
+      Han/Kana-scripted names (简体中文 / 繁體中文 / 日本語) switch to their
+      English form (labelEn) so the chrome stays script-consistent —
+      Latin-scripted native names (Deutsch, Español…) are kept as-is. %>
+  <% const uiIsCjk = typeof currentLocale !== 'undefined' && ['zh-CN', 'zh-TW', 'ja'].includes(currentLocale); %>
+  <select name="locale" onchange="this.form.submit()" aria-label="<%= t("nav.languageLabel") %>"
           class="text-sm rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 cursor-pointer">
     <% (typeof locales !== 'undefined' ? locales : []).forEach(function(l){ %>
-      <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= l.label %></option>
+      <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= (uiIsCjk || !/[぀-ヿ一-鿿]/.test(l.label)) ? l.label : l.labelEn %></option>
     <% }) %>
   </select>
 </form>

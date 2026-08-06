@@ -9,6 +9,26 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+  // ---------- i18n ----------
+  // The server injects window.BWC_T (all app.js.* strings from the locale
+  // dictionaries) and window.BWC_LOCALE from calendar-app.ejs. T() looks a
+  // key up and substitutes {name}-style placeholders; unknown keys degrade
+  // to the readable key text (same contract as the server-side t()).
+  const T = (k, vars) => {
+    let s = (window.BWC_T && window.BWC_T[k]) || k;
+    if (vars) for (const [kk, v] of Object.entries(vars)) s = s.replaceAll("{" + kk + "}", String(v));
+    return s;
+  };
+  const LOCALE = window.BWC_LOCALE || "zh-CN";
+  // Localized month names (index 0 = January) and weekday names starting
+  // Sunday, built from Intl so every locale gets its native forms without
+  // shipping tables. 2021-08-01 was a Sunday; using local-midnight Dates
+  // keeps the formatter in the browser's zone (no off-by-one-day).
+  const MONTH_NAMES = Array.from({ length: 12 }, (_, m) =>
+    new Intl.DateTimeFormat(LOCALE, { month: "long" }).format(new Date(2021, m, 1)));
+  const dayNamesFor = (style) =>
+    [0, 1, 2, 3, 4, 5, 6].map((d) => new Intl.DateTimeFormat(LOCALE, { weekday: style }).format(new Date(2021, 7, 1 + d)));
+
   // Animated modal show/hide. The CSS (input.css "Modal motion") keeps modals
   // in a closed state (opacity/transform) by default and reveals them on the
   // `.is-open` class; so EVERY show path must call openModal(). Accepts an id
@@ -68,14 +88,14 @@
     if (!target) { banner.classList.add("hidden"); return; }
     const fmt = (ms) => {
       const mins = Math.round((ms - now) / 60000);
-      if (mins < 0) return `${Math.abs(mins)} 分钟前开始`;
-      if (mins < 60) return `${mins} 分钟后开始`;
+      if (mins < 0) return T("app.js.banner.startedMinAgo", { n: Math.abs(mins) });
+      if (mins < 60) return T("app.js.banner.startsInMin", { n: mins });
       const hours = Math.round(mins / 60);
-      if (hours < 24) return `${hours} 小时后开始`;
-      return new Date(target.s).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      if (hours < 24) return T("app.js.banner.startsInHours", { n: hours });
+      return new Date(target.s).toLocaleString(LOCALE, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
     };
-    const verb = inProgress ? "进行中" : fmt(target.s);
-    text.textContent = `${target.e.summary || "(无标题)"} · ${verb}`;
+    const verb = inProgress ? T("app.js.banner.inProgress") : fmt(target.s);
+    text.textContent = `${target.e.summary || T("app.js.untitled")} · ${verb}`;
     banner.classList.remove("hidden");
     if (jump) {
       jump.onclick = () => {
@@ -109,9 +129,9 @@
     if (submitBtn) submitBtn.classList.toggle("hidden", !editing);
     if (cancelBtn) {
       cancelBtn.classList.toggle("hidden", false);
-      // In view mode "取消" is misleading — there's nothing to cancel.
-      // Swap the label to "关闭" without changing the click behavior.
-      cancelBtn.textContent = editing ? "取消" : "关闭";
+      // In view mode "Cancel" is misleading — there's nothing to cancel.
+      // Swap the label to "Close" without changing the click behavior.
+      cancelBtn.textContent = editing ? T("app.js.common.cancel") : T("app.js.common.close");
     }
     if (deleteBtn) deleteBtn.classList.toggle("hidden", !editing || !form.querySelector('[name="id"]').value);
     if (enterEditBtn) enterEditBtn.classList.toggle("hidden", editing);
@@ -119,7 +139,7 @@
     const titleEl = $("#modal-event-title");
     if (titleEl) {
       const isExisting = !!form.querySelector('[name="id"]').value;
-      titleEl.textContent = editing ? (isExisting ? "编辑事件" : "新建事件") : "事件详情";
+      titleEl.textContent = editing ? (isExisting ? T("app.js.modal.editEvent") : T("app.js.modal.newEvent")) : T("app.js.modal.eventDetails");
     }
   }
   $$(".modal-close").forEach((b) => b.addEventListener("click", (e) => {
@@ -220,12 +240,12 @@
       hourStart: 0,
       hourEnd: 24,
       startDayOfWeek: 1,
-      dayNames: ["周日", "周一", "周二", "周三", "周四", "周五", "周六"],
+      dayNames: dayNamesFor("short"),
       showNowIndicator: true,
     },
     month: {
       startDayOfWeek: 1,
-      dayNames: ["日", "一", "二", "三", "四", "五", "六"],
+      dayNames: dayNamesFor("narrow"),
       visibleWeeksCount: 0,
       isAlways6Weeks: false,
     },
@@ -260,12 +280,12 @@
   function formatPeriodLabel() {
     const start = cal.getDateRangeStart().toDate();
     const end = cal.getDateRangeEnd().toDate();
-    const fmt = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric" });
+    const fmt = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long", day: "numeric" });
     if (currentView === "month") {
       const mid = new Date((+start + +end) / 2);
-      $("#period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long" }).format(mid);
+      $("#period-label").textContent = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long" }).format(mid);
     } else if (currentView === "day") {
-      $("#period-label").textContent = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(start);
+      $("#period-label").textContent = new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(start);
     } else {
       $("#period-label").textContent = `${fmt.format(start)} – ${fmt.format(end)}`;
     }
@@ -452,7 +472,7 @@
       // Only toast if stage 1 didn't paint — otherwise user already
       // sees their (cached) calendar, no need to alarm them.
       if (!stageOneEvents) {
-        window.bwc && window.bwc.toast("加载事件失败", "error");
+        window.bwc && window.bwc.toast(T("app.js.toast.loadEventsFailed"), "error");
       }
     } finally {
       hideLoadingSkeleton();
@@ -622,15 +642,14 @@
     const nextBtn = $("#mini-next");
     if (!monthGrid || !yearGrid || !monthView || !periodBtn || !prevBtn || !nextBtn) return;
 
-    const ZH_MONTHS = ["一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月"];
     let viewKind = "month"; // "month" | "year"
     // Tracks which month/year the mini-cal is *showing*, not the main calendar.
     let cursor = new Date();
     cursor.setDate(1);
 
     function fmtPeriod() {
-      if (viewKind === "month") return `${cursor.getFullYear()} ${ZH_MONTHS[cursor.getMonth()]}`;
-      return `${cursor.getFullYear()} 年`;
+      if (viewKind === "month") return new Intl.DateTimeFormat(LOCALE, { year: "numeric", month: "long" }).format(cursor);
+      return new Intl.DateTimeFormat(LOCALE, { year: "numeric" }).format(cursor);
     }
     function isSameYMD(a, b) {
       return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -711,7 +730,7 @@
           isCurrent ? "bg-brand-600 text-white hover:bg-brand-700 hover:text-white" : "text-slate-700",
           isThisMonth && !isCurrent ? "ring-1 ring-brand-300" : "",
         ].filter(Boolean).join(" ");
-        btn.textContent = ZH_MONTHS[m];
+        btn.textContent = MONTH_NAMES[m];
         yearGrid.appendChild(btn);
       }
     }
@@ -826,7 +845,7 @@
     if (isNaN(instant.getTime())) { tzHintEl.classList.add("hidden"); return; }
     let inEventTz;
     try {
-      inEventTz = new Intl.DateTimeFormat("zh-CN", {
+      inEventTz = new Intl.DateTimeFormat(LOCALE, {
         timeZone: eventTz, year: "numeric", month: "2-digit", day: "2-digit",
         hour: "2-digit", minute: "2-digit", hour12: false,
       }).format(instant);
@@ -834,7 +853,12 @@
       // Bad/unknown zone — hide rather than show garbage.
       tzHintEl.classList.add("hidden"); return;
     }
-    tzHintEl.textContent = `⚠ 浏览器时区 ${browserTz}：你输入的 ${startsLocal.replace("T", " ")} 在事件时区（${eventTz}）是 ${inEventTz}`;
+    tzHintEl.textContent = T("app.js.tzHint", {
+      browserTz,
+      input: startsLocal.replace("T", " "),
+      eventTz,
+      converted: inEventTz,
+    });
     tzHintEl.classList.remove("hidden");
   }
   // Trigger on every relevant input change. Debounced via the browser's
@@ -922,25 +946,25 @@
       card.className = "w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl bg-white shadow-2xl";
       card.innerHTML =
         '<div class="border-b border-slate-200 px-5 py-4">' +
-          '<h3 class="text-base font-semibold text-slate-900">' + (isDelete ? "删除重复事件" : "保存重复事件") + '</h3>' +
-          '<p class="mt-1 text-sm text-slate-500">这是一个重复事件，请选择' + (isDelete ? "删除" : "保存") + '范围：</p>' +
+          '<h3 class="text-base font-semibold text-slate-900">' + T(isDelete ? "app.js.recurring.deleteTitle" : "app.js.recurring.saveTitle") + '</h3>' +
+          '<p class="mt-1 text-sm text-slate-500">' + T(isDelete ? "app.js.recurring.promptDelete" : "app.js.recurring.promptSave") + '</p>' +
         '</div>' +
         '<div class="space-y-2 p-5">' +
           '<button type="button" data-scope="instance" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
-            '<div class="text-sm font-medium text-slate-900">仅此事件</div>' +
-            '<div class="mt-0.5 text-xs text-slate-500">只' + (isDelete ? "删除" : "修改") + '当前这一次，其他不变</div>' +
+            '<div class="text-sm font-medium text-slate-900">' + T("app.js.recurring.onlyThis") + '</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">' + T(isDelete ? "app.js.recurring.onlyThisDeleteDesc" : "app.js.recurring.onlyThisSaveDesc") + '</div>' +
           '</button>' +
           '<button type="button" data-scope="future" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
-            '<div class="text-sm font-medium text-slate-900">此事件及后续</div>' +
-            '<div class="mt-0.5 text-xs text-slate-500">从此次开始的所有后续</div>' +
+            '<div class="text-sm font-medium text-slate-900">' + T("app.js.recurring.thisAndFuture") + '</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">' + T("app.js.recurring.thisAndFutureDesc") + '</div>' +
           '</button>' +
           '<button type="button" data-scope="series" class="block w-full rounded-lg border border-slate-200 px-4 py-3 text-left hover:bg-slate-50">' +
-            '<div class="text-sm font-medium text-slate-900">所有事件</div>' +
-            '<div class="mt-0.5 text-xs text-slate-500">' + (isDelete ? "删除" : "修改") + '整个重复系列</div>' +
+            '<div class="text-sm font-medium text-slate-900">' + T("app.js.recurring.all") + '</div>' +
+            '<div class="mt-0.5 text-xs text-slate-500">' + T(isDelete ? "app.js.recurring.allDeleteDesc" : "app.js.recurring.allSaveDesc") + '</div>' +
           '</button>' +
         '</div>' +
         '<div class="flex justify-end border-t border-slate-200 px-5 py-3">' +
-          '<button type="button" data-scope="" class="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">取消</button>' +
+          '<button type="button" data-scope="" class="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">' + T("app.js.common.cancel") + '</button>' +
         '</div>';
       overlay.appendChild(card);
       const cleanup = (s) => { try { overlay.remove(); } catch (_e) {} resolve(s || null); };
@@ -1021,8 +1045,8 @@
     const summary = $("#attendee-summary-text");
     const manage = $("#attendee-manage-link");
     if (summary) summary.textContent = attendees.length > 0
-      ? `${attendees.length} 位：${attendees.slice(0, 3).join(", ")}${attendees.length > 3 ? " …" : ""}`
-      : "尚未邀请任何人";
+      ? T("app.js.attendees.count", { count: attendees.length, names: attendees.slice(0, 3).join(", ") }) + (attendees.length > 3 ? " …" : "")
+      : T("app.js.attendees.none");
     if (manage) {
       manage.classList.toggle("hidden", !payload.id);
       if (payload.id) manage.href = `/app/events/${encodeURIComponent(payload.id)}/attendees`;
@@ -1364,7 +1388,8 @@
   {
     const nlInput = $("#nl-input");
     const nlHint = $("#nl-hint");
-    const fmtDate = (d) => `${d.getMonth() + 1}月${d.getDate()}日`;
+    // Localized "Aug 6"-style date (zh-CN renders as 8月6日 via Intl).
+    const fmtDate = (d) => new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric" }).format(d);
     const fmtTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     function showParsed(parsed, commit) {
       if (!nlInput || !nlHint) return;
@@ -1372,7 +1397,7 @@
         if (commit && nlInput.value.trim()) {
           nlHint.classList.remove("hidden");
           nlHint.style.color = "rgb(100 116 139)";
-          nlHint.textContent = "没看懂时间，试试「明天下午三点 开会」";
+          nlHint.textContent = T("app.js.nl.noTime");
         } else {
           nlHint.classList.add("hidden");
           nlHint.textContent = "";
@@ -1391,7 +1416,7 @@
       const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
       nlHint.classList.remove("hidden");
       nlHint.style.color = "rgb(67 56 202)"; // brand-700
-      nlHint.textContent = `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${parsed.summary || "无标题"}`;
+      nlHint.textContent = `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${parsed.summary || T("app.js.nl.untitled")}`;
     }
     function applyNl(commit) {
       if (!nlInput) return;
@@ -1480,7 +1505,7 @@
     const submitBtn = e.target.querySelector('button[type="submit"]');
     if (submitBtn && submitBtn.dataset.saving === "1") return;
     const prevLabel = submitBtn ? submitBtn.textContent : "";
-    if (submitBtn) { submitBtn.dataset.saving = "1"; submitBtn.disabled = true; submitBtn.textContent = "保存中…"; }
+    if (submitBtn) { submitBtn.dataset.saving = "1"; submitBtn.disabled = true; submitBtn.textContent = T("app.js.saving"); }
     try {
     const data = Object.fromEntries(new FormData(e.target).entries());
     const id = data.id;
@@ -1526,11 +1551,11 @@
         const { conflicts } = await cResp.json();
         if (Array.isArray(conflicts) && conflicts.length > 0) {
           const names = conflicts.slice(0, 3).map((c) => "• " + c.summary).join("\n");
-          const more = conflicts.length > 3 ? `\n• …还有 ${conflicts.length - 3} 个` : "";
+          const more = conflicts.length > 3 ? `\n• ${T("app.js.conflict.more", { n: conflicts.length - 3 })}` : "";
           if (!(await window.bwc.confirm({
-            title: "时间冲突",
-            message: `和现有事件时间冲突：\n${names}${more}\n\n仍要保存？`,
-            confirmLabel: "仍然保存",
+            title: T("app.js.conflict.title"),
+            message: `${T("app.js.conflict.message")}\n${names}${more}\n\n${T("app.js.conflict.question")}`,
+            confirmLabel: T("app.js.conflict.saveAnyway"),
           }))) return;
         }
       }
@@ -1561,7 +1586,7 @@
         if (!resp.ok) throw new Error(await resp.text());
         closeModal("#modal-event");
         await loadEvents();
-        window.bwc && window.bwc.toast("事件已更新", "success");
+        window.bwc && window.bwc.toast(T("app.js.toast.eventUpdated"), "success");
       } else if (window.bwcStore) {
         // Route through bwcStore when available — optimistic local update +
         // outbox queue means the modal can close instantly even on flaky network.
@@ -1571,8 +1596,8 @@
         const offline = !window.bwcStore.isOnline();
         window.bwc && window.bwc.toast(
           offline
-            ? (id ? "事件已暂存（离线，联网后自动同步）" : "事件已暂存（离线，联网后自动同步）")
-            : (id ? "事件已更新" : "事件已添加"),
+            ? T("app.js.toast.eventQueuedOffline")
+            : (id ? T("app.js.toast.eventUpdated") : T("app.js.toast.eventAdded")),
           "success",
         );
       } else {
@@ -1582,11 +1607,11 @@
         if (!resp.ok) throw new Error(await resp.text());
         closeModal("#modal-event");
         await loadEvents();
-        window.bwc && window.bwc.toast(id ? "事件已更新" : "事件已添加", "success");
+        window.bwc && window.bwc.toast(id ? T("app.js.toast.eventUpdated") : T("app.js.toast.eventAdded"), "success");
       }
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast("保存失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.saveFailed"), "error");
     }
     } finally {
       // Re-enable on every exit path (success, validation cancel, error)
@@ -1606,7 +1631,7 @@
       recurringScope = await promptRecurringScope("delete");
       if (!recurringScope) return; // user cancelled
     } else {
-      if (!(await window.bwc.confirm({ message: "删除该事件？", danger: true, confirmLabel: "删除" }))) return;
+      if (!(await window.bwc.confirm({ message: T("app.js.deleteEvent.confirm"), danger: true, confirmLabel: T("app.js.common.delete") }))) return;
     }
     // Scoped recurring delete (this / this+future): bypass bwcStore
     // and hit the server directly with ?scope=&recurrenceId= — the
@@ -1626,12 +1651,12 @@
         closeModal("#modal-event");
         await loadEvents();
         window.bwc && window.bwc.toast(
-          recurringScope === "instance" ? "已删除此次" : "已删除此次及之后",
+          recurringScope === "instance" ? T("app.js.toast.deletedInstance") : T("app.js.toast.deletedFuture"),
           "success",
         );
       } catch (err) {
         console.error("delete_recurring_scoped", err);
-        window.bwc && window.bwc.toast("删除失败", "error");
+        window.bwc && window.bwc.toast(T("app.js.toast.deleteFailed"), "error");
       }
       return;
     }
@@ -1649,10 +1674,10 @@
           try { await window.bwcStore.invalidate(); } catch (_e) {}
         }
         await loadEvents();
-        window.bwc && window.bwc.toast("已撤销删除", "success");
+        window.bwc && window.bwc.toast(T("app.js.toast.undoDone"), "success");
       } catch (err) {
         console.error("undo_delete", err);
-        window.bwc && window.bwc.toast("撤销失败", "error");
+        window.bwc && window.bwc.toast(T("app.js.toast.undoFailed"), "error");
       }
     }
 
@@ -1667,15 +1692,15 @@
           // No undo for offline deletes — restore would race with the
           // outbox replay. User can dig into the conflict modal if
           // they really need to recover.
-          window.bwc && window.bwc.toast("已标记删除（联网后同步）", "success");
+          window.bwc && window.bwc.toast(T("app.js.toast.deleteQueuedOffline"), "success");
         } else {
-          window.bwc && window.bwc.toast("事件已删除", "success", {
-            actionLabel: "撤销", onAction: undoDelete,
+          window.bwc && window.bwc.toast(T("app.js.toast.eventDeleted"), "success", {
+            actionLabel: T("app.js.toast.undo"), onAction: undoDelete,
           });
         }
       } catch (err) {
         console.error("delete_event_store", err);
-        window.bwc && window.bwc.toast("删除失败", "error");
+        window.bwc && window.bwc.toast(T("app.js.toast.deleteFailed"), "error");
       }
       return;
     }
@@ -1691,7 +1716,7 @@
       });
     } catch (err) {
       console.error("delete_event_network", err);
-      window.bwc && window.bwc.toast("删除失败：网络错误", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.deleteFailedNetwork"), "error");
       return;
     }
     // 204 / 200 → deleted; 404 → already gone (treat as success and just refresh)
@@ -1699,10 +1724,10 @@
       closeModal("#modal-event");
       await loadEvents();
       if (resp.status === 404) {
-        window.bwc && window.bwc.toast("事件已不存在，已刷新", "success");
+        window.bwc && window.bwc.toast(T("app.js.toast.eventGone"), "success");
       } else {
-        window.bwc && window.bwc.toast("事件已删除", "success", {
-          actionLabel: "撤销", onAction: undoDelete,
+        window.bwc && window.bwc.toast(T("app.js.toast.eventDeleted"), "success", {
+          actionLabel: T("app.js.toast.undo"), onAction: undoDelete,
         });
       }
       return;
@@ -1710,7 +1735,7 @@
     let errBody = "";
     try { errBody = (await resp.json()).error || ""; } catch (_e) { errBody = ""; }
     console.error("delete_event_failed", resp.status, errBody);
-    window.bwc && window.bwc.toast(`删除失败 (HTTP ${resp.status})${errBody ? ": " + errBody : ""}`, "error");
+    window.bwc && window.bwc.toast(`${T("app.js.toast.deleteFailedHttp", { status: resp.status })}${errBody ? ": " + errBody : ""}`, "error");
   });
 
   // ---------- Calendar create / import (Synology-style add menu) ----------
@@ -1729,7 +1754,7 @@
       sw.dataset.color = c;
       sw.className = "color-swatch relative h-7 w-7 rounded-md border border-slate-200 hover:scale-110 transition-transform";
       sw.style.background = `linear-gradient(135deg, ${c} 50%, #f8fafc 50%)`;
-      sw.setAttribute("aria-label", `颜色 ${c}`);
+      sw.setAttribute("aria-label", T("app.js.colorLabel", { c }));
       container.appendChild(sw);
     });
     const setSelected = (val) => {
@@ -1807,11 +1832,11 @@
     try {
       const resp = await fetch("/api/calendars", fetchOpts({ method: "POST", body: JSON.stringify(data) }));
       if (!resp.ok) throw new Error(await resp.text());
-      window.bwc && window.bwc.toast("日历已创建", "success");
+      window.bwc && window.bwc.toast(T("app.js.toast.calendarCreated"), "success");
       setTimeout(() => window.location.reload(), 400);
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast("创建失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.createFailed"), "error");
     }
   });
 
@@ -1832,10 +1857,10 @@
   if (importForm) {
     const sourceHint = $("#import-source-hint");
     const hints = {
-      file: "从本地选择一个 .ics 文件上传（最大 5MB）。支持 Google / Apple / Outlook / 群晖 等任意标准 iCalendar 文件。",
-      "url-once": "服务器一次性从远程 URL 拉取并导入。适合公开节假日 / 课表的快照。",
-      sub: "服务器按周期自动同步远程 URL，事件按 UID 增量更新。",
-      paste: "如果你只能复制内容，直接粘贴 ICS 文本即可。",
+      file: T("app.js.import.hintFile"),
+      "url-once": T("app.js.import.hintUrlOnce"),
+      sub: T("app.js.import.hintSub"),
+      paste: T("app.js.import.hintPaste"),
     };
     importForm.querySelectorAll('input[name="source"]').forEach((r) => r.addEventListener("change", () => {
       const v = importForm.querySelector('input[name="source"]:checked').value;
@@ -1855,16 +1880,16 @@
       const destination = importForm.querySelector('input[name="destination"]:checked').value;
       const submitBtn = importForm.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
-      submitBtn.textContent = "导入中…";
+      submitBtn.textContent = T("app.js.import.importing");
       try {
         // Step 1: resolve target calendarId
         let calendarId;
         if (destination === "existing") {
           const sel = importForm.querySelector('[data-dest-pane="existing"]');
           calendarId = sel.value;
-          if (!calendarId) throw new Error("请选择一个现有日历");
+          if (!calendarId) throw new Error(T("app.js.import.selectExisting"));
         } else {
-          const name = importForm.querySelector('input[name="newName"]').value.trim() || "导入的日历";
+          const name = importForm.querySelector('input[name="newName"]').value.trim() || T("app.js.import.defaultName");
           const color = importForm.querySelector('input[name="newColor"]').value || "#6366f1";
           // New calendar inherits the user's browser-detected (OS/IANA) zone
           // rather than a hardcoded Asia/Shanghai.
@@ -1874,7 +1899,7 @@
             method: "POST",
             body: JSON.stringify({ name, color, timezone: newCalTz }),
           }));
-          if (!created.ok) throw new Error("创建日历失败");
+          if (!created.ok) throw new Error(T("app.js.import.createFailed"));
           const calRow = await created.json();
           calendarId = calRow.id;
         }
@@ -1882,33 +1907,33 @@
         // Step 2: send the import to that calendar
         if (source === "file") {
           const fileInput = importForm.querySelector('[data-source-pane="file"] input[type="file"]');
-          if (!fileInput.files || !fileInput.files[0]) throw new Error("请选择 .ics 文件");
+          if (!fileInput.files || !fileInput.files[0]) throw new Error(T("app.js.import.selectFile"));
           const fd = new FormData();
           fd.append("file", fileInput.files[0]);
           const resp = await fetch(`/app/calendars/${calendarId}/import/file`, { method: "POST", credentials: "same-origin", body: fd });
-          if (!resp.ok && resp.status !== 302) throw new Error("上传失败");
+          if (!resp.ok && resp.status !== 302) throw new Error(T("app.js.import.uploadFailed"));
         } else if (source === "url-once") {
           const url = importForm.querySelector('[data-source-pane="url-once"] input[name="url"]').value.trim();
-          if (!url) throw new Error("请输入 URL");
+          if (!url) throw new Error(T("app.js.import.enterUrl"));
           await postForm(`/app/calendars/${calendarId}/import/url-once`, { url });
         } else if (source === "sub") {
           const url = importForm.querySelector('[data-source-pane="sub"] input[name="url"]').value.trim();
           const label = importForm.querySelector('[data-source-pane="sub"] input[name="label"]').value.trim();
           const refreshMinutes = importForm.querySelector('[data-source-pane="sub"] select[name="refreshMinutes"]').value;
-          if (!url) throw new Error("请输入 URL");
+          if (!url) throw new Error(T("app.js.import.enterUrl"));
           await postForm(`/app/calendars/${calendarId}/subscriptions`, { url, label, refreshMinutes });
         } else if (source === "paste") {
           const text = importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]').value;
-          if (!text || text.length < 20) throw new Error("请粘贴 ICS 文本");
+          if (!text || text.length < 20) throw new Error(T("app.js.import.pasteIcs"));
           await postForm(`/app/calendars/${calendarId}/import/text`, { text });
         }
-        window.bwc && window.bwc.toast("导入完成", "success");
+        window.bwc && window.bwc.toast(T("app.js.import.done"), "success");
         setTimeout(() => window.location.reload(), 500);
       } catch (err) {
         console.error(err);
-        window.bwc && window.bwc.toast("导入失败：" + (err.message || err), "error");
+        window.bwc && window.bwc.toast(T("app.js.import.failed", { error: (err && err.message) || err }), "error");
         submitBtn.disabled = false;
-        submitBtn.textContent = "导入";
+        submitBtn.textContent = T("app.js.import.submit");
       }
     });
   }
@@ -2027,25 +2052,25 @@
       const resp = await fetch(`/api/calendars/${currentMenuCalId}`,
         fetchOpts({ method: "PATCH", body: JSON.stringify(body) }));
       if (!resp.ok) throw new Error(await resp.text());
-      window.bwc && window.bwc.toast("已保存", "success");
+      window.bwc && window.bwc.toast(T("app.js.toast.saved"), "success");
       // Reload so the calendar name in the sidebar, event colors, and
       // calendar pickers everywhere pick up the new values. Could be
       // surgical with ctx.calendars updates but reload is bulletproof.
       setTimeout(() => window.location.reload(), 400);
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast("保存失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.saveFailed"), "error");
     }
   });
 
   async function loadShareTokens(calId) {
     const list = $("#share-tokens-list");
-    list.innerHTML = '<li class="text-slate-400 text-center py-2">加载中…</li>';
+    list.innerHTML = `<li class="text-slate-400 text-center py-2">${T("app.js.share.loading")}</li>`;
     try {
       const resp = await fetch(`/api/calendars/${calId}/share-tokens`, fetchOpts());
       const tokens = await resp.json();
       if (!tokens.length) {
-        list.innerHTML = '<li class="text-slate-400 text-center py-2">还没有订阅链接</li>';
+        list.innerHTML = `<li class="text-slate-400 text-center py-2">${T("app.js.share.empty")}</li>`;
         return;
       }
       list.innerHTML = tokens.map((t) => {
@@ -2055,27 +2080,27 @@
         <li class="py-3 border-b border-slate-100 last:border-0 space-y-2">
           <div class="flex items-start gap-2">
             <div class="flex-1 min-w-0">
-              <div class="text-slate-700 text-sm">${escapeHtml(t.label || "未命名")}</div>
+              <div class="text-slate-700 text-sm">${escapeHtml(t.label || T("app.js.share.unnamed"))}</div>
               <code class="text-xs text-slate-400 truncate block mt-0.5">${escapeHtml(t.url)}</code>
             </div>
-            <button type="button" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 flex-shrink-0" data-revoke="${escapeHtml(t.token)}">撤销</button>
+            <button type="button" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 flex-shrink-0" data-revoke="${escapeHtml(t.token)}">${T("app.js.share.revoke")}</button>
           </div>
           <div class="flex flex-wrap gap-1.5">
-            <button type="button" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-copy="${escapeHtml(t.url)}">复制 URL</button>
-            <a href="${escapeHtml(webcalUrl)}" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">📱 添加到手机日历</a>
-            <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">📅 添加到 Google 日历</a>
+            <button type="button" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-copy="${escapeHtml(t.url)}">${T("app.js.share.copyUrl")}</button>
+            <a href="${escapeHtml(webcalUrl)}" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">${T("app.js.share.addToPhone")}</a>
+            <a href="${escapeHtml(gcalUrl)}" target="_blank" rel="noopener" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">${T("app.js.share.addToGoogle")}</a>
           </div>
         </li>
       `;}).join("");
       list.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => window.bwc.copy(b.dataset.copy)));
       list.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
-        if (!(await window.bwc.confirm({ message: "撤销该订阅链接？已订阅的客户端会失效。", danger: true, confirmLabel: "撤销" }))) return;
+        if (!(await window.bwc.confirm({ message: T("app.js.share.revokeConfirm"), danger: true, confirmLabel: T("app.js.share.revoke") }))) return;
         await fetch(`/api/calendars/${calId}/share-tokens/${b.dataset.revoke}`, fetchOpts({ method: "DELETE" }));
         await loadShareTokens(calId);
-        window.bwc && window.bwc.toast("已撤销", "success");
+        window.bwc && window.bwc.toast(T("app.js.share.revoked"), "success");
       }));
     } catch (err) {
-      list.innerHTML = '<li class="text-red-500 text-center py-2">加载失败</li>';
+      list.innerHTML = `<li class="text-red-500 text-center py-2">${T("app.js.share.loadFailed")}</li>`;
     }
   }
 
@@ -2090,19 +2115,19 @@
       if (!resp.ok) throw new Error();
       e.target.reset();
       await loadShareTokens(currentMenuCalId);
-      window.bwc && window.bwc.toast("已生成订阅链接", "success");
+      window.bwc && window.bwc.toast(T("app.js.share.generated"), "success");
     } catch (err) {
-      window.bwc && window.bwc.toast("生成失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.share.generateFailed"), "error");
     }
   });
 
   $("#btn-delete-calendar").addEventListener("click", async () => {
     if (!currentMenuCalId) return;
     if (!(await window.bwc.confirm({
-      title: "删除日历",
-      message: "所有事件和订阅链接都会消失，且不可恢复。",
+      title: T("app.js.deleteCalendar.title"),
+      message: T("app.js.deleteCalendar.message"),
       danger: true,
-      confirmLabel: "删除日历",
+      confirmLabel: T("app.js.deleteCalendar.ok"),
     }))) return;
     try {
       const resp = await fetch(`/api/calendars/${currentMenuCalId}`, fetchOpts({ method: "DELETE" }));
@@ -2110,7 +2135,7 @@
       closeModal("#modal-cal-menu");
       setTimeout(() => window.location.reload(), 400);
     } catch (err) {
-      window.bwc && window.bwc.toast("删除失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.deleteFailed"), "error");
     }
   });
 
@@ -2160,7 +2185,7 @@
         // new rows in one shot.
         await loadEvents();
         window.bwc && window.bwc.toast(
-          recurringScope === "instance" ? "已修改此次" : "已修改此次及之后",
+          recurringScope === "instance" ? T("app.js.toast.movedInstance") : T("app.js.toast.movedFuture"),
           "success",
         );
         return;
@@ -2171,7 +2196,7 @@
       cal.updateEvent(event.id, event.calendarId, changes);
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast("移动失败", "error");
+      window.bwc && window.bwc.toast(T("app.js.toast.moveFailed"), "error");
     }
   });
 
@@ -2213,7 +2238,8 @@
       // Find the first matching curated entry; fall back to the IANA id.
       const z = zones.find((t) => t.id === zoneId);
       if (!z) return zoneId || "Asia/Shanghai";
-      return `${z.label}（${z.offset}）`;
+      // Per-locale bracket style: CJK locales use fullwidth parens.
+      return T("app.js.tz.labelFormat", { label: z.label, offset: z.offset });
     }
 
     function syncPickerLabel(picker) {
@@ -2234,7 +2260,7 @@
       // Cap at 200 results so a blank search doesn't dump 420 DOM nodes.
       const capped = matches.slice(0, 200);
       list.innerHTML = capped.length === 0
-        ? '<li class="py-6 text-center text-sm text-slate-400">没有匹配的时区</li>'
+        ? `<li class="py-6 text-center text-sm text-slate-400">${T("app.js.tz.noMatch")}</li>`
         : capped.map((z) =>
             `<li><button type="button" data-tz-pick="${z.id}" class="w-full flex items-center justify-between rounded-md px-3 py-2 text-left text-sm hover:bg-slate-50 active:bg-slate-100">
               <span class="text-slate-900">${escapeHtml(z.label)}</span>
@@ -2342,18 +2368,18 @@
       if (conflictCount > 0) {
         chip.classList.add("bg-red-50", "text-red-700", "hover:bg-red-100", "cursor-pointer");
         dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-red-500";
-        text.textContent = `⚠ ${conflictCount} 条冲突，点击处理`;
-        chip.title = "点击查看同步冲突";
+        text.textContent = T("app.js.sync.conflicts", { n: conflictCount });
+        chip.title = T("app.js.sync.conflictsTitle");
       } else if (!online) {
         chip.classList.add("bg-amber-50", "text-amber-700");
         dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-amber-500";
-        text.textContent = pending > 0 ? `离线 · ${pending} 条待同步` : "离线";
-        chip.title = "网络不可用";
+        text.textContent = pending > 0 ? T("app.js.sync.offlinePending", { n: pending }) : T("app.js.sync.offline");
+        chip.title = T("app.js.sync.offlineTitle");
       } else if (pending > 0) {
         chip.classList.add("bg-sky-50", "text-sky-700");
         dot.className = "inline-block h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse";
-        text.textContent = `同步中 · ${pending}`;
-        chip.title = "正在向服务器同步";
+        text.textContent = T("app.js.sync.syncing", { n: pending });
+        chip.title = T("app.js.sync.syncingTitle");
       }
     }
 
@@ -2368,7 +2394,7 @@
       // user notices their edit got stuck instead of waiting until they
       // happen to glance at the chip.
       if (ev.kind === "sync-conflict") {
-        if (window.bwc) window.bwc.toast("有同步冲突，点顶部红色徽章处理", "error");
+        if (window.bwc) window.bwc.toast(T("app.js.sync.conflictToast"), "error");
       }
     });
     window.addEventListener("online", refresh);
@@ -2392,11 +2418,15 @@
       return;
     }
     empty.classList.add("hidden");
-    const opLabel = { create: "新建", update: "修改", delete: "删除" };
+    const opLabel = {
+      create: T("app.js.conflictList.opCreate"),
+      update: T("app.js.conflictList.opUpdate"),
+      delete: T("app.js.conflictList.opDelete"),
+    };
     list.innerHTML = items.map((it) => {
-      const title = (it.payload && it.payload.summary) || "(无标题)";
-      const when = new Date(it.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-      const err = it.lastError ? `<div class="mt-1 text-xs text-red-700 break-all">最后错误：${escapeHtml(it.lastError)}</div>` : "";
+      const title = (it.payload && it.payload.summary) || T("app.js.untitled");
+      const when = new Date(it.createdAt).toLocaleString(LOCALE, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+      const err = it.lastError ? `<div class="mt-1 text-xs text-red-700 break-all">${T("app.js.conflictList.lastError", { error: escapeHtml(it.lastError) })}</div>` : "";
       return `
         <li class="rounded-lg border border-red-200 bg-red-50/40 p-3" data-outbox-id="${it.id}">
           <div class="flex items-start justify-between gap-3">
@@ -2404,14 +2434,14 @@
               <div class="flex items-center gap-2 mb-0.5">
                 <span class="inline-block rounded-full bg-red-100 text-red-700 text-xs px-2 py-0.5">${opLabel[it.op] || it.op}</span>
                 <span class="text-xs text-slate-500">${when}</span>
-                <span class="text-xs text-slate-400">· ${it.attempts} 次失败</span>
+                <span class="text-xs text-slate-400">· ${T("app.js.conflictList.attempts", { n: it.attempts })}</span>
               </div>
               <div class="text-sm font-medium text-slate-800 break-words">${escapeHtml(title)}</div>
               ${err}
             </div>
             <div class="flex gap-1.5 flex-shrink-0">
-              <button type="button" class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-conflict-retry="${it.id}">重试</button>
-              <button type="button" class="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50" data-conflict-discard="${it.id}">丢弃</button>
+              <button type="button" class="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50" data-conflict-retry="${it.id}">${T("app.js.conflictList.retry")}</button>
+              <button type="button" class="rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50" data-conflict-discard="${it.id}">${T("app.js.conflictList.discard")}</button>
             </div>
           </div>
         </li>`;
@@ -2431,9 +2461,9 @@
       setTimeout(() => loadEvents().catch(() => {}), 1500);
     } else if (discardId) {
       if (!(await window.bwc.confirm({
-        message: "丢弃这条变更？本地的优化更新会回滚。",
+        message: T("app.js.conflictList.discardConfirm"),
         danger: true,
-        confirmLabel: "丢弃",
+        confirmLabel: T("app.js.conflictList.discard"),
       }))) return;
       await window.bwcStore.discardItem(parseInt(discardId, 10));
       await renderConflicts();

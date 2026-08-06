@@ -21,7 +21,7 @@ import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type We
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
-import { resolveLocaleFromRequest, makeT } from "../lib/i18n.js";
+import { resolveLocaleFromRequest, makeT, clientStrings } from "../lib/i18n.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { validateInvite, consumeInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { listTimezones } from "../lib/timezones.js";
@@ -247,6 +247,11 @@ export async function webRoutes(app: FastifyInstance) {
   app.get("/data-processing", (req, reply) => renderLegal(req, reply, "data-processing", "legal.dataProcessing.title"));
 
   app.get("/terms", (req, reply) => renderLegal(req, reply, "terms", "legal.terms.title"));
+
+  // Open Source Licenses — per-platform inventory of the third-party
+  // components shipped in the server/web, iOS, Android, and desktop
+  // builds. Linked from the footer alongside the other legal pages.
+  app.get("/open-source", (req, reply) => renderLegal(req, reply, "open-source", "legal.openSource.title"));
 
   // Public landing for app downloads — iOS App Store + Android APK +
   // browser fallback. Linked from the footer + landing hero + GitHub
@@ -966,13 +971,22 @@ export async function webRoutes(app: FastifyInstance) {
     const seen = new Set(owned.map((c) => c.id));
     const calendars = [...owned, ...shared.filter((c) => !seen.has(c.id))];
 
+    // Locale: same resolution chain as every other page (cookie > user >
+    // site default > Accept-Language). The EJS template gets `t` from the
+    // global view-locals hook; here we additionally build the client-side
+    // strings map (window.BWC_T) for calendar-app.js, which can't call the
+    // server-side t() — see clientStrings in src/lib/i18n.ts.
+    const settings = await getSettings();
+    const locale = resolveLocaleFromRequest(req, user.locale ?? null, settings.defaultLocale);
+
     return reply.view("app/calendar-app", {
-      title: "日历",
+      title: makeT(locale)("nav.calendar"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       calendars,
-      timezones: listTimezones(),
+      timezones: listTimezones(locale),
+      jsStrings: clientStrings(locale),
       publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
       appShell: true,
     });
