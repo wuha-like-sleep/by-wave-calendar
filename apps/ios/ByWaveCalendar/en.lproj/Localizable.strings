@@ -387,3 +387,5 @@
 "没看懂，换个说法试试" = "Couldn’t parse that — try different wording";
 "删除后 5 秒内可撤销。" = "You can undo for 5 seconds after deleting.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "You can undo for 5 seconds after deleting. For recurring events, delete from the detail page.";
+"删除后 5 秒内可撤销。" = "You can undo within 5 seconds after deleting.";
+"删除后 5 秒内可撤销。重复事件请进详情删除。" = "You can undo within 5 seconds. For recurring events, open details to delete.";

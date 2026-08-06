@@ -71,12 +71,6 @@ struct CalendarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面) — floats over
-            // whatever view mode is active; auto-dismisses after 5s.
-            .overlay(alignment: .bottom) {
-                undoDeleteBar
-                    .animation(.snappy, value: state.pendingUndoDelete)
-            }
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -224,6 +218,13 @@ struct CalendarView: View {
                         else if h > 70 { shiftAnchor(by: -1) }
                     },
             )
+        }
+        // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
+        // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
+        // 根视图才出现。5 秒自动消失。
+        .overlay(alignment: .bottom) {
+            undoDeleteBar
+                .animation(.snappy, value: state.pendingUndoDelete)
         }
     }
 

@@ -387,3 +387,5 @@
 "没看懂，换个说法试试" = "No se pudo interpretar. Prueba con otras palabras";
 "删除后 5 秒内可撤销。" = "Puedes deshacer durante 5 segundos después de eliminar.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Puedes deshacer durante 5 segundos después de eliminar. Los eventos recurrentes se eliminan desde el detalle.";
+"删除后 5 秒内可撤销。" = "Puedes deshacer en los 5 segundos posteriores a la eliminación.";
+"删除后 5 秒内可撤销。重复事件请进详情删除。" = "Puedes deshacer en 5 segundos. Para eventos recurrentes, elimínalos desde los detalles.";

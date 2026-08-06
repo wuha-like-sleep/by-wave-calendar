@@ -387,3 +387,5 @@
 "没看懂，换个说法试试" = "Nicht verstanden – bitte anders formulieren";
 "删除后 5 秒内可撤销。" = "Nach dem Löschen kannst du 5 Sekunden lang rückgängig machen.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Nach dem Löschen kannst du 5 Sekunden lang rückgängig machen. Wiederkehrende Termine bitte in der Detailansicht löschen.";
+"删除后 5 秒内可撤销。" = "Innerhalb von 5 Sekunden nach dem Löschen widerrufbar.";
+"删除后 5 秒内可撤销。重复事件请进详情删除。" = "Innerhalb von 5 Sekunden widerrufbar. Wiederkehrende Termine über die Details löschen.";
