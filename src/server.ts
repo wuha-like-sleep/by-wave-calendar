@@ -245,6 +245,25 @@ app.addHook("onResponse", async (req, reply) => {
   );
 });
 
+// ---- Site-private extensions ----
+// Optional deployment-specific modules under src/web/private/ (kept OUT of
+// the public repo; each default-exports `(app) => …`). Loaded before the
+// compression plugin ON PURPOSE: an extension's onSend hooks then run
+// before compress transforms the payload, so they can still rewrite HTML
+// strings. Missing directory = silently skipped (the normal open-source case).
+try {
+  const { readdir } = await import("node:fs/promises");
+  const privDir = new URL("./web/private/", import.meta.url);
+  const entries = (await readdir(privDir)).filter((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts"));
+  for (const f of entries) {
+    const mod = await import(new URL(f, privDir).href);
+    if (typeof mod.default === "function") {
+      await mod.default(app);
+      app.log.info({ ext: f }, "site-private extension loaded");
+    }
+  }
+} catch { /* no private extensions — the default for public deployments */ }
+
 // ---- Response compression (perf) ----
 // gzip/brotli for text payloads (HTML, JSON, CSS, JS). Big win on the
 // EJS-rendered calendar pages + the /api/v1/events JSON which can be tens
