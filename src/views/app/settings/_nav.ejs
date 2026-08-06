@@ -11,18 +11,18 @@
    etc.) still resolve via redirects in src/web/index.ts. %>
 <nav class="mb-6">
   <div class="text-sm text-slate-500 mb-3">
-    <a href="/app" class="hover:text-slate-700">日历</a>
+    <a href="/app" class="hover:text-slate-700"><%= t("nav.calendar") %></a>
     <span class="px-2">/</span>
-    <span class="text-slate-900">账号设置</span>
+    <span class="text-slate-900"><%= t("settings.nav.breadcrumb") %></span>
   </div>
   <div class="-mx-4 sm:mx-0 overflow-x-auto">
     <ul class="flex gap-1 px-4 sm:px-0 sm:flex-wrap border-b border-slate-200 min-w-max sm:min-w-0">
       <% [
-        { href: '/app/settings',               label: '账户' },
-        { href: '/app/settings/security',      label: '安全' },
-        { href: '/app/settings/devices',       label: '设备' },
-        { href: '/app/settings/notifications', label: '通知' },
-        { href: '/app/settings/appearance',    label: '外观' },
+        { href: '/app/settings',               label: t("settings.nav.account") },
+        { href: '/app/settings/security',      label: t("settings.nav.security") },
+        { href: '/app/settings/devices',       label: t("settings.nav.devices") },
+        { href: '/app/settings/notifications', label: t("settings.nav.notifications") },
+        { href: '/app/settings/appearance',    label: t("settings.nav.appearance") },
       ].forEach(function(item){ %>
         <li>
           <a href="<%= item.href %>"

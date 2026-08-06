@@ -1,9 +1,10 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { verifyCsrf, csrfTokenFor } from "../lib/csrf.js";
+import { tForRequest } from "../lib/i18n.js";
 import {
   loadSession,
   markSessionMfaSatisfied,
@@ -32,6 +33,13 @@ function flashFromQuery(req: any) {
   };
 }
 
+/** Request-scoped translate for route handlers — flash messages, page
+ *  titles, error-view copy. Locale comes from `req.locale`, stashed by the
+ *  view-locals hook in src/server.ts. See tForRequest in src/lib/i18n.ts. */
+function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
+  return tForRequest(req)(key, vars);
+}
+
 export async function mfaRoutes(app: FastifyInstance) {
   // ---- Login MFA challenge ----
   app.get("/login/mfa", async (req, reply) => {
@@ -39,7 +47,7 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (!s) return reply.redirect("/login");
     if (s.mfaSatisfied || !s.user.mfaEnabled) return reply.redirect("/app");
     return reply.view("auth/mfa", {
-      title: "二次验证",
+      title: tr(req, "page.mfa"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -58,11 +66,11 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (s.mfaSatisfied || !s.user.mfaEnabled) return reply.redirect("/app");
 
     const body = z.object({ code: z.string().min(6).max(20) }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/login/mfa?error=" + encodeURIComponent("请输入 6 位验证码"));
+    if (!body.success) return reply.redirect("/login/mfa?error=" + encodeURIComponent(tr(req, "flash.mfa.codeFormat")));
 
     const code = body.data.code.trim();
     const secret = s.user.mfaTotpSecret;
-    if (!secret) return reply.redirect("/login?error=" + encodeURIComponent("MFA 配置异常"));
+    if (!secret) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.mfa.configError")));
 
     // Helper: consume bwc_return_to cookie and return the path, or
     // fall back to /app. Mirrors the consumeReturnTo helper in web/
@@ -107,24 +115,24 @@ export async function mfaRoutes(app: FastifyInstance) {
       // banner on their original page.
       const target = consumeMfaReturnTo();
       const sep = target.includes("?") ? "&" : "?";
-      return reply.redirect(target + sep + "success=" + encodeURIComponent("已使用备用码登录，请重新生成"));
+      return reply.redirect(target + sep + "success=" + encodeURIComponent(tr(req, "flash.mfa.backupUsed")));
     }
 
     req.log.warn({ userId: s.user.id, ip: req.ip }, "mfa_failed");
-    return reply.redirect("/login/mfa?error=" + encodeURIComponent("验证码错误"));
+    return reply.redirect("/login/mfa?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
   });
 
   // ---- MFA setup (authed) ----
   app.get("/app/settings/mfa/setup", async (req, reply) => {
     const s = await loadSession(req);
     if (!s || (s.user.mfaEnabled && !s.mfaSatisfied)) return reply.redirect("/login");
-    if (s.user.mfaEnabled) return reply.redirect("/app/settings?error=" + encodeURIComponent("已启用 MFA，先停用再重新设置"));
+    if (s.user.mfaEnabled) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.alreadyEnabled")));
 
     const secret = newTotpSecret();
     const qr = await totpQrDataUrl(s.user.email, secret);
 
     return reply.view("app/mfa-setup", {
-      title: "设置二次验证",
+      title: tr(req, "page.mfaSetup"),
       user: s.user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -142,10 +150,10 @@ export async function mfaRoutes(app: FastifyInstance) {
     const body = z
       .object({ secret: z.string().min(16).max(64), code: z.string().min(6).max(8) })
       .safeParse(req.body);
-    if (!body.success) return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent("请输入验证码"));
+    if (!body.success) return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.enterCode")));
 
     if (!verifyTotpCode(body.data.secret, body.data.code)) {
-      return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent("验证码错误，请重新扫码再试"));
+      return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.wrongCodeRescan")));
     }
 
     const { plain, stored } = generateBackupCodes();
@@ -163,10 +171,10 @@ export async function mfaRoutes(app: FastifyInstance) {
       .catch((err) => req.log.warn({ err }, "mfa_enable_mail_failed"));
 
     return reply.view("app/mfa-enabled", {
-      title: "MFA 已启用",
+      title: tr(req, "page.mfaEnabled"),
       user: { ...s.user, mfaEnabled: true },
       csrfToken: csrfTokenFor(req),
-      flash: { success: "MFA 已启用，请保存下面的备用码" },
+      flash: { success: tr(req, "flash.mfa.enabled") },
       backupCodes: plain,
     });
   });
@@ -178,12 +186,12 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (!s.user.mfaEnabled) return reply.redirect("/app/settings");
 
     const body = z.object({ code: z.string().min(6).max(20) }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/app/settings?error=" + encodeURIComponent("请输入当前验证码以确认"));
+    if (!body.success) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.confirmCurrentCode")));
 
     const secret = s.user.mfaTotpSecret;
-    if (!secret) return reply.redirect("/app/settings?error=" + encodeURIComponent("MFA 状态异常"));
+    if (!secret) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.stateError")));
     if (!verifyTotpCode(secret, body.data.code)) {
-      return reply.redirect("/app/settings?error=" + encodeURIComponent("验证码错误"));
+      return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
     }
     await db
       .update(schema.users)
@@ -191,7 +199,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, s.user.id));
     void sendMail(securityChangeMail(s.user.email, { kind: "mfa_disabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
-    return reply.redirect("/app/settings?success=" + encodeURIComponent("已关闭 MFA"));
+    return reply.redirect("/app/settings?success=" + encodeURIComponent(tr(req, "flash.mfa.disabled")));
   });
 
   app.post("/app/settings/mfa/regenerate-codes", async (req, reply) => {
@@ -205,10 +213,10 @@ export async function mfaRoutes(app: FastifyInstance) {
       .set({ mfaBackupCodes: stored as unknown as object, updatedAt: new Date() })
       .where(eq(schema.users.id, s.user.id));
     return reply.view("app/mfa-enabled", {
-      title: "新的备用码",
+      title: tr(req, "page.mfaBackupCodes"),
       user: s.user,
       csrfToken: csrfTokenFor(req),
-      flash: { success: "已生成新的备用码，旧的已失效" },
+      flash: { success: tr(req, "flash.mfa.backupRegenerated") },
       backupCodes: plain,
     });
   });

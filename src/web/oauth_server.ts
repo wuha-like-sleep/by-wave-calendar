@@ -8,12 +8,13 @@
 // For an end-to-end walkthrough see the /admin/oauth-apps "如何接入"
 // section, which the admin UI links to.
 
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
+import { tForRequest } from "../lib/i18n.js";
 import {
   findClientByClientId,
   issueAuthorizationCode,
@@ -31,6 +32,13 @@ const authorizeQuery = z.object({
   code_challenge_method: z.literal("S256").optional(),
 });
 
+/** Request-scoped translate for route handlers — flash messages, page
+ *  titles, error-view copy. Locale comes from `req.locale`, stashed by the
+ *  view-locals hook in src/server.ts. See tForRequest in src/lib/i18n.ts. */
+function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
+  return tForRequest(req)(key, vars);
+}
+
 export async function oauthServerRoutes(app: FastifyInstance) {
   // GET /oauth/authorize — consent screen. If the user isn't logged in,
   // redirect them to /login with a return-to so they bounce back here.
@@ -38,18 +46,18 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     const q = authorizeQuery.safeParse(req.query);
     if (!q.success) {
       return reply.code(400).view("error", {
-        title: "OAuth 错误", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 400, heading: "OAuth 请求参数无效",
-        message: "缺少必填字段，或字段格式不对。",
+        title: tr(req, "page.oauthError"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: tr(req, "errorPage.oauth.badRequestHeading"),
+        message: tr(req, "errorPage.oauth.badRequestMessage"),
       });
     }
 
     const client = await findClientByClientId(q.data.client_id);
     if (!client || !client.enabled) {
       return reply.code(400).view("error", {
-        title: "OAuth 错误", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 400, heading: "应用不存在或已禁用",
-        message: `client_id 无效：${q.data.client_id}`,
+        title: tr(req, "page.oauthError"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: tr(req, "errorPage.oauth.unknownClientHeading"),
+        message: tr(req, "errorPage.oauth.unknownClientMessage", { clientId: q.data.client_id }),
       });
     }
 
@@ -58,9 +66,9 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     const allowed = client.redirectUris.split("\n").map((s) => s.trim()).filter(Boolean);
     if (!allowed.includes(q.data.redirect_uri)) {
       return reply.code(400).view("error", {
-        title: "OAuth 错误", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 400, heading: "redirect_uri 不在白名单",
-        message: `应用「${client.name}」没有注册这个回调地址。`,
+        title: tr(req, "page.oauthError"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: tr(req, "errorPage.oauth.redirectUriHeading"),
+        message: tr(req, "errorPage.oauth.redirectUriMessage", { name: client.name }),
       });
     }
 
@@ -70,9 +78,9 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     const finalScopes = requested.filter((s) => allowedScopes.includes(s));
     if (finalScopes.length === 0) {
       return reply.code(400).view("error", {
-        title: "OAuth 错误", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 400, heading: "权限范围无效",
-        message: `应用申请的 scope 都不在它被允许的范围内。`,
+        title: tr(req, "page.oauthError"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: tr(req, "errorPage.oauth.scopeHeading"),
+        message: tr(req, "errorPage.oauth.scopeMessage"),
       });
     }
 
@@ -84,11 +92,11 @@ export async function oauthServerRoutes(app: FastifyInstance) {
       reply.setCookie("bwc_post_login_url", back, {
         path: "/", maxAge: 600, httpOnly: true, sameSite: "lax",
       });
-      return reply.redirect("/login?notice=" + encodeURIComponent(`登录后授权「${client.name}」访问你的日历`));
+      return reply.redirect("/login?notice=" + encodeURIComponent(tr(req, "flash.oauth.signInToAuthorize", { name: client.name })));
     }
 
     return reply.view("oauth/consent", {
-      title: `授权 ${client.name}`,
+      title: tr(req, "page.oauthAuthorize", { name: client.name }),
       user: session.user, csrfToken: csrfTokenFor(req), flash: {},
       client: {
         name: client.name,

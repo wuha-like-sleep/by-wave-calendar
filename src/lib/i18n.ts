@@ -120,6 +120,26 @@ const DICTIONARIES: Record<LocaleCode, Partial<Record<TranslationKey, string>>> 
  *  string>>`), so a typo in a *dictionary* is caught even though a typo in
  *  a *call site* is not. */
 export function translate(locale: LocaleCode, key: string, vars?: Record<string, string | number>): string {
+  return interpolate(locale, key, vars, true);
+}
+
+/** Same lookup as `translate`, but interpolated values are NOT HTML-escaped.
+ *
+ *  Use this ONLY where the result is handed to a consumer that escapes it
+ *  again — flash messages (`<%= flash.error %>`), page `<title>`, the error
+ *  view's heading/message, redirect query params. Escaping there too would
+ *  double-encode and surface literal `&amp;` / `&#39;` to the user. Anything
+ *  rendered with `<%- t(...) %>` must keep using `translate`. */
+export function translatePlain(locale: LocaleCode, key: string, vars?: Record<string, string | number>): string {
+  return interpolate(locale, key, vars, false);
+}
+
+function interpolate(
+  locale: LocaleCode,
+  key: string,
+  vars: Record<string, string | number> | undefined,
+  escapeValues: boolean,
+): string {
   const dict = DICTIONARIES[locale] ?? DICTIONARIES.en;
   const k = key as TranslationKey;
   let value = dict[k] ?? DICTIONARIES.en[k] ?? key;
@@ -135,7 +155,10 @@ export function translate(locale: LocaleCode, key: string, vars?: Record<string,
       // (not the template) kills stored/reflected XSS via the public booking
       // page, attendee lists, subscription-status banners, etc., while
       // preserving the intended markup of the trusted template text.
-      value = value.replaceAll(`{${name}}`, escapeHtml(String(v)));
+      //
+      // The one exception is `translatePlain` (escapeValues=false), whose
+      // output is escaped downstream — see its doc comment.
+      value = value.replaceAll(`{${name}}`, escapeValues ? escapeHtml(String(v)) : String(v));
     }
   }
   return value;
@@ -263,6 +286,25 @@ export function resolveLocaleFromRequest(
  *  req.locals / view locals so EJS templates can call `t("login.email")`. */
 export function makeT(locale: LocaleCode): (key: string, vars?: Record<string, string | number>) => string {
   return (key, vars) => translate(locale, key, vars);
+}
+
+/** Request-scoped `t()` for ROUTE HANDLERS (page titles, flash messages,
+ *  redirect query params) — the counterpart to the `t` view local that EJS
+ *  templates already get.
+ *
+ *  The global onRequest hook in src/server.ts resolves the locale once per
+ *  request and stashes it on `req.locale`, so this is a cheap lookup with no
+ *  DB I/O. Falls back to the hard default when the hook hasn't run yet (e.g.
+ *  a unit test constructing a bare request object).
+ *
+ *  Uses `translatePlain`: everything a route handler produces lands in an
+ *  auto-escaping sink (`<%= flash.error %>`, `<%= title %>`, the error view's
+ *  heading/message, a URL query param), so escaping here as well would
+ *  double-encode. */
+export function tForRequest(req: FastifyRequest): (key: string, vars?: Record<string, string | number>) => string {
+  const stashed = (req as unknown as { locale?: string }).locale;
+  const locale = isValidLocale(stashed) ? stashed : "zh-CN";
+  return (key, vars) => translatePlain(locale, key, vars);
 }
 
 /** Resolve every key under a prefix into a flat { key: translated } map.

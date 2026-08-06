@@ -135,6 +135,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUser, loadUserFromRequest, createSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
+import { tForRequest } from "../lib/i18n.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
 import { verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
@@ -167,6 +168,12 @@ async function ensureAppsEnabled(reply: FastifyReply, req?: { log: { warn: (msg:
   }
   reply.code(403).send({ error: "apps_disabled", message: "管理员已停用 APP 同步。请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" });
   return false;
+}
+
+/** Request-scoped translate for the pair-page titles rendered here.
+ *  Locale comes from `req.locale` (view-locals hook in src/server.ts). */
+function tr(req: FastifyRequest, key: string): string {
+  return tForRequest(req)(key);
 }
 
 export async function deviceRoutes(app: FastifyInstance) {
@@ -1278,19 +1285,19 @@ export async function pairPageRoutes(app: FastifyInstance) {
     // contain the key, else EJS throws "flash is not defined".
     if (!p) {
       return reply.view("desktop-pair", {
-        title: "桌面端登录", state: "expired", user,
+        title: tr(req, "page.desktopSignIn"), state: "expired", user,
         csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     if (p.status !== "pending") {
       return reply.view("desktop-pair", {
-        title: "桌面端登录",
+        title: tr(req, "page.desktopSignIn"),
         state: p.status === "approved" ? "already_approved" : "denied",
         user, csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     return reply.view("desktop-pair", {
-      title: "桌面端登录", state: "pending", code, user,
+      title: tr(req, "page.desktopSignIn"), state: "pending", code, user,
       csrfToken: csrfTokenFor(req), siteName, flash: null,
     });
   });
@@ -1299,7 +1306,7 @@ export async function pairPageRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     if (!(await siteAppsEnabled())) {
       return reply.code(403).type("text/html").send(
-        "<p>管理员已停用 APP 同步。请联系管理员后再试。</p>",
+        `<p>${tr(req, "errorPage.appsDisabled.heading")}. ${tr(req, "errorPage.appsDisabled.message")}</p>`,
       );
     }
     _purgeExpiredDesktopPairs();
@@ -1357,7 +1364,7 @@ export async function pairPageRoutes(app: FastifyInstance) {
     // the same check using the shared site-settings helper.
     if (!(await siteQrLoginEnabled())) {
       return reply.code(403).type("text/html").send(
-        "<p>管理员已停用网页扫码登录功能。请用密码或 Passkey 登录。</p>",
+        `<p>${tr(req, "login.qrAdminDisabled")}</p>`,
       );
     }
     _purgeExpiredWebPairs();
@@ -1372,19 +1379,19 @@ export async function pairPageRoutes(app: FastifyInstance) {
     // flash: null — required by layout.ejs (see desktop-pair branch above).
     if (!p) {
       return reply.view("web-pair", {
-        title: "网页扫码登录", state: "expired", user,
+        title: tr(req, "page.webQrSignIn"), state: "expired", user,
         csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     if (p.status !== "pending") {
       return reply.view("web-pair", {
-        title: "网页扫码登录",
+        title: tr(req, "page.webQrSignIn"),
         state: p.status === "approved" ? "already_approved" : "denied",
         user, csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
     return reply.view("web-pair", {
-      title: "网页扫码登录", state: "pending", code, user,
+      title: tr(req, "page.webQrSignIn"), state: "pending", code, user,
       csrfToken: csrfTokenFor(req), siteName, flash: null,
     });
   });

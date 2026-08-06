@@ -39,7 +39,7 @@
 
       <div class="relative my-6">
         <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-200"></div></div>
-        <div class="relative flex justify-center text-xs"><span class="bg-white px-2 text-slate-400">或</span></div>
+        <div class="relative flex justify-center text-xs"><span class="bg-white px-2 text-slate-400"><%= t("login.or") %></span></div>
       </div>
 
       <form method="post" action="/login" class="space-y-4">
@@ -84,33 +84,32 @@
       <div class="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5">
         <div id="qr-loading" class="text-center py-12 text-sm text-slate-500">
           <svg class="animate-spin mx-auto mb-3 h-6 w-6 text-brand-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"></path></svg>
-          正在生成二维码…
+          <%= t("login.qrLoading") %>
         </div>
         <div id="qr-display" class="hidden">
           <div id="qr-box" class="bg-white rounded-lg p-3 flex items-center justify-center" style="min-height: 220px;"></div>
           <p class="mt-4 text-sm text-slate-700 text-center">
-            打开 <span class="font-medium">ByWave Calendar</span> 手机 APP，<br>
-            点「设置 → 扫码登录网页版」，扫上面二维码。
+            <%- t("login.qrInstructions") %>
           </p>
           <div id="qr-status" class="mt-4 text-center text-xs text-slate-500">
             <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>
-            等待手机扫码授权…
+            <%= t("login.qrWaiting") %>
           </div>
           <button type="button" id="qr-refresh"
                   class="mt-4 hidden w-full text-xs text-brand-600 hover:text-brand-700 font-medium">
-            重新生成二维码
+            <%= t("login.qrRefresh") %>
           </button>
         </div>
         <div id="qr-error" class="hidden text-center py-6 text-sm text-rose-700">
-          <p id="qr-error-msg">二维码加载失败</p>
+          <p id="qr-error-msg"><%= t("login.qrError") %></p>
           <button type="button" id="qr-error-retry"
                   class="mt-3 text-xs text-brand-600 hover:text-brand-700 font-medium">
-            重试
+            <%= t("login.qrRetry") %>
           </button>
         </div>
       </div>
       <p class="mt-4 text-xs text-slate-400 text-center">
-        手机 APP 需要先用密码 / Passkey 登录一次 · 之后扫码即可
+        <%= t("login.qrFallback") %>
       </p>
     </div>
     <% } %>
@@ -136,12 +135,29 @@
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+// Strings the scripts below inject at runtime. Same idea as window.BWC_T on
+// /app: client JS can't call the server-side t(), so hand it a resolved map.
+// jsonForScript is the XSS-safe serializer (site name / locale text can be
+// admin-supplied).
+const BWC_LOGIN_T = <%- jsonForScript({
+  passkeyWaiting: t("login.passkeyWaiting"),
+  passkeyButton: t("login.passkeyButton"),
+  passkeyFailed: t("login.passkeyFailed", { error: "__ERR__" }),
+  qrError: t("login.qrError"),
+  qrLoadFailed: t("login.qrError"),
+  qrAdminDisabled: t("login.qrAdminDisabled"),
+  qrWaiting: t("login.qrWaiting"),
+  qrApproved: t("login.qrApproved"),
+  qrExpired: t("login.qrExpired"),
+  qrDenied: t("login.qrDenied"),
+  qrAccountSuspended: t("login.qrAccountSuspended"),
+}) %>;
 (function(){
   const btn = document.getElementById("passkey-login");
   if (!btn || !window.SimpleWebAuthnBrowser) return;
   btn.addEventListener("click", async function () {
     btn.disabled = true;
-    btn.textContent = "等待 Passkey...";
+    btn.textContent = BWC_LOGIN_T.passkeyWaiting;
     try {
       const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
       const email = document.getElementById("email").value.trim() || undefined;
@@ -169,9 +185,9 @@
       window.location = data.redirect || "/app";
     } catch (err) {
       console.error(err);
-      window.bwc.toast("Passkey 登录失败：" + (err.message || err), "error");
+      window.bwc.toast(BWC_LOGIN_T.passkeyFailed.replace("__ERR__", String(err.message || err)), "error");
       btn.disabled = false;
-      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg> 使用 Passkey 登录';
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="12" r="4"/><path d="M14 12h7M17 12v3M21 12v3"/></svg> ' + BWC_LOGIN_T.passkeyButton;
     }
   });
 })();
@@ -239,7 +255,13 @@
     document.getElementById("qr-loading").classList.add("hidden");
     document.getElementById("qr-display").classList.add("hidden");
     document.getElementById("qr-error").classList.remove("hidden");
-    document.getElementById("qr-error-msg").textContent = msg || "二维码加载失败";
+    document.getElementById("qr-error-msg").textContent = msg || BWC_LOGIN_T.qrLoadFailed;
+  }
+  // Translated text goes into innerHTML alongside trusted markup, so escape
+  // it — dictionary strings are trusted but this keeps the seam safe if a
+  // locale ever picks up an angle bracket.
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
   }
   function setStatus(html, hideRefresh) {
     document.getElementById("qr-status").innerHTML = html;
@@ -263,7 +285,7 @@
       });
       if (!initResp.ok) {
         if (initResp.status === 403) {
-          showError("管理员已停用 APP 同步功能，请用密码登录");
+          showError(BWC_LOGIN_T.qrAdminDisabled);
           return;
         }
         throw new Error("init_failed_" + initResp.status);
@@ -291,11 +313,11 @@
         svg.setAttribute("height", "220");
       }
       showDisplay();
-      setStatus('<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>等待手机扫码授权…', true);
+      setStatus('<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>' + esc(BWC_LOGIN_T.qrWaiting), true);
       pollStatus();
     } catch (err) {
       console.error(err);
-      showError("二维码生成失败 —— 请刷新页面重试");
+      showError(BWC_LOGIN_T.qrError);
     }
   }
 
@@ -305,7 +327,7 @@
     if (pollCount > 150) {
       // ~5min exceeded → server side TTL'd anyway. Stop polling and
       // tell user to refresh.
-      setStatus('<span class="text-amber-600">二维码已过期</span>', false);
+      setStatus('<span class="text-amber-600">' + esc(BWC_LOGIN_T.qrExpired) + '</span>', false);
       return;
     }
     try {
@@ -323,24 +345,24 @@
         // are wrapped in { ok, data }.
         const envP = await resp.json();
         const dataP = envP && envP.ok && envP.data ? envP.data : envP;
-        setStatus('<span class="text-emerald-600">✓ 已批准 —— 正在跳转…</span>', true);
+        setStatus('<span class="text-emerald-600">' + esc(BWC_LOGIN_T.qrApproved) + '</span>', true);
         // Cookie is now set by the server. Navigate to /app.
         window.location = dataP.redirectTo || "/app";
         return;
       }
       if (resp.status === 404) {
         // Expired or unknown code.
-        setStatus('<span class="text-amber-600">二维码已过期</span>', false);
+        setStatus('<span class="text-amber-600">' + esc(BWC_LOGIN_T.qrExpired) + '</span>', false);
         return;
       }
       if (resp.status === 410) {
         // Denied.
-        setStatus('<span class="text-rose-600">已拒绝授权</span>', false);
+        setStatus('<span class="text-rose-600">' + esc(BWC_LOGIN_T.qrDenied) + '</span>', false);
         return;
       }
       if (resp.status === 403) {
         // Account suspended between approval and poll.
-        setStatus('<span class="text-rose-600">账号已停用</span>', false);
+        setStatus('<span class="text-rose-600">' + esc(BWC_LOGIN_T.qrAccountSuspended) + '</span>', false);
         return;
       }
       // Unexpected response — keep polling, the next round may recover.

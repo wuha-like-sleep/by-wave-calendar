@@ -141,7 +141,7 @@
     `).join("");
 
     if (calendars.length) {
-      html += sectionHeader(BWC_I18N.secCalendars || "日历");
+      html += sectionHeader(BWC_I18N.secCalendars || "");
       html += calendars.map((c) => `
         <li>
           <a href="${escapeHtml(c.url || '/app')}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition">
@@ -155,13 +155,13 @@
     }
 
     if (bookingLinks.length) {
-      html += sectionHeader(BWC_I18N.secBookingLinks || "预约链接");
+      html += sectionHeader(BWC_I18N.secBookingLinks || "");
       html += bookingLinks.map((b) => `
         <li>
           <a href="${escapeHtml(b.url || '/app/booking-links')}" class="block rounded-lg border border-slate-200 bg-white p-3 hover:border-brand-300 hover:shadow-sm transition ${b.enabled === false ? 'opacity-60' : ''}">
             <div class="min-w-0">
               <div class="text-sm font-medium text-slate-900 truncate">${highlight(b.title, query)}</div>
-              <div class="mt-0.5 text-xs text-slate-400 truncate">/${escapeHtml(b.slug)}${b.enabled === false ? ' · ' + escapeHtml(BWC_I18N.bookingDisabled || '已停用') : ''}</div>
+              <div class="mt-0.5 text-xs text-slate-400 truncate">/${escapeHtml(b.slug)}${b.enabled === false ? ' · ' + escapeHtml(BWC_I18N.bookingDisabled || '') : ''}</div>
             </div>
           </a>
         </li>

@@ -18,6 +18,7 @@ import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 import { userIsActive } from "../lib/user_state.js";
 import { hashPassword } from "../lib/password.js";
+import { tForRequest } from "../lib/i18n.js";
 
 const STATE_COOKIE = "bwc_sso_state";
 
@@ -30,6 +31,13 @@ const STATE_COOKIE = "bwc_sso_state";
 // /auth/idp variant.
 function redirectUri(): string {
   return `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/auth/idp/callback`;
+}
+
+/** Request-scoped translate for route handlers — flash messages, page
+ *  titles, error-view copy. Locale comes from `req.locale`, stashed by the
+ *  view-locals hook in src/server.ts. See tForRequest in src/lib/i18n.ts. */
+function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
+  return tForRequest(req)(key, vars);
 }
 
 export async function ssoRoutes(app: FastifyInstance) {
@@ -75,7 +83,7 @@ export async function ssoRoutes(app: FastifyInstance) {
       return reply.redirect(url);
     } catch (err) {
       req.log.warn({ err, slug }, "sso_login_start_failed");
-      return reply.redirect("/login?error=" + encodeURIComponent("SSO 配置异常：" + (err instanceof Error ? err.message : "未知错误")));
+      return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.configError", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
     }
   };
   app.get<{ Params: { slug: string }; Querystring: { link?: string } }>("/auth/sso/:slug/login", handleProviderLogin);
@@ -86,29 +94,29 @@ export async function ssoRoutes(app: FastifyInstance) {
     reply: FastifyReply,
   ) => {
       if (req.query.error) {
-        return reply.redirect("/login?error=" + encodeURIComponent(`SSO 返回错误：${req.query.error_description || req.query.error}`));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerError", { error: String(req.query.error_description || req.query.error) })));
       }
 
       const cookie = req.cookies[STATE_COOKIE];
-      if (!cookie) return reply.redirect("/login?error=" + encodeURIComponent("SSO 会话已过期，请重试"));
+      if (!cookie) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
       reply.clearCookie(STATE_COOKIE, { path: "/" });
 
       let parsed: { slug: string; state: string; nonce: string; verifier: string; link?: boolean };
       try {
         parsed = JSON.parse(Buffer.from(cookie, "base64url").toString("utf8"));
       } catch {
-        return reply.redirect("/login?error=" + encodeURIComponent("SSO 状态损坏"));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
       }
 
       const prov = await getProviderBySlug(parsed.slug);
       if (!prov || !prov.enabled) {
-        return reply.redirect("/login?error=" + encodeURIComponent("SSO 提供方已被关闭"));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerDisabled")));
       }
       if (!req.query.state || req.query.state !== parsed.state) {
-        return reply.redirect("/login?error=" + encodeURIComponent("SSO state 不匹配（可能 CSRF 攻击）"));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateMismatch")));
       }
       if (!req.query.code) {
-        return reply.redirect("/login?error=" + encodeURIComponent("SSO 未返回授权码"));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noCode")));
       }
 
       try {
@@ -122,10 +130,10 @@ export async function ssoRoutes(app: FastifyInstance) {
         const email = (info.email ?? "").toLowerCase().trim();
         const subject = (info.sub ?? "").trim();
         if (!email) {
-          return reply.redirect("/login?error=" + encodeURIComponent("SSO 用户没有 email，无法登录"));
+          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noEmail")));
         }
         if (!subject) {
-          return reply.redirect("/login?error=" + encodeURIComponent("SSO 令牌缺少 sub，无法识别身份"));
+          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noSub")));
         }
 
         // ---- Link mode: bind this SSO identity to the CURRENT account. ----
@@ -135,18 +143,18 @@ export async function ssoRoutes(app: FastifyInstance) {
         if (parsed.link) {
           const session = await loadSession(req);
           if (!session) {
-            return reply.redirect("/login?error=" + encodeURIComponent("绑定失败：请先登录后再绑定 SSO"));
+            return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
           }
           const linked = await linkIdentity({ userId: session.user.id, provider: parsed.slug, subject, email });
           if (!linked.ok) {
-            return reply.redirect("/app/settings/security?error=" + encodeURIComponent("该 SSO 身份已绑定到别的账号"));
+            return reply.redirect("/app/settings/security?error=" + encodeURIComponent(tr(req, "flash.sso.alreadyLinkedElsewhere")));
           }
           if (session.user.ssoProviderSlug !== parsed.slug) {
             await db.update(schema.users).set({ ssoProviderSlug: parsed.slug, updatedAt: new Date() }).where(eq(schema.users.id, session.user.id));
           }
           // created=false ⇒ this identity was already the user's own — re-binding
           // yourself is a no-op; say so instead of a misleading "已绑定".
-          const msg = linked.created ? "已绑定 SSO 登录方式" : "这个 SSO 账户已经是你的登录方式了";
+          const msg = linked.created ? tr(req, "flash.sso.linked") : tr(req, "flash.sso.alreadyYours");
           return reply.redirect("/app/settings/security?success=" + encodeURIComponent(msg));
         }
 
@@ -181,7 +189,7 @@ export async function ssoRoutes(app: FastifyInstance) {
               ssoProviderSlug: parsed.slug,
             })
             .returning();
-          if (!created) return reply.redirect("/login?error=" + encodeURIComponent("创建账号失败"));
+          if (!created) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.createFailed")));
           user = created;
           await db.insert(schema.calendars).values({
             ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
@@ -192,7 +200,7 @@ export async function ssoRoutes(app: FastifyInstance) {
         // Disabled-account gate: stop BEFORE writing any login event / alert,
         // otherwise a disabled user can keep triggering "you just signed in".
         if (!userIsActive(user)) {
-          return reply.redirect("/login?error=" + encodeURIComponent("账号已被管理员停用"));
+          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.accountDisabled")));
         }
         // Keep the email-verified flag + last-used provider fresh.
         {
@@ -229,7 +237,7 @@ export async function ssoRoutes(app: FastifyInstance) {
         return reply.redirect(redirect);
       } catch (err) {
         req.log.warn({ err, slug: parsed.slug }, "sso_callback_failed");
-        return reply.redirect("/login?error=" + encodeURIComponent("SSO 登录失败：" + (err instanceof Error ? err.message : "未知错误")));
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.loginFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
       }
   };
   app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(

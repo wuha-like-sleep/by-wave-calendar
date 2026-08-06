@@ -1,22 +1,22 @@
 <div class="mx-auto max-w-md">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
-    <h1 class="text-2xl font-semibold text-slate-900">🛡 安全验证</h1>
-    <p class="mt-1 text-sm text-slate-500">检测到陌生设备登录，请输入刚刚发送到你邮箱的 <strong>6 位验证码</strong>。</p>
+    <h1 class="text-2xl font-semibold text-slate-900"><%= t("loginChallenge.title") %></h1>
+    <p class="mt-1 text-sm text-slate-500"><%- t("loginChallenge.subtitle") %></p>
 
     <form method="post" action="/login/challenge" class="mt-6 space-y-4">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div>
-        <label class="block text-sm font-medium text-slate-700">验证码</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("loginChallenge.codeLabel") %></label>
         <input type="text" name="code" required pattern="\d{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
                placeholder="000000"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-center text-2xl tracking-[0.5em] font-mono shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" autofocus />
       </div>
-      <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700">验证并登录</button>
+      <button type="submit" class="w-full inline-flex justify-center rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-brand-700"><%= t("loginChallenge.submit") %></button>
     </form>
 
     <div class="mt-6 rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-500 leading-relaxed">
-      <p>⏱ 验证码 10 分钟内有效，最多尝试 5 次。</p>
-      <p class="mt-1">没收到？检查垃圾邮件，或者<a href="/login" class="text-brand-600 hover:underline">回到登录页</a>重试。</p>
+      <p><%= t("loginChallenge.expiryNote") %></p>
+      <p class="mt-1"><%- t("loginChallenge.notReceived") %></p>
     </div>
   </div>
 </div>

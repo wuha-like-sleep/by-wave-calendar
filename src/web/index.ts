@@ -21,7 +21,7 @@ import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type We
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
-import { resolveLocaleFromRequest, makeT, clientStrings } from "../lib/i18n.js";
+import { resolveLocaleFromRequest, makeT, clientStrings, tForRequest } from "../lib/i18n.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { validateInvite, consumeInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { listTimezones } from "../lib/timezones.js";
@@ -39,15 +39,23 @@ import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES,
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
+/** Request-scoped translate for route handlers — page titles, flash
+ *  messages, error-view copy. Locale comes from `req.locale`, stashed by the
+ *  view-locals hook in src/server.ts, so this matches whatever the template
+ *  side of the same request renders. See tForRequest in src/lib/i18n.ts. */
+function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
+  return tForRequest(req)(key, vars);
+}
+
 /** User-facing message for a failed invite validation (never leaks token internals). */
-function inviteErrorMsg(reason: Exclude<InviteValidation, { ok: true }>["reason"]): string {
+function inviteErrorMsg(req: FastifyRequest, reason: Exclude<InviteValidation, { ok: true }>["reason"]): string {
   switch (reason) {
-    case "revoked": return "该邀请链接已被撤销";
-    case "expired": return "该邀请链接已过期";
-    case "exhausted": return "该邀请链接的可用次数已用完";
-    case "email_mismatch": return "该邀请链接仅限指定邮箱注册";
+    case "revoked": return tr(req, "flash.invite.revoked");
+    case "expired": return tr(req, "flash.invite.expired");
+    case "exhausted": return tr(req, "flash.invite.exhausted");
+    case "email_mismatch": return tr(req, "flash.invite.emailMismatch");
     case "not_found":
-    default: return "邀请链接无效，请向管理员索取新的链接";
+    default: return tr(req, "flash.invite.invalid");
   }
 }
 
@@ -101,7 +109,7 @@ function bounceToLogin(req: FastifyRequest, reply: FastifyReply, flash?: Flash):
       path: "/", maxAge: RETURN_TO_TTL_S, signed: true,
     });
   }
-  redirectWith(reply, "/login", flash ?? { error: "请先登录" });
+  redirectWith(reply, "/login", flash ?? { error: tr(req, "flash.auth.signInFirst") });
   return null;
 }
 
@@ -199,7 +207,7 @@ export async function webRoutes(app: FastifyInstance) {
     const user = await loadUserFromRequest(req);
     if (user) return reply.redirect("/app");
     return reply.view("landing", {
-      title: "首页",
+      title: tr(req, "page.home"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -208,7 +216,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.get("/about", async (req, reply) => {
     return reply.view("landing", {
-      title: "关于",
+      title: tr(req, "page.about"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -296,7 +304,7 @@ export async function webRoutes(app: FastifyInstance) {
     const desktopWinUrl = assetUrl(desktop?.assets.win);
     const desktopLinuxUrl = assetUrl(desktop?.assets.linux);
     return reply.view("download", {
-      title: "下载",
+      title: tr(req, "page.download"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -311,7 +319,7 @@ export async function webRoutes(app: FastifyInstance) {
       iosVersion: "1.3.7",
       iosAppStoreUrl: "https://apps.apple.com/us/app/bywavecalendar/id6772655143",
       iosTestFlightUrl: "https://testflight.apple.com/join/rkM3hkpX",
-      iosEtaWeek: "本周内",
+      iosEtaWeek: tr(req, "download.eta.thisWeek"),
       // Android — version + APK URL come from the live manifest at
       // apps/android/releases/latest.json (committed) or data/app-android-
       // manifest.json (runtime override). When the manifest is absent we
@@ -324,7 +332,7 @@ export async function webRoutes(app: FastifyInstance) {
       androidNotes: rel?.notes || "",
       androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       androidApkGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
-      androidEtaWeek: "本月内",
+      androidEtaWeek: tr(req, "download.eta.thisMonth"),
       // Desktop — Mac (DMG) + Win (MSI) + Linux (DEB). Each URL is empty
       // until a manifest for that platform is published; the template
       // renders a "coming soon" branch when empty. Versions and notes
@@ -341,7 +349,7 @@ export async function webRoutes(app: FastifyInstance) {
       desktopLinuxSize: fmtSize(desktop?.assets.linux?.sizeBytes),
       desktopGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       desktopGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
-      desktopEtaWeek: "本月内",
+      desktopEtaWeek: tr(req, "download.eta.thisMonth"),
     });
   });
 
@@ -411,7 +419,7 @@ export async function webRoutes(app: FastifyInstance) {
     // hand-crafts a request.
     const settings = await getSettings();
     return reply.view("auth/login", {
-      title: "登录",
+      title: tr(req, "login.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -442,7 +450,7 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/login", { error: "邮箱或密码格式不正确" });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.login.badFormat") });
     }
     const rememberMe = body.data.remember === "on";
     const [user] = await db.select().from(schema.users).where(eq(schema.users.email, body.data.email)).limit(1);
@@ -453,20 +461,20 @@ export async function webRoutes(app: FastifyInstance) {
       // registered emails by measuring response time.
       await verifyPasswordTimingSafe(body.data.password);
       req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
-      return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     if (user.disabledAt) {
       req.log.warn({ userId: user.id, email: user.email, ip: req.ip }, "login_blocked_disabled");
-      return redirectWith(reply, "/login", { error: "账号已停用，请联系管理员" });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.login.accountDisabled") });
     }
     if (isLocked(user)) {
       const mins = lockedRemainingMinutes(user);
-      return redirectWith(reply, "/login", { error: `账号已临时锁定，请 ${mins} 分钟后再试，或点击「忘记密码」重置。` });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.login.lockedMinutes", { minutes: mins }) });
     }
     if (!(await verifyPassword(body.data.password, user.passwordHash))) {
       await recordFailedLogin(user);
       req.log.warn({ userId: user.id, email: body.data.email, ip: req.ip }, "login_failed");
-      return redirectWith(reply, "/login", { error: "邮箱或密码错误" });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     await resetFailedLogin(user.id);
 
@@ -487,7 +495,7 @@ export async function webRoutes(app: FastifyInstance) {
         await sendMail(loginChallengeMail(user.email, issued.code, { ip: req.ip, userAgent: ua }));
       } catch (err) {
         req.log.warn({ err }, "login_challenge_mail_failed");
-        return redirectWith(reply, "/login", { error: "需要邮件验证，但邮件发送失败 —— 请联系管理员" });
+        return redirectWith(reply, "/login", { error: tr(req, "flash.login.challengeMailFailed") });
       }
       reply.setCookie("bwc_login_chall", issued.token, {
         httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 10 * 60,
@@ -519,7 +527,7 @@ export async function webRoutes(app: FastifyInstance) {
     const token = req.cookies["bwc_login_chall"];
     if (!token) return reply.redirect("/login");
     return reply.view("auth/login-challenge", {
-      title: "安全验证",
+      title: tr(req, "page.securityCheck"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -534,18 +542,18 @@ export async function webRoutes(app: FastifyInstance) {
     const token = req.cookies["bwc_login_chall"];
     if (!token) return reply.redirect("/login");
     const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/login/challenge", { error: "请输入 6 位数字验证码" });
+    if (!body.success) return redirectWith(reply, "/login/challenge", { error: tr(req, "flash.code.sixDigits") });
     const result = await verifyLoginChallenge(token, body.data.code);
     if (!result.ok) {
       const msg: Record<string, string> = {
-        no_challenge: "验证已过期，请重新登录",
-        expired: "验证码已过期，请重新登录",
-        too_many_attempts: "尝试次数过多，请重新登录",
-        wrong: "验证码错误",
+        no_challenge: tr(req, "flash.challenge.noChallenge"),
+        expired: tr(req, "flash.challenge.expired"),
+        too_many_attempts: tr(req, "flash.challenge.tooManyAttempts"),
+        wrong: tr(req, "flash.code.wrong"),
       };
       if (result.reason !== "wrong") reply.clearCookie("bwc_login_chall", { path: "/" });
       return redirectWith(reply, result.reason === "wrong" ? "/login/challenge" : "/login", {
-        error: msg[result.reason] ?? "验证失败",
+        error: msg[result.reason] ?? tr(req, "flash.code.verifyFailed"),
       });
     }
     reply.clearCookie("bwc_login_chall", { path: "/" });
@@ -555,7 +563,7 @@ export async function webRoutes(app: FastifyInstance) {
     const rememberMe = req.cookies["bwc_login_remember"] === "1";
     reply.clearCookie("bwc_login_remember", { path: "/" });
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, result.userId)).limit(1);
-    if (!user) return redirectWith(reply, "/login", { error: "用户不存在" });
+    if (!user) return redirectWith(reply, "/login", { error: tr(req, "flash.login.userNotFound") });
     await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled, rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
@@ -567,7 +575,7 @@ export async function webRoutes(app: FastifyInstance) {
   // -------- Forgot / reset password --------
   app.get("/forgot-password", async (req, reply) => {
     return reply.view("auth/forgot-password", {
-      title: "忘记密码",
+      title: tr(req, "page.forgotPassword"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -581,7 +589,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ email: z.string().email().max(254) }).safeParse(req.body);
     // Generic response regardless of whether the email exists, to prevent enumeration.
-    const generic = "如果该邮箱已注册，重置链接将很快到达邮箱（请检查垃圾邮件）。";
+    const generic = tr(req, "flash.forgotPassword.generic");
     if (!body.success) {
       return redirectWith(reply, "/forgot-password", { success: generic });
     }
@@ -605,17 +613,17 @@ export async function webRoutes(app: FastifyInstance) {
     const reset = await loadValidReset(token);
     if (!reset) {
       return reply.code(400).view("error", {
-        title: "链接无效",
+        title: tr(req, "page.linkInvalid"),
         user: null,
         csrfToken: csrfTokenFor(req),
         flash: {},
         statusCode: 400,
-        heading: "重置链接无效或已过期",
-        message: "请重新申请密码重置邮件。链接 1 小时内有效，且每个链接只能使用一次。",
+        heading: tr(req, "errorPage.resetLink.heading"),
+        message: tr(req, "errorPage.resetLink.message"),
       });
     }
     return reply.view("auth/reset-password", {
-      title: "重置密码",
+      title: tr(req, "resetPassword.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -634,7 +642,7 @@ export async function webRoutes(app: FastifyInstance) {
     const token = req.params.token;
     const reset = await loadValidReset(token);
     if (!reset) {
-      return redirectWith(reply, "/forgot-password", { error: "重置链接无效或已过期，请重新申请" });
+      return redirectWith(reply, "/forgot-password", { error: tr(req, "flash.resetPassword.linkInvalid") });
     }
     const body = z
       .object({
@@ -643,10 +651,10 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: "密码至少 8 位" });
+      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: tr(req, "flash.resetPassword.tooShort") });
     }
     if (body.data.password !== body.data.confirm) {
-      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: "两次输入的密码不一致" });
+      return redirectWith(reply, `/reset-password/${encodeURIComponent(token)}`, { error: tr(req, "flash.resetPassword.mismatch") });
     }
     const policyErr = passwordPolicyError(body.data.password);
     if (policyErr) {
@@ -659,20 +667,20 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, reset.userId));
     await consumeReset(token);
     await destroyAllUserSessions(reset.userId);
-    return redirectWith(reply, "/login", { success: "密码已重置，请使用新密码登录" });
+    return redirectWith(reply, "/login", { success: tr(req, "flash.resetPassword.success") });
   });
 
   app.get("/register", async (req, reply) => {
     const settings = await getSettings();
     if (settings.registrationMode === "closed") {
       return reply.code(403).view("error", {
-        title: "注册关闭",
+        title: tr(req, "page.registrationClosed"),
         user: null,
         csrfToken: csrfTokenFor(req),
         flash: {},
         statusCode: 403,
-        heading: "注册已关闭",
-        message: "管理员暂时关闭了开放注册。",
+        heading: tr(req, "errorPage.registrationClosed.heading"),
+        message: tr(req, "errorPage.registrationClosed.message"),
       });
     }
     let inviteToken: string | null = null;
@@ -683,13 +691,13 @@ export async function webRoutes(app: FastifyInstance) {
       if (!v.ok) {
         // No token, or an invalid/expired/used one → don't render the form.
         return reply.code(403).view("error", {
-          title: "仅邀请注册",
+          title: tr(req, "page.inviteOnly"),
           user: null,
           csrfToken: csrfTokenFor(req),
           flash: {},
           statusCode: 403,
-          heading: "仅邀请注册",
-          message: token ? inviteErrorMsg(v.reason) : "本站当前仅接受邀请注册，请联系管理员获取邀请链接。",
+          heading: tr(req, "errorPage.inviteOnly.heading"),
+          message: token ? inviteErrorMsg(req, v.reason) : tr(req, "errorPage.inviteOnly.message"),
         });
       }
       inviteToken = token!;
@@ -698,7 +706,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (user) return reply.redirect("/app");
     const inviteForValidation = inviteToken ? await validateInvite(inviteToken) : null;
     return reply.view("auth/register", {
-      title: "注册",
+      title: tr(req, "register.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -715,7 +723,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const settings = await getSettings();
     if (settings.registrationMode === "closed") {
-      return redirectWith(reply, "/login", { error: "公开注册已关闭" });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.register.closed") });
     }
     const body = z
       .object({
@@ -731,7 +739,7 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/register", { error: "邮箱或密码格式不正确" });
+      return redirectWith(reply, "/register", { error: tr(req, "flash.login.badFormat") });
     }
     // The page this request came from (so error redirects keep the invite token).
     const registerBackUrl = body.data.invite
@@ -739,7 +747,7 @@ export async function webRoutes(app: FastifyInstance) {
       : "/register";
     // Must agree to the Terms + Privacy Policy to register.
     if (body.data.agreeTerms !== "on") {
-      return redirectWith(reply, registerBackUrl, { error: "请先阅读并勾选同意《使用条款》与《隐私政策》" });
+      return redirectWith(reply, registerBackUrl, { error: tr(req, "flash.register.mustAgree") });
     }
     // Cheap, recoverable input checks FIRST — they must not consume the
     // single-use captcha. The captcha is verified last (just below), right
@@ -756,13 +764,13 @@ export async function webRoutes(app: FastifyInstance) {
     if (settings.registrationMode === "invite") {
       const v = await validateInvite(body.data.invite, email);
       if (!v.ok) {
-        return redirectWith(reply, registerBackUrl, { error: inviteErrorMsg(v.reason) });
+        return redirectWith(reply, registerBackUrl, { error: inviteErrorMsg(req, v.reason) });
       }
       inviteToken = body.data.invite!;
     }
     const existing = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.email, email)).limit(1);
     if (existing.length > 0) {
-      return redirectWith(reply, registerBackUrl, { error: "该邮箱已注册" });
+      return redirectWith(reply, registerBackUrl, { error: tr(req, "flash.register.emailTaken") });
     }
     // Human verification — pluggable provider. Verified LAST, after the cheap
     // recoverable checks above, so a weak password / duplicate email doesn't
@@ -776,13 +784,13 @@ export async function webRoutes(app: FastifyInstance) {
     );
     if (!captchaResult.ok) {
       req.log.warn({ reason: captchaResult.reason }, "register_captcha_failed");
-      return redirectWith(reply, registerBackUrl, { error: "人机验证未通过，请刷新页面后重试" });
+      return redirectWith(reply, registerBackUrl, { error: tr(req, "flash.register.captchaFailed") });
     }
     const passwordHash = await hashPassword(body.data.password);
 
     const result = await issueCode(email, { passwordHash, displayName: body.data.displayName ?? null, inviteToken });
     if (!result.ok) {
-      return redirectWith(reply, registerBackUrl, { error: "验证码发送失败，请稍后重试或联系管理员" });
+      return redirectWith(reply, registerBackUrl, { error: tr(req, "flash.register.codeSendFailed") });
     }
 
     reply.setCookie(PENDING_EMAIL_COOKIE, email, {
@@ -794,14 +802,14 @@ export async function webRoutes(app: FastifyInstance) {
       req.log.info(`[dev] verification code for ${email} = ${result.code}`);
     }
 
-    return redirectWith(reply, "/verify-email", { success: "验证码已发送至你的邮箱，10 分钟内有效" });
+    return redirectWith(reply, "/verify-email", { success: tr(req, "flash.register.codeSent") });
   });
 
   app.get("/verify-email", async (req, reply) => {
     const email = req.cookies[PENDING_EMAIL_COOKIE];
     if (!email) return reply.redirect("/register");
     return reply.view("auth/verify-email", {
-      title: "验证邮箱",
+      title: tr(req, "page.verifyEmail"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -819,17 +827,17 @@ export async function webRoutes(app: FastifyInstance) {
     if (!email) return reply.redirect("/register");
 
     const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/verify-email", { error: "请输入 6 位数字验证码" });
+    if (!body.success) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.code.sixDigits") });
 
     const result = await verifyCode(email, body.data.code);
     if (!result.ok) {
       const reasonMap: Record<string, string> = {
-        no_pending: "未发现待验证的注册请求，请重新注册",
-        expired: "验证码已过期，请重新获取",
-        too_many_attempts: "尝试次数过多，请稍后再试",
-        wrong: "验证码错误",
+        no_pending: tr(req, "flash.verifyEmail.noPending"),
+        expired: tr(req, "flash.verifyEmail.expired"),
+        too_many_attempts: tr(req, "flash.verifyEmail.tooManyAttempts"),
+        wrong: tr(req, "flash.code.wrong"),
       };
-      const msg = reasonMap[result.reason ?? "wrong"] ?? "验证失败";
+      const msg = reasonMap[result.reason ?? "wrong"] ?? tr(req, "flash.code.verifyFailed");
       return redirectWith(reply, "/verify-email", { error: msg });
     }
 
@@ -873,7 +881,7 @@ export async function webRoutes(app: FastifyInstance) {
         }
       }
     }
-    if (!user) return redirectWith(reply, "/verify-email", { error: "完成验证失败" });
+    if (!user) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.verifyEmail.completeFailed") });
 
     reply.clearCookie(PENDING_EMAIL_COOKIE, { path: "/" });
     // Don't overwrite an existing session if the user was already logged in.
@@ -898,12 +906,12 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.emailVerifications)
       .where(eq(schema.emailVerifications.email, email))
       .limit(1);
-    if (!pending) return redirectWith(reply, "/register", { error: "请重新发起注册" });
+    if (!pending) return redirectWith(reply, "/register", { error: tr(req, "flash.verifyEmail.restart") });
 
     const payload = pending.payload as unknown as PendingRegistration;
     const result = await issueCode(email, payload);
-    if (!result.ok) return redirectWith(reply, "/verify-email", { error: "发送失败，请稍后重试" });
-    return redirectWith(reply, "/verify-email", { success: "新的验证码已发送" });
+    if (!result.ok) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.verifyEmail.resendFailed") });
+    return redirectWith(reply, "/verify-email", { success: tr(req, "flash.verifyEmail.resent") });
   });
 
   // Logout handler — shared by two URL surfaces.
@@ -1012,7 +1020,7 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.calendars.createdAt));
 
     return reply.view("app/dashboard", {
-      title: "我的日历",
+      title: tr(req, "dashboard.title"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -1033,10 +1041,10 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app", { error: "请填写日历名称" });
+      return redirectWith(reply, "/app", { error: tr(req, "flash.calendar.nameRequired") });
     }
     await db.insert(schema.calendars).values({ ownerId: user.id, ...body.data });
-    return redirectWith(reply, "/app", { success: "日历已创建" });
+    return redirectWith(reply, "/app", { success: tr(req, "flash.calendar.created") });
   });
 
   app.get<{ Params: { id: string } }>("/app/calendars/:id", async (req, reply) => {
@@ -1133,24 +1141,24 @@ export async function webRoutes(app: FastifyInstance) {
 
     const file = await req.file();
     if (!file) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请选择 .ics 文件" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pickFile") });
     }
     const buf = await file.toBuffer();
     if (buf.length > 5 * 1024 * 1024) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "文件过大（>5MB）" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
     }
     const text = buf.toString("utf8");
     if (!text.toUpperCase().includes("BEGIN:VCALENDAR")) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "不是有效的 iCalendar 文件" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.notIcs") });
     }
     try {
       const result = await importIcsText(calId.data, text, { sourceTag: `file:${file.filename ?? "upload"}` });
       return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: `导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+        success: tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
       });
     } catch (err) {
       req.log.warn({ err }, "ics_file_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "导入失败：" + (err instanceof Error ? err.message : "未知错误") });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
     }
   });
 
@@ -1164,19 +1172,19 @@ export async function webRoutes(app: FastifyInstance) {
 
     const body = z.object({ text: z.string().min(20).max(5 * 1024 * 1024) }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请粘贴 .ics 文本内容" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteText") });
     }
     if (!body.data.text.toUpperCase().includes("BEGIN:VCALENDAR")) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "粘贴的内容不是 iCalendar 格式" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteNotIcs") });
     }
     try {
       const result = await importIcsText(calId.data, body.data.text, { sourceTag: "paste" });
       return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: `导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+        success: tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
       });
     } catch (err) {
       req.log.warn({ err }, "ics_text_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "导入失败：" + (err instanceof Error ? err.message : "未知错误") });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
     }
   });
 
@@ -1196,17 +1204,17 @@ export async function webRoutes(app: FastifyInstance) {
 
     const body = z.object({ url: z.string().min(1).max(2000) }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的 URL" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.urlInvalid") });
     }
     try {
       const text = await fetchIcsUrl(body.data.url);
       const result = await importIcsText(calId.data, text, { sourceTag: `url-once` });
       return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: `从 URL 导入成功：新增 ${result.inserted} · 更新 ${result.updated} · 跳过 ${result.skipped}`,
+        success: tr(req, "flash.import.urlSuccess", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
       });
     } catch (err) {
       req.log.warn({ err }, "ics_url_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "拉取失败：" + (err instanceof Error ? err.message : "未知错误") });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fetchFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
     }
   });
 
@@ -1231,7 +1239,7 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的订阅 URL" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.subscription.urlInvalid") });
     }
 
     const [sub] = await db
@@ -1244,17 +1252,17 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .returning({ id: schema.calendarSubscriptions.id });
     if (!sub) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "保存订阅失败" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.subscription.saveFailed") });
     }
 
     const refresh = await refreshSubscription(sub.id);
     if (!refresh.ok) {
       return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        error: `订阅已保存但首次拉取失败：${refresh.error}（将按周期重试）`,
+        error: tr(req, "flash.subscription.savedFetchFailed", { error: refresh.error }),
       });
     }
     return redirectWith(reply, `/app/calendars/${calId.data}`, {
-      success: `订阅创建并同步成功：新增 ${refresh.result.inserted} · 更新 ${refresh.result.updated}`,
+      success: tr(req, "flash.subscription.created", { inserted: refresh.result.inserted, updated: refresh.result.updated }),
     });
   });
 
@@ -1271,10 +1279,10 @@ export async function webRoutes(app: FastifyInstance) {
     if (!(await ownsCalendar(params.data.id, user.id))) return reply.redirect("/app");
     const refresh = await refreshSubscription(params.data.subId);
     if (!refresh.ok) {
-      return redirectWith(reply, `/app/calendars/${params.data.id}`, { error: "同步失败：" + refresh.error });
+      return redirectWith(reply, `/app/calendars/${params.data.id}`, { error: tr(req, "flash.subscription.syncFailed", { error: refresh.error }) });
     }
     return redirectWith(reply, `/app/calendars/${params.data.id}`, {
-      success: `同步完成：新增 ${refresh.result.inserted} · 更新 ${refresh.result.updated}`,
+      success: tr(req, "flash.subscription.synced", { inserted: refresh.result.inserted, updated: refresh.result.updated }),
     });
   });
 
@@ -1291,7 +1299,7 @@ export async function webRoutes(app: FastifyInstance) {
         eq(schema.calendarSubscriptions.id, params.data.subId),
         eq(schema.calendarSubscriptions.calendarId, params.data.id),
       ));
-    return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: "订阅已删除（已导入事件保留）" });
+    return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: tr(req, "flash.subscription.deleted") });
   });
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/delete", async (req, reply) => {
@@ -1303,7 +1311,7 @@ export async function webRoutes(app: FastifyInstance) {
     await db
       .delete(schema.calendars)
       .where(and(eq(schema.calendars.id, calId.data), eq(schema.calendars.ownerId, user.id)));
-    return redirectWith(reply, "/app", { success: "日历已删除" });
+    return redirectWith(reply, "/app", { success: tr(req, "flash.calendar.deleted") });
   });
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/events", async (req, reply) => {
@@ -1324,16 +1332,16 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请检查输入" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.event.checkInput") });
     }
 
     const starts = new Date(body.data.startsAt);
     const ends = new Date(body.data.endsAt);
     if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "时间格式无效" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.event.badTime") });
     }
     if (ends < starts) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "结束时间不能早于开始时间" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.event.endBeforeStart") });
     }
 
     await db.insert(schema.events).values({
@@ -1345,7 +1353,7 @@ export async function webRoutes(app: FastifyInstance) {
       startsAt: starts,
       endsAt: ends,
     });
-    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "事件已添加" });
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: tr(req, "flash.event.added") });
   });
 
   // ---------- Event attendees (dedicated invite/revoke page) ----------
@@ -1374,7 +1382,7 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
       .orderBy(desc(schema.eventInviteTokens.createdAt));
     return reply.view("app/event-attendees", {
-      title: "管理参与者 · " + event.summary,
+      title: tr(req, "page.attendees", { summary: event.summary }),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -1402,7 +1410,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!evId.success) return reply.redirect("/app");
     const body = z.object({ email: z.string().email().max(254) }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: "请输入合法邮箱" });
+      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: tr(req, "flash.attendee.emailInvalid") });
     }
     const inviteeEmail = body.data.email.toLowerCase().trim();
 
@@ -1417,7 +1425,7 @@ export async function webRoutes(app: FastifyInstance) {
     const extra = (event.extra as Record<string, unknown> | null) ?? {};
     const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
     if (current.includes(inviteeEmail)) {
-      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: `${inviteeEmail} 已是参与者` });
+      return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: tr(req, "flash.attendee.already", { email: inviteeEmail }) });
     }
     const next = [...current, inviteeEmail];
     await db.update(schema.events).set({ extra: { ...extra, attendees: next }, updatedAt: new Date() }).where(eq(schema.events.id, event.id));
@@ -1464,10 +1472,10 @@ export async function webRoutes(app: FastifyInstance) {
     } catch (err) {
       req.log.warn({ err, to: inviteeEmail }, "event_invite_send_failed");
       return redirectWith(reply, `/app/events/${evId.data}/attendees`, {
-        error: `${inviteeEmail} 已添加为参与者，但邀请邮件发送失败`,
+        error: tr(req, "flash.attendee.addedMailFailed", { email: inviteeEmail }),
       });
     }
-    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: `已邀请 ${inviteeEmail}` });
+    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: tr(req, "flash.attendee.invited", { email: inviteeEmail }) });
   });
 
   app.post<{ Params: { id: string } }>("/app/events/:id/attendees/revoke", async (req, reply) => {
@@ -1500,7 +1508,7 @@ export async function webRoutes(app: FastifyInstance) {
         eq(schema.eventInviteTokens.recipientEmail, target),
         isNull(schema.eventInviteTokens.acceptedAt),
       ));
-    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: `已撤销 ${target}` });
+    return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: tr(req, "flash.attendee.revoked", { email: target }) });
   });
 
   app.post<{ Params: { id: string } }>("/app/events/:id/delete", async (req, reply) => {
@@ -1520,8 +1528,8 @@ export async function webRoutes(app: FastifyInstance) {
     if (!target) return reply.redirect("/app");
     const result = await cancelEvent(target.id, { id: user.id, email: user.email, displayName: user.displayName });
     const msg = result.cancelledNotices > 0
-      ? `事件已取消，已给 ${result.cancelledNotices} 位参与者发送取消通知`
-      : "事件已删除";
+      ? tr(req, "flash.event.cancelledNotified", { count: result.cancelledNotices })
+      : tr(req, "flash.event.deleted");
     return redirectWith(reply, `/app/calendars/${target.calendarId}`, { success: msg });
   });
 
@@ -1535,7 +1543,7 @@ export async function webRoutes(app: FastifyInstance) {
     const body = z.object({ label: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : undefined)) }).safeParse(req.body ?? {});
     const label = body.success ? body.data.label : undefined;
     await db.insert(schema.shareTokens).values({ token: newShareToken(), calendarId: calId.data, label });
-    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "已生成新的订阅链接" });
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: tr(req, "flash.share.regenerated") });
   });
 
   app.post<{ Params: { id: string; token: string } }>("/app/calendars/:id/share-tokens/:token/revoke", async (req, reply) => {
@@ -1549,7 +1557,7 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.shareTokens)
       .set({ revokedAt: new Date() })
       .where(and(eq(schema.shareTokens.token, params.data.token), eq(schema.shareTokens.calendarId, params.data.id)));
-    return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: "订阅链接已撤销" });
+    return redirectWith(reply, `/app/calendars/${params.data.id}`, { success: tr(req, "flash.share.revoked") });
   });
 
   // ---------- Calendar invitations ----------
@@ -1571,7 +1579,7 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "请输入有效的邮箱（最长 254 字符）" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.member.emailInvalid") });
     }
     const inviteeEmail = body.data.email.toLowerCase().trim();
 
@@ -1587,7 +1595,7 @@ export async function webRoutes(app: FastifyInstance) {
         .where(and(eq(schema.calendarMembers.calendarId, calId.data), eq(schema.calendarMembers.userId, invitee.id)))
         .limit(1);
       if (existing) {
-        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: `${inviteeEmail} 已是协作者` });
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.member.already", { email: inviteeEmail }) });
       }
     }
 
@@ -1612,10 +1620,10 @@ export async function webRoutes(app: FastifyInstance) {
       }));
     } catch (err) {
       req.log.warn({ err }, "invite_send_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: "邀请已创建，但邮件发送失败" });
+      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.member.inviteMailFailed") });
     }
 
-    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: `已邀请 ${inviteeEmail}（7 天内有效）` });
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: tr(req, "flash.member.invited", { email: inviteeEmail }) });
   });
 
   app.post<{ Params: { id: string; token: string } }>("/app/calendars/:id/invitations/:token/revoke", async (req, reply) => {
@@ -1631,7 +1639,7 @@ export async function webRoutes(app: FastifyInstance) {
         eq(schema.calendarInvitations.calendarId, calId.data),
         eq(schema.calendarInvitations.token, req.params.token),
       ));
-    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "邀请已撤销" });
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: tr(req, "flash.member.inviteRevoked") });
   });
 
   app.post<{ Params: { id: string; memberId: string } }>("/app/calendars/:id/members/:memberId/remove", async (req, reply) => {
@@ -1648,7 +1656,7 @@ export async function webRoutes(app: FastifyInstance) {
         eq(schema.calendarMembers.id, memberId.data),
         eq(schema.calendarMembers.calendarId, calId.data),
       ));
-    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: "已移除成员" });
+    return redirectWith(reply, `/app/calendars/${calId.data}`, { success: tr(req, "flash.member.removed") });
   });
 
   // ---------- Event-invite deep link ("添加到我的日历" from the email) ----------
@@ -1697,24 +1705,24 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.events)
       .set({ updatedAt: new Date() })
       .where(eq(schema.events.id, tok.sourceEventId));
-    const msg = body.data.status === "accepted" ? "已回复：参加"
-              : body.data.status === "declined" ? "已回复：不参加"
-              :                                   "已回复：可能参加";
+    const msg = body.data.status === "accepted" ? tr(req, "flash.rsvp.accepted")
+              : body.data.status === "declined" ? tr(req, "flash.rsvp.declined")
+              :                                   tr(req, "flash.rsvp.tentative");
     return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?success=${encodeURIComponent(msg)}`);
   });
 
   app.get<{ Params: { token: string } }>("/event-invite/:token", async (req, reply) => {
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
     if (!tok) {
-      return reply.code(404).view("error", { title: "邀请无效", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "邀请链接无效", message: "请检查邮件里的链接是否完整。" });
+      return reply.code(404).view("error", { title: tr(req, "page.inviteInvalid"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.inviteInvalid.heading"), message: tr(req, "errorPage.inviteInvalid.message") });
     }
     if (tok.expiresAt < new Date()) {
-      return reply.code(410).view("error", { title: "已过期", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 410, heading: "邀请链接已过期", message: "请联系邀请人重新发送邀请。" });
+      return reply.code(410).view("error", { title: tr(req, "page.expired"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 410, heading: tr(req, "errorPage.inviteExpired.heading"), message: tr(req, "errorPage.inviteExpired.message") });
     }
     const currentUser = await loadUserFromRequest(req);
     const [sourceEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
     if (!sourceEvent) {
-      return reply.code(404).view("error", { title: "事件不存在", user: currentUser, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "原事件已被删除", message: "邀请人撤销了这次活动。" });
+      return reply.code(404).view("error", { title: tr(req, "page.eventMissing"), user: currentUser, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.eventMissing.heading"), message: tr(req, "errorPage.eventMissing.message") });
     }
     // Build Google Calendar pre-filled event URL (no login needed on Google's side).
     const fmtGcal = (d: Date) => sourceEvent.allDay
@@ -1734,7 +1742,7 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.calendars.ownerId, currentUser.id))
       .orderBy(asc(schema.calendars.name)) : [];
     return reply.view("invite/event-accept", {
-      title: "添加到日历",
+      title: tr(req, "page.addToCalendar"),
       user: currentUser,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -1761,18 +1769,18 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
     if (!tok || tok.expiresAt < new Date()) {
-      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "邀请已失效" });
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: tr(req, "flash.eventInvite.expired") });
     }
     const body = z.object({ calendarId: z.string().uuid() }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "请选择要加入的日历" });
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: tr(req, "flash.eventInvite.pickCalendar") });
     }
     if (!(await ownsCalendar(body.data.calendarId, user.id))) {
-      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "不能写入这本日历" });
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: tr(req, "flash.eventInvite.noWriteAccess") });
     }
     const [sourceEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
     if (!sourceEvent) {
-      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: "原事件已不存在" });
+      return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: tr(req, "flash.eventInvite.sourceGone") });
     }
     // Copy the event into the recipient's chosen calendar with a fresh UID so
     // it shows up as their own row. Owner edits to the source won't propagate;
@@ -1790,7 +1798,7 @@ export async function webRoutes(app: FastifyInstance) {
       extra: { ...((sourceEvent.extra as Record<string, unknown> | null) ?? {}), importedFromInvite: tok.token },
     });
     await db.update(schema.eventInviteTokens).set({ acceptedAt: new Date() }).where(eq(schema.eventInviteTokens.token, tok.token));
-    return redirectWith(reply, "/app", { success: `已添加 ${sourceEvent.summary} 到你的日历` });
+    return redirectWith(reply, "/app", { success: tr(req, "flash.eventInvite.added", { summary: sourceEvent.summary }) });
   });
 
   app.get<{ Params: { token: string } }>("/invite/:token", async (req, reply) => {
@@ -1801,20 +1809,20 @@ export async function webRoutes(app: FastifyInstance) {
       .limit(1);
     if (!inv) {
       return reply.code(404).view("error", {
-        title: "邀请无效", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 404, heading: "邀请链接无效或已撤销", message: "请联系邀请你的人重新发送。",
+        title: tr(req, "page.inviteInvalid"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 404, heading: tr(req, "errorPage.calInviteInvalid.heading"), message: tr(req, "errorPage.calInviteInvalid.message"),
       });
     }
     if (inv.acceptedAt) {
       return reply.view("error", {
-        title: "已接受", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 200, heading: "这条邀请已被接受", message: "可以直接到日历中查看共享的内容。",
+        title: tr(req, "page.accepted"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 200, heading: tr(req, "errorPage.calInviteAccepted.heading"), message: tr(req, "errorPage.calInviteAccepted.message"),
       });
     }
     if (inv.expiresAt < new Date()) {
       return reply.code(410).view("error", {
-        title: "已过期", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 410, heading: "邀请链接已过期", message: "邀请仅 7 天内有效。请联系邀请人重发。",
+        title: tr(req, "page.expired"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 410, heading: tr(req, "errorPage.inviteExpired.heading"), message: tr(req, "errorPage.calInviteExpired.message"),
       });
     }
     const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, inv.calendarId)).limit(1);
@@ -1825,13 +1833,13 @@ export async function webRoutes(app: FastifyInstance) {
       : null;
     const currentUser = await loadUserFromRequest(req);
     return reply.view("invite/accept", {
-      title: "接受日历邀请",
+      title: tr(req, "page.acceptCalendarInvite"),
       user: currentUser,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
       invitation: { token: inv.token, email: inv.email, role: inv.role, message: inv.message },
       calendar: cal,
-      inviterName: inviter ? (inviter.displayName || inviter.email) : "未知",
+      inviterName: inviter ? (inviter.displayName || inviter.email) : tr(req, "common.unknown"),
       emailMatches: currentUser ? currentUser.email === inv.email : false,
     });
   });
@@ -1844,15 +1852,15 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.calendarInvitations.token, req.params.token))
       .limit(1);
     if (!inv || inv.acceptedAt || inv.expiresAt < new Date()) {
-      return redirectWith(reply, `/invite/${req.params.token}`, { error: "邀请已失效" });
+      return redirectWith(reply, `/invite/${req.params.token}`, { error: tr(req, "flash.eventInvite.expired") });
     }
     const user = await loadUserFromRequest(req);
     if (!user) {
-      return redirectWith(reply, "/login", { error: `请先用 ${inv.email} 登录或注册以接受邀请` });
+      return redirectWith(reply, "/login", { error: tr(req, "flash.calInvite.signInAs", { email: inv.email }) });
     }
     if (user.email !== inv.email) {
       return redirectWith(reply, `/invite/${req.params.token}`, {
-        error: `这封邀请发给 ${inv.email}，请切换到该账号后再接受`,
+        error: tr(req, "flash.calInvite.wrongAccount", { email: inv.email }),
       });
     }
     await db.insert(schema.calendarMembers).values({
@@ -1865,7 +1873,7 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.calendarInvitations)
       .set({ acceptedAt: new Date() })
       .where(eq(schema.calendarInvitations.token, inv.token));
-    return redirectWith(reply, "/app", { success: "已加入日历，刷新后会出现在你的日历列表" });
+    return redirectWith(reply, "/app", { success: tr(req, "flash.calInvite.joined") });
   });
 
   // Re-issue a verification code for already-logged-in users who never
@@ -1877,19 +1885,19 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     if (user.emailVerified) {
-      return redirectWith(reply, "/app", { success: "邮箱已经是验证过的状态" });
+      return redirectWith(reply, "/app", { success: tr(req, "flash.verifyEmail.alreadyVerified") });
     }
     // The verify-email flow expects a pending payload (passwordHash etc.) since
     // it was built for the register path; for already-existing users we just
     // mark verified after they enter the code, no user-creation step.
     const result = await issueCode(user.email, { passwordHash: user.passwordHash, displayName: user.displayName });
     if (!result.ok) {
-      return redirectWith(reply, "/app", { error: "验证码发送失败，请稍后重试" });
+      return redirectWith(reply, "/app", { error: tr(req, "flash.verifyEmail.sendFailed") });
     }
     reply.setCookie(PENDING_EMAIL_COOKIE, user.email, {
       httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/", maxAge: 15 * 60,
     });
-    return redirectWith(reply, "/verify-email", { success: "验证码已发送到你的邮箱，输入后即可完成验证" });
+    return redirectWith(reply, "/verify-email", { success: tr(req, "flash.verifyEmail.sentToInbox") });
   });
 
   // Shared data-load helper for all 5 sub-pages. They all render the
@@ -1929,7 +1937,7 @@ export async function webRoutes(app: FastifyInstance) {
     const ssoProviders = await listEnabledProvidersPublic();
 
     return reply.view("app/settings", {
-      title: "设置",
+      title: tr(req, "nav.settings"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -1984,7 +1992,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     const q = (req.query as { q?: string })?.q ?? "";
     return reply.view("app/search", {
-      title: "搜索事件",
+      title: tr(req, "search.heading"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -2026,9 +2034,9 @@ export async function webRoutes(app: FastifyInstance) {
     const settings = await getSettings();
     if (!settings.appsEnabled) {
       return reply.code(403).view("error", {
-        title: "APP 已停用", user, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 403, heading: "管理员已停用 APP 同步",
-        message: "请联系管理员重新启用，或在网页继续使用。",
+        title: tr(req, "page.appsDisabled"), user, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 403, heading: tr(req, "errorPage.appsDisabled.heading"),
+        message: tr(req, "errorPage.appsDisabled.message"),
       });
     }
 
@@ -2060,18 +2068,18 @@ export async function webRoutes(app: FastifyInstance) {
     }).safeParse(req.query);
     if (!q.success) {
       return reply.code(400).view("error", {
-        title: "登录链接无效", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 400, heading: "登录链接格式不对",
-        message: "请回到 APP 重新生成链接（链接只能使用一次，且 5 分钟内有效）。",
+        title: tr(req, "page.signInLinkInvalid"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 400, heading: tr(req, "errorPage.signInLinkInvalid.heading"),
+        message: tr(req, "errorPage.signInLinkInvalid.message"),
       });
     }
     const { consumeWebSessionToken } = await import("../routes/devices.js");
     const userId = consumeWebSessionToken(q.data.token);
     if (!userId) {
       return reply.code(403).view("error", {
-        title: "登录链接已过期", user: null, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 403, heading: "登录链接已过期或已被使用",
-        message: "请回到 APP 重新打开账号管理页。",
+        title: tr(req, "page.signInLinkExpired"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+        statusCode: 403, heading: tr(req, "errorPage.signInLinkExpired.heading"),
+        message: tr(req, "errorPage.signInLinkExpired.message"),
       });
     }
     const { createSession } = await import("../lib/session.js");
@@ -2088,7 +2096,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     const recentLogins = await listRecentLogins(user.id, 100);
     return reply.view("app/logins", {
-      title: "登录历史",
+      title: tr(req, "page.loginHistory"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -2107,11 +2115,11 @@ export async function webRoutes(app: FastifyInstance) {
       .object({ label: z.string().min(1).max(60) })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings/devices", { error: "请填写设备标签（最长 60 字）" });
+      return redirectWith(reply, "/app/settings/devices", { error: tr(req, "flash.device.labelRequired") });
     }
     const issued = await createAppPassword(user.id, body.data.label);
     const params = new URLSearchParams({
-      success: "已生成新的 CalDAV 应用密码，仅显示一次，请立即保存到客户端。",
+      success: tr(req, "flash.device.appPasswordCreated"),
       newAppPassword: issued.plain,
       newAppLabel: body.data.label,
     });
@@ -2128,7 +2136,7 @@ export async function webRoutes(app: FastifyInstance) {
     // Same TTL invalidation as password change — phone with the
     // revoked password should fail next sync, not 60s from now.
     invalidateCalDavAuthCache(user.id);
-    return redirectWith(reply, "/app/settings/devices", { success: "应用密码已撤销" });
+    return redirectWith(reply, "/app/settings/devices", { success: tr(req, "flash.device.appPasswordRevoked") });
   });
 
   app.post("/app/settings/theme", async (req, reply) => {
@@ -2143,18 +2151,18 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings/appearance", { error: "无效的外观选项" });
+      return redirectWith(reply, "/app/settings/appearance", { error: tr(req, "flash.appearance.invalid") });
     }
     if (body.data.reset) {
       await db.update(schema.users).set({ themePalette: null, themeDensity: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       clearThemeCookies(reply);
-      return redirectWith(reply, "/app/settings/appearance", { success: "已恢复为站点默认外观" });
+      return redirectWith(reply, "/app/settings/appearance", { success: tr(req, "flash.appearance.reset") });
     }
     const palette = isValidPalette(body.data.palette) ? body.data.palette : null;
     const density = isValidDensity(body.data.density) ? body.data.density : null;
     await db.update(schema.users).set({ themePalette: palette, themeDensity: density, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     setThemeCookies(reply, palette, density);
-    return redirectWith(reply, "/app/settings/appearance", { success: "外观已更新" });
+    return redirectWith(reply, "/app/settings/appearance", { success: tr(req, "flash.appearance.updated") });
   });
 
   // -------- 我的语言 -------- (per-user; overrides site default)
@@ -2166,7 +2174,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
     const body = z.object({ locale: z.string().max(20).optional() }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/app/settings#language", { error: "无效的语言选项" });
+    if (!body.success) return redirectWith(reply, "/app/settings#language", { error: tr(req, "flash.language.invalid") });
     const raw = body.data.locale ?? "";
     if (raw === "") {
       // Empty selection → "Follow site default": wipe column + clear
@@ -2174,7 +2182,7 @@ export async function webRoutes(app: FastifyInstance) {
       await db.update(schema.users).set({ locale: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       reply.clearCookie(LOCALE_COOKIE, { path: "/" });
     } else {
-      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings#language", { error: "不支持的语言" });
+      if (!isValidLocale(raw)) return redirectWith(reply, "/app/settings#language", { error: tr(req, "flash.language.unsupported") });
       await db.update(schema.users).set({ locale: raw, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       // Also write the override cookie so the change takes effect on
       // THIS browser tab immediately (the redirect response carries it).
@@ -2198,7 +2206,7 @@ export async function webRoutes(app: FastifyInstance) {
       confirm: z.string().min(1).max(100),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings", { error: "请输入密码并输入确认短语" });
+      return redirectWith(reply, "/app/settings", { error: tr(req, "flash.deleteAccount.needPasswordAndPhrase") });
     }
     // The confirm phrase is i18n'd — the form shows
     // settings.account.deleteConfirmFieldPlaceholder in the user's locale.
@@ -2216,13 +2224,13 @@ export async function webRoutes(app: FastifyInstance) {
     const _expected = translate(_locale, "settings.account.deleteConfirmFieldPlaceholder");
     const _typed = body.data.confirm.trim();
     if (_typed !== _expected && _typed !== "删除我的账号") {
-      return redirectWith(reply, "/app/settings", { error: `确认短语不正确，请精确输入「${_expected}」` });
+      return redirectWith(reply, "/app/settings", { error: tr(req, "flash.deleteAccount.phraseMismatch", { phrase: _expected }) });
     }
     // Verify password (SSO-only accounts can't self-delete this way; they
     // need to clear MFA / set a password first or contact admin).
     const ok = await verifyPassword(body.data.password, user.passwordHash);
     if (!ok) {
-      return redirectWith(reply, "/app/settings", { error: "密码错误，账号未删除" });
+      return redirectWith(reply, "/app/settings", { error: tr(req, "flash.deleteAccount.wrongPassword") });
     }
     // Last-admin guard: refuse self-delete if this would leave the system
     // with zero admins. Same footgun as toggle-admin / toggle-disabled —
@@ -2230,14 +2238,14 @@ export async function webRoutes(app: FastifyInstance) {
     if (user.isAdmin) {
       const { countActiveAdmins } = await import("../lib/user_state.js");
       if ((await countActiveAdmins()) <= 1) {
-        return redirectWith(reply, "/app/settings", { error: "你是唯一的管理员，无法删除自己。请先提升另一个用户为管理员。" });
+        return redirectWith(reply, "/app/settings", { error: tr(req, "flash.deleteAccount.lastAdmin") });
       }
     }
     // Hard delete — FK cascades clean up calendars/events/sessions/etc.
     await destroyAllUserSessions(user.id);
     await db.delete(schema.users).where(eq(schema.users.id, user.id));
     await destroySession(req, reply);
-    return redirectWith(reply, "/", { success: "账号已永久删除。感谢你曾经使用 ByWave Calendar。" });
+    return redirectWith(reply, "/", { success: tr(req, "flash.deleteAccount.done") });
   });
 
   // Unlink an SSO login identity from the current account. Guards against
@@ -2259,12 +2267,12 @@ export async function webRoutes(app: FastifyInstance) {
         .limit(1);
       if (pk.length === 0) {
         return redirectWith(reply, "/app/settings/security", {
-          error: "这是你唯一的登录方式，解绑前请先添加 Passkey、或确保能用密码 / 邮箱找回登录",
+          error: tr(req, "flash.sso.onlyLoginMethod"),
         });
       }
     }
     await unlinkIdentity(user.id, id.data);
-    return redirectWith(reply, "/app/settings/security", { success: "已解绑该 SSO 登录方式" });
+    return redirectWith(reply, "/app/settings/security", { success: tr(req, "flash.sso.unlinked") });
   });
 
   app.post("/app/settings/password", async (req, reply) => {
@@ -2275,7 +2283,7 @@ export async function webRoutes(app: FastifyInstance) {
       .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(200) })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, "/app/settings/security", { error: "新密码格式不正确" });
+      return redirectWith(reply, "/app/settings/security", { error: tr(req, "flash.password.badFormat") });
     }
     const policyErr = passwordPolicyError(body.data.newPassword);
     if (policyErr) {
@@ -2283,7 +2291,7 @@ export async function webRoutes(app: FastifyInstance) {
     }
     const ok = await verifyPassword(body.data.currentPassword, user.passwordHash);
     if (!ok) {
-      return redirectWith(reply, "/app/settings/security", { error: "当前密码错误" });
+      return redirectWith(reply, "/app/settings/security", { error: tr(req, "flash.password.wrongCurrent") });
     }
     const passwordHash = await hashPassword(body.data.newPassword);
     await db.update(schema.users).set({ passwordHash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
@@ -2295,7 +2303,7 @@ export async function webRoutes(app: FastifyInstance) {
     // their iPhone could keep syncing for up to 60s on the old password.
     invalidateCalDavAuthCache(user.id);
     await destroySession(req, reply);
-    return redirectWith(reply, "/login", { success: "密码已更新，请重新登录" });
+    return redirectWith(reply, "/login", { success: tr(req, "flash.password.updated") });
   });
 
   // -------- Booking links (Calendly-style) — management --------
@@ -2305,7 +2313,7 @@ export async function webRoutes(app: FastifyInstance) {
     const links = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, user.id)).orderBy(asc(schema.bookingLinks.title));
     const cals = await db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color }).from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
     return reply.view("app/booking-links", {
-      title: "预约链接",
+      title: tr(req, "page.bookingLinks"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -2320,7 +2328,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
-      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "URL 标识只能 a-z 0-9 和 -"),
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug_format"),
       title: z.string().min(1).max(120),
       description: z.string().max(2000).optional().transform((v) => v?.trim() || undefined),
       calendarId: z.string().uuid(),
@@ -2335,9 +2343,16 @@ export async function webRoutes(app: FastifyInstance) {
       notifyEmail: z.union([z.literal("on"), z.literal("off"), z.undefined()])
         .transform((v) => v !== "off" && v !== undefined),
     }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, "/app/booking-links", { error: "参数无效：" + (body.error.errors[0]?.message ?? "") });
+    if (!body.success) {
+      // The slug regex carries a "slug_format" sentinel instead of prose so
+      // the human-readable text can be localized here; any other zod issue
+      // falls through with its own message.
+      const issue = body.error.errors[0];
+      const detail = issue?.message === "slug_format" ? tr(req, "flash.bookingLink.slugFormat") : (issue?.message ?? "");
+      return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.paramInvalid", { error: detail }) });
+    }
     if (!(await ownsCalendar(body.data.calendarId, user.id))) {
-      return redirectWith(reply, "/app/booking-links", { error: "目标日历不存在或不属于你" });
+      return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.calendarMissing") });
     }
     try {
       await db.insert(schema.bookingLinks).values({
@@ -2355,10 +2370,10 @@ export async function webRoutes(app: FastifyInstance) {
         notifyEmail: body.data.notifyEmail,
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "未知错误";
-      return redirectWith(reply, "/app/booking-links", { error: msg.includes("duplicate") ? "slug 已存在" : msg });
+      const msg = err instanceof Error ? err.message : tr(req, "common.unknownError");
+      return redirectWith(reply, "/app/booking-links", { error: msg.includes("duplicate") ? tr(req, "flash.bookingLink.slugTaken") : msg });
     }
-    return redirectWith(reply, "/app/booking-links", { success: "预约链接已创建" });
+    return redirectWith(reply, "/app/booking-links", { success: tr(req, "flash.bookingLink.created") });
   });
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle", async (req, reply) => {
@@ -2370,7 +2385,7 @@ export async function webRoutes(app: FastifyInstance) {
     const [link] = await db.select().from(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id))).limit(1);
     if (!link) return reply.redirect("/app/booking-links");
     await db.update(schema.bookingLinks).set({ enabled: !link.enabled, updatedAt: new Date() }).where(eq(schema.bookingLinks.id, id.data));
-    return redirectWith(reply, "/app/booking-links", { success: link.enabled ? "已暂停" : "已启用" });
+    return redirectWith(reply, "/app/booking-links", { success: link.enabled ? tr(req, "flash.bookingLink.paused") : tr(req, "flash.bookingLink.enabled") });
   });
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/delete", async (req, reply) => {
@@ -2380,7 +2395,7 @@ export async function webRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/booking-links");
     await db.delete(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id)));
-    return redirectWith(reply, "/app/booking-links", { success: "已删除" });
+    return redirectWith(reply, "/app/booking-links", { success: tr(req, "flash.bookingLink.deleted") });
   });
 
   // Toggle whether the owner receives an email when someone books a
@@ -2401,17 +2416,17 @@ export async function webRoutes(app: FastifyInstance) {
       .set({ notifyEmail: !link.notifyEmail, updatedAt: new Date() })
       .where(eq(schema.bookingLinks.id, id.data));
     return redirectWith(reply, "/app/booking-links", {
-      success: link.notifyEmail ? "已关闭邮件通知" : "已开启邮件通知",
+      success: link.notifyEmail ? tr(req, "flash.bookingLink.notifyOff") : tr(req, "flash.bookingLink.notifyOn"),
     });
   });
 
   // -------- Public booking pages --------
   app.get<{ Params: { userId: string; slug: string } }>("/book/:userId/:slug", async (req, reply) => {
     const userId = z.string().uuid().safeParse(req.params.userId);
-    if (!userId.success) return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在", message: "请检查链接是否正确。" });
+    if (!userId.success) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.bookingNotFound.heading"), message: tr(req, "errorPage.bookingNotFound.message") });
     const link = await findLinkBySlug(userId.data, req.params.slug);
     if (!link || !link.enabled) {
-      return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在或已停用", message: "请联系发布方获取新链接。" });
+      return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.bookingDisabled.heading"), message: tr(req, "errorPage.bookingDisabled.message") });
     }
     const [owner] = await db.select({ email: schema.users.email, displayName: schema.users.displayName, disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
     if (!owner) return reply.code(404).type("text/plain").send("Not Found");
@@ -2419,7 +2434,7 @@ export async function webRoutes(app: FastifyInstance) {
     // has disabled — to the public the link should look exactly like
     // "not found" / "disabled link" so we don't leak account status.
     if (owner.disabledAt) {
-      return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "预约链接不存在或已停用", message: "请联系发布方获取新链接。" });
+      return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.bookingDisabled.heading"), message: tr(req, "errorPage.bookingDisabled.message") });
     }
     const slots = await availableSlots(link, new Date(), link.maxDaysAhead);
     // Group slots by date string for the picker.
@@ -2447,18 +2462,18 @@ export async function webRoutes(app: FastifyInstance) {
     const userId = z.string().uuid().safeParse(req.params.userId);
     if (!userId.success) return reply.redirect("/");
     const link = await findLinkBySlug(userId.data, req.params.slug);
-    if (!link || !link.enabled) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "链接已停用" });
+    if (!link || !link.enabled) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.linkDisabled") });
     // Disabled-account gate: stop the booking before we INSERT an event
     // into the disabled user's calendar.
     const [ownerCheck] = await db.select({ disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
-    if (!ownerCheck || ownerCheck.disabledAt) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "链接已停用" });
+    if (!ownerCheck || ownerCheck.disabledAt) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.linkDisabled") });
     const body = z.object({
       startsAt: z.string().datetime({ offset: true }),
       guestEmail: z.string().email().max(254),
       guestName: z.string().min(1).max(100),
       guestMessage: z.string().max(2000).optional(),
     }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: "请填写邮箱和姓名" });
+    if (!body.success) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.needEmailName") });
     const startsAt = new Date(body.data.startsAt);
     const endsAt = new Date(startsAt.getTime() + link.durationMinutes * 60_000);
     try {
@@ -2487,18 +2502,18 @@ export async function webRoutes(app: FastifyInstance) {
           html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">📅 新预约</h1><p style="font-size:14px;color:#475569;margin:0 0 14px;"><strong>${body.data.guestName.replace(/[<>&]/g, "")}</strong> &lt;${body.data.guestEmail.replace(/[<>&]/g, "")}&gt; 通过<strong>${link.title}</strong>预约了你的时间</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;white-space:pre-wrap;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}</div></div>`,
         }).catch(() => undefined);
       }
-      return reply.redirect(`/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent("预约成功！确认邮件已发到你的邮箱。")}`);
+      return reply.redirect(`/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent(tr(req, "flash.booking.success"))}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "预约失败";
+      const msg = err instanceof Error ? err.message : tr(req, "flash.booking.failed");
       return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: msg });
     }
   });
 
   app.get<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
     const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
-    if (!b) return reply.code(404).view("error", { title: "找不到", user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: "取消链接无效", message: "请检查邮件里的链接。" });
+    if (!b) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.cancelLinkInvalid.heading"), message: tr(req, "errorPage.cancelLinkInvalid.message") });
     return reply.view("booking/cancel", {
-      title: "取消预约",
+      title: tr(req, "page.cancelBooking"),
       user: null, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
       booking: b,
     });
@@ -2508,7 +2523,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
     if (!b) return reply.redirect("/");
-    if (b.cancelledAt) return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: "这个预约已经取消过了" });
+    if (b.cancelledAt) return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: tr(req, "flash.booking.alreadyCancelled") });
     // Mark booking + soft-delete the underlying event.
     await db.update(schema.bookings).set({ cancelledAt: new Date() }).where(eq(schema.bookings.id, b.id));
     if (b.eventId) {
@@ -2523,6 +2538,6 @@ export async function webRoutes(app: FastifyInstance) {
         }
       }
     }
-    return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: "预约已取消" });
+    return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: tr(req, "flash.booking.cancelled") });
   });
 }
