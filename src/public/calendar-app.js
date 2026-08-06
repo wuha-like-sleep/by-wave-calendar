@@ -1166,265 +1166,31 @@
     "零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4,
     "五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
   };
-  // Chinese numeral → number, 0..59 (also accepts an ASCII-digit string).
-  function nlCnNum(s) {
-    if (/^[0-9]+$/.test(s)) return Number(s);
-    if (s === "十") return 10;
-    const i = s.indexOf("十");
-    if (i === -1) {
-      let n = 0;
-      for (const ch of s) {
-        if (!(ch in NL_CN_DIGIT)) return NaN;
-        n = n * 10 + NL_CN_DIGIT[ch];
-      }
-      return n;
-    }
-    const before = s.slice(0, i), after = s.slice(i + 1);
-    const tens = before === "" ? 1 : (before in NL_CN_DIGIT ? NL_CN_DIGIT[before] : NaN);
-    const ones = after === "" ? 0 : (after in NL_CN_DIGIT ? NL_CN_DIGIT[after] : NaN);
-    if (isNaN(tens) || isNaN(ones)) return NaN;
-    return tens * 10 + ones;
-  }
-  // Minutes half of a "X点Y" token: 半→30, 一刻/三刻→15/45, else the numeral.
-  function nlMinToken(g) {
-    if (!g) return 0;
-    if (g === "半") return 30;
-    if (g.endsWith("刻")) { const q = nlCnNum(g.slice(0, -1)); return isNaN(q) ? 0 : q * 15; }
-    const n = nlCnNum(g.replace(/分$/, ""));
-    return isNaN(n) ? 0 : n;
-  }
-  const NL_NUM = "[0-9零〇一二两三四五六七八九十]";
-
+  // ---------- Natural-language parsing ----------
+  // The parser itself lives in src/lib/nl_parse.ts and is compiled to
+  // /static/lib/nl-parse.js by scripts/build-nl-bundle.mjs. It used to be
+  // duplicated here by hand, which meant every fix had to land twice and any
+  // missed sync was a bug users could see; now the server, the native apps
+  // and this live preview all run the exact same code.
   function parseNaturalLanguageEvent(text) {
-    if (!text || typeof text !== "string") return null;
-    // Pad so the spaced "半" fallback still works; token rules no longer
-    // require whitespace, so connected input like "明天下午三点开会" parses too.
-    let remaining = " " + text.trim() + " ";
-
-    // Colloquial normalization — mirror of server nl_parse.ts. Lookaheads
-    // keep summaries intact (去教堂做礼拜 must NOT become 做周).
-    remaining = remaining
-      .replace(/(星期|礼拜)(?=[一二三四五六日天末])/g, "周")
-      .replace(/(?<=[下本这])(星期|礼拜)/g, "周")
-      .replace(/今晚/g, "今天晚上")
-      .replace(/明晚/g, "明天晚上")
-      .replace(/今早/g, "今天早上")
-      .replace(/明早/g, "明天早上")
-      .replace(/钟头/g, "小时")
-      .replace(/俩(?=个?(小时|分钟))/g, "两")
-      .replace(/仨(?=个?(小时|分钟))/g, "三");
-
-    // Step 1: date. Longer words first (大后天 ⊃ 后天) since there are no
-    // whitespace guards to keep them apart.
-    const now = new Date();
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    let dateOffset = null;
-    const dateRules = [
-      [/大后天/, 3], [/后天/, 2], [/明天/, 1], [/今天/, 0],
-      [/前天/, -2], [/昨天/, -1],
-    ];
-    for (const [re, off] of dateRules) {
-      if (re.test(remaining)) {
-        dateOffset = off;
-        remaining = remaining.replace(re, " ");
-        break;
-      }
-    }
-    // 周一..周日 / 周天 / 周末 → NEXT occurrence (never today); 下周X +7, 下下周X +14.
-    const weekdayMap = { "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 0, "天": 0, "末": 6 };
-    const wkRe = /(下下周|下周|本周|这周|周)([一二三四五六日天末])/;
-    const wkMatch = remaining.match(wkRe);
-    if (wkMatch && dateOffset === null) {
-      const target = weekdayMap[wkMatch[2]];
-      let diff = (target - now.getDay() + 7) % 7;
-      if (diff === 0) diff = 7;   // 周X always means upcoming, not today
-      if (wkMatch[1] === "下周") diff += 7;
-      else if (wkMatch[1] === "下下周") diff += 14;
-      dateOffset = diff;
-      remaining = remaining.replace(wkRe, " ");
-    }
-    // "下周/下下周" alone (no weekday) → that week's Monday.
-    const bareWeekRe = /(下下周|下周)(?![一二三四五六日天末])/;
-    const bareWeekM = remaining.match(bareWeekRe);
-    if (bareWeekM && dateOffset === null) {
-      let diff = (1 - now.getDay() + 7) % 7;
-      if (diff === 0) diff = 7;
-      if (bareWeekM[1] === "下下周") diff += 7;
-      dateOffset = diff;
-      remaining = remaining.replace(bareWeekRe, " ");
-    }
-    // "X天后 / X天以后" relative offset.
-    const daysLaterRe = new RegExp("(" + NL_NUM + "{1,3})天[以之]?后");
-    const daysLaterM = remaining.match(daysLaterRe);
-    if (daysLaterM && dateOffset === null) {
-      const n = nlCnNum(daysLaterM[1]);
-      if (!isNaN(n) && n > 0 && n < 400) {
-        dateOffset = n;
-        remaining = remaining.replace(daysLaterRe, " ");
-      }
-    }
-    // X月X日 / X月X号
-    const mdRe = /(\d{1,2})月(\d{1,2})[日号]?/;
-    const mdMatch = remaining.match(mdRe);
-    if (mdMatch && dateOffset === null) {
-      const m = Number(mdMatch[1]) - 1;
-      const d = Number(mdMatch[2]);
-      const tgt = new Date(now.getFullYear(), m, d);
-      if (tgt < day) tgt.setFullYear(tgt.getFullYear() + 1);
-      dateOffset = Math.round((tgt - day) / 86400000);
-      remaining = remaining.replace(mdRe, " ");
-    }
-    // "下个月X号 / 这个月X号" month-relative dates.
-    const relMonthRe = /(下下个月|下个月|这个月|本月)(\d{1,2})[日号]/;
-    const relMonthM = remaining.match(relMonthRe);
-    if (relMonthM && dateOffset === null) {
-      const addMonths = relMonthM[1] === "下下个月" ? 2 : relMonthM[1] === "下个月" ? 1 : 0;
-      const tgt = new Date(now.getFullYear(), now.getMonth() + addMonths, Number(relMonthM[2]));
-      dateOffset = Math.round((tgt - day) / 86400000);
-      remaining = remaining.replace(relMonthRe, " ");
-    }
-    // Bare "X号" → this month, or next month when already passed
-    // ("15号交房租"). Digits-only on purpose — 三号楼 stays in the summary.
-    const bareDayRe = /(?<![0-9月])([0-9]{1,2})号/;
-    const bareDayM = remaining.match(bareDayRe);
-    if (bareDayM && dateOffset === null) {
-      const d = Number(bareDayM[1]);
-      if (d >= 1 && d <= 31) {
-        let tgt = new Date(now.getFullYear(), now.getMonth(), d);
-        if (tgt < day) tgt = new Date(now.getFullYear(), now.getMonth() + 1, d);
-        dateOffset = Math.round((tgt - day) / 86400000);
-        remaining = remaining.replace(bareDayRe, " ");
-      }
-    }
-
-    // Step 2: time. Colon form ("15:30") first, then 点/时 form with an
-    // optional period prefix and ASCII-or-Chinese numerals + 半/刻/分 minutes.
-    let hours = null, mins = 0;
-    const NL_PERIOD = "(早上|清晨|一早|上午|中午|下午|傍晚|晚上|夜里|半夜|凌晨)?";
-    // Resolve an hour under its period word. 中午一点 must give 13, not 12.
-    function nlApplyPeriod(period, h) {
-      switch (period) {
-        case "下午": case "傍晚": case "晚上": case "夜里":
-          return h < 12 ? h + 12 : h;
-        case "凌晨": case "半夜":
-          return h === 12 ? 0 : h;
-        case "中午":
-          return h <= 3 ? h + 12 : h;   // 中午12点=12, 中午一点=13, 中午11点=11
-        default:
-          return h;
-      }
-    }
-    const NL_TIME_TOKEN = "(" + NL_NUM + "{1,3})[点时](半|" + NL_NUM + "{1,3}刻|[0-9]{1,2}分?|" + NL_NUM + "{1,3}分?)?";
-    // Range form first — "下午3点到5点" — so the single-time rule below
-    // doesn't eat the start and leave "到5点" in the summary.
-    let durationFromRange = null;
-    const rangeRe = new RegExp(NL_PERIOD + NL_TIME_TOKEN + "[到至~—-]" + NL_PERIOD + NL_TIME_TOKEN);
-    const rMatch = remaining.match(rangeRe);
-    if (rMatch) {
-      const p1 = rMatch[1], h1raw = rMatch[2], m1raw = rMatch[3], p2 = rMatch[4], h2raw = rMatch[5], m2raw = rMatch[6];
-      const h1 = nlApplyPeriod(p1, nlCnNum(h1raw));
-      const m1 = nlMinToken(m1raw);
-      // End inherits the start's period when it has none (下午3点到5点 → 17).
-      let h2 = nlApplyPeriod(p2 || p1, nlCnNum(h2raw));
-      const m2 = nlMinToken(m2raw);
-      if (!isNaN(h1) && !isNaN(h2) && h1 >= 0 && h1 <= 23 && h2 >= 0 && h2 <= 23) {
-        if (h2 * 60 + m2 <= h1 * 60 + m1 && h2 < 12) h2 += 12; // 10点到2点 → 14
-        const dur = (h2 * 60 + m2) - (h1 * 60 + m1);
-        if (dur > 0) {
-          hours = h1; mins = m1;
-          durationFromRange = dur;
-          remaining = remaining.replace(rangeRe, " ");
-        }
-      }
-    }
-    if (hours === null) {
-      const colonRe = new RegExp(NL_PERIOD + "([0-9]{1,2})[:：]([0-9]{2})");
-      const dianRe = new RegExp(NL_PERIOD + NL_TIME_TOKEN);
-      let tMatch = remaining.match(colonRe);
-      let matchedRe = tMatch ? colonRe : null;
-      if (!tMatch) { tMatch = remaining.match(dianRe); if (tMatch) matchedRe = dianRe; }
-      if (tMatch && matchedRe) {
-        const period = tMatch[1];
-        const h = nlApplyPeriod(period, nlCnNum(tMatch[2]));
-        const m = matchedRe === colonRe ? Number(tMatch[3]) : nlMinToken(tMatch[3]);
-        if (!isNaN(h) && h >= 0 && h <= 23 && m >= 0 && m <= 59) {
-          hours = h; mins = m;
-          remaining = remaining.replace(matchedRe, " ");
-        }
-      }
-    }
-    // Period word with no explicit hour — "明天下午开会" lands at 15:00
-    // instead of the generic 09:00.
-    if (hours === null) {
-      const periodDefaults = [
-        [/凌晨|半夜/, 6], [/早上|清晨|一早/, 9], [/上午/, 10], [/中午/, 12],
-        [/下午/, 15], [/傍晚/, 18], [/晚上|夜里/, 20],
-      ];
-      for (const [re, h] of periodDefaults) {
-        if (re.test(remaining)) {
-          hours = h; mins = 0;
-          remaining = remaining.replace(re, " ");
-          break;
-        }
-      }
-    }
-    // "半点" with the 半 split off by whitespace, e.g. "下午3点 半".
-    const halfRe = /\s半\s/;
-    if (halfRe.test(remaining) && hours !== null && mins === 0) {
-      mins = 30;
-      remaining = remaining.replace(halfRe, " ");
-    }
-
-    // Need at least a date OR time to count this as a successful parse.
-    if (dateOffset === null && hours === null) return null;
-
-    // Step 3: duration. "X个半小时" (X·60+30), then plain "X小时/X分钟"
-    // (ASCII or Chinese, optional 个), then a bare "半小时" fallback.
-    let durationMin = 60;
-    let durSet = false;
-    if (durationFromRange !== null) { durationMin = durationFromRange; durSet = true; }
-    const durHalfRe = new RegExp("([0-9]+|" + NL_NUM + "+)个?半个?小时");
-    const durHalfM = durSet ? null : remaining.match(durHalfRe);
-    if (durHalfM) {
-      const n = nlCnNum(durHalfM[1]);
-      if (!isNaN(n)) { durationMin = n * 60 + 30; durSet = true; remaining = remaining.replace(durHalfRe, " "); }
-    }
-    if (!durSet) {
-      const durRe = new RegExp("([0-9]+(?:\\.[0-9]+)?|" + NL_NUM + "+)\\s?个?\\s?(小时|h|hours?|分钟|min|minutes?)", "i");
-      const durMatch = remaining.match(durRe);
-      if (durMatch) {
-        const n = /^[0-9.]+$/.test(durMatch[1]) ? Number(durMatch[1]) : nlCnNum(durMatch[1]);
-        const unit = durMatch[2].toLowerCase();
-        if (!isNaN(n)) {
-          durationMin = (unit.startsWith("小时") || unit === "h" || unit.startsWith("hour"))
-            ? Math.round(n * 60)
-            : Math.round(n);
-          durSet = true;
-          remaining = remaining.replace(durRe, " ");
-        }
-      }
-    }
-    if (!durSet) {
-      const halfHourRe = /半个?小时/;
-      if (halfHourRe.test(remaining)) { durationMin = 30; remaining = remaining.replace(halfHourRe, " "); }
-    }
-
-    // Step 4: build the date.
-    const startsAt = new Date(day);
-    if (dateOffset !== null) startsAt.setDate(startsAt.getDate() + dateOffset);
-    if (hours === null) {
-      // Date but no time → default 09:00 of that day, 1-hour event.
-      startsAt.setHours(9, 0, 0, 0);
-    } else {
-      startsAt.setHours(hours, mins, 0, 0);
-      // If no date given AND the time has already passed today, push to tomorrow.
-      if (dateOffset === null && startsAt < now) startsAt.setDate(startsAt.getDate() + 1);
-    }
-    const endsAt = new Date(startsAt.getTime() + durationMin * 60000);
-
-    // Step 5: the remaining text is the summary.
-    const summary = remaining.replace(/[，。、；：,;:]+/g, " ").replace(/\s+/g, " ").trim();
-    return { summary, startsAt, endsAt };
+    const nl = window.BWC_NL;
+    if (!nl || typeof nl.parse !== "function") return null; // bundle failed to load
+    // The parser is wall-clock based: hand it OUR local now, never UTC.
+    const d = new Date();
+    const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    let r;
+    try { r = nl.parse(text, local); } catch { return null; }
+    if (!r) return null;
+    // The shared parser returns naive local strings ("2026-08-08T15:00:00");
+    // showParsed() below wants Date objects (it calls toDateString/getHours).
+    // A date-time string with no zone is parsed as LOCAL by spec, which is
+    // exactly the wall-clock reading we want — no timezone shift here.
+    return {
+      summary: r.summary,
+      startsAt: new Date(r.startsAt),
+      endsAt: new Date(r.endsAt),
+    };
   }
 
   // Wire the natural-language input. As the user types we show a LIVE

@@ -11,7 +11,7 @@
     "build:vendor": "node scripts/copy-vendor.mjs",
     "build:css": "tailwindcss -i src/styles/input.css -o src/public/css/styles.css --minify",
     "build:js": "node scripts/minify-public-js.mjs",
-    "build:assets": "npm run build:vendor && npm run build:css && npm run build:js",
+    "build:assets": "npm run build:vendor && npm run build:nl && npm run build:css && npm run build:js",
     "build": "npm run build:assets && tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "db:generate": "drizzle-kit generate",
@@ -26,7 +26,8 @@
     "clean:icloud": "find . -name '* 2*' -not -path '*/node_modules/.cache/*' -print -delete 2>/dev/null; find . -name '.DS_Store' -delete 2>/dev/null; echo done",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:int": "vitest run --config vitest.integration.config.ts"
+    "test:int": "vitest run --config vitest.integration.config.ts",
+    "build:nl": "node scripts/build-nl-bundle.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
@@ -73,6 +74,7 @@
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.5.0",
     "drizzle-kit": "^0.28.1",
+    "esbuild": "^0.28.1",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19",
     "terser": "^5.47.1",

@@ -703,6 +703,12 @@
      Both are deferred, so they still execute in document order. -->
 <script src="/static/lib/purify.min.js" defer></script>
 <script src="/static/lib/toastui-calendar.min.js" defer></script>
+<!-- Natural-language quick-add parser, compiled from src/lib/nl_parse.ts —
+     the SAME code the server and the native apps run. Must load before
+     calendar-app.js, which calls window.BWC_NL.parse() for the live preview.
+     If it ever fails to load the preview just stays silent; submitting still
+     works, because the server re-parses server-side. -->
+<script src="/static/lib/nl-parse.js" defer></script>
 <!-- Offline event store (IndexedDB cache + outbox queue) must load BEFORE
      calendar-app.js so window.bwcStore exists when loadEvents() runs. -->
 <script src="<%= calJs %>/event-store.js?v=<%= calV %>" defer></script>
