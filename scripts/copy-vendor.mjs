@@ -10,6 +10,11 @@ mkdirSync(targetDir, { recursive: true });
 const items = [
   { from: "node_modules/htmx.org/dist/htmx.min.js",                              to: "htmx.min.js" },
   { from: "node_modules/@simplewebauthn/browser/dist/bundle/index.umd.min.js",   to: "simplewebauthn.umd.min.js" },
+  // Must be served BEFORE toastui-calendar.min.js: that bundle embeds an old
+  // DOMPurify (2.3.8, GHSA XSS bypass) but prefers window.DOMPurify when one is
+  // already defined, so loading a current build first overrides the vulnerable
+  // copy without patching or forking the vendored bundle.
+  { from: "node_modules/dompurify/dist/purify.min.js",                           to: "purify.min.js" },
   { from: "node_modules/@toast-ui/calendar/dist/toastui-calendar.min.js",        to: "toastui-calendar.min.js" },
   { from: "node_modules/@toast-ui/calendar/dist/toastui-calendar.min.css",       to: "toastui-calendar.min.css" },
 ];

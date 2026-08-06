@@ -67,6 +67,9 @@
     })
   %></script>
 
+  <!-- Load first: toastui-calendar embeds DOMPurify 2.3.8 but defers to an
+       existing window.DOMPurify, so this replaces the vulnerable copy. -->
+  <script src="/static/lib/purify.min.js"></script>
   <script src="/static/lib/toastui-calendar.min.js"></script>
   <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
   (function(){

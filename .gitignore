@@ -38,3 +38,4 @@ src/public/uploads/
 # reach the same maturity as iOS; uncomment when they're ready to push.
 # apps/android/
 # apps/desktop/
+.claude/

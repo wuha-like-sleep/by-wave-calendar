@@ -698,6 +698,10 @@
 <%# defer keeps the order (toastui → event-store → calendar-app) but no
     longer blocks HTML parsing — first paint feedback comes ~300ms sooner
     on cold loads. event-store and calendar-app are already defer. %>
+<!-- Load first: toastui-calendar embeds DOMPurify 2.3.8 but defers to an
+     existing window.DOMPurify, so this replaces the vulnerable copy.
+     Both are deferred, so they still execute in document order. -->
+<script src="/static/lib/purify.min.js" defer></script>
 <script src="/static/lib/toastui-calendar.min.js" defer></script>
 <!-- Offline event store (IndexedDB cache + outbox queue) must load BEFORE
      calendar-app.js so window.bwcStore exists when loadEvents() runs. -->
