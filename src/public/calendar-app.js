@@ -291,6 +291,25 @@
     calendars: tuiCalendars,
     template: {
       monthDayName(model) { return `<span class="text-xs text-slate-500">${model.label}</span>`; },
+      // Week header. Toast UI's default puts the weekday name and the date
+      // number side by side, which needs more width than a column has on a
+      // phone: at 375px each column is ~43px and "9 周日" overflowed it by
+      // 14px, so Sunday was visibly cut off at the screen edge. Stack them
+      // below sm (the shape Google/Apple Calendar use on phones) and keep the
+      // familiar side-by-side layout from sm up.
+      // No colours here on purpose: Toast UI puts a per-day `color` inline
+      // style on the wrapper span (grey for past days, brand for today,
+      // red for Sunday), and hardcoding our own would flatten all of that —
+      // an earlier attempt painted every day the same brand colour and lost
+      // the "today" cue entirely. We only set size and stacking, and let its
+      // colour cascade in; opacity keeps the weekday label subordinate to the
+      // date without pinning a colour.
+      weekDayName(model) {
+        return `<span class="flex h-full flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1.5 leading-tight overflow-hidden">
+          <span class="text-[10px] sm:text-xs opacity-75">${model.dayName}</span>
+          <span class="text-sm sm:text-base font-medium">${model.date}</span>
+        </span>`;
+      },
     },
   });
 

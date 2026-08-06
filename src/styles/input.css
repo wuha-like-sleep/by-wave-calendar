@@ -219,6 +219,26 @@ details > summary::-webkit-details-marker { display: none; }
   #cal-sidebar.bwc-drawer.is-open { transform: none !important; }
 }
 
+/* ---------- Touch targets for small inline links ----------
+   Footer links and a few utility links ("清除记录", "工单中心 →") are 12px
+   text, so their hit box is ~16px tall — well under the 44px Apple/Material
+   both recommend, and genuinely hard to tap on a phone. Growing them with
+   padding would push the footer around and change the design on desktop,
+   where a mouse hits 16px fine.
+   So: expand the hit box only where the pointer is coarse, using an absolutely
+   positioned pseudo-element. Layout and appearance are untouched — the link
+   just becomes ~40px tall to a finger. `position: relative` is applied at all
+   sizes so the two rules can't drift apart. */
+.bwc-tap { position: relative; }
+@media (pointer: coarse) {
+  .bwc-tap::after {
+    content: "";
+    position: absolute;
+    inset: -12px -6px;
+    /* Purely a hit area — must never paint or catch layout. */
+  }
+}
+
 /* Toast UI Calendar tweaks to match our theme */
 .toastui-calendar-week-view,
 .toastui-calendar-month {

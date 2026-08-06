@@ -169,18 +169,18 @@
             </a>
           </div>
           <div class="flex flex-wrap gap-3 text-xs text-slate-400 items-center">
-            <a href="/" class="hover:text-slate-700"><%= t("footer.linkHome") %></a>
-            <a href="/download" class="hover:text-slate-700"><%= t("footer.linkDownload") %></a>
-            <a href="/about" class="hover:text-slate-700"><%= t("footer.linkAbout") %></a>
-            <a href="/privacy" class="hover:text-slate-700"><%= t("footer.linkPrivacy") %></a>
-            <a href="/data-processing" class="hover:text-slate-700"><%= t("footer.linkDataProcessing") %></a>
-            <a href="/terms" class="hover:text-slate-700"><%= t("footer.linkTerms") %></a>
-            <a href="/support" class="hover:text-slate-700"><%= t("footer.linkSupport") %></a>
-            <a href="/open-source" class="hover:text-slate-700"><%= t("footer.linkOpenSource") %></a>
-            <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener" class="hover:text-slate-700"><%= t("footer.linkSource") %></a>
+            <a href="/" class="bwc-tap hover:text-slate-700"><%= t("footer.linkHome") %></a>
+            <a href="/download" class="bwc-tap hover:text-slate-700"><%= t("footer.linkDownload") %></a>
+            <a href="/about" class="bwc-tap hover:text-slate-700"><%= t("footer.linkAbout") %></a>
+            <a href="/privacy" class="bwc-tap hover:text-slate-700"><%= t("footer.linkPrivacy") %></a>
+            <a href="/data-processing" class="bwc-tap hover:text-slate-700"><%= t("footer.linkDataProcessing") %></a>
+            <a href="/terms" class="bwc-tap hover:text-slate-700"><%= t("footer.linkTerms") %></a>
+            <a href="/support" class="bwc-tap hover:text-slate-700"><%= t("footer.linkSupport") %></a>
+            <a href="/open-source" class="bwc-tap hover:text-slate-700"><%= t("footer.linkOpenSource") %></a>
+            <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener" class="bwc-tap hover:text-slate-700"><%= t("footer.linkSource") %></a>
             <% if (typeof icpNumber !== 'undefined' && icpNumber) { %>
               <span class="text-slate-300">·</span>
-              <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="hover:text-slate-700"><%= icpNumber %></a>
+              <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="bwc-tap hover:text-slate-700"><%= icpNumber %></a>
             <% } %>
           </div>
         </div>

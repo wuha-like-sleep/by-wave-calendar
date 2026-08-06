@@ -18,7 +18,12 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
     </div>
-    <h2 id="period-label" class="text-sm sm:text-lg font-semibold text-slate-900 flex-1 min-w-0 truncate">…</h2>
+    <%# On phones this drops onto its own full-width row (order-last + w-full).
+        Sharing the row left it ~37px wide, so "2026年8月3日 – 2026年8月9日"
+        rendered as "20…" — and the label is the one thing on this toolbar you
+        actually need to read. From sm up it goes back to filling the gap
+        between the arrows and the view switcher. %>
+    <h2 id="period-label" class="order-last w-full sm:order-none sm:w-auto text-sm sm:text-lg font-semibold text-slate-900 sm:flex-1 min-w-0 truncate">…</h2>
     <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
       <button type="button" data-view="month" class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]"><%= t("app.toolbar.viewMonth") %></button>
       <button type="button" data-view="week"  class="view-btn px-3 sm:px-3 py-2 sm:py-1.5 text-sm rounded-md text-slate-600 min-w-[36px]"><%= t("app.toolbar.viewWeek") %></button>
