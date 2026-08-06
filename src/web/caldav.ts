@@ -962,25 +962,24 @@ export async function caldavRoutes(app: FastifyInstance) {
       .send("CardDAV not supported; CalDAV at /caldav/");
   });
 
-  // OPTIONS / — Apple Calendar's second probe (after .well-known). Must
-  // be unauthenticated so the client can discover the DAV capabilities
-  // before it knows whose credentials to send. We can't route OPTIONS
-  // to "/" with a normal Fastify handler without colliding with the
-  // landing page; use a hook instead.
-  app.addHook("onRequest", async (req, reply) => {
-    if (req.method === "OPTIONS" && (req.url === "/" || req.url === "")) {
-      reply
-        .header("DAV", "1, 2, 3, calendar-access")
-        // Advertise only the methods we actually handle. MKCALENDAR and
-        // PROPPATCH were previously listed but never routed — clients
-        // (esp. native Apple Calendar's "New Calendar") would try them
-        // and 405, polluting logs and confusing users.
-        .header("Allow", "OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, REPORT")
-        .header("Accept-Ranges", "bytes")
-        .code(200)
-        .send();
-    }
+  // OPTIONS / — Apple Calendar 发现流程的第二步(紧跟 .well-known)。
+  // 必须不带认证就能答,因为此时客户端还不知道该用谁的凭据。
+  //
+  // 这里原本用 onRequest 钩子实现,但钩子注册在 CalDAV 插件的封装作用域
+  // 里,只对该作用域内**已注册的路由**生效 —— 而 OPTIONS / 恰恰没有路由,
+  // 请求直接落到全局 404,钩子从不触发。实测 `OPTIONS /` 返回
+  // {"error":"not_found"},注释里描述的行为从未实现过。
+  // 改为真正注册一条路由:与首页的 GET / 是不同方法,不会冲突。
+  app.route({
+    method: "OPTIONS",
+    url: "/",
+    config: { rateLimit: false },
+    handler: async (_req, reply) => {
+      setOptionsHeaders(reply);
+      return reply.code(200).send();
+    },
   });
+
 
   // PROPFIND / — after OPTIONS, Apple does PROPFIND on the discovery
   // root looking for current-user-principal. Without it, Apple aborts
