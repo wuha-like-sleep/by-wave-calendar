@@ -35,6 +35,7 @@ export type SettingsView = {
   defaultLocale: string;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
+  embedFrameAncestors: string;
   vapidPublicKey: string | null;
   vapidPrivateKey: string | null;
   vapidSubject: string | null;
@@ -129,6 +130,7 @@ function toView(r: schema.SiteSettings): SettingsView {
     defaultLocale: r.defaultLocale || "zh-CN",
     forceAdminMfa: r.forceAdminMfa,
     embedEnabled: r.embedEnabled,
+    embedFrameAncestors: r.embedFrameAncestors ?? "",
     vapidPublicKey: r.vapidPublicKey,
     vapidPrivateKey: r.vapidPrivateKey,
     vapidSubject: r.vapidSubject,
@@ -213,6 +215,7 @@ export async function updateSettings(patch: Partial<{
   defaultLocale: string;
   forceAdminMfa: boolean;
   embedEnabled: boolean;
+  embedFrameAncestors: string;
   vapidPublicKey: string | null;
   vapidPrivateKey: string | null;
   vapidSubject: string | null;

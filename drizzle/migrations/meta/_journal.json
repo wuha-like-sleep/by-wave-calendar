@@ -330,6 +330,13 @@
       "when": 1783153533697,
       "tag": "0046_massive_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786020000000,
+      "tag": "0047_embed_frame_ancestors",
+      "breakpoints": true
     }
   ]
 }

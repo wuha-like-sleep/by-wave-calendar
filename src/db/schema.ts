@@ -168,6 +168,10 @@ export const siteSettings = pgTable("site_settings", {
   // off if they don't want third-party sites embedding the calendar iframe.
   // Doesn't affect the underlying ICS share — those still work via /ics/.
   embedEnabled: boolean("embed_enabled").notNull().default(true),
+  // 允许 iframe 嵌入 /embed/<token> 的来源白名单,每行一个 origin。
+  // 为空 = 不允许任何外部站点嵌入(安全默认,与站点全局
+  // frame-ancestors 'none' 一致)。见 0047 迁移里的说明。
+  embedFrameAncestors: text("embed_frame_ancestors").notNull().default(""),
   // VAPID key pair for Web Push. Generated lazily on first /admin/push
   // visit; persisted so push subscriptions stay valid across restarts.
   vapidPublicKey: text("vapid_public_key"),
