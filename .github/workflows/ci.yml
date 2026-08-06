@@ -38,7 +38,11 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc -p tsconfig.json --noEmit
+        # npm run（不是 npx):npx 在 node_modules 里找不到 tsc 时会去
+        # 下载 npm 上一个同名的无关包 —— 本地就撞见过一次,它只会打印
+        # "This is not the tsc command you are looking for" 然后退出 0,
+        # 于是类型错误被静默放过。npm run 只认本地 bin。
+        run: npm run typecheck
 
       - name: Unit tests
         # env.ts 对必填项做 zod 校验,缺了就 process.exit(1) —— CI 里没有
@@ -48,7 +52,7 @@ jobs:
           DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
           SESSION_SECRET: ci-only-secret-not-used-anywhere-0123456789
           PUBLIC_BASE_URL: http://127.0.0.1:3000
-        run: npx vitest run
+        run: npm test
 
       # 语言包完整性:任一语言缺 key 都会在这里暴露,而不是等用户
       # 切到该语言看到 key 名。已知的 18 个历史缺失键不阻塞构建。

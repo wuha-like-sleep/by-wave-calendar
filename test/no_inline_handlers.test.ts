@@ -11,9 +11,8 @@
 // data-confirm — or a <script nonce="…"> block.
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { globSync } from "node:fs";
 
 const VIEWS = path.resolve("src/views");
 
@@ -37,8 +36,18 @@ const HANDLERS = [
 
 const RE = new RegExp(`\\son(${HANDLERS.join("|")})\\s*=`, "i");
 
-function listTemplates(): string[] {
-  return globSync("**/*.ejs", { cwd: VIEWS }).map((f) => path.join(VIEWS, f));
+// Hand-rolled walk rather than fs.globSync: that landed in Node 22, and
+// package.json declares support for >=20 (CI runs 20). On Node 20 the import
+// is simply undefined and the test blows up at call time — which is a silly
+// way for a lint-style guard to fail.
+function listTemplates(dir: string = VIEWS): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...listTemplates(full));
+    else if (entry.name.endsWith(".ejs")) out.push(full);
+  }
+  return out;
 }
 
 describe("templates carry no inline event handlers", () => {
