@@ -69,6 +69,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -2169,6 +2170,42 @@ private fun AppearanceSection(profile: Profile) {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(36.dp))
+
+    // -- 浅色 / 深色 / 跟随系统(本机设置,立即生效)
+    val appearance by cn.bywave.calendar.desktop.data.AppearancePrefs.mode.collectAsState()
+    SectionTitle(t("settings.theme.title"))
+    Text(
+        t("settings.theme.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    SectionCard {
+        listOf(
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.LIGHT to "settings.theme.light",
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.DARK to "settings.theme.dark",
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.SYSTEM to "settings.theme.system",
+        ).forEach { (mode, key) ->
+            val active = mode == appearance
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .clickable { cn.bywave.calendar.desktop.data.AppearancePrefs.setMode(mode) }
+                    .padding(horizontal = 4.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(
+                    selected = active,
+                    onClick = { cn.bywave.calendar.desktop.data.AppearancePrefs.setMode(mode) },
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(t(key), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

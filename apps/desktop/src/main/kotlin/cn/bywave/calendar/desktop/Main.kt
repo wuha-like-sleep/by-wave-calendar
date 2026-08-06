@@ -42,11 +42,33 @@ private val LightColors = lightColorScheme(
     tertiary = BrandPurple,
     surface = Color(0xFFFAFAFA),
 )
+// 暗色配色:1.0.15 只改了 surface 一个颜色就启用,其余中性色留给
+// Material 默认值 —— 卡片(surfaceVariant 低透明度铺底)、网格线
+// (outlineVariant)在近黑底上几乎糊成一片,用户反馈「看不清」。
+// 现在把每个中性角色显式定死,保证:
+//   正文 onSurface / 次要文字 onSurfaceVariant 对 surface 的对比度
+//   都在 WCAG AA(≥4.5:1)以上;卡片和网格线对底色有可见落差。
 private val DarkColors = darkColorScheme(
     primary = BrandPurpleDark,
+    onPrimary = Color(0xFF2A1A5E),        // 深紫压在浅紫上(今日圆点)
     secondary = BrandPurpleDark,
     tertiary = BrandPurpleDark,
-    surface = Color(0xFF111114),
+    background = Color(0xFF121216),
+    onBackground = Color(0xFFEDEDF2),
+    surface = Color(0xFF17171C),          // 比 background 略亮 → 卡片能浮起来
+    onSurface = Color(0xFFEDEDF2),        // 对 surface ≈ 14:1
+    // 下面两个值是按「乘完 alpha 之后的实际对比度」反推的,不是拍脑袋:
+    // 卡片用 surfaceVariant×0.35、网格线用 outlineVariant×0.5 铺底,
+    // 1.0.16 的取值算出来只有 1.1~1.3:1 —— 这就是截图里顶栏/表头/网格
+    // 糊成一片黑的原因。现在分别做到 ≈1.3:1 和 ≈1.9:1。
+    surfaceVariant = Color(0xFF565664),   // ×0.35 → #2D2D35,对 surface 1.31:1
+    onSurfaceVariant = Color(0xFFC3C3CE), // 次要文字,对 surface ≈ 10:1
+    outline = Color(0xFF8A8A98),
+    outlineVariant = Color(0xFF767683),   // ×0.5 → #464650,对 surface 1.92:1
+    errorContainer = Color(0xFF5C1A1A),
+    onErrorContainer = Color(0xFFFFD9D6),
+    primaryContainer = Color(0xFF3A2A78),
+    onPrimaryContainer = Color(0xFFE7DDFF),
 )
 
 fun main() = application {
@@ -55,6 +77,8 @@ fun main() = application {
     cn.bywave.calendar.desktop.i18n.I18n.init()
     // Load reminder prefs (enabled + lead time) before the scheduler starts.
     cn.bywave.calendar.desktop.data.notify.ReminderPrefs.init()
+    // 外观偏好要在第一帧之前读,否则会闪一下浅色再切深色。
+    cn.bywave.calendar.desktop.data.AppearancePrefs.init()
 
     val state = rememberWindowState(width = 1100.dp, height = 720.dp)
     // Track visibility separately so the close button hides the window
@@ -190,10 +214,17 @@ fun main() = application {
                 ))
             }
         }
-        // Follow the OS dark-mode preference — DarkColors has been in
-        // the file since v0.2 but was never wired up. The brand palette
-        // stays identical between modes; only neutral surfaces flip.
-        MaterialTheme(colorScheme = if (androidx.compose.foundation.isSystemInDarkTheme()) DarkColors else LightColors) {
+        // 外观由用户在「设置 → 外观」选:浅色(默认)/ 深色 / 跟随系统。
+        // 1.0.15 曾直接跟随系统,把深色用户丢进未经验证的暗色配色里,
+        // 1.0.17 改回默认浅色 + 显式开关(见 AppearancePrefs 的注释)。
+        val appearance by cn.bywave.calendar.desktop.data.AppearancePrefs.mode.collectAsState()
+        val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+        val dark = when (appearance) {
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.DARK -> true
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.LIGHT -> false
+            cn.bywave.calendar.desktop.data.AppearancePrefs.Mode.SYSTEM -> systemDark
+        }
+        MaterialTheme(colorScheme = if (dark) DarkColors else LightColors) {
             Root()
         }
     }
