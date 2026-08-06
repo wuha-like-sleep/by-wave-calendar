@@ -1,0 +1,60 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Open Source Licenses</h1>
+  <p class="text-sm text-slate-500 mb-8">Last updated: <%= updatedDate %></p>
+
+  <p>This product is based on the open-source software <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">by-wave-calendar</a>, released under the <strong>MIT License</strong>. This page lists the third-party open-source components used in each part of the product, together with their licenses. Our thanks go to all open-source authors.</p>
+
+  <h2>1. Server &amp; Web</h2>
+  <h3>Server-side (Node.js)</h3>
+  <ul>
+    <li>Fastify and official plugins (fastify, @fastify/compress / cookie / cors / csrf-protection / formbody / helmet / multipart / rate-limit / static / view) — MIT</li>
+    <li>Drizzle ORM — Apache-2.0</li>
+    <li>EJS — Apache-2.0</li>
+    <li>Postgres.js (postgres) — Unlicense</li>
+    <li>bcryptjs — MIT</li>
+    <li>jose — MIT</li>
+    <li>otplib — MIT</li>
+    <li>SimpleWebAuthn (@simplewebauthn/server) — MIT</li>
+    <li>Nodemailer — MIT-0</li>
+    <li>@parse/node-apn — MIT</li>
+    <li>web-push — MPL-2.0</li>
+    <li>ical-generator — MIT</li>
+    <li>rrule — BSD-3-Clause</li>
+    <li>Zod — MIT</li>
+    <li>nanoid — MIT</li>
+    <li>node-qrcode (qrcode) — MIT</li>
+    <li>sharp — Apache-2.0 (bundles libvips, LGPL-2.1-or-later)</li>
+    <li>dotenv — BSD-2-Clause</li>
+    <li>pino-pretty — MIT</li>
+  </ul>
+  <h3>Shipped to the browser</h3>
+  <ul>
+    <li>Toast UI Calendar (@toast-ui/calendar) — MIT</li>
+    <li>htmx — 0BSD (Zero-Clause BSD)</li>
+    <li>SimpleWebAuthn (@simplewebauthn/browser) — MIT</li>
+    <li>Tailwind CSS — MIT (build-time tool; only its compiled CSS output is shipped with pages)</li>
+  </ul>
+
+  <h2>2. iOS app</h2>
+  <p>The iOS app contains no third-party dependencies. It uses only Apple system frameworks (SwiftUI, Foundation, etc.), provided under the Apple SDK license terms.</p>
+
+  <h2>3. Android app</h2>
+  <ul>
+    <li>Kotlin, kotlinx.coroutines, kotlinx.serialization — Apache-2.0</li>
+    <li>AndroidX / Jetpack (Core KTX, AppCompat, Lifecycle, Activity Compose, Navigation Compose, Room, DataStore, Security Crypto, CameraX) — Apache-2.0</li>
+    <li>Jetpack Compose (UI, Material 3, Material Icons Extended) — Apache-2.0</li>
+    <li>Retrofit, OkHttp, Retrofit kotlinx.serialization converter — Apache-2.0</li>
+    <li>Google ML Kit Barcode Scanning — license: see the <a href="https://developers.google.com/ml-kit" class="text-brand-700 hover:underline">project page</a></li>
+  </ul>
+
+  <h2>4. Desktop app</h2>
+  <ul>
+    <li>Kotlin (JVM) — Apache-2.0</li>
+    <li>Compose Multiplatform — Apache-2.0</li>
+    <li>Ktor Client (core, CIO, content negotiation, kotlinx-json) — Apache-2.0</li>
+    <li>kotlinx.coroutines, kotlinx.serialization — Apache-2.0</li>
+    <li>ZXing (core, javase) — Apache-2.0</li>
+  </ul>
+
+  <p>The full license text of each component can be found in its respective project repository. Note: the PostgreSQL database is a server-side service (PostgreSQL License) and is not distributed with any of the apps.</p>
+</div>

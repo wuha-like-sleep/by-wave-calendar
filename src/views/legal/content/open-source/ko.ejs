@@ -1,0 +1,60 @@
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-10 legal-prose">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">오픈소스 라이선스</h1>
+  <p class="text-sm text-slate-500 mb-8">최종 업데이트：<%= updatedDate %></p>
+
+  <p>본 제품은 오픈소스 소프트웨어 <a href="https://github.com/wuha-like-sleep/by-wave-calendar" class="text-brand-700 hover:underline">by-wave-calendar</a>를 기반으로 하며 <strong>MIT License</strong>로 공개되어 있습니다. 이 페이지에서는 제품의 각 구성 부분에서 사용하는 서드파티 오픈소스 구성 요소와 해당 라이선스를 안내합니다. 모든 오픈소스 개발자분들께 감사드립니다.</p>
+
+  <h2>1. 서버 및 웹</h2>
+  <h3>서버 측(Node.js)</h3>
+  <ul>
+    <li>Fastify 및 공식 플러그인(fastify, @fastify/compress / cookie / cors / csrf-protection / formbody / helmet / multipart / rate-limit / static / view) — MIT</li>
+    <li>Drizzle ORM — Apache-2.0</li>
+    <li>EJS — Apache-2.0</li>
+    <li>Postgres.js(postgres) — Unlicense</li>
+    <li>bcryptjs — MIT</li>
+    <li>jose — MIT</li>
+    <li>otplib — MIT</li>
+    <li>SimpleWebAuthn(@simplewebauthn/server) — MIT</li>
+    <li>Nodemailer — MIT-0</li>
+    <li>@parse/node-apn — MIT</li>
+    <li>web-push — MPL-2.0</li>
+    <li>ical-generator — MIT</li>
+    <li>rrule — BSD-3-Clause</li>
+    <li>Zod — MIT</li>
+    <li>nanoid — MIT</li>
+    <li>node-qrcode(qrcode) — MIT</li>
+    <li>sharp — Apache-2.0(libvips 포함, LGPL-2.1-or-later)</li>
+    <li>dotenv — BSD-2-Clause</li>
+    <li>pino-pretty — MIT</li>
+  </ul>
+  <h3>브라우저에 배포되는 구성 요소</h3>
+  <ul>
+    <li>Toast UI Calendar(@toast-ui/calendar) — MIT</li>
+    <li>htmx — 0BSD(Zero-Clause BSD)</li>
+    <li>SimpleWebAuthn(@simplewebauthn/browser) — MIT</li>
+    <li>Tailwind CSS — MIT(빌드 타임 도구이며, 페이지와 함께 배포되는 것은 컴파일된 CSS뿐입니다)</li>
+  </ul>
+
+  <h2>2. iOS 앱</h2>
+  <p>iOS 앱에는 서드파티 의존성이 포함되어 있지 않습니다. Apple 시스템 프레임워크(SwiftUI, Foundation 등)만 사용하며, 이는 Apple SDK 라이선스 조건에 따라 제공됩니다.</p>
+
+  <h2>3. Android 앱</h2>
+  <ul>
+    <li>Kotlin, kotlinx.coroutines, kotlinx.serialization — Apache-2.0</li>
+    <li>AndroidX / Jetpack(Core KTX, AppCompat, Lifecycle, Activity Compose, Navigation Compose, Room, DataStore, Security Crypto, CameraX) — Apache-2.0</li>
+    <li>Jetpack Compose(UI, Material 3, Material Icons Extended) — Apache-2.0</li>
+    <li>Retrofit, OkHttp, Retrofit kotlinx.serialization converter — Apache-2.0</li>
+    <li>Google ML Kit Barcode Scanning — 라이선스는 <a href="https://developers.google.com/ml-kit" class="text-brand-700 hover:underline">프로젝트 페이지</a> 참조</li>
+  </ul>
+
+  <h2>4. 데스크톱 앱</h2>
+  <ul>
+    <li>Kotlin(JVM) — Apache-2.0</li>
+    <li>Compose Multiplatform — Apache-2.0</li>
+    <li>Ktor Client(core, CIO, content negotiation, kotlinx-json) — Apache-2.0</li>
+    <li>kotlinx.coroutines, kotlinx.serialization — Apache-2.0</li>
+    <li>ZXing(core, javase) — Apache-2.0</li>
+  </ul>
+
+  <p>각 구성 요소의 전체 라이선스 전문은 해당 프로젝트 저장소에서 확인할 수 있습니다. 참고: PostgreSQL 데이터베이스는 서버 측 서비스(PostgreSQL License)이며 어떤 앱에도 포함되어 배포되지 않습니다.</p>
+</div>
