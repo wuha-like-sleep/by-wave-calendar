@@ -99,7 +99,7 @@
     banner.classList.remove("hidden");
     if (jump) {
       jump.onclick = () => {
-        try { cal.setDate(new Date(target.s)); refresh(); } catch (_e) {}
+        try { cal.setDate(new Date(target.s)); refresh(); saveViewState(); } catch (_e) {}
       };
     }
   }
@@ -225,8 +225,47 @@
   // 2 chars, drag-to-create misfires constantly. Default to "day" on
   // mobile; the view-switcher header still lets the user pick weekly.
   const isMobileViewport = window.matchMedia("(max-width: 640px)").matches;
+
+  // ---------- 视图位置记忆 ----------
+  // 视图(日/周/月)和当前日期原本只活在 JS 内存里,所以刷新一次、或者
+  // 切个语言(切语言会带着 return_to 重新加载页面),就被打回「今天 + 默认
+  // 视图」—— 用户正翻着下个月的日程,一刷新全没了。存 localStorage:
+  //   - 视图:一直记住
+  //   - 日期:只在 12 小时内有效。隔天再打开当然应该回到今天,而不是
+  //     停在昨晚看的那一周。
+  const VIEW_KEY = "bwc.view.mode";
+  const ANCHOR_KEY = "bwc.view.anchor";      // "<ISO 日期>|<存的时间戳>"
+  const ANCHOR_TTL_MS = 12 * 60 * 60 * 1000;
+
+  function readSavedView() {
+    try {
+      const v = localStorage.getItem(VIEW_KEY);
+      return ["day", "week", "month"].includes(v) ? v : null;
+    } catch (_e) { return null; }
+  }
+  function readSavedAnchor() {
+    try {
+      const raw = localStorage.getItem(ANCHOR_KEY);
+      if (!raw) return null;
+      const [iso, savedAt] = raw.split("|");
+      if (!iso || !savedAt) return null;
+      if (Date.now() - Number(savedAt) > ANCHOR_TTL_MS) return null;
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? null : d;
+    } catch (_e) { return null; }
+  }
+  function saveViewState() {
+    try {
+      localStorage.setItem(VIEW_KEY, currentView);
+      // getDate() 是当前视图的锚点日期(周视图=该周内某天,月视图=该月内某天)
+      const d = cal.getDate().toDate();
+      localStorage.setItem(ANCHOR_KEY, `${d.toISOString()}|${Date.now()}`);
+    } catch (_e) { /* 隐私模式下 localStorage 会抛,忽略即可 */ }
+  }
+
+  const savedView = readSavedView();
   const cal = new tui.Calendar("#calendar", {
-    defaultView: isMobileViewport ? "day" : "week",
+    defaultView: savedView || (isMobileViewport ? "day" : "week"),
     useFormPopup: false,
     useDetailPopup: false,
     useCreationPopup: false,
@@ -257,7 +296,13 @@
 
   // Keep this in sync with the defaultView passed to tui.Calendar above —
   // otherwise the view-switcher buttons start out highlighting the wrong tab.
-  let currentView = isMobileViewport ? "day" : "week";
+  let currentView = savedView || (isMobileViewport ? "day" : "week");
+  // 恢复上次停留的日期(12 小时内)。要在第一次 refresh() 之前设好,
+  // 否则会先闪一下今天再跳过去。
+  {
+    const savedAnchor = readSavedAnchor();
+    if (savedAnchor) { try { cal.setDate(savedAnchor); } catch (_e) {} }
+  }
 
   // Scroll the time grid so "now" is roughly in the middle on first load
   // (24-hour view means a lot of empty hours otherwise). Toast UI doesn't
@@ -539,15 +584,16 @@
   startNowTick();
 
   // ---------- Toolbar ----------
-  $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); scrollGridToNow(); });
-  $("#btn-prev").addEventListener("click", () => { cal.prev(); refresh(); });
-  $("#btn-next").addEventListener("click", () => { cal.next(); refresh(); });
+  $("#btn-today").addEventListener("click", () => { cal.today(); refresh(); saveViewState(); scrollGridToNow(); });
+  $("#btn-prev").addEventListener("click", () => { cal.prev(); refresh(); saveViewState(); });
+  $("#btn-next").addEventListener("click", () => { cal.next(); refresh(); saveViewState(); });
   $$(".view-btn").forEach((b) => b.addEventListener("click", () => {
     currentView = b.dataset.view;
     cal.changeView(currentView);
     $$(".view-btn").forEach((x) => x.classList.remove("bg-brand-50", "text-brand-700", "font-semibold"));
     b.classList.add("bg-brand-50", "text-brand-700", "font-semibold");
     refresh();
+    saveViewState();
     if (currentView !== "month") scrollGridToNow();
   }));
   // Highlight whichever view we started in (week on desktop, day on mobile).
@@ -611,7 +657,7 @@
       return;
     }
     switch (e.key.toLowerCase()) {
-      case "t": cal.today(); refresh(); scrollGridToNow(); break;
+      case "t": cal.today(); refresh(); saveViewState(); scrollGridToNow(); break;
       case "m": $('.view-btn[data-view="month"]')?.click(); break;
       case "w": $('.view-btn[data-view="week"]')?.click(); break;
       case "d": $('.view-btn[data-view="day"]')?.click(); break;
@@ -619,8 +665,8 @@
         e.preventDefault();
         $("#btn-new-event")?.click();
         break;
-      case "arrowleft": cal.prev(); refresh(); break;
-      case "arrowright": cal.next(); refresh(); break;
+      case "arrowleft": cal.prev(); refresh(); saveViewState(); break;
+      case "arrowright": cal.next(); refresh(); saveViewState(); break;
       case "escape": shortcutsPanel?.classList.add("hidden"); break;
       default: return;
     }
@@ -757,6 +803,7 @@
       const d = new Date(t.dataset.iso);
       cal.setDate(d);
       refresh();
+      saveViewState();
       if (currentView !== "month") scrollGridToNow();
       render(); // re-highlight the newly selected cell
     });

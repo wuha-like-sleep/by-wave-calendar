@@ -464,13 +464,23 @@ export async function* applyUploadedUpdate(
 }
 
 export async function restartProcess(): Promise<{ ok: boolean; output: string }> {
-  // Try pm2 first; fall back to systemd if PM_PROCESS isn't set.
-  const procName = process.env.PM2_PROCESS_NAME || "by-wave-calendar";
+  // 进程名优先用 PM2 注入的 `name`(它就是 pm2 list 里显示的那个),
+  // 而不是写死 "by-wave-calendar" —— 装的时候用了别的名字(或者
+  // ecosystem 文件里改过),写死的名字会让 `pm2 restart` 直接失败,
+  // 后台的「重启服务」按钮就成了摆设。
+  const procName = process.env.PM2_PROCESS_NAME || process.env.name || "by-wave-calendar";
   try {
     const { stdout, stderr } = await run("pm2", ["restart", procName]);
     return { ok: true, output: (stdout + (stderr ? "\n" + stderr : "")).slice(0, 4000) };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // 兜底:只要我们本来就跑在 PM2 下(pm_id 由 PM2 注入),自己退出
+    // 就够了 —— 守护进程会立刻用全新环境把我们拉起来,这正是改完
+    // .env 需要的效果。pm2 CLI 不在 PATH 里(常见于宝塔/容器)时全靠这条。
+    if (process.env.pm_id !== undefined) {
+      setTimeout(() => process.exit(0), 300);
+      return { ok: true, output: `pm2 CLI 不可用(${msg.slice(0, 200)}),已改为自退出让守护进程重启` };
+    }
     return { ok: false, output: msg.slice(0, 4000) };
   }
 }
