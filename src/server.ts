@@ -153,6 +153,56 @@ app.addHook("onRequest", async (req) => {
   (req.raw as unknown as { cspNonce: string }).cspNonce = randomBytes(16).toString("base64");
 });
 
+// ---- Error handler ----
+//
+// 必须注册在任何 await app.register(...) **之前**。Fastify 在注册路由时就把
+// 当前的 errorHandler 按值快照进 route context，而 await register 会当场抽干
+// boot 队列——所以一个写在所有 register 之后的 setErrorHandler，对每一条路由
+// 都是死代码，且不报任何错。这个处理器从上线起到 2026-09 一次都没跑过，代价是
+// 线上每个 5xx 都把 err.message 原样回给了客户端（PG 的报错里带 SQL 语句、
+// 服务器绝对路径和内网 IP）。用本仓库的 fastify 5.11.2 复现确认过：
+// 注册在 register 之后 → 处理器执行 0 次；之前 → 1 次。
+//
+// 处理范围刻意收窄到 5xx。非 5xx 一律 `throw err` 委托回 Fastify 默认——
+// 因为客户端（iOS / Android / 桌面 / 网页）是照着**实际收到的**响应写的，
+// 而它们一直收到的就是 Fastify 默认形状。把 400/429 改成这里原本想要的
+// { error: "validation_failed" } / { error: "too_many_requests" }，
+// 等于在修一个安全问题的同时悄悄改了 API 契约。修漏洞不该顺带改契约。
+app.setErrorHandler(async (err: FastifyError, req, reply) => {
+  // 响应已经在线上（CalDAV 的流式 multistatus 会 hijack 后直接 writeHead）：
+  // 再碰 reply、或返回 undefined（Fastify 会当作「没处理」），都会让它走进
+  // fallbackErrorHandler 里那个没包 try/catch 的重试 writeHead → 进程退出。
+  // 返回已发出的 reply 表示「已处理」。见 lib/reply_guard.ts。
+  if (replyAlreadySent(reply)) return reply;
+
+  const status = err.statusCode ?? 500;
+
+  // 非 5xx：交还给 Fastify 默认处理器，响应形状保持和今天一模一样。
+  if (status < 500) throw err;
+
+  // 5xx：服务端完整记录，客户端只给一句话。
+  // err.message 可能含 SQL 语句、文件路径、堆栈线索、PG 报错里的内网 IP，
+  // 生产环境绝不外送；开发环境照常显示，方便排查。
+  req.log.error({ err }, "request_failed");
+  const safeMessage = env.NODE_ENV === "production"
+    ? "服务器内部错误"
+    : (err.message ?? "internal_error");
+
+  if ((req.headers.accept ?? "").includes("text/html")) {
+    const user = await loadUserFromRequest(req).catch(() => null);
+    return reply.code(status).view("error", {
+      title: "出错了",
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: {},
+      statusCode: status,
+      heading: "出错了",
+      message: safeMessage,
+    });
+  }
+  return reply.code(status).send({ error: "internal_error", message: safeMessage });
+});
+
 // ---- Security headers ----
 await app.register(helmet, {
   contentSecurityPolicy: {
@@ -1064,47 +1114,6 @@ await app.register(mfaRoutes);
 await app.register(adminRoutes);
 await app.register(ssoRoutes);
 await app.register(caldavRoutes);
-
-// ---- Error handler ----
-app.setErrorHandler(async (err: FastifyError, req, reply) => {
-  // ---- reply-already-sent guard (do not remove) ----
-  // The response is already on the wire; touching `reply` — or returning
-  // `undefined`, which Fastify reads as "unhandled" — crashes the process.
-  // Returning the sent reply marks the error handled. See lib/reply_guard.ts.
-  if (replyAlreadySent(reply)) return reply;
-  if (err.validation) return reply.code(400).send({ error: "validation_failed", details: err.validation });
-  if (err.statusCode === 429) {
-    return reply.code(429).send({ error: "too_many_requests", message: err.message });
-  }
-  // Always log full error server-side; never reach the user.
-  req.log.error({ err }, "request_failed");
-  const accept = req.headers.accept ?? "";
-  if (accept.includes("text/html")) {
-    const user = await loadUserFromRequest(req).catch(() => null);
-    return reply.code(err.statusCode ?? 500).view("error", {
-      title: "出错了",
-      user,
-      csrfToken: csrfTokenFor(req),
-      flash: {},
-      statusCode: err.statusCode ?? 500,
-      heading: "出错了",
-      message: env.NODE_ENV === "production" ? "服务器内部错误" : (err.message ?? "internal_error"),
-    });
-  }
-  // JSON path: in production NEVER leak err.message — could contain SQL
-  // statements, file paths, stack hints, internal IPs from PG error
-  // descriptions, etc. In dev surface the message so debugging is easy.
-  // 5xx specifically: always sanitize. 4xx with status set: surface the
-  // (developer-defined) message which is already safe.
-  const status = err.statusCode ?? 500;
-  if (status >= 500) {
-    return reply.code(status).send({
-      error: "internal_error",
-      message: env.NODE_ENV === "production" ? "服务器内部错误" : (err.message ?? "internal_error"),
-    });
-  }
-  return reply.code(status).send({ error: err.message ?? "internal_error" });
-});
 
 // ---- 404 ----
 app.setNotFoundHandler(async (req, reply) => {
