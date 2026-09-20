@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createPublicKey, verify as cryptoVerify } from "node:crypto";
 import { readFile, mkdtemp, rm, mkdir, copyFile, cp, stat } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,52 @@ export type UpdateStatus = {
 
 async function run(cmd: string, args: string[], timeoutMs = STEP_TIMEOUT_MS): Promise<{ stdout: string; stderr: string }> {
   return exec(cmd, args, { cwd: CWD, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 });
+}
+
+/**
+ * 定位 npm，**不依赖 PATH**。
+ *
+ * 为什么需要这个：更新流程用 execFile 调 npm，而 execFile 不走 shell，
+ * 完全靠 PATH 查找。PM2 托管的进程拿到的 PATH 往往是精简的——宝塔面板启动、
+ * 或 Node 装在 nvm/自定义前缀下时，npm 根本不在里面。结果就是后台点「更新」
+ * 走到装依赖那一步直接 `spawn npm ENOENT`，而此时新版本的文件**已经覆盖上去了**，
+ * 系统停在一个「代码是新的、依赖是旧的」的半更新状态。线上真出过这个事故。
+ *
+ * 解析顺序：
+ *   1. NPM_BIN 环境变量（运维显式指定，优先级最高）
+ *   2. 从 process.execPath 反推——npm 和 node 装在一起，
+ *      这条同时保证用的是**同一个 Node**，不会出现 node 20 跑着、
+ *      npm 却挂在另一个 node 18 上的错配
+ *   3. 几个常见绝对路径
+ *   4. 都找不到才退回 "npm"，让 PATH 碰运气（并在报错里说清楚怎么修）
+ *
+ * 返回 npm-cli.js 时用 [node, cli.js, ...args] 调用，比调 npm 这个 shell
+ * 包装脚本更稳（不受 shebang 和符号链接影响）。
+ */
+function resolveNpm(): { cmd: string; prefixArgs: string[]; how: string } {
+  const fromEnv = process.env.NPM_BIN;
+  if (fromEnv) return { cmd: fromEnv, prefixArgs: [], how: "NPM_BIN 环境变量" };
+
+  const nodeDir = path.dirname(process.execPath);
+  const candidates: { file: string; viaNode: boolean; how: string }[] = [
+    // npm 的入口 JS —— 最稳，直接用当前 node 执行
+    { file: path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"), viaNode: true, how: "随 node 安装的 npm-cli.js" },
+    { file: path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js"), viaNode: true, how: "node 同级的 npm-cli.js" },
+    // 再退到 npm 包装脚本
+    { file: path.join(nodeDir, "npm"), viaNode: false, how: "node 同目录的 npm" },
+    { file: "/usr/local/bin/npm", viaNode: false, how: "/usr/local/bin/npm" },
+    { file: "/usr/bin/npm", viaNode: false, how: "/usr/bin/npm" },
+    { file: "/www/server/nodejs/bin/npm", viaNode: false, how: "宝塔 nodejs 目录" },
+  ];
+  for (const c of candidates) {
+    try {
+      if (!existsSync(c.file)) continue;
+      return c.viaNode
+        ? { cmd: process.execPath, prefixArgs: [c.file], how: c.how }
+        : { cmd: c.file, prefixArgs: [], how: c.how };
+    } catch { /* 探测失败就试下一个 */ }
+  }
+  return { cmd: "npm", prefixArgs: [], how: "PATH（未能定位到绝对路径）" };
 }
 
 export function pickRemote(): string {
@@ -170,17 +216,17 @@ export type UpdateProgressEvent =
   | { type: "done"; step: string; index: number; total: number; ok: boolean; output: string }
   | { type: "final"; ok: boolean };
 
-const STEPS = (npmBin: string, remote: string, branch: string): { name: string; cmd: string; args: string[] }[] => [
+const STEPS = (npm: { cmd: string; prefixArgs: string[] }, remote: string, branch: string): { name: string; cmd: string; args: string[] }[] => [
   { name: "git fetch", cmd: "git", args: ["fetch", remote, branch] },
   { name: "git reset --hard", cmd: "git", args: ["reset", "--hard", `${remote}/${branch}`] },
-  { name: "npm ci", cmd: npmBin, args: ["ci", "--include=dev"] },
-  { name: "npm run build", cmd: npmBin, args: ["run", "build"] },
-  { name: "db migrate", cmd: npmBin, args: ["run", "db:migrate"] },
+  { name: "npm ci", cmd: npm.cmd, args: [...npm.prefixArgs, "ci", "--include=dev"] },
+  { name: "npm run build", cmd: npm.cmd, args: [...npm.prefixArgs, "run", "build"] },
+  { name: "db migrate", cmd: npm.cmd, args: [...npm.prefixArgs, "run", "db:migrate"] },
 ];
 
 export async function* applyUpdateStream(remoteOverride?: string): AsyncGenerator<UpdateProgressEvent> {
-  const npmBin = process.env.NPM_BIN || "npm";
-  const steps = STEPS(npmBin, remoteOverride || pickRemote(), pickBranch());
+  const npm = resolveNpm();
+  const steps = STEPS(npm, remoteOverride || pickRemote(), pickBranch());
   const total = steps.length;
   let ok = true;
   for (let i = 0; i < steps.length; i++) {
@@ -309,7 +355,7 @@ export async function* applyUploadedUpdate(
   tarballPath: string,
   sigBase64: string,
 ): AsyncGenerator<UploadedUpdateProgressEvent> {
-  const npmBin = process.env.NPM_BIN || "npm";
+  const npm = resolveNpm();
   const total = 5;
   let staging: string | null = null;
   let stagedRoot: string | null = null;
@@ -432,10 +478,23 @@ export async function* applyUploadedUpdate(
     // ---- 4) npm ci（生产依赖）----
     yield { type: "start", step: "npm ci", index: 3, total };
     try {
-      const { stdout, stderr } = await run(npmBin, ["ci", "--omit=dev"]);
-      yield { type: "done", step: "npm ci", index: 3, total, ok: true, output: (stdout + (stderr ? "\n[stderr]\n" + stderr : "")).slice(0, 8000) };
+      const { stdout, stderr } = await run(npm.cmd, [...npm.prefixArgs, "ci", "--omit=dev"]);
+      yield { type: "done", step: "npm ci", index: 3, total, ok: true,
+              output: `[npm 来源] ${npm.how}\n` + (stdout + (stderr ? "\n[stderr]\n" + stderr : "")).slice(0, 8000) };
     } catch (err) {
-      yield fail("npm ci", 3, err instanceof Error ? err.message : String(err));
+      const raw = err instanceof Error ? err.message : String(err);
+      // ENOENT 的原文只有一句 "spawn npm ENOENT"，看不出该怎么办。
+      // 这一步失败时新版本文件**已经覆盖上去了**，系统停在「代码新、依赖旧」
+      // 的半更新状态 —— 必须把补救办法直接写给管理员。
+      const hint = /ENOENT/.test(raw)
+        ? `\n\n找不到 npm（尝试的来源：${npm.how}）。\n` +
+          `新版本的文件已经解压覆盖，但依赖没装上，服务此刻可能起不来。\n\n` +
+          `在服务器上执行下面两条即可补完：\n` +
+          `  cd ${CWD} && $(command -v npm || echo /usr/local/bin/npm) ci --omit=dev\n` +
+          `  pm2 restart ${process.env.PM2_PROCESS_NAME || process.env.name || "by-wave-calendar"}\n\n` +
+          `要根治：用 \`which npm\` 查出绝对路径，写进 .env 的 NPM_BIN=，再重启服务。`
+        : "";
+      yield fail("npm ci", 3, raw + hint);
       yield { type: "final", ok: false };
       return;
     }
