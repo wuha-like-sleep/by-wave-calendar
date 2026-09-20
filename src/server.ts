@@ -256,7 +256,7 @@ app.addHook("onSend", async (req, reply, payload) => {
 
 // ---- forensic trail for IdP service-client (cross-account) mutations ----
 // A trusted Keycloak service token can act on ANY account via X-Account — the
-// most powerful auth path. requireUser() tags such requests; here we log every
+// most powerful auth path. requireUserOrSend() tags such requests; here we log every
 // successful mutation (POST/PUT/PATCH/DELETE) it makes so there's an immutable
 // server-log record of "client X wrote to account Y". Reads are omitted (high
 // volume, low risk); account provisioning is separately written to the admin

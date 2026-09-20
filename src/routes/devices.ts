@@ -133,7 +133,7 @@ import { z } from "zod";
 import QRCode from "qrcode";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser, loadUserFromRequest, createSession } from "../lib/session.js";
+import { requireUserOrSend, loadUserFromRequest, createSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { tForRequest } from "../lib/i18n.js";
 import { env } from "../env.js";
@@ -182,7 +182,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // both the structured payload (for the app to consume after scan) and
   // an SVG-encoded QR for the web page to drop in directly.
   app.post("/devices/pair-init", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     if (!(await ensureAppsEnabled(reply, req))) return;
     const { code, expiresAt } = await initPairing(user.id);
 
@@ -577,7 +578,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // Called by the iOS APP after iOS hands it a device token. We store
   // it on the device row identified by the JWT's `did` claim.
   app.post("/devices/me/push-token", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const deviceId = (req as unknown as { deviceId?: string }).deviceId;
     if (!deviceId) {
       return reply.code(400).send({ error: "not_a_device_session" });
@@ -602,7 +604,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // resolve "which devices row is me" without needing to scan the
   // list — handy for self-revoke from the SettingsView.
   app.get("/devices/me", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const deviceId = (req as unknown as { deviceId?: string }).deviceId;
     if (!deviceId) return reply.code(400).send({ error: "not_a_device_session" });
     const [device] = await db.select().from(schema.devices)
@@ -629,8 +632,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // form redirects so the iOS APP can present native UI.
 
   app.post("/account/mfa/setup", async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     if (user.mfaEnabled) {
       return reply.code(409).send({ error: "already_enabled", message: "MFA 已启用。请先关闭再重新设置。" });
     }
@@ -651,8 +654,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   });
 
   app.post("/account/mfa/verify", async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({ code: z.string().min(6).max(8) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     if (!user.mfaPendingSecret) {
@@ -678,8 +681,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   });
 
   app.post("/account/mfa/disable", async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     if (!user.mfaEnabled) return reply.send({ ok: true });  // already off
     const body = z.object({
       password: z.string().min(1).max(200),
@@ -717,8 +720,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post("/account/password", {
     config: { rateLimit: { max: 6, timeWindow: "1 minute" } },
   }, async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({
       currentPassword: z.string().min(1).max(200),
       newPassword: z.string().min(8).max(200),
@@ -756,8 +759,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post("/account/delete", {
     config: { rateLimit: { max: 3, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({
       password: z.string().min(1).max(200),
       confirm: z.string().min(1).max(100),
@@ -819,8 +822,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post("/auth/web-session", {
     config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
   }, async (req, reply) => {
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({
       next: z.string().min(1).max(200).regex(/^\/app(\/.*)?$/, "next 必须以 /app/ 开头").optional(),
     }).safeParse(req.body ?? {});
@@ -844,7 +847,8 @@ export async function deviceRoutes(app: FastifyInstance) {
 
   // -------- list my devices --------
   app.get("/devices", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const rows = await listDevicesForUser(user.id);
     return reply.send({
       devices: rows.map((d) => ({
@@ -863,7 +867,8 @@ export async function deviceRoutes(app: FastifyInstance) {
 
   // -------- revoke one of my devices --------
   app.delete<{ Params: { id: string } }>("/devices/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.code(400).send({ error: "bad_id" });
     const ok = await revokeDevice(user.id, id.data);
@@ -979,8 +984,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post<{ Body: { code?: string } }>("/devices/desktop-pair-approve", async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
     _purgeExpiredDesktopPairs();
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
 
     const code = String(req.body?.code ?? "").toUpperCase().trim();
     if (!code) return reply.code(400).send({ error: "missing_code" });
@@ -1217,8 +1222,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (!(await ensureAppsEnabled(reply, req))) return;
     if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();
-    const user = await requireUser(req, reply);
-    if (!user) return;
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
 
     const code = String(req.body?.code ?? "").toUpperCase().trim();
     if (!code) return reply.code(400).send({ error: "missing_code" });
@@ -1310,7 +1315,8 @@ export async function pairPageRoutes(app: FastifyInstance) {
       );
     }
     _purgeExpiredDesktopPairs();
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const code = req.params.code.toUpperCase();
     const p = desktopPairs.get(code);
     if (!p) return reply.redirect(`/desktop-pair/${code}`);
@@ -1348,7 +1354,8 @@ export async function pairPageRoutes(app: FastifyInstance) {
   app.post<{ Params: { code: string } }>("/desktop-pair/:code/deny", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     _purgeExpiredDesktopPairs();
-    await requireUser(req, reply);
+    // 丢弃返回值会让 TypeScript 沉默，所以这里显式判空（漏掉的话未认证请求会执行下面的副作用）。
+    if (!(await requireUserOrSend(req, reply))) return reply;
     const code = req.params.code.toUpperCase();
     const p = desktopPairs.get(code);
     if (p && p.status === "pending") p.status = "denied";
@@ -1399,7 +1406,8 @@ export async function pairPageRoutes(app: FastifyInstance) {
   app.post<{ Params: { code: string } }>("/web-pair/:code/approve", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     _purgeExpiredWebPairs();
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const code = req.params.code.toUpperCase();
     const p = webPairs.get(code);
     if (!p) return reply.redirect(`/web-pair/${code}`);
@@ -1412,7 +1420,8 @@ export async function pairPageRoutes(app: FastifyInstance) {
   app.post<{ Params: { code: string } }>("/web-pair/:code/deny", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     _purgeExpiredWebPairs();
-    await requireUser(req, reply);
+    // 丢弃返回值会让 TypeScript 沉默，所以这里显式判空（漏掉的话未认证请求会执行下面的副作用）。
+    if (!(await requireUserOrSend(req, reply))) return reply;
     const code = req.params.code.toUpperCase();
     const p = webPairs.get(code);
     if (p && p.status === "pending") p.status = "denied";

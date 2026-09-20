@@ -9,7 +9,7 @@
 //   - /app/search page: up to 100
 //
 // SECURITY / ISOLATION (the whole point of this file):
-//   - requireUser() authenticates (session cookie or, like every other read
+//   - requireUserOrSend() authenticates (session cookie or, like every other read
 //     endpoint, a Bearer/OAuth token); there is no anonymous path.
 //   - `allowedIds` is the user's owned + member calendars. EVERY event/calendar
 //     result is constrained to it. A public share token does NOT create a
@@ -26,7 +26,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq, inArray, isNull, ilike, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUserOrSend } from "../lib/session.js";
 import { parseSearchTerms, likeNeedle, textMatchesAllTerms, eventRelevance } from "../lib/search_query.js";
 
 const MAX_CALENDAR_RESULTS = 8;
@@ -35,7 +35,8 @@ const EMPTY = { events: [], calendars: [], bookingLinks: [] } as const;
 
 export async function searchRoutes(app: FastifyInstance) {
   app.get("/search", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const parsed = z.object({
       q: z.string().min(1).max(100),
       limit: z.coerce.number().int().min(1).max(100).default(30),

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUserOrSend } from "../lib/session.js";
 import { fetchEventMastersInWindow } from "../lib/events_query.js";
 import { newEventUid, newInvitationToken } from "../lib/ids.js";
 import { invitationIcs } from "../lib/ical.js";
@@ -75,7 +75,8 @@ export async function eventRoutes(app: FastifyInstance) {
   // Fetch events across all (or a subset of) user's calendars in a date range.
   // Used by the calendar app view to populate the grid.
   app.get("/events", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const q = z
       .object({
         from: z.string().datetime({ offset: true }),
@@ -152,7 +153,8 @@ export async function eventRoutes(app: FastifyInstance) {
   });
 
   app.get("/calendars/:id/events", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     if (!(await ownsCalendar(id, user.id))) {
       return reply.code(404).send({ error: "not_found" });
@@ -177,7 +179,8 @@ export async function eventRoutes(app: FastifyInstance) {
   // Cheap overlap check for the client — POST so we can keep tomorrow's
   // "exclude editing self" form clean without putting an event UUID in the URL.
   app.post("/events/conflicts", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({
       calendarId: z.string().uuid(),
       startsAt: isoDate,
@@ -215,7 +218,8 @@ export async function eventRoutes(app: FastifyInstance) {
   // it. `now` is the caller's local wall-clock so results are timezone-correct
   // regardless of the server's zone; we never touch the DB here.
   app.post("/parse-event", async (req, reply) => {
-    await requireUser(req, reply);
+    // 丢弃返回值会让 TypeScript 沉默，所以这里显式判空（漏掉的话未认证请求会执行下面的副作用）。
+    if (!(await requireUserOrSend(req, reply))) return reply;
     const body = z.object({
       text: z.string().min(1).max(500),
       now: z.string().max(40).optional(),
@@ -226,7 +230,8 @@ export async function eventRoutes(app: FastifyInstance) {
   });
 
   app.post("/events", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = createSchema.parse(req.body);
     if (!(await ownsCalendar(body.calendarId, user.id))) {
       return reply.code(404).send({ error: "calendar_not_found" });
@@ -408,7 +413,8 @@ export async function eventRoutes(app: FastifyInstance) {
   }).optional();
 
   app.patch("/events/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     // PATCH body may carry our recurring-scope fields alongside the
     // event fields. updateSchema is .partial() so unknown keys are
@@ -539,7 +545,8 @@ export async function eventRoutes(app: FastifyInstance) {
   });
 
   app.delete("/events/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const parsed = idParam.safeParse(req.params);
     // Fully idempotent: a malformed ID (e.g. iOS sometimes hands us its
     // internal token rather than our UUID, or the modal lost state during
@@ -594,7 +601,8 @@ export async function eventRoutes(app: FastifyInstance) {
   // on the event row + per-recipient tokens in event_invite_tokens.
 
   app.get<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const event = await loadOwnedEvent(id, user.id);
     if (!event) return reply.code(404).send({ error: "not_found" });
@@ -622,7 +630,8 @@ export async function eventRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/events/:id/attendees", {
     config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
   }, async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const body = z.object({
       email: z.string().email().max(254).transform((s) => s.toLowerCase().trim()),
@@ -692,7 +701,8 @@ export async function eventRoutes(app: FastifyInstance) {
 
   // Revoke. iOS sends email in body (avoid URL-encoding @ in path).
   app.delete<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const body = z.object({
       email: z.string().email().transform((s) => s.toLowerCase().trim()),
@@ -719,7 +729,8 @@ export async function eventRoutes(app: FastifyInstance) {
   // Only the owner of the calendar can restore. CANCEL emails already
   // sent stay sent — we don't try to "un-cancel" iMIP, that's a no-go.
   app.post("/events/:id/restore", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     // Load the soft-deleted row (loadOwnedEvent filters out deletedAt,
     // so we query directly with the ownership join).

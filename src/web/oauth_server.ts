@@ -203,11 +203,12 @@ export async function oauthServerRoutes(app: FastifyInstance) {
   });
 
   // GET /oauth/userinfo — sugar for "who is this token" introspection.
-  // Bearer-only; works with both OAuth and API tokens (via requireUser
+  // Bearer-only; works with both OAuth and API tokens (via requireUserOrSend
   // chain) but exposes scope info only for OAuth.
   app.get("/oauth/userinfo", async (req, reply) => {
-    const { requireUser } = await import("../lib/session.js");
-    const user = await requireUser(req, reply);
+    const { requireUserOrSend } = await import("../lib/session.js");
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const scopes = (req as unknown as { oauthScopes?: string[] }).oauthScopes ?? null;
     return reply.send({
       sub: user.id,

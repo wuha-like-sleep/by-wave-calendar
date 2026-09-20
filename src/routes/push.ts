@@ -8,7 +8,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUserOrSend } from "../lib/session.js";
 import { getPublicVapidKey } from "../lib/push.js";
 
 export async function pushRoutes(app: FastifyInstance) {
@@ -18,7 +18,8 @@ export async function pushRoutes(app: FastifyInstance) {
   });
 
   app.post("/push/subscribe", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({
       endpoint: z.string().url().max(2048),
       keys: z.object({
@@ -53,7 +54,8 @@ export async function pushRoutes(app: FastifyInstance) {
   });
 
   app.post("/push/unsubscribe", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = z.object({ endpoint: z.string().url().max(2048) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     await db.delete(schema.pushSubscriptions).where(and(

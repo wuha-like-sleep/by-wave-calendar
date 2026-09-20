@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUserOrSend } from "../lib/session.js";
 import { newShareToken } from "../lib/ids.js";
 import { env } from "../env.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -23,7 +23,8 @@ const idParam = z.object({ id: z.string().uuid() });
 // the ok()/err() helpers branch based on the inbound URL.
 export async function calendarRoutes(app: FastifyInstance) {
   app.get("/calendars", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const rows = await db
       .select()
       .from(schema.calendars)
@@ -33,7 +34,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.post("/calendars", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = createSchema.parse(req.body);
     const [row] = await db
       .insert(schema.calendars)
@@ -44,7 +46,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.patch("/calendars/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const body = updateSchema.parse(req.body);
     const [row] = await db
@@ -57,7 +60,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.delete("/calendars/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const result = await db
       .delete(schema.calendars)
@@ -68,7 +72,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.get("/calendars/:id/share-tokens", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const owned = await ownsCalendar(id, user.id);
     if (!owned) return err(req, reply, 404, "not_found", "日历不存在");
@@ -80,7 +85,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.post("/calendars/:id/share-tokens", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const body = z.object({ label: z.string().max(100).optional() }).parse(req.body ?? {});
     const owned = await ownsCalendar(id, user.id);
@@ -96,7 +102,8 @@ export async function calendarRoutes(app: FastifyInstance) {
   });
 
   app.delete("/calendars/:id/share-tokens/:token", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id, token } = z.object({ id: z.string().uuid(), token: z.string() }).parse(req.params);
     const owned = await ownsCalendar(id, user.id);
     if (!owned) return err(req, reply, 404, "not_found", "日历不存在");

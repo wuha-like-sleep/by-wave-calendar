@@ -127,7 +127,29 @@ declare module "fastify" {
   }
 }
 
-export async function requireUser(req: FastifyRequest, reply: FastifyReply): Promise<schema.User> {
+/**
+ * 认证当前请求。
+ *
+ * 不变式：返回 null **当且仅当**本函数已经把响应发出去了。调用方必须立刻退出：
+ *
+ *     const user = await requireUserOrSend(req, reply);
+ *     if (!user) return reply;
+ *
+ * 两条禁令，都是拿线上事故换来的：
+ *
+ * 1. 绝不新增「返回 null 但没发响应」的分支 —— 请求会永远挂住。
+ * 2. 绝不恢复「先 send 再 throw」的写法。异常到达错误处理器时字节已经在线上，
+ *    Fastify 的 fallbackErrorHandler 会再 writeHead 一次，而那个重试没有包
+ *    try/catch，异常从一条没人接的 promise 链里逃出去 → 未捕获异常 → 进程退出。
+ *    一个未认证的 GET /api/calendars 就能打死服务器，2026-08 和 2026-09 各发生
+ *    过一次。名字里的 OrSend 就是为了让调用方一眼看见「它可能已经回过话了」。
+ *
+ * 同形状的生产范式见 lib/caldav_auth.ts 的 send401()。
+ */
+export async function requireUserOrSend(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<schema.User | null> {
   if (req.user) return req.user;
 
   // 1) Bearer token (third-party API integration). Only honored when admin
@@ -158,7 +180,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
         }
       }
       reply.code(401).send({ error: "invalid_token" });
-      throw new Error("invalid_token");
+      return null;
     }
 
     const { looksLikeApiToken, verifyApiToken, touchApiToken } = await import("./api_token.js");
@@ -175,7 +197,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
         }
       }
       reply.code(401).send({ error: "invalid_token" });
-      throw new Error("invalid_token");
+      return null;
     }
 
     // External IdP (Keycloak) access token — ByWave as OAuth resource server.
@@ -210,7 +232,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
           return res.user;
         }
         reply.code(res.code).send({ error: res.error });
-        throw new Error(res.error);
+        return null;
       }
       // matched:false → not one of our IdPs; fall through to device-token path.
     }
@@ -229,7 +251,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
       const settings = await getSettings();
       if (!settings.appsEnabled) {
         reply.code(403).send({ error: "apps_disabled" });
-        throw new Error("apps_disabled");
+        return null;
       }
       const payload = verifyAccessToken(token);
       if (payload) {
@@ -247,7 +269,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
         }
       }
       reply.code(401).send({ error: "invalid_token" });
-      throw new Error("invalid_token");
+      return null;
     }
   }
 
@@ -255,7 +277,7 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
   const user = await loadUserFromRequest(req);
   if (!user) {
     reply.code(401).send({ error: "unauthorized" });
-    throw new Error("unauthorized");
+    return null;
   }
   req.user = user;
   return user;

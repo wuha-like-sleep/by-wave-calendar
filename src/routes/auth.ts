@@ -3,7 +3,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, passwordPolicyError, verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
-import { createSession, destroySession, requireUser } from "../lib/session.js";
+import { createSession, destroySession, requireUserOrSend } from "../lib/session.js";
 import { userIsActive } from "../lib/user_state.js";
 import { ok, err } from "../lib/api_response.js";
 import { env } from "../env.js";
@@ -103,7 +103,8 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.get("/auth/me", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
   });
 }

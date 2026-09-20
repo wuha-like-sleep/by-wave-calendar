@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, asc, desc, eq, gte, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { requireUser } from "../lib/session.js";
+import { requireUserOrSend } from "../lib/session.js";
 import { env } from "../env.js";
 import { ok, okList, err } from "../lib/api_response.js";
 import { DEFAULT_AVAILABILITY, type WeeklyAvailability } from "../lib/booking.js";
@@ -74,7 +74,8 @@ function withPublicUrl(userId: string, link: schema.BookingLink) {
 export async function bookingRoutes(app: FastifyInstance) {
   // List the authenticated user's booking links.
   app.get("/booking-links", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const rows = await db
       .select()
       .from(schema.bookingLinks)
@@ -86,7 +87,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   // Create a booking link. Mirrors POST /app/booking-links but takes JSON
   // (so notifyEmail is a real boolean, not the HTML "on"/absent dance).
   app.post("/booking-links", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const body = createSchema.parse(req.body);
     if (!(await ownsCalendar(body.calendarId, user.id))) {
       return err(req, reply, 404, "calendar_not_found", "目标日历不存在或不属于你");
@@ -124,7 +126,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   // Partial update — covers rename, re-target calendar, duration/notice/
   // buffer tweaks, enable/disable, notify toggle, and per-day availability.
   app.patch("/booking-links/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const body = updateSchema.parse(req.body);
     if (Object.keys(body).length === 0) {
@@ -151,7 +154,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   app.delete("/booking-links/:id", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const result = await db
       .delete(schema.bookingLinks)
@@ -165,7 +169,8 @@ export async function bookingRoutes(app: FastifyInstance) {
   // (not-cancelled) upcoming bookings; pass ?all=1 to include past +
   // cancelled. Lets the native owner UI show "who booked me".
   app.get("/booking-links/:id/bookings", async (req, reply) => {
-    const user = await requireUser(req, reply);
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
     const { id } = idParam.parse(req.params);
     const q = z.object({ all: z.coerce.boolean().default(false) }).parse(req.query ?? {});
     // Ownership check — the link must belong to the caller.
