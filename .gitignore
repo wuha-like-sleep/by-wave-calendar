@@ -39,3 +39,11 @@ src/public/uploads/
 # apps/android/
 # apps/desktop/
 .claude/
+
+# iCloud 同步产生的重复文件（~/Desktop 在 iCloud 里，会生成 "xxx 2.css" 这种）。
+# 它们不匹配上面按确切文件名写的忽略规则，曾经被误提交过一次。
+*\ [0-9].css
+*\ [0-9].js
+*\ [0-9].ts
+*\ [0-9].json
+*\ [0-9].ejs
