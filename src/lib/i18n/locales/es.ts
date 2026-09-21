@@ -1407,4 +1407,20 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "loginChallenge.submit": "Verificar e iniciar sesión",
   "loginChallenge.expiryNote": "⏱ El código es válido 10 minutos, con un máximo de 5 intentos.",
   "loginChallenge.notReceived": "¿No te ha llegado? Revisa la carpeta de spam o <a href=\"/login\" class=\"text-brand-600 hover:underline\">vuelve al inicio de sesión</a> e inténtalo otra vez.",
+
+  // Inicio de sesión con Apple rechazado. Las versiones ya publicadas de la app
+  // muestran el `message` del servidor, así que cada frase indica qué hacer.
+  "appleLogin.emailTaken": "Ya existe una cuenta con este correo en este sitio, y Apple no ha confirmado que la dirección sea tuya. Inicia sesión como lo hacías antes (contraseña o inicio de sesión único): a esta cuenta no se puede entrar con Iniciar sesión con Apple.",
+  "appleLogin.signupClosed": "Este sitio no admite cuentas nuevas por ahora. Si ya tienes una, inicia sesión como lo hacías antes; si no, escribe a quien administra el sitio.",
+  "appleLogin.inviteOnly": "Este sitio es solo por invitación, y Iniciar sesión con Apple no puede transmitir un código de invitación. Regístrate en la web con tu enlace de invitación y el mismo correo, confirma tu correo y vuelve aquí para pulsar de nuevo Iniciar sesión con Apple.",
+  "appleLogin.domainNotAllowed": "Este sitio solo acepta cuentas de ciertos dominios de correo, y tu dirección de Apple no es una de ellas. Regístrate en la web con una dirección admitida y luego inicia sesión con esa dirección.",
+  "appleLogin.quotaReached": "Este sitio ya ha agotado las cuentas nuevas que acepta hoy. Inténtalo mañana o escribe a quien administra el sitio.",
+  "appleLogin.invalidEmail": "Este sitio no puede usar la dirección de correo que ha facilitado Apple: lo más probable es que sea una dirección oculta. Regístrate en la web con una dirección utilizable y luego inicia sesión con esa dirección.",
+  "appleLogin.createFailed": "No se ha podido crear la cuenta. Inténtalo de nuevo en un momento; si sigue fallando, escribe a quien administra el sitio.",
+  "appleLogin.deviceFailed": "No se ha podido guardar el inicio de sesión en este dispositivo. Inténtalo de nuevo en un momento; si sigue fallando, escribe a quien administra el sitio.",
+  "appleLogin.badRequest": "Este sitio no ha podido aceptar la solicitud de inicio de sesión. Actualiza la aplicación a la última versión y vuelve a intentarlo.",
+  "appleLogin.tokenInvalid": "No se ha podido verificar la prueba de inicio de sesión de Apple; puede que haya caducado. Vuelve a iniciar sesión.",
+  "appleLogin.accountDisabled": "Esta cuenta está desactivada. Escribe a quien administra el sitio para recuperarla.",
+  "appleLogin.notConfigured": "Este sitio todavía no tiene activado el inicio de sesión con Apple. Pide que lo activen o inicia sesión como lo hacías antes.",
+
 };

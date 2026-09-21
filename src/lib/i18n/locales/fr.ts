@@ -1407,4 +1407,20 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "loginChallenge.submit": "Vérifier et se connecter",
   "loginChallenge.expiryNote": "⏱ Le code est valable 10 minutes, avec 5 tentatives maximum.",
   "loginChallenge.notReceived": "Rien reçu ? Vérifiez vos spams, ou <a href=\"/login\" class=\"text-brand-600 hover:underline\">revenez à la connexion</a> et réessayez.",
+
+  // Connexion avec Apple refusée. Les versions déjà publiées de l'application
+  // affichent le `message` du serveur : chaque phrase doit dire quoi faire.
+  "appleLogin.emailTaken": "Un compte avec cette adresse existe déjà sur ce site, et Apple n'a pas confirmé qu'elle vous appartient. Connectez-vous comme avant (mot de passe ou authentification unique) : ce compte n'est pas accessible via Se connecter avec Apple.",
+  "appleLogin.signupClosed": "Ce site n'accepte pas de nouveaux comptes pour le moment. Si vous en avez déjà un, connectez-vous comme avant ; sinon, contactez la personne qui administre le site.",
+  "appleLogin.inviteOnly": "Ce site est sur invitation, et Se connecter avec Apple ne peut pas transmettre de code d'invitation. Inscrivez-vous sur le web avec votre lien d'invitation et la même adresse e-mail, confirmez votre adresse, puis revenez ici et appuyez à nouveau sur Se connecter avec Apple.",
+  "appleLogin.domainNotAllowed": "Ce site n'accepte que les comptes de certains domaines de messagerie, et votre adresse Apple n'en fait pas partie. Inscrivez-vous sur le web avec une adresse acceptée, puis connectez-vous avec cette adresse.",
+  "appleLogin.quotaReached": "Ce site a déjà atteint le nombre de nouveaux comptes qu'il accepte aujourd'hui. Réessayez demain ou contactez la personne qui administre le site.",
+  "appleLogin.invalidEmail": "Ce site ne peut pas utiliser l'adresse e-mail fournie par Apple : il s'agit très probablement d'une adresse masquée. Inscrivez-vous sur le web avec une adresse utilisable, puis connectez-vous avec cette adresse.",
+  "appleLogin.createFailed": "Le compte n'a pas pu être créé. Réessayez dans un instant ; si le problème persiste, contactez la personne qui administre le site.",
+  "appleLogin.deviceFailed": "La connexion n'a pas pu être enregistrée sur cet appareil. Réessayez dans un instant ; si le problème persiste, contactez la personne qui administre le site.",
+  "appleLogin.badRequest": "Ce site n'a pas pu accepter la demande de connexion. Mettez l'application à jour vers la dernière version, puis réessayez.",
+  "appleLogin.tokenInvalid": "La preuve de connexion fournie par Apple n'a pas pu être vérifiée ; elle a peut-être expiré. Reconnectez-vous.",
+  "appleLogin.accountDisabled": "Ce compte a été désactivé. Contactez la personne qui administre le site pour le rétablir.",
+  "appleLogin.notConfigured": "Ce site n'a pas encore activé la connexion avec Apple. Demandez son activation ou connectez-vous comme avant.",
+
 };

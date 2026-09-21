@@ -1407,4 +1407,20 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "loginChallenge.submit": "확인하고 로그인",
   "loginChallenge.expiryNote": "⏱ 코드는 10분간 유효하며 최대 5회까지 시도할 수 있습니다.",
   "loginChallenge.notReceived": "받지 못하셨나요? 스팸함을 확인하거나 <a href=\"/login\" class=\"text-brand-600 hover:underline\">로그인 페이지로 돌아가</a> 다시 시도하세요.",
+
+  // Apple 로그인이 거부된 경우. 이미 배포된 앱은 서버가 보낸 message를 그대로
+  // 보여주므로, 각 문장은 다음에 무엇을 할지 알려 주어야 한다.
+  "appleLogin.emailTaken": "이 이메일로 된 계정이 이미 있는데, Apple이 그 주소가 회원님의 것임을 확인해 주지 않았습니다. 기존에 쓰던 방법(비밀번호 또는 통합 로그인)으로 로그인해 주세요. 이 계정은 Apple로 로그인할 수 없습니다.",
+  "appleLogin.signupClosed": "이 사이트는 지금 새 계정 가입을 받지 않습니다. 이미 계정이 있다면 기존 방식으로 로그인하고, 없다면 사이트 관리자에게 문의해 주세요.",
+  "appleLogin.inviteOnly": "이 사이트는 초대받은 분만 가입할 수 있고, Apple 로그인으로는 초대 코드를 전달할 수 없습니다. 먼저 초대 링크로 같은 이메일을 사용해 웹에서 가입하고 이메일 인증을 마친 뒤, 여기로 돌아와 Apple로 로그인을 다시 누르면 됩니다.",
+  "appleLogin.domainNotAllowed": "이 사이트는 지정된 이메일 도메인의 계정만 받습니다. 회원님의 Apple 주소는 해당되지 않습니다. 허용되는 주소로 웹에서 가입한 뒤 그 주소로 로그인해 주세요.",
+  "appleLogin.quotaReached": "오늘 이 사이트가 받을 수 있는 새 계정이 모두 찼습니다. 내일 다시 시도하거나 사이트 관리자에게 문의해 주세요.",
+  "appleLogin.invalidEmail": "Apple이 제공한 이메일 주소는 이 사이트에서 사용할 수 없습니다(대개 가려진 주소입니다). 사용 가능한 주소로 웹에서 가입한 뒤 그 주소로 로그인해 주세요.",
+  "appleLogin.createFailed": "계정을 만들지 못했습니다. 잠시 후 다시 시도해 주세요. 계속 실패하면 사이트 관리자에게 문의해 주세요.",
+  "appleLogin.deviceFailed": "이 기기에 로그인 정보를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요. 계속 실패하면 사이트 관리자에게 문의해 주세요.",
+  "appleLogin.badRequest": "이 사이트가 로그인 요청을 받아들이지 못했습니다. 앱을 최신 버전으로 업데이트한 뒤 다시 시도해 주세요.",
+  "appleLogin.tokenInvalid": "Apple이 보낸 로그인 증명을 확인하지 못했습니다. 시간이 너무 지났을 수 있으니 다시 로그인해 주세요.",
+  "appleLogin.accountDisabled": "이 계정은 사용 중지되었습니다. 복구가 필요하면 사이트 관리자에게 문의해 주세요.",
+  "appleLogin.notConfigured": "이 사이트는 아직 Apple 로그인을 켜지 않았습니다. 사이트 관리자에게 활성화를 요청하거나 기존 방식으로 로그인해 주세요.",
+
 };

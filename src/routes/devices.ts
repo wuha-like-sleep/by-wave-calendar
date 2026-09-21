@@ -135,7 +135,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUserOrSend, loadUserFromRequest, createSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
-import { tForRequest } from "../lib/i18n.js";
+import { tForRequest, translatePlain, resolveLocaleFromRequest, type TranslationKey } from "../lib/i18n.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
 import { verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
@@ -157,28 +157,78 @@ import {
 } from "../lib/devices.js";
 
 /**
- * 苹果登录建号被拒 → 这条路的错误形态(跟本文件其它错误一样是裸
- * `{ error: "<code>" }`,不换壳)。导出是为了能单独钉住这张表。
+ * 苹果登录建号被拒 → 这条路的错误形态。导出是为了能单独钉住这张表。
  *
  * **一条都不是 401。** 401 在 App 的 api.dart 里的意思是「会话没了」,收到就
  * 把人登出;而「这次不让你开号」跟「你是谁我不认」完全是两回事,已发布的包
  * 改不了那个判断。403 才是「我认得你,但这件事不行」。
  *
  * 也不把配额数字放进 error 串:那是管理员设的闸门,不该从 App 漏出去。
+ *
+ * ── messageKey 是干什么的 ──────────────────────────────────────────────
+ * 光有 error 码不够,因为**已经发布出去的 iOS 包改不了**。
+ * apps/ios/.../Auth/AppleSignIn.swift 的文案表只认识四个码
+ * (apple_token_invalid / account_disabled / apple_signin_not_configured /
+ * apps_disabled),这里这几个码它一个都不认,全都落到 default 分支,而那个
+ * 分支不带 message 时会把状态码和码名直接拼给用户看:
+ *
+ *     Apple 登录失败 (HTTP 409) - email_taken
+ *
+ * 好在它的 default 分支**第一件事**就是「服务端给了非空 message 就显示它」。
+ * 所以纯服务端补一句本地化的人话,存量用户当场就能看懂 —— 不用发版。
+ *
+ * 回的是键不是文案:语言要按请求现算(见路由里的 appleT),这个函数是纯的,
+ * 不该知道请求长什么样。
  */
-export function appleProvisionDenial(d: ProvisionDenial): { status: number; error: string } {
+export function appleProvisionDenial(d: ProvisionDenial): { status: number; error: string; messageKey: TranslationKey } {
   switch (d.code) {
-    case "invalid_email": return { status: 400, error: "invalid_email" };
-    case "registration_closed": return { status: 403, error: "signup_closed" };
+    case "invalid_email": return { status: 400, error: "invalid_email", messageKey: "appleLogin.invalidEmail" };
+    case "registration_closed": return { status: 403, error: "signup_closed", messageKey: "appleLogin.signupClosed" };
     // 苹果登录带不出邀请码,所以邀请制下这两条对 App 是同一件事。
     case "invite_required":
-    case "invite_invalid": return { status: 403, error: "signup_invite_only" };
-    case "domain_not_allowed": return { status: 403, error: "signup_domain_not_allowed" };
-    case "daily_quota_reached": return { status: 403, error: "signup_quota_reached" };
+    case "invite_invalid": return { status: 403, error: "signup_invite_only", messageKey: "appleLogin.inviteOnly" };
+    case "domain_not_allowed": return { status: 403, error: "signup_domain_not_allowed", messageKey: "appleLogin.domainNotAllowed" };
+    case "daily_quota_reached": return { status: 403, error: "signup_quota_reached", messageKey: "appleLogin.quotaReached" };
     // 这两条是「号建不出来」,不是闸门拦的,沿用原来的 500 形态。
-    case "email_taken":
-    case "create_failed": return { status: 500, error: "account_create_failed" };
+    // 但对用户来说「邮箱撞了」和「插库失败」下一步完全不同,所以码合并、话不合并。
+    case "email_taken": return { status: 500, error: "account_create_failed", messageKey: "appleLogin.emailTaken" };
+    case "create_failed": return { status: 500, error: "account_create_failed", messageKey: "appleLogin.createFailed" };
   }
+}
+
+/**
+ * /auth/apple 这条路上的 `t()`。
+ *
+ * 为什么不直接用 tForRequest:那个读的是 `req.locale`,而 `req.locale` 是
+ * src/server.ts 里一个全局 onRequest 钩子写的。**这条路能不能读到它,取决于
+ * 那个钩子和 `app.register(deviceRoutes)` 的先后**,而且 tForRequest 读不到时
+ * 会安静地回落到 zh-CN —— 不报错、不打日志,只是全世界的用户都收到中文。
+ * 这种失效形态在这个仓库出过太多次,不值得再赌一次:这里自己算。
+ *
+ * 口径跟网页完全一致(resolveLocale 的优先级):
+ *   ?lang= → bwc_locale cookie → 用户偏好 → 站点默认语言 → Accept-Language → zh-CN
+ * 登录这一刻服务端还不知道他是谁,所以前三级都不可能命中:
+ *   - 原生 App 不带 cookie,也不会给这个接口加 ?lang=;
+ *   - 用户是谁正是这次请求要决定的事。
+ * 于是实际生效的是后两级 —— **站点默认语言压着 Accept-Language**。
+ *
+ * 局限(知道了再选,不是没看见):
+ *   - `default_locale` 这一列的建表默认值是 "zh-CN",不是 "auto"。站长没动过
+ *     这一项的话,日本用户收到的仍然是中文。要让设备语言说了算,站长得把
+ *     后台的网站语言改成「跟随浏览器」。这条不在这里偷偷改口径 —— 一个接口
+ *     跟全站不一样,是下一个坑。
+ *   - iOS 没有显式发 Accept-Language,靠的是 URLSession 按系统偏好语言自动带的
+ *     那一条。用户只在 App 里换了语言、没换系统语言时,这里会跟 App 界面不一致。
+ *   - 苹果发的是 zh-Hans-CN / zh-Hant-TW 这种写法,而 pickFromAcceptLanguage 只做
+ *     「精确匹配 → 主语言前缀」两级,zh-Hant-TW 会落到 zh-CN(繁体用户收到简体)。
+ *     修它要动 src/lib/i18n.ts,不在这一轮的射程里。
+ */
+async function appleT(req: FastifyRequest): Promise<(key: TranslationKey) => string> {
+  const s = await getSettings();
+  const locale = resolveLocaleFromRequest(req, null, s.defaultLocale);
+  // translatePlain 不是 translate:这句话落在 JSON 里、由原生 App 直接显示,
+  // 不经过 EJS。用会转义的那个,用户会在手机上看到 &quot; 和 &#39;。
+  return (key) => translatePlain(locale, key);
 }
 
 // Master feature gate. Reads the latest site_settings on each call so an
@@ -470,10 +520,13 @@ export async function deviceRoutes(app: FastifyInstance) {
   //   3. Otherwise create a fresh passwordless account.
   app.post("/auth/apple", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
+    // 每个拒绝分支都要带一句人话:存量 iOS 包不认识下面这些码,不给 message
+    // 就把状态码和码名拼给用户看。语言按请求现算,见 appleT。
+    const t = await appleT(req);
     const { appleSignInConfigured, verifyAppleIdentityToken, AppleVerifyError } =
       await import("../lib/apple_signin.js");
     if (!appleSignInConfigured()) {
-      return reply.code(503).send({ error: "apple_signin_not_configured" });
+      return reply.code(503).send({ error: "apple_signin_not_configured", message: t("appleLogin.notConfigured") });
     }
     const body = z.object({
       identityToken: z.string().min(1).max(8192),
@@ -487,7 +540,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       // identity) — the verified token is the source of truth for sub/email.
       fullName: z.string().max(100).optional(),
     }).safeParse(req.body);
-    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    if (!body.success) return reply.code(400).send({ error: "bad_request", message: t("appleLogin.badRequest") });
 
     let claims;
     try {
@@ -495,7 +548,7 @@ export async function deviceRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof AppleVerifyError) {
         req.log.warn({ code: err.code }, "apple_signin_verify_failed");
-        return reply.code(401).send({ error: "apple_token_invalid", code: err.code });
+        return reply.code(401).send({ error: "apple_token_invalid", code: err.code, message: t("appleLogin.tokenInvalid") });
       }
       throw err;
     }
@@ -522,7 +575,7 @@ export async function deviceRoutes(app: FastifyInstance) {
         });
         if (decision === "refuse") {
           // 409 而不是 401:401 在 App 的 api.dart 里的意思是「会话没了」。
-          return reply.code(409).send({ error: "email_taken" });
+          return reply.code(409).send({ error: "email_taken", message: t("appleLogin.emailTaken") });
         }
         if (decision === "adopt_after_eviction") {
           await evictAccountCredentials(byEmail.id, {
@@ -537,7 +590,7 @@ export async function deviceRoutes(app: FastifyInstance) {
         // 作废动作改过这一行的一大半列(密码、MFA、锁定计数…),byEmail 这个
         // 对象已经是旧的。回读一次,别把陈旧字段带进后面的判定。
         const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, byEmail.id)).limit(1);
-        if (!fresh) return reply.code(500).send({ error: "account_create_failed" });
+        if (!fresh) return reply.code(500).send({ error: "account_create_failed", message: t("appleLogin.createFailed") });
         user = fresh;
       }
     }
@@ -562,7 +615,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       // 时回的也是 refuse,口径是同一条,只是这条路没有第二种可能、不必再算一次。
       const [emailClash] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
       if (emailClash) {
-        return reply.code(409).send({ error: "email_taken" });
+        return reply.code(409).send({ error: "email_taken", message: t("appleLogin.emailTaken") });
       } else {
         // 建号收口:注册策略 / 邀请码 / 域名白名单 / 每日配额 全在里面判,跟网页
         // 注册同一份。苹果登录以前完全不看这些开关 —— 站长把注册关了,从 App
@@ -586,14 +639,14 @@ export async function deviceRoutes(app: FastifyInstance) {
         });
         if (!prov.ok) {
           const m = appleProvisionDenial(prov.reason);
-          return reply.code(m.status).send({ error: m.error });
+          return reply.code(m.status).send({ error: m.error, message: t(m.messageKey) });
         }
         user = prov.user;
       }
     }
 
     if (!userIsActive(user)) {
-      return reply.code(403).send({ error: "account_disabled" });
+      return reply.code(403).send({ error: "account_disabled", message: t("appleLogin.accountDisabled") });
     }
 
     // Mint device tokens — identical to /auth/login-password's happy path.
@@ -611,7 +664,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       ip: req.ip,
       userAgent: ua,
     });
-    if (!device) return reply.code(500).send({ error: "device_create_failed" });
+    if (!device) return reply.code(500).send({ error: "device_create_failed", message: t("appleLogin.deviceFailed") });
     const access = signAccessToken(user.id, device.id);
     void (async () => {
       try {

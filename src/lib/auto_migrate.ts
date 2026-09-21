@@ -138,4 +138,12 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "users.signup_source（缺了登录和注册都 500）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source text`,
   },
+  {
+    // 0051。空串 = 「还没 bump 过」，和迁移里的默认值一字不差。
+    // 补出来的值故意**不是** 0051 里那个发版字面量：这一条的职责是「别让整站
+    // 白屏」，不是替迁移做决定。真补出空串来，代价只是这台机器上的强制重拉
+    // 暂时不生效（客户端照常同步），而迁移器一旦恢复记账就会把值补上。
+    why: "site_settings.caldav_sync_epoch（缺了每一个页面都 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS caldav_sync_epoch text NOT NULL DEFAULT ''`,
+  },
 ];

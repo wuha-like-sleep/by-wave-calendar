@@ -207,6 +207,25 @@ export const siteSettings = pgTable("site_settings", {
   // VAPID requires a "subject" — typically mailto:admin@... — for the
   // push services to contact you if your pushes misbehave.
   vapidSubject: text("vapid_subject"),
+  // CalDAV 集合的「同步纪元」——一个部署级别的字符串,掺进每个日历的 ctag。
+  //
+  // 为什么需要它:ctag 是 md5(该日历 max(updated_at) | 活行数),而苹果日历
+  // 正是靠 ctag 变没变来决定「要不要重新列一遍这个日历」。于是凡是
+  // **只改序列化口径、不改任何一行数据**的发版(比如合成 VEVENT 开始带
+  // VALARM 了),ctag 一个字节都不变,客户端手上那份过期副本就一直是它眼里
+  // 的最新版。0050 那种「挑一批行改 updated_at」的做法治不了根:只要
+  // max(updated_at) 落在没被挑中的行上(订阅进来的、没挂提醒的),ctag 照样
+  // 不变——实测两条事件的日历跑完 0050 前后 ctag 完全一样。
+  //
+  // 形态是**文本**,不是自增整数、也不是时间戳:
+  //   · 自增整数要求「后一次 bump 的值一定比前一次大」。迁移里写死常量 N
+  //     配 `WHERE epoch < N` 才可重入,而后台一旦也能 +1,管理员按几次就能
+  //     越过下一版的常量,那一版的强制重拉就被静默吞掉。
+  //   · 文本 + `IS DISTINCT FROM 常量` 不需要任何顺序假设:重放同一条迁移
+  //     匹配不到行(真 no-op),后台写一个新串也一定和上一版的常量不同。
+  //     两个 bump 源互相不会遮住对方。
+  // 默认空串 = 「还没 bump 过」,是一个合法取值,不是缺失。
+  caldavSyncEpoch: text("caldav_sync_epoch").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

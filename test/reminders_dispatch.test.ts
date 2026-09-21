@@ -9,7 +9,8 @@ vi.mock("../src/lib/site_settings.js", () => ({ getSettings: async () => ({ defa
 vi.mock("../src/lib/push.js", () => ({ pushToUser: vi.fn(async () => ({ sent: 0, failed: 0 })) }));
 vi.mock("../src/lib/mailer.js", () => ({ sendMail: vi.fn(async () => ({ ok: true as boolean, reason: undefined as string | undefined })) }));
 
-import { dispatchDueReminders, type ReminderStore, type SentKey } from "../src/lib/reminders.js";
+import { dispatchDueReminders, sentTriggerFor, type ReminderStore, type SentKey } from "../src/lib/reminders.js";
+import { composeCalendarAudience } from "../src/lib/calendar_access.js";
 import { sendMail } from "../src/lib/mailer.js";
 import { pushToUser } from "../src/lib/push.js";
 
@@ -30,7 +31,9 @@ type EventRow = {
   rrule: string | null; exdates: unknown; allDay: boolean;
 };
 
-type CalRow = { id: string; ownerId: string; timezone: string | null };
+type CalRow = { id: string; ownerId: string; timezone: string | null; name: string };
+
+type MemberRow = { calendarId: string; userId: string };
 
 function keyOf(k: SentKey): string {
   return `${k.eventId}\u0000${k.trigger}\u0000${k.instanceStart.toISOString()}`;
@@ -39,14 +42,23 @@ function keyOf(k: SentKey): string {
 type Harness = {
   store: ReminderStore;
   sentRows: SentKey[];
-  calls: { loadEvents: number; loadSent: number; loadOwners: number; loadCalendars: number };
+  calls: { loadEvents: number; loadSent: number; loadUsers: number; loadCalendars: number; loadMembers: number };
   /** markSent 被调用时先返回 false（模拟别的副本刚抢先落了行） */
   conflictOn: Set<string>;
 };
 
-function harness(events: EventRow[], calendars: CalRow[], ownerDisabled = false): Harness {
+type HarnessOpts = {
+  ownerDisabled?: boolean;
+  /** calendar_members 里的行 */
+  members?: MemberRow[];
+  /** 这些 user id 的账号是停用状态 */
+  disabledUserIds?: string[];
+};
+
+function harness(events: EventRow[], calendars: CalRow[], opts: HarnessOpts = {}): Harness {
   const sentRows: SentKey[] = [];
-  const calls = { loadEvents: 0, loadSent: 0, loadOwners: 0, loadCalendars: 0 };
+  const calls = { loadEvents: 0, loadSent: 0, loadUsers: 0, loadCalendars: 0, loadMembers: 0 };
+  const disabled = new Set(opts.disabledUserIds ?? []);
   const conflictOn = new Set<string>();
   const store: ReminderStore = {
     async loadEvents(from, to) {
@@ -57,11 +69,17 @@ function harness(events: EventRow[], calendars: CalRow[], ownerDisabled = false)
       calls.loadCalendars++;
       return calendars.filter((c) => ids.includes(c.id));
     },
-    async loadOwners(ids) {
-      calls.loadOwners++;
+    async loadMembers(calendarIds) {
+      calls.loadMembers++;
+      return (opts.members ?? []).filter((m) => calendarIds.includes(m.calendarId));
+    },
+    async loadUsers(ids) {
+      calls.loadUsers++;
       return ids.map((id) => ({
-        id, email: `${id}@example.com`, displayName: "Owner",
-        disabledAt: ownerDisabled ? new Date("2026-01-01T00:00:00Z") : null,
+        id, email: `${id}@example.com`, displayName: "U",
+        // 所有者的停用开关沿用老参数；成员按 disabledUserIds 单独开。
+        disabledAt: (disabled.has(id) || (opts.ownerDisabled && id === "user-1"))
+          ? new Date("2026-01-01T00:00:00Z") : null,
         locale: "en",
       }));
     },
@@ -81,7 +99,7 @@ function harness(events: EventRow[], calendars: CalRow[], ownerDisabled = false)
   return { store, sentRows, calls, conflictOn };
 }
 
-const CAL: CalRow = { id: "cal-1", ownerId: "user-1", timezone: "Asia/Shanghai" };
+const CAL: CalRow = { id: "cal-1", ownerId: "user-1", timezone: "Asia/Shanghai", name: "团队日程" };
 
 function ev(over: Partial<EventRow> = {}): EventRow {
   return {
@@ -290,8 +308,9 @@ describe("批量查重", () => {
     const r = await dispatchDueReminders(logger(), h.store);
     expect(r.sent).toBe(2);                  // a 的 -PT15M + b 的 -PT0M
     expect(h.calls.loadSent).toBe(1);
-    expect(h.calls.loadOwners).toBe(1);
+    expect(h.calls.loadUsers).toBe(1);
     expect(h.calls.loadCalendars).toBe(1);
+    expect(h.calls.loadMembers).toBe(1);
   });
 
   it("同一事件被取回两次（join 复制行）也只发一封", async () => {
@@ -385,11 +404,220 @@ describe("邮件正文", () => {
 
 describe("收件人", () => {
   it("被封禁的账号不发信、不落行", async () => {
-    const h = harness([ev()], [CAL], true);
+    const h = harness([ev()], [CAL], { ownerDisabled: true });
     at("2026-07-14T01:45:00Z");
     const r = await dispatchDueReminders(logger(), h.store);
     expect(mockSendMail).not.toHaveBeenCalled();
     expect(r.sent).toBe(0);
     expect(h.sentRows).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 共享日历的成员
+//
+// 在这之前扫描器只反查 calendars.owner_id 一个人，被邀请进来的成员一条提醒都收不到。
+// 下面这一组钉的是「收件人 = 所有者 + 全部成员，各一次，不多不少」，以及加了这一维
+// 之后幂等还站得住（失败只影响失败的那个人，第二轮谁都不重发）。
+// ---------------------------------------------------------------------------
+
+/** 本轮真正发出去的收信地址，按发送顺序。 */
+function recipients(): string[] {
+  return mockSendMail.mock.calls.map((c) => c[0].to);
+}
+
+const MEMBERS: MemberRow[] = [
+  { calendarId: "cal-1", userId: "user-2" },
+  { calendarId: "cal-1", userId: "user-3" },
+];
+
+describe("共享日历：成员也收提醒", () => {
+  it("共享给 2 个成员的日历上的事件到点 → 所有者 + 2 个成员各一次，不多不少", async () => {
+    const h = harness([ev()], [CAL], { members: MEMBERS });
+    at("2026-07-14T01:45:00Z");
+
+    const r = await dispatchDueReminders(logger(), h.store);
+
+    // toEqual 卡的是「谁、几封、什么顺序」三件事：少一个人、多一封、
+    // 同一个人收两封，都会在这一条上红。
+    expect(recipients()).toEqual([
+      "user-1@example.com", "user-2@example.com", "user-3@example.com",
+    ]);
+    expect(r.sent).toBe(3);
+    expect(r.deliveries).toBe(3);
+    expect(h.sentRows).toHaveLength(3);
+  });
+
+  it("幂等行：所有者存 trigger 原文，成员存 trigger#userId", async () => {
+    // 这条守的是「不改 schema」那个决定的前提。所有者的键一个字都不能变 ——
+    // 线上已经落着的行、以及 0049 那种按 rs.trigger 等值回填的迁移，都指着它。
+    const h = harness([ev()], [CAL], { members: MEMBERS });
+    at("2026-07-14T01:45:00Z");
+    await dispatchDueReminders(logger(), h.store);
+
+    expect(h.sentRows.map((k) => k.trigger)).toEqual([
+      "-PT15M", "-PT15M#user-2", "-PT15M#user-3",
+    ]);
+    expect(sentTriggerFor("-PT15M", { userId: "user-2", isOwner: false })).toBe("-PT15M#user-2");
+    expect(sentTriggerFor("-PT15M", { userId: "user-1", isOwner: true })).toBe("-PT15M");
+  });
+
+  it("被停用的成员不收，同一个日历上其他人照收", async () => {
+    // absence（停用的那个收不到）和 presence（没停用的那两个收得到）在同一条里配齐：
+    // 只断言「user-2 没收到」的话，把发信整个改坏它也是绿的。
+    const h = harness([ev()], [CAL], { members: MEMBERS, disabledUserIds: ["user-2"] });
+    at("2026-07-14T01:45:00Z");
+
+    const r = await dispatchDueReminders(logger(), h.store);
+
+    expect(recipients()).toEqual(["user-1@example.com", "user-3@example.com"]);
+    // 不发信的人也不许落幂等行：他哪天被解封，这条提醒还在窗口里就该补得上。
+    expect(h.sentRows.map((k) => k.trigger)).toEqual(["-PT15M", "-PT15M#user-3"]);
+    expect(r.sent).toBe(2);
+    expect(r.failed).toBe(0);      // 停用是「不该发」，不是「发失败」
+  });
+
+  it("发给其中一个人失败：只有他那行不落，其余照落，下一轮只补他一个", async () => {
+    mockSendMail.mockImplementation(async (args) =>
+      args.to === "user-2@example.com" ? { ok: false, reason: "smtp_550" } : { ok: true });
+    const h = harness([ev()], [CAL], { members: MEMBERS });
+    at("2026-07-14T01:45:00Z");
+
+    const r = await dispatchDueReminders(logger(), h.store);
+    expect(r.sent).toBe(2);
+    expect(r.failed).toBe(1);
+    expect(h.sentRows.map((k) => k.trigger)).toEqual(["-PT15M", "-PT15M#user-3"]);
+
+    // 下一分钟：成功的那两个被幂等行挡住，失败的那个重试。
+    mockSendMail.mockReset();
+    mockSendMail.mockResolvedValue({ ok: true });
+    at("2026-07-14T01:45:30Z");
+    const r2 = await dispatchDueReminders(logger(), h.store);
+
+    expect(recipients()).toEqual(["user-2@example.com"]);
+    expect(r2.sent).toBe(1);
+    expect(h.sentRows.map((k) => k.trigger).sort()).toEqual(
+      ["-PT15M", "-PT15M#user-2", "-PT15M#user-3"],
+    );
+  });
+
+  it("第二轮扫描一个人都不重发", async () => {
+    const h = harness([ev()], [CAL], { members: MEMBERS });
+    at("2026-07-14T01:45:00Z");
+    expect((await dispatchDueReminders(logger(), h.store)).sent).toBe(3);
+
+    mockSendMail.mockClear();
+    at("2026-07-14T01:45:30Z");   // 同一条提醒仍在 ±60s 窗口里
+    const r2 = await dispatchDueReminders(logger(), h.store);
+
+    expect(mockSendMail).not.toHaveBeenCalled();
+    expect(r2.sent).toBe(0);
+    expect(h.sentRows).toHaveLength(3);
+  });
+
+  it("所有者同时也躺在成员表里，只收一封", async () => {
+    const h = harness([ev()], [CAL], {
+      members: [{ calendarId: "cal-1", userId: "user-1" }, ...MEMBERS],
+    });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+
+    expect(recipients()).toEqual([
+      "user-1@example.com", "user-2@example.com", "user-3@example.com",
+    ]);
+    expect(r.sent).toBe(3);
+  });
+
+  it("两个日历同时到点，各自的成员只收自己那个日历的事件", async () => {
+    // 这一条必须**两个日历上都有到点的事件**才立得住。只放一个日历的话，
+    // 另一个日历的成员行在 SQL 那层（假 store 里照抄的 WHERE calendar_id IN (...)）
+    // 就已经被滤掉了，源码里按日历分组那一步改成「全表拉平」照样是绿的 ——
+    // 验红时真踩到过这个假绿。
+    const CAL2: CalRow = { id: "cal-2", ownerId: "user-8", timezone: "Asia/Shanghai", name: "招聘" };
+    const h = harness(
+      [ev(), ev({ id: "ev-2", summary: "面试", calendarId: "cal-2" })],
+      [CAL, CAL2],
+      {
+        members: [
+          { calendarId: "cal-1", userId: "user-2" },
+          { calendarId: "cal-2", userId: "user-9" },
+        ],
+      },
+    );
+    at("2026-07-14T01:45:00Z");
+    await dispatchDueReminders(logger(), h.store);
+
+    // 「哪封信、发给谁」成对地钉住：串台时 user-9 会出现在周会那几封里。
+    const pairs = mockSendMail.mock.calls.map((c) => [
+      c[0].subject.includes("面试") ? "ev-2" : "ev-1",
+      c[0].to,
+    ]);
+    expect(pairs).toEqual([
+      ["ev-1", "user-1@example.com"],
+      ["ev-1", "user-2@example.com"],
+      ["ev-2", "user-8@example.com"],
+      ["ev-2", "user-9@example.com"],
+    ]);
+  });
+
+  it("web push 也发给每个成员，各一次", async () => {
+    const h = harness([ev()], [CAL], { members: MEMBERS });
+    at("2026-07-14T01:45:00Z");
+    await dispatchDueReminders(logger(), h.store);
+
+    expect(mockPush.mock.calls.map((c) => c[0])).toEqual(["user-1", "user-2", "user-3"]);
+  });
+
+  it("成员的信写明来自哪个共享日历，所有者的信不写", async () => {
+    // 成员收到一封「⏰ 周会」而完全不知道是谁的日历，比不收还费解。
+    const h = harness([ev()], [CAL], { members: [{ calendarId: "cal-1", userId: "user-2" }] });
+    at("2026-07-14T01:45:00Z");
+    await dispatchDueReminders(logger(), h.store);
+
+    const ownerMail = mockSendMail.mock.calls[0]![0];
+    const memberMail = mockSendMail.mock.calls[1]![0];
+    expect(ownerMail.text).not.toContain("团队日程");
+    expect(memberMail.text).toContain("Shared calendar: 团队日程");
+    expect(memberMail.html).toContain("团队日程");
+  });
+
+  it("查库次数和成员数无关：50 个成员也只多问一次成员表", async () => {
+    const many: MemberRow[] = Array.from({ length: 50 }, (_, i) => ({
+      calendarId: "cal-1", userId: `m-${i}`,
+    }));
+    const h = harness([ev()], [CAL], { members: many });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+
+    expect(r.sent).toBe(51);
+    expect(h.calls.loadMembers).toBe(1);
+    expect(h.calls.loadUsers).toBe(1);
+    expect(h.calls.loadSent).toBe(1);
+    expect(h.calls.loadCalendars).toBe(1);
+  });
+});
+
+describe("composeCalendarAudience — 可见性和提醒共用的收件人定义", () => {
+  it("所有者排第一，成员按原顺序跟在后面", () => {
+    expect(composeCalendarAudience("o", ["a", "b"])).toEqual([
+      { userId: "o", isOwner: true },
+      { userId: "a", isOwner: false },
+      { userId: "b", isOwner: false },
+    ]);
+  });
+
+  it("所有者也在成员表里时只出现一次，且仍然算所有者", () => {
+    expect(composeCalendarAudience("o", ["a", "o"])).toEqual([
+      { userId: "o", isOwner: true },
+      { userId: "a", isOwner: false },
+    ]);
+  });
+
+  it("成员表里重复的行只算一个人", () => {
+    expect(composeCalendarAudience("o", ["a", "a"])).toHaveLength(2);
+  });
+
+  it("没有成员时就只有所有者", () => {
+    expect(composeCalendarAudience("o", [])).toEqual([{ userId: "o", isOwner: true }]);
   });
 });

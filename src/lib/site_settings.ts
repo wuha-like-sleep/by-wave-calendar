@@ -1,4 +1,5 @@
 import path from "node:path";
+import crypto from "node:crypto";
 import { existsSync as fsExistsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -42,6 +43,9 @@ export type SettingsView = {
   vapidPublicKey: string | null;
   vapidPrivateKey: string | null;
   vapidSubject: string | null;
+  // CalDAV 集合的同步纪元。掺进每个日历的 ctag,bump 一次 = 所有 CalDAV
+  // 客户端下一轮轮询时会重新列一遍事件清单。见 schema.ts 上的说明。
+  caldavSyncEpoch: string;
   // CAPTCHA — provider + public site key are safe for the wide-read view.
   // The secret is NOT here; read it only via getCaptchaConfig().
   captchaProvider: CaptchaProvider;
@@ -111,8 +115,8 @@ function logoFileExists(logoUrl: string | null): boolean {
 // 把新列在参数类型里标成可选,TS 就会逼着每一处写回落。
 // 以后每加一个新列,先加进这个 Partial 里,等它在所有存量库上都落地了再摘掉。
 type SettingsRow =
-  Omit<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota">
-  & Partial<Pick<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota">>;
+  Omit<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch">
+  & Partial<Pick<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch">>;
 
 // 导出只是为了测试能直接喂一行进来 —— 纯逻辑测试档里没有 Postgres,
 // 走 getSettings() 就得起一个真数据库。这是「行 → 视图」的唯一回落口径。
@@ -159,6 +163,11 @@ export function toView(r: SettingsRow): SettingsView {
     vapidPublicKey: r.vapidPublicKey,
     vapidPrivateKey: r.vapidPrivateKey,
     vapidSubject: r.vapidSubject,
+    // 列不存在(老库、或者迁移器记账脱节)回落到空串 —— 和这一列的默认值一致。
+    // 回落到空串的代价是「这台机器上的 bump 暂时不生效」,不是「ctag 乱跳」:
+    // 空串本身是个稳定取值,ctag 对同一份数据照样稳定,客户端不会无限重同步。
+    // 这个窗口到下一次开机为止 —— auto_migrate.ts 的兜底补丁会把列补回来。
+    caldavSyncEpoch: r.caldavSyncEpoch ?? "",
     captchaProvider: isCaptchaProvider(r.captchaProvider) ? r.captchaProvider : "builtin",
     captchaSiteKey: r.captchaSiteKey ?? null,
     captchaBuiltinMode: isBuiltinMode(r.captchaBuiltinMode) ? r.captchaBuiltinMode : "invisible",
@@ -257,10 +266,38 @@ export async function updateSettings(patch: Partial<{
   idpApiEnabled: boolean;
   idpApiServiceClients: string;
   idpApiAutoProvision: boolean;
+  caldavSyncEpoch: string;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)
     .set({ ...patch, updatedAt: new Date() })
     .where(eq(schema.siteSettings.id, 1));
   reloadSettings();
+}
+
+/**
+ * 手动 bump 一次 CalDAV 同步纪元。
+ *
+ * 效果:所有 CalDAV 客户端在下一轮轮询里会发现 ctag 变了,于是各自做**一次**
+ * Depth:1 PROPFIND 把事件清单重新列一遍。清单里每条的 etag 不受纪元影响
+ * (见 src/web/caldav.ts 的 calendarCtags / etagOf),所以正文一条都不会重下 ——
+ * 这是「让客户端重新看一眼」,不是「让客户端重下整个日历」。
+ *
+ * 什么时候用:发版改了序列化口径、而数据一行没动的时候(合成 VEVENT 开始带
+ * VALARM 就是这种)。常规发版用不着 —— 正常的增删改本来就会动 updated_at,
+ * ctag 自己会变。
+ *
+ * 写一个随机串而不是 now():两次 bump 之间如果在同一秒,时间戳会一模一样,
+ * 于是第二次 bump 什么都没发生、也不报错 —— 正是这个仓库最常见的那种失效形态。
+ * 随机串没有这个窗口。
+ *
+ * **进程内缓存的边界**:这里 reload 的只有当前进程。多进程(pm2 cluster)
+ * 部署下,别的 worker 要到下一次重启才读到新值,期间它们发的 ctag 还是旧的。
+ * 迁移里的 bump 不受影响(每个 worker 开机时都重新读一遍),所以这条只影响
+ * 「以后加的后台按钮」——真加按钮的时候要么单进程、要么另做一次跨进程失效。
+ */
+export async function bumpCaldavSyncEpoch(): Promise<string> {
+  const value = `manual:${new Date().toISOString()}:${crypto.randomBytes(6).toString("hex")}`;
+  await updateSettings({ caldavSyncEpoch: value });
+  return value;
 }

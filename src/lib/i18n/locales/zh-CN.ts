@@ -1394,4 +1394,20 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "loginChallenge.submit": "验证并登录",
   "loginChallenge.expiryNote": "⏱ 验证码 10 分钟内有效，最多尝试 5 次。",
   "loginChallenge.notReceived": "没收到？检查垃圾邮件，或者<a href=\"/login\" class=\"text-brand-600 hover:underline\">回到登录页</a>重试。",
+
+  // 苹果登录被拒。已发布的 App 直接显示服务端给的 message，所以每一句都要
+  // 说清下一步怎么办，不是把码翻译一遍。
+  "appleLogin.emailTaken": "这个邮箱在本站已经有账号了，而苹果没有证明它属于你。请改用你原来的登录方式（密码或单点登录）——这个账号目前没法通过苹果登录进入。",
+  "appleLogin.signupClosed": "本站暂时不开放注册新账号。如果你已经有账号，请改用原来的登录方式；没有的话，请联系本站管理员。",
+  "appleLogin.inviteOnly": "本站只接受受邀注册，而苹果登录带不出邀请码。请先在网页上用邀请链接、用同一个邮箱注册并完成邮箱验证；之后回到这里再点一次苹果登录就能进。",
+  "appleLogin.domainNotAllowed": "本站只接受指定邮箱域名的账号，你的苹果邮箱不在其中。请先在网页上用一个符合要求的邮箱注册，之后用那个邮箱登录。",
+  "appleLogin.quotaReached": "本站今天的新账号名额已经用完了。请明天再试，或者联系本站管理员。",
+  "appleLogin.invalidEmail": "苹果这次提供的邮箱本站无法使用（多半是隐藏邮箱）。请先在网页上用一个可用的邮箱注册，之后用那个邮箱登录。",
+  "appleLogin.createFailed": "账号没能创建成功。请稍后重试；如果一直不行，请联系本站管理员。",
+  "appleLogin.deviceFailed": "登录信息没能保存到这台设备上。请稍后重试；如果一直不行，请联系本站管理员。",
+  "appleLogin.badRequest": "这次登录请求没被本站接受。请把 App 更新到最新版本后再试。",
+  "appleLogin.tokenInvalid": "苹果这次给的登录凭证没通过验证，可能是放太久了。请重新登录一次。",
+  "appleLogin.accountDisabled": "这个账号已被停用。需要恢复的话，请联系本站管理员。",
+  "appleLogin.notConfigured": "本站还没有开启苹果登录。请联系本站管理员开启后再试，或者改用原来的登录方式。",
+
 };

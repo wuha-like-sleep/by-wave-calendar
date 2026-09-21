@@ -74,3 +74,38 @@ export async function listPendingInvitations(calendarId: string) {
       isNull(schema.calendarInvitations.acceptedAt),
     ));
 }
+
+/** 日历的一个「相关人」。isOwner 用来区分所有者和被邀请进来的成员。 */
+export type CalendarAudienceEntry = { userId: string; isOwner: boolean };
+
+/**
+ * 一个日历的收件人集合 = 所有者 + calendar_members 里的全部成员，去重，所有者排第一。
+ *
+ * 为什么是纯函数、又为什么放在这个文件：
+ * 「谁算这个日历的人」这件事上面 getUserRole/canView 已经有一份定义了（所有者，
+ * 或者 calendar_members 里有一行，两者都不是就没权限）。提醒扫描器要按同一个集合
+ * 发信，但它是每分钟批量跑的，不能一个日历一次 getUserRole 往返，只能自己拼。
+ * 两处各拼各的，以后再多一种共享方式（比如公开订阅），改了可见性那边、漏了这边，
+ * 表现是「他在日历上看得见这个事件，但永远收不到它的提醒」—— 不报错，没人会来报。
+ * 所以把拼装规则抽成这一个纯函数，两边共用，改的时候只有一处。
+ *
+ * 所有者排第一不是为了好看：他同时也可能躺在 calendar_members 里（历史数据、
+ * 或者管理员手工加过一行），先放他再按 userId 去重，才能保证他只收一份。
+ */
+export function composeCalendarAudience(
+  ownerId: string,
+  memberUserIds: readonly string[],
+): CalendarAudienceEntry[] {
+  const out: CalendarAudienceEntry[] = [];
+  const seen = new Set<string>();
+  if (ownerId) {
+    out.push({ userId: ownerId, isOwner: true });
+    seen.add(ownerId);
+  }
+  for (const userId of memberUserIds) {
+    if (!userId || seen.has(userId)) continue;
+    seen.add(userId);
+    out.push({ userId, isOwner: false });
+  }
+  return out;
+}

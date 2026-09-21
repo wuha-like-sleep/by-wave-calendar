@@ -6,6 +6,7 @@ import { expandEvent } from "./rrule_expand.js";
 import { pushToUser } from "./push.js";
 import { getSettings } from "./site_settings.js";
 import { normalizeAlarms, parseTrigger, resolveTriggerAt } from "./reminder_triggers.js";
+import { composeCalendarAudience } from "./calendar_access.js";
 
 // Format a Date in the event's stored timezone (falls back to Shanghai
 // for legacy events that pre-date the timezone column). The label suffix
@@ -14,15 +15,17 @@ import { normalizeAlarms, parseTrigger, resolveTriggerAt } from "./reminder_trig
 // Reminder notifications go out in whatever language the recipient chose
 // (users.locale, falling back to the site default). Dates + relative times use
 // Intl so they read naturally per-locale; the few fixed labels come from here.
-const REMINDER_STRINGS: Record<string, { starts: string; location: string; open: string; reminder: string }> = {
-  "zh-CN": { starts: "开始", location: "地点", open: "打开日历", reminder: "提醒" },
-  "zh-TW": { starts: "開始", location: "地點", open: "開啟日曆", reminder: "提醒" },
-  "en": { starts: "Starts", location: "Location", open: "Open calendar", reminder: "Reminder" },
-  "ja": { starts: "開始", location: "場所", open: "カレンダーを開く", reminder: "リマインダー" },
-  "ko": { starts: "시작", location: "위치", open: "캘린더 열기", reminder: "알림" },
-  "es": { starts: "Comienza", location: "Lugar", open: "Abrir calendario", reminder: "Recordatorio" },
-  "fr": { starts: "Début", location: "Lieu", open: "Ouvrir le calendrier", reminder: "Rappel" },
-  "de": { starts: "Beginn", location: "Ort", open: "Kalender öffnen", reminder: "Erinnerung" },
+const REMINDER_STRINGS: Record<string, {
+  starts: string; location: string; open: string; reminder: string; shared: string;
+}> = {
+  "zh-CN": { starts: "开始", location: "地点", open: "打开日历", reminder: "提醒", shared: "共享日历" },
+  "zh-TW": { starts: "開始", location: "地點", open: "開啟日曆", reminder: "提醒", shared: "共用日曆" },
+  "en": { starts: "Starts", location: "Location", open: "Open calendar", reminder: "Reminder", shared: "Shared calendar" },
+  "ja": { starts: "開始", location: "場所", open: "カレンダーを開く", reminder: "リマインダー", shared: "共有カレンダー" },
+  "ko": { starts: "시작", location: "위치", open: "캘린더 열기", reminder: "알림", shared: "공유 캘린더" },
+  "es": { starts: "Comienza", location: "Lugar", open: "Abrir calendario", reminder: "Recordatorio", shared: "Calendario compartido" },
+  "fr": { starts: "Début", location: "Lieu", open: "Ouvrir le calendrier", reminder: "Rappel", shared: "Agenda partagé" },
+  "de": { starts: "Beginn", location: "Ort", open: "Kalender öffnen", reminder: "Erinnerung", shared: "Geteilter Kalender" },
 };
 function reminderStrings(locale: string) {
   return REMINDER_STRINGS[locale] ?? REMINDER_STRINGS.en!;
@@ -99,9 +102,13 @@ type CandidateEventRow = {
   allDay: boolean;
 };
 
-type CalendarRow = { id: string; ownerId: string; timezone: string | null };
+type CalendarRow = { id: string; ownerId: string; timezone: string | null; name: string };
 
-type OwnerRow = {
+/** calendar_members 里的一行。角色（只读/可写）故意不取，理由见 recipientsFor()。 */
+type MemberRow = { calendarId: string; userId: string };
+
+/** 一个收件人的账号信息。所有者和成员走同一张表、同一套判断。 */
+type RecipientRow = {
   id: string;
   email: string;
   displayName: string | null;
@@ -109,8 +116,37 @@ type OwnerRow = {
   locale: string | null;
 };
 
-/** 幂等键。和 reminders_sent 上的唯一索引一一对应。 */
+/** 幂等键。和 reminders_sent 上的唯一索引 (event_id, trigger, instance_start) 一一对应。 */
 export type SentKey = { eventId: string; trigger: string; instanceStart: Date };
+
+// 一条提醒现在要发给 N 个人（所有者 + 成员），而幂等键只有三列，一个事件一行。
+// 不加这一维的话：发给 A 成功、发给 B 失败，落不落那一行都是错的 ——
+// 落了 B 永远收不到，不落下一轮 A 再收一封，每分钟一封。
+//
+// 这里**不加列**，把收件人编进 trigger 列：成员的行存 `<原文>#<user id>`，
+// 所有者的行仍然存原文。理由三条：
+//
+// 1) 加列要一条迁移，而这条代码和那条迁移是分开写的；真实的失效形态是
+//    「代码上线了、迁移没上」—— 那时 INSERT 报「列不存在」，邮件却已经发出去了，
+//    于是每分钟重发一封。不加列就没有这个两段式。
+// 2) 所有者的键一个字都不变，所以线上已经躺着的那些行照样挡得住重发，
+//    发版当分钟不会有人平白多收一封；0049 那条按 `rs.trigger = 旧档位` 回填的
+//    迁移语义也原样成立（它本来就只认所有者那一份）。
+// 3) 编码是单射的，不会和任何历史行撞：合法 trigger 要么匹配 duration 语法
+//    （`P` 开头），要么匹配 DATE-TIME 语法（全数字 + T + Z），而 user id 是 uuid
+//    （只有 0-9a-f 和 -，既没有 `p` 也不含 `T`），所以「原文 + # + uuid」这个形状
+//    本身不可能是一条合法 trigger，也就不可能等于任何一条历史行的 trigger。
+//
+// ⚠️ 代价写在这里：reminders_sent.trigger 从此不再保证是纯粹的 iCalendar 原文。
+// 以后再写「按 trigger 等值匹配」的迁移（像 0049 那样），记得成员行是带后缀的，
+// 要用 `split_part(trigger, '#', 1)` 或 `trigger LIKE '档位#%'` 一起捞，
+// 否则漏掉的那部分不会报错，只会让某些人多收或少收一次。
+const MEMBER_KEY_SEP = "#";
+
+/** 这条提醒发给这个收件人时，幂等行的 trigger 列该写什么。 */
+export function sentTriggerFor(trigger: string, recipient: { userId: string; isOwner: boolean }): string {
+  return recipient.isOwner ? trigger : `${trigger}${MEMBER_KEY_SEP}${recipient.userId}`;
+}
 
 /**
  * 扫描器用到的全部数据访问。抽出来是为了让「发信失败不许记成已发」这类
@@ -120,7 +156,9 @@ export type SentKey = { eventId: string; trigger: string; instanceStart: Date };
 export type ReminderStore = {
   loadEvents(from: Date, to: Date): Promise<CandidateEventRow[]>;
   loadCalendars(ids: string[]): Promise<CalendarRow[]>;
-  loadOwners(ids: string[]): Promise<OwnerRow[]>;
+  /** 这批日历上的全部成员。一次问回，不要一个日历一次。 */
+  loadMembers(calendarIds: string[]): Promise<MemberRow[]>;
+  loadUsers(ids: string[]): Promise<RecipientRow[]>;
   /** 一次问回这批候选里已经发过的。返回的是 sentKeyOf() 串成的集合。 */
   loadSent(keys: SentKey[]): Promise<Set<string>>;
   /** 落幂等行。返回 false = 唯一索引撞了，说明别的副本刚发过，不是错误。 */
@@ -157,12 +195,24 @@ const dbStore: ReminderStore = {
   async loadCalendars(ids) {
     if (ids.length === 0) return [];
     return db
-      .select({ id: schema.calendars.id, ownerId: schema.calendars.ownerId, timezone: schema.calendars.timezone })
+      .select({
+        id: schema.calendars.id, ownerId: schema.calendars.ownerId,
+        timezone: schema.calendars.timezone, name: schema.calendars.name,
+      })
       .from(schema.calendars)
       .where(inArray(schema.calendars.id, ids));
   },
 
-  async loadOwners(ids) {
+  async loadMembers(calendarIds) {
+    if (calendarIds.length === 0) return [];
+    // 参数个数 = 本分钟有提醒到点的**日历**数，和成员数无关（50 个成员也还是一个参数）。
+    return db
+      .select({ calendarId: schema.calendarMembers.calendarId, userId: schema.calendarMembers.userId })
+      .from(schema.calendarMembers)
+      .where(inArray(schema.calendarMembers.calendarId, calendarIds));
+  },
+
+  async loadUsers(ids) {
     if (ids.length === 0) return [];
     return db
       .select({
@@ -214,6 +264,18 @@ type Candidate = {
   tz: string | null;
 };
 
+/**
+ * 「一条到点的提醒 × 一个收件人」。真正要发出去的最小单位，也是幂等的最小单位。
+ * 一个 Candidate 会展开成 1 + 成员数 条 Delivery。
+ */
+type Delivery = {
+  candidate: Candidate;
+  userId: string;
+  isOwner: boolean;
+  /** 已经按收件人编码过的幂等键，见 sentTriggerFor()。 */
+  key: SentKey;
+};
+
 export type DispatchResult = {
   scanned: number;
   sent: number;
@@ -221,13 +283,20 @@ export type DispatchResult = {
   skipped: number;
   /** 发信失败、**没有**落幂等行、下一分钟还会重试的条数 */
   failed: number;
+  /** 本轮展开出多少「提醒 × 收件人」。共享日历上一条提醒会算成多条。 */
+  deliveries: number;
 };
 
 /**
  * 每分钟扫一遍到点的提醒并发出去。
  *
+ * 收件人是日历的**所有者 + 全部成员**：订阅了这个日历的人，就该收到这个日历上
+ * 事件的提醒。所以一个共享给 50 人的日历，一条提醒就是 50 封信 —— 这是正确行为，
+ * 不是失控，别看到量大就去掉。
+ *
  * 幂等靠 reminders_sent 上 (event_id, trigger, instance_start) 的唯一索引，
- * 所以重复事件的每一个 occurrence 各自独立提醒。
+ * 所以重复事件的每一个 occurrence 各自独立提醒；收件人这一维编在 trigger 列里，
+ * 见 sentTriggerFor()。
  *
  * 这一版改了三件影响正确性的事：
  * 1) 触发时刻一律问 reminder_triggers，本地那个只认 D/H/M、还把 0 和正数判成非法的
@@ -244,7 +313,7 @@ export async function dispatchDueReminders(
   const windowTo = new Date(now + SCAN_LOOKAHEAD_MS);
 
   const upcoming = await store.loadEvents(windowFrom, windowTo);
-  const result: DispatchResult = { scanned: upcoming.length, sent: 0, skipped: 0, failed: 0 };
+  const result: DispatchResult = { scanned: upcoming.length, sent: 0, skipped: 0, failed: 0, deliveries: 0 };
   if (upcoming.length === 0) return result;
 
   // 日历要在算触发时刻**之前**拿到：全天事件的时区链是 extra.timezone → 日历 timezone，
@@ -314,34 +383,60 @@ export async function dispatchDueReminders(
   }
   if (candidates.length === 0) return result;
 
-  // 第二趟：一次问回已发集合 + 一次问回收件人。原来这两件事都在双层 for 里逐条
-  // 往返，一个事件挂 8 条提醒就是 8 次 SELECT。
-  const sentKeys = await store.loadSent(
-    candidates.map((c) => ({ eventId: c.event.id, trigger: c.trigger, instanceStart: c.instanceStart })),
-  );
-  const pending = candidates.filter(
-    (c) => !sentKeys.has(sentKeyOf({ eventId: c.event.id, trigger: c.trigger, instanceStart: c.instanceStart })),
-  );
+  // 第二趟：把每条候选展开到收件人，再一次问回已发集合、一次问回账号。
+  //
+  // 收件人 = 日历所有者 + calendar_members 里的全部成员（见 calendar_access.ts 的 composeCalendarAudience）。
+  // 在这之前这里只反查 calendars.owner_id 一个人，共享日历的成员一条提醒都收不到，
+  // 而且界面上没有任何地方说过这件事 —— 被邀请的人只会以为「这破日历不提醒」。
+  //
+  // 查库次数和成员数无关：成员一次问回（按日历 IN），账号一次问回（按 user id IN）。
+  // 整轮仍然是 5 次 SELECT，一个 50 人的日历和一个 1 人的日历一样多。
+  const memberIdsByCal = new Map<string, string[]>();
+  for (const m of await store.loadMembers([...new Set(candidates.map((c) => c.event.calendarId))])) {
+    const list = memberIdsByCal.get(m.calendarId);
+    if (list) list.push(m.userId);
+    else memberIdsByCal.set(m.calendarId, [m.userId]);
+  }
+
+  const deliveries: Delivery[] = [];
+  for (const c of candidates) {
+    const cal = calendars.get(c.event.calendarId);
+    if (!cal) continue;   // 日历查不回来时时区也拿不到，前面早就跳过了；这里只是收口
+    for (const r of composeCalendarAudience(cal.ownerId, memberIdsByCal.get(cal.id) ?? [])) {
+      deliveries.push({
+        candidate: c, userId: r.userId, isOwner: r.isOwner,
+        key: { eventId: c.event.id, trigger: sentTriggerFor(c.trigger, r), instanceStart: c.instanceStart },
+      });
+    }
+  }
+  result.deliveries = deliveries.length;
+  if (deliveries.length === 0) return result;
+
+  const sentKeys = await store.loadSent(deliveries.map((d) => d.key));
+  const pending = deliveries.filter((d) => !sentKeys.has(sentKeyOf(d.key)));
   if (pending.length === 0) return result;
 
-  const ownerIds = new Set<string>();
-  for (const c of pending) {
-    const ownerId = calendars.get(c.event.calendarId)?.ownerId;
-    if (ownerId) ownerIds.add(ownerId);
-  }
-  const owners = new Map((await store.loadOwners([...ownerIds])).map((o) => [o.id, o]));
+  const users = new Map(
+    (await store.loadUsers([...new Set(pending.map((d) => d.userId))])).map((u) => [u.id, u]),
+  );
 
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
   const siteDefaultLocale = (await getSettings()).defaultLocale || "zh-CN";
 
-  // 第三趟：真发。
-  for (const c of pending) {
+  // 第三趟：真发。一个 Delivery 一封信、一行幂等，互相不牵连。
+  for (const d of pending) {
+    const c = d.candidate;
     const ev = c.event;
-    const ownerId = calendars.get(ev.calendarId)?.ownerId;
-    const owner = ownerId ? owners.get(ownerId) : undefined;
-    if (!owner || owner.disabledAt) continue;  // don't email disabled users
+    const user = users.get(d.userId);
+    // 停用的账号不发。成员和所有者同一条判断 —— 之前只有所有者有，
+    // 成员那一维是新加的，漏掉就是给已经停用的账号继续发信。
+    if (!user || user.disabledAt) continue;
 
-    const loc = owner.locale || siteDefaultLocale;
+    // 成员收到的信里写清楚这是哪个共享日历来的。所有者的信一个字不变：
+    // 他知道自己的日历，多这一行只是噪音。
+    const sharedName = d.isOwner ? null : (calendars.get(ev.calendarId)?.name ?? null);
+
+    const loc = user.locale || siteDefaultLocale;
     const S = reminderStrings(loc);
     // 全天事件不写「还有多久」：它的 startsAt 是 UTC 午夜，不是用户心里的开始时刻，
     // 算出来的「1 小时前」既不对也没意义。全天只报日期。
@@ -356,26 +451,25 @@ export async function dispatchDueReminders(
     // (shouldn't happen due to remindersSent unique key) collapses.
     // 注意：这一发是 fire-and-forget 的，它的成败**不参与**下面「算不算发出去了」
     // 的判断 —— 用户没订阅 push 是常态，拿它当失败会把邮件也一起判失败。
-    void pushToUser(owner.id, {
+    void pushToUser(d.userId, {
       title: `⏰ ${ev.summary}`,
       body: `${headline}${lead ? " · " + when : ""}${ev.location ? " · " + ev.location : ""}`,
       url: "/app",
       tag: `event-${ev.id}-${c.trigger}`,
     }).catch(() => undefined);
 
-    const key: SentKey = { eventId: ev.id, trigger: c.trigger, instanceStart: c.instanceStart };
     try {
       const mail = await sendMail({
-        to: owner.email,
+        to: user.email,
         subject: `⏰ ${ev.summary} · ${headline}`,
-        text: `${ev.summary}\n${headline}\n${S.starts}: ${when}${ev.location ? `\n${S.location}: ${ev.location}` : ""}\n\n${baseUrl}/app`,
+        text: `${ev.summary}\n${headline}\n${S.starts}: ${when}${ev.location ? `\n${S.location}: ${ev.location}` : ""}${sharedName ? `\n${S.shared}: ${sharedName}` : ""}\n\n${baseUrl}/app`,
         html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:520px;margin:auto;padding:24px;background:#f1f5f9;">
           <div style="background:#fff;border-radius:16px;padding:24px;box-shadow:0 1px 3px rgba(15,23,42,0.06);">
             <div style="font-size:13px;color:#6366f1;font-weight:600;letter-spacing:1px;text-transform:uppercase;">${S.reminder}</div>
             <h1 style="margin:8px 0 12px;font-size:22px;color:#0f172a;">${ev.summary.replace(/[<>&]/g, "")}</h1>
             <div style="font-size:14px;color:#475569;line-height:1.8;">
               ⏰ <strong>${headline}</strong><br/>
-              📅 ${when}${ev.location ? `<br/>📍 ${ev.location.replace(/[<>&]/g, "")}` : ""}
+              📅 ${when}${ev.location ? `<br/>📍 ${ev.location.replace(/[<>&]/g, "")}` : ""}${sharedName ? `<br/>🗂 ${S.shared}: ${sharedName.replace(/[<>&]/g, "")}` : ""}
             </div>
             <p style="margin:16px 0 0;"><a href="${baseUrl}/app" style="display:inline-block;background:#4f46e5;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-size:13px;">${S.open}</a></p>
           </div>
@@ -389,16 +483,16 @@ export async function dispatchDueReminders(
         result.failed++;
         logger.warn({
           msg: "[reminders] send failed", eventId: ev.id, trigger: c.trigger,
-          instance: c.instanceStart.toISOString(), reason: mail.reason ?? "unknown",
+          instance: c.instanceStart.toISOString(), userId: d.userId, reason: mail.reason ?? "unknown",
         });
         continue;
       }
       // 并发/多副本下第二道防线：唯一索引撞了说明别的副本已经发过这一条，
       // 这是预期内的竞态，不是错误，只是不该重复计进 sent。
-      if (await store.markSent(key)) result.sent++;
+      if (await store.markSent(d.key)) result.sent++;
     } catch (err) {
       result.failed++;
-      logger.warn({ err, eventId: ev.id, trigger: c.trigger, instance: c.instanceStart.toISOString() });
+      logger.warn({ err, eventId: ev.id, trigger: c.trigger, instance: c.instanceStart.toISOString(), userId: d.userId });
     }
   }
   return result;
@@ -414,15 +508,53 @@ function unresolvedReason(allDay: boolean, tz: string | null, endsAt: Date | nul
 }
 
 let started = false;
+/** 上一轮还在飞。**不是**防重复启动（那是 started 干的），是防重入。 */
+let tickInFlight = false;
+
 export function startReminderScheduler(log: { info: (m: string) => void; warn: (m: unknown) => void }): void {
   if (started) return;
   started = true;
-  // Run every minute. The DB unique-key on reminders_sent gives us correctness
-  // even across overlapping runs / multi-replica deployments.
-  const tick = async () => {
+  // 每分钟一跳。
+  //
+  // ⚠️ 原来这里的注释写着「reminders_sent 的唯一索引在重叠运行下也保证正确」。
+  // 那句话只对**行**成立，对**信**不成立 —— 发信在前、落幂等行在后，
+  // 两轮重叠时第二轮 loadSent 读到的是第一轮还没提交的那批，于是照发一遍，
+  // 而 markSent 撞索引回 false、sent 不计数，**日志上一片安静**。
+  //
+  // 加上共享日历成员之后，一条提醒从「1 封信」变成「1 + 成员数 封」，而发信是
+  // 串行 await。按一次 SMTP 往返 300ms 算，一轮的预算只有 200 封 ——
+  // 一个 50 人的日历同一分钟到点 4 条提醒就会超过 60 秒。而到点窗口是 ±60 秒，
+  // 下一轮**必然**仍然认为这批是到点的，不存在「错开了就没事」。
+  // 实测：20 个成员、第二跳在第一跳 200ms 时进来 → 21 人里 16 人各收两封。
+  const tick = makeReminderTick(log, () => dispatchDueReminders(log));
+  setTimeout(() => { void tick(); }, 45_000);
+  setInterval(() => { void tick(); }, 60_000);
+  log.info("reminder scheduler started (1-min tick)");
+}
+
+/**
+ * 一跳。抽出来是为了能单独验重入守卫 —— 它埋在 setInterval 里的话，
+ * 「两轮重叠会不会把信发两遍」这件事没有任何办法写成断言，
+ * 而这正是它已经出过事的地方。
+ */
+export function makeReminderTick(
+  log: { info: (m: string) => void; warn: (m: unknown) => void },
+  dispatch: () => Promise<{ scanned: number; sent: number; failed: number; skipped: number }>,
+): () => Promise<void> {
+  return async () => {
+    if (tickInFlight) {
+      // 跳过要留痕。悄悄跳过的话，SMTP 变慢导致提醒整体延迟时无从判断。
+      log.warn({ msg: "[reminders] 上一轮还没跑完，跳过这一跳（发信比一分钟还慢）" });
+      return;
+    }
+    tickInFlight = true;
     try {
-      const result = await dispatchDueReminders(log);
-      if (result.sent > 0) log.info(`[reminders] sent ${result.sent} of ${result.scanned} upcoming`);
+      const result = await dispatch();
+      // 不能再写成 "sent N of M"：加上成员之后 sent 数的是信、scanned 数的是事件，
+      // 一个 50 人的日历会打出「sent 50 of 1」，看着像出了故障。
+      if (result.sent > 0) {
+        log.info(`[reminders] sent ${result.sent} notification(s) to recipients of ${result.scanned} upcoming event(s)`);
+      }
       // 失败和跳过单独报一行。混在上面那行里会得到「sent 0 of 12」这种看着像
       // 「本来就没有要发的」的输出 —— 这正是 SMTP 挂了三天没人发现的那次。
       if (result.failed > 0 || result.skipped > 0) {
@@ -430,9 +562,13 @@ export function startReminderScheduler(log: { info: (m: string) => void; warn: (
       }
     } catch (err) {
       log.warn({ err });
+    } finally {
+      tickInFlight = false;
     }
   };
-  setTimeout(() => { void tick(); }, 45_000);
-  setInterval(() => { void tick(); }, 60_000);
-  log.info("reminder scheduler started (1-min tick)");
+}
+
+/** 只给测试用：把在飞标志归位，免得用例之间互相串。 */
+export function __resetReminderTickStateForTest(): void {
+  tickInFlight = false;
 }

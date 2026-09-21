@@ -1414,6 +1414,23 @@ export const en = {
   "loginChallenge.submit": "Verify and sign in",
   "loginChallenge.expiryNote": "⏱ The code is valid for 10 minutes, with up to 5 attempts.",
   "loginChallenge.notReceived": "Didn't get it? Check your spam folder, or <a href=\"/login\" class=\"text-brand-600 hover:underline\">go back to sign-in</a> and try again.",
+
+  // Sign in with Apple, refused (apps talk to /auth/apple). Shipped app builds
+  // show whatever `message` we send, so each line must say what to do next —
+  // never a translated error code. See src/routes/devices.ts:appleProvisionDenial.
+  "appleLogin.emailTaken": "An account with this email already exists here, and Apple didn't confirm the address belongs to you. Please sign in the way you did before (password or single sign-on) — this account can't be reached through Sign in with Apple.",
+  "appleLogin.signupClosed": "This site is not accepting new accounts at the moment. If you already have one, sign in the way you did before; otherwise please ask the site administrator.",
+  "appleLogin.inviteOnly": "This site is invite-only, and Sign in with Apple can't carry an invite code. Register on the web using your invite link and the same email address, confirm your email, then come back and tap Sign in with Apple again.",
+  "appleLogin.domainNotAllowed": "This site only accepts accounts from certain email domains, and your Apple address isn't one of them. Register on the web with an accepted address, then sign in with that address.",
+  "appleLogin.quotaReached": "This site has already taken all the new accounts it accepts today. Please try again tomorrow, or ask the site administrator.",
+  "appleLogin.invalidEmail": "This site can't use the email address Apple provided — it's most likely a hidden relay address. Register on the web with a usable address, then sign in with that address.",
+  "appleLogin.createFailed": "The account could not be created. Please try again in a moment; if it keeps failing, ask the site administrator.",
+  "appleLogin.deviceFailed": "Your sign-in could not be saved on this device. Please try again in a moment; if it keeps failing, ask the site administrator.",
+  "appleLogin.badRequest": "This site could not accept the sign-in request. Please update the app to the latest version and try again.",
+  "appleLogin.tokenInvalid": "The sign-in proof from Apple could not be verified — it may have expired. Please sign in again.",
+  "appleLogin.accountDisabled": "This account has been turned off. Please ask the site administrator to restore it.",
+  "appleLogin.notConfigured": "This site has not turned on Sign in with Apple yet. Please ask the site administrator to enable it, or sign in the way you did before.",
+
 } satisfies Record<string, string>;
 
 /** Every translation key the app knows about, derived from the English

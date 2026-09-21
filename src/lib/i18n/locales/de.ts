@@ -1407,4 +1407,20 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "loginChallenge.submit": "Bestätigen und anmelden",
   "loginChallenge.expiryNote": "⏱ Der Code gilt 10 Minuten und erlaubt bis zu 5 Versuche.",
   "loginChallenge.notReceived": "Nichts angekommen? Sieh im Spam-Ordner nach oder <a href=\"/login\" class=\"text-brand-600 hover:underline\">gehe zurück zur Anmeldung</a> und versuche es erneut.",
+
+  // Anmeldung mit Apple abgelehnt. Bereits veröffentlichte App-Versionen zeigen
+  // die `message` des Servers an — jeder Satz sagt, was als Nächstes zu tun ist.
+  "appleLogin.emailTaken": "Für diese E-Mail-Adresse gibt es hier bereits ein Konto, und Apple hat nicht bestätigt, dass die Adresse Ihnen gehört. Melden Sie sich wie bisher an (Passwort oder Single Sign-on) – über „Mit Apple anmelden“ ist dieses Konto nicht erreichbar.",
+  "appleLogin.signupClosed": "Diese Seite nimmt derzeit keine neuen Konten an. Wenn du schon eins hast, melde dich wie bisher an; andernfalls wende dich an die Administration der Seite.",
+  "appleLogin.inviteOnly": "Diese Website ist nur auf Einladung zugänglich, und „Mit Apple anmelden“ kann keinen Einladungscode übermitteln. Registrieren Sie sich im Web über Ihren Einladungslink mit derselben E-Mail-Adresse, bestätigen Sie Ihre Adresse und tippen Sie danach hier erneut auf „Mit Apple anmelden“.",
+  "appleLogin.domainNotAllowed": "Diese Website akzeptiert nur Konten bestimmter E-Mail-Domains; Ihre Apple-Adresse gehört nicht dazu. Registrieren Sie sich im Web mit einer zulässigen Adresse und melden Sie sich anschließend mit dieser Adresse an.",
+  "appleLogin.quotaReached": "Diese Seite hat alle neuen Konten vergeben, die sie heute annimmt. Versuche es morgen erneut oder wende dich an die Administration der Seite.",
+  "appleLogin.invalidEmail": "Diese Website kann die von Apple übermittelte E-Mail-Adresse nicht verwenden – meist handelt es sich um eine verborgene Adresse. Registrieren Sie sich im Web mit einer nutzbaren Adresse und melden Sie sich anschließend mit dieser Adresse an.",
+  "appleLogin.createFailed": "Das Konto konnte nicht angelegt werden. Versuche es gleich noch einmal; wenn es weiterhin fehlschlägt, wende dich an die Administration der Seite.",
+  "appleLogin.deviceFailed": "Die Anmeldung konnte auf diesem Gerät nicht gespeichert werden. Versuche es gleich noch einmal; wenn es weiterhin fehlschlägt, wende dich an die Administration der Seite.",
+  "appleLogin.badRequest": "Diese Seite konnte die Anmeldeanfrage nicht annehmen. Aktualisiere die App auf die neueste Version und versuche es erneut.",
+  "appleLogin.tokenInvalid": "Der Anmeldenachweis von Apple konnte nicht geprüft werden, möglicherweise ist er abgelaufen. Melde dich bitte erneut an.",
+  "appleLogin.accountDisabled": "Dieses Konto ist deaktiviert. Wende dich an die Administration der Seite, um es wieder freischalten zu lassen.",
+  "appleLogin.notConfigured": "Auf dieser Seite ist die Anmeldung mit Apple noch nicht aktiviert. Bitte um Aktivierung oder melde dich wie bisher an.",
+
 };
