@@ -302,11 +302,25 @@ struct CalendarView: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 4)
 
+            // 错误独立一行，且优先于「X 分钟前同步」。
+            //
+            // 以前这两个是 if / else-if：只要同步成功过一次（或读到过磁盘缓存），
+            // lastSyncedAt 就不为 nil，错误提示**永远渲染不出来**。后果是
+            // 同步一直在后台静默失败，而界面上只有一个慢慢变大的「X 分钟前同步」
+            // ——用户完全看不出坏了。
+            if let err = errorMessage {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                    Text(err)
+                }
+                .font(.caption2)
+                .foregroundStyle(.red)
+                .padding(.horizontal, 14)
+                .multilineTextAlignment(.center)
+            }
             if let synced = lastSyncedAt {
                 Text(syncedLabel(for: synced))
                     .font(.caption2).foregroundStyle(.tertiary)
-            } else if let err = errorMessage {
-                Text(err).font(.caption2).foregroundStyle(.red)
             }
         }
         .padding(.top, 6)
@@ -553,10 +567,12 @@ struct CalendarView: View {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
-        // Remember what range we just covered so anchor-change handlers
-        // can decide whether to refetch (only when navigating far enough
-        // outside the cached window).
-        lastFetchedWindow = (start: from, end: to)
+        // 注意：lastFetchedWindow 只在**请求成功之后**才记录（见下面成功分支）。
+        //
+        // 以前是在这里、发请求之前就记上的。于是一旦这次加载失败，这个窗口
+        // 就被永久标记成「已取过」，再也不会重试——用户翻到那个月看到的是
+        // 「没有任何安排」，而不是「加载失败」。他会真的以为自己那个月没事，
+        // 可能因此错过安排。
 
         // Use the cached ISO8601 formatter — was creating a new one
         // per request, ~1ms overhead each. Tiny but cumulative under
@@ -577,6 +593,8 @@ struct CalendarView: View {
             self.calendars = resp.calendars
             self.events = sortedEvents
             self.lastSyncedAt = Date()
+            // 取到了才算这个窗口覆盖过——失败的窗口要能被重试。
+            self.lastFetchedWindow = (start: from, end: to)
             // Persist to disk async — EventCache.write returns immediately
             // (enqueues on its background queue), so no UI hitch.
             let payload = EventCachePayload(

@@ -109,11 +109,19 @@ final class EventCache: @unchecked Sendable {
         }
     }
 
-    /// Profile-scoped clear — used by AppState.removeProfile. Doesn't
-    /// have access to the profile's email mapping, so falls back to
-    /// clearAll. Caller is removing a profile entirely so over-clearing
-    /// is harmless (other profiles re-fetch on next view).
-    func clearForProfile(_ profileId: String) {
-        clearAll()
+    /// 只清掉某一个账号的缓存。
+    ///
+    /// 以前这里直接调 clearAll()，注释说「反正会重新拉，多清无害」——
+    /// 但那是本 App 唯一会真正弄丢本地数据的路径：多账号用户为了修一个
+    /// 登录问题去退出 A 账号，回头发现 B 账号的离线日历也空了，
+    /// 没网的时候就什么都看不到。
+    ///
+    /// 缓存文件名里本来就带着 host-email 的键（见 cacheURL / key），
+    /// 精确删除是做得到的。
+    func clearForUserKey(_ key: String) {
+        queue.sync {
+            guard let url = cacheURL(forUserKey: key) else { return }
+            try? fileManager.removeItem(at: url)
+        }
     }
 }

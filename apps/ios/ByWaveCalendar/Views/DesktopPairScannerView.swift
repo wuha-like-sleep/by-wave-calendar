@@ -198,8 +198,10 @@ struct DesktopPairScannerView: View {
             return inner.localizedDescription
         case .decode(let inner):
             return "服务器响应解析失败：%@".locFormat(inner.localizedDescription)
-        case .refreshFailed(let status):
-            return "登录已过期 (HTTP %lld)，请重新登录后再试。".locFormat(status)
+        case .refreshFailed:
+            return "登录已失效，请重新登录后再试。".loc
+        case .deviceRevoked:
+            return "密码已更改或此设备已被移除，请重新登录后再试。".loc
         case .server(let status, _):
             switch status {
             case 404: return "二维码已过期或无效，请让电脑端重新生成。".loc

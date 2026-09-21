@@ -16,14 +16,21 @@ enum APIError: Error, LocalizedError {
     case decode(Error)
     case network(Error)
     case refreshFailed(status: Int)
+    /// 服务端明确吊销了这台设备（改密码 / 重置密码 / 后台移除设备）。
+    /// 和「网络不好」必须分开：前者要登出并说清原因，后者应当保持登录、
+    /// 继续显示离线缓存。
+    case deviceRevoked
 
     var errorDescription: String? {
         switch self {
         case .notSignedIn: return "请先登录".loc
-        case .server(let s, let b): return "服务器错误 %lld — %@".locFormat(s, b ?? "")
-        case .decode(let e): return "解析错误：%@".locFormat(e.localizedDescription)
-        case .network(let e): return "网络错误：%@".locFormat(e.localizedDescription)
-        case .refreshFailed(let s): return "令牌刷新失败 (HTTP %lld) — 请重新登录".locFormat(s)
+        // 不要把服务端返回的 body 原样摊给用户——那会显示成
+        // 「服务器错误 403 — {"ok":false,"error":{...}}」。
+        case .server(let s, _): return "操作失败，请稍后再试（%lld）".locFormat(s)
+        case .decode: return "数据读取失败，请稍后再试".loc
+        case .network: return "网络连接失败，请检查网络后重试".loc
+        case .refreshFailed: return "登录已失效，请重新登录".loc
+        case .deviceRevoked: return "密码已更改或此设备已被移除，请重新登录".loc
         }
     }
 }

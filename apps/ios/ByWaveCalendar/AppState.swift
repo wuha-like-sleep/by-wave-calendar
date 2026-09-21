@@ -68,6 +68,14 @@ final class AppState: ObservableObject {
     /// token. Drives Setup ↔ Calendar branching in RootView.
     @Published var isSignedIn: Bool = false
 
+    /// 上一次被动登出的原因，显示在配对页顶部。
+    ///
+    /// 为什么需要它：设备被吊销（改密码 / 重置密码 / 后台移除）时，
+    /// 用户看到的只是一个空白配对页——分不清是自己被踢了、还是网络有问题、
+    /// 还是 App 坏了。把原因带过来，他才知道该做什么。
+    /// 用户开始重新配对时由 SetupView 清空。
+    @Published var signedOutReason: String?
+
     /// User-chosen appearance override (跟随系统 / 浅色 / 深色). Cross-
     /// profile setting — persisted globally, not per profile.
     @Published var appearance: AppearanceMode = AppearanceMode(rawValue:
@@ -299,6 +307,8 @@ final class AppState: ObservableObject {
     /// profile already exists for (serverURL, userEmail), updates it in
     /// place (refreshing the token). Otherwise creates a new profile.
     func completePairing(serverURL: URL, refreshToken: String, accessToken: String, accessTokenExpiresAt: Date, userEmail: String?, userName: String?) {
+        // 重新登录成功，上一次被踢的提示就该消失了。
+        signedOutReason = nil
         // De-dup: same server + same email = same profile.
         let urlStr = serverURL.absoluteString
         let existingIdx = profiles.firstIndex(where: { p in
@@ -363,14 +373,21 @@ final class AppState: ObservableObject {
     /// Soft sign-out: clear refresh token for the active profile but
     /// KEEP the profile entry in the list (so the user can sign back
     /// in without re-typing the host). UI flips to SetupView.
-    func signOut() {
+    func signOut(reason: String? = nil) {
         guard let id = activeProfileId else { return }
+        // 把「为什么被登出」带到登录页，否则用户只看到一个空白的配对界面，
+        // 分不清是自己被踢了还是网络有问题。
+        if let reason { self.signedOutReason = reason }
         Keychain.delete(.refreshToken(profileId: id))
         accessToken = nil
         accessTokenExpiresAt = nil
         isSignedIn = false
-        // Clear per-profile EventCache + cross-profile EventKit mirror.
-        EventCache.shared.clearAll()
+        // 只清当前账号的缓存。以前这里是 clearAll()，会把其它账号的离线日历
+        // 一起删掉——多账号用户为了修一个登录问题退出 A，回头发现 B 也空了。
+        if let p = activeProfile, let url = p.serverURL {
+            EventCache.shared.clearForUserKey(
+                EventCache.shared.key(serverURL: url, userEmail: p.userEmail))
+        }
         EventKitMirror.shared.tearDown()
         Task { await LocalNotifications.shared.clearAll() }
         // Stay on the same activeProfileId — SetupView pre-fills its URL.
@@ -381,7 +398,10 @@ final class AppState: ObservableObject {
     /// and the on-disk event cache.
     func removeProfile(id: String) {
         Keychain.delete(.refreshToken(profileId: id))
-        EventCache.shared.clearForProfile(id)
+        if let p = profiles.first(where: { $0.id == id }), let url = p.serverURL {
+            EventCache.shared.clearForUserKey(
+                EventCache.shared.key(serverURL: url, userEmail: p.userEmail))
+        }
         profiles.removeAll(where: { $0.id == id })
         // If we removed the active profile, pick another (or go signed-out).
         if activeProfileId == id {
@@ -431,8 +451,20 @@ final class AppState: ObservableObject {
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: ["refreshToken": refresh])
         let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
-            throw APIError.refreshFailed(status: (resp as? HTTPURLResponse)?.statusCode ?? -1)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? -1
+        // 401 = 服务端明确说这张 refresh token 不认了（改密码 / 重置密码 /
+        // 后台移除设备都会吊销）。这和「服务器 500」「网络断了」是两回事：
+        // 前者必须登出并告诉用户原因，后者应当保持登录、继续用离线缓存。
+        //
+        // 以前这里一律抛 refreshFailed 且不清凭据，结果 App 变成僵尸：
+        // 日历照常显示上次同步的内容，新建/编辑/删除全部失败，
+        // 而界面上没有任何地方告诉用户「你被登出了」。
+        if status == 401 {
+            await MainActor.run { self.signOut(reason: "密码已更改或此设备已被移除，请重新登录".loc) }
+            throw APIError.deviceRevoked
+        }
+        guard status == 200 else {
+            throw APIError.refreshFailed(status: status)
         }
         let outer = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         let payload = (outer["data"] as? [String: Any]) ?? outer

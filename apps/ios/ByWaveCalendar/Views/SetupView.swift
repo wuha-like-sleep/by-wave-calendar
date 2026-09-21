@@ -202,6 +202,23 @@ struct SetupView: View {
             Text("登录你的服务器，开始同步")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+
+            // 被动登出时把原因摆在最显眼的位置。没有这一句，用户看到的
+            // 只是一个空白配对页——分不清是被踢了、没网、还是 App 坏了。
+            if let reason = state.signedOutReason {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(reason)
+                        .font(.footnote)
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                .padding(.top, 4)
+            }
         }
     }
 
