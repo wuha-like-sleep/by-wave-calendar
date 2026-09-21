@@ -80,7 +80,10 @@ function send401(reply: FastifyReply, body: string, errParam?: string): null {
     ? `Basic realm="${REALM}", charset="UTF-8", error="${errParam}"`
     : `Basic realm="${REALM}", charset="UTF-8"`;
   reply.header("WWW-Authenticate", challenge);
-  reply.code(401).type("text/plain").send(body);
+  // 同 caldav.ts 的 sendXml：send 之后必须让 handler 拿到 reply，
+  // 否则响应体会在 compress 的 onSend 里被丢掉（本函数返回 null 供调用方
+  // `return send401(...)` 用，reply 已发出这一点由调用方的 return 表达）。
+  void reply.code(401).type("text/plain").send(body);
   return null;
 }
 

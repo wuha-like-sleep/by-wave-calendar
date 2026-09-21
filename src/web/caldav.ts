@@ -147,8 +147,24 @@ function eventHref(userId: string, calId: string, uid: string): string { return 
 
 // ---------- Common helpers ----------
 
-function sendXml(reply: FastifyReply, body: string, code = 207): void {
-  reply
+/**
+ * 发一份 multistatus/XML 响应。
+ *
+ * **必须 `return sendXml(...)`，不能光调用。** 这不是风格问题：
+ * handler 以 undefined 结束时 Fastify 认为「没人处理」，而响应其实已经发了，
+ * 于是走进 @fastify/compress 的 onSend 之后 body 被丢掉——客户端拿到
+ * `207 Multi-Status` + `content-encoding: gzip` + **0 字节**。
+ *
+ * 这个 bug 只在客户端声明压缩、且响应超过 compress 的 1024 字节阈值时发作，
+ * 也就是：小响应（OPTIONS、principal 查询）正常，一到「列日历」「列事件」就空。
+ * 表现正是 Apple 的「目前不能刷新账户」，或者账户加上了却一个日历都没有。
+ *
+ * 而 curl 默认**不发** Accept-Encoding，所以人工诊断脚本一路绿灯——
+ * 这个 bug 因此躲过了两轮排查。门禁 test/caldav_compression.test.ts
+ * 必须带 Accept-Encoding: gzip，否则那条测试永远是绿的。
+ */
+function sendXml(reply: FastifyReply, body: string, code = 207): FastifyReply {
+  return reply
     .code(code)
     .header("Content-Type", 'application/xml; charset="utf-8"')
     .header("DAV", "1, 2, 3, calendar-access")
@@ -368,7 +384,10 @@ async function loadAttendeeStatuses(eventIds: string[]): Promise<Map<string, Map
 
 async function handleOptions(_req: FastifyRequest, reply: FastifyReply) {
   setOptionsHeaders(reply);
-  reply.code(200).send();
+  // return（不是光调用）—— 见 sendXml 的注释：漏了 return，响应体会被
+  // compress 的 onSend 丢掉。这里 body 是空的所以暂时无害，但形状必须一致，
+  // 否则下一个照着抄的人就会踩坑。
+  return reply.code(200).send();
 }
 
 // PROPFIND / (the actual HTTP root, not /caldav/) — Apple Calendar's
@@ -386,7 +405,7 @@ async function propfindDiscoveryRoot(req: FastifyRequest, reply: FastifyReply) {
       displayname: "ByWave",
     }),
   ]);
-  sendXml(reply, body);
+  return sendXml(reply, body);
 }
 
 // PROPFIND /caldav/ — return current-user-principal pointing to user's principal
@@ -400,7 +419,7 @@ async function propfindRoot(req: FastifyRequest, reply: FastifyReply) {
       currentUserPrincipal: principalHref(user.id),
     }),
   ]);
-  sendXml(reply, body);
+  return sendXml(reply, body);
 }
 
 // PROPFIND /caldav/principals/<userId>/
@@ -419,7 +438,7 @@ async function propfindPrincipal(req: FastifyRequest, reply: FastifyReply) {
       calendarUserAddressSet: `mailto:${user.email}`,
     }),
   ]);
-  sendXml(reply, body);
+  return sendXml(reply, body);
 }
 
 // PROPFIND /caldav/<userId>/ — calendar-home: lists user's calendars (Depth 1)
@@ -457,7 +476,7 @@ async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
       }));
     }
   }
-  sendXml(reply, multistatus(entries));
+  return sendXml(reply, multistatus(entries));
 }
 
 // PROPFIND /caldav/<userId>/<calId>/ — single calendar, optionally with events
@@ -496,7 +515,7 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
       }));
     }
   }
-  sendXml(reply, multistatus(entries));
+  return sendXml(reply, multistatus(entries));
 }
 
 // REPORT /caldav/<userId>/<calId>/ — calendar-query / calendar-multiget
@@ -952,7 +971,7 @@ export async function caldavRoutes(app: FastifyInstance) {
   // a 404 that still carries DAV headers so the client knows we're a
   // DAV server, just not a CardDAV one.
   app.all("/.well-known/caldav", { config: { rateLimit: false } }, async (_req, reply) => {
-    reply.code(302).header("Location", "/caldav/").send();
+    return reply.code(302).header("Location", "/caldav/").send();
   });
   app.all("/.well-known/carddav", { config: { rateLimit: false } }, async (_req, reply) => {
     reply
