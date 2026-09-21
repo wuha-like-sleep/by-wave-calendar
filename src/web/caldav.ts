@@ -554,7 +554,6 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
   if (!cal) return reply.code(404).send("Not Found");
 
   const depth = depthHeader(req);
-  const events = await loadAllEventsOf(cal.id);
   const entries: string[] = [];
 
   entries.push(responseEntry(calendarHref(user.id, cal.id), {
@@ -571,6 +570,13 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
   }));
 
   if (depth !== "0") {
+    // 这批行**只有**列清单时才用得上，所以放在这里面加载。
+    // 以前它在函数开头无条件跑：而客户端平时的例行轮询是 Depth:0
+    // （只问一个 ctag，看看要不要同步），每台设备每轮都会把整个日历的
+    // 全部事件行连同 raw_ics 一起捞进内存，然后原样扔掉。
+    // 3000 条事件的日历实测 25ms/次 —— 而这笔钱是每台设备、每轮都在付的。
+    // ctag 本身走的是聚合查询（见 calendarCtags），不需要这些行。
+    const events = await loadAllEventsOf(cal.id);
     for (const e of events) {
       entries.push(responseEntry(eventHref(user.id, cal.id, e.uid), {
         resourcetype: "",
