@@ -188,12 +188,16 @@ private struct DayCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
+                // 只能有一个 .foregroundStyle。以前写了两遍：先 numberColor、
+                // 后 .white，而 SwiftUI 里靠外层的那次会被内层覆盖——加上
+                // numberColor 对「今天」返回的正好是品牌蓝，于是蓝底配蓝字，
+                // **今天的日期数字在月视图里完全看不见**（只剩一个纯蓝圆点）。
+                // 周视图的写法本来就是对的，只有这里坏了。
                 Text("\(dayNumber)")
                     .font(.callout.weight(isToday ? .bold : .regular))
-                    .foregroundStyle(numberColor)
                     .frame(minWidth: 22, minHeight: 22)
                     .background(isToday ? Color.accentColor : .clear, in: Circle())
-                    .foregroundStyle(isToday ? .white : numberColor)
+                    .foregroundStyle(isToday ? Color.white : numberColor)
                 Spacer()
             }
             // Up to 3 events with a colored bar; more compressed when no space.
@@ -240,8 +244,9 @@ private struct DayCell: View {
         .opacity(inMonth ? 1.0 : 0.35)
     }
 
+    /// 非「今天」格子的数字颜色。今天走上面的 .white（配蓝底圆），
+    /// 不经过这里——以前这里对 isToday 返回品牌蓝，正是蓝底蓝字那个 bug 的一半。
     private var numberColor: Color {
-        if isToday { return .accentColor }
-        return inMonth ? .primary : .secondary
+        inMonth ? .primary : .secondary
     }
 }
