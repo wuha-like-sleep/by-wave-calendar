@@ -128,6 +128,24 @@ object ProfileStore {
      *  first remaining profile (or null when the list empties).
      *  Also wipes the event cache so removed-then-re-added accounts
      *  don't see ghost events from before. */
+    /** 上一次被动登出的原因，登录页读它显示提示；重新登录成功后清空。 */
+    private val _signedOutReason = MutableStateFlow<String?>(null)
+    val signedOutReason: StateFlow<String?> = _signedOutReason.asStateFlow()
+
+    fun clearSignedOutReason() { _signedOutReason.value = null }
+
+    /**
+     * 服务端吊销了这台设备（改密码 / 重置密码 / 后台移除）。
+     *
+     * 清掉凭据让界面自然回到登录页。以前刷新失败只是把 401 原样抛出、
+     * 不碰这里，结果桌面端变成僵尸：日历照常显示上次同步的内容，
+     * 新建/编辑/删除全部失败，而没有任何地方告诉用户「你被登出了」。
+     */
+    fun markSignedOut(reason: String) {
+        _signedOutReason.value = reason
+        _activeId.value?.let { remove(it) }
+    }
+
     fun remove(id: String) {
         val list = _profiles.value
         val newList = list.filterNot { it.deviceId == id }

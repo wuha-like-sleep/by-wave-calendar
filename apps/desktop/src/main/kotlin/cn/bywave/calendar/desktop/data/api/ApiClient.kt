@@ -584,7 +584,17 @@ class ApiClient(val serverUrl: String) {
             // engine pools connections aggressively and an unread 401
             // body can pin a connection.
             runCatching { resp.bodyAsText() }
-            if (tryRefresh()) resp = block()
+            if (tryRefresh()) {
+                resp = block()
+            } else {
+                // 刷新失败 = 服务端不认这张 refresh token 了（改密码、重置密码、
+                // 后台移除设备都会吊销它）。
+                //
+                // 以前这里什么都不做，把 401 原样抛给调用方：桌面端变成僵尸——
+                // 日历照常显示上次同步的内容，新建/编辑/删除全部失败，
+                // 而界面上没有任何地方说明原因。
+                ProfileStore.markSignedOut("密码已更改或此设备已被移除，请重新登录")
+            }
         }
         return resp
     }
