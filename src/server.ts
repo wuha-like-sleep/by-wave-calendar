@@ -1178,6 +1178,25 @@ app.log.info(
   `[startup] TRUST_PROXY=${env.TRUST_PROXY || "loopback（默认）"} — ${describeTrustProxy(trustProxyOption)}`,
 );
 
+// Apply any pending DB migrations BEFORE we start listening. install.sh
+// runs migrate during full deploys, but in-place `git pull && pm2 reload`
+// skips that step — which silently broke /app/booking-links the moment
+// the v1.3.10 release added the `notify_email` column. Auto-migrating
+// on boot makes that failure class impossible to hit. drizzle's
+// migrator is a no-op when nothing's pending, so normal restarts stay
+// fast (one SELECT on __drizzle_migrations).
+//
+// ⚠️ 这一段必须排在**所有读库的代码之前**，不只是「listen 之前」。
+// 曾经它在最后面，而下面打印功能开关那段会先 SELECT 一次 site_settings ——
+// 于是新版本一旦给 site_settings 加了列，用新代码去读还没迁移的老库，
+// 驱动层直接报「列不存在」，未捕获异常，**服务端根本起不来**。
+// 站长看到的是 pm2 反复重启，而这段注释上面写着「开机自动迁移让这类故障
+// 不可能发生」。有一条断言盯着这个顺序（test/migrate_before_db_read.test.ts）。
+{
+  const { runPendingMigrations } = await import("./lib/auto_migrate.js");
+  await runPendingMigrations();
+}
+
 // Surface critical APP-related toggles at startup. If apps_enabled is
 // off, the iOS / Android APP will see 403 on every auth call — this
 // log is the canonical place to verify before going hunting in admin.
@@ -1188,18 +1207,6 @@ app.log.info(
   if (!s.appsEnabled) {
     app.log.warn("[startup] appsEnabled=false — 原生 APP 登录会被拒绝 (HTTP 403 apps_disabled). 在 /admin/api#apps 打开开关。");
   }
-}
-
-// Apply any pending DB migrations BEFORE we start listening. install.sh
-// runs migrate during full deploys, but in-place `git pull && pm2 reload`
-// skips that step — which silently broke /app/booking-links the moment
-// the v1.3.10 release added the `notify_email` column. Auto-migrating
-// on boot makes that failure class impossible to hit. drizzle's
-// migrator is a no-op when nothing's pending, so normal restarts stay
-// fast (one SELECT on __drizzle_migrations).
-{
-  const { runPendingMigrations } = await import("./lib/auto_migrate.js");
-  await runPendingMigrations();
 }
 
 try {
