@@ -170,7 +170,9 @@ private struct MonthCard: View {
                 }
             }
             // 卡片被拉高时多出来的空间平摊到点阵上下，标题仍然贴顶。
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            // 点径封顶后（宽屏上会封到 14pt）点阵会比卡片内宽窄一点，
+            // 居中比靠左好看，手机上点阵正好填满、居中等于没动。
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
         .padding(padding)
         .background(

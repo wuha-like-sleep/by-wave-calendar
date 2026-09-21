@@ -107,6 +107,11 @@ struct SetupView: View {
                     Spacer(minLength: 40)
                 }
                 .padding(.horizontal, 22).padding(.top, 28)
+                // 登录表单封顶 480pt 并居中。不封的话在 iPad / Mac 上
+                // 一个填邮箱的输入框会横着拉满一千多点宽，读起来很别扭；
+                // 手机上宽度本来就不到 480，这两行不产生任何变化。
+                .frame(maxWidth: 480)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(bgGradient)
             .sheet(isPresented: $showingScanner) {
