@@ -132,9 +132,18 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   if (verifyPromise) {
     coalesced++;
   } else {
-    const fresh = verifyAndCache(email, password, ckey);
+    // .finally 必须接在同一条链上再赋值，**不能单独调用**。
+    // `fresh.finally(...)` 会派生出一条新 promise，而那条没有任何人 await：
+    // 数据库抖一下（ECONNREFUSED / 连接被重置）verifyAndCache 一 reject，
+    // 派生链跟着 reject → unhandledRejection → server.ts 的进程级兜底
+    // 认定它不是良性双写，process.exit(1) → 整个服务挂掉。
+    //
+    // 而认证缓存只有 60 秒、Apple 后台轮询约 15 分钟一次，所以**每一次真实的
+    // Apple 轮询都是缓存未命中**，也就是每一次都走这条路径。数据库只要抖一下，
+    // 一条正常的日历同步就能把进程打死，PM2 拉起来后 DB 还没好就是 crash-loop。
+    const fresh = verifyAndCache(email, password, ckey)
+      .finally(() => inFlight.delete(ckey));
     inFlight.set(ckey, fresh);
-    fresh.finally(() => inFlight.delete(ckey));
     verifyPromise = fresh;
   }
   const verified = await verifyPromise;
