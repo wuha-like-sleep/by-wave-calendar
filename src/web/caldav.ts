@@ -462,7 +462,7 @@ async function handleOptions(_req: FastifyRequest, reply: FastifyReply) {
 // is — we just point at /caldav/ and let the client follow.
 async function propfindDiscoveryRoot(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const body = multistatus([
     responseEntry("/", {
       resourcetype: "<collection/>",
@@ -476,7 +476,7 @@ async function propfindDiscoveryRoot(req: FastifyRequest, reply: FastifyReply) {
 // PROPFIND /caldav/ — return current-user-principal pointing to user's principal
 async function propfindRoot(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const body = multistatus([
     responseEntry("/caldav/", {
       resourcetype: "<collection/>",
@@ -490,7 +490,7 @@ async function propfindRoot(req: FastifyRequest, reply: FastifyReply) {
 // PROPFIND /caldav/principals/<userId>/
 async function propfindPrincipal(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
 
@@ -509,7 +509,7 @@ async function propfindPrincipal(req: FastifyRequest, reply: FastifyReply) {
 // PROPFIND /caldav/<userId>/ — calendar-home: lists user's calendars (Depth 1)
 async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
 
@@ -547,7 +547,7 @@ async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
 // PROPFIND /caldav/<userId>/<calId>/ — single calendar, optionally with events
 async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
   const cal = await loadCalendarOwned(user.id, params.calId ?? "");
@@ -586,7 +586,7 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
 // REPORT /caldav/<userId>/<calId>/ — calendar-query / calendar-multiget
 async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
   const cal = await loadCalendarOwned(user.id, params.calId ?? "");
@@ -750,7 +750,7 @@ function parseIcalUtcStamp(val: string): Date | null {
 // GET /caldav/<userId>/<calId>/<uid>.ics — single event as iCalendar
 async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
   const cal = await loadCalendarOwned(user.id, params.calId ?? "");
@@ -828,7 +828,7 @@ export function applyAlarmsFromPut(
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
 async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
   const cal = await loadCalendarOwned(user.id, params.calId ?? "");
@@ -1091,7 +1091,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
 // DELETE /caldav/<userId>/<calId>/<uid>.ics
 async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
-  if (!user) return;
+  if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   req.log.info({ caldav: "delete", userId: user.id, calId: params.calId, uid: params.uid, ifMatch: req.headers["if-match"] }, "caldav_delete");
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");

@@ -274,7 +274,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Overview / settings dashboard
   app.get("/admin", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
 
     // Counts. Use parallel queries — they don't depend on each other,
@@ -365,7 +365,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Section pages
   app.get("/admin/site", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/site", {
       title: "站点设置 · 管理后台",
@@ -375,7 +375,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/admin/logo", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/logo", {
       title: "Logo · 管理后台",
@@ -385,7 +385,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/admin/smtp", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     // BIMI section: resolve the active logo (admin-uploaded → bundled default),
     // build the absolute URL the DNS record must point at (stable, no cache-bust),
@@ -415,7 +415,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Upload a BIMI-compliant SVG. multipart → no reliable CSRF cookie; gate on admin.
   app.post("/admin/bimi/logo", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const file = await req.file();
     if (!file) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("请选择 SVG 文件") + "#bimi");
     const isSvg = file.mimetype.toLowerCase().includes("svg") || /\.svg$/i.test(file.filename || "");
@@ -441,7 +441,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/bimi/logo/delete", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const p = path.join(process.cwd(), "src", "public", "uploads", "bimi.svg");
     await unlink(p).catch(() => undefined);
@@ -451,7 +451,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/bimi/vmc", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ vmcUrl: z.string().max(500).optional() }).safeParse(req.body);
     if (!body.success) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("参数无效") + "#bimi");
@@ -470,7 +470,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // submit URL never hits the WAF.
   const ssoIndex = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const providers = await listAllProviders();
     return reply.view("admin/sso", {
       title: "SSO · 管理后台",
@@ -487,7 +487,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const ssoCreateProvider = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug 只能包含 a-z 0-9 和 -"),
@@ -514,7 +514,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const ssoUpdateProvider = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/idp");
@@ -545,7 +545,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const ssoDeleteProvider = async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/idp");
@@ -557,7 +557,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/settings", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       siteName: z.string().min(1).max(200),
@@ -581,7 +581,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // LOCALES). Surfaces in install.sh too via .env seed.
   app.post("/admin/site/locale", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const { isValidSiteLocale } = await import("../lib/i18n.js");
     const body = z.object({ defaultLocale: z.string().max(20) }).safeParse(req.body);
@@ -595,7 +595,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/smtp", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       host: z.string().optional().transform((v) => v?.trim() || null),
@@ -623,7 +623,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   const ssoKeycloakLegacy = async (req: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       enabled: z.string().optional().transform((v) => v === "on" || v === "true"),
@@ -649,7 +649,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Logo upload ----------
   app.post("/admin/logo", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     // multipart requests don't carry CSRF cookie token reliably; rely on auth + admin check + same-origin.
 
     const file = await req.file();
@@ -689,7 +689,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/logo/delete", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const settings = await getSettings();
     if (settings.logoUrl) {
@@ -707,7 +707,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Dry-run preview: resolve both refs and show what would move. Read-only.
   app.get<{ Querystring: { source?: string; target?: string } }>("/admin/users/merge", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const { resolveUserRef, mergeSummary, mergeDeleteCounts } = await import("../lib/account_merge.js");
     const source = await resolveUserRef(req.query.source || "");
     const target = await resolveUserRef(req.query.target || "");
@@ -740,7 +740,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ sourceId: z.string().uuid(), targetId: z.string().uuid() }).safeParse(req.body);
     if (!body.success) return reply.redirect("/admin/users?error=" + encodeURIComponent("参数无效"));
@@ -756,7 +756,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get<{ Querystring: { q?: string; source?: string } }>("/admin/users", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     // Read-only filter: find a user by email / display name. Escaped + capped.
     const q = (typeof req.query?.q === "string" ? req.query.q : "").trim().slice(0, 100);
     const qClause = q
@@ -863,7 +863,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/users/:id/toggle-admin", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
@@ -885,7 +885,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/users/:id/toggle-disabled", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
@@ -940,7 +940,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/users/bulk-disable", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const ids = normalizeUserIds(body.userIds);
@@ -964,7 +964,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = (req.body ?? {}) as Record<string, unknown>;
     const ids = normalizeUserIds(body.userIds);
@@ -1005,7 +1005,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/users/:id/revoke-sessions", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
@@ -1027,7 +1027,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // 审计里压根没有对应的行。
   app.get("/admin/signups", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const settings = await getSettings();
 
     // 「从未登录过」的判据:login_events 里一条都没有。
@@ -1112,7 +1112,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // SSO、外部 IdP 懒建号、苹果登录,全都从同一个收口函数过。
   app.post("/admin/signup-gates", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       signupDomainAllowlist: z.string().max(4000).optional(),
@@ -1149,7 +1149,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Admin audit log ----------
   app.get("/admin/audit", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
 
     // Map an action's first segment to a coloured category badge. The full
     // Tailwind class strings live here (admin.ts is in tailwind.config's
@@ -1251,7 +1251,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Backup / restore ----------
   app.get("/admin/backup", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     return reply.view("admin/backup", {
       title: "数据备份 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
@@ -1262,7 +1262,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/admin/backup/export", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const bundle = await exportData();
     const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     reply.header("Content-Type", "application/json; charset=utf-8");
@@ -1274,7 +1274,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 3, timeWindow: "10 minutes" } },
   }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     // multipart: no CSRF cookie reliably — gate on admin status.
     const file = await req.file();
     if (!file) return reply.redirect("/admin/backup?error=" + encodeURIComponent("请选择备份文件"));
@@ -1314,7 +1314,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/admin/api", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const settings = await getSettings();
     const tokens = await listAllApiTokens();
     const allUsers = await db.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName }).from(schema.users).orderBy(asc(schema.users.email));
@@ -1368,7 +1368,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // External IdP (Keycloak) resource-server API config. See src/lib/external_idp.ts.
   app.post("/admin/api/idp", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       enabled: z.string().optional(),
@@ -1390,7 +1390,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/api/toggle", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ apiEnabled: enabled });
@@ -1403,7 +1403,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // every previously-paired device.
   app.post("/admin/apps/toggle", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ appsEnabled: enabled });
@@ -1417,7 +1417,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // native APPs working while hiding the cross-device QR flow.
   app.post("/admin/qr-login/toggle", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ qrLoginEnabled: enabled });
@@ -1429,7 +1429,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       label: z.string().min(1).max(80),
@@ -1456,7 +1456,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/admin/api/tokens/:id/revoke", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/api");
@@ -1475,7 +1475,7 @@ export async function adminRoutes(app: FastifyInstance) {
     { config: { rateLimit: { max: 10, timeWindow: "5 minutes" } } },
     async (req, reply) => {
       const u = await requireAdmin(req, reply);
-      if (!u) return;
+      if (!u) return reply;
       if (!verifyCsrf(req, reply)) return;
       const id = z.string().uuid().safeParse(req.params.id);
       if (!id.success) return reply.redirect("/admin/api?error=" + encodeURIComponent("Token id 无效"));
@@ -1509,7 +1509,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Security knobs (risk-login + lockout) ----------
   app.get("/admin/security", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/security", {
       title: "安全设置",
@@ -1526,7 +1526,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // CAPTCHA provider config — separate form (its own secret-keep logic).
   app.post("/admin/security/captcha", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       captchaProvider: z.string(),
@@ -1554,7 +1554,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/security", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({
@@ -1585,7 +1585,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/admin/invites", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     const invites = await listInvites();
     return reply.view("admin/invites", {
@@ -1602,7 +1602,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/invites", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       email: z.string().max(254).optional(),
@@ -1652,7 +1652,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { token: string } }>("/admin/invites/:token/revoke", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     await revokeInvite(req.params.token);
     await audit(req, user.id, "invite.revoke", { targetType: "signup_invite", targetId: req.params.token });
@@ -1661,7 +1661,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { token: string } }>("/admin/invites/:token/email", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ to: z.string().max(254).optional() }).safeParse(req.body);
     const v = await validateInvite(req.params.token);
@@ -1691,7 +1691,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Email template preview (admin only) ----------
   app.post("/admin/smtp/preview", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ to: z.string().email() }).safeParse(req.body);
     if (!body.success) {
@@ -1732,7 +1732,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Email templates: see + edit brand details + live preview ----------
   app.get("/admin/email-templates", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     const now = new Date();
     // Render each template once with the CURRENTLY SAVED branding for the
@@ -1760,7 +1760,7 @@ export async function adminRoutes(app: FastifyInstance) {
     "/admin/email-templates/preview",
     async (req, reply) => {
       const user = await requireAdmin(req, reply);
-      if (!user) return;
+      if (!user) return reply;
       const q = req.query ?? {};
       const key = typeof q.key === "string" ? q.key : "";
       const html = renderPreviewHtml(key, "you@example.com", new Date(), {
@@ -1776,7 +1776,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/email-templates", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       siteName: z.string().max(100).optional(),
@@ -1804,7 +1804,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/email-templates/send", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       to: z.string().email(),
@@ -1844,7 +1844,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Theme / appearance ----------
   app.get("/admin/theme", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/theme", {
       title: "外观",
@@ -1859,7 +1859,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/theme", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({
@@ -1877,7 +1877,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // ---------- Self-update (admin only) ----------
   app.get("/admin/update", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     // Read version from package.json at request time (cheap; ~10ms) so
     // it's accurate even if the process is running pre-restart code.
     let pkgVersion = "0.0.0";
@@ -1925,7 +1925,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/update/check", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     try {
       const status = await checkForUpdates(await resolveRemoteParam(req));
@@ -1945,7 +1945,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "10 minutes" } },
   }, async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const name = String(req.body?.name || "").trim();
     const url = String(req.body?.url || "").trim();
@@ -1974,7 +1974,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 5, timeWindow: "10 minutes" } },
   }, async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     if (updateInFlight) {
       return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 于 ${updateInFlight.startedAt.toISOString()} 启动）` });
@@ -1998,7 +1998,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Streaming variant with per-step progress (Server-Sent Events).
   app.post("/admin/update/apply-stream", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     if (updateInFlight) {
       reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 启动）` });
@@ -2031,7 +2031,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/update/restart", async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     // Reply first; queue the restart so the response can flush.
     reply.send({ ok: true, scheduled: true });
@@ -2053,7 +2053,7 @@ export async function adminRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 5, timeWindow: "10 minutes" } },
   }, async (req, reply) => {
     const user = await requireAdmin(req, reply);
-    if (!user) return;
+    if (!user) return reply;
 
     if (!req.isMultipart()) {
       return reply.code(400).send({ ok: false, error: "请求必须是 multipart/form-data" });
@@ -2205,7 +2205,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // admin can debug from the same page.
   app.get("/admin/webhooks", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const hooks = await db.select().from(schema.webhooks).orderBy(asc(schema.webhooks.createdAt));
     // Latest 50 deliveries across all hooks, joined with the hook label.
     const recent = await db
@@ -2237,7 +2237,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/webhooks", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       label: z.string().min(1).max(120),
@@ -2262,7 +2262,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/webhooks/:id/toggle", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/webhooks");
@@ -2274,7 +2274,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/webhooks/:id/delete", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/webhooks");
@@ -2287,7 +2287,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/webhooks/:id/test", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/webhooks");
@@ -2305,7 +2305,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // Admins use this to debug external integration failures.
   app.get("/admin/webhooks/:id/deliveries", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/webhooks");
     const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
@@ -2336,7 +2336,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // the receiver. Returns to the deliveries page with a flash.
   app.post("/admin/webhooks/:id/deliveries/:deliveryId/retry", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const params = req.params as { id: string; deliveryId: string };
     const dId = z.string().uuid().safeParse(params.deliveryId);
@@ -2353,7 +2353,7 @@ export async function adminRoutes(app: FastifyInstance) {
   // 第三方应用可代表用户调用 /api/v1/* (受 scope 限制)。
   app.get("/admin/oauth-apps", async (req, reply) => {
     const u = await requireAdmin(req, reply);
-    if (!u) return;
+    if (!u) return reply;
     const apps = await db.select({
       id: schema.oauthClients.id,
       clientId: schema.oauthClients.clientId,
@@ -2398,7 +2398,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/oauth-apps", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       name: z.string().min(1).max(200),
@@ -2432,7 +2432,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/oauth-apps/:id/toggle", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/oauth-apps");
@@ -2445,7 +2445,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/admin/oauth-apps/:id/delete", async (req, reply) => {
     const me = await requireAdmin(req, reply);
-    if (!me) return;
+    if (!me) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/oauth-apps");

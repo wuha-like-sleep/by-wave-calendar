@@ -1004,7 +1004,7 @@ export async function webRoutes(app: FastifyInstance) {
   // Main calendar view (Google/Synology-style grid + sidebar).
   app.get("/app", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const owned = await db
       .select({
         id: schema.calendars.id,
@@ -1055,7 +1055,7 @@ export async function webRoutes(app: FastifyInstance) {
   // Legacy card-grid dashboard, kept as an alt view.
   app.get("/app/calendars", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const rows = await db
       .select({
         id: schema.calendars.id,
@@ -1082,7 +1082,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/calendars", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({
@@ -1101,7 +1101,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>("/app/calendars/:id", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
@@ -1163,7 +1163,7 @@ export async function webRoutes(app: FastifyInstance) {
   //   own calendar without minting (and later having to revoke) a public URL.
   app.get<{ Params: { id: string } }>("/app/calendars/:id/export.ics", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.code(404).type("text/plain").send("Not Found");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.code(404).type("text/plain").send("Not Found");
@@ -1186,7 +1186,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/import/file", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
@@ -1216,7 +1216,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/import/text", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1248,7 +1248,7 @@ export async function webRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1277,7 +1277,7 @@ export async function webRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1324,7 +1324,7 @@ export async function webRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const params = z.object({ id: z.string().uuid(), subId: z.string().uuid() }).safeParse(req.params);
     if (!params.success) return reply.redirect("/app");
@@ -1340,7 +1340,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string; subId: string } }>("/app/calendars/:id/subscriptions/:subId/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const params = z.object({ id: z.string().uuid(), subId: z.string().uuid() }).safeParse(req.params);
     if (!params.success) return reply.redirect("/app");
@@ -1356,7 +1356,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1368,7 +1368,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/events", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1411,7 +1411,7 @@ export async function webRoutes(app: FastifyInstance) {
   // ---------- Event attendees (dedicated invite/revoke page) ----------
   app.get<{ Params: { id: string } }>("/app/events/:id/attendees", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const evId = z.string().uuid().safeParse(req.params.id);
     if (!evId.success) return reply.redirect("/app");
     const [ev] = await db
@@ -1459,7 +1459,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/events/:id/attendees/invite", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const evId = z.string().uuid().safeParse(req.params.id);
     if (!evId.success) return reply.redirect("/app");
@@ -1537,7 +1537,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/events/:id/attendees/revoke", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const evId = z.string().uuid().safeParse(req.params.id);
     if (!evId.success) return reply.redirect("/app");
@@ -1572,7 +1572,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/events/:id/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const evId = z.string().uuid().safeParse(req.params.id);
     if (!evId.success) return reply.redirect("/app");
@@ -1594,7 +1594,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/share-tokens", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1607,7 +1607,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string; token: string } }>("/app/calendars/:id/share-tokens/:token/revoke", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const params = z.object({ id: z.string().uuid(), token: z.string().min(1) }).safeParse(req.params);
     if (!params.success) return reply.redirect("/app");
@@ -1624,7 +1624,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/calendars/:id/invitations", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1687,7 +1687,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string; token: string } }>("/app/calendars/:id/invitations/:token/revoke", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     if (!calId.success) return reply.redirect("/app");
@@ -1703,7 +1703,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string; memberId: string } }>("/app/calendars/:id/members/:memberId/remove", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const calId = z.string().uuid().safeParse(req.params.id);
     const memberId = z.string().uuid().safeParse(req.params.memberId);
@@ -1825,7 +1825,7 @@ export async function webRoutes(app: FastifyInstance) {
   app.post<{ Params: { token: string } }>("/event-invite/:token/accept", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
     if (!tok || tok.expiresAt < new Date()) {
       return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}`, { error: tr(req, "flash.eventInvite.expired") });
@@ -1941,7 +1941,7 @@ export async function webRoutes(app: FastifyInstance) {
     config: { rateLimit: { max: 3, timeWindow: "5 minute" } },
   }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     if (user.emailVerified) {
       return redirectWith(reply, "/app", { success: tr(req, "flash.verifyEmail.alreadyVerified") });
@@ -1968,7 +1968,7 @@ export async function webRoutes(app: FastifyInstance) {
   // but its JS interacts with the calendar list and CalDAV setup).
   async function renderSettings(req: FastifyRequest, reply: FastifyReply, currentTab: "account" | "security" | "devices" | "notifications" | "appearance") {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const passkeys = await db
       .select({
         id: schema.webauthnCredentials.id,
@@ -2048,7 +2048,7 @@ export async function webRoutes(app: FastifyInstance) {
   // than 10 results at a time (e.g. "where's that meeting from 3 months ago?").
   app.get("/app/search", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const q = (req.query as { q?: string })?.q ?? "";
     return reply.view("app/search", {
       title: tr(req, "search.heading"),
@@ -2076,7 +2076,7 @@ export async function webRoutes(app: FastifyInstance) {
   // displayed as a QR. apps_enabled gate applies (admin can disable).
   app.get("/app/auth/native", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const q = z.object({
       // Opaque round-trip identifier the APP supplies so it can verify
       // the callback corresponds to its own request (anti-CSRF for the
@@ -2152,7 +2152,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.get("/app/logins", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const recentLogins = await listRecentLogins(user.id, 100);
     return reply.view("app/logins", {
       title: tr(req, "page.loginHistory"),
@@ -2168,7 +2168,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/settings/app-passwords", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({ label: z.string().min(1).max(60) })
@@ -2187,7 +2187,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/settings/app-passwords/:id/revoke", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/settings/devices");
@@ -2200,7 +2200,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/settings/theme", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({
@@ -2229,7 +2229,7 @@ export async function webRoutes(app: FastifyInstance) {
   // wipes the column, also clears the bwc_locale override cookie).
   app.post("/app/settings/locale", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
     const body = z.object({ locale: z.string().max(20).optional() }).safeParse(req.body);
@@ -2258,7 +2258,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/settings/delete-account", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       password: z.string().min(1),
@@ -2312,7 +2312,7 @@ export async function webRoutes(app: FastifyInstance) {
   // the user also has no passkey (they'd have no usable way back in).
   app.post<{ Params: { id: string } }>("/app/settings/identities/:id/unlink", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/settings/security");
@@ -2336,7 +2336,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/settings/password", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z
       .object({ currentPassword: z.string().min(1), newPassword: z.string().min(8).max(200) })
@@ -2374,7 +2374,7 @@ export async function webRoutes(app: FastifyInstance) {
   // -------- Booking links (Calendly-style) — management --------
   app.get("/app/booking-links", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     const links = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, user.id)).orderBy(asc(schema.bookingLinks.title));
     const cals = await db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color }).from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
     return reply.view("app/booking-links", {
@@ -2390,7 +2390,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post("/app/booking-links", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
       slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug_format"),
@@ -2443,7 +2443,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/booking-links");
@@ -2455,7 +2455,7 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/booking-links");
@@ -2469,7 +2469,7 @@ export async function webRoutes(app: FastifyInstance) {
   // an email for every booking" is a common case.
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle-notify", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
-    if (!user) return;
+    if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/booking-links");
