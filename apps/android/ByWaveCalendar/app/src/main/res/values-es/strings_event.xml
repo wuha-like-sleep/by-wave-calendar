@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">No has iniciado sesión</string>
     <string name="eventedit_err_save_failed">Error al guardar</string>
     <string name="eventedit_err_delete_failed">Error al eliminar</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">¿Quitar a este invitado?</string>
+    <string name="attendees_revoke_message">%1$s dejará de recibir novedades de este evento.</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">¿Descartar los cambios?</string>
+    <string name="eventedit_discard_message">Lo que has escrito aún no se ha guardado y se perderá.</string>
+    <string name="eventedit_discard_confirm">Descartar</string>
+    <string name="eventedit_keep_editing">Seguir editando</string>
+    <string name="eventedit_need_calendar">Tu lista de calendarios aún no se ha cargado, así que no se puede guardar. Se cargará cuando vuelvas a estar en línea.</string>
+    <string name="eventedit_retry">Reintentar</string>
+    <string name="eventedit_need_title">Añade un título y podrás guardar.</string>
 </resources>

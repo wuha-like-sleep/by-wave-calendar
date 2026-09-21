@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,11 +33,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -55,6 +61,10 @@ fun AttendeesScreen(
 ) {
     val state by vm.state.collectAsState()
     LaunchedEffect(eventId) { vm.bootstrap(eventId) }
+    // 撤销邀请原来是「点一下图标，人就没了」——图标就贴在邮箱右边，
+    // 滑动列表时很容易误触，而且撤销之后没有任何撤回的路，只能重新邀请
+    // 再让对方重新接受。加一步确认，并把是谁写进提示里。
+    var pendingRevoke by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -83,8 +93,14 @@ fun AttendeesScreen(
             )
         },
     ) { padding ->
+        // 同 SetupScreen：edge-to-edge 下键盘不会自动把内容顶上去，
+        // 邀请框下面的名单会被键盘整个盖住。
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+                .padding(horizontal = 16.dp),
         ) {
             Spacer(Modifier.size(8.dp))
 
@@ -165,7 +181,7 @@ fun AttendeesScreen(
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
-                            IconButton(onClick = { vm.revoke(email) }) {
+                            IconButton(onClick = { pendingRevoke = email }) {
                                 Icon(
                                     Icons.Default.PersonRemove,
                                     contentDescription = stringResource(R.string.attendees_revoke),
@@ -179,5 +195,25 @@ fun AttendeesScreen(
                 }
             }
         }
+    }
+
+    val toRevoke = pendingRevoke
+    if (toRevoke != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRevoke = null },
+            title = { Text(stringResource(R.string.attendees_revoke_title)) },
+            text = { Text(stringResource(R.string.attendees_revoke_message, toRevoke)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRevoke = null
+                    vm.revoke(toRevoke)
+                }) { Text(stringResource(R.string.attendees_revoke)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRevoke = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 }

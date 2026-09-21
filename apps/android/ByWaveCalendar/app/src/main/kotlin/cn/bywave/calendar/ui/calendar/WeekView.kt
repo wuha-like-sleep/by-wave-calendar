@@ -46,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -84,15 +86,16 @@ fun WeekView(
 
         // Scrollable time grid
         val scroll = rememberScrollState()
-        LaunchedEffect(weekStart) {
-            // Land at current hour - 1, like iOS WeekView.onAppear.
+        // dp→px 必须用真实的屏幕密度。这里原来写死了 ×3，理由是
+        // 「composable 里拿不到 LocalDensity」——其实拿得到。后果是密度不等于
+        // 3 的机器全都落错位置：2.0（多数千元机 / 平板）少滚三分之一，早上
+        // 打开周视图停在凌晨；3.5（部分高分屏）多滚，直接甩到下午。
+        val density = LocalDensity.current
+        LaunchedEffect(weekStart, density) {
+            // 对齐 iOS WeekView.onAppear：停在「当前小时 - 1」。
             val now = LocalTime.now()
-            val target = ((now.hour - 1).coerceAtLeast(0)) * HOUR_HEIGHT.value
-            // Convert dp to px for scroll — assume 3x density (rough);
-            // we don't have access to LocalDensity here. ScrollState
-            // animateScrollTo takes Int px; for the first frame this
-            // overshoots/undershoots slightly but settles after layout.
-            scroll.scrollTo((target * 3).toInt())
+            val targetDp = ((now.hour - 1).coerceAtLeast(0)) * HOUR_HEIGHT.value
+            scroll.scrollTo(with(density) { targetDp.dp.roundToPx() })
         }
 
         Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll)) {
@@ -158,6 +161,7 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(Modifier.width(TIME_GUTTER))
+        val locale = LocalConfiguration.current.locales[0]
         for (day in dayStarts) {
             Column(
                 modifier = Modifier.weight(1f),
@@ -165,7 +169,8 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
             ) {
                 val isToday = day == LocalDate.now()
                 Text(
-                    text = weekdayShort(day),
+                    text = weekdayShort(day, locale),
+                    maxLines = 1,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isToday) MaterialTheme.colorScheme.primary else mutedTextColor(),
                 )
@@ -191,11 +196,17 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
 @Composable
 private fun HourLines() {
     val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    // 左侧刻度原本写死成 "%02d:00"，把手机设成 12 小时制也还是 00:00–23:00。
+    // 走同一套格式器，和事件详情页、日视图里的时间保持一致。
+    val formats = rememberCalendarFormats()
+    val hourLabels = remember(formats) {
+        (0 until 24).map { formats.time.format(LocalTime.of(it, 0).atDate(LocalDate.now())) }
+    }
     Column(modifier = Modifier.fillMaxSize()) {
         for (hour in 0 until 24) {
             Row(modifier = Modifier.fillMaxWidth().height(HOUR_HEIGHT)) {
                 Text(
-                    text = "%02d:00".format(hour),
+                    text = hourLabels[hour],
                     modifier = Modifier
                         .width(TIME_GUTTER - 4.dp)
                         .padding(end = 4.dp)
@@ -203,6 +214,7 @@ private fun HourLines() {
                     textAlign = TextAlign.End,
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
+                    maxLines = 1,
                 )
                 Box(modifier = Modifier.weight(1f).height(HOUR_HEIGHT)) {
                     // Top divider line for the hour
@@ -320,10 +332,11 @@ private fun EventChip(
 
 // ---- Helpers ----
 
-// Short weekday label in the device's locale (e.g. "Mon" / "周一" / "月").
-// Locale-aware via java.time display names — no hand-translated arrays.
-private fun weekdayShort(d: LocalDate): String =
-    d.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault())
+// 周几短名（Mon / 周一 / 月）。locale 由调用方从 Configuration 取，
+// 不用 Locale.getDefault()：Android 13 以下 APP 内语言只改 Configuration，
+// 进程默认 Locale 还是系统语言，用后者会让表头和正文语言对不上。
+private fun weekdayShort(d: LocalDate, locale: Locale): String =
+    d.dayOfWeek.getDisplayName(TextStyle.SHORT, locale)
 
 /** Cluster events that overlap in time so we can split column width.
  *  A new event whose start is BEFORE the cluster's current end becomes

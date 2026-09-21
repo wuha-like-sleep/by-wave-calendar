@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 更新提醒 — 繁體中文。 -->
+<resources>
+    <string name="update_title_available">發現新版本</string>
+    <string name="update_title_mandatory">需要更新</string>
+    <string name="update_mandatory_note">這是一次必要的升級，請安裝後繼續使用。</string>
+    <string name="update_download_now">立即下載</string>
+    <string name="update_later">稍後</string>
+    <string name="update_install_now">立即安裝</string>
+    <string name="update_install_hint">系統會彈出安裝確認，首次升級還需要允許安裝未知應用。</string>
+    <string name="update_unknown_sources">請在系統設定裡允許本應用安裝未知來源應用，然後再試一次。</string>
+    <string name="update_progress">已下載 %1$d / %2$d MB</string>
+    <string name="update_eta_min">約還需 %1$d 分 %2$d 秒</string>
+    <string name="update_eta_sec">約還需 %1$d 秒</string>
+    <string name="update_err_apk_missing">安裝檔沒有下載完整，請重試</string>
+    <string name="update_err_installer">無法開啟系統安裝程式，請稍後再試</string>
+    <string name="update_err_download">下載失敗，請稍後再試</string>
+    <string name="update_err_checksum">下載的安裝檔校驗沒通過，請稍後再試</string>
+    <string name="update_err_server">伺服器暫時沒有回應，請稍後再試</string>
+    <string name="update_err_network">網路連不上，請檢查網路後重試</string>
+</resources>

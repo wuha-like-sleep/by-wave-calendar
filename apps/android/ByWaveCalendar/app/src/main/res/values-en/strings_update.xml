@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-app updater strings — English. -->
+<resources>
+    <string name="update_title_available">Update available</string>
+    <string name="update_title_mandatory">Update required</string>
+    <string name="update_mandatory_note">This update is required before you can keep using the app.</string>
+    <string name="update_download_now">Download</string>
+    <string name="update_later">Later</string>
+    <string name="update_install_now">Install</string>
+    <string name="update_install_hint">Your phone will ask you to confirm. The first time, it also asks you to allow installing unknown apps.</string>
+    <string name="update_unknown_sources">Allow this app to install unknown apps in your system settings, then try again.</string>
+    <string name="update_progress">%1$d of %2$d MB downloaded</string>
+    <string name="update_eta_min">About %1$d min %2$d s left</string>
+    <string name="update_eta_sec">About %1$d s left</string>
+    <string name="update_err_apk_missing">The download is incomplete. Please try again.</string>
+    <string name="update_err_installer">Couldn’t open the installer. Please try again later.</string>
+    <string name="update_err_download">Download failed. Please try again later.</string>
+    <string name="update_err_checksum">The download didn’t verify. Please try again later.</string>
+    <string name="update_err_server">The server isn’t responding. Please try again later.</string>
+    <string name="update_err_network">Can’t reach the network. Check your connection and try again.</string>
+</resources>

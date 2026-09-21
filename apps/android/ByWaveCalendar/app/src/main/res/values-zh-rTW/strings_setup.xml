@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">尚未登入，請先登入後再掃碼</string>
     <string name="pairscan_approve_failed">核准失敗</string>
+    <string name="pairscan_confirm_title">要核准這次登入嗎？</string>
+    <string name="pairscan_confirm_desktop_body">核准後，這台電腦會以下面這個帳號登入，能看到並修改你的全部日曆。</string>
+    <string name="pairscan_confirm_web_body">核准後，那個瀏覽器會以下面這個帳號登入，能看到並修改你的全部日曆。</string>
+    <string name="pairscan_confirm_warning">只有你自己剛剛在電腦上發起了這次登入，才應該核准。別人拿給你「掃一下」的碼，掃完就等於把帳號交給他。</string>
+    <string name="pairscan_confirm_account">帳號</string>
+    <string name="pairscan_confirm_server">伺服器</string>
+    <string name="pairscan_confirm_code">配對碼</string>
+    <string name="pairscan_confirm_approve">核准登入</string>
+    <string name="pairscan_confirm_no_detail">伺服器沒有提供發起方的更多資訊（裝置、IP、時間）。</string>
+    <string name="pairscan_confirm_host_mismatch">這個碼來自另一台伺服器：%1$s；你現在登入的是 %2$s。</string>
     <string name="pairscan_approving_title">正在核准…</string>
     <string name="pairscan_approving_body">正在讓電腦端登入，請稍候。</string>
     <string name="pairscan_approved_title">✓ 已核准</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">沒有符合的事件</string>
     <string name="search2_no_results_subtitle">換個關鍵字再試試</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">密碼已變更，或這台裝置已被移除，請重新登入。</string>
 </resources>

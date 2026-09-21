@@ -28,7 +28,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -70,6 +72,12 @@ import java.time.ZoneId
 
 private val HOUR_HEIGHT = 56.dp
 private val TIME_GUTTER = 56.dp
+/** 全天事件条带的最小高度。即使这一周没有全天事件也保留这条,理由是:
+ *  高度随内容有无而跳动,会让下面整张时间网格上下窜一格;而且这条留着,
+ *  用户才知道「全天事件是有地方放的」。 */
+private val ALLDAY_MIN_HEIGHT = 26.dp
+/** 一列里最多显示几条全天事件,再多折叠成 +N。 */
+private const val ALLDAY_MAX_CHIPS = 2
 
 @Composable
 fun WeekView(
@@ -91,9 +99,23 @@ fun WeekView(
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
+    // 全天事件。以前这一行是不存在的 —— WeekView 只留下 !allDay,全天事件
+    // 在周视图里直接人间蒸发:月视图有、日视图有、周视图没有,用户会以为
+    // 事件丢了或者没同步上。时间网格按小时定位,全天事件没有小时可言,
+    // 所以它们需要自己的一条横带,和 Google/Outlook 的周视图一致。
+    val allDayEvents = remember(events) { events.filter { it.allDay } }
 
     Column(modifier = Modifier.fillMaxSize()) {
         HeaderRow(dayStarts = dayStarts)
+        AllDayBand(
+            dayStarts = dayStarts,
+            events = allDayEvents,
+            calendars = calendars,
+            onEventClick = onEventClick,
+            onEventEdit = onEventEdit,
+            onEventDuplicate = onEventDuplicate,
+            onEventDelete = onEventDelete,
+        )
         HorizontalDivider()
 
         val scroll = rememberScrollState()
@@ -112,7 +134,11 @@ fun WeekView(
                     .fillMaxWidth()
                     .height(HOUR_HEIGHT * 24),
             ) {
-                val available = maxWidth - TIME_GUTTER
+                // 窗口再窄也不能让列宽变成负数 —— Modifier.width(负值) 会
+                // 直接抛 IllegalArgumentException,整个周视图崩掉。窗口最小
+                // 宽度(Main.kt)已经挡住了绝大多数情况,这里是兜底:多显示器
+                // 热插拔、窗口被系统强行改尺寸时 maxWidth 可能短暂很小。
+                val available = (maxWidth - TIME_GUTTER).coerceAtLeast(0.dp)
                 val columnWidth = available / 7
 
                 HourLines()
@@ -203,6 +229,115 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
                 }
             }
         }
+    }
+}
+
+/** 表头下面那条全天事件带。每列最多两条,多的折成 +N;整条支持横向 7 等分,
+ *  和时间网格的列对齐(所以左边同样留 TIME_GUTTER 宽的空)。 */
+@Composable
+private fun AllDayBand(
+    dayStarts: List<LocalDate>,
+    events: List<EventDTO>,
+    calendars: List<CalendarMeta>,
+    onEventClick: (EventDTO) -> Unit,
+    onEventEdit: (EventDTO) -> Unit,
+    onEventDuplicate: (EventDTO) -> Unit,
+    onEventDelete: (EventDTO) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val label = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("fmt.timeAllDay") }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = ALLDAY_MIN_HEIGHT)
+            .padding(vertical = 2.dp),
+    ) {
+        // 左侧和小时刻度同宽的说明栏。没有全天事件时这两个字就是这条带子
+        // 唯一的内容 —— 骨架留着,用户不会以为这块区域「没了」。
+        Text(
+            text = label,
+            modifier = Modifier
+                .width(TIME_GUTTER - 6.dp)
+                .padding(end = 6.dp),
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.labelSmall,
+            color = mutedTextColor(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        for (day in dayStarts) {
+            val onDay = remember(events, day) { events.filter { eventOnDay(it, day) } }
+            Column(
+                modifier = Modifier.weight(1f).padding(horizontal = 1.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp),
+            ) {
+                for (ev in onDay.take(ALLDAY_MAX_CHIPS)) {
+                    AllDayChip(
+                        event = ev,
+                        calendars = calendars,
+                        onClick = { onEventClick(ev) },
+                        onView = onEventClick,
+                        onEdit = onEventEdit,
+                        onDuplicate = onEventDuplicate,
+                        onDelete = onEventDelete,
+                    )
+                }
+                if (onDay.size > ALLDAY_MAX_CHIPS) {
+                    Text(
+                        text = "+${onDay.size - ALLDAY_MAX_CHIPS}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mutedTextColor(),
+                        modifier = Modifier.padding(start = 3.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AllDayChip(
+    event: EventDTO,
+    calendars: List<CalendarMeta>,
+    onClick: () -> Unit,
+    onView: (EventDTO) -> Unit,
+    onEdit: (EventDTO) -> Unit,
+    onDuplicate: (EventDTO) -> Unit,
+    onDelete: (EventDTO) -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val color = calendarColor(event, calendars)
+    Box {
+        Text(
+            text = event.summary,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(Dimens.chipRadius))
+                .background(color.copy(alpha = 0.9f))
+                // 和时间网格里的事件块一样:左键看详情,右键出菜单。
+                .onClick(
+                    matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
+                    onClick = { menuOpen = true },
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        EventContextMenu(
+            expanded = menuOpen,
+            event = event,
+            onDismiss = { menuOpen = false },
+            onView = onView,
+            onEdit = onEdit,
+            onDuplicate = onDuplicate,
+            onDelete = onDelete,
+        )
     }
 }
 

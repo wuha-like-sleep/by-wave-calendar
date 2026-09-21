@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">Non connecté</string>
     <string name="eventedit_err_save_failed">Échec de l\'enregistrement</string>
     <string name="eventedit_err_delete_failed">Échec de la suppression</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">Retirer cet invité ?</string>
+    <string name="attendees_revoke_message">%1$s ne recevra plus les mises à jour de cet événement.</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">Abandonner les modifications ?</string>
+    <string name="eventedit_discard_message">Ce que vous avez saisi n’est pas encore enregistré et sera perdu.</string>
+    <string name="eventedit_discard_confirm">Abandonner</string>
+    <string name="eventedit_keep_editing">Continuer</string>
+    <string name="eventedit_need_calendar">Votre liste de calendriers n\'est pas encore chargée : impossible d\'enregistrer. Elle se chargera dès que vous serez en ligne.</string>
+    <string name="eventedit_retry">Réessayer</string>
+    <string name="eventedit_need_title">Ajoutez un titre pour pouvoir enregistrer.</string>
 </resources>

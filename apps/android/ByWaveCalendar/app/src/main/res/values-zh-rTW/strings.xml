@@ -87,6 +87,7 @@
     <string name="settings_mirror_desc">把事件鏡像到 Android 系統「行事曆」provider，讓 Google 日曆 / 預設行事曆 / 桌面小工具都能看到。</string>
     <string name="settings_reminders_title">事件開始前提醒</string>
     <string name="settings_reminders_desc">在事件開始前若干分鐘彈出本機通知。不走 Apple/Google 伺服器，純本機定時。</string>
+    <string name="settings_reminders_need_permission">提醒已開啟，但系統還沒允許本 APP 發送通知。點這裡去允許。</string>
     <string name="settings_reminder_lead">提前時間</string>
     <string name="settings_reminder_lead_5">5 分鐘</string>
     <string name="settings_reminder_lead_10">10 分鐘</string>
@@ -166,9 +167,9 @@
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">請輸入「删除我的账号」以確認</string>
-    <string name="delete_account_confirm_mismatch">請完全照樣輸入「删除我的账号」</string>
+    <string name="delete_account_confirm_phrase">刪除我的帳號</string>
+    <string name="delete_account_confirm_label">請輸入「%1$s」以確認</string>
+    <string name="delete_account_confirm_mismatch">請完全照樣輸入「%1$s」</string>
     <string name="delete_account_failed">無法刪除帳號</string>
 
     <!-- Booking links (v0.12) -->

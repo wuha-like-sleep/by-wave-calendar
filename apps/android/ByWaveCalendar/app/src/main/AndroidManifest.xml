@@ -32,9 +32,9 @@
          Play Store-only variant — irrelevant for our APK distribution. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
 
-    <!-- Cooperative scheduling — re-arming alarms after a reboot. The
-         receiver also acts on boot completed to reschedule from the
-         last cached events. -->
+    <!-- 开机后重排提醒。AlarmManager 里的 PendingIntent 不跨重启，
+         收不到这条广播 = 手机重启一次提醒全没了。真正的接收器是
+         .sync.BootReceiver（见下面，必须 exported 才收得到系统广播）。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- In-app updater (v0.8). REQUEST_INSTALL_PACKAGES + the per-app
@@ -97,10 +97,32 @@
         <!-- ReminderReceiver — fires when an AlarmManager pending intent
              lands. Materializes the saved-in-intent extras into a
              NotificationManagerCompat post. Not exported because the
-             only sender is our own AlarmManager. -->
+             only sender is our own AlarmManager.
+             ⚠️ 它**只**处理自己排的那个 PendingIntent：onReceive 拿不到
+             事件标题就直接 return。开机广播不走这里，走下面的
+             BootReceiver。 -->
         <receiver
             android:name=".sync.ReminderReceiver"
             android:exported="false" />
+
+        <!-- BootReceiver — 开机 / 覆盖安装之后按 Room 缓存重排提醒。
+             exported="true" 是必须的：BOOT_COMPLETED 和
+             MY_PACKAGE_REPLACED 都是系统进程发过来的，不导出就收不到。
+             它不接受任何来自外部的指令，onReceive 只认这几个 action，
+             其余一律 return。 -->
+        <receiver
+            android:name=".sync.BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <!-- 部分国产 ROM 的「快速开机」发的是这个。 -->
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
 
         <!-- FileProvider — exposes the downloaded APK to the system
              package installer with a content:// URI. Android 7+ refuses

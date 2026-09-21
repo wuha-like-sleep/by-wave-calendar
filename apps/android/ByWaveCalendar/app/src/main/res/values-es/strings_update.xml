@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Actualizador integrado — Español. -->
+<resources>
+    <string name="update_title_available">Actualización disponible</string>
+    <string name="update_title_mandatory">Actualización necesaria</string>
+    <string name="update_mandatory_note">Necesitas esta actualización para seguir usando la app.</string>
+    <string name="update_download_now">Descargar</string>
+    <string name="update_later">Más tarde</string>
+    <string name="update_install_now">Instalar</string>
+    <string name="update_install_hint">El teléfono te pedirá confirmar. La primera vez también debes permitir instalar apps desconocidas.</string>
+    <string name="update_unknown_sources">Permite que esta app instale apps desconocidas en los ajustes del sistema y vuelve a intentarlo.</string>
+    <string name="update_progress">%1$d de %2$d MB descargados</string>
+    <string name="update_eta_min">Faltan unos %1$d min %2$d s</string>
+    <string name="update_eta_sec">Faltan unos %1$d s</string>
+    <string name="update_err_apk_missing">La descarga está incompleta. Inténtalo de nuevo.</string>
+    <string name="update_err_installer">No se pudo abrir el instalador. Inténtalo más tarde.</string>
+    <string name="update_err_download">Error al descargar. Inténtalo más tarde.</string>
+    <string name="update_err_checksum">La descarga no se pudo verificar. Inténtalo más tarde.</string>
+    <string name="update_err_server">El servidor no responde. Inténtalo más tarde.</string>
+    <string name="update_err_network">Sin conexión. Revisa tu red e inténtalo de nuevo.</string>
+</resources>

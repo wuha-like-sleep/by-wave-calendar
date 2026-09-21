@@ -8,7 +8,9 @@ package cn.bywave.calendar.ui.calendar
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
@@ -48,6 +50,9 @@ data class CalendarUiState(
 class CalendarViewModel : ViewModel() {
     private val profiles = BywaveApp.instance.profiles
     private val repository = BywaveApp.instance.repository
+    // Application 单例兼作取本地化文案的 Context——这个 VM 继承的是普通
+    // ViewModel，没有 getApplication()。和 EventEditViewModel 同一套做法。
+    private val app = BywaveApp.instance
 
     private val _state = MutableStateFlow(CalendarUiState())
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
@@ -114,7 +119,7 @@ class CalendarViewModel : ViewModel() {
                 if (scope == null) _state.update { it.copy(undoDeleteId = id) }
                 load()
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = e.localizedMessage ?: "删除失败") }
+                _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_delete_failed)) }
             }
         }
     }
@@ -130,7 +135,7 @@ class CalendarViewModel : ViewModel() {
                 client.api.restoreEvent(id)
                 load()
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = e.localizedMessage ?: "撤销失败") }
+                _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_undo_failed)) }
             }
         }
     }
@@ -151,11 +156,13 @@ class CalendarViewModel : ViewModel() {
                 // 只清 Room 的话，提醒会按旧数据继续响、系统日历里的日程永久残留，
                 // 而 App 里已经查无此账号——用户关不掉也删不掉。
                 runCatching { repository.wipeProfileFully(active) }
-                    .onFailure { Log.w("SignOut", "wipeProfileFully failed: ${it.message}") }
+                    // 正式包不输出日志：这行带的是异常原文，对用户没用，
+                    // 对旁观 logcat 的人反而是信息。
+                    .onFailure { if (BuildConfig.DEBUG) Log.w("SignOut", "wipeProfileFully failed: ${it.message}") }
                 ApiClient.invalidate(active.id)
                 profiles.remove(active.id)
             } catch (e: Exception) {
-                _state.update { it.copy(errorMessage = e.localizedMessage ?: "退出登录失败") }
+                _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_signout_failed)) }
             }
         }
     }
@@ -182,7 +189,7 @@ class CalendarViewModel : ViewModel() {
 
     private fun load() {
         if (profiles.active() == null) {
-            _state.update { it.copy(errorMessage = "未登录") }
+            _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_not_signed_in)) }
             return
         }
         _state.update { it.copy(loading = true, errorMessage = null) }
@@ -213,7 +220,7 @@ class CalendarViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         loading = false,
-                        errorMessage = e.localizedMessage ?: "加载事件失败",
+                        errorMessage = app.getString(R.string.cal_err_load_failed),
                     )
                 }
             }

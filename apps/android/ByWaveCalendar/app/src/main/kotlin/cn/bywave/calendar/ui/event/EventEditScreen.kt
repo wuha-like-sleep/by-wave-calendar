@@ -21,7 +21,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
+import android.text.format.DateFormat
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
@@ -62,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -70,6 +76,7 @@ import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.parseHex
+import cn.bywave.calendar.ui.calendar.rememberCalendarFormats
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -84,6 +91,8 @@ fun EventEditScreen(
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
+    /** 日历列表没拿到时，给用户一条能自己重试的路。null = 不显示重试。 */
+    onRetryCalendars: (() -> Unit)? = null,
     vm: EventEditViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -97,9 +106,22 @@ fun EventEditScreen(
         is EventEditMode.Duplicate -> "duplicate-${initialMode.source.id}"
     }
     LaunchedEffect(bootstrapKey) { vm.bootstrap(initialMode, calendars) }
+    // bootstrapKey 里**不含** calendars（含了的话日历一到就整份重建，用户
+    // 填了一半的内容会被冲掉）。所以日历后到这件事单独接一下：只补列表和
+    // 还没选中时的默认日历。
+    LaunchedEffect(calendars) { vm.onCalendarsChanged(calendars) }
     LaunchedEffect(state.finished) { if (state.finished) onSaved() }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // 「填了一半按返回」原来是直接丢弃，一点提示都没有。用户分不清是
+    // 自己按错了还是 APP 把内容弄丢了，只能重填一遍。
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    fun requestClose() {
+        if (state.hasUnsavedChanges) showDiscardConfirm = true else onDismiss()
+    }
+    // 系统返回键/手势和左上角的 X 必须走同一条路，否则「点 X 会问、
+    // 按返回键不会问」，等于没拦。
+    BackHandler(enabled = !state.saving && !state.deleting) { requestClose() }
     // Pop the scope picker before save when editing a recurring event.
     // Non-recurring events save directly (sourceRrule is null).
     var showScopePicker by remember { mutableStateOf(false) }
@@ -119,7 +141,7 @@ fun EventEditScreen(
                     Text(if (state.isEdit) stringResource(R.string.event_edit) else stringResource(R.string.event_new))
                 },
                 navigationIcon = {
-                    IconButton(onClick = onDismiss, enabled = !state.saving && !state.deleting) {
+                    IconButton(onClick = { requestClose() }, enabled = !state.saving && !state.deleting) {
                         Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_cancel))
                     }
                 },
@@ -135,11 +157,53 @@ fun EventEditScreen(
             )
         },
     ) { padding ->
+        // 这个表单一共十来个字段，加起来 700dp 打底，而普通手机的内容区
+        // 只有 600 出头 —— 之前它是一个不滚动的 Column（文件头注释写着
+        // "All fields stack in a LazyColumn"，但代码里并没有），后果是
+        // 备注框被切掉一半、编辑态最底下那个「删除」按钮在多数机器上
+        // 根本点不到；系统字号调大或者横屏之后连开始/结束时间都够不着。
+        // imePadding 让键盘弹起时输入框自己让位，不用用户先收键盘再滚动。
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.size(4.dp))
+
+            // 保存按钮是个纯图标，灰掉之后不会说话 —— 用户只看到「点了没反应」。
+            // 冷启动头两秒 / 离线首启时日历列表是空的，那时候这个按钮**永远**
+            // 不会亮。把原因摆出来，并给一条能自己动手的路。
+            if (!state.saving && !state.deleting) {
+                if (state.calendars.isEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.eventedit_need_calendar),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (onRetryCalendars != null) {
+                            TextButton(onClick = onRetryCalendars) {
+                                Text(stringResource(R.string.eventedit_retry))
+                            }
+                        }
+                    }
+                } else if (state.summary.isBlank()) {
+                    Text(
+                        text = stringResource(R.string.eventedit_need_title),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             // Natural-language quick-add (create only) — type a phrase like
             // "明天 下午3点 牙医", tap 识别, and summary/start/end fill in via the
@@ -284,6 +348,25 @@ fun EventEditScreen(
         }
     }
 
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text(stringResource(R.string.eventedit_discard_title)) },
+            text = { Text(stringResource(R.string.eventedit_discard_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardConfirm = false
+                    onDismiss()
+                }) { Text(stringResource(R.string.eventedit_discard_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text(stringResource(R.string.eventedit_keep_editing))
+                }
+            },
+        )
+    }
+
     // Two distinct destruction paths:
     //   - non-recurring: plain AlertDialog confirm
     //   - recurring:    skip the AlertDialog (the picker IS the
@@ -418,6 +501,11 @@ private fun DateTimeRow(
 ) {
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // 日期原来写死 "yyyy 年 M 月 d 日"、时间写死 "HH:mm"，切到别的语言
+    // 照样是中文年月日，手机设成 12 小时制也还是 24 小时。
+    val formats = rememberCalendarFormats()
+    val use24Hour = remember(context) { DateFormat.is24HourFormat(context) }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -425,11 +513,11 @@ private fun DateTimeRow(
     ) {
         Text(label, modifier = Modifier.weight(1f))
         TextButton(onClick = { showDate = true }) {
-            Text(DATE_FMT.format(value.toLocalDate()))
+            Text(formats.monthDayYear.format(value.toLocalDate()), maxLines = 1)
         }
         if (!allDay) {
             TextButton(onClick = { showTime = true }) {
-                Text(TIME_FMT.format(value.toLocalTime()))
+                Text(formats.time.format(value), maxLines = 1)
             }
         }
     }
@@ -459,7 +547,8 @@ private fun DateTimeRow(
         val state = rememberTimePickerState(
             initialHour = value.hour,
             initialMinute = value.minute,
-            is24Hour = true,
+            // 跟随系统的 12/24 小时开关，而不是一律 24 小时。
+            is24Hour = use24Hour,
         )
         AlertDialog(
             onDismissRequest = { showTime = false },
@@ -478,5 +567,4 @@ private fun DateTimeRow(
     }
 }
 
-private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日")
-private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+

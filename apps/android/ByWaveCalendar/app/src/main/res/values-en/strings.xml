@@ -83,6 +83,7 @@ to match the development locale.
     <string name="settings_mirror_desc">Write events into Android\'s Calendar provider so Google Calendar / stock Calendar / widgets see them.</string>
     <string name="settings_reminders_title">Notify before event starts</string>
     <string name="settings_reminders_desc">Fire a local notification N minutes before each event. Pure on-device timer; no Apple/Google servers.</string>
+    <string name="settings_reminders_need_permission">Reminders are on, but Android hasn\'t allowed this app to send notifications yet. Tap to allow.</string>
     <string name="settings_reminder_lead">Lead time</string>
     <string name="settings_reminder_lead_5">5 minutes</string>
     <string name="settings_reminder_lead_10">10 minutes</string>
@@ -161,9 +162,9 @@ to match the development locale.
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">To confirm, type “删除我的账号”</string>
-    <string name="delete_account_confirm_mismatch">Type “删除我的账号” exactly</string>
+    <string name="delete_account_confirm_phrase">delete my account</string>
+    <string name="delete_account_confirm_label">To confirm, type “%1$s”</string>
+    <string name="delete_account_confirm_mismatch">Type “%1$s” exactly</string>
     <string name="delete_account_failed">Couldn\'t delete account</string>
 
     <!-- Booking links (v0.12) -->

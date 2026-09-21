@@ -30,6 +30,7 @@ import cn.bywave.calendar.desktop.ui.main.MainScreen
 import cn.bywave.calendar.desktop.ui.main.ShortcutAction
 import cn.bywave.calendar.desktop.ui.main.ShortcutBus
 import cn.bywave.calendar.desktop.ui.main.keyEventToShortcut
+import cn.bywave.calendar.desktop.util.DebugLog
 
 // Brand palette mirrors Android Theme.kt — Mac+Win windows feel like
 // the same product as mobile clients.
@@ -81,6 +82,11 @@ fun main() = application {
     cn.bywave.calendar.desktop.data.AppearancePrefs.init()
 
     val state = rememberWindowState(width = 1100.dp, height = 720.dp)
+    // 这台机器是不是 macOS —— 关窗行为在 Mac 和 Win/Linux 上必须不一样,
+    // 见下面 onCloseRequest 的注释。
+    val isMac = remember {
+        System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+    }
     // Track visibility separately so the close button hides the window
     // (macOS standard behavior — app stays in dock, Cmd+Tab still finds
     // it) instead of quitting outright. Real quit goes through the
@@ -121,30 +127,37 @@ fun main() = application {
                         // it was closed from.
                         state.isMinimized = false
                         visible = true
-                        System.err.println("[ByWave] dock click → window restored")
+                        DebugLog.d("ByWave") { "dock click → window restored" }
                     }
                 })
-                System.err.println("[ByWave] AppReopenedListener registered")
+                DebugLog.d("ByWave") { "AppReopenedListener registered" }
             } else {
-                System.err.println("[ByWave] APP_EVENT_REOPENED not supported on this JDK/OS")
+                DebugLog.d("ByWave") { "APP_EVENT_REOPENED not supported on this JDK/OS" }
             }
         }.onFailure {
-            System.err.println("[ByWave] AppReopenedListener registration failed: ${it.message}")
+            DebugLog.d("ByWave") { "AppReopenedListener registration failed: ${it.message}" }
         }
     }
     Window(
         onCloseRequest = {
-            // Hide AND minimize so:
-            //   - On macOS dock click after close, applicationShouldHandle-
-            //     Reopen fires reliably (the window is genuinely "not
-            //     visible" in NSApp's window-list bookkeeping when
-            //     both flags are set).
-            //   - If AppReopenedListener doesn't fire for some reason,
-            //     the minimized state means the user can still click the
-            //     dock icon and get the standard macOS un-minimize behavior.
-            //   - On Win/Linux this is just minimize-to-taskbar.
-            state.isMinimized = true
-            visible = false
+            // macOS:关窗 = 隐藏,进程留在 Dock 里(系统惯例)。同时置
+            // isMinimized,因为:
+            //   - 两个标志都置上时 NSApp 才真的认为窗口「不可见」,点 Dock
+            //     图标才稳定触发 applicationShouldHandleReopen。
+            //   - 万一 AppReopenedListener 没触发,最小化状态还留着系统
+            //     自带的「点 Dock 图标还原」这条后路。
+            //
+            // Windows / Linux:必须真的退出。这两个平台没有 Dock,菜单栏
+            // 又是画在窗口里面的 —— visible=false 之后连任务栏条目都没了,
+            // 用户点 X 之后 App 既看不见也点不回来,只能去任务管理器杀进程,
+            // 而且下次双击图标还会撞上「已经有一个实例在跑」。所以这里按
+            // 平台分岔,别再统一成隐藏。
+            if (isMac) {
+                state.isMinimized = true
+                visible = false
+            } else {
+                exitApplication()
+            }
         },
         visible = visible,
         state = state,
@@ -163,6 +176,19 @@ fun main() = application {
             false
         },
     ) {
+        // 最小窗口尺寸。Compose 的 WindowState 只管「打开时多大」,不管
+        // 「能被拖到多小」—— 没有这一行的时候用户可以把窗口拖到一两百
+        // 像素宽,顶栏的设置/刷新/搜索图标会被直接切掉(Row 溢出是静默
+        // 裁剪,不报错也不换行),侧栏 260dp 又把剩下的宽度吃光,日历区
+        // 变成一条缝。960×620 是顶栏紧凑模式 + 侧栏 + 周视图七列都还能
+        // 看清的下限。
+        //
+        // 放在 Window 内容里而不是 rememberWindowState:这是 AWT 层的属性,
+        // Compose 没有对应的 DSL 参数。LaunchedEffect(Unit) 保证只设一次。
+        LaunchedEffect(Unit) {
+            window.minimumSize = java.awt.Dimension(960, 620)
+        }
+
         // Menu bar — gives the user explicit way to re-show the window
         // (if they closed it and the dock icon isn't around) and a
         // clean "退出" path that maps to Cmd+Q. Without this, hiding

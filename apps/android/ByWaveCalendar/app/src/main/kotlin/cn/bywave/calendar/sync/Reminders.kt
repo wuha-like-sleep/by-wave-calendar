@@ -30,6 +30,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.MainActivity
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
@@ -83,7 +84,10 @@ class Reminders(private val context: Context) {
                 // tolerance so we still fire approximately on time. Log it so
                 // a "my reminder was a few minutes late" report is diagnosable
                 // instead of a silent downgrade.
-                Log.w("Reminders", "SCHEDULE_EXACT_ALARM denied; using setWindow for event ${ev.id}")
+                // 事件 id 属于用户数据，正式包不往 logcat 里写。
+                if (BuildConfig.DEBUG) {
+                    Log.w("Reminders", "SCHEDULE_EXACT_ALARM denied; using setWindow for event ${ev.id}")
+                }
                 alarms.setWindow(AlarmManager.RTC_WAKEUP, fireAt, 60_000L, pending)
                 scheduled++
             }

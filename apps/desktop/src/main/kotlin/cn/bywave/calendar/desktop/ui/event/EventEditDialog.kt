@@ -58,6 +58,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -126,13 +131,27 @@ fun EventEditDialog(
     ) -> Unit,
     onDismiss: () -> Unit,
     /** Natural-language quick-add (create mode only). Null = feature off. */
-    onQuickParse: (suspend (String) -> cn.bywave.calendar.desktop.data.model.ParseEventResult?)? = null,
+    /** 一句话录入的解析动作。返回 Result —— 失败要能说出「为什么」，
+     *  以前这里是可空返回值，失败和「解析出来是空的」长得一模一样，
+     *  对话框只能什么都不做。 */
+    onQuickParse: (suspend (String) -> Result<cn.bywave.calendar.desktop.data.model.ParseEventResult>)? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val initial = remember(mode, calendars) { initialState(mode, calendars) }
     var form by remember(mode) { mutableStateOf(initial) }
+
+    // 提交入口抽出来,给「点保存」和「在标题里敲回车」共用。桌面端填完
+    // 标题按回车就想存下,以前回车在单行输入框里什么都不做,用户要伸手
+    // 去够鼠标。日期/备注这些字段不挂回车:备注是多行的,回车在那里
+    // 的意思是换行。
+    val submit = {
+        if (form.canSubmit && !saving) {
+            val (create, update) = buildBodies(form)
+            onSave(form.isEdit, form.sourceId, form.sourceRrule, form.sourceStartsAt, create, update)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -154,37 +173,83 @@ fun EventEditDialog(
                     val qScope = rememberCoroutineScope()
                     var quickText by remember { mutableStateOf("") }
                     var parsing by remember { mutableStateOf(false) }
+                    // 解析失败时贴在输入框底下的一行说明。以前失败是「什么都不发生」:
+                    // 用户输入一句话、点解析、转一下、表单一动不动,也没有任何提示。
+                    var quickError by remember { mutableStateOf<String?>(null) }
+                    // 解析动作抽出来:按钮和回车走同一条路径。
+                    val runParse = {
+                        if (quickText.isNotBlank() && !parsing) {
+                            qScope.launch {
+                                parsing = true
+                                quickError = null
+                                val r = onQuickParse(quickText)
+                                parsing = false
+                                r.onSuccess { parsed ->
+                                    // 服务端把时间回成本地墙上时间(无时区)。解析不出来
+                                    // 就当这次没认出来,别让一个格式问题把整个对话框崩掉。
+                                    val start = runCatching { java.time.LocalDateTime.parse(parsed.startsAt) }.getOrNull()
+                                    val end = runCatching { java.time.LocalDateTime.parse(parsed.endsAt) }.getOrNull()
+                                    if (start == null || end == null) {
+                                        quickError = cn.bywave.calendar.desktop.i18n.I18n.t("event.edit.quickadd.failed")
+                                    } else {
+                                        form = form.copy(
+                                            summary = if (parsed.summary.isNotBlank()) parsed.summary else form.summary,
+                                            start = start,
+                                            end = end,
+                                        )
+                                    }
+                                }.onFailure { e ->
+                                    // 老服务端没有这个接口(404)。这时候说「没识别出来」是骗人的,
+                                    // 该说的是「这台服务器还不支持」。
+                                    val status = (e as? cn.bywave.calendar.desktop.data.api.ApiException)?.status
+                                    quickError = if (status == 404) {
+                                        cn.bywave.calendar.desktop.i18n.I18n.t("event.edit.quickadd.unsupported")
+                                    } else {
+                                        cn.bywave.calendar.desktop.util.userFacingError(e, "event.edit.quickadd.failed")
+                                    }
+                                }
+                            }
+                            Unit
+                        }
+                    }
                     OutlinedTextField(
                         value = quickText,
                         onValueChange = { quickText = it },
                         label = { Text(t("event.edit.quickadd")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            // 一句话录入完按回车就解析,别让人再去点旁边那个
+                            // 小按钮。这里回车只解析、不保存——解析结果还要
+                            // 让用户过一眼。
+                            .onPreviewKeyEvent { e ->
+                                if (e.type == KeyEventType.KeyDown &&
+                                    (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
+                                    quickText.isNotBlank() && !parsing
+                                ) {
+                                    runParse(); true
+                                } else {
+                                    false
+                                }
+                            },
                         trailingIcon = {
                             if (parsing) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
                                 TextButton(
-                                    onClick = {
-                                        if (quickText.isBlank()) return@TextButton
-                                        qScope.launch {
-                                            parsing = true
-                                            val r = onQuickParse(quickText)
-                                            parsing = false
-                                            if (r != null) {
-                                                form = form.copy(
-                                                    summary = if (r.summary.isNotBlank()) r.summary else form.summary,
-                                                    start = java.time.LocalDateTime.parse(r.startsAt),
-                                                    end = java.time.LocalDateTime.parse(r.endsAt),
-                                                )
-                                            }
-                                        }
-                                    },
+                                    onClick = { runParse() },
                                     enabled = quickText.isNotBlank(),
                                 ) { Text(t("event.edit.quickadd.parse")) }
                             }
                         },
                     )
+                    quickError?.let { msg ->
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 OutlinedTextField(
@@ -192,7 +257,18 @@ fun EventEditDialog(
                     onValueChange = { form = form.copy(summary = it) },
                     label = { Text(t("event.edit.summary") + " *") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onPreviewKeyEvent { e ->
+                            if (e.type == KeyEventType.KeyDown &&
+                                (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
+                                form.canSubmit && !saving
+                            ) {
+                                submit(); true
+                            } else {
+                                false
+                            }
+                        },
                 )
 
                 CalendarPicker(
@@ -293,17 +369,7 @@ fun EventEditDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val (create, update) = buildBodies(form)
-                    onSave(
-                        form.isEdit,
-                        form.sourceId,
-                        form.sourceRrule,
-                        form.sourceStartsAt,
-                        create,
-                        update,
-                    )
-                },
+                onClick = { submit() },
                 enabled = form.canSubmit && !saving,
             ) {
                 if (saving) {

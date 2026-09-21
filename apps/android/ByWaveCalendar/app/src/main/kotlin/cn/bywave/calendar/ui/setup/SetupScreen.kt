@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -45,15 +46,26 @@ fun SetupScreen(
 ) {
     val state by vm.state.collectAsState()
 
+    // 被动登出（改了密码 / 这台设备被后台移除）的说明。ProfileStore 一直
+    // 在记这个原因，注释也写着「配对页读它显示提示」，但全仓没有任何地方
+    // 读过——用户是被凭空踢回登录页的，屏幕上没有一个字解释发生了什么，
+    // 只能怀疑是自己密码记错了。
+    val profiles = androidx.compose.runtime.remember { cn.bywave.calendar.BywaveApp.instance.profiles }
+    val signedOutReason by profiles.signedOutReason.collectAsState()
+
     // Navigate away once login succeeds. We watch the success flag in
     // a LaunchedEffect so the ViewModel doesn't need a NavController.
     androidx.compose.runtime.LaunchedEffect(state.signedIn) {
-        if (state.signedIn) onSignedIn()
+        if (state.signedIn) {
+            profiles.clearSignedOutReason()
+            onSignedIn()
+        }
     }
 
     Scaffold { innerPadding ->
         SetupContent(
             state = state,
+            signedOutReason = signedOutReason,
             innerPadding = innerPadding,
             onServerChange = vm::onServerChange,
             onEmailChange = vm::onEmailChange,
@@ -77,6 +89,7 @@ fun SetupScreen(
 @Composable
 private fun SetupContent(
     state: SetupUiState,
+    @androidx.annotation.StringRes signedOutReason: Int?,
     innerPadding: PaddingValues,
     onServerChange: (String) -> Unit,
     onEmailChange: (String) -> Unit,
@@ -84,10 +97,15 @@ private fun SetupContent(
     onSignIn: () -> Unit,
     onScanQr: () -> Unit,
 ) {
+    // imePadding 不能少。APP 是 edge-to-edge 的（MainActivity 调了
+    // enableEdgeToEdge），系统就不再替我们把窗口缩到键盘上方了——键盘弹出来
+    // 之后，「登录」按钮被压在键盘底下，而外面这层滚动的高度没变，往上
+    // 划也划不出来。这是第一次打开 APP 就会撞上的死路。
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -102,6 +120,16 @@ private fun SetupContent(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        // 被动登出的说明放在输入框上面：用户一睁眼就该知道为什么要重登。
+        if (signedOutReason != null) {
+            Text(
+                text = stringResource(signedOutReason),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
         Spacer(Modifier.height(8.dp))
 
         OutlinedTextField(

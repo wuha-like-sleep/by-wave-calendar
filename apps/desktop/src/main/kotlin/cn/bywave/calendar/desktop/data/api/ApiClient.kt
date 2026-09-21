@@ -46,6 +46,7 @@ import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
 import cn.bywave.calendar.desktop.data.model.WebSessionRequest
 import cn.bywave.calendar.desktop.data.model.WebSessionResponse
+import cn.bywave.calendar.desktop.util.userFacingError
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -110,10 +111,7 @@ class ApiClient(val serverUrl: String) {
     suspend fun desktopPairInit(): DesktopPairInitResponse {
         val resp = client.post("$baseUrl/api/v1/devices/desktop-pair-init")
         if (!resp.status.isSuccess()) {
-            // Read body BEFORE throwing — Kotlin's require() lambda is
-            // non-suspend so we can't call bodyAsText() inside it.
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("<no body>")
-            throw ApiException(resp.status.value, "pair-init failed: ${resp.status} $body")
+            throw errorFrom(resp, "pair-init failed")
         }
         // Go through unwrap() — server wraps every /api/v1/* response in
         // { ok: true, data: ... }, so a bare resp.body() would try to
@@ -146,7 +144,7 @@ class ApiClient(val serverUrl: String) {
                 else -> PairStatus.Error("HTTP ${resp.status.value}")
             }
         } catch (e: Exception) {
-            PairStatus.Error(e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("api.networkError"))
+            PairStatus.Error(userFacingError(e, "api.networkError"))
         }
     }
 
@@ -213,8 +211,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "calendar delete failed: ${resp.status} $body")
+            throw errorFrom(resp, "calendar delete failed")
         }
     }
 
@@ -257,8 +254,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "share-token revoke failed: ${resp.status} $body")
+            throw errorFrom(resp, "share-token revoke failed")
         }
     }
 
@@ -319,8 +315,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "booking-link delete failed: ${resp.status} $body")
+            throw errorFrom(resp, "booking-link delete failed")
         }
     }
 
@@ -368,8 +363,7 @@ class ApiClient(val serverUrl: String) {
         // Server returns 204 No Content on success; envelope unwrap on
         // an empty body would fail, so handle DELETE separately.
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "delete failed: ${resp.status} $body")
+            throw errorFrom(resp, "delete failed")
         }
     }
 
@@ -396,8 +390,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "restore failed: ${resp.status} $body")
+            throw errorFrom(resp, "restore failed")
         }
     }
 
@@ -500,8 +493,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "invite failed: ${resp.status} $body")
+            throw errorFrom(resp, "invite failed")
         }
     }
 
@@ -523,8 +515,7 @@ class ApiClient(val serverUrl: String) {
             }
         }
         if (!resp.status.isSuccess()) {
-            val body = runCatching { resp.bodyAsText() }.getOrDefault("")
-            throw ApiException(resp.status.value, "revoke failed: ${resp.status} $body")
+            throw errorFrom(resp, "revoke failed")
         }
     }
 
@@ -593,7 +584,7 @@ class ApiClient(val serverUrl: String) {
                 // 以前这里什么都不做，把 401 原样抛给调用方：桌面端变成僵尸——
                 // 日历照常显示上次同步的内容，新建/编辑/删除全部失败，
                 // 而界面上没有任何地方说明原因。
-                ProfileStore.markSignedOut("密码已更改或此设备已被移除，请重新登录")
+                ProfileStore.markSignedOut("auth.sessionRevoked")
             }
         }
         return resp
@@ -649,12 +640,21 @@ class ApiClient(val serverUrl: String) {
         throw ApiException(resp.status.value, message)
     }
 
-    /** Build an ApiException from a non-2xx response whose body we expect
-     *  to be the { ok:false, error:{ code, message } } envelope (or the
-     *  legacy { error, message } shape). Used by the bare-{ ok: true }
-     *  endpoints (changePassword / revokeDevice) that can't go through
-     *  unwrap(). Falls back to `fallback` + status if the body is unusable
-     *  so the caller always gets *something* readable to show inline. */
+    /** 把一个非 2xx 响应翻成 ApiException，**并且把服务端那句人话留下来**。
+     *  body 预期是 { ok:false, error:{ code, message } }（或老的
+     *  { error, message } 形状）。
+     *
+     *  所有不走 unwrap() 的分支都必须经过这里。这条规矩是有来历的：
+     *  这些分支原先是自己拼字符串——
+     *      throw ApiException(status, "calendar delete failed: $status $body")
+     *  拼完那句话会撞上 util/UserFacingError.kt 里的「内部标记」判定
+     *  （msg.contains(" failed: ")），于是被整句换成通用文案。结果是：
+     *  服务端明明回了「日历不存在」「管理员已停用 APP 同步。请进入网页后台…」
+     *  这种能照着做的说明，用户看到的却是「删除失败」四个字。错误文案收口
+     *  本来是为了别把内部标记摆给用户看，不是为了把服务端的说明一起吞掉。
+     *
+     *  body 实在读不出来时才退回 `fallback` + 状态码——那一句仍然带
+     *  " failed: "，会被 userFacingError 换成通用文案，这正是想要的。 */
     private suspend fun errorFrom(resp: HttpResponse, fallback: String): ApiException {
         val raw = runCatching { resp.bodyAsText() }.getOrDefault("")
         val message = runCatching {

@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">未登录，请先登录后再扫码</string>
     <string name="pairscan_approve_failed">批准失败</string>
+    <string name="pairscan_confirm_title">要批准这次登录吗？</string>
+    <string name="pairscan_confirm_desktop_body">批准后，这台电脑会以下面这个账号登录，能看到并修改你的全部日历。</string>
+    <string name="pairscan_confirm_web_body">批准后，那个浏览器会以下面这个账号登录，能看到并修改你的全部日历。</string>
+    <string name="pairscan_confirm_warning">只有你自己刚刚在电脑上发起了这次登录，才应该批准。别人拿给你「扫一下」的码，扫完就等于把账号交给了他。</string>
+    <string name="pairscan_confirm_account">账号</string>
+    <string name="pairscan_confirm_server">服务器</string>
+    <string name="pairscan_confirm_code">配对码</string>
+    <string name="pairscan_confirm_approve">批准登录</string>
+    <string name="pairscan_confirm_no_detail">服务器没有提供发起方的更多信息（设备、IP、时间）。</string>
+    <string name="pairscan_confirm_host_mismatch">这个码来自另一台服务器：%1$s；你现在登录的是 %2$s。</string>
     <string name="pairscan_approving_title">正在批准…</string>
     <string name="pairscan_approving_body">正在让电脑端登录，请稍候。</string>
     <string name="pairscan_approved_title">✓ 已批准</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">没有匹配的事件</string>
     <string name="search2_no_results_subtitle">换个关键字再试试</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">密码已更改，或这台设备已被移除，请重新登录。</string>
 </resources>

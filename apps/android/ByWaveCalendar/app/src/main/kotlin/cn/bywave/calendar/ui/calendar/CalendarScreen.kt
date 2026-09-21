@@ -62,6 +62,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
@@ -381,15 +382,23 @@ private fun CalendarBody(
             IconButton(onClick = onPrev) {
                 Icon(Icons.Default.ChevronLeft, contentDescription = stringResource(R.string.cal_cd_prev))
             }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onToday) {
+            // 日期按钮吃掉中间所有剩余宽度，两个箭头永远留在原位。
+            // 之前是「Spacer(weight) + 按钮 + Spacer(weight)」，德语/法语的
+            // 完整星期+月份名（Donnerstag, 25. September 2026）会把「下一个」
+            // 箭头顶出屏幕右边——窄屏上就再也翻不到下一天。
+            TextButton(
+                onClick = onToday,
+                modifier = Modifier.weight(1f),
+            ) {
                 Text(
-                    text = formatAnchor(state.mode, state.anchor),
+                    text = formatAnchor(state.mode, state.anchor, rememberCalendarFormats()),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
-            Spacer(Modifier.weight(1f))
             IconButton(onClick = onNext) {
                 Icon(Icons.Default.ChevronRight, contentDescription = stringResource(R.string.cal_cd_next))
             }

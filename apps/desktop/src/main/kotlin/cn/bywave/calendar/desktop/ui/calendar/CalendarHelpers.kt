@@ -43,8 +43,29 @@ internal fun calendarColor(event: EventDTO, calendars: List<CalendarMeta>): Colo
 internal fun calendarName(event: EventDTO, calendars: List<CalendarMeta>): String? =
     calendars.firstOrNull { it.id == event.calendarId }?.name
 
-internal fun parseInstant(iso: String?): Instant? =
-    iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
+/**
+ * 把服务端给的时间串解析成 Instant。
+ *
+ * 为什么这里值得多兜一层：这个函数的调用方清一色是
+ * 「?: return / continue / mapNotNull」—— 解析不出来的后果不是报错，
+ * 是那条事件在月视图、日程、周视图里**凭空消失**，界面上一句话都没有。
+ *
+ * 实测过的边界（JDK 21，也就是这个模块 jvmToolchain 里钉的那一版）：
+ *   · `2026-09-21T18:00:00.000Z`   Instant.parse 收 —— 服务端现在发的就是这种
+ *   · `2026-09-21T18:00:00+08:00`  Instant.parse 也收（ISO_INSTANT 从 JDK 12
+ *                                  起就不再只认 Z 了），所以不需要再写一遍
+ *                                  OffsetDateTime 的分支
+ *   · `2026-09-21T18:00:00`        Instant.parse 抛 DateTimeParseException，
+ *                                  下面这层按本机时区兜住
+ */
+internal fun parseInstant(iso: String?): Instant? {
+    if (iso.isNullOrBlank()) return null
+    runCatching { Instant.parse(iso) }.getOrNull()?.let { return it }
+    // 完全没带时区的写法，按本机时区解释——总比整条事件不见了强。
+    return runCatching {
+        LocalDateTime.parse(iso).atZone(ZoneId.systemDefault()).toInstant()
+    }.getOrNull()
+}
 
 internal fun toLocalDate(i: Instant?): LocalDate? =
     i?.atZone(ZoneId.systemDefault())?.toLocalDate()

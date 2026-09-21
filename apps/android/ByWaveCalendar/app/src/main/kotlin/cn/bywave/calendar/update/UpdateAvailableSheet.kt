@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -46,8 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -92,7 +95,7 @@ fun UpdateAvailableSheet(
             when (val r = ApkInstaller.install(context, done.file)) {
                 is InstallResult.Failed -> unknownSourcesError = r.message
                 is InstallResult.NeedsUnknownSources ->
-                    unknownSourcesError = "请在系统设置中允许「ByWave 日历」安装未知来源应用"
+                    unknownSourcesError = context.getString(R.string.update_unknown_sources)
                 InstallResult.Launched -> { /* system takes over */ }
             }
         }
@@ -113,14 +116,19 @@ fun UpdateAvailableSheet(
         },
         sheetState = sheetState,
     ) {
+        // 强制更新时这张表单是用户唯一的出口，大字号 / 小屏下必须能滚到
+        // 「立即安装」那颗按钮，否则人被卡在一个按不到按钮的界面里。
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
         ) {
             Text(
-                text = if (mandatory) "需要更新" else "发现新版本",
+                text = stringResource(
+                    if (mandatory) R.string.update_title_mandatory else R.string.update_title_available,
+                ),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -134,7 +142,7 @@ fun UpdateAvailableSheet(
             if (mandatory) {
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "这是一次必要的升级，请安装后继续使用。",
+                    text = stringResource(R.string.update_mandatory_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -182,8 +190,10 @@ fun UpdateAvailableSheet(
                             val secs = (remaining / rate).toLong()
                             lastEta = when {
                                 rate <= 0 -> null
-                                secs >= 60 -> "约还需 ${secs / 60} 分 ${secs % 60} 秒"
-                                else -> "约还需 ${secs} 秒"
+                                secs >= 60 -> context.getString(
+                                    R.string.update_eta_min, (secs / 60).toInt(), (secs % 60).toInt(),
+                                )
+                                else -> context.getString(R.string.update_eta_sec, secs.toInt())
                             }
                             lastSampleAt = now
                             lastSampleBytes = s.bytesRead
@@ -212,7 +222,7 @@ fun UpdateAvailableSheet(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("立即下载") }
+                    ) { Text(stringResource(R.string.update_download_now)) }
                     if (!mandatory) {
                         Spacer(Modifier.height(4.dp))
                         TextButton(
@@ -221,7 +231,7 @@ fun UpdateAvailableSheet(
                                 onDismiss()
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("稍后") }
+                        ) { Text(stringResource(R.string.update_later)) }
                     }
                 }
                 is DownloadProgress.Downloading -> {
@@ -237,8 +247,9 @@ fun UpdateAvailableSheet(
                         val mbDone = (s.bytesRead / 1024 / 1024)
                         val mbTotal = (s.totalBytes / 1024 / 1024).coerceAtLeast(1)
                         Text(
-                            text = "已下载 ${mbDone} / ${mbTotal} MB" +
-                                (lastEta?.let { " · $it" } ?: ""),
+                            text = context.getString(
+                                R.string.update_progress, mbDone.toInt(), mbTotal.toInt(),
+                            ) + (lastEta?.let { " · $it" } ?: ""),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f),
@@ -249,7 +260,7 @@ fun UpdateAvailableSheet(
                                 downloadJob = null
                                 statusFlow.value = null  // back to idle
                             },
-                        ) { Text("取消") }
+                        ) { Text(stringResource(R.string.action_cancel)) }
                     }
                 }
                 is DownloadProgress.Done -> {
@@ -275,10 +286,10 @@ fun UpdateAvailableSheet(
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("立即安装") }
+                    ) { Text(stringResource(R.string.update_install_now)) }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "系统会弹出安装确认对话框，首次升级还需要在设置里允许「安装未知应用」",
+                        text = stringResource(R.string.update_install_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -296,7 +307,7 @@ fun UpdateAvailableSheet(
                                 statusFlow.value = null  // Reset to idle, user can retry
                             },
                             modifier = Modifier.weight(1f),
-                        ) { Text("重试") }
+                        ) { Text(stringResource(R.string.action_retry)) }
                         if (!mandatory) {
                             TextButton(
                                 onClick = {
@@ -304,7 +315,7 @@ fun UpdateAvailableSheet(
                                     onDismiss()
                                 },
                                 modifier = Modifier.weight(1f),
-                            ) { Text("稍后") }
+                            ) { Text(stringResource(R.string.update_later)) }
                         }
                     }
                 }
@@ -313,12 +324,15 @@ fun UpdateAvailableSheet(
     }
 }
 
-// Cap the release-notes box at ~30% of the screen height so very long
-// notes don't push the action button below the fold.
+// 给更新说明一个高度上限，免得很长的说明把「立即下载」顶到屏幕外。
+//
+// 之前这里用的是固定高度 height()，而行数是按 '\n' 数的：一段没有换行、
+// 但实际要折成五六行的说明会被算成「1 行 = 44dp」，然后齐刷刷截掉后面
+// 所有内容——用户看到的更新说明只有开头半句。改成 heightIn(max)：短说明
+// 按自己的高度收缩，长说明封顶后在框内滚动。
 @Composable
 private fun Modifier.heightInUpdate(notes: String): Modifier {
     val lines = notes.count { it == '\n' } + 1
-    // Heuristic: ~22dp per line, max 180dp.
-    val target = (lines * 22).coerceIn(44, 180)
-    return this.then(Modifier.height(target.dp))
+    val cap = (lines * 22).coerceIn(44, 180)
+    return this.then(Modifier.heightIn(max = cap.dp))
 }

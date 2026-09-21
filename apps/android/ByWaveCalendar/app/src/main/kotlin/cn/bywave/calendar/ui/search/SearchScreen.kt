@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.R
@@ -60,12 +61,13 @@ import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.calendarColor
 import cn.bywave.calendar.ui.calendar.calendarName
-import cn.bywave.calendar.ui.calendar.formatTimeRange
+import cn.bywave.calendar.ui.calendar.eventTimeText
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseInstant
+import cn.bywave.calendar.ui.calendar.rememberCalendarFormats
+import cn.bywave.calendar.ui.calendar.toLocalDate
 import cn.bywave.calendar.ui.components.EmptyState
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -147,17 +149,23 @@ private fun ResultsList(
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit,
 ) {
-    // Group by day for visual structure — sticky-header-style would
-    // be nicer but adds API complexity; v0.7 just uses inline headers.
+    val formats = rememberCalendarFormats()
+    // 按天分组。注意这里必须先按 LocalDate 分组、再拿日期排序，最后才格式化：
+    // 之前是直接 groupBy(格式化后的字符串) 然后按字符串倒序，而
+    // 「2026 年 10 月 1 日」和「2026 年 2 月 1 日」按字符串比大小是 "1" < "2"，
+    // 于是 10 月的结果排到了 2 月后面——跨月搜索时间线整个是乱的。
+    // 换成本地化格式之后（英文的 Oct / Feb）只会更乱。
     val grouped = remember(results) {
-        results.groupBy { dayKey(it) }
-            .toSortedMap(compareByDescending { it })  // newest first
+        results.groupBy { toLocalDate(parseInstant(it.startsAt)) }
+            .toSortedMap(compareByDescending { it ?: LocalDate.MIN })  // 最近的在上面
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         for ((day, items) in grouped) {
-            item(key = "header-$day") {
+            // 解析不出时间的事件仍然成组显示，不让它整块消失。
+            val header = day?.let { formats.dayHeader.format(it) } ?: "—"
+            item(key = "header-${day ?: "unknown"}") {
                 Text(
-                    text = day,
+                    text = header,
                     style = MaterialTheme.typography.labelMedium,
                     color = mutedTextColor(),
                     fontWeight = FontWeight.SemiBold,
@@ -205,19 +213,26 @@ private fun ResultRow(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = formatTimeRange(event),
+                    text = eventTimeText(event),
                     style = MaterialTheme.typography.bodySmall,
                     color = mutedTextColor(),
                 )
                 if (!cal.isNullOrBlank()) {
+                    // weight(fill = false) 让日历名只占它需要的宽度，但超出时
+                    // 会被压缩并加省略号。之前它在 Row 里没有任何宽度约束，
+                    // 长日历名（「市场部 2026 上半年排期」）直接被切在屏幕外，
+                    // 连省略号都没有。
                     Text(
                         text = " · $cal",
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedTextColor(),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                     )
                 }
             }
@@ -227,16 +242,10 @@ private fun ResultRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
     }
 }
 
-private val DAY_FMT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日 EEEE").withZone(ZoneId.systemDefault())
-
-private fun dayKey(ev: EventDTO): String {
-    val inst = parseInstant(ev.startsAt) ?: return "—"
-    return DAY_FMT.format(inst)
-}

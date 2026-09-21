@@ -6,6 +6,7 @@
 package cn.bywave.calendar.data.api
 
 import cn.bywave.calendar.BuildConfig
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
@@ -385,7 +386,7 @@ private class AuthInterceptor(
             //
             // 清掉 refresh token，启动页就会自然回到配对页；signedOutReason
             // 让配对页能说清是为什么。
-            store.markSignedOut(profileId, "密码已更改或此设备已被移除，请重新登录")
+            store.markSignedOut(profileId, R.string.setup_signed_out_reason)
             return firstResp.newBuilder()
                 .body("""{"ok":false,"error":{"code":"device_revoked","message":"设备已被移除"}}"""
                     .toResponseBody("application/json".toMediaType()))

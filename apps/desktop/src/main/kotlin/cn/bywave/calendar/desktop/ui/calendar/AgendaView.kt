@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -49,6 +50,7 @@ import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import cn.bywave.calendar.desktop.ui.theme.Dimens
+import cn.bywave.calendar.desktop.ui.theme.EventListSkeleton
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import cn.bywave.calendar.desktop.ui.theme.rowShape
 import java.time.LocalDate
@@ -73,6 +75,8 @@ fun AgendaView(
     onEventEdit: (EventDTO) -> Unit,
     onEventDuplicate: (EventDTO) -> Unit,
     onEventDelete: (EventDTO) -> Unit,
+    /** 正在取这 30 天的数据。只在「还一条都没有」时影响画面。 */
+    loading: Boolean = false,
 ) {
     // Observe locale so empty-state copy + date headers re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -92,35 +96,49 @@ fun AgendaView(
             .map { (date, rows) -> date to rows.map { it.first } }
     }
 
-    if (grouped.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("agenda.empty") },
-                style = MaterialTheme.typography.bodyMedium,
-                color = mutedTextColor(),
-            )
-        }
-        return
-    }
+    // 和日视图同一套宽度约束:超宽屏上把日程列表收在可读宽度内,
+    // 外层 Box 三态共用,所以空数据时整块区域不会消失。
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        // 注意修饰符顺序:widthIn 必须排在 fillMaxSize 前面。反过来写的话
+        // fillMaxSize 先把约束定死成「min=max=父容器宽度」,widthIn 再想把
+        // 上限压到 940 就会被 coerce 回父容器宽度 —— 限宽静默失效,而且
+        // 只有在足够宽的屏幕上才看得出来。
+        val content = Modifier.widthIn(max = 940.dp).fillMaxSize()
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        grouped.forEach { (date, dayEvents) ->
-            item(key = "header-$date") {
-                AgendaDayHeader(date = date, count = dayEvents.size)
+        if (grouped.isEmpty()) {
+            if (loading) {
+                EventListSkeleton(rows = 5, modifier = Modifier.widthIn(max = 940.dp))
+            } else {
+                Box(modifier = content, contentAlignment = Alignment.Center) {
+                    Text(
+                        text = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("agenda.empty") },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = mutedTextColor(),
+                    )
+                }
             }
-            items(dayEvents, key = { "${it.id}-${it.startsAt}" }) { ev ->
-                AgendaRow(
-                    event = ev,
-                    calendars = calendars,
-                    onClick = { onEventClick(ev) },
-                    onView = onEventClick,
-                    onEdit = onEventEdit,
-                    onDuplicate = onEventDuplicate,
-                    onDelete = onEventDelete,
-                )
+            return@Box
+        }
+
+        LazyColumn(
+            modifier = content.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            grouped.forEach { (date, dayEvents) ->
+                item(key = "header-$date") {
+                    AgendaDayHeader(date = date, count = dayEvents.size)
+                }
+                items(dayEvents, key = { "${it.id}-${it.startsAt}" }) { ev ->
+                    AgendaRow(
+                        event = ev,
+                        calendars = calendars,
+                        onClick = { onEventClick(ev) },
+                        onView = onEventClick,
+                        onEdit = onEventEdit,
+                        onDuplicate = onEventDuplicate,
+                        onDelete = onEventDelete,
+                    )
+                }
             }
         }
     }

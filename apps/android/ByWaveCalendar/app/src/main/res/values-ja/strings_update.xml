@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- アプリ内アップデート — 日本語。 -->
+<resources>
+    <string name="update_title_available">新しいバージョンがあります</string>
+    <string name="update_title_mandatory">更新が必要です</string>
+    <string name="update_mandatory_note">このアップデートを済ませないと引き続きご利用いただけません。</string>
+    <string name="update_download_now">今すぐダウンロード</string>
+    <string name="update_later">あとで</string>
+    <string name="update_install_now">今すぐインストール</string>
+    <string name="update_install_hint">端末に確認画面が表示されます。初回は「不明なアプリのインストール」の許可も必要です。</string>
+    <string name="update_unknown_sources">システム設定でこのアプリに「不明なアプリのインストール」を許可してから、もう一度お試しください。</string>
+    <string name="update_progress">%1$d / %2$d MB をダウンロード済み</string>
+    <string name="update_eta_min">残り約 %1$d 分 %2$d 秒</string>
+    <string name="update_eta_sec">残り約 %1$d 秒</string>
+    <string name="update_err_apk_missing">ダウンロードが不完全です。もう一度お試しください。</string>
+    <string name="update_err_installer">インストーラーを開けませんでした。しばらくしてからお試しください。</string>
+    <string name="update_err_download">ダウンロードに失敗しました。しばらくしてからお試しください。</string>
+    <string name="update_err_checksum">ダウンロードの検証に失敗しました。しばらくしてからお試しください。</string>
+    <string name="update_err_server">サーバーが応答しません。しばらくしてからお試しください。</string>
+    <string name="update_err_network">ネットワークに接続できません。接続を確認してもう一度お試しください。</string>
+</resources>

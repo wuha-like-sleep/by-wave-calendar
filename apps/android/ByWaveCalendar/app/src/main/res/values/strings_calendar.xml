@@ -13,4 +13,11 @@
     <string name="cal_switch_account">切换账号</string>
     <string name="cal_delete_message">「%1$s」将被永久删除，此操作不可恢复。</string>
     <string name="day_empty_subtitle">点按右下角 + 新建一个事件</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">加载事件失败，请下拉重试</string>
+    <string name="cal_err_delete_failed">删除失败，请重试</string>
+    <string name="cal_err_undo_failed">撤销失败，请重试</string>
+    <string name="cal_err_signout_failed">退出登录失败，请重试</string>
+    <string name="cal_err_not_signed_in">请先登录</string>
 </resources>

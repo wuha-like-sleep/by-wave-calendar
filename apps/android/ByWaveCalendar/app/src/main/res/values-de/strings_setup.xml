@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">Nicht angemeldet. Bitte zuerst anmelden, dann scannen</string>
     <string name="pairscan_approve_failed">Genehmigung fehlgeschlagen</string>
+    <string name="pairscan_confirm_title">Diese Anmeldung genehmigen?</string>
+    <string name="pairscan_confirm_desktop_body">Wenn du genehmigst, meldet sich dieser Computer mit dem Konto unten an und kann alle deine Kalender sehen und ändern.</string>
+    <string name="pairscan_confirm_web_body">Wenn du genehmigst, meldet sich dieser Browser mit dem Konto unten an und kann alle deine Kalender sehen und ändern.</string>
+    <string name="pairscan_confirm_warning">Genehmige nur, wenn du diese Anmeldung gerade selbst gestartet hast. Hält dir jemand einen Code zum Scannen hin, gibst du mit der Genehmigung dein Konto aus der Hand.</string>
+    <string name="pairscan_confirm_account">Konto</string>
+    <string name="pairscan_confirm_server">Server</string>
+    <string name="pairscan_confirm_code">Kopplungscode</string>
+    <string name="pairscan_confirm_approve">Anmeldung genehmigen</string>
+    <string name="pairscan_confirm_no_detail">Der Server nennt keine weiteren Angaben zum Anfragenden (Gerät, IP, Zeit).</string>
+    <string name="pairscan_confirm_host_mismatch">Dieser Code stammt von einem anderen Server: %1$s. Angemeldet bist du bei %2$s.</string>
     <string name="pairscan_approving_title">Wird genehmigt…</string>
     <string name="pairscan_approving_body">Der Computer wird angemeldet, bitte warten.</string>
     <string name="pairscan_approved_title">✓ Genehmigt</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">Keine passenden Termine</string>
     <string name="search2_no_results_subtitle">Versuche es mit einem anderen Stichwort</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">Dein Passwort wurde geändert oder dieses Gerät wurde entfernt. Bitte melde dich erneut an.</string>
 </resources>

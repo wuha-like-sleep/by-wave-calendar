@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">Nicht angemeldet</string>
     <string name="eventedit_err_save_failed">Speichern fehlgeschlagen</string>
     <string name="eventedit_err_delete_failed">Löschen fehlgeschlagen</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">Diesen Gast entfernen?</string>
+    <string name="attendees_revoke_message">%1$s erhält keine Updates mehr zu diesem Termin.</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">Änderungen verwerfen?</string>
+    <string name="eventedit_discard_message">Deine Eingaben sind noch nicht gespeichert und gehen verloren.</string>
+    <string name="eventedit_discard_confirm">Verwerfen</string>
+    <string name="eventedit_keep_editing">Weiter bearbeiten</string>
+    <string name="eventedit_need_calendar">Deine Kalenderliste ist noch nicht geladen, deshalb kann nicht gespeichert werden. Sie wird geladen, sobald du online bist.</string>
+    <string name="eventedit_retry">Erneut versuchen</string>
+    <string name="eventedit_need_title">Gib einen Titel ein, dann kannst du speichern.</string>
 </resources>

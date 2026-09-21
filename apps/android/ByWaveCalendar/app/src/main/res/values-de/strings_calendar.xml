@@ -8,4 +8,11 @@
     <string name="cal_switch_account">Konto wechseln</string>
     <string name="cal_delete_message">„%1$s“ wird dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.</string>
     <string name="day_empty_subtitle">Tippe unten rechts auf +, um einen Termin zu erstellen</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">Termine konnten nicht geladen werden</string>
+    <string name="cal_err_delete_failed">Löschen fehlgeschlagen</string>
+    <string name="cal_err_undo_failed">Rückgängig fehlgeschlagen</string>
+    <string name="cal_err_signout_failed">Abmelden fehlgeschlagen</string>
+    <string name="cal_err_not_signed_in">Bitte zuerst anmelden</string>
 </resources>

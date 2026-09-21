@@ -78,6 +78,7 @@
     <string name="settings_mirror_desc">Android のカレンダープロバイダーに予定を書き込み、Google カレンダー / 標準カレンダー / ウィジェットから見えるようにします。</string>
     <string name="settings_reminders_title">予定開始前に通知</string>
     <string name="settings_reminders_desc">各予定の開始 N 分前にローカル通知を発火します。完全に端末内のタイマーで、Apple/Google サーバーは経由しません。</string>
+    <string name="settings_reminders_need_permission">リマインダーはオンですが、通知の送信がまだ許可されていません。タップして許可してください。</string>
     <string name="settings_reminder_lead">事前時間</string>
     <string name="settings_reminder_lead_5">5 分</string>
     <string name="settings_reminder_lead_10">10 分</string>
@@ -156,9 +157,9 @@
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">確認するには「删除我的账号」と入力してください</string>
-    <string name="delete_account_confirm_mismatch">「删除我的账号」と正確に入力してください</string>
+    <string name="delete_account_confirm_phrase">delete my account</string>
+    <string name="delete_account_confirm_label">確認するには「%1$s」と入力してください</string>
+    <string name="delete_account_confirm_mismatch">「%1$s」と正確に入力してください</string>
     <string name="delete_account_failed">アカウントを削除できませんでした</string>
 
     <!-- Booking links (v0.12) -->

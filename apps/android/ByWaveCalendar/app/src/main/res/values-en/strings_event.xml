@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">Not signed in</string>
     <string name="eventedit_err_save_failed">Failed to save</string>
     <string name="eventedit_err_delete_failed">Failed to delete</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">Remove this guest?</string>
+    <string name="attendees_revoke_message">%1$s will stop receiving updates about this event.</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">Discard your changes?</string>
+    <string name="eventedit_discard_message">What you’ve typed hasn’t been saved yet and will be lost.</string>
+    <string name="eventedit_discard_confirm">Discard</string>
+    <string name="eventedit_keep_editing">Keep editing</string>
+    <string name="eventedit_need_calendar">Your calendar list hasn\'t loaded yet, so this can\'t be saved. It fills in once you\'re online.</string>
+    <string name="eventedit_retry">Retry</string>
+    <string name="eventedit_need_title">Add a title and you can save.</string>
 </resources>

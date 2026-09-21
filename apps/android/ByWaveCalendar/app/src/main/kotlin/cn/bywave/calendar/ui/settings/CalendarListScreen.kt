@@ -367,7 +367,7 @@ private fun CreateCalendarSheet(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 client.api.createCalendar(
                                     CalendarCreateRequest(
@@ -504,7 +504,7 @@ private fun EditCalendarSheet(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 val body = CalendarUpdateInput(
                                     // Only send fields that actually changed — the server's
@@ -573,7 +573,7 @@ private fun EditCalendarSheet(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 client.api.deleteCalendar(calendar.id)
                                 snackbar.showSnackbar(context.getString(R.string.calendars_deleted))
@@ -622,7 +622,7 @@ private fun ShareLinksSection(
     suspend fun reloadTokens() {
         try {
             val profile = BywaveApp.instance.profiles.active()
-                ?: throw IllegalStateException("未登录")
+                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
             val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
             val list = client.api.shareTokens(calendarId)
             tokens.clear()
@@ -724,7 +724,7 @@ private fun ShareLinksSection(
                     error = null
                     try {
                         val profile = BywaveApp.instance.profiles.active()
-                            ?: throw IllegalStateException("未登录")
+                            ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                         val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                         client.api.createShareToken(
                             calendarId,
@@ -769,7 +769,7 @@ private fun ShareLinksSection(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 client.api.revokeShareToken(calendarId, toRevoke.token)
                                 reloadTokens()

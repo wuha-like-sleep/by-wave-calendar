@@ -8,4 +8,11 @@
     <string name="cal_switch_account">Changer de compte</string>
     <string name="cal_delete_message">« %1$s » sera supprimé définitivement. Cette action est irréversible.</string>
     <string name="day_empty_subtitle">Appuyez sur + en bas à droite pour créer un événement</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">Impossible de charger les événements</string>
+    <string name="cal_err_delete_failed">Suppression impossible</string>
+    <string name="cal_err_undo_failed">Annulation impossible</string>
+    <string name="cal_err_signout_failed">Déconnexion impossible</string>
+    <string name="cal_err_not_signed_in">Connectez-vous d’abord</string>
 </resources>

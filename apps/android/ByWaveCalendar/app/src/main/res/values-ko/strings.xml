@@ -78,6 +78,7 @@
     <string name="settings_mirror_desc">Android 캘린더 제공자에 일정을 기록하여 Google 캘린더 / 기본 캘린더 / 위젯에서 볼 수 있게 합니다.</string>
     <string name="settings_reminders_title">일정 시작 전 알림</string>
     <string name="settings_reminders_desc">각 일정 시작 N분 전에 로컬 알림을 표시합니다. 완전히 기기 내 타이머이며 Apple/Google 서버를 거치지 않습니다.</string>
+    <string name="settings_reminders_need_permission">알림이 켜져 있지만 아직 알림 전송이 허용되지 않았습니다. 눌러서 허용하세요.</string>
     <string name="settings_reminder_lead">알림 시점</string>
     <string name="settings_reminder_lead_5">5분</string>
     <string name="settings_reminder_lead_10">10분</string>
@@ -156,9 +157,9 @@
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">확인하려면 “删除我的账号”을(를) 입력하세요</string>
-    <string name="delete_account_confirm_mismatch">“删除我的账号”을(를) 정확히 입력하세요</string>
+    <string name="delete_account_confirm_phrase">delete my account</string>
+    <string name="delete_account_confirm_label">확인하려면 “%1$s”을(를) 입력하세요</string>
+    <string name="delete_account_confirm_mismatch">“%1$s”을(를) 정확히 입력하세요</string>
     <string name="delete_account_failed">계정을 삭제할 수 없습니다</string>
 
     <!-- Booking links (v0.12) -->

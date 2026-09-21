@@ -112,6 +112,19 @@ android {
             // `gradle compileKotlin` honest if someone drops Java code in.
             java.srcDirs("src/main/kotlin")
         }
+        named("test") {
+            java.srcDirs("src/test/kotlin")
+        }
+    }
+
+    testOptions {
+        unitTests {
+            // 故意**不**开 isReturnDefaultValues：开了以后 android.jar 的桩
+            // 方法会静悄悄返回 null/0，门禁就会在「其实根本没调到真实现」
+            // 的情况下变绿。要用到 Android 类的地方一律靠注入（见
+            // CalendarFormats 的 BestPatternProvider）。
+            isReturnDefaultValues = false
+        }
     }
 }
 
@@ -121,10 +134,13 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
-    // Only for AppCompatDelegate.setApplicationLocales — universal per-app
-    // language API across Android 8 through 14+. We don't use any
-    // AppCompat themes / activities elsewhere; the project is Compose-only.
-    implementation(libs.androidx.appcompat)
+    // ⚠️ 这里以前挂着 androidx.appcompat，理由是「AppCompatDelegate.
+    // setApplicationLocales 是通用的 per-app 语言 API」。它在本仓不成立：
+    // 那个 API 在 Android 13 以下要靠 AppCompatActivity + AppCompat 主题
+    // 才生效，而本仓是纯 Compose（ComponentActivity + Material 主题），
+    // 于是 API ≤ 32 上它是个空开关。语言改由平台 LocaleManager（13+）+
+    // attachBaseContext 换 Configuration（12 及以下）落地，见
+    // i18n/LocaleHelper.kt，AppCompat 这个依赖也就没有调用点了。
 
     // Compose (versions managed via the BOM so we don't list each here).
     implementation(platform(libs.compose.bom))
@@ -161,4 +177,16 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.barcode.scanning)
+
+    // 纯 JVM 单元测试（./gradlew :app:testDebugUnitTest，不需要模拟器）。
+    //
+    // icu4j 只在测试里出现。它和设备上 android.text.format.DateFormat.
+    // getBestDateTimePattern() 背后是同一个 DateTimePatternGenerator，
+    // 所以门禁能拿**真的 CLDR 数据**跑 8 种语言，而不是喂一张我们自己抄
+    // 下来的表（抄下来的表只会证明我们抄得对）。
+    // 注意版本差异：设备上的 ICU 跟着 Android 版本走，和这里的 77.1 不是
+    // 同一份数据 —— 所以门禁断言的是「pattern 的字符集合合法」，不是
+    // 「格式化出来的字符串长什么样」。
+    testImplementation(libs.junit)
+    testImplementation(libs.icu4j)
 }

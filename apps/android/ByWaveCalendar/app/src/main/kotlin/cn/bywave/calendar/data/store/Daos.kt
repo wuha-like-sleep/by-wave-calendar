@@ -41,6 +41,11 @@ interface CalendarDao {
     @Query("SELECT * FROM calendars WHERE profileId = :profileId ORDER BY name ASC")
     fun observeForProfile(profileId: String): Flow<List<CalendarEntity>>
 
+    /** 一次性读取。设置页改完「镜像到系统日历」要立刻重建镜像，那时候
+     *  手上没有 Flow 的最新值，只能直接查一次。 */
+    @Query("SELECT * FROM calendars WHERE profileId = :profileId")
+    suspend fun listForProfile(profileId: String): List<CalendarEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(rows: List<CalendarEntity>)
 

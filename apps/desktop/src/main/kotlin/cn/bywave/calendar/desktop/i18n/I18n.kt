@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import cn.bywave.calendar.desktop.util.DebugLog
 
 object I18n {
 
@@ -99,8 +100,8 @@ object I18n {
             Files.writeString(storeFile, loc.code)
         }.onFailure {
             // Persistence failure isn't fatal — language still switches
-            // for this session. Log to stderr; next launch reverts.
-            System.err.println("[I18n] failed to persist locale: ${it.message}")
+            // for this session; next launch reverts. Debug-only log.
+            DebugLog.d("I18n") { "failed to persist locale: ${it.message}" }
         }
     }
 
@@ -180,6 +181,13 @@ object I18n {
         "settings.profileMgmt.switch" to "Switch",
         "settings.profileMgmt.remove" to "Remove",
         "settings.profileMgmt.addServer" to "+ Add server",
+        "common.cancel" to "Cancel",
+        "auth.sessionRevoked" to "You were signed out. The account password changed, or this computer was removed from your devices. Sign in again to continue.",
+        "settings.profileMgmt.removeTitle" to "Remove this account?",
+        "settings.profileMgmt.removeWarning" to "\"{email}\" will be removed from this computer, along with its cached events. To add it back you will need to scan the QR code with your phone again.",
+        "settings.profileMgmt.removeConfirm" to "Remove account",
+        "settings.signOut.confirmTitle" to "Sign out of this account?",
+        "settings.signOut.confirmWarning" to "To sign back in on this computer you will need to scan the QR code with your phone again.",
         "settings.signOut.title" to "Sign out of current account",
         "settings.signOut.desc" to "Signing out keeps cached event data locally. Signing back in with the same account picks up where you left off.",
         "settings.signOut.button" to "Sign out of current account",
@@ -271,6 +279,7 @@ object I18n {
         "search.searching" to "Searching…",
         "search.empty" to "No matches.",
         "search.failed" to "Search failed.",
+        "search.jumpFailed" to "Couldn’t open that result. Try the calendar view.",
         "search.close" to "Close",
 
         // Settings — Security
@@ -428,6 +437,8 @@ object I18n {
         "event.edit.summary" to "Title",
         "event.edit.quickadd" to "Quick add (Chinese, e.g. 明天 下午3点 牙医)",
         "event.edit.quickadd.parse" to "Parse",
+        "event.edit.quickadd.failed" to "Couldn’t read a date out of that. Fill in the fields below instead.",
+        "event.edit.quickadd.unsupported" to "This server is too old for quick add. Fill in the fields below instead.",
         "event.edit.allDay" to "All-day",
         "event.edit.start" to "Start",
         "event.edit.end" to "End",
@@ -636,6 +647,13 @@ object I18n {
         "settings.profileMgmt.switch" to "切换",
         "settings.profileMgmt.remove" to "移除",
         "settings.profileMgmt.addServer" to "+ 添加服务器",
+        "common.cancel" to "取消",
+        "auth.sessionRevoked" to "你已被退出登录。账号密码已更改，或这台电脑被从设备列表中移除。请重新登录后继续。",
+        "settings.profileMgmt.removeTitle" to "移除这个账号？",
+        "settings.profileMgmt.removeWarning" to "「{email}」会从这台电脑移除，本地缓存的事件也会一起清掉。想加回来需要再用手机扫一次二维码。",
+        "settings.profileMgmt.removeConfirm" to "移除账号",
+        "settings.signOut.confirmTitle" to "退出当前账号？",
+        "settings.signOut.confirmWarning" to "要在这台电脑上重新登录，需要再用手机扫一次二维码。",
         "settings.signOut.title" to "退出当前账号",
         "settings.signOut.desc" to "退出会保留本地缓存的事件数据。重新登录同一账号可以接着用。",
         "settings.signOut.button" to "退出当前账号",
@@ -725,6 +743,7 @@ object I18n {
         "search.searching" to "正在搜索…",
         "search.empty" to "没有匹配。",
         "search.failed" to "搜索失败。",
+        "search.jumpFailed" to "这条结果打不开，请到日历里找。",
         "search.close" to "关闭",
 
         "settings.security.title" to "安全",
@@ -872,6 +891,8 @@ object I18n {
         "event.edit.summary" to "标题",
         "event.edit.quickadd" to "快速输入（如 明天 下午3点 牙医）",
         "event.edit.quickadd.parse" to "识别",
+        "event.edit.quickadd.failed" to "没认出这句话里的时间，请在下面手动填写。",
+        "event.edit.quickadd.unsupported" to "这台服务器的版本还不支持快速输入，请在下面手动填写。",
         "event.edit.allDay" to "全天",
         "event.edit.start" to "开始",
         "event.edit.end" to "结束",
@@ -1075,6 +1096,13 @@ object I18n {
         "settings.profileMgmt.switch" to "切換",
         "settings.profileMgmt.remove" to "移除",
         "settings.profileMgmt.addServer" to "+ 新增伺服器",
+        "common.cancel" to "取消",
+        "auth.sessionRevoked" to "你已被登出。帳號密碼已變更，或這台電腦已從裝置清單中移除。請重新登入後繼續。",
+        "settings.profileMgmt.removeTitle" to "移除這個帳號？",
+        "settings.profileMgmt.removeWarning" to "「{email}」會從這台電腦移除，本機快取的事件也會一併清除。想加回來需要再用手機掃一次 QR code。",
+        "settings.profileMgmt.removeConfirm" to "移除帳號",
+        "settings.signOut.confirmTitle" to "登出目前帳號？",
+        "settings.signOut.confirmWarning" to "要在這台電腦上重新登入，需要再用手機掃一次 QR code。",
         "settings.signOut.title" to "登出目前帳號",
         "settings.signOut.desc" to "登出會保留本機快取的事件資料。以同一帳號重新登入即可接續使用。",
         "settings.signOut.button" to "登出目前帳號",
@@ -1238,6 +1266,7 @@ object I18n {
         "search.searching" to "正在搜尋…",
         "search.empty" to "沒有相符結果。",
         "search.failed" to "搜尋失敗。",
+        "search.jumpFailed" to "這條結果打不開，請到日曆裡找。",
         "search.close" to "關閉",
 
         // 安全性 / 原生變更密碼對話框
@@ -1320,6 +1349,8 @@ object I18n {
         "event.edit.summary" to "標題",
         "event.edit.quickadd" to "快速輸入（如 明天 下午3點 牙醫）",
         "event.edit.quickadd.parse" to "識別",
+        "event.edit.quickadd.failed" to "沒認出這句話裡的時間，請在下面手動填寫。",
+        "event.edit.quickadd.unsupported" to "這台伺服器的版本還不支援快速輸入，請在下面手動填寫。",
         "event.edit.allDay" to "整天",
         "event.edit.start" to "開始",
         "event.edit.end" to "結束",
@@ -1523,6 +1554,13 @@ object I18n {
         "settings.profileMgmt.switch" to "切り替え",
         "settings.profileMgmt.remove" to "削除",
         "settings.profileMgmt.addServer" to "+ サーバーを追加",
+        "common.cancel" to "キャンセル",
+        "auth.sessionRevoked" to "サインアウトされました。アカウントのパスワードが変更されたか、このパソコンがデバイス一覧から削除されています。もう一度サインインしてください。",
+        "settings.profileMgmt.removeTitle" to "このアカウントを削除しますか？",
+        "settings.profileMgmt.removeWarning" to "「{email}」はこのパソコンから削除され、キャッシュされたイベントも消去されます。追加し直すには、スマートフォンで QR コードを読み取り直す必要があります。",
+        "settings.profileMgmt.removeConfirm" to "アカウントを削除",
+        "settings.signOut.confirmTitle" to "このアカウントからサインアウトしますか？",
+        "settings.signOut.confirmWarning" to "このパソコンで再度サインインするには、スマートフォンで QR コードを読み取り直す必要があります。",
         "settings.signOut.title" to "現在のアカウントからサインアウト",
         "settings.signOut.desc" to "サインアウトしてもキャッシュされたイベントデータはローカルに保持されます。同じアカウントで再度サインインすれば続きから利用できます。",
         "settings.signOut.button" to "現在のアカウントからサインアウト",
@@ -1686,6 +1724,7 @@ object I18n {
         "search.searching" to "検索中…",
         "search.empty" to "一致するものがありません。",
         "search.failed" to "検索に失敗しました。",
+        "search.jumpFailed" to "この結果を開けませんでした。カレンダーから探してください。",
         "search.close" to "閉じる",
 
         // セキュリティ / ネイティブのパスワード変更ダイアログ
@@ -1768,6 +1807,8 @@ object I18n {
         "event.edit.summary" to "タイトル",
         "event.edit.quickadd" to "クイック入力（中国語 例: 明天 下午3点 牙医）",
         "event.edit.quickadd.parse" to "解析",
+        "event.edit.quickadd.failed" to "この文から日時を読み取れませんでした。下の項目を手入力してください。",
+        "event.edit.quickadd.unsupported" to "このサーバーはクイック入力に未対応です。下の項目を手入力してください。",
         "event.edit.allDay" to "終日",
         "event.edit.start" to "開始",
         "event.edit.end" to "終了",
@@ -1971,6 +2012,13 @@ object I18n {
         "settings.profileMgmt.switch" to "전환",
         "settings.profileMgmt.remove" to "제거",
         "settings.profileMgmt.addServer" to "+ 서버 추가",
+        "common.cancel" to "취소",
+        "auth.sessionRevoked" to "로그아웃되었습니다. 계정 비밀번호가 변경되었거나 이 컴퓨터가 기기 목록에서 제거되었습니다. 다시 로그인해 주세요.",
+        "settings.profileMgmt.removeTitle" to "이 계정을 제거할까요?",
+        "settings.profileMgmt.removeWarning" to "'{email}' 계정이 이 컴퓨터에서 제거되고 캐시된 일정도 함께 삭제됩니다. 다시 추가하려면 휴대폰으로 QR 코드를 다시 스캔해야 합니다.",
+        "settings.profileMgmt.removeConfirm" to "계정 제거",
+        "settings.signOut.confirmTitle" to "이 계정에서 로그아웃할까요?",
+        "settings.signOut.confirmWarning" to "이 컴퓨터에서 다시 로그인하려면 휴대폰으로 QR 코드를 다시 스캔해야 합니다.",
         "settings.signOut.title" to "현재 계정에서 로그아웃",
         "settings.signOut.desc" to "로그아웃해도 캐시된 일정 데이터는 로컬에 유지됩니다. 같은 계정으로 다시 로그인하면 이어서 사용할 수 있습니다.",
         "settings.signOut.button" to "현재 계정에서 로그아웃",
@@ -2134,6 +2182,7 @@ object I18n {
         "search.searching" to "검색 중…",
         "search.empty" to "일치하는 항목이 없습니다.",
         "search.failed" to "검색에 실패했습니다.",
+        "search.jumpFailed" to "이 결과를 열 수 없습니다. 달력에서 찾아 주세요.",
         "search.close" to "닫기",
 
         // 보안 / 네이티브 비밀번호 변경 대화상자
@@ -2216,6 +2265,8 @@ object I18n {
         "event.edit.summary" to "제목",
         "event.edit.quickadd" to "빠른 입력 (중국어 예: 明天 下午3点 牙医)",
         "event.edit.quickadd.parse" to "인식",
+        "event.edit.quickadd.failed" to "이 문장에서 일시를 읽지 못했습니다. 아래 항목을 직접 입력해 주세요.",
+        "event.edit.quickadd.unsupported" to "이 서버는 빠른 입력을 지원하지 않습니다. 아래 항목을 직접 입력해 주세요.",
         "event.edit.allDay" to "종일",
         "event.edit.start" to "시작",
         "event.edit.end" to "종료",
@@ -2419,6 +2470,13 @@ object I18n {
         "settings.profileMgmt.switch" to "Cambiar",
         "settings.profileMgmt.remove" to "Eliminar",
         "settings.profileMgmt.addServer" to "+ Añadir servidor",
+        "common.cancel" to "Cancelar",
+        "auth.sessionRevoked" to "Se cerró tu sesión. La contraseña de la cuenta cambió o este equipo se quitó de tus dispositivos. Inicia sesión de nuevo para continuar.",
+        "settings.profileMgmt.removeTitle" to "¿Quitar esta cuenta?",
+        "settings.profileMgmt.removeWarning" to "«{email}» se quitará de este equipo junto con sus eventos en caché. Para volver a añadirla tendrás que escanear el código QR con el teléfono otra vez.",
+        "settings.profileMgmt.removeConfirm" to "Quitar cuenta",
+        "settings.signOut.confirmTitle" to "¿Cerrar sesión en esta cuenta?",
+        "settings.signOut.confirmWarning" to "Para volver a iniciar sesión en este equipo tendrás que escanear el código QR con el teléfono otra vez.",
         "settings.signOut.title" to "Cerrar sesión de la cuenta actual",
         "settings.signOut.desc" to "Al cerrar sesión se conservan localmente los datos de eventos en caché. Al volver a iniciar sesión con la misma cuenta, retomas donde lo dejaste.",
         "settings.signOut.button" to "Cerrar sesión de la cuenta actual",
@@ -2582,6 +2640,7 @@ object I18n {
         "search.searching" to "Buscando…",
         "search.empty" to "Sin coincidencias.",
         "search.failed" to "La búsqueda falló.",
+        "search.jumpFailed" to "No se ha podido abrir ese resultado. Búscalo en el calendario.",
         "search.close" to "Cerrar",
 
         // Seguridad / diálogo nativo de cambio de contraseña
@@ -2664,6 +2723,8 @@ object I18n {
         "event.edit.summary" to "Título",
         "event.edit.quickadd" to "Añadir rápido (chino, p. ej. 明天 下午3点 牙医)",
         "event.edit.quickadd.parse" to "Analizar",
+        "event.edit.quickadd.failed" to "No se ha podido leer una fecha en esa frase. Rellena los campos de abajo.",
+        "event.edit.quickadd.unsupported" to "Este servidor no admite el añadido rápido. Rellena los campos de abajo.",
         "event.edit.allDay" to "Todo el día",
         "event.edit.start" to "Inicio",
         "event.edit.end" to "Fin",
@@ -2867,6 +2928,13 @@ object I18n {
         "settings.profileMgmt.switch" to "Changer",
         "settings.profileMgmt.remove" to "Supprimer",
         "settings.profileMgmt.addServer" to "+ Ajouter un serveur",
+        "common.cancel" to "Annuler",
+        "auth.sessionRevoked" to "Vous avez été déconnecté. Le mot de passe du compte a changé ou cet ordinateur a été retiré de vos appareils. Reconnectez-vous pour continuer.",
+        "settings.profileMgmt.removeTitle" to "Retirer ce compte ?",
+        "settings.profileMgmt.removeWarning" to "« {email} » sera retiré de cet ordinateur, avec ses événements mis en cache. Pour le rajouter, vous devrez scanner à nouveau le code QR avec votre téléphone.",
+        "settings.profileMgmt.removeConfirm" to "Retirer le compte",
+        "settings.signOut.confirmTitle" to "Se déconnecter de ce compte ?",
+        "settings.signOut.confirmWarning" to "Pour vous reconnecter sur cet ordinateur, vous devrez scanner à nouveau le code QR avec votre téléphone.",
         "settings.signOut.title" to "Se déconnecter du compte actuel",
         "settings.signOut.desc" to "La déconnexion conserve localement les données d'événements mises en cache. En vous reconnectant avec le même compte, vous reprenez là où vous en étiez.",
         "settings.signOut.button" to "Se déconnecter du compte actuel",
@@ -3030,6 +3098,7 @@ object I18n {
         "search.searching" to "Recherche…",
         "search.empty" to "Aucun résultat.",
         "search.failed" to "La recherche a échoué.",
+        "search.jumpFailed" to "Impossible d’ouvrir ce résultat. Cherchez-le dans le calendrier.",
         "search.close" to "Fermer",
 
         // Sécurité / boîte de dialogue native de changement de mot de passe
@@ -3112,6 +3181,8 @@ object I18n {
         "event.edit.summary" to "Titre",
         "event.edit.quickadd" to "Ajout rapide (chinois, ex. 明天 下午3点 牙医)",
         "event.edit.quickadd.parse" to "Analyser",
+        "event.edit.quickadd.failed" to "Aucune date n’a pu être lue dans cette phrase. Remplissez les champs ci-dessous.",
+        "event.edit.quickadd.unsupported" to "Ce serveur ne prend pas en charge l’ajout rapide. Remplissez les champs ci-dessous.",
         "event.edit.allDay" to "Journée entière",
         "event.edit.start" to "Début",
         "event.edit.end" to "Fin",
@@ -3315,6 +3386,13 @@ object I18n {
         "settings.profileMgmt.switch" to "Wechseln",
         "settings.profileMgmt.remove" to "Entfernen",
         "settings.profileMgmt.addServer" to "+ Server hinzufügen",
+        "common.cancel" to "Abbrechen",
+        "auth.sessionRevoked" to "Du wurdest abgemeldet. Das Kontopasswort wurde geändert oder dieser Computer wurde aus deinen Geräten entfernt. Melde dich erneut an, um fortzufahren.",
+        "settings.profileMgmt.removeTitle" to "Dieses Konto entfernen?",
+        "settings.profileMgmt.removeWarning" to "„{email}“ wird zusammen mit den zwischengespeicherten Terminen von diesem Computer entfernt. Zum Wiederhinzufügen musst du den QR-Code erneut mit dem Handy scannen.",
+        "settings.profileMgmt.removeConfirm" to "Konto entfernen",
+        "settings.signOut.confirmTitle" to "Von diesem Konto abmelden?",
+        "settings.signOut.confirmWarning" to "Um dich auf diesem Computer wieder anzumelden, musst du den QR-Code erneut mit dem Handy scannen.",
         "settings.signOut.title" to "Vom aktuellen Konto abmelden",
         "settings.signOut.desc" to "Beim Abmelden bleiben zwischengespeicherte Termindaten lokal erhalten. Wenn du dich mit demselben Konto erneut anmeldest, machst du dort weiter, wo du aufgehört hast.",
         "settings.signOut.button" to "Vom aktuellen Konto abmelden",
@@ -3478,6 +3556,7 @@ object I18n {
         "search.searching" to "Wird gesucht…",
         "search.empty" to "Keine Treffer.",
         "search.failed" to "Suche fehlgeschlagen.",
+        "search.jumpFailed" to "Dieses Ergebnis lässt sich nicht öffnen. Bitte im Kalender suchen.",
         "search.close" to "Schließen",
 
         // Sicherheit / nativer Dialog zum Ändern des Passworts
@@ -3560,6 +3639,8 @@ object I18n {
         "event.edit.summary" to "Titel",
         "event.edit.quickadd" to "Schnell hinzufügen (Chin., z. B. 明天 下午3点 牙医)",
         "event.edit.quickadd.parse" to "Erkennen",
+        "event.edit.quickadd.failed" to "Aus diesem Satz konnte kein Datum gelesen werden. Bitte die Felder unten ausfüllen.",
+        "event.edit.quickadd.unsupported" to "Dieser Server unterstützt die Schnelleingabe nicht. Bitte die Felder unten ausfüllen.",
         "event.edit.allDay" to "Ganztägig",
         "event.edit.start" to "Beginn",
         "event.edit.end" to "Ende",
@@ -3710,7 +3791,7 @@ object I18n {
         "api.networkError" to "Netzwerkfehler",
     )
 
-    private val DICTIONARIES: Map<Locale, Map<String, String>> = mapOf(
+    internal val DICTIONARIES: Map<Locale, Map<String, String>> = mapOf(
         Locale.EN to en,
         Locale.ZH_CN to zhCN,
         Locale.ZH_TW to zhTW,

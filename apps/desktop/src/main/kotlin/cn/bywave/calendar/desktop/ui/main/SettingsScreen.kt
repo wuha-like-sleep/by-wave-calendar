@@ -42,6 +42,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,6 +109,7 @@ import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.update.UpdateChecker
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
+import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.launch
 import java.awt.Desktop
 import java.net.URI
@@ -208,36 +210,51 @@ fun SettingsScreen(
                 // "字全部挤在一起" the user reported on v0.7.6.
                 // Column is the right container: stacks children
                 // vertically, respects Spacers, supports verticalScroll.
-                Column(
+                // 右栏内容限宽并居中。以前是 fillMaxSize:在一台 32 寸
+                // 显示器上全屏打开设置,一个填邮箱/服务器地址的输入框会横跨
+                // 两千多像素,标签在最左、光标在最右,读都读不成一句话。
+                // 760dp 是一行长文本还舒服的上限(和 iPad 版刚修过的是同一
+                // 类问题)。窗口窄于这个数时 widthIn 不起作用,照常铺满。
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 32.dp, vertical = 24.dp),
+                        .verticalScroll(rememberScrollState()),
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    when (tab) {
-                        SettingsTab.Account -> AccountSection(
-                            profile = profile,
-                            profiles = profiles,
-                            onSwitchProfile = onSwitchProfile,
-                            onRemoveProfile = onRemoveProfile,
-                            onAddAccount = onAddAccount,
-                            onSignOut = onSignOut,
-                        )
-                        SettingsTab.Calendars -> CalendarsSection(
-                            calendars = calendars,
-                            profile = profile,
-                            onChanged = onCalendarsChanged,
-                        )
-                        SettingsTab.Booking -> BookingSection(
-                            calendars = calendars,
-                            profile = profile,
-                        )
-                        SettingsTab.Security -> SecuritySection(profile = profile)
-                        SettingsTab.Appearance -> AppearanceSection(profile = profile)
-                        SettingsTab.About -> AboutSection(
-                            profile = profile,
-                            onCheckUpdate = onCheckUpdate,
-                        )
+                    Column(
+                        modifier = Modifier
+                            // widthIn 要排在 fillMaxWidth 前面,否则 fillMaxWidth
+                            // 先把约束钉成父容器宽度,760 的上限会被 coerce 掉,
+                            // 限宽静默失效(窄窗口上还看不出来)。
+                            .widthIn(max = 760.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp, vertical = 24.dp),
+                    ) {
+                        when (tab) {
+                            SettingsTab.Account -> AccountSection(
+                                profile = profile,
+                                profiles = profiles,
+                                onSwitchProfile = onSwitchProfile,
+                                onRemoveProfile = onRemoveProfile,
+                                onAddAccount = onAddAccount,
+                                onSignOut = onSignOut,
+                            )
+                            SettingsTab.Calendars -> CalendarsSection(
+                                calendars = calendars,
+                                profile = profile,
+                                onChanged = onCalendarsChanged,
+                            )
+                            SettingsTab.Booking -> BookingSection(
+                                calendars = calendars,
+                                profile = profile,
+                            )
+                            SettingsTab.Security -> SecuritySection(profile = profile)
+                            SettingsTab.Appearance -> AppearanceSection(profile = profile)
+                            SettingsTab.About -> AboutSection(
+                                profile = profile,
+                                onCheckUpdate = onCheckUpdate,
+                            )
+                        }
                     }
                 }
             }
@@ -280,6 +297,13 @@ private fun AccountSection(
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+
+    // 「移除账号」和「退出登录」在这台机器上都是不可撤销的:凭据被删掉,
+    // 想回来得拿手机重新扫码配对。而它们以前都是点一下立刻生效,和旁边
+    // 那个无害的「切换」按钮只差几十像素。日历删除、预约链接删除早就有
+    // 二次确认了,这两个才是最容易误点的。
+    var removeTarget by remember { mutableStateOf<Profile?>(null) }
+    var confirmSignOut by remember { mutableStateOf(false) }
 
     SectionTitle(t("settings.account.title"))
 
@@ -329,7 +353,7 @@ private fun AccountSection(
                 if (!isActive) {
                     TextButton(onClick = { onSwitchProfile(p.deviceId) }) { Text(t("settings.profileMgmt.switch")) }
                 }
-                TextButton(onClick = { onRemoveProfile(p.deviceId) }) {
+                TextButton(onClick = { removeTarget = p }) {
                     Text(t("settings.profileMgmt.remove"), color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -351,7 +375,7 @@ private fun AccountSection(
         modifier = Modifier.padding(bottom = 12.dp),
     )
     Button(
-        onClick = onSignOut,
+        onClick = { confirmSignOut = true },
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -361,6 +385,72 @@ private fun AccountSection(
         Spacer(Modifier.width(6.dp))
         Text(t("settings.signOut.button"))
     }
+
+    removeTarget?.let { target ->
+        DangerConfirmDialog(
+            title = t("settings.profileMgmt.removeTitle"),
+            body = cn.bywave.calendar.desktop.i18n.I18n.t(
+                "settings.profileMgmt.removeWarning",
+                mapOf("email" to target.email),
+            ),
+            confirmLabel = t("settings.profileMgmt.removeConfirm"),
+            onConfirm = {
+                removeTarget = null
+                onRemoveProfile(target.deviceId)
+            },
+            onDismiss = { removeTarget = null },
+        )
+    }
+
+    if (confirmSignOut) {
+        DangerConfirmDialog(
+            title = t("settings.signOut.confirmTitle"),
+            body = t("settings.signOut.confirmWarning"),
+            confirmLabel = t("settings.signOut.button"),
+            onConfirm = {
+                confirmSignOut = false
+                onSignOut()
+            },
+            onDismiss = { confirmSignOut = false },
+        )
+    }
+}
+
+/** 破坏性操作的二次确认。和日历删除 / 预约链接删除那两个对话框长一样,
+ *  区别只是文案由调用方给 —— 这里不需要各自再写一遍按钮样式。 */
+@Composable
+private fun DangerConfirmDialog(
+    title: String,
+    body: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val cancel = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("common.cancel") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.SemiBold) },
+        text = {
+            Text(
+                body,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.widthIn(max = 420.dp),
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) { Text(confirmLabel) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(cancel) }
+        },
+    )
 }
 
 // -------- Calendars --------
@@ -574,7 +664,7 @@ private fun ShareLinksDialog(
             }
             .onFailure {
                 api.close()
-                loadError = it.localizedMessage ?: t("settings.share.loadFailed")
+                loadError = userFacingError(it, "settings.share.loadFailed")
                 loading = false
             }
     }
@@ -633,7 +723,7 @@ private fun ShareLinksDialog(
                                 }.onFailure {
                                     api.close()
                                     generating = false
-                                    actionError = it.localizedMessage ?: t("settings.share.generateFailed")
+                                    actionError = userFacingError(it, "settings.share.generateFailed")
                                 }
                             }
                         },
@@ -772,7 +862,7 @@ private fun ShareLinksDialog(
                             }.onFailure {
                                 api.close()
                                 working = false
-                                revokeError = it.localizedMessage ?: t("settings.share.revokeFailed")
+                                revokeError = userFacingError(it, "settings.share.revokeFailed")
                             }
                         }
                     },
@@ -944,7 +1034,7 @@ private fun CalendarEditDialog(
                         }.onFailure {
                             api.close()
                             saving = false
-                            errorMsg = it.localizedMessage ?: t("settings.calendars.saveFailed")
+                            errorMsg = userFacingError(it, "settings.calendars.saveFailed")
                         }
                     }
                 },
@@ -1026,7 +1116,7 @@ private fun CalendarDeleteDialog(
                         }.onFailure {
                             api.close()
                             working = false
-                            errorMsg = it.localizedMessage ?: t("settings.calendars.deleteFailed")
+                            errorMsg = userFacingError(it, "settings.calendars.deleteFailed")
                         }
                     }
                 },
@@ -1124,7 +1214,7 @@ private fun BookingSection(
             }
             .onFailure {
                 api.close()
-                loadError = it.localizedMessage ?: t("booking.loadFailed")
+                loadError = userFacingError(it, "booking.loadFailed")
                 loading = false
             }
     }
@@ -1201,7 +1291,7 @@ private fun BookingSection(
                                         }.onFailure {
                                             api.close()
                                             toggling = null
-                                            actionError = it.localizedMessage ?: t("booking.toggleFailed")
+                                            actionError = userFacingError(it, "booking.toggleFailed")
                                         }
                                     }
                                 },
@@ -1515,7 +1605,7 @@ private fun BookingCreateDialog(
                         }.onFailure {
                             api.close()
                             saving = false
-                            errorMsg = it.localizedMessage ?: t("booking.createFailed")
+                            errorMsg = userFacingError(it, "booking.createFailed")
                         }
                     }
                 },
@@ -1597,7 +1687,7 @@ private fun BookingDeleteDialog(
                         }.onFailure {
                             api.close()
                             working = false
-                            errorMsg = it.localizedMessage ?: t("booking.deleteFailed")
+                            errorMsg = userFacingError(it, "booking.deleteFailed")
                         }
                     }
                 },
@@ -1789,7 +1879,7 @@ private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
                                 }.onFailure {
                                     api.close()
                                     working = false
-                                    errorMsg = it.localizedMessage ?: t("settings.security.changePassword.failed")
+                                    errorMsg = userFacingError(it, "settings.security.changePassword.failed")
                                 }
                             }
                         }
@@ -1844,7 +1934,7 @@ private fun DevicesSection(profile: Profile) {
             }
             .onFailure {
                 api.close()
-                loadError = it.localizedMessage ?: t("settings.devices.loadFailed")
+                loadError = userFacingError(it, "settings.devices.loadFailed")
                 loading = false
             }
     }
@@ -2006,7 +2096,7 @@ private fun RevokeDeviceDialog(
                         }.onFailure {
                             api.close()
                             working = false
-                            errorMsg = it.localizedMessage ?: t("settings.devices.revokeFailed")
+                            errorMsg = userFacingError(it, "settings.devices.revokeFailed")
                         }
                     }
                 },
@@ -2392,7 +2482,7 @@ private fun OpenInWebRow(
                         Desktop.getDesktop().browse(URI(resp.url))
                         api.close()
                     }.onFailure {
-                        errorMsg = it.localizedMessage ?: t("openInWeb.openFailed")
+                        errorMsg = userFacingError(it, "openInWeb.openFailed")
                     }
                     working = false
                 }
@@ -2453,7 +2543,7 @@ private fun OpenInWebButton(profile: Profile, next: String, label: String) {
                     Desktop.getDesktop().browse(URI(resp.url))
                     api.close()
                 }.onFailure {
-                    errorMsg = it.localizedMessage ?: t("openInWeb.openFailed")
+                    errorMsg = userFacingError(it, "openInWeb.openFailed")
                 }
                 working = false
             }

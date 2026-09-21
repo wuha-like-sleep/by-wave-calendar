@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">Vous n\'êtes pas connecté. Connectez-vous d\'abord, puis scannez</string>
     <string name="pairscan_approve_failed">Échec de l\'approbation</string>
+    <string name="pairscan_confirm_title">Approuver cette connexion ?</string>
+    <string name="pairscan_confirm_desktop_body">Si vous approuvez, cet ordinateur se connectera avec le compte ci-dessous et pourra consulter et modifier tous vos calendriers.</string>
+    <string name="pairscan_confirm_web_body">Si vous approuvez, ce navigateur se connectera avec le compte ci-dessous et pourra consulter et modifier tous vos calendriers.</string>
+    <string name="pairscan_confirm_warning">N\'approuvez que si vous venez de lancer cette connexion vous-même. Si quelqu\'un vous tend un code à scanner, l\'approuver revient à lui donner votre compte.</string>
+    <string name="pairscan_confirm_account">Compte</string>
+    <string name="pairscan_confirm_server">Serveur</string>
+    <string name="pairscan_confirm_code">Code d\'appairage</string>
+    <string name="pairscan_confirm_approve">Approuver la connexion</string>
+    <string name="pairscan_confirm_no_detail">Le serveur ne donne aucune autre information sur l\'auteur de la demande (appareil, IP, heure).</string>
+    <string name="pairscan_confirm_host_mismatch">Ce code provient d\'un autre serveur : %1$s. Vous êtes connecté à %2$s.</string>
     <string name="pairscan_approving_title">Approbation…</string>
     <string name="pairscan_approving_body">Connexion de l\'ordinateur en cours, veuillez patienter.</string>
     <string name="pairscan_approved_title">✓ Approuvé</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">Aucun événement correspondant</string>
     <string name="search2_no_results_subtitle">Essayez un autre mot-clé</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">Votre mot de passe a changé ou cet appareil a été retiré. Reconnectez-vous.</string>
 </resources>

@@ -24,6 +24,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.URI
 import java.security.MessageDigest
+import cn.bywave.calendar.desktop.util.userFacingError
 
 sealed class DownloadState {
     object Idle : DownloadState()
@@ -119,7 +120,7 @@ object UpdateDownloader {
                 _state.value = DownloadState.Done(target)
             }
         } catch (e: Exception) {
-            _state.value = DownloadState.Failed(e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("update.download.failed"))
+            _state.value = DownloadState.Failed(userFacingError(e, "update.download.failed"))
         }
     }
 

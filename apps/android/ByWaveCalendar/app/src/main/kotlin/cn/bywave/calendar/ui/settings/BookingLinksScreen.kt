@@ -126,7 +126,7 @@ fun BookingLinksScreen(
     suspend fun reloadLinks() {
         try {
             val profile = BywaveApp.instance.profiles.active()
-                ?: throw IllegalStateException("未登录")
+                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
             val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
             val list = client.api.bookingLinks()
             links.clear()
@@ -210,7 +210,7 @@ fun BookingLinksScreen(
                                 error = null
                                 try {
                                     val profile = BywaveApp.instance.profiles.active()
-                                        ?: throw IllegalStateException("未登录")
+                                        ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                     val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                     client.api.updateBookingLink(
                                         link.id,
@@ -265,7 +265,7 @@ fun BookingLinksScreen(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 client.api.deleteBookingLink(toDelete.id)
                                 reloadLinks()
@@ -563,7 +563,7 @@ private fun CreateBookingLinkSheet(
                             error = null
                             try {
                                 val profile = BywaveApp.instance.profiles.active()
-                                    ?: throw IllegalStateException("未登录")
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                                 client.api.createBookingLink(
                                     BookingLinkCreateRequest(

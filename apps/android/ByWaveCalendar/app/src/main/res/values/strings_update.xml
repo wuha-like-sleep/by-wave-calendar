@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 更新提醒（默认 / 简体中文）。ApkDownloader / ApkInstaller / UpdateChecker
+     产生的失败提示也在这里——它们出现在用户眼前，所以只说「发生了什么、
+     下一步怎么办」，不写接口名和状态码。 -->
+<resources>
+    <string name="update_title_available">发现新版本</string>
+    <string name="update_title_mandatory">需要更新</string>
+    <string name="update_mandatory_note">这是一次必要的升级，请安装后继续使用。</string>
+    <string name="update_download_now">立即下载</string>
+    <string name="update_later">稍后</string>
+    <string name="update_install_now">立即安装</string>
+    <string name="update_install_hint">系统会弹出安装确认，首次升级还需要允许安装未知应用。</string>
+    <string name="update_unknown_sources">请在系统设置里允许本应用安装未知来源应用，然后再试一次。</string>
+    <string name="update_progress">已下载 %1$d / %2$d MB</string>
+    <string name="update_eta_min">约还需 %1$d 分 %2$d 秒</string>
+    <string name="update_eta_sec">约还需 %1$d 秒</string>
+    <string name="update_err_apk_missing">安装包没有下载完整，请重试</string>
+    <string name="update_err_installer">无法打开系统安装程序，请稍后再试</string>
+    <string name="update_err_download">下载失败，请稍后再试</string>
+    <string name="update_err_checksum">下载的安装包校验没通过，请稍后再试</string>
+    <string name="update_err_server">服务器暂时没有响应，请稍后再试</string>
+    <string name="update_err_network">网络连接不上，请检查网络后重试</string>
+</resources>

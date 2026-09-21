@@ -84,6 +84,14 @@ import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.update.UpdateChecker
 import kotlinx.coroutines.launch
 
+/** Android 13+ 才有运行时通知权限；更早的版本装上就是允许的。 */
+private fun hasNotificationPermission(context: android.content.Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+    return ContextCompat.checkSelfPermission(
+        context, Manifest.permission.POST_NOTIFICATIONS,
+    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -98,6 +106,16 @@ fun SettingsScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val prefsStore = remember { SyncPreferences(context) }
+    // 写完开关不能只落 DataStore 就完事——提醒是排进系统 AlarmManager 的，
+    // 镜像是写进系统日历的，两者都活在 APP 之外，不主动去改就一直是旧的。
+    // 所有改这三项的地方都走这一个函数，省得又漏掉某一条分支。
+    val repository = remember { BywaveApp.instance.repository }
+    fun applySync(write: suspend () -> Unit) {
+        scope.launch {
+            write()
+            repository.applySyncPreferences()
+        }
+    }
     val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
     var showSignOutDialog by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
@@ -114,13 +132,17 @@ fun SettingsScreen(
     ) { granted ->
         val ok = granted[Manifest.permission.READ_CALENDAR] == true &&
             granted[Manifest.permission.WRITE_CALENDAR] == true
-        if (ok) scope.launch { prefsStore.setMirrorToSystem(true) }
+        if (ok) applySync { prefsStore.setMirrorToSystem(true) }
         else permissionWarning = context.getString(R.string.settings_perm_calendar_denied)
     }
+    // 提醒默认是开的，而 Android 13+ 的通知权限要单独授权。开关显示「开」
+    // 而系统不让发通知 = 又一个空开关，所以这个状态必须拿在手上、显示出来。
+    var notifGranted by remember { mutableStateOf(hasNotificationPermission(context)) }
     val notifPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) scope.launch { prefsStore.setRemindersEnabled(true) }
+        notifGranted = granted
+        if (granted) applySync { prefsStore.setRemindersEnabled(true) }
         else permissionWarning = context.getString(R.string.settings_perm_notifications_denied)
     }
 
@@ -165,9 +187,9 @@ fun SettingsScreen(
                 )
             }
 
-            // Language (v0.10+) — APP-level override via AppCompat-
-            // Delegate.setApplicationLocales. State + persistence live
-            // in cn.bywave.calendar.i18n.LocaleHelper.
+            // Language (v0.10+) — APP 内语言覆盖。13+ 走平台 LocaleManager，
+            // 12 及以下走 attachBaseContext 换 Configuration；状态和持久化
+            // 都在 cn.bywave.calendar.i18n.LocaleHelper。
             run {
                 var showLangDialog by remember { mutableStateOf(false) }
                 val currentLocale by cn.bywave.calendar.i18n.LocaleHelper.current
@@ -199,15 +221,18 @@ fun SettingsScreen(
                         onDismissRequest = { showLangDialog = false },
                         title = { Text(stringResource(R.string.settings_language_title)) },
                         text = {
-                            // Hard-coded display labels for the 3 entries
-                            // so they're identifiable regardless of the
-                            // currently-active locale.
+                            // 这里原来只列了「跟随系统 / 简体中文 / English」
+                            // 三项，而 APP 实际带了 8 种翻译，locales_config.xml
+                            // 里也声明了 8 种。后果：日文/韩文/西/法/德/繁中的
+                            // 用户在 APP 里根本切不过去，Android 13 以下连系统
+                            // 设置那条路都没有——翻译做了，但那批人看不到。
+                            // 改成直接读 LocaleHelper.languages，以后加语言
+                            // 只改一处。
                             val options = listOf(
                                 "" to stringResource(R.string.settings_language_follow_system),
-                                "zh-Hans" to stringResource(R.string.settings_language_zh),
-                                "en" to stringResource(R.string.settings_language_en),
-                            )
-                            Column {
+                            ) + cn.bywave.calendar.i18n.LocaleHelper.languages
+                            // 语言多了之后一屏放不下，对话框内容要能滚。
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                                 options.forEach { (code, label) ->
                                     Row(
                                         modifier = Modifier
@@ -215,10 +240,10 @@ fun SettingsScreen(
                                             .clickable {
                                                 cn.bywave.calendar.i18n.LocaleHelper.setLocale(context, code)
                                                 showLangDialog = false
-                                                // AppCompatDelegate triggers an
-                                                // Activity recreate so the new
-                                                // locale applies instantly. No
-                                                // manual restart needed.
+                                                // LocaleHelper 里会重建 Activity
+                                                // （13+ 由平台重建，12 及以下
+                                                // 我们自己 recreate），新语言
+                                                // 立刻生效，不用手动重启。
                                             }
                                             .padding(vertical = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically,
@@ -262,7 +287,7 @@ fun SettingsScreen(
                                 context, Manifest.permission.WRITE_CALENDAR,
                             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                             if (hasRead && hasWrite) {
-                                scope.launch { prefsStore.setMirrorToSystem(true) }
+                                applySync { prefsStore.setMirrorToSystem(true) }
                             } else {
                                 calendarPermLauncher.launch(arrayOf(
                                     Manifest.permission.READ_CALENDAR,
@@ -270,7 +295,7 @@ fun SettingsScreen(
                                 ))
                             }
                         } else {
-                            scope.launch { prefsStore.setMirrorToSystem(false) }
+                            applySync { prefsStore.setMirrorToSystem(false) }
                         }
                     },
                 )
@@ -285,21 +310,34 @@ fun SettingsScreen(
                             val hasPerm = !needsRuntime || ContextCompat.checkSelfPermission(
                                 context, Manifest.permission.POST_NOTIFICATIONS,
                             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                            notifGranted = hasPerm
                             if (hasPerm) {
-                                scope.launch { prefsStore.setRemindersEnabled(true) }
+                                applySync { prefsStore.setRemindersEnabled(true) }
                             } else {
                                 notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
                         } else {
-                            scope.launch { prefsStore.setRemindersEnabled(false) }
+                            applySync { prefsStore.setRemindersEnabled(false) }
                         }
                     },
                 )
+                if (prefs.remindersEnabled && !notifGranted) {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.settings_reminders_need_permission),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                            .padding(vertical = 10.dp),
+                    )
+                }
                 if (prefs.remindersEnabled) {
                     HorizontalDivider()
                     LeadTimeRow(
                         currentMinutes = prefs.reminderLeadMinutes,
-                        onPick = { m -> scope.launch { prefsStore.setReminderLeadMinutes(m) } },
+                        onPick = { m -> applySync { prefsStore.setReminderLeadMinutes(m) } },
                     )
                 }
             }
@@ -585,7 +623,7 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
                         error = null
                         try {
                             val profile = BywaveApp.instance.profiles.active()
-                                ?: throw IllegalStateException("未登录")
+                                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                             val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
                             client.api.changePassword(
                                 ChangePasswordRequest(currentPassword = current, newPassword = next),
@@ -620,6 +658,10 @@ private fun ChangePasswordDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** 本地化确认短语上线之前，服务端只认这一串。只用于对老服务端的一次重试，
+ *  不显示给任何人看。 */
+private const val LEGACY_DELETE_PHRASE = "\u5220\u9664\u6211\u7684\u8d26\u53f7"
+
 @Composable
 private fun DeleteAccountDialog(
     onDismiss: () -> Unit,
@@ -632,13 +674,24 @@ private fun DeleteAccountDialog(
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    // The confirm phrase MUST exactly equal the server's z.literal. We
-    // pull it from resources (same key in every locale — NOT localized)
-    // and gate the button on a verbatim match, so we never even attempt
-    // a request the server would reject as bad_confirmation.
+    // 确认短语跟着界面语言走。
+    //
+    // 之前这一行是「同一个 key 在 8 种语言里都填中文的『删除我的账号』」，
+    // 注释写着「必须等于服务端的 z.literal」。后果：一个德语用户，手机上
+    // 没有中文输入法，就永远删不掉自己的账号 —— 按钮永远是灰的。
+    //
+    // 服务端早就不是 z.literal 了（src/routes/devices.ts 的 /account/delete）：
+    // 它接受**任意一门受支持语言**的确认短语，也仍然接受中文那一串。所以
+    // 客户端要做的就是：显示并要求用户输入他自己语言的那串，原样发过去。
+    // 这里的取值必须和服务端 src/lib/i18n/locales/<lang>.ts 里的
+    // settings.account.deleteConfirmFieldPlaceholder 完全一致 ——
+    // DeleteAccountPhraseTest 会逐条比对，不一致就红。
     val requiredPhrase = stringResource(R.string.delete_account_confirm_phrase)
-    val phraseMismatch = phrase.isNotEmpty() && phrase != requiredPhrase
-    val canSubmit = !busy && password.isNotEmpty() && phrase == requiredPhrase
+    // 软键盘容易在词尾自动补一个空格，trim 一下，别让用户对着一个
+    // 看起来完全正确的输入框猜自己哪里错了。
+    val typedPhrase = phrase.trim()
+    val phraseMismatch = phrase.isNotEmpty() && typedPhrase != requiredPhrase
+    val canSubmit = !busy && password.isNotEmpty() && typedPhrase == requiredPhrase
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -661,11 +714,11 @@ private fun DeleteAccountDialog(
                 OutlinedTextField(
                     value = phrase,
                     onValueChange = { phrase = it },
-                    label = { Text(stringResource(R.string.delete_account_confirm_label)) },
+                    label = { Text(stringResource(R.string.delete_account_confirm_label, requiredPhrase)) },
                     singleLine = true,
                     isError = phraseMismatch,
                     supportingText = if (phraseMismatch) {
-                        { Text(stringResource(R.string.delete_account_confirm_mismatch), color = MaterialTheme.colorScheme.error) }
+                        { Text(stringResource(R.string.delete_account_confirm_mismatch, requiredPhrase), color = MaterialTheme.colorScheme.error) }
                     } else null,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -683,11 +736,23 @@ private fun DeleteAccountDialog(
                         error = null
                         try {
                             val profile = BywaveApp.instance.profiles.active()
-                                ?: throw IllegalStateException("未登录")
+                                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                             val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
-                            client.api.deleteAccount(
-                                DeleteAccountRequest(password = password, confirm = requiredPhrase),
-                            )
+                            try {
+                                client.api.deleteAccount(
+                                    DeleteAccountRequest(password = password, confirm = requiredPhrase),
+                                )
+                            } catch (e: retrofit2.HttpException) {
+                                // 老服务端（本地化确认短语上线之前的版本）只认中文那一串。
+                                // 用户在自己语言里输入的是对的，不该因为服务端还没升级
+                                // 就删不掉账号 —— 被判 400 bad_confirmation 时用兼容值
+                                // 再试一次。其它错误（密码错、最后一个管理员）原样抛出。
+                                if (e.code() == 400 && requiredPhrase != LEGACY_DELETE_PHRASE) {
+                                    client.api.deleteAccount(
+                                        DeleteAccountRequest(password = password, confirm = LEGACY_DELETE_PHRASE),
+                                    )
+                                } else throw e
+                            }
                             onDeleted()
                         } catch (e: Exception) {
                             error = serverErrorMessage(e)

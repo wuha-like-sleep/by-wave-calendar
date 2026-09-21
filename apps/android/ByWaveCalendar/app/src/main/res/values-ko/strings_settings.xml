@@ -32,4 +32,7 @@
     <string name="profilesw_no_profiles">아직 추가된 계정이 없습니다</string>
     <string name="profilesw_add_account">다른 계정 추가</string>
     <string name="profilesw_active_desc">현재 계정</string>
+
+    <!-- Language picker -->
+    <string name="settings_language_follow_system_detail">시스템 설정 사용 · %1$s</string>
 </resources>

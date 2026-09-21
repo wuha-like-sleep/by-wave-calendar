@@ -15,6 +15,7 @@
 
 package cn.bywave.calendar.update
 
+import cn.bywave.calendar.R
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -85,11 +86,11 @@ object ApkDownloader {
         try {
             call.execute().use { resp ->
                 if (!resp.isSuccessful) {
-                    emit(DownloadProgress.Failed("下载失败（HTTP ${resp.code}）"))
+                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_server)))
                     return@flow
                 }
                 val body = resp.body ?: run {
-                    emit(DownloadProgress.Failed("下载失败（空响应）"))
+                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
                     return@flow
                 }
                 val total = body.contentLength().let { if (it > 0) it else release.sizeBytes }
@@ -128,7 +129,7 @@ object ApkDownloader {
                 val actual = sha256(target)
                 if (!actual.equals(release.sha256, ignoreCase = true)) {
                     target.delete()
-                    emit(DownloadProgress.Failed("校验失败：下载的安装包内容与服务器不匹配。请稍后再试"))
+                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_checksum)))
                     return@flow
                 }
             }
@@ -142,7 +143,7 @@ object ApkDownloader {
             throw e
         } catch (e: Exception) {
             target.delete()
-            emit(DownloadProgress.Failed(e.localizedMessage ?: "下载失败"))
+            emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
         }
     }.flowOn(Dispatchers.IO)
 

@@ -78,6 +78,7 @@
     <string name="settings_mirror_desc">Écrit les événements dans le fournisseur de calendrier d\'Android pour que Google Agenda / le calendrier natif / les widgets les voient.</string>
     <string name="settings_reminders_title">Avertir avant le début de l\'événement</string>
     <string name="settings_reminders_desc">Déclenche une notification locale N minutes avant chaque événement. Minuteur entièrement sur l\'appareil ; aucun serveur Apple/Google.</string>
+    <string name="settings_reminders_need_permission">Les rappels sont activés, mais Android n\'autorise pas encore cette app à envoyer des notifications. Appuyez pour autoriser.</string>
     <string name="settings_reminder_lead">Délai d\'avance</string>
     <string name="settings_reminder_lead_5">5 minutes</string>
     <string name="settings_reminder_lead_10">10 minutes</string>
@@ -156,9 +157,9 @@
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">Pour confirmer, saisissez « 删除我的账号 »</string>
-    <string name="delete_account_confirm_mismatch">Saisissez « 删除我的账号 » exactement</string>
+    <string name="delete_account_confirm_phrase">delete my account</string>
+    <string name="delete_account_confirm_label">Pour confirmer, saisissez « %1$s »</string>
+    <string name="delete_account_confirm_mismatch">Saisissez « %1$s » exactement</string>
     <string name="delete_account_failed">Impossible de supprimer le compte</string>
 
     <!-- Booking links (v0.12) -->

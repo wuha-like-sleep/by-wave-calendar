@@ -32,4 +32,7 @@
     <string name="profilesw_no_profiles">还没有绑定账号</string>
     <string name="profilesw_add_account">添加另一个账号</string>
     <string name="profilesw_active_desc">当前账号</string>
+
+    <!-- Language picker -->
+    <string name="settings_language_follow_system_detail">跟随系统 · %1$s</string>
 </resources>

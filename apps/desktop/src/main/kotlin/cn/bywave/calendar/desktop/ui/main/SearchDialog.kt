@@ -57,6 +57,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +72,7 @@ import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import cn.bywave.calendar.desktop.ui.theme.rowShape
+import cn.bywave.calendar.desktop.util.userFacingError
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -110,6 +116,22 @@ fun SearchDialog(
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
+    /** 跳到某条结果所在的那天。按结果行点击和输入框回车共用。 */
+    fun jumpTo(r: SearchResultDTO) {
+        // 点了一条搜索结果，无论如何都得有反应。
+        //
+        // 以前这里是「解析失败就 return」：解析一旦失败，对话框不关、日历不动、
+        // 屏幕上一个字都不多，用户只会以为鼠标没点着，反复点。现在解析走公用的
+        // parseInstant（多认一种不带时区的写法），真解析不了就把话说出来。
+        val day = cn.bywave.calendar.desktop.ui.calendar.parseInstant(r.startsAt)
+            ?.atZone(ZoneId.systemDefault())?.toLocalDate()
+        if (day != null) {
+            onJumpToDate(day)
+        } else {
+            errorMsg = cn.bywave.calendar.desktop.i18n.I18n.t("search.jumpFailed")
+        }
+    }
+
     // Debounced server search. Re-runs whenever the (trimmed) query changes.
     // A fresh keystroke cancels the previous in-flight LaunchedEffect, so
     // only the last query wins — same debounce iOS does (250ms there; 300
@@ -139,7 +161,7 @@ fun SearchDialog(
                 // CancellationException means a newer keystroke superseded
                 // this run — leave state alone so the newer run owns it.
                 if (it is kotlinx.coroutines.CancellationException) throw it
-                errorMsg = it.localizedMessage ?: t("search.failed")
+                errorMsg = userFacingError(it, "search.failed")
                 searching = false
                 hasSearched = true
             }
@@ -170,7 +192,21 @@ fun SearchDialog(
                     singleLine = true,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .focusRequester(focusRequester),
+                        .focusRequester(focusRequester)
+                        // 搜索框里敲回车 = 跳到第一条结果。这是所有搜索框
+                        // 的默认预期,以前回车没反应,用户得手动去点那一行。
+                        // 还在搜 / 没有结果时回车什么都不做,不要弹错。
+                        .onPreviewKeyEvent { e ->
+                            val first = results.firstOrNull()
+                            if (e.type == KeyEventType.KeyDown &&
+                                (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
+                                first != null
+                            ) {
+                                jumpTo(first); true
+                            } else {
+                                false
+                            }
+                        },
                 )
 
                 when {
@@ -222,17 +258,7 @@ fun SearchDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             results.forEach { r ->
-                                SearchResultRow(
-                                    result = r,
-                                    onClick = {
-                                        val day = runCatching {
-                                            Instant.parse(r.startsAt)
-                                                .atZone(ZoneId.systemDefault())
-                                                .toLocalDate()
-                                        }.getOrNull()
-                                        if (day != null) onJumpToDate(day)
-                                    },
-                                )
+                                SearchResultRow(result = r, onClick = { jumpTo(r) })
                             }
                         }
                     }

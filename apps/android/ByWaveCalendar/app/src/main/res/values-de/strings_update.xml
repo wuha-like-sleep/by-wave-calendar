@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-App-Update — Deutsch. -->
+<resources>
+    <string name="update_title_available">Update verfügbar</string>
+    <string name="update_title_mandatory">Update erforderlich</string>
+    <string name="update_mandatory_note">Diese Aktualisierung ist nötig, um weiter zu arbeiten.</string>
+    <string name="update_download_now">Herunterladen</string>
+    <string name="update_later">Später</string>
+    <string name="update_install_now">Installieren</string>
+    <string name="update_install_hint">Dein Gerät fragt nach einer Bestätigung. Beim ersten Mal musst du auch unbekannte Apps erlauben.</string>
+    <string name="update_unknown_sources">Erlaube dieser App in den Systemeinstellungen die Installation unbekannter Apps und versuche es erneut.</string>
+    <string name="update_progress">%1$d von %2$d MB geladen</string>
+    <string name="update_eta_min">Noch etwa %1$d Min. %2$d Sek.</string>
+    <string name="update_eta_sec">Noch etwa %1$d Sek.</string>
+    <string name="update_err_apk_missing">Der Download ist unvollständig. Bitte erneut versuchen.</string>
+    <string name="update_err_installer">Das Installationsprogramm ließ sich nicht öffnen. Bitte später erneut versuchen.</string>
+    <string name="update_err_download">Download fehlgeschlagen. Bitte später erneut versuchen.</string>
+    <string name="update_err_checksum">Der Download konnte nicht verifiziert werden. Bitte später erneut versuchen.</string>
+    <string name="update_err_server">Der Server antwortet nicht. Bitte später erneut versuchen.</string>
+    <string name="update_err_network">Keine Netzwerkverbindung. Verbindung prüfen und erneut versuchen.</string>
+</resources>

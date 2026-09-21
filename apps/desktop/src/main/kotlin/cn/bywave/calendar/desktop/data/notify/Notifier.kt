@@ -17,8 +17,8 @@
 package cn.bywave.calendar.desktop.data.notify
 
 import java.awt.SystemTray
-import java.awt.Toolkit
 import java.awt.TrayIcon
+import cn.bywave.calendar.desktop.util.DebugLog
 
 object Notifier {
 
@@ -35,7 +35,7 @@ object Notifier {
         runCatching {
             if (isMac) notifyMac(title, body) else notifyTray(title, body)
         }.onFailure {
-            System.err.println("[Notifier] failed: ${it.message}")
+            DebugLog.d("Notifier") { "failed: ${it.message}" }
         }
     }
 
@@ -56,17 +56,42 @@ object Notifier {
     private fun notifyTray(title: String, body: String) {
         if (!SystemTray.isSupported()) return
         val tray = SystemTray.getSystemTray()
-        val icon = trayIcon ?: run {
-            // A 1x1 transparent image is enough — we don't want a visible
-            // tray presence, just the API to flash a balloon. Some WMs
-            // require a non-null image.
-            val img = Toolkit.getDefaultToolkit().createImage(ByteArray(0))
-            val ti = TrayIcon(img, "ByWave Calendar")
-            ti.isImageAutoSize = true
-            runCatching { tray.add(ti) }
-            trayIcon = ti
-            ti
+        val existing = trayIcon
+        if (existing != null) {
+            existing.displayMessage(title, body, TrayIcon.MessageType.INFO)
+            return
         }
-        icon.displayMessage(title, body, TrayIcon.MessageType.INFO)
+        // 图标必须是一张真的、已经加载好的位图。
+        //
+        // 这里原本是 `Toolkit.createImage(ByteArray(0))` —— 一个 0 字节的
+        // 图源。createImage 不会当场报错，它返回一个「等着异步解码」的 Image，
+        // 而解码永远失败：SystemTray.add() 在 Windows / 多数 Linux 桌面上
+        // 会因为拿不到像素抛异常，异常又被 runCatching 吞掉，于是 TrayIcon
+        // 根本没进托盘，后面每次 displayMessage() 都是空转。
+        // 结果就是：设置里提醒开关写着「开」，Mac 上响、Win/Linux 上一声不吭。
+        //
+        // 换成自己画一张 16×16 的 ARGB 位图：像素是现成的，不需要解码，
+        // add() 不会因为图源失败。整体全透明 + 中间一个小方块，托盘里几乎
+        // 看不见，但系统认得。
+        val img = java.awt.image.BufferedImage(16, 16, java.awt.image.BufferedImage.TYPE_INT_ARGB)
+        val g = img.createGraphics()
+        try {
+            g.color = java.awt.Color(0x66, 0x40, 0xE9, 0xFF)   // 品牌紫，和窗口里一致
+            g.fillRoundRect(3, 3, 10, 10, 3, 3)
+        } finally {
+            g.dispose()
+        }
+        val ti = TrayIcon(img, "ByWave Calendar")
+        ti.isImageAutoSize = true
+        // add() 失败就别留着这个图标：留着的话下一次会走上面的 early-return
+        // 分支，对着一个没进托盘的图标反复 displayMessage，永远不响也永远
+        // 不再重试。
+        val added = runCatching { tray.add(ti) }.isSuccess
+        if (!added) {
+            DebugLog.d("Notifier") { "SystemTray.add failed; no tray notification this time" }
+            return
+        }
+        trayIcon = ti
+        ti.displayMessage(title, body, TrayIcon.MessageType.INFO)
     }
 }

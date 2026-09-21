@@ -111,9 +111,12 @@ class ProfileStore(context: Context) {
 
     /** Remove a profile entirely. If it was the active one, pick the
      *  next most-recently-used as active (or null if none left). */
-    /** 上一次被动登出的原因，配对页读它显示提示。用户重新配对成功后清空。 */
-    private val _signedOutReason = MutableStateFlow<String?>(null)
-    val signedOutReason: StateFlow<String?> = _signedOutReason.asStateFlow()
+    /** 上一次被动登出的原因，配对页读它显示提示。用户重新登录成功后清空。
+     *
+     *  存的是**资源 id 不是成品文案**：文案要在显示那一刻按当时的界面语言
+     *  取，否则用户在被登出之后改了 APP 语言，这条提示还停在旧语言上。 */
+    private val _signedOutReason = MutableStateFlow<Int?>(null)
+    val signedOutReason: StateFlow<Int?> = _signedOutReason.asStateFlow()
 
     fun clearSignedOutReason() { _signedOutReason.value = null }
 
@@ -124,7 +127,7 @@ class ProfileStore(context: Context) {
      * 都自愈不了，因为启动页只看本地有没有账号记录。唯一出路藏在设置里，
      * 而屏幕上唯一的线索是一行英文 HTTP 401。
      */
-    fun markSignedOut(profileId: String, reason: String) {
+    fun markSignedOut(profileId: String, @androidx.annotation.StringRes reason: Int) {
         _signedOutReason.value = reason
         remove(profileId)
     }

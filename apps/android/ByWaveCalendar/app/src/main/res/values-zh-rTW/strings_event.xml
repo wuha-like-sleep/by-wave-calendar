@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">尚未登入</string>
     <string name="eventedit_err_save_failed">儲存失敗</string>
     <string name="eventedit_err_delete_failed">刪除失敗</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">撤銷這位參與者的邀請？</string>
+    <string name="attendees_revoke_message">%1$s 將不再收到這個事件的更新。</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">放棄這次編輯？</string>
+    <string name="eventedit_discard_message">你填的內容還沒儲存，返回後會遺失。</string>
+    <string name="eventedit_discard_confirm">放棄</string>
+    <string name="eventedit_keep_editing">繼續編輯</string>
+    <string name="eventedit_need_calendar">還沒取得你的日曆清單，暫時無法儲存。連上網後會自動補上。</string>
+    <string name="eventedit_retry">重試</string>
+    <string name="eventedit_need_title">填個標題就能儲存了。</string>
 </resources>

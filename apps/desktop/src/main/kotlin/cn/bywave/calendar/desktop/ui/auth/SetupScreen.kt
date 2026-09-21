@@ -32,6 +32,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,6 +55,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -59,6 +67,7 @@ import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.ui.theme.Dimens
+import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -113,7 +122,7 @@ fun SetupScreen(
                 approveUrl = resp.approveUrl
                 phase = Phase.ShowingQr
             } catch (e: Exception) {
-                errorMessage = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("setup.errorConnect")
+                errorMessage = userFacingError(e, "setup.errorConnect")
                 phase = Phase.ServerUrl
             }
         }
@@ -140,6 +149,8 @@ fun SetupScreen(
                     )
                     ProfileStore.save(profile)
                     r.accessToken?.let(ProfileStore::setAccessToken)
+                    // 重新登录成功 = 上一次被踢的事说完了，横幅该收掉。
+                    ProfileStore.clearSignedOutReason()
                     phase = Phase.Approved
                     onSignedIn()
                     return@LaunchedEffect
@@ -162,51 +173,89 @@ fun SetupScreen(
         }
     }
 
+    // 竖向可滚动:二维码那一屏本身就有 ~600dp 高,窗口被拖矮时如果不滚动,
+    // 「重新生成」按钮和授权码会被直接切在窗口外面,用户以为按钮没了。
+    val outerScroll = rememberScrollState()
+    // 被动登出的原因(改密码 / 设备被移除)。存的是 key,在这里才翻译,
+    // 所以用户被踢之后再切语言,横幅也跟着变。
+    val signedOutKey by ProfileStore.signedOutReasonKey.collectAsState()
+
     Box(
-        modifier = Modifier.fillMaxSize().padding(48.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(outerScroll).padding(48.dp),
         contentAlignment = Alignment.Center,
     ) {
-        when (phase) {
-            Phase.ServerUrl -> ServerUrlPanel(
-                serverUrl = serverUrl,
-                onServerUrlChange = { serverUrl = it; errorMessage = null },
-                errorMessage = errorMessage,
-                onContinue = { beginPairing() },
-            )
-            Phase.GeneratingCode -> Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                CircularProgressIndicator()
-                Text(
-                    remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.requestingQr") },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            signedOutKey?.let { key ->
+                SignedOutBanner(
+                    message = remember(locale, key) { cn.bywave.calendar.desktop.i18n.I18n.t(key) },
                 )
             }
-            Phase.ShowingQr -> QrPanel(
-                approveUrl = approveUrl ?: "",
-                code = code ?: "",
-                pollMessage = pollMessage,
-                onRestart = {
-                    code = null
-                    approveUrl = null
-                    phase = Phase.ServerUrl
-                },
-            )
-            Phase.Approved -> Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    "✓ " + remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.signedIn") },
-                    style = MaterialTheme.typography.headlineSmall,
+            when (phase) {
+                Phase.ServerUrl -> ServerUrlPanel(
+                    serverUrl = serverUrl,
+                    onServerUrlChange = { serverUrl = it; errorMessage = null },
+                    errorMessage = errorMessage,
+                    onContinue = { beginPairing() },
                 )
-                Text(
-                    remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.openingCalendar") },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Phase.GeneratingCode -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.requestingQr") },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Phase.ShowingQr -> QrPanel(
+                    approveUrl = approveUrl ?: "",
+                    code = code ?: "",
+                    pollMessage = pollMessage,
+                    onRestart = {
+                        code = null
+                        approveUrl = null
+                        phase = Phase.ServerUrl
+                    },
                 )
+                Phase.Approved -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "✓ " + remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.signedIn") },
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text(
+                        remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.openingCalendar") },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
+    }
+}
+
+/** 「你被登出了」横幅。只在服务端吊销这台设备之后出现(改密码 / 重置密码 /
+ *  后台移除设备)。放在登录页最上面,因为用户此刻唯一的疑问就是「我刚才好好的
+ *  怎么回登录页了」。 */
+@Composable
+private fun SignedOutBanner(message: String) {
+    Row(
+        modifier = Modifier
+            .widthIn(max = 460.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+        )
     }
 }
 
@@ -243,7 +292,20 @@ private fun ServerUrlPanel(
             singleLine = true,
             isError = errorMessage != null,
             supportingText = errorMessage?.let { { Text(it, color = MaterialTheme.colorScheme.error) } },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                // 桌面端填完地址第一反应是敲回车,不是去点按钮。拦 KeyDown
+                // (不是 KeyUp),否则这一下回车会穿透到刚出现的下一屏。
+                .onPreviewKeyEvent { e ->
+                    if (e.type == KeyEventType.KeyDown &&
+                        (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
+                        serverUrl.isNotBlank()
+                    ) {
+                        onContinue(); true
+                    } else {
+                        false
+                    }
+                },
         )
         Button(
             onClick = onContinue,

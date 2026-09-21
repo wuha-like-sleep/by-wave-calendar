@@ -32,4 +32,7 @@
     <string name="profilesw_no_profiles">アカウントがまだありません</string>
     <string name="profilesw_add_account">別のアカウントを追加</string>
     <string name="profilesw_active_desc">現在のアカウント</string>
+
+    <!-- Language picker -->
+    <string name="settings_language_follow_system_detail">システムに従う · %1$s</string>
 </resources>

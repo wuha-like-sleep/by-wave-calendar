@@ -32,4 +32,7 @@
     <string name="profilesw_no_profiles">Aucun compte ajouté pour le moment</string>
     <string name="profilesw_add_account">Ajouter un autre compte</string>
     <string name="profilesw_active_desc">Compte actuel</string>
+
+    <!-- Language picker -->
+    <string name="settings_language_follow_system_detail">Suivre le système · %1$s</string>
 </resources>

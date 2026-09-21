@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import cn.bywave.calendar.desktop.util.DebugLog
 
 object AppearancePrefs {
 
@@ -53,7 +54,7 @@ object AppearancePrefs {
             Files.createDirectories(storeDir)
             Files.writeString(storeFile, m.code)
         }.onFailure {
-            System.err.println("[AppearancePrefs] failed to persist: ${it.message}")
+            DebugLog.d("AppearancePrefs") { "failed to persist: ${it.message}" }
         }
     }
 }

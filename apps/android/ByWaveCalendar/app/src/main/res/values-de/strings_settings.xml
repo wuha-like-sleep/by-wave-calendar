@@ -32,4 +32,7 @@
     <string name="profilesw_no_profiles">Noch keine Konten hinzugefügt</string>
     <string name="profilesw_add_account">Weiteres Konto hinzufügen</string>
     <string name="profilesw_active_desc">Aktuelles Konto</string>
+
+    <!-- Language picker -->
+    <string name="settings_language_follow_system_detail">Systemsprache · %1$s</string>
 </resources>

@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">ログインしていません。先にログインしてからスキャンしてください</string>
     <string name="pairscan_approve_failed">承認に失敗しました</string>
+    <string name="pairscan_confirm_title">このログインを承認しますか？</string>
+    <string name="pairscan_confirm_desktop_body">承認すると、そのパソコンは下のアカウントでログインし、すべてのカレンダーを閲覧・変更できるようになります。</string>
+    <string name="pairscan_confirm_web_body">承認すると、そのブラウザは下のアカウントでログインし、すべてのカレンダーを閲覧・変更できるようになります。</string>
+    <string name="pairscan_confirm_warning">自分でこのログインを始めたときだけ承認してください。誰かに「スキャンして」と渡されたコードを承認すると、アカウントを渡すことになります。</string>
+    <string name="pairscan_confirm_account">アカウント</string>
+    <string name="pairscan_confirm_server">サーバー</string>
+    <string name="pairscan_confirm_code">ペアリングコード</string>
+    <string name="pairscan_confirm_approve">ログインを承認</string>
+    <string name="pairscan_confirm_no_detail">サーバーは要求元の詳細（端末・IP・時刻）を返していません。</string>
+    <string name="pairscan_confirm_host_mismatch">このコードは別のサーバー（%1$s）のものです。現在ログイン中のサーバーは %2$s です。</string>
     <string name="pairscan_approving_title">承認中…</string>
     <string name="pairscan_approving_body">パソコンをログインさせています。しばらくお待ちください。</string>
     <string name="pairscan_approved_title">✓ 承認しました</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">一致する予定がありません</string>
     <string name="search2_no_results_subtitle">別のキーワードで試してください</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">パスワードが変更されたか、この端末が解除されました。もう一度サインインしてください。</string>
 </resources>

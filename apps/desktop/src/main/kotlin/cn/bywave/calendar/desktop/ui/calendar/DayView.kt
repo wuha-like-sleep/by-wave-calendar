@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.onClick
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.ui.event.EventContextMenu
 import cn.bywave.calendar.desktop.ui.theme.Dimens
+import cn.bywave.calendar.desktop.ui.theme.EventListSkeleton
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import cn.bywave.calendar.desktop.ui.theme.rowShape
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
@@ -58,6 +60,9 @@ fun DayView(
     onEventEdit: (EventDTO) -> Unit = {},
     onEventDuplicate: (EventDTO) -> Unit = {},
     onEventDelete: (EventDTO) -> Unit = {},
+    /** 正在向服务器取这一天的数据。只有在「还一条都没有」时才影响画面:
+     *  有缓存内容时照常显示内容,后台静默刷新。 */
+    loading: Boolean = false,
 ) {
     // Observe locale so the empty-state copy re-renders on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -68,37 +73,54 @@ fun DayView(
               .sortedBy { it.startsAt }
     }
 
-    if (onDay.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            val emptyText = remember(locale, anchor) {
-                cn.bywave.calendar.desktop.i18n.I18n.t(
-                    if (anchor == LocalDate.now()) "day.emptyToday" else "day.empty"
+    // 超宽屏上把列表宽度收住。一行事件在 2560 的显示器上铺满,色点在最左、
+    // 时间在最右,眼睛要横扫一整块屏幕才能把「什么事」和「几点」对上。
+    // 940dp 是一行放得下长标题、又不至于散开的上限。
+    // 这个 Box 在三个状态里都在,所以「没数据」时整块区域不会塌掉。
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        // 注意修饰符顺序:widthIn 必须排在 fillMaxSize 前面。反过来写的话
+        // fillMaxSize 先把约束定死成「min=max=父容器宽度」,widthIn 再想把
+        // 上限压到 940 就会被 coerce 回父容器宽度 —— 限宽静默失效,而且
+        // 只有在足够宽的屏幕上才看得出来。
+        val content = Modifier.widthIn(max = 940.dp).fillMaxSize()
+
+        if (onDay.isEmpty()) {
+            if (loading) {
+                // 首次加载:画骨架,别宣布「今天没有事件」——那时候还不知道。
+                EventListSkeleton(modifier = Modifier.widthIn(max = 940.dp))
+            } else {
+                Box(modifier = content, contentAlignment = Alignment.Center) {
+                    val emptyText = remember(locale, anchor) {
+                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                            if (anchor == LocalDate.now()) "day.emptyToday" else "day.empty"
+                        )
+                    }
+                    Text(
+                        text = emptyText,
+                        color = mutedTextColor(),
+                    )
+                }
+            }
+            return@Box
+        }
+
+        LazyColumn(
+            modifier = content.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(Dimens.rowGap),
+        ) {
+            items(items = onDay, key = { "${it.id}@${it.startsAt}" }) { ev ->
+                EventRow(
+                    event = ev,
+                    calendars = calendars,
+                    onClick = { onEventClick(ev) },
+                    onView = onEventClick,
+                    onEdit = onEventEdit,
+                    onDuplicate = onEventDuplicate,
+                    onDelete = onEventDelete,
                 )
             }
-            Text(
-                text = emptyText,
-                color = mutedTextColor(),
-            )
+            item { Spacer(Modifier.height(24.dp)) }
         }
-        return
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(Dimens.rowGap),
-    ) {
-        items(items = onDay, key = { "${it.id}@${it.startsAt}" }) { ev ->
-            EventRow(
-                event = ev,
-                calendars = calendars,
-                onClick = { onEventClick(ev) },
-                onView = onEventClick,
-                onEdit = onEventEdit,
-                onDuplicate = onEventDuplicate,
-                onDelete = onEventDelete,
-            )
-        }
-        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 

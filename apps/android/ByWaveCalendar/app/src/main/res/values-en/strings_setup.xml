@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">Not signed in. Please sign in first, then scan.</string>
     <string name="pairscan_approve_failed">Approval failed</string>
+    <string name="pairscan_confirm_title">Approve this sign-in?</string>
+    <string name="pairscan_confirm_desktop_body">If you approve, that computer signs in as the account below and can read and change all of your calendars.</string>
+    <string name="pairscan_confirm_web_body">If you approve, that browser signs in as the account below and can read and change all of your calendars.</string>
+    <string name="pairscan_confirm_warning">Only approve if you just started this sign-in yourself. If someone handed you a code and asked you to scan it, approving hands them your account.</string>
+    <string name="pairscan_confirm_account">Account</string>
+    <string name="pairscan_confirm_server">Server</string>
+    <string name="pairscan_confirm_code">Pairing code</string>
+    <string name="pairscan_confirm_approve">Approve sign-in</string>
+    <string name="pairscan_confirm_no_detail">The server says nothing more about who asked (device, IP, time).</string>
+    <string name="pairscan_confirm_host_mismatch">This code comes from a different server: %1$s. You are signed in to %2$s.</string>
     <string name="pairscan_approving_title">Approving…</string>
     <string name="pairscan_approving_body">Signing the computer in, please wait.</string>
     <string name="pairscan_approved_title">✓ Approved</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">No matching events</string>
     <string name="search2_no_results_subtitle">Try a different keyword</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">Your password changed, or this device was removed. Please sign in again.</string>
 </resources>

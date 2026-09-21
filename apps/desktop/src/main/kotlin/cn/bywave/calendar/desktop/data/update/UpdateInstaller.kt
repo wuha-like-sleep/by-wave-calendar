@@ -50,6 +50,7 @@ import java.awt.Desktop
 import java.io.File
 import java.util.concurrent.TimeUnit
 import kotlin.system.exitProcess
+import cn.bywave.calendar.desktop.util.DebugLog
 
 object UpdateInstaller {
 
@@ -215,7 +216,7 @@ object UpdateInstaller {
                 .start()
             true
         } catch (e: Exception) {
-            System.err.println("[ByWave Updater] windows spawn failed: ${e.message}")
+            DebugLog.d("ByWave Updater") { "windows spawn failed: ${e.message}" }
             runCatching { Desktop.getDesktop().open(msiFile) }
             _state.value = InstallState.FallbackOpenedInFinder(
                 cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"),

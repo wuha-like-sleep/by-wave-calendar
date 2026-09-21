@@ -15,11 +15,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,6 +56,10 @@ fun ProfileSwitcher(
     onRemove: (String) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    // 这个 X 以前是点一下当场删账号。它挨着「切换到这个账号」的可点区域,
+    // 只有 24dp 见方,误点成本却是「凭据没了,得拿手机重新扫码」。
+    // 和设置页里的移除走同一套文案和同一道确认。
+    var removeTarget by remember { mutableStateOf<Profile?>(null) }
     // Observe locale so the dropdown labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -128,7 +137,7 @@ fun ProfileSwitcher(
                                     // top-bar button.
                                     if (!isActive) {
                                         IconButton(
-                                            onClick = { onRemove(p.deviceId); open = false },
+                                            onClick = { removeTarget = p; open = false },
                                             modifier = Modifier.size(24.dp),
                                         ) {
                                             Icon(
@@ -168,5 +177,40 @@ fun ProfileSwitcher(
                 }
             }
         }
+    }
+
+    removeTarget?.let { target ->
+        val cancel = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("common.cancel") }
+        AlertDialog(
+            onDismissRequest = { removeTarget = null },
+            title = {
+                Text(t("settings.profileMgmt.removeTitle"), fontWeight = FontWeight.SemiBold)
+            },
+            text = {
+                Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                        "settings.profileMgmt.removeWarning",
+                        mapOf("email" to target.email),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.widthIn(max = 420.dp),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        removeTarget = null
+                        onRemove(target.deviceId)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text(t("settings.profileMgmt.removeConfirm")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { removeTarget = null }) { Text(cancel) }
+            },
+        )
     }
 }

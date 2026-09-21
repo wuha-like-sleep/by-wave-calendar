@@ -16,6 +16,8 @@ package cn.bywave.calendar.ui.event
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -57,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import cn.bywave.calendar.R
@@ -108,9 +111,13 @@ private fun EventDetailContent(
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
 
+    // 这张卡片以前不滚动。备注长一点（会议纪要、议程）就把底下的「编辑」
+    // 按钮顶出屏幕，而 ModalBottomSheet 本身也滑不动——结果是内容越多的
+    // 事件越改不了，只能从长按菜单绕。
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -129,12 +136,16 @@ private fun EventDetailContent(
                     text = event.summary,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 if (cal != null) {
                     Text(
                         text = cal,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedTextColor(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -383,7 +394,7 @@ private fun DetailRow(icon: ImageVector, label: String, value: String) {
 
 // Locale-aware date/time so a non-Chinese app language renders e.g.
 // "Jul 2, 2026, 2:30 PM" / "2026年7月2日 14:30" instead of a hardcoded
-// Chinese pattern. Follows the in-app language (AppCompat per-app locale
+// Chinese pattern. Follows the in-app language (per-app locale
 // → Configuration.locales), passed in from the composable.
 private fun dateTimeFmt(locale: Locale): DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)

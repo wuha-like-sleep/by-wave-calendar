@@ -19,6 +19,8 @@ import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import cn.bywave.calendar.desktop.data.notify.ReminderFeed
+import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -162,7 +164,7 @@ class CalendarState(
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(
                     loading = false,
-                    error = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.loadFailed"),
+                    error = userFacingError(e, "error.loadFailed"),
                 )
             }
         }
@@ -223,6 +225,25 @@ class CalendarState(
         _ui.value = _ui.value.copy(activeSheet = null, formError = null)
     }
 
+    /** Esc 的落点:把当前挂着的所有模态都收掉。
+     *
+     *  以前 Esc 只走 closeSheet(),而重复事件的「改这一个 / 改以后 / 改整个
+     *  系列」选择器不是 activeSheet,是 pendingScopeEdit / pendingScopeDelete
+     *  这两个字段 —— 于是这个对话框成了全 App 唯一按 Esc 关不掉的窗口,
+     *  只能去点「取消」。把三处一起清,语义才和用户理解的「Esc = 退出当前
+     *  这一步」一致。
+     *
+     *  清 pending 等价于用户点了取消:resolveScope*(null) 也只是把它置空、
+     *  不发请求。 */
+    fun dismissAllModals() {
+        _ui.value = _ui.value.copy(
+            activeSheet = null,
+            formError = null,
+            pendingScopeEdit = null,
+            pendingScopeDelete = null,
+        )
+    }
+
     // ---- Create / update / delete ----
 
     /** Create a new event. Closes the sheet + reloads on success.
@@ -244,19 +265,25 @@ class CalendarState(
                 client.createEvent(body, clientUid = clientUid)
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
+                // 提醒有自己的一份数据（ReminderFeed），跟这里的 load() 不是同一份。
+                // 本机刚建的会要立刻进那一份，否则最坏要等到它下一个刷新间隔——
+                // 「新建一个 10 分钟后的会，结果没响」就是这么来的。
+                ReminderFeed.requestRefresh()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.saveFailed"))
+                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.saveFailed"))
             }
         }
     }
 
-    /** Natural-language quick-add: parse a phrase into event fields via the
-     *  shared server endpoint. `now` = local wall-clock so 明天/周五 resolve in
-     *  the user's zone. Returns null on any failure (incl. old-server 404) so
-     *  the dialog just leaves the form untouched. */
-    suspend fun parseEvent(text: String): ParseEventResult? {
+    /** 一句话录入：把「明天下午三点牙医」交给服务端解析成字段。
+     *  `now` 传本地墙上时间，好让「明天 / 周五」按用户所在时区算。
+     *
+     *  以前这里是 `runCatching{...}.getOrNull()`，任何失败都吞成 null，而调用方
+     *  拿到 null 就什么都不做——用户看到的是：输入一句话、点「解析」、转一下、
+     *  表单纹丝不动，也没有任何说明。现在把失败原样交出去，由对话框贴一行提示。 */
+    suspend fun parseEvent(text: String): Result<ParseEventResult> {
         val now = java.time.LocalDateTime.now().withNano(0).toString()
-        return runCatching { client.parseEvent(text, now) }.getOrNull()
+        return runCatching { client.parseEvent(text, now) }
     }
 
     /** Update an event. If `sourceRrule` is non-null we park the update
@@ -295,8 +322,9 @@ class CalendarState(
                 client.updateEvent(sourceId, body)
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load()
+                ReminderFeed.requestRefresh()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.saveFailed"))
+                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.saveFailed"))
             }
         }
     }
@@ -335,8 +363,8 @@ class CalendarState(
      *  series, the same data-loss bug we already fix for save+delete. */
     fun applyMove(event: EventDTO, deltaMinutes: Int, deltaDays: Int) {
         if (deltaMinutes == 0 && deltaDays == 0) return
-        val origStart = runCatching { java.time.Instant.parse(event.startsAt) }.getOrNull() ?: return
-        val origEnd = runCatching { java.time.Instant.parse(event.endsAt) }.getOrNull() ?: return
+        val origStart = parseInstant(event.startsAt) ?: return
+        val origEnd = parseInstant(event.endsAt) ?: return
         val totalMin = deltaMinutes.toLong() + deltaDays.toLong() * 24L * 60L
         val newStart = origStart.plus(totalMin, java.time.temporal.ChronoUnit.MINUTES)
         val newEnd = origEnd.plus(totalMin, java.time.temporal.ChronoUnit.MINUTES)
@@ -353,8 +381,8 @@ class CalendarState(
      *  event to end at a new time, keeping start unchanged. */
     fun applyResize(event: EventDTO, deltaMinutes: Int) {
         if (deltaMinutes == 0) return
-        val origStart = runCatching { java.time.Instant.parse(event.startsAt) }.getOrNull() ?: return
-        val origEnd = runCatching { java.time.Instant.parse(event.endsAt) }.getOrNull() ?: return
+        val origStart = parseInstant(event.startsAt) ?: return
+        val origEnd = parseInstant(event.endsAt) ?: return
         // Clamp: end must stay at least 15 min after start.
         val candidate = origEnd.plus(deltaMinutes.toLong(), java.time.temporal.ChronoUnit.MINUTES)
         val minEnd = origStart.plus(15L, java.time.temporal.ChronoUnit.MINUTES)
@@ -381,8 +409,10 @@ class CalendarState(
                 else null
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null, undoDelete = undo ?: _ui.value.undoDelete)
                 load()
+                // 删掉的会不该再响。
+                ReminderFeed.requestRefresh()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.deleteFailed"))
+                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.deleteFailed"))
             }
         }
     }
@@ -396,8 +426,9 @@ class CalendarState(
                 client.restoreEvent(undo.eventId)
                 _ui.value = _ui.value.copy(undoDelete = null)
                 load()
+                ReminderFeed.requestRefresh()
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(formError = e.localizedMessage ?: cn.bywave.calendar.desktop.i18n.I18n.t("error.deleteFailed"))
+                _ui.value = _ui.value.copy(formError = userFacingError(e, "error.deleteFailed"))
             }
         }
     }
@@ -421,39 +452,46 @@ class CalendarState(
         }
     }
 
-    /** Inclusive start, exclusive end — same convention the server uses. */
-    private fun windowFor(mode: ViewMode, anchor: LocalDate): Pair<java.time.Instant, java.time.Instant> {
-        val zone = ZoneId.systemDefault()
-        return when (mode) {
-            ViewMode.Day -> {
-                val s = anchor.atStartOfDay(zone).toInstant()
-                val e = anchor.plusDays(1).atStartOfDay(zone).toInstant()
-                s to e
-            }
-            ViewMode.Week -> {
-                val ws = startOfWeek(anchor)
-                ws.atStartOfDay(zone).toInstant() to
-                    ws.plusDays(7).atStartOfDay(zone).toInstant()
-            }
-            ViewMode.Month -> {
-                val cells = monthGridDays(YearMonth.from(anchor))
-                cells.first().atStartOfDay(zone).toInstant() to
-                    cells.last().plusDays(1).atStartOfDay(zone).toInstant()
-            }
-            // Agenda: a flat list from the anchor day forward for
-            // AGENDA_WINDOW_DAYS. The window starts at the anchor (today by
-            // default) so it reads as "what's coming up".
-            ViewMode.Agenda -> {
-                val s = anchor.atStartOfDay(zone).toInstant()
-                val e = anchor.plusDays(AGENDA_WINDOW_DAYS).atStartOfDay(zone).toInstant()
-                s to e
-            }
-        }
-    }
-
     companion object {
         private val ISO_INSTANT: DateTimeFormatter = DateTimeFormatter.ISO_INSTANT
         /** Length of the Agenda view's rolling window, in days. */
         private const val AGENDA_WINDOW_DAYS = 30L
+
+        /** 当前视图要拉的那一段。前闭后开——和服务端同一套约定。
+         *
+         *  注意这里返回的是**界面正好要画的那一段**：日视图 24 小时、周视图 7 天、
+         *  月视图当月那 6 周格子。提醒不能用它当数据源（用了就变成「只提醒你此刻
+         *  正在看的那几天」），提醒走 ReminderFeed.windowFor()。 */
+        internal fun windowFor(
+            mode: ViewMode,
+            anchor: LocalDate,
+            zone: ZoneId = ZoneId.systemDefault(),
+        ): Pair<java.time.Instant, java.time.Instant> {
+            return when (mode) {
+                ViewMode.Day -> {
+                    val s = anchor.atStartOfDay(zone).toInstant()
+                    val e = anchor.plusDays(1).atStartOfDay(zone).toInstant()
+                    s to e
+                }
+                ViewMode.Week -> {
+                    val ws = startOfWeek(anchor)
+                    ws.atStartOfDay(zone).toInstant() to
+                        ws.plusDays(7).atStartOfDay(zone).toInstant()
+                }
+                ViewMode.Month -> {
+                    val cells = monthGridDays(YearMonth.from(anchor))
+                    cells.first().atStartOfDay(zone).toInstant() to
+                        cells.last().plusDays(1).atStartOfDay(zone).toInstant()
+                }
+                // Agenda: a flat list from the anchor day forward for
+                // AGENDA_WINDOW_DAYS. The window starts at the anchor (today by
+                // default) so it reads as "what's coming up".
+                ViewMode.Agenda -> {
+                    val s = anchor.atStartOfDay(zone).toInstant()
+                    val e = anchor.plusDays(AGENDA_WINDOW_DAYS).atStartOfDay(zone).toInstant()
+                    s to e
+                }
+            }
+        }
     }
 }

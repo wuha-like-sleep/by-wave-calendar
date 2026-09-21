@@ -86,9 +86,38 @@ data class EventEditUiState(
     val deleting: Boolean = false,
     val errorMessage: String? = null,
     val finished: Boolean = false,
+    /** 打开编辑器那一刻所有可编辑字段的指纹。bootstrap 里写入一次，
+     *  之后不再变，用来判断「用户到底改过东西没有」。 */
+    val pristine: String = "",
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank() && !saving
+
+    /** 当前字段的指纹。字段增删时记得同步这里，否则新字段的改动会被
+     *  当成「没改过」——那就又变成静默丢弃。 */
+    val fingerprint: String
+        get() = listOf(
+            calendarId, summary, location, description, url, meetingPassword,
+            start.toString(), end.toString(), allDay.toString(),
+        ).joinToString("\u0000")
+
+    /** 有未保存的改动。退出前要拦一下：新建/编辑事件里填了一半的内容
+     *  被返回键静默清掉，用户不会知道是自己按错了还是 APP 丢了数据。 */
+    val hasUnsavedChanges: Boolean
+        get() = !saving && !deleting && !finished && fingerprint != pristine
+}
+
+/**
+ * 日历列表后到时的状态迁移。抽成纯函数是为了能在纯 JVM 单元测试里跑 ——
+ * EventEditViewModel 构造时就取 BywaveApp.instance，单测里根本 new 不出来。
+ */
+internal fun EventEditUiState.withCalendars(calendars: List<CalendarMeta>): EventEditUiState {
+    if (this.calendars == calendars) return this
+    val nextId = if (calendarId.isBlank()) calendars.firstOrNull()?.id.orEmpty() else calendarId
+    val updated = copy(calendars = calendars, calendarId = nextId)
+    // 用户还没动过表单的话，基准指纹要跟着挪，否则「日历后到」会被当成
+    // 用户的改动，一按返回就凭空弹出「放弃修改？」。
+    return if (fingerprint == pristine) updated.copy(pristine = updated.fingerprint) else updated
 }
 
 class EventEditViewModel : ViewModel() {
@@ -101,6 +130,12 @@ class EventEditViewModel : ViewModel() {
     val state: StateFlow<EventEditUiState> = _state.asStateFlow()
 
     fun bootstrap(mode: EventEditMode, calendars: List<CalendarMeta>) {
+        bootstrapFields(mode, calendars)
+        // 所有分支都已经把初始字段填好了，这里统一记一次基准指纹。
+        _state.update { it.copy(pristine = it.fingerprint) }
+    }
+
+    private fun bootstrapFields(mode: EventEditMode, calendars: List<CalendarMeta>) {
         when (mode) {
             is EventEditMode.Create -> {
                 val start = mode.seedStart ?: nextHalfHour()
@@ -168,6 +203,22 @@ class EventEditViewModel : ViewModel() {
                 )
             }
         }
+    }
+
+    /**
+     * 日历列表后到时补进来。
+     *
+     * 冷启动头两秒点「+」，calendars 还是空的：bootstrap 里
+     * `calendars.firstOrNull()?.id` 取到空串，而 canSubmit 要求它非空 ——
+     * 保存按钮从此永远是灰的。而 EventEditScreen 的 bootstrap 那个
+     * LaunchedEffect 的 key 里不含 calendars，日历后到也不会重新 bootstrap。
+     * 离线首启（缓存空 + 同步失败）时这是**永久**状态。
+     *
+     * 这里不走重新 bootstrap：那会把用户已经填了一半的内容冲掉。只补两样
+     * 东西 —— 列表本身，以及还没选中时的默认日历。
+     */
+    fun onCalendarsChanged(calendars: List<CalendarMeta>) {
+        _state.update { it.withCalendars(calendars) }
     }
 
     fun onSummary(v: String) = _state.update { it.copy(summary = v, errorMessage = null) }

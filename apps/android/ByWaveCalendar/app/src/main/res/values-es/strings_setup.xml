@@ -4,6 +4,16 @@
     <!-- Desktop / Web pair scanner (DesktopPairScannerScreen) -->
     <string name="pairscan_not_signed_in">No has iniciado sesión. Inicia sesión primero y luego escanea</string>
     <string name="pairscan_approve_failed">Error al aprobar</string>
+    <string name="pairscan_confirm_title">¿Aprobar este inicio de sesión?</string>
+    <string name="pairscan_confirm_desktop_body">Si apruebas, ese ordenador iniciará sesión con la cuenta de abajo y podrá ver y modificar todos tus calendarios.</string>
+    <string name="pairscan_confirm_web_body">Si apruebas, ese navegador iniciará sesión con la cuenta de abajo y podrá ver y modificar todos tus calendarios.</string>
+    <string name="pairscan_confirm_warning">Aprueba solo si acabas de iniciar tú mismo este inicio de sesión. Si alguien te da un código para escanear, aprobarlo equivale a entregarle tu cuenta.</string>
+    <string name="pairscan_confirm_account">Cuenta</string>
+    <string name="pairscan_confirm_server">Servidor</string>
+    <string name="pairscan_confirm_code">Código de emparejamiento</string>
+    <string name="pairscan_confirm_approve">Aprobar inicio de sesión</string>
+    <string name="pairscan_confirm_no_detail">El servidor no indica nada más sobre quién lo solicita (dispositivo, IP, hora).</string>
+    <string name="pairscan_confirm_host_mismatch">Este código procede de otro servidor: %1$s. Tu sesión está iniciada en %2$s.</string>
     <string name="pairscan_approving_title">Aprobando…</string>
     <string name="pairscan_approving_body">Iniciando sesión en el ordenador, espera un momento.</string>
     <string name="pairscan_approved_title">✓ Aprobado</string>
@@ -45,4 +55,7 @@
     <string name="search2_no_results_title">No hay eventos coincidentes</string>
     <string name="search2_no_results_subtitle">Prueba con otra palabra clave</string>
 
+
+    <!-- 被动登出时配对页顶部的说明 -->
+    <string name="setup_signed_out_reason">Tu contraseña cambió o se quitó este dispositivo. Vuelve a iniciar sesión.</string>
 </resources>

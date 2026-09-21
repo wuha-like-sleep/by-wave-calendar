@@ -71,6 +71,20 @@ dependencies {
     // straight into Compose via toComposeImageBitmap().
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:javase:3.5.3")
+
+    // 单元测试。桌面端以前没有 test source set —— 于是「提醒到底读的是哪一份
+    // 数据」「8 种语言的文案齐不齐」这类问题只能靠人肉点，点不到就一直挂着。
+    // kotlin("test") 会跟着下面的 useJUnitPlatform() 解析成 JUnit 5 变体。
+    testImplementation(kotlin("test"))
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "failed", "skipped")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 kotlin {

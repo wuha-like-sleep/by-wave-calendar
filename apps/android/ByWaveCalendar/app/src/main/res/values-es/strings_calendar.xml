@@ -8,4 +8,11 @@
     <string name="cal_switch_account">Cambiar de cuenta</string>
     <string name="cal_delete_message">«%1$s» se eliminará de forma permanente. Esta acción no se puede deshacer.</string>
     <string name="day_empty_subtitle">Toca + abajo a la derecha para crear un evento</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">No se pudieron cargar los eventos</string>
+    <string name="cal_err_delete_failed">No se pudo eliminar</string>
+    <string name="cal_err_undo_failed">No se pudo deshacer</string>
+    <string name="cal_err_signout_failed">No se pudo cerrar sesión</string>
+    <string name="cal_err_not_signed_in">Inicia sesión primero</string>
 </resources>

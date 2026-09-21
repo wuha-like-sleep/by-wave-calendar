@@ -9,9 +9,13 @@
 
 package cn.bywave.calendar.desktop.ui.main
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -61,6 +66,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
@@ -97,20 +104,42 @@ fun MainScreen(
     val p = profile
 
     val scope = rememberCoroutineScope()
-    val state = remember(p?.serverUrl, p?.userId) {
-        if (p == null) null else CalendarState(ApiClient(p.serverUrl), scope)
+    // 一个账号一个 ApiClient,日历视图和提醒共用它。
+    //
+    // 共用是有意的:刷新令牌的单飞锁(ApiClient.refreshMutex)是**实例**级别的。
+    // 给提醒单开一个 ApiClient,就等于多一个每两分钟固定发请求的实例,迟早和
+    // 用户的操作同时撞上 401 —— 两个实例各自去换令牌,服务端轮换之后必然有
+    // 一个手里拿的是旧的,刷新失败会走 markSignedOut(),把人直接踢回登录页。
+    val client = remember(p?.serverUrl, p?.userId) {
+        if (p == null) null else ApiClient(p.serverUrl)
+    }
+    val state = remember(client) {
+        if (client == null) null else CalendarState(client, scope)
     }
 
     LaunchedEffect(state) { state?.load() }
 
-    // Event-reminder scheduler: polls the loaded events and fires a native
-    // desktop notification `leadMinutes` before each event's start. Bound to
-    // the current state's event flow; re-binds on profile switch. Lives as
-    // long as the main screen (the whole session). Honors ReminderPrefs
-    // (on/off + lead) read live each tick.
-    LaunchedEffect(state) {
-        val s = state ?: return@LaunchedEffect
-        cn.bywave.calendar.desktop.data.notify.ReminderScheduler.run(s.ui)
+    // 事件提醒。
+    //
+    // 数据源是 ReminderFeed,不是 state.ui —— state.ui 里装的是「当前视图正好
+    // 要画的那一段」(日视图 24 小时 / 周视图 7 天 / 月视图那 6 周格子),接过来
+    // 就变成「提醒只对你此刻正在看的那几天生效」,而且不响的时候界面上没有任何
+    // 迹象。ReminderFeed 自己按「从现在起 N 天」拉,跟用户在看哪一天无关。
+    //
+    // 两个协程放在同一个 LaunchedEffect 里,是为了保证「先清干净、再开跑」:
+    // 切账号时上一个账号的事件和「响过」记录都要先归零。
+    LaunchedEffect(client) {
+        val c = client ?: return@LaunchedEffect
+        cn.bywave.calendar.desktop.data.notify.ReminderFeed.reset()
+        cn.bywave.calendar.desktop.data.notify.ReminderScheduler.reset()
+        kotlinx.coroutines.coroutineScope {
+            launch {
+                cn.bywave.calendar.desktop.data.notify.ReminderFeed.run { from, to ->
+                    c.events(from = from, to = to).events
+                }
+            }
+            launch { cn.bywave.calendar.desktop.data.notify.ReminderScheduler.run() }
+        }
     }
 
     // Background update check on every profile switch + first mount.
@@ -164,6 +193,14 @@ fun MainScreen(
         }
     }
 
+    // 切账号 / 被登出时收掉搜索框。
+    //
+    // SearchDialog 的结果列表是它自己的 state,而它只是换了个 serverUrl
+    // 参数 —— 组件没被重建,上一个账号的搜索结果会原样留在屏幕上,点一下
+    // 还会跳到那条并不属于当前账号的日期。切账号时直接关掉最干净。
+    // 这个 effect 首次挂载也会跑一次,那时 showSearch 本来就是 false。
+    LaunchedEffect(state) { showSearch = false }
+
     // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
     // Re-attaches when CalendarState rebuilds on profile switch. Escape
     // closes any open sheet (dialog focus consumes letter keys but Esc
@@ -178,13 +215,18 @@ fun MainScreen(
                 ShortcutAction.Previous -> s.previous()
                 ShortcutAction.Next -> s.next()
                 ShortcutAction.Escape -> {
-                    // Esc precedence: search dialog, then Settings page,
-                    // then any open sheet/dialog. The search dialog floats
-                    // on top so it "owns" the keystroke when visible.
+                    // Esc 的优先级:更新对话框 → 搜索框 → 设置页 → 其它模态。
+                    // 更新对话框排最前,因为它是浮在所有东西之上的那一层;
+                    // 以前这条链里没有它,于是 Cmd+U 弹出来的那个框成了唯一
+                    // 一个按 Esc 关不掉的窗口(只能去点按钮)。
                     when {
+                        showUpdateDialog -> {
+                            showUpdateDialog = false
+                            UpdateChecker.dismiss()
+                        }
                         showSearch -> showSearch = false
                         showSettings -> showSettings = false
-                        else -> s.closeSheet()
+                        else -> s.dismissAllModals()
                     }
                 }
                 ShortcutAction.OpenSearch -> { showSearch = true }
@@ -219,103 +261,117 @@ fun MainScreen(
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val anchorLabel = remember(locale, ui.mode, ui.anchor) { anchorLabelFor(ui.mode, ui.anchor) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopBar(
-            mode = ui.mode,
-            anchorLabel = anchorLabel,
-            loading = ui.loading,
-            onModeChange = { state.setMode(it) },
-            onPrev = { state.previous() },
-            onToday = { state.today() },
-            onNext = { state.next() },
-            onRefresh = { state.load() },
-            onNew = { state.openCreate() },
-            onOpenSearch = { showSearch = true },
-            // Settings page hosts sign-out + all account / security /
-            // appearance / about controls. Previously the toolbar had
-            // its own Logout icon — removed in favor of the Settings
-            // path so a misclick can't drop the active profile.
-            onOpenSettings = { showSettings = true },
-        )
-        HorizontalDivider()
+    // 整屏宽度决定顶栏和侧栏的形态。窗口最小宽度是 960dp(见 Main.kt),
+    // 在那个宽度上顶栏原样排会溢出——Row 溢出是静默裁剪,被切掉的正好是
+    // 排在最后的设置/刷新/搜索三个图标,用户会以为设置入口没了。
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val compact = maxWidth < 1180.dp
+        // 侧栏在窄窗口收窄而不是消失:账号切换器和日历色卡都在里面,整块拿掉
+        // 用户就没法切账号了。
+        val sidebarWidth = if (compact) 210.dp else 260.dp
 
-        // Staged-update banner (re-added in v0.8; a minimal banner was
-        // removed in v0.7.3). Non-blocking: a new version has already
-        // downloaded in the background and will apply on quit. We offer
-        // an immediate "立即重启" plus a "×" to hide the bar for this
-        // session (the update still applies on quit regardless).
-        val stagedFile = staged
-        if (stagedFile != null && !bannerDismissed) {
-            StagedUpdateBanner(
-                versionName = updateInfo?.versionName,
-                onRestartNow = { UpdateInstaller.staged.value?.let { UpdateInstaller.install(it) } },
-                onDismiss = { bannerDismissed = true },
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopBar(
+                mode = ui.mode,
+                anchorLabel = anchorLabel,
+                loading = ui.loading,
+                compact = compact,
+                onModeChange = { state.setMode(it) },
+                onPrev = { state.previous() },
+                onToday = { state.today() },
+                onNext = { state.next() },
+                onRefresh = { state.load() },
+                onNew = { state.openCreate() },
+                onOpenSearch = { showSearch = true },
+                // Settings page hosts sign-out + all account / security /
+                // appearance / about controls. Previously the toolbar had
+                // its own Logout icon — removed in favor of the Settings
+                // path so a misclick can't drop the active profile.
+                onOpenSettings = { showSettings = true },
             )
-        }
+            HorizontalDivider()
 
-        Row(modifier = Modifier.fillMaxSize()) {
-            Sidebar(
-                active = p,
-                profiles = profiles,
-                calendars = ui.calendars,
-                onProfileSelect = { ProfileStore.setActive(it) },
-                onAddAccount = onAddAccount,
-                onProfileRemove = { ProfileStore.remove(it) },
-            )
-            VerticalDivider()
-            Box(modifier = Modifier.fillMaxSize()) {
-                when (ui.mode) {
-                    ViewMode.Day -> DayView(
-                        anchor = ui.anchor,
-                        events = ui.events,
-                        calendars = ui.calendars,
-                        onEventClick = { state.openDetail(it) },
-                        onEventEdit = { state.openEdit(it) },
-                        onEventDuplicate = { state.openDuplicate(it) },
-                        onEventDelete = { state.delete(it) },
-                    )
-                    ViewMode.Week -> WeekView(
-                        weekStart = startOfWeek(ui.anchor),
-                        events = ui.events,
-                        calendars = ui.calendars,
-                        onEventClick = { state.openDetail(it) },
-                        onEventEdit = { state.openEdit(it) },
-                        onEventDuplicate = { state.openDuplicate(it) },
-                        onEventDelete = { state.delete(it) },
-                        onEventMove = { ev, dm, dd -> state.applyMove(ev, dm, dd) },
-                        onEventResize = { ev, dm -> state.applyResize(ev, dm) },
-                        onEmptySlotClick = { seedTime -> state.openCreate(seedTime) },
-                    )
-                    ViewMode.Month -> MonthView(
-                        anchor = ui.anchor,
-                        events = ui.events,
-                        calendars = ui.calendars,
-                        onDayClick = { state.jumpToDay(it) },
-                        onEventClick = { state.openDetail(it) },
-                        onEventEdit = { state.openEdit(it) },
-                        onEventDuplicate = { state.openDuplicate(it) },
-                        onEventDelete = { state.delete(it) },
-                    )
-                    ViewMode.Agenda -> AgendaView(
-                        anchor = ui.anchor,
-                        events = ui.events,
-                        calendars = ui.calendars,
-                        onEventClick = { state.openDetail(it) },
-                        onEventEdit = { state.openEdit(it) },
-                        onEventDuplicate = { state.openDuplicate(it) },
-                        onEventDelete = { state.delete(it) },
-                    )
-                }
-                if (ui.error != null) {
-                    ErrorBanner(message = ui.error!!, onRetry = { state.load() })
-                }
-                ui.undoDelete?.let { undo ->
-                    UndoDeleteSnackbar(
-                        undo = undo,
-                        onUndo = { state.undoLastDelete() },
-                        onTimeout = { state.dismissUndoDelete(undo.token) },
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-                    )
+            // Staged-update banner (re-added in v0.8; a minimal banner was
+            // removed in v0.7.3). Non-blocking: a new version has already
+            // downloaded in the background and will apply on quit. We offer
+            // an immediate "立即重启" plus a "×" to hide the bar for this
+            // session (the update still applies on quit regardless).
+            val stagedFile = staged
+            if (stagedFile != null && !bannerDismissed) {
+                StagedUpdateBanner(
+                    versionName = updateInfo?.versionName,
+                    onRestartNow = { UpdateInstaller.staged.value?.let { UpdateInstaller.install(it) } },
+                    onDismiss = { bannerDismissed = true },
+                )
+            }
+
+            Row(modifier = Modifier.fillMaxSize()) {
+                Sidebar(
+                    width = sidebarWidth,
+                    active = p,
+                    profiles = profiles,
+                    calendars = ui.calendars,
+                    onProfileSelect = { ProfileStore.setActive(it) },
+                    onAddAccount = onAddAccount,
+                    onProfileRemove = { ProfileStore.remove(it) },
+                )
+                VerticalDivider()
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when (ui.mode) {
+                        ViewMode.Day -> DayView(
+                            anchor = ui.anchor,
+                            events = ui.events,
+                            calendars = ui.calendars,
+                            loading = ui.loading,
+                            onEventClick = { state.openDetail(it) },
+                            onEventEdit = { state.openEdit(it) },
+                            onEventDuplicate = { state.openDuplicate(it) },
+                            onEventDelete = { state.delete(it) },
+                        )
+                        ViewMode.Week -> WeekView(
+                            weekStart = startOfWeek(ui.anchor),
+                            events = ui.events,
+                            calendars = ui.calendars,
+                            onEventClick = { state.openDetail(it) },
+                            onEventEdit = { state.openEdit(it) },
+                            onEventDuplicate = { state.openDuplicate(it) },
+                            onEventDelete = { state.delete(it) },
+                            onEventMove = { ev, dm, dd -> state.applyMove(ev, dm, dd) },
+                            onEventResize = { ev, dm -> state.applyResize(ev, dm) },
+                            onEmptySlotClick = { seedTime -> state.openCreate(seedTime) },
+                        )
+                        ViewMode.Month -> MonthView(
+                            anchor = ui.anchor,
+                            events = ui.events,
+                            calendars = ui.calendars,
+                            onDayClick = { state.jumpToDay(it) },
+                            onEventClick = { state.openDetail(it) },
+                            onEventEdit = { state.openEdit(it) },
+                            onEventDuplicate = { state.openDuplicate(it) },
+                            onEventDelete = { state.delete(it) },
+                        )
+                        ViewMode.Agenda -> AgendaView(
+                            anchor = ui.anchor,
+                            events = ui.events,
+                            calendars = ui.calendars,
+                            loading = ui.loading,
+                            onEventClick = { state.openDetail(it) },
+                            onEventEdit = { state.openEdit(it) },
+                            onEventDuplicate = { state.openDuplicate(it) },
+                            onEventDelete = { state.delete(it) },
+                        )
+                    }
+                    if (ui.error != null) {
+                        ErrorBanner(message = ui.error!!, onRetry = { state.load() })
+                    }
+                    ui.undoDelete?.let { undo ->
+                        UndoDeleteSnackbar(
+                            undo = undo,
+                            onUndo = { state.undoLastDelete() },
+                            onTimeout = { state.dismissUndoDelete(undo.token) },
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                        )
+                    }
                 }
             }
         }
@@ -489,11 +545,45 @@ private fun anchorLabelFor(mode: ViewMode, anchor: java.time.LocalDate): String 
     )
 }
 
+/** 修饰键在这台机器上叫什么。macOS 写 ⌘,其它平台写 Ctrl —— 提示里
+ *  印错了比不印更糟。 */
+private val MOD_LABEL: String =
+    if (System.getProperty("os.name").orEmpty().lowercase().contains("mac")) "⌘" else "Ctrl+"
+
+/** 带快捷键提示的悬浮气泡。桌面端的快捷键如果不写在某处,等于没有:
+ *  顶栏这几个图标按钮以前连名字都不显示,鼠标停上去什么也不出现,
+ *  Cmd+F / Cmd+R / Cmd+, 只有读过源码的人知道。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun WithTooltip(text: String, shortcut: String? = null, content: @Composable () -> Unit) {
+    TooltipArea(
+        tooltip = {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                tonalElevation = 4.dp,
+                shadowElevation = 4.dp,
+            ) {
+                Text(
+                    text = if (shortcut == null) text else "$text  $MOD_LABEL$shortcut",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
+        },
+        delayMillis = 500,
+        tooltipPlacement = TooltipPlacement.CursorPoint(offset = androidx.compose.ui.unit.DpOffset(0.dp, 16.dp)),
+        content = content,
+    )
+}
+
 @Composable
 private fun TopBar(
     mode: ViewMode,
     anchorLabel: String,
     loading: Boolean,
+    /** 窄窗口:藏掉产品名、「新建」只留图标。让出来的 ~200dp 正好是
+     *  末尾三个图标按钮被切掉的那部分。 */
+    compact: Boolean,
     onModeChange: (ViewMode) -> Unit,
     onPrev: () -> Unit,
     onToday: () -> Unit,
@@ -514,25 +604,42 @@ private fun TopBar(
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            t("app.name"),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(Modifier.width(20.dp))
-
-        IconButton(onClick = onPrev) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = prevLabel(mode, t))
+        if (!compact) {
+            Text(
+                t("app.name"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(20.dp))
         }
-        OutlinedButton(onClick = onToday) { Text(t("topbar.today")) }
-        IconButton(onClick = onNext) {
-            Icon(Icons.Default.ChevronRight, contentDescription = nextLabel(mode, t))
+
+        WithTooltip(prevLabel(mode, t), "←") {
+            IconButton(onClick = onPrev) {
+                Icon(Icons.Default.ChevronLeft, contentDescription = prevLabel(mode, t))
+            }
+        }
+        WithTooltip(t("topbar.today"), "T") {
+            OutlinedButton(onClick = onToday) { Text(t("topbar.today")) }
+        }
+        WithTooltip(nextLabel(mode, t), "→") {
+            IconButton(onClick = onNext) {
+                Icon(Icons.Default.ChevronRight, contentDescription = nextLabel(mode, t))
+            }
         }
 
         Spacer(Modifier.width(12.dp))
-        Text(anchorLabel, style = MaterialTheme.typography.titleSmall)
-
-        Spacer(Modifier.weight(1f))
+        // 日期标签吃掉所有富余宽度(weight),而不是在它后面塞一个
+        // Spacer(weight) 把后面的按钮往右推。差别在窗口变窄时:
+        // 前者让标签自己省略号收缩,后者会把末尾的设置图标挤出窗口。
+        // 德语的月份名 + 年份最长,是这里的压力测试用例。
+        Text(
+            anchorLabel,
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
 
         // Day / Week / Month segmented switcher
         SingleChoiceSegmentedButtonRow {
@@ -555,24 +662,40 @@ private fun TopBar(
             )
             Spacer(Modifier.width(8.dp))
         }
-        Button(onClick = onNew) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(t("topbar.new"))
+        WithTooltip(t("topbar.new"), "N") {
+            Button(onClick = onNew) {
+                Icon(
+                    Icons.Default.Add,
+                    // 紧凑模式下文字没了,图标就得自己承担说明职责 ——
+                    // contentDescription 在桌面端是 hover 提示的来源。
+                    contentDescription = if (compact) t("topbar.new") else null,
+                    modifier = Modifier.size(18.dp),
+                )
+                if (!compact) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(t("topbar.new"))
+                }
+            }
         }
         Spacer(Modifier.width(4.dp))
         // Global search (Cmd/Ctrl+F) — opens the event search dialog.
-        IconButton(onClick = onOpenSearch) {
-            Icon(Icons.Default.Search, contentDescription = t("topbar.search"))
+        WithTooltip(t("topbar.search"), "F") {
+            IconButton(onClick = onOpenSearch) {
+                Icon(Icons.Default.Search, contentDescription = t("topbar.search"))
+            }
         }
-        IconButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
+        WithTooltip(t("topbar.refresh"), "R") {
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
+            }
         }
         // Settings (Cmd+,) — primary entry to the Settings page. Logout
         // is still accessible there but no longer pollutes the toolbar
         // (a misclick used to drop the active profile with no confirm).
-        IconButton(onClick = onOpenSettings) {
-            Icon(Icons.Default.Settings, contentDescription = t("topbar.settings"))
+        WithTooltip(t("topbar.settings"), ",") {
+            IconButton(onClick = onOpenSettings) {
+                Icon(Icons.Default.Settings, contentDescription = t("topbar.settings"))
+            }
         }
     }
 }
@@ -603,6 +726,7 @@ private fun nextLabel(mode: ViewMode, t: (String) -> String): String = when (mod
 
 @Composable
 private fun Sidebar(
+    width: Dp,
     active: cn.bywave.calendar.desktop.data.model.Profile,
     profiles: List<cn.bywave.calendar.desktop.data.model.Profile>,
     calendars: List<cn.bywave.calendar.desktop.data.model.CalendarMeta>,
@@ -615,7 +739,7 @@ private fun Sidebar(
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     Column(
         modifier = Modifier
-            .width(260.dp)
+            .width(width)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
             .verticalScroll(rememberScrollState())
@@ -662,6 +786,8 @@ private fun Sidebar(
                         Text(
                             cal.name,
                             style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
                     }
@@ -774,7 +900,9 @@ private fun StagedUpdateBanner(
         IconButton(onClick = onDismiss) {
             Icon(
                 Icons.Default.Close,
-                contentDescription = cn.bywave.calendar.desktop.i18n.I18n.t("settings.close"),
+                // 这里以前挂的是 settings.close(「关闭设置」)—— 和这个按钮
+                // 实际干的事(收起更新提示条)对不上。用通用的「关闭」。
+                contentDescription = cn.bywave.calendar.desktop.i18n.I18n.t("event.detail.close"),
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(18.dp),
             )

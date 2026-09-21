@@ -12,6 +12,7 @@
 
 package cn.bywave.calendar
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +31,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import cn.bywave.calendar.i18n.LocaleHelper
 import cn.bywave.calendar.ui.calendar.CalendarScreen
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.event.AttendeesScreen
@@ -50,6 +52,14 @@ import cn.bywave.calendar.update.UpdateState
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    // APP 内语言在 Android 12 及以下就是在这里生效的：Activity 的
+    // Configuration 换成带目标 locale 的那一份，Compose 的
+    // LocalConfiguration / stringResource 全部跟着走。13+ 上 wrap() 原样
+    // 返回，语言由平台 LocaleManager 管。
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -243,6 +253,9 @@ private fun AppRoot() {
                     nav.popBackStack()
                     calVm.reload()
                 },
+                // 日历列表没拿到时（冷启动头两秒 / 离线首启），编辑器里
+                // 那条提示旁边的「重试」就是再拉一次。
+                onRetryCalendars = { calVm.reload() },
             )
         }
 
@@ -269,6 +282,9 @@ private fun AppRoot() {
                     nav.popBackStack()
                     calVm.reload()
                 },
+                // 日历列表没拿到时（冷启动头两秒 / 离线首启），编辑器里
+                // 那条提示旁边的「重试」就是再拉一次。
+                onRetryCalendars = { calVm.reload() },
             )
         }
 
@@ -295,6 +311,9 @@ private fun AppRoot() {
                     nav.popBackStack()
                     calVm.reload()
                 },
+                // 日历列表没拿到时（冷启动头两秒 / 离线首启），编辑器里
+                // 那条提示旁边的「重试」就是再拉一次。
+                onRetryCalendars = { calVm.reload() },
             )
         }
 

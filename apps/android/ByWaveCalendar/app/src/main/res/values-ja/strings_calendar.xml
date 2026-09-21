@@ -8,4 +8,11 @@
     <string name="cal_switch_account">アカウントを切り替え</string>
     <string name="cal_delete_message">「%1$s」は完全に削除されます。この操作は取り消せません。</string>
     <string name="day_empty_subtitle">右下の + をタップして予定を作成</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">予定を読み込めませんでした</string>
+    <string name="cal_err_delete_failed">削除できませんでした</string>
+    <string name="cal_err_undo_failed">元に戻せませんでした</string>
+    <string name="cal_err_signout_failed">サインアウトできませんでした</string>
+    <string name="cal_err_not_signed_in">先にサインインしてください</string>
 </resources>

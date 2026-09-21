@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import cn.bywave.calendar.desktop.util.DebugLog
 
 object ReminderPrefs {
     private val storeDir: Path = Paths.get(System.getProperty("user.home"), ".bywave-calendar")
@@ -59,7 +60,7 @@ object ReminderPrefs {
             Files.createDirectories(storeDir)
             Files.writeString(storeFile, "${_enabled.value}:${_leadMinutes.value}")
         }.onFailure {
-            System.err.println("[ReminderPrefs] failed to persist: ${it.message}")
+            DebugLog.d("ReminderPrefs") { "failed to persist: ${it.message}" }
         }
     }
 }

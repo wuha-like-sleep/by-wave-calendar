@@ -88,6 +88,44 @@ class EventRepository(
         }
     }
 
+    /**
+     * 把「提醒 / 镜像到系统日历」这两个开关的当前状态**立刻**落到系统上。
+     *
+     * 之前这两件事只在 fetchAndCache() 里做，也就是只有联网同步成功那一刻
+     * 才会重新排期。三个后果，都是用户能直接撞上的：
+     *
+     *   1. 把提醒提前量从 15 分钟改成 1 小时，已经排好的闹钟还是 15 分钟。
+     *      下一次同步碰巧发生之前，改了等于没改，而界面上那一行显示的
+     *      是新值——用户以为生效了。
+     *   2. 把「事件提醒」开关关掉，只是不再排新的；已经进了 AlarmManager
+     *      的最多 64 个照响不误。用户关了开关还一直被打扰，而且没有任何
+     *      办法撤销（这正是当初退出登录那条路上踩过的同一个坑）。
+     *   3. 把「镜像到系统日历」关掉，系统日历里那份 ByWave 日程永久留着。
+     *
+     * 取消提醒必须能重建出当初的 PendingIntent，所以要先从 Room 把事件
+     * 读出来再操作。两个动作各自 runCatching：镜像失败不该让提醒也不生效。
+     */
+    suspend fun applySyncPreferences() {
+        val profile = profiles.active() ?: return
+        val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
+            .getOrElse { return }
+        val current = prefs.current()
+
+        if (current.remindersEnabled) {
+            runCatching { reminders.reschedule(profile, events, current.reminderLeadMinutes) }
+        } else {
+            runCatching { reminders.cancelAll(profile, events) }
+        }
+
+        if (current.mirrorToSystemCalendar) {
+            val calendars = runCatching { db.calendarDao().listForProfile(profile.id).map { it.toDto() } }
+                .getOrElse { emptyList() }
+            runCatching { mirror.mirror(profile, calendars, events) }
+        } else {
+            runCatching { mirror.unmirror(profile) }
+        }
+    }
+
     /** Wipe just one profile's cache (used when removing that account). */
     suspend fun wipeProfile(profileId: String) {
         AppDatabase.wipeProfile(context, profileId)

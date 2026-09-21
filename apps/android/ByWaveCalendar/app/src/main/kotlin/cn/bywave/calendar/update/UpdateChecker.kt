@@ -14,6 +14,7 @@ package cn.bywave.calendar.update
 import android.content.Context
 import android.content.pm.PackageManager
 import cn.bywave.calendar.BywaveApp
+import cn.bywave.calendar.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,10 +82,10 @@ object UpdateChecker {
                 // there's nothing newer to install.
                 UserCheckResult.UpToDate
             } else {
-                UserCheckResult.Failed("服务器返回 ${e.code()}")
+                UserCheckResult.Failed(context.getString(R.string.update_err_server))
             }
         } catch (e: Exception) {
-            UserCheckResult.Failed(e.localizedMessage ?: "网络异常")
+            UserCheckResult.Failed(context.getString(R.string.update_err_network))
         }
     }
 

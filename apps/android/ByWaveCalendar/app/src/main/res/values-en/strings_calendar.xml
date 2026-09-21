@@ -8,4 +8,11 @@
     <string name="cal_switch_account">Switch account</string>
     <string name="cal_delete_message">\"%1$s\" will be permanently deleted. This cannot be undone.</string>
     <string name="day_empty_subtitle">Tap + at the bottom right to create an event</string>
+
+    <!-- Sync / delete failures surfaced in the calendar status line -->
+    <string name="cal_err_load_failed">Couldn’t load events</string>
+    <string name="cal_err_delete_failed">Couldn’t delete</string>
+    <string name="cal_err_undo_failed">Couldn’t undo</string>
+    <string name="cal_err_signout_failed">Couldn’t sign out</string>
+    <string name="cal_err_not_signed_in">Sign in first</string>
 </resources>

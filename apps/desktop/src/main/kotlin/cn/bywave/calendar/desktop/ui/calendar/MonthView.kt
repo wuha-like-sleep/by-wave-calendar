@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -79,27 +80,43 @@ fun MonthView(
         m
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        WeekdayHeader()
-        HorizontalDivider()
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 一格里能放几条事件块,按格子实际高度算,不再写死 2 条。
+        //
+        // 写死 2 条的后果是两头都不对:窗口拉高到全屏时每格有 140dp 高,
+        // 下面 100dp 全是空的,而当天第 3、4 件事只能显示成「+2」——
+        // 屏幕明明够用却在折叠;窗口压矮时又反过来,2 条根本塞不下,
+        // 事件块被格子边缘切掉一半。
+        //
+        // 34dp = 日期圆点(24) + 上下内边距;17dp = 一条事件块 + 行距。
+        // 折叠提示「+N」自己也要占一行,所以按能放 n 条算出来之后,
+        // 真的有折叠时会少显示一条给它腾位置。
+        val rowHeight = ((maxHeight - 32.dp) / 6).coerceAtLeast(0.dp)
+        val maxChips = (((rowHeight - 34.dp) / 17.dp).toInt()).coerceIn(1, 8)
 
-        for (row in 0 until 6) {
-            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                for (col in 0 until 7) {
-                    val idx = row * 7 + col
-                    val day = cells[idx]
-                    DayCell(
-                        day = day,
-                        monthAnchor = month,
-                        eventsOnDay = byDay[day].orEmpty(),
-                        calendars = calendars,
-                        onDayClick = { onDayClick(day) },
-                        onEventClick = onEventClick,
-                        onEventEdit = onEventEdit,
-                        onEventDuplicate = onEventDuplicate,
-                        onEventDelete = onEventDelete,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
-                    )
+        Column(modifier = Modifier.fillMaxSize()) {
+            WeekdayHeader()
+            HorizontalDivider()
+
+            for (row in 0 until 6) {
+                Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    for (col in 0 until 7) {
+                        val idx = row * 7 + col
+                        val day = cells[idx]
+                        DayCell(
+                            day = day,
+                            monthAnchor = month,
+                            eventsOnDay = byDay[day].orEmpty(),
+                            calendars = calendars,
+                            maxChips = maxChips,
+                            onDayClick = { onDayClick(day) },
+                            onEventClick = onEventClick,
+                            onEventEdit = onEventEdit,
+                            onEventDuplicate = onEventDuplicate,
+                            onEventDelete = onEventDelete,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
                 }
             }
         }
@@ -136,6 +153,8 @@ private fun DayCell(
     monthAnchor: YearMonth,
     eventsOnDay: List<EventDTO>,
     calendars: List<CalendarMeta>,
+    /** 这一格放得下几条事件块,由 MonthView 按窗口高度算出来。 */
+    maxChips: Int,
     onDayClick: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
     onEventEdit: (EventDTO) -> Unit,
@@ -178,9 +197,11 @@ private fun DayCell(
             )
         }
 
-        // Up to 2 colored chips. Secondary click anywhere on the chip
-        // opens the per-event context menu (popup anchored to the chip).
-        val visible = eventsOnDay.take(2)
+        // 彩色事件块。右键任意一块出该事件的上下文菜单(弹层锚在块上)。
+        // 只有真的放不下时才折叠,并且给「+N」自己留一行。
+        val overflow = eventsOnDay.size > maxChips
+        val shown = if (overflow) (maxChips - 1).coerceAtLeast(1) else maxChips
+        val visible = eventsOnDay.take(shown)
         for (ev in visible) {
             val color = calendarColor(ev, calendars)
             Box {
@@ -216,9 +237,9 @@ private fun DayCell(
                 }
             }
         }
-        if (eventsOnDay.size > 2) {
+        if (eventsOnDay.size > visible.size) {
             Text(
-                text = "+${eventsOnDay.size - 2}",
+                text = "+${eventsOnDay.size - visible.size}",
                 style = MaterialTheme.typography.labelSmall,
                 color = mutedTextColor(),
                 modifier = Modifier.padding(start = 4.dp),

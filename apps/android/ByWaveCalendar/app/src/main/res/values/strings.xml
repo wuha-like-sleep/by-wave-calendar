@@ -87,6 +87,7 @@
     <string name="settings_mirror_desc">把事件镜像到 Android 系统「日历」provider，让 Google 日历 / 默认日历 / 桌面小组件都能看到。</string>
     <string name="settings_reminders_title">事件开始前提醒</string>
     <string name="settings_reminders_desc">在事件开始前若干分钟弹出本机通知。不走 Apple/Google 服务器，纯本机定时。</string>
+    <string name="settings_reminders_need_permission">提醒已打开，但系统还没允许本 APP 发通知。点这里去允许。</string>
     <string name="settings_reminder_lead">提前时间</string>
     <string name="settings_reminder_lead_5">5 分钟</string>
     <string name="settings_reminder_lead_10">10 分钟</string>
@@ -167,8 +168,8 @@
          z.literal in src/routes/devices.ts (POST /account/delete). Do
          not localize the literal itself — only the surrounding hint. -->
     <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">为确认，请输入「删除我的账号」</string>
-    <string name="delete_account_confirm_mismatch">请精确输入「删除我的账号」</string>
+    <string name="delete_account_confirm_label">为确认，请输入「%1$s」</string>
+    <string name="delete_account_confirm_mismatch">请精确输入「%1$s」</string>
     <string name="delete_account_failed">删除账号失败</string>
 
     <!-- Booking links (v0.12) -->

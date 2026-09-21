@@ -43,4 +43,17 @@
     <string name="eventedit_err_not_logged_in">로그인되지 않음</string>
     <string name="eventedit_err_save_failed">저장에 실패했습니다</string>
     <string name="eventedit_err_delete_failed">삭제에 실패했습니다</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">이 참석자의 초대를 취소할까요?</string>
+    <string name="attendees_revoke_message">%1$s 님은 이 일정의 업데이트를 더 이상 받지 않습니다.</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">변경 사항을 취소할까요?</string>
+    <string name="eventedit_discard_message">입력한 내용이 아직 저장되지 않아 사라집니다.</string>
+    <string name="eventedit_discard_confirm">취소</string>
+    <string name="eventedit_keep_editing">계속 편집</string>
+    <string name="eventedit_need_calendar">캘린더 목록을 아직 불러오지 못해 저장할 수 없습니다. 온라인이 되면 자동으로 불러옵니다.</string>
+    <string name="eventedit_retry">다시 시도</string>
+    <string name="eventedit_need_title">제목을 입력하면 저장할 수 있습니다.</string>
 </resources>

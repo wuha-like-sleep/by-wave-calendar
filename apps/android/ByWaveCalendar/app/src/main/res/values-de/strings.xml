@@ -78,6 +78,7 @@
     <string name="settings_mirror_desc">Schreibt Termine in den Kalender-Anbieter von Android, damit Google Kalender / Standardkalender / Widgets sie sehen.</string>
     <string name="settings_reminders_title">Vor Terminbeginn benachrichtigen</string>
     <string name="settings_reminders_desc">Löst N Minuten vor jedem Termin eine lokale Benachrichtigung aus. Reiner Timer auf dem Gerät; keine Apple/Google-Server.</string>
+    <string name="settings_reminders_need_permission">Erinnerungen sind an, aber Android erlaubt dieser App noch keine Benachrichtigungen. Tippen, um sie zu erlauben.</string>
     <string name="settings_reminder_lead">Vorlaufzeit</string>
     <string name="settings_reminder_lead_5">5 Minuten</string>
     <string name="settings_reminder_lead_10">10 Minuten</string>
@@ -156,9 +157,9 @@
     <!-- IMPORTANT: must EXACTLY match the server's z.literal (Chinese)
          in src/routes/devices.ts. Do NOT translate this value, only the
          surrounding label/hint. -->
-    <string name="delete_account_confirm_phrase">删除我的账号</string>
-    <string name="delete_account_confirm_label">Gib zur Bestätigung „删除我的账号“ ein</string>
-    <string name="delete_account_confirm_mismatch">Gib „删除我的账号“ genau so ein</string>
+    <string name="delete_account_confirm_phrase">delete my account</string>
+    <string name="delete_account_confirm_label">Gib zur Bestätigung „%1$s“ ein</string>
+    <string name="delete_account_confirm_mismatch">Gib „%1$s“ genau so ein</string>
     <string name="delete_account_failed">Konto konnte nicht gelöscht werden</string>
 
     <!-- Booking links (v0.12) -->

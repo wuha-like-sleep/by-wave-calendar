@@ -17,6 +17,7 @@
 package cn.bywave.calendar.desktop.data.update
 
 import cn.bywave.calendar.desktop.BuildInfo
+import cn.bywave.calendar.desktop.util.DebugLog
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -112,7 +113,7 @@ object UpdateChecker {
         val fromServer = fetchManifest("${serverUrl.trimEnd('/')}/api/app/desktop/latest", "server")
         if (fromServer != null && fromServer.versionCode > BuildInfo.VERSION_CODE) {
             _available.value = fromServer
-            System.err.println("[ByWave Updater] update found via server: v${fromServer.versionName} (code ${fromServer.versionCode})")
+            DebugLog.d("ByWave Updater") { "update found via server: v${fromServer.versionName} (code ${fromServer.versionCode})" }
             return CheckResult.UpdateAvailable
         }
 
@@ -124,7 +125,7 @@ object UpdateChecker {
         val fromGithub = fetchManifest(GITHUB_MANIFEST_URL, "github")
         if (fromGithub != null && fromGithub.versionCode > BuildInfo.VERSION_CODE) {
             _available.value = fromGithub
-            System.err.println("[ByWave Updater] update found via github fallback: v${fromGithub.versionName} (code ${fromGithub.versionCode})")
+            DebugLog.d("ByWave Updater") { "update found via github fallback: v${fromGithub.versionName} (code ${fromGithub.versionCode})" }
             return CheckResult.UpdateAvailable
         }
 
@@ -135,7 +136,7 @@ object UpdateChecker {
         // current — report a check FAILURE rather than falsely claim
         // 「已是最新版本」. Only when ≥1 source actually answered is it truly latest.
         val reached = fromServer != null || fromGithub != null
-        System.err.println("[ByWave Updater] ${if (reached) "up to date" else "UNREACHABLE"} — server=${fromServer?.versionCode ?: "null"}, github=${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}")
+        DebugLog.d("ByWave Updater") { "${if (reached) "up to date" else "UNREACHABLE"} — server=${fromServer?.versionCode ?: "null"}, github=${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}" }
         return if (reached) CheckResult.UpToDate else CheckResult.Unreachable
     }
 
@@ -146,7 +147,7 @@ object UpdateChecker {
         val resp = try {
             client.get(url)
         } catch (e: Exception) {
-            System.err.println("[ByWave Updater] $sourceTag fetch failed: ${e::class.simpleName}: ${e.message}")
+            DebugLog.d("ByWave Updater") { "$sourceTag fetch failed: ${e::class.simpleName}: ${e.message}" }
             return null
         }
         if (resp.status == HttpStatusCode.NotFound) {
@@ -156,13 +157,13 @@ object UpdateChecker {
             return null
         }
         if (!resp.status.isSuccess()) {
-            System.err.println("[ByWave Updater] $sourceTag returned ${resp.status}")
+            DebugLog.d("ByWave Updater") { "$sourceTag returned ${resp.status}" }
             return null
         }
         return try {
             resp.body<DesktopUpdateInfo>()
         } catch (e: Exception) {
-            System.err.println("[ByWave Updater] $sourceTag JSON parse failed: ${e::class.simpleName}: ${e.message}")
+            DebugLog.d("ByWave Updater") { "$sourceTag JSON parse failed: ${e::class.simpleName}: ${e.message}" }
             null
         }
     }

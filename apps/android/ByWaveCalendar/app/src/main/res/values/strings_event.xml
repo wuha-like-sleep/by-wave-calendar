@@ -48,4 +48,17 @@
     <string name="eventedit_err_not_logged_in">未登录</string>
     <string name="eventedit_err_save_failed">保存失败</string>
     <string name="eventedit_err_delete_failed">删除失败</string>
+
+    <!-- Revoke confirmation -->
+    <string name="attendees_revoke_title">撤销这位参与者的邀请？</string>
+    <string name="attendees_revoke_message">%1$s 将不再收到这个事件的更新。</string>
+
+    <!-- 未保存改动的丢弃确认 -->
+    <string name="eventedit_discard_title">放弃这次编辑？</string>
+    <string name="eventedit_discard_message">你填的内容还没保存，返回后会丢失。</string>
+    <string name="eventedit_discard_confirm">放弃</string>
+    <string name="eventedit_keep_editing">继续编辑</string>
+    <string name="eventedit_need_calendar">还没拿到你的日历列表，暂时不能保存。联网后会自动补上。</string>
+    <string name="eventedit_retry">重试</string>
+    <string name="eventedit_need_title">填个标题就能保存了。</string>
 </resources>

@@ -20,6 +20,7 @@
 package cn.bywave.calendar.desktop.data.auth
 
 import cn.bywave.calendar.desktop.data.model.Profile
+import cn.bywave.calendar.desktop.util.DebugLog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -128,11 +129,15 @@ object ProfileStore {
      *  first remaining profile (or null when the list empties).
      *  Also wipes the event cache so removed-then-re-added accounts
      *  don't see ghost events from before. */
-    /** 上一次被动登出的原因，登录页读它显示提示；重新登录成功后清空。 */
-    private val _signedOutReason = MutableStateFlow<String?>(null)
-    val signedOutReason: StateFlow<String?> = _signedOutReason.asStateFlow()
+    /** 上一次被动登出的原因，存的是 I18n 的 key 不是已翻译好的文案。
+     *
+     *  存 key 而不是成品字符串，是因为这个值可能在界面上停留很久（用户
+     *  被踢回登录页之后可能先去切了语言），存成品字符串的话就会卡在
+     *  被踢那一刻的语言上；登录页每次渲染时再 t() 一次才跟得上。 */
+    private val _signedOutReasonKey = MutableStateFlow<String?>(null)
+    val signedOutReasonKey: StateFlow<String?> = _signedOutReasonKey.asStateFlow()
 
-    fun clearSignedOutReason() { _signedOutReason.value = null }
+    fun clearSignedOutReason() { _signedOutReasonKey.value = null }
 
     /**
      * 服务端吊销了这台设备（改密码 / 重置密码 / 后台移除）。
@@ -140,9 +145,13 @@ object ProfileStore {
      * 清掉凭据让界面自然回到登录页。以前刷新失败只是把 401 原样抛出、
      * 不碰这里，结果桌面端变成僵尸：日历照常显示上次同步的内容，
      * 新建/编辑/删除全部失败，而没有任何地方告诉用户「你被登出了」。
+     *
+     * 注意：光记下原因还不够——1.0.17 之前这个 flow 没有任何地方在读，
+     * 用户看到的只是「界面自己跳回了登录页」。登录页现在会把它显示成
+     * 一条横幅（见 SetupScreen）。
      */
-    fun markSignedOut(reason: String) {
-        _signedOutReason.value = reason
+    fun markSignedOut(reasonKey: String) {
+        _signedOutReasonKey.value = reasonKey
         _activeId.value?.let { remove(it) }
     }
 
@@ -206,7 +215,7 @@ object ProfileStore {
                 recomputeActive()
                 return
             }.onFailure {
-                System.err.println("[ProfileStore] failed to parse profiles.json — ignoring: ${it.message}")
+                DebugLog.d("ProfileStore") { "failed to parse profiles.json — ignoring: ${it.message}" }
             }
         }
         // Migration from v0.2-v0.5 single-profile file. Read it,
@@ -221,7 +230,7 @@ object ProfileStore {
                 persist()
                 Files.deleteIfExists(legacyFile)
             }.onFailure {
-                System.err.println("[ProfileStore] legacy profile.json unreadable — starting fresh: ${it.message}")
+                DebugLog.d("ProfileStore") { "legacy profile.json unreadable — starting fresh: ${it.message}" }
             }
         }
     }
@@ -273,7 +282,7 @@ object ProfileStore {
             // Last-resort fallback: direct write so we don't silently lose
             // the user's session on an unexpected FS quirk. Non-atomic, but
             // better than dropping the data entirely.
-            System.err.println("[ProfileStore] atomic persist failed (${e.message}); falling back to direct write")
+            DebugLog.d("ProfileStore") { "atomic persist failed (${e.message}); falling back to direct write" }
             runCatching {
                 Files.writeString(storeFile, serialized)
                 Files.setPosixFilePermissions(storeFile, PosixFilePermissions.fromString("rw-------"))

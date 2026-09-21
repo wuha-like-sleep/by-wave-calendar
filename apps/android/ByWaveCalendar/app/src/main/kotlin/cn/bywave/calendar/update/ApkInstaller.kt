@@ -25,6 +25,7 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import java.io.File
+import cn.bywave.calendar.R
 
 sealed class InstallResult {
     object Launched : InstallResult()
@@ -41,7 +42,7 @@ object ApkInstaller {
      *  the per-app toggle first, or Failed for any other error. */
     fun install(context: Context, apk: File): InstallResult {
         if (!apk.exists() || apk.length() <= 0) {
-            return InstallResult.Failed("安装包文件不存在或为空")
+            return InstallResult.Failed(context.getString(R.string.update_err_apk_missing))
         }
 
         // Permission gate (Android 8.0+).
@@ -69,7 +70,7 @@ object ApkInstaller {
             context.startActivity(install)
             InstallResult.Launched
         } catch (e: Exception) {
-            InstallResult.Failed(e.localizedMessage ?: "无法启动系统安装程序")
+            InstallResult.Failed(context.getString(R.string.update_err_installer))
         }
     }
 }

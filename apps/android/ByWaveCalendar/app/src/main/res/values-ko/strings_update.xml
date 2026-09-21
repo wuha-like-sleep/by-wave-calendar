@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 인앱 업데이트 — 한국어. -->
+<resources>
+    <string name="update_title_available">새 버전이 있습니다</string>
+    <string name="update_title_mandatory">업데이트가 필요합니다</string>
+    <string name="update_mandatory_note">이 업데이트를 설치해야 계속 사용할 수 있습니다.</string>
+    <string name="update_download_now">지금 다운로드</string>
+    <string name="update_later">나중에</string>
+    <string name="update_install_now">지금 설치</string>
+    <string name="update_install_hint">기기에서 설치 확인을 요청합니다. 처음에는 알 수 없는 앱 설치 허용도 필요합니다.</string>
+    <string name="update_unknown_sources">시스템 설정에서 이 앱의 알 수 없는 앱 설치를 허용한 뒤 다시 시도해 주세요.</string>
+    <string name="update_progress">%1$d / %2$d MB 다운로드됨</string>
+    <string name="update_eta_min">약 %1$d분 %2$d초 남음</string>
+    <string name="update_eta_sec">약 %1$d초 남음</string>
+    <string name="update_err_apk_missing">다운로드가 완전하지 않습니다. 다시 시도해 주세요.</string>
+    <string name="update_err_installer">설치 프로그램을 열지 못했습니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="update_err_download">다운로드에 실패했습니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="update_err_checksum">다운로드 파일 검증에 실패했습니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="update_err_server">서버가 응답하지 않습니다. 잠시 후 다시 시도해 주세요.</string>
+    <string name="update_err_network">네트워크에 연결할 수 없습니다. 연결을 확인한 뒤 다시 시도해 주세요.</string>
+</resources>

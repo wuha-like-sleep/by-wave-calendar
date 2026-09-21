@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mise à jour intégrée — Français. -->
+<resources>
+    <string name="update_title_available">Mise à jour disponible</string>
+    <string name="update_title_mandatory">Mise à jour requise</string>
+    <string name="update_mandatory_note">Cette mise à jour est nécessaire pour continuer.</string>
+    <string name="update_download_now">Télécharger</string>
+    <string name="update_later">Plus tard</string>
+    <string name="update_install_now">Installer</string>
+    <string name="update_install_hint">Votre téléphone vous demandera de confirmer. La première fois, il faut aussi autoriser les applis inconnues.</string>
+    <string name="update_unknown_sources">Autorisez cette appli à installer des applis inconnues dans les réglages, puis réessayez.</string>
+    <string name="update_progress">%1$d Mo sur %2$d téléchargés</string>
+    <string name="update_eta_min">Environ %1$d min %2$d s restantes</string>
+    <string name="update_eta_sec">Environ %1$d s restantes</string>
+    <string name="update_err_apk_missing">Le téléchargement est incomplet. Réessayez.</string>
+    <string name="update_err_installer">Impossible d’ouvrir l’installateur. Réessayez plus tard.</string>
+    <string name="update_err_download">Échec du téléchargement. Réessayez plus tard.</string>
+    <string name="update_err_checksum">Le téléchargement n’a pas pu être vérifié. Réessayez plus tard.</string>
+    <string name="update_err_server">Le serveur ne répond pas. Réessayez plus tard.</string>
+    <string name="update_err_network">Réseau inaccessible. Vérifiez votre connexion et réessayez.</string>
+</resources>

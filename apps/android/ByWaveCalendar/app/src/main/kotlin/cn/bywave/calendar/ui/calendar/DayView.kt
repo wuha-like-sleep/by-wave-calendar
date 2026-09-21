@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
@@ -117,15 +118,17 @@ private fun EventRow(
         )
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
+            // maxLines 不配 overflow 的话 Compose 默认是 Clip——长标题会被
+            // 齐刷刷切断，看不出后面还有字。省略号才让人知道「这里被截了」。
             Text(
                 text = event.summary,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = if (event.allDay) stringResource(R.string.event_allday)
-                       else formatTimeRange(event),
+                text = eventTimeText(event),
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )
@@ -134,6 +137,8 @@ private fun EventRow(
                     text = cal,
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
