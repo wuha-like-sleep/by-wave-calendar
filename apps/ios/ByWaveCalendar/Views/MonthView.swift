@@ -60,11 +60,20 @@ struct MonthView: View {
         return m
     }
 
+    /// 网格两侧的留白。以前是 0，日期数字直接顶在屏幕边缘，
+    /// 「今天」那个圆圈几乎被屏幕圆角切到。
+    private let sideInset: CGFloat = 8
+
     var body: some View {
         VStack(spacing: 0) {
             weekdayHeader
             GeometryReader { geo in
                 let cellW = geo.size.width / 7
+                // 42 天固定铺 6 行，所以高度按 6 等分。
+                // 关键是 geo.size.height 必须是**可见**高度：这个 GeometryReader
+                // 外面加了 .safeAreaPadding(.bottom)，否则在有 Home 指示条的机型上
+                // 它拿到的是含安全区的高度，最后一行会被屏幕底部切掉半截
+                // （实测 iPhone 18 Pro 上第六周只露出小半截）。
                 let cellH = geo.size.height / 6
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellW), spacing: 0), count: 7), spacing: 0) {
                     ForEach(days, id: \.self) { day in
@@ -111,6 +120,8 @@ struct MonthView: View {
                     }
                 }
             }
+            .padding(.horizontal, sideInset)
+            .safeAreaPadding(.bottom)
         }
         .sheet(isPresented: $showDaySheet) {
             if let day = selectedDay {
@@ -153,6 +164,7 @@ struct MonthView: View {
             }
         }
         .padding(.vertical, 6)
+        .padding(.horizontal, sideInset)   // 与下面的网格列对齐
         .background(Theme.subtleSurface)
     }
 
