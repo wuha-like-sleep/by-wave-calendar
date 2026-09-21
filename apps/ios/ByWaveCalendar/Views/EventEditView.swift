@@ -539,18 +539,40 @@ struct EventEditView: View {
         }
     }
 
-    /// Build the `extra` field for the API request. Returns nil when
-    /// nothing's set so we don't blank-out the field on edit (server
-    /// preserves existing extra when key not present). Attendees are
-    /// managed via AttendeesPage's own endpoints — not touched here.
-    private func buildExtra() -> EventExtra? {
-        let tz = allDay ? nil : (timezone.isEmpty ? nil : timezone)
+    /// 新建（含「复制一份」）走 POST，编辑走 PATCH —— 两者对「字段空着」的含义不同。
+    private var isNewEvent: Bool {
+        switch mode {
+        case .create, .duplicateOf: return true
+        default: return false
+        }
+    }
+
+    /// 这个界面负责的字段，空着时是什么意思：
+    /// 新建时没有「原来的值」可删，直接不带上；编辑时空着就是用户清空了，要发显式 null。
+    private func managed(_ v: String?) -> ExtraField<String> {
+        if let v { return .value(v) }
+        return isNewEvent ? .unmanaged : .cleared
+    }
+
+    /// 拼 API 请求里的 `extra`。
+    ///
+    /// 关键在于区分「这个界面不管这个字段」和「用户清空了它」：服务端是逐字段合并的，
+    /// 键不出现 = 保持原样，显式 null = 删掉。以前这里统一用 Optional，nil 被
+    /// Swift 省掉，于是会议链接和入会密码**永远删不掉**。
+    private func buildExtra() -> EventExtra {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        let urlValue = trimmedURL.isEmpty ? nil : trimmedURL
         let trimmedPassword = meetingPassword.trimmingCharacters(in: .whitespacesAndNewlines)
-        let passwordValue = trimmedPassword.isEmpty ? nil : trimmedPassword
-        if tz == nil && urlValue == nil && passwordValue == nil { return nil }
-        return EventExtra(timezone: tz, attendees: nil, category: nil, url: urlValue, meetingPassword: passwordValue)
+        return EventExtra(
+            // 全天事件这个界面不提供时区选择，所以它不是「被清空」而是「不归我管」。
+            // 写成清空会把别的端设的时区删掉，而服务端算全天事件的提醒正要用它。
+            timezone: allDay ? .unmanaged : managed(timezone.isEmpty ? nil : timezone),
+            // 参与者有自己的页面和接口，分类和提醒由网页 / 其它端维护 ——
+            // 在这里发 null 等于把别人设的东西抹掉。
+            attendees: .unmanaged,
+            category: .unmanaged,
+            url: managed(trimmedURL.isEmpty ? nil : trimmedURL),
+            meetingPassword: managed(trimmedPassword.isEmpty ? nil : trimmedPassword),
+        )
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is

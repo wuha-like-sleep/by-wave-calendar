@@ -73,19 +73,53 @@ struct EventsResponse: Decodable {
 //   - timezone: IANA tz name (e.g. "Asia/Shanghai") to interpret start/end in
 //   - attendees: email list — server fires invitation .ics emails on insert
 //   - category: optional grouping label
-struct EventExtra: Encodable {
-    let timezone: String?
-    let attendees: [String]?
-    let category: String?
-    let url: String?
-    let meetingPassword: String?
+/// 请求体里一个 extra 字段的三种命运。
+///
+/// 服务端把 extra 改成了**逐字段合并**：键不出现 = 保持原样，显式写 null = 删掉。
+/// 而 Swift 给 Optional 合成的编码是 `encodeIfPresent` —— nil 一律被省掉。
+/// 于是「用户把会议链接删空了」这个动作根本传不出去：界面提示保存成功，
+/// 退出来链接又回来了，反复几次都一样，也不报错。
+///
+/// 所以「这个界面不负责这个字段」和「用户清空了它」必须分开表达，
+/// 用一个 Optional 是表达不了的。
+enum ExtraField<T: Encodable> {
+    /// 这个界面不负责它 —— 键不出现，别动服务端上的值。
+    case unmanaged
+    /// 用户清空了它 —— 写显式 null。
+    case cleared
+    case value(T)
+}
 
-    var isEmpty: Bool {
-        (timezone?.isEmpty ?? true)
-            && (attendees?.isEmpty ?? true)
-            && (category?.isEmpty ?? true)
-            && (url?.isEmpty ?? true)
-            && (meetingPassword?.isEmpty ?? true)
+struct EventExtra: Encodable {
+    let timezone: ExtraField<String>
+    let attendees: ExtraField<[String]>
+    let category: ExtraField<String>
+    let url: ExtraField<String>
+    let meetingPassword: ExtraField<String>
+
+    enum CodingKeys: String, CodingKey {
+        case timezone, attendees, category, url, meetingPassword
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try put(timezone, .timezone, &c)
+        try put(attendees, .attendees, &c)
+        try put(category, .category, &c)
+        try put(url, .url, &c)
+        try put(meetingPassword, .meetingPassword, &c)
+    }
+
+    private func put<T: Encodable>(
+        _ field: ExtraField<T>,
+        _ key: CodingKeys,
+        _ c: inout KeyedEncodingContainer<CodingKeys>,
+    ) throws {
+        switch field {
+        case .unmanaged: break                      // 整个键不出现
+        case .cleared: try c.encodeNil(forKey: key) // 显式 null = 删掉
+        case .value(let v): try c.encode(v, forKey: key)
+        }
     }
 }
 
