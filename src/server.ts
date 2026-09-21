@@ -37,6 +37,9 @@ import { logApnsStartup } from "./lib/apns.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
+// 限流那句提示要按请求方的语言出，而它的回调是同步的 —— 静态导入，
+// 不能像别处那样临时 await import。
+import { resolveLocaleFromRequest, translatePlain } from "./lib/i18n.js";
 import { loadUserFromRequest, serviceClientForensicLine } from "./lib/session.js";
 // Double-writeHead crash guards — see lib/reply_guard.ts. Removing either
 // call site brings back an unauthenticated remote crash.
@@ -195,12 +198,18 @@ app.setErrorHandler(async (err: FastifyError, req, reply) => {
   if (status < 500) throw err;
 
   // 5xx：服务端完整记录，客户端只给一句话。
-  // err.message 可能含 SQL 语句、文件路径、堆栈线索、PG 报错里的内网 IP，
-  // 生产环境绝不外送；开发环境照常显示，方便排查。
+  //
+  // err.message 可能含 SQL 语句、文件路径、堆栈线索、PG 报错里的内网 IP。
+  // 以前这里按 NODE_ENV 分档，生产不外送、开发照常显示 —— 听起来合理，
+  // 但 env.ts 里 NODE_ENV 的**默认值是 development**，而这是个自建产品：
+  // 客户 `npm start` 起来、不专门设这个变量，跑的就是「照常显示」那一档。
+  // 也就是说这道防线默认是关着的。
+  //
+  // 现在无条件不外送。开发时想看细节，日志就在眼前（上面这行 log.error
+  // 记的是完整的 err，含堆栈）—— 为了省开发者一次看日志，把所有自建站点
+  // 的内网信息暴露出去，这笔账不划算。
   req.log.error({ err }, "request_failed");
-  const safeMessage = env.NODE_ENV === "production"
-    ? "服务器内部错误"
-    : (err.message ?? "internal_error");
+  const safeMessage = "服务器内部错误";
 
   if ((req.headers.accept ?? "").includes("text/html")) {
     const user = await loadUserFromRequest(req).catch(() => null);
@@ -390,10 +399,21 @@ await app.register(rateLimit, {
   timeWindow: "1 minute",
   hook: "preHandler",
   keyGenerator: (req) => req.ip,
-  errorResponseBuilder: (_req, ctx) => ({
+  // 按请求方的语言给这句话。以前是写死的中文 —— 而三端 App 是直接把服务端的
+  // message 摆给用户看的，于是德语/日语用户撞上限流会突然看到一句中文。
+  // 限流在生产里是常态，不是边角。
+  //
+  // 这个回调是**同步**的，取不了站点设置（那是一次异步查库），所以只走
+  // 「?lang= → cookie → Accept-Language」这几级。对这句话来说够了：
+  // 用户自己浏览器/设备的语言，本来就比站点默认语言更贴近他。
+  errorResponseBuilder: (req, ctx) => ({
     statusCode: 429,
     error: "too_many_requests",
-    message: `请求过于频繁，请 ${Math.ceil(ctx.ttl / 1000)} 秒后再试`,
+    message: translatePlain(
+      resolveLocaleFromRequest(req, null, undefined),
+      "error.tooManyRequests",
+      { n: Math.ceil(ctx.ttl / 1000) },
+    ),
   }),
 });
 

@@ -1410,6 +1410,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
 
   // Inicio de sesión con Apple rechazado. Las versiones ya publicadas de la app
   // muestran el `message` del servidor, así que cada frase indica qué hacer.
+  "error.tooManyRequests": "Demasiadas solicitudes. Vuelve a intentarlo en {n} segundos.",
   "appleLogin.emailTaken": "Ya existe una cuenta con este correo en este sitio, y Apple no ha confirmado que la dirección sea tuya. Inicia sesión como lo hacías antes (contraseña o inicio de sesión único): a esta cuenta no se puede entrar con Iniciar sesión con Apple.",
   "appleLogin.signupClosed": "Este sitio no admite cuentas nuevas por ahora. Si ya tienes una, inicia sesión como lo hacías antes; si no, escribe a quien administra el sitio.",
   "appleLogin.inviteOnly": "Este sitio es solo por invitación, y Iniciar sesión con Apple no puede transmitir un código de invitación. Regístrate en la web con tu enlace de invitación y el mismo correo, confirma tu correo y vuelve aquí para pulsar de nuevo Iniciar sesión con Apple.",
@@ -1422,5 +1423,38 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "No se ha podido verificar la prueba de inicio de sesión de Apple; puede que haya caducado. Vuelve a iniciar sesión.",
   "appleLogin.accountDisabled": "Esta cuenta está desactivada. Escribe a quien administra el sitio para recuperarla.",
   "appleLogin.notConfigured": "Este sitio todavía no tiene activado el inicio de sesión con Apple. Pide que lo activen o inicia sesión como lo hacías antes.",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "Sincronización de dispositivos",
+  "adminCaldav.heading": "Hacer que todos los dispositivos vuelvan a sincronizar los calendarios",
+  "adminCaldav.lead": "Las aplicaciones de calendario del móvil y del ordenador miran un único valor de resumen para decidir si algo ha cambiado. Al crear, editar o borrar eventos ese valor cambia solo. Pero cuando una actualización solo cambia la forma de exportar los calendarios y no toca ni un evento, el valor se queda igual y cada aplicación sigue usando la copia que ya tenía. Esta página cambia ese valor a mano para que todos los dispositivos vuelvan a mirar.",
+  "adminCaldav.state.heading": "Estado actual",
+  "adminCaldav.state.sourceLabel": "Última vez",
+  "adminCaldav.state.timeLabel": "Momento",
+  "adminCaldav.state.markerLabel": "Marca actual",
+  "adminCaldav.state.never": "Nunca se ha hecho",
+  "adminCaldav.state.manual": "Hecho a mano desde esta página",
+  "adminCaldav.state.release": "Escrito automáticamente por una actualización de versión",
+  "adminCaldav.action.heading": "Volver a sincronizar",
+  "adminCaldav.action.desc": "El botón de abajo lleva a una página de confirmación donde se explica qué pasará exactamente. No se ejecuta nada hasta que confirmes allí.",
+  "adminCaldav.action.button": "Hacer que todos los dispositivos vuelvan a sincronizar…",
+  "adminCaldav.action.whenToUse": "Normalmente no hace falta: cuando alguien crea, edita o borra un evento, las aplicaciones lo detectan por su cuenta.",
+  "adminCaldav.confirm.heading": "Confirmar: ¿hacer que todos los dispositivos vuelvan a sincronizar?",
+  "adminCaldav.confirm.lead": "No se puede deshacer. En cuanto lo pulses, todos los dispositivos conectados quedan en cola para su próxima comprobación. Lee antes los cuatro puntos siguientes.",
+  "adminCaldav.confirm.willHappenLabel": "Qué pasa:",
+  "adminCaldav.confirm.willHappen": "Todas las aplicaciones de calendario conectadas (Calendario de iPhone y Mac, Outlook, DAVx⁵ y otras) volverán a pedir la lista de eventos de cada calendario al que estén suscritas, en su propia próxima sincronización.",
+  "adminCaldav.confirm.wontHappenLabel": "Qué no pasa:",
+  "adminCaldav.confirm.wontHappen": "El contenido de los eventos no se descarga otra vez. Cada evento conserva su número de versión, así que las aplicaciones se saltan todo lo que no ha cambiado. Calendarios, eventos, enlaces compartidos y direcciones de suscripción siguen igual, y las personas que usan el sitio no ven ningún cambio.",
+  "adminCaldav.confirm.costLabel": "Cuánto cuesta:",
+  "adminCaldav.confirm.cost": "Una petición de lista más por cada calendario y cada dispositivo. La lista solo lleva el número de versión de cada evento, no los eventos.",
+  "adminCaldav.confirm.notInstantLabel": "No es inmediato:",
+  "adminCaldav.confirm.notInstant": "Cada aplicación pregunta a su propio ritmo, normalmente entre cada pocos minutos y cada media hora. Es normal que justo después de pulsar no se vea nada.",
+  "adminCaldav.confirm.multiProcessHeading": "Si este servidor ejecuta varias copias de ByWave a la vez",
+  "adminCaldav.confirm.multiProcess": "Algunas instalaciones ejecutan un mismo sitio como varias copias del programa para repartir la carga. En ese caso, solo la copia a la que estás conectado ahora lo aplica de inmediato; las demás conservan el valor anterior hasta que se reinicie el programa, así que una parte de los dispositivos volverá solo después de ese reinicio. Con una sola copia, que es la instalación por defecto, esto no afecta.",
+  "adminCaldav.confirm.submit": "Sí, que todos los dispositivos vuelvan a sincronizar",
+  "adminCaldav.confirm.cancel": "Cancelar y volver",
+  "adminCaldav.done": "Se ha enviado la marca de nueva sincronización. Cada dispositivo conectado volverá a pedir su lista de eventos en su propia próxima sincronización: no es inmediato, pero suele empezar en pocos minutos.",
+  "adminCaldav.needConfirm": "Esta acción hay que confirmarla antes en la página de confirmación.",
 
 };

@@ -1397,6 +1397,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
 
   // 苹果登录被拒。已发布的 App 直接显示服务端给的 message，所以每一句都要
   // 说清下一步怎么办，不是把码翻译一遍。
+  "error.tooManyRequests": "请求过于频繁，请 {n} 秒后再试",
   "appleLogin.emailTaken": "这个邮箱在本站已经有账号了，而苹果没有证明它属于你。请改用你原来的登录方式（密码或单点登录）——这个账号目前没法通过苹果登录进入。",
   "appleLogin.signupClosed": "本站暂时不开放注册新账号。如果你已经有账号，请改用原来的登录方式；没有的话，请联系本站管理员。",
   "appleLogin.inviteOnly": "本站只接受受邀注册，而苹果登录带不出邀请码。请先在网页上用邀请链接、用同一个邮箱注册并完成邮箱验证；之后回到这里再点一次苹果登录就能进。",
@@ -1409,5 +1410,38 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "苹果这次给的登录凭证没通过验证，可能是放太久了。请重新登录一次。",
   "appleLogin.accountDisabled": "这个账号已被停用。需要恢复的话，请联系本站管理员。",
   "appleLogin.notConfigured": "本站还没有开启苹果登录。请联系本站管理员开启后再试，或者改用原来的登录方式。",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "设备同步",
+  "adminCaldav.heading": "让所有设备重新同步日历",
+  "adminCaldav.lead": "手机、电脑上的日历客户端靠一个汇总值判断「有没有变化」。平时增删改日程都会让它变；但如果某次更新只改了日历的导出格式、事件数据一行没动，这个值就不会变，客户端便一直用着手上那份旧的。这一页就是手动把它变一次，把所有设备叫回来重新看一眼。",
+  "adminCaldav.state.heading": "当前状态",
+  "adminCaldav.state.sourceLabel": "最近一次",
+  "adminCaldav.state.timeLabel": "时间",
+  "adminCaldav.state.markerLabel": "当前标记",
+  "adminCaldav.state.never": "从来没有触发过",
+  "adminCaldav.state.manual": "在这一页手动触发的",
+  "adminCaldav.state.release": "随一次版本更新自动写入的",
+  "adminCaldav.action.heading": "重新同步",
+  "adminCaldav.action.desc": "点下面的按钮会先到一个确认页，那里写清楚按下去到底会发生什么；在那一页再确认一次才真的执行。",
+  "adminCaldav.action.button": "让所有设备重新同步…",
+  "adminCaldav.action.whenToUse": "平时不需要用它：用户自己增删改日程，客户端本来就会发现变化。",
+  "adminCaldav.confirm.heading": "确认：让所有设备重新同步？",
+  "adminCaldav.confirm.lead": "这个动作没有撤销可言 —— 按下去的那一刻，所有已连接的设备就已经被排进了各自的下一轮检查。请先看清楚下面四条。",
+  "adminCaldav.confirm.willHappenLabel": "会发生什么：",
+  "adminCaldav.confirm.willHappen": "所有已连接的日历客户端（iPhone / Mac 的日历、Outlook、DAVx⁵ 等）会在各自的下一次同步时，把自己订阅的每个日历的事件清单重新列一遍。",
+  "adminCaldav.confirm.wontHappenLabel": "不会发生什么：",
+  "adminCaldav.confirm.wontHappen": "事件内容不会被重新下载。每条事件自己的版本号不受影响，客户端比对下来没变的就不会再拉。日历、事件、分享链接、订阅地址一个都不动，用户那边看不到任何东西被改。",
+  "adminCaldav.confirm.costLabel": "代价：",
+  "adminCaldav.confirm.cost": "每台设备的每个日历多一次「列清单」的请求。清单里只有每条事件的版本号，不含事件内容。",
+  "adminCaldav.confirm.notInstantLabel": "不是立刻：",
+  "adminCaldav.confirm.notInstant": "客户端按自己的节奏来问，通常几分钟到几十分钟一次。按完不会马上看到动静，这是正常的。",
+  "adminCaldav.confirm.multiProcessHeading": "如果这台服务器同时跑着好几份 ByWave",
+  "adminCaldav.confirm.multiProcess": "有些部署方式会把同一个站点同时跑成好几份程序来分摊压力。那种情况下，这次操作只有你此刻连上的那一份立即生效，其余几份要等到下一次重启程序才认新值 —— 也就是说会有一部分设备到重启之后才被叫回来。只跑一份（默认装法）不受这条影响。",
+  "adminCaldav.confirm.submit": "确认，让所有设备重新同步",
+  "adminCaldav.confirm.cancel": "取消，返回",
+  "adminCaldav.done": "已经发出重新同步的标记。所有已连接的设备会在各自的下一次同步时重新列一遍事件清单 —— 不是立刻，通常几分钟内陆续开始。",
+  "adminCaldav.needConfirm": "这个操作需要先在确认页上确认一次。",
 
 };

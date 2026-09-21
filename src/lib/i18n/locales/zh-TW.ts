@@ -1396,6 +1396,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
 
   // 蘋果登入被拒。已發布的 App 直接顯示伺服器給的 message，所以每一句都要
   // 說清下一步怎麼做，不是把代碼翻譯一遍。
+  "error.tooManyRequests": "請求過於頻繁，請 {n} 秒後再試",
   "appleLogin.emailTaken": "這個信箱在本站已經有帳號了，而 Apple 沒有證明它屬於你。請改用你原本的登入方式（密碼或單一登入）——這個帳號目前無法透過 Apple 登入。",
   "appleLogin.signupClosed": "本站暫時不開放註冊新帳號。如果你已經有帳號，請改用原來的登入方式；沒有的話，請聯絡本站管理員。",
   "appleLogin.inviteOnly": "本站只接受受邀註冊，而 Apple 登入帶不出邀請碼。請先在網頁上用邀請連結、以同一個信箱註冊並完成信箱驗證；之後回到這裡再點一次 Apple 登入即可。",
@@ -1408,5 +1409,38 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "蘋果這次給的登入憑證沒通過驗證，可能是放太久了。請重新登入一次。",
   "appleLogin.accountDisabled": "這個帳號已被停用。需要恢復的話，請聯絡本站管理員。",
   "appleLogin.notConfigured": "本站還沒有開啟蘋果登入。請聯絡本站管理員開啟後再試，或是改用原來的登入方式。",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "裝置同步",
+  "adminCaldav.heading": "讓所有裝置重新同步行事曆",
+  "adminCaldav.lead": "手機、電腦上的行事曆用戶端靠一個彙總值判斷「有沒有變化」。平時新增修改刪除行程都會讓它變；但如果某次更新只改了行事曆的匯出格式、事件資料一行沒動，這個值就不會變，用戶端便一直用著手上那份舊的。這一頁就是手動把它變一次，把所有裝置叫回來重新看一眼。",
+  "adminCaldav.state.heading": "目前狀態",
+  "adminCaldav.state.sourceLabel": "最近一次",
+  "adminCaldav.state.timeLabel": "時間",
+  "adminCaldav.state.markerLabel": "目前標記",
+  "adminCaldav.state.never": "從來沒有觸發過",
+  "adminCaldav.state.manual": "在這一頁手動觸發的",
+  "adminCaldav.state.release": "隨一次版本更新自動寫入的",
+  "adminCaldav.action.heading": "重新同步",
+  "adminCaldav.action.desc": "點下面的按鈕會先到一個確認頁，那裡寫清楚按下去到底會發生什麼；在那一頁再確認一次才真的執行。",
+  "adminCaldav.action.button": "讓所有裝置重新同步…",
+  "adminCaldav.action.whenToUse": "平時不需要用它：使用者自己新增修改刪除行程，用戶端本來就會發現變化。",
+  "adminCaldav.confirm.heading": "確認：讓所有裝置重新同步？",
+  "adminCaldav.confirm.lead": "這個動作沒有撤銷可言 —— 按下去的那一刻，所有已連線的裝置就已經被排進了各自的下一輪檢查。請先看清楚下面四條。",
+  "adminCaldav.confirm.willHappenLabel": "會發生什麼：",
+  "adminCaldav.confirm.willHappen": "所有已連線的行事曆用戶端（iPhone / Mac 的行事曆、Outlook、DAVx⁵ 等）會在各自的下一次同步時，把自己訂閱的每個行事曆的事件清單重新列一遍。",
+  "adminCaldav.confirm.wontHappenLabel": "不會發生什麼：",
+  "adminCaldav.confirm.wontHappen": "事件內容不會被重新下載。每條事件自己的版本號不受影響，用戶端比對下來沒變的就不會再拉。行事曆、事件、分享連結、訂閱網址一個都不動，使用者那邊看不到任何東西被改。",
+  "adminCaldav.confirm.costLabel": "代價：",
+  "adminCaldav.confirm.cost": "每台裝置的每個行事曆多一次「列清單」的請求。清單裡只有每條事件的版本號，不含事件內容。",
+  "adminCaldav.confirm.notInstantLabel": "不是立刻：",
+  "adminCaldav.confirm.notInstant": "用戶端按自己的節奏來問，通常幾分鐘到幾十分鐘一次。按完不會馬上看到動靜，這是正常的。",
+  "adminCaldav.confirm.multiProcessHeading": "如果這台伺服器同時跑著好幾份 ByWave",
+  "adminCaldav.confirm.multiProcess": "有些部署方式會把同一個站台同時跑成好幾份程式來分攤壓力。那種情況下，這次操作只有你此刻連上的那一份立即生效，其餘幾份要等到下一次重新啟動程式才認新值 —— 也就是說會有一部分裝置到重新啟動之後才被叫回來。只跑一份（預設裝法）不受這條影響。",
+  "adminCaldav.confirm.submit": "確認，讓所有裝置重新同步",
+  "adminCaldav.confirm.cancel": "取消，返回",
+  "adminCaldav.done": "已經發出重新同步的標記。所有已連線的裝置會在各自的下一次同步時重新列一遍事件清單 —— 不是立刻，通常幾分鐘內陸續開始。",
+  "adminCaldav.needConfirm": "這個操作需要先在確認頁上確認一次。",
 
 };

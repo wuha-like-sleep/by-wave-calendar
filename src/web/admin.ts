@@ -10,7 +10,7 @@ import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
-import { getSettings, updateSettings } from "../lib/site_settings.js";
+import { bumpCaldavSyncEpoch, getSettings, updateSettings } from "../lib/site_settings.js";
 import { CAPTCHA_PROVIDERS, isCaptchaProvider, isBuiltinMode } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
 import {
@@ -92,6 +92,43 @@ const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" d
 /** 请求内翻译,给 flash / 页面标题用。口径跟 web/sso.ts 的 tr() 一致。 */
 function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
   return tForRequest(req)(key, vars);
+}
+
+// ---------------------------------------------------------------------------
+// CalDAV 同步纪元(site_settings.caldav_sync_epoch)的人话版本
+// ---------------------------------------------------------------------------
+
+export type CaldavEpochView = {
+  /** 库里那一列的原样取值。页面上照原样显示,不做任何美化。 */
+  raw: string;
+  /** none = 从来没被 bump 过;manual = 后台按钮写的;release = 随版本更新写的。 */
+  kind: "none" | "manual" | "release";
+  /** 只有 manual 能解析出时间;其余为 null。 */
+  atIso: string | null;
+};
+
+/**
+ * 把纪元那一列翻译成「谁、什么时候动的」。
+ *
+ * 为什么要有这个:按钮按下去以后**唯一**能证明它真的生效的东西,就是这一列
+ * 变了。页面上不摆出来的话,站长按完看到一句「已发出」就走了,而真出问题时
+ * (库没写进去 / 写了个和原来一样的值)他这边一模一样,什么都看不出来 ——
+ * 这个仓库最常见的失效形态就是这种。
+ *
+ * 取值的两种来源见 src/lib/site_settings.ts 的 bumpCaldavSyncEpoch(手动,
+ * `manual:<ISO>:<随机十六进制>`)和 drizzle/migrations 里的迁移(版本字面量,
+ * 如 `2026-09-21-alarm-vevent`)。这里只认得出手动那一种的时间,别的来源
+ * 一律当「随版本更新写的」——猜错来源比不猜更糟。
+ */
+export function describeCaldavEpoch(raw: string): CaldavEpochView {
+  if (raw === "") return { raw, kind: "none", atIso: null };
+  // ISO 串自己带冒号,所以不能按 ":" 切 —— 贪婪匹配吃到最后一个冒号为止。
+  const m = raw.match(/^manual:(.+):([0-9a-f]+)$/);
+  if (!m) return { raw, kind: "release", atIso: null };
+  const at = new Date(m[1]!);
+  // 时间解析不出来不代表这不是手动写的:来源判断和时间显示是两件事,
+  // 混在一起的话一个坏时间戳会把「这是谁按的」也一起弄丢。
+  return { raw, kind: "manual", atIso: Number.isNaN(at.getTime()) ? null : at.toISOString() };
 }
 
 // ---------------------------------------------------------------------------
@@ -1308,6 +1345,75 @@ export async function adminRoutes(app: FastifyInstance) {
       await audit(req, u.id, "backup.restore_failed", { details: { error: msg.slice(0, 500) } });
       return reply.redirect("/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));
     }
+  });
+
+  // ---------- CalDAV:让所有设备重新同步 ----------
+  //
+  // 这一页只有一个动作:bump 一次同步纪元(site_settings.caldav_sync_epoch)。
+  // 纪元掺在每个日历的 ctag 里(见 src/web/caldav.ts 的 calendarCtags),改一次
+  // = 所有 CalDAV 客户端下一轮轮询会发现 ctag 变了,各自把事件清单重新列一遍。
+  //
+  // 为什么非要有这个按钮:ctag 的另外两个信号(max(updated_at) / 活行数)都是
+  // **数据**信号。发版只改了导出格式、事件一行没动的时候,这两个信号都不变,
+  // 客户端手上那份旧副本在它眼里永远是最新的 —— 站长怎么重启、用户怎么下拉
+  // 刷新都没有任何变化,而且一条错都不报。迁移里能 bump 一次,但那只覆盖发版
+  // 当天;事后发现漏了、或者手工改过库,就只剩这条路。
+  app.get("/admin/caldav", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const settings = await getSettings();
+    return reply.view("admin/caldav", {
+      title: `${tr(req, "adminCaldav.heading")} · 管理后台`,
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/caldav",
+      epoch: describeCaldavEpoch(settings.caldavSyncEpoch),
+    });
+  });
+
+  // 确认页。单独一页而不是一个勾选框:这个动作没有「撤销」可言 —— 按下去的
+  // 那一刻,所有设备都已经被排进各自的下一轮重列,再改回来也只是再排一轮。
+  // 所以它值一次完整的「你知道会发生什么吗」。
+  app.get("/admin/caldav/resync", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    return reply.view("admin/caldav-resync-confirm", {
+      title: `${tr(req, "adminCaldav.confirm.heading")} · 管理后台`,
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/caldav",
+    });
+  });
+
+  // 限频:6 次 / 5 分钟。
+  //
+  // 判据不是「保护服务器」—— 一次 bump 就是一条 UPDATE,连着按十次也还是十条
+  // UPDATE;而客户端是按分钟级轮询的,同一个轮询周期内 bump 几次,设备那边只
+  // 会看见一次 ctag 变化,额外代价是零。真正要兜的是**无意识的重复提交**:
+  // 确认页提交完刷新、回退再提交、手滑双击。这类重复每一次都会给全站设备
+  // 排一轮重列,而站长以为自己只按了一次。
+  // 6 次比任何真实用途都宽(发版后按一次就够),比连点窄。
+  app.post("/admin/caldav/resync", {
+    config: { rateLimit: { max: 6, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    // 确认这一步是**服务端**要求的,不是模板上一个 required 的勾选框。
+    // 浏览器那边的 required 只是提示:谁把这个地址直接当表单提交、或者手上
+    // 有个旧标签页回退重发,都绕得过去,而那正是「我没按啊」的来源。
+    if (body.confirm !== "yes") {
+      return reply.redirect("/admin/caldav?error=" + encodeURIComponent(tr(req, "adminCaldav.needConfirm")));
+    }
+    const before = (await getSettings()).caldavSyncEpoch;
+    const after = await bumpCaldavSyncEpoch();
+    // 审计里前后两个值都留:事后要回答的问题是「那天到底有没有真的变过」,
+    // 只记一个「按过按钮」答不了 —— 写进去的值和原来一样同样会留下这条记录。
+    // (ip 那一列是 NOT NULL,audit() 里已经从 req.ip 取,这里不用管。)
+    await audit(req, u.id, "caldav.resync_all", {
+      targetType: "site",
+      details: { epochBefore: before, epochAfter: after, changed: before !== after },
+    });
+    return reply.redirect("/admin/caldav?success=" + encodeURIComponent(tr(req, "adminCaldav.done")));
   });
 
   // ---------- Third-party API ----------

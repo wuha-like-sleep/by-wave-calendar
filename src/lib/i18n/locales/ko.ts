@@ -1410,6 +1410,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
 
   // Apple 로그인이 거부된 경우. 이미 배포된 앱은 서버가 보낸 message를 그대로
   // 보여주므로, 각 문장은 다음에 무엇을 할지 알려 주어야 한다.
+  "error.tooManyRequests": "요청이 너무 많습니다. {n}초 후에 다시 시도해 주세요.",
   "appleLogin.emailTaken": "이 이메일로 된 계정이 이미 있는데, Apple이 그 주소가 회원님의 것임을 확인해 주지 않았습니다. 기존에 쓰던 방법(비밀번호 또는 통합 로그인)으로 로그인해 주세요. 이 계정은 Apple로 로그인할 수 없습니다.",
   "appleLogin.signupClosed": "이 사이트는 지금 새 계정 가입을 받지 않습니다. 이미 계정이 있다면 기존 방식으로 로그인하고, 없다면 사이트 관리자에게 문의해 주세요.",
   "appleLogin.inviteOnly": "이 사이트는 초대받은 분만 가입할 수 있고, Apple 로그인으로는 초대 코드를 전달할 수 없습니다. 먼저 초대 링크로 같은 이메일을 사용해 웹에서 가입하고 이메일 인증을 마친 뒤, 여기로 돌아와 Apple로 로그인을 다시 누르면 됩니다.",
@@ -1422,5 +1423,38 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "Apple이 보낸 로그인 증명을 확인하지 못했습니다. 시간이 너무 지났을 수 있으니 다시 로그인해 주세요.",
   "appleLogin.accountDisabled": "이 계정은 사용 중지되었습니다. 복구가 필요하면 사이트 관리자에게 문의해 주세요.",
   "appleLogin.notConfigured": "이 사이트는 아직 Apple 로그인을 켜지 않았습니다. 사이트 관리자에게 활성화를 요청하거나 기존 방식으로 로그인해 주세요.",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "기기 동기화",
+  "adminCaldav.heading": "모든 기기가 캘린더를 다시 동기화하게 하기",
+  "adminCaldav.lead": "휴대폰과 컴퓨터의 캘린더 앱은 하나의 요약 값을 보고 '바뀐 것이 있는지'를 판단합니다. 일정을 추가·수정·삭제하면 이 값은 저절로 바뀝니다. 그런데 일정 데이터는 전혀 건드리지 않고 캘린더를 내보내는 방식만 바뀐 업데이트에서는 이 값이 그대로여서, 각 기기는 가지고 있던 예전 사본을 계속 씁니다. 이 페이지에서는 그 값을 손으로 한 번 바꿔, 모든 기기가 다시 확인하러 오게 합니다.",
+  "adminCaldav.state.heading": "현재 상태",
+  "adminCaldav.state.sourceLabel": "마지막 실행",
+  "adminCaldav.state.timeLabel": "시각",
+  "adminCaldav.state.markerLabel": "현재 표시 값",
+  "adminCaldav.state.never": "한 번도 실행한 적 없음",
+  "adminCaldav.state.manual": "이 페이지에서 직접 실행함",
+  "adminCaldav.state.release": "버전 업데이트와 함께 자동으로 기록됨",
+  "adminCaldav.action.heading": "다시 동기화",
+  "adminCaldav.action.desc": "아래 버튼을 누르면 확인 페이지가 열리고, 누를 경우 무슨 일이 일어나는지 그곳에 적혀 있습니다. 그 페이지에서 한 번 더 확인하기 전까지는 아무것도 실행되지 않습니다.",
+  "adminCaldav.action.button": "모든 기기가 다시 동기화하게 하기…",
+  "adminCaldav.action.whenToUse": "평소에는 필요하지 않습니다. 이용자가 직접 일정을 추가·수정·삭제하면 각 기기는 그것만으로 변화를 알아챕니다.",
+  "adminCaldav.confirm.heading": "확인: 모든 기기가 다시 동기화하게 할까요?",
+  "adminCaldav.confirm.lead": "이 작업은 되돌릴 수 없습니다. 누르는 순간 연결된 모든 기기가 각자의 다음 확인 차례에 들어갑니다. 아래 네 가지를 먼저 읽어 주세요.",
+  "adminCaldav.confirm.willHappenLabel": "일어나는 일:",
+  "adminCaldav.confirm.willHappen": "연결된 모든 캘린더 앱(iPhone과 Mac의 캘린더, Outlook, DAVx⁵ 등)이 각자의 다음 동기화 때, 구독 중인 각 캘린더의 일정 목록을 다시 한 번 받아 갑니다.",
+  "adminCaldav.confirm.wontHappenLabel": "일어나지 않는 일:",
+  "adminCaldav.confirm.wontHappen": "일정 내용을 다시 내려받지는 않습니다. 일정마다 가진 버전 번호는 그대로이므로, 바뀌지 않은 것은 다시 가져가지 않습니다. 캘린더·일정·공유 링크·구독 주소는 그대로이며, 이용자 쪽에서 달라지는 것은 없습니다.",
+  "adminCaldav.confirm.costLabel": "드는 비용:",
+  "adminCaldav.confirm.cost": "기기마다, 캘린더마다 '목록 받아 가기' 요청이 한 번 늘어납니다. 목록에는 각 일정의 버전 번호만 들어 있고 일정 내용은 들어 있지 않습니다.",
+  "adminCaldav.confirm.notInstantLabel": "바로는 아닙니다:",
+  "adminCaldav.confirm.notInstant": "각 기기는 자기 주기대로 물어봅니다. 보통 몇 분에서 수십 분에 한 번입니다. 누른 직후에 눈에 보이는 변화가 없어도 정상입니다.",
+  "adminCaldav.confirm.multiProcessHeading": "이 서버에서 ByWave를 여러 벌 돌리고 있다면",
+  "adminCaldav.confirm.multiProcess": "구성에 따라 한 사이트를 여러 벌의 프로그램으로 동시에 돌려 부하를 나누기도 합니다. 그럴 때는 지금 접속해 있는 한 벌에만 즉시 반영되고, 나머지는 프로그램을 다시 시작할 때까지 예전 값을 씁니다. 즉 일부 기기는 다시 시작한 뒤에야 불려 옵니다. 한 벌만 돌리는 기본 설치에서는 해당되지 않습니다.",
+  "adminCaldav.confirm.submit": "확인, 모든 기기가 다시 동기화하게 하기",
+  "adminCaldav.confirm.cancel": "취소하고 돌아가기",
+  "adminCaldav.done": "다시 동기화하라는 표시를 보냈습니다. 연결된 모든 기기가 각자의 다음 동기화 때 일정 목록을 다시 받아 갑니다. 즉시가 아니라 보통 몇 분 안에 차례로 시작됩니다.",
+  "adminCaldav.needConfirm": "이 작업은 확인 페이지에서 먼저 확인해야 합니다.",
 
 };

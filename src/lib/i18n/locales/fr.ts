@@ -1410,6 +1410,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
 
   // Connexion avec Apple refusée. Les versions déjà publiées de l'application
   // affichent le `message` du serveur : chaque phrase doit dire quoi faire.
+  "error.tooManyRequests": "Trop de requêtes. Réessayez dans {n} secondes.",
   "appleLogin.emailTaken": "Un compte avec cette adresse existe déjà sur ce site, et Apple n'a pas confirmé qu'elle vous appartient. Connectez-vous comme avant (mot de passe ou authentification unique) : ce compte n'est pas accessible via Se connecter avec Apple.",
   "appleLogin.signupClosed": "Ce site n'accepte pas de nouveaux comptes pour le moment. Si vous en avez déjà un, connectez-vous comme avant ; sinon, contactez la personne qui administre le site.",
   "appleLogin.inviteOnly": "Ce site est sur invitation, et Se connecter avec Apple ne peut pas transmettre de code d'invitation. Inscrivez-vous sur le web avec votre lien d'invitation et la même adresse e-mail, confirmez votre adresse, puis revenez ici et appuyez à nouveau sur Se connecter avec Apple.",
@@ -1422,5 +1423,38 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "La preuve de connexion fournie par Apple n'a pas pu être vérifiée ; elle a peut-être expiré. Reconnectez-vous.",
   "appleLogin.accountDisabled": "Ce compte a été désactivé. Contactez la personne qui administre le site pour le rétablir.",
   "appleLogin.notConfigured": "Ce site n'a pas encore activé la connexion avec Apple. Demandez son activation ou connectez-vous comme avant.",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "Synchronisation des appareils",
+  "adminCaldav.heading": "Faire resynchroniser les agendas sur tous les appareils",
+  "adminCaldav.lead": "Les applications d'agenda du téléphone et de l'ordinateur regardent une seule valeur récapitulative pour savoir si quelque chose a changé. Quand on ajoute, modifie ou supprime un événement, cette valeur bouge d'elle-même. Mais lorsqu'une mise à jour change seulement la façon d'exporter les agendas sans toucher au moindre événement, la valeur reste identique et chaque application continue d'utiliser la copie qu'elle a déjà. Cette page change cette valeur à la main, pour que tous les appareils reviennent y regarder.",
+  "adminCaldav.state.heading": "État actuel",
+  "adminCaldav.state.sourceLabel": "Dernière fois",
+  "adminCaldav.state.timeLabel": "Date et heure",
+  "adminCaldav.state.markerLabel": "Repère actuel",
+  "adminCaldav.state.never": "Jamais déclenché",
+  "adminCaldav.state.manual": "Déclenché à la main depuis cette page",
+  "adminCaldav.state.release": "Écrit automatiquement par une mise à jour de version",
+  "adminCaldav.action.heading": "Resynchroniser",
+  "adminCaldav.action.desc": "Le bouton ci-dessous ouvre une page de confirmation qui détaille ce qui va se passer. Rien ne s'exécute tant que vous n'avez pas confirmé là-bas.",
+  "adminCaldav.action.button": "Faire resynchroniser tous les appareils…",
+  "adminCaldav.action.whenToUse": "En temps normal ce n'est pas nécessaire : quand quelqu'un ajoute, modifie ou supprime un événement, les applications s'en aperçoivent toutes seules.",
+  "adminCaldav.confirm.heading": "Confirmation : faire resynchroniser tous les appareils ?",
+  "adminCaldav.confirm.lead": "Il n'y a pas de retour en arrière. Dès que vous appuyez, tous les appareils connectés sont mis en file pour leur prochaine vérification. Lisez d'abord les quatre points ci-dessous.",
+  "adminCaldav.confirm.willHappenLabel": "Ce qui se passe :",
+  "adminCaldav.confirm.willHappen": "Toutes les applications d'agenda connectées (Calendrier sur iPhone et Mac, Outlook, DAVx⁵ et autres) redemanderont la liste des événements de chaque agenda auquel elles sont abonnées, lors de leur propre prochaine synchronisation.",
+  "adminCaldav.confirm.wontHappenLabel": "Ce qui ne se passe pas :",
+  "adminCaldav.confirm.wontHappen": "Le contenu des événements n'est pas retéléchargé. Chaque événement garde son numéro de version, donc les applications passent tout ce qui n'a pas changé. Agendas, événements, liens de partage et adresses d'abonnement restent tels quels, et vos utilisateurs ne voient rien changer.",
+  "adminCaldav.confirm.costLabel": "Ce que ça coûte :",
+  "adminCaldav.confirm.cost": "Une requête de liste supplémentaire par agenda et par appareil. Une liste ne contient que le numéro de version de chaque événement, pas les événements eux-mêmes.",
+  "adminCaldav.confirm.notInstantLabel": "Ce n'est pas immédiat :",
+  "adminCaldav.confirm.notInstant": "Chaque application interroge à son propre rythme, en général de quelques minutes à une demi-heure. Il est normal que rien ne se voie juste après l'appui.",
+  "adminCaldav.confirm.multiProcessHeading": "Si ce serveur fait tourner plusieurs copies de ByWave à la fois",
+  "adminCaldav.confirm.multiProcess": "Certaines installations font tourner un même site sous forme de plusieurs copies du programme pour répartir la charge. Dans ce cas, seule la copie à laquelle vous êtes connecté maintenant prend la nouvelle valeur tout de suite ; les autres gardent l'ancienne jusqu'au redémarrage du programme, donc une partie des appareils ne sera rappelée qu'après ce redémarrage. Avec une seule copie, l'installation par défaut, cela ne s'applique pas.",
+  "adminCaldav.confirm.submit": "Oui, faire resynchroniser tous les appareils",
+  "adminCaldav.confirm.cancel": "Annuler et revenir",
+  "adminCaldav.done": "Le repère de resynchronisation a été envoyé. Chaque appareil connecté redemandera sa liste d'événements lors de sa propre prochaine synchronisation : pas tout de suite, mais en général dans les minutes qui suivent.",
+  "adminCaldav.needConfirm": "Cette action doit d'abord être confirmée sur la page de confirmation.",
 
 };

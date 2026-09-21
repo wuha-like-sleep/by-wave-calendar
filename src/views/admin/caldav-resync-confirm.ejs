@@ -1,0 +1,33 @@
+<%- include('_nav') %>
+
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminCaldav.confirm.heading") %></h1>
+<p class="text-sm text-slate-500 mb-6"><%= t("adminCaldav.confirm.lead") %></p>
+
+<section class="rounded-2xl border border-amber-200 bg-amber-50/50 p-5 sm:p-6 mb-6">
+  <ul class="space-y-3 text-sm text-slate-700 leading-relaxed">
+    <li><strong class="text-slate-900"><%= t("adminCaldav.confirm.willHappenLabel") %></strong> <%= t("adminCaldav.confirm.willHappen") %></li>
+    <li><strong class="text-slate-900"><%= t("adminCaldav.confirm.wontHappenLabel") %></strong> <%= t("adminCaldav.confirm.wontHappen") %></li>
+    <li><strong class="text-slate-900"><%= t("adminCaldav.confirm.costLabel") %></strong> <%= t("adminCaldav.confirm.cost") %></li>
+    <li><strong class="text-slate-900"><%= t("adminCaldav.confirm.notInstantLabel") %></strong> <%= t("adminCaldav.confirm.notInstant") %></li>
+  </ul>
+</section>
+
+<%# 多进程那条单独摆出来：它是这个功能唯一一处「按了也可能一半没生效」的地方，
+    夹在上面的清单里会被当成又一条说明读过去。 %>
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-base font-semibold text-slate-900 mb-2"><%= t("adminCaldav.confirm.multiProcessHeading") %></h2>
+  <p class="text-sm text-slate-600 leading-relaxed"><%= t("adminCaldav.confirm.multiProcess") %></p>
+</section>
+
+<form method="post" action="/admin/caldav/resync" class="flex flex-wrap items-center gap-3">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+  <%# 服务端认这个字段才执行（见 admin.ts 里那条路由）。它不是给用户勾的，
+      是为了让「没经过这一页的 POST」有个明确的拒绝口径。 %>
+  <input type="hidden" name="confirm" value="yes" />
+  <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">
+    <%= t("adminCaldav.confirm.submit") %>
+  </button>
+  <a href="/admin/caldav" class="text-sm text-slate-600 hover:text-slate-900"><%= t("adminCaldav.confirm.cancel") %></a>
+</form>
+
+<%- include('_nav_end') %>

@@ -1410,6 +1410,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
 
   // Apple でのログインが拒否されたとき。配布済みのアプリはサーバーが返した
   // message をそのまま表示するため、次に何をすればよいかを書く。
+  "error.tooManyRequests": "リクエストが多すぎます。{n} 秒後にもう一度お試しください。",
   "appleLogin.emailTaken": "このメールアドレスのアカウントは既にこのサイトに存在しますが、Apple はそのアドレスがあなたのものだと証明していません。以前と同じ方法（パスワードまたはシングルサインオン）でログインしてください。このアカウントに Apple でサインインすることはできません。",
   "appleLogin.signupClosed": "このサイトは現在、新しいアカウントの登録を受け付けていません。すでにアカウントをお持ちの場合はこれまでの方法でログインしてください。お持ちでない場合はサイト管理者にお問い合わせください。",
   "appleLogin.inviteOnly": "このサイトは招待制で、Apple でサインインでは招待コードを渡せません。まず招待リンクから、同じメールアドレスでウェブ上に登録してメール確認を済ませてください。そのあとここに戻って、もう一度 Apple でサインインすればログインできます。",
@@ -1422,5 +1423,38 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "Apple から渡されたログインの証明を確認できませんでした。時間が経ちすぎた可能性があります。もう一度ログインしてください。",
   "appleLogin.accountDisabled": "このアカウントは停止されています。復旧が必要な場合はサイト管理者にお問い合わせください。",
   "appleLogin.notConfigured": "このサイトではまだ Apple でのログインが有効になっていません。サイト管理者に有効化を依頼するか、これまでの方法でログインしてください。",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "端末の同期",
+  "adminCaldav.heading": "すべての端末にカレンダーを同期し直させる",
+  "adminCaldav.lead": "スマートフォンやパソコンのカレンダーアプリは、ひとつのまとめ値を見て「変更があったかどうか」を判断します。予定を追加・変更・削除すれば、この値はひとりでに変わります。ただし、予定のデータには一切手を触れず書き出し方だけを変えた更新では、この値が変わらないため、各端末は手元の古い写しを使い続けます。このページでは、その値を手動で一度変えて、すべての端末に見直しに来てもらいます。",
+  "adminCaldav.state.heading": "現在の状態",
+  "adminCaldav.state.sourceLabel": "前回",
+  "adminCaldav.state.timeLabel": "日時",
+  "adminCaldav.state.markerLabel": "現在の目印",
+  "adminCaldav.state.never": "一度も実行されていません",
+  "adminCaldav.state.manual": "このページから手動で実行されました",
+  "adminCaldav.state.release": "バージョン更新に伴って自動的に書き込まれました",
+  "adminCaldav.action.heading": "同期のやり直し",
+  "adminCaldav.action.desc": "下のボタンを押すと確認ページが開き、押した場合に何が起きるかがそこに書かれています。そのページでもう一度確認するまで、実際には何も実行されません。",
+  "adminCaldav.action.button": "すべての端末に同期し直させる…",
+  "adminCaldav.action.whenToUse": "普段は必要ありません。利用者が自分で予定を追加・変更・削除すれば、各端末はそれだけで変更に気づきます。",
+  "adminCaldav.confirm.heading": "確認：すべての端末に同期し直させますか？",
+  "adminCaldav.confirm.lead": "この操作は取り消せません。押した時点で、接続中のすべての端末が次回の確認の順番に入ります。まず下の 4 点をお読みください。",
+  "adminCaldav.confirm.willHappenLabel": "起きること：",
+  "adminCaldav.confirm.willHappen": "接続中のすべてのカレンダーアプリ（iPhone や Mac のカレンダー、Outlook、DAVx⁵ など）が、それぞれ次回の同期のときに、購読している各カレンダーの予定一覧をもう一度取得し直します。",
+  "adminCaldav.confirm.wontHappenLabel": "起きないこと：",
+  "adminCaldav.confirm.wontHappen": "予定の中身が再ダウンロードされることはありません。予定ごとの版番号は変わらないため、各端末は変わっていないものを取りに来ません。カレンダー・予定・共有リンク・購読アドレスはそのままで、利用者から見て変わるものは何もありません。",
+  "adminCaldav.confirm.costLabel": "かかる負担：",
+  "adminCaldav.confirm.cost": "端末ごと・カレンダーごとに「一覧の取得」が 1 回増えるだけです。一覧に含まれるのは各予定の版番号だけで、予定の中身は含まれません。",
+  "adminCaldav.confirm.notInstantLabel": "すぐには起きません：",
+  "adminCaldav.confirm.notInstant": "各端末は自分のペースで問い合わせます。数分おきから数十分おき程度です。押した直後に目に見える動きがなくても、それが正常です。",
+  "adminCaldav.confirm.multiProcessHeading": "このサーバーで ByWave を複数動かしている場合",
+  "adminCaldav.confirm.multiProcess": "構成によっては、ひとつのサイトを複数のプログラムとして同時に動かし、負荷を分担させることがあります。その場合、今つながっている 1 つにはすぐ反映されますが、残りはプログラムを再起動するまで古い値のままです。つまり一部の端末は再起動のあとで呼び戻されます。1 つだけで動かす既定の構成では、この点は関係ありません。",
+  "adminCaldav.confirm.submit": "実行する（すべての端末に同期し直させる）",
+  "adminCaldav.confirm.cancel": "取り消して戻る",
+  "adminCaldav.done": "同期し直しの目印を出しました。接続中のすべての端末が、それぞれ次回の同期のときに予定一覧を取得し直します。すぐにではなく、通常は数分のうちに順次始まります。",
+  "adminCaldav.needConfirm": "この操作は、先に確認ページで確認する必要があります。",
 
 };

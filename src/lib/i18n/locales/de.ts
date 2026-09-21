@@ -1410,6 +1410,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
 
   // Anmeldung mit Apple abgelehnt. Bereits veröffentlichte App-Versionen zeigen
   // die `message` des Servers an — jeder Satz sagt, was als Nächstes zu tun ist.
+  "error.tooManyRequests": "Zu viele Anfragen. Bitte versuchen Sie es in {n} Sekunden erneut.",
   "appleLogin.emailTaken": "Für diese E-Mail-Adresse gibt es hier bereits ein Konto, und Apple hat nicht bestätigt, dass die Adresse Ihnen gehört. Melden Sie sich wie bisher an (Passwort oder Single Sign-on) – über „Mit Apple anmelden“ ist dieses Konto nicht erreichbar.",
   "appleLogin.signupClosed": "Diese Seite nimmt derzeit keine neuen Konten an. Wenn du schon eins hast, melde dich wie bisher an; andernfalls wende dich an die Administration der Seite.",
   "appleLogin.inviteOnly": "Diese Website ist nur auf Einladung zugänglich, und „Mit Apple anmelden“ kann keinen Einladungscode übermitteln. Registrieren Sie sich im Web über Ihren Einladungslink mit derselben E-Mail-Adresse, bestätigen Sie Ihre Adresse und tippen Sie danach hier erneut auf „Mit Apple anmelden“.",
@@ -1422,5 +1423,38 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "appleLogin.tokenInvalid": "Der Anmeldenachweis von Apple konnte nicht geprüft werden, möglicherweise ist er abgelaufen. Melde dich bitte erneut an.",
   "appleLogin.accountDisabled": "Dieses Konto ist deaktiviert. Wende dich an die Administration der Seite, um es wieder freischalten zu lassen.",
   "appleLogin.notConfigured": "Auf dieser Seite ist die Anmeldung mit Apple noch nicht aktiviert. Bitte um Aktivierung oder melde dich wie bisher an.",
+
+
+  // /admin/caldav
+  "adminCaldav.navLabel": "Gerätesynchronisierung",
+  "adminCaldav.heading": "Alle Geräte die Kalender neu abgleichen lassen",
+  "adminCaldav.lead": "Kalender-Apps auf Telefon und Computer schauen auf einen einzigen Sammelwert, um zu entscheiden, ob sich etwas geändert hat. Beim Anlegen, Ändern oder Löschen von Terminen ändert sich dieser Wert von selbst. Wenn eine Aktualisierung aber nur die Art ändert, wie Kalender ausgegeben werden, ohne einen einzigen Termin anzufassen, bleibt der Wert gleich und jede App arbeitet weiter mit der Kopie, die sie schon hat. Diese Seite ändert den Wert von Hand, damit alle Geräte noch einmal nachsehen kommen.",
+  "adminCaldav.state.heading": "Aktueller Stand",
+  "adminCaldav.state.sourceLabel": "Zuletzt",
+  "adminCaldav.state.timeLabel": "Zeitpunkt",
+  "adminCaldav.state.markerLabel": "Aktuelle Markierung",
+  "adminCaldav.state.never": "Noch nie ausgelöst",
+  "adminCaldav.state.manual": "Von Hand auf dieser Seite ausgelöst",
+  "adminCaldav.state.release": "Automatisch durch eine Programmaktualisierung geschrieben",
+  "adminCaldav.action.heading": "Neu abgleichen",
+  "adminCaldav.action.desc": "Die Schaltfläche unten führt zu einer Bestätigungsseite, auf der genau steht, was passieren wird. Vorher wird nichts ausgeführt.",
+  "adminCaldav.action.button": "Alle Geräte neu abgleichen lassen…",
+  "adminCaldav.action.whenToUse": "Im Normalfall brauchst du das nicht: Wenn jemand selbst Termine anlegt, ändert oder löscht, merken die Apps das von allein.",
+  "adminCaldav.confirm.heading": "Bestätigen: alle Geräte neu abgleichen lassen?",
+  "adminCaldav.confirm.lead": "Das lässt sich nicht rückgängig machen. Sobald du drückst, sind alle verbundenen Geräte für ihre nächste Prüfung eingereiht. Lies bitte zuerst die vier Punkte unten.",
+  "adminCaldav.confirm.willHappenLabel": "Was passiert:",
+  "adminCaldav.confirm.willHappen": "Alle verbundenen Kalender-Apps (Kalender auf iPhone und Mac, Outlook, DAVx⁵ und andere) holen sich beim jeweils nächsten Abgleich noch einmal die Terminliste jedes Kalenders, den sie abonniert haben.",
+  "adminCaldav.confirm.wontHappenLabel": "Was nicht passiert:",
+  "adminCaldav.confirm.wontHappen": "Termininhalte werden nicht erneut heruntergeladen. Jeder Termin behält seine eigene Versionsnummer, deshalb überspringen die Apps alles, was sich nicht geändert hat. Kalender, Termine, Freigabelinks und Abonnementadressen bleiben unverändert, und für deine Nutzerinnen und Nutzer ändert sich nichts Sichtbares.",
+  "adminCaldav.confirm.costLabel": "Was es kostet:",
+  "adminCaldav.confirm.cost": "Eine zusätzliche Listenabfrage pro Kalender und Gerät. In einer Liste stehen nur die Versionsnummern der Termine, nicht die Termine selbst.",
+  "adminCaldav.confirm.notInstantLabel": "Nicht sofort:",
+  "adminCaldav.confirm.notInstant": "Die Apps fragen in ihrem eigenen Takt nach, üblicherweise alle paar Minuten bis alle halbe Stunde. Dass direkt nach dem Drücken nichts zu sehen ist, ist normal.",
+  "adminCaldav.confirm.multiProcessHeading": "Wenn auf diesem Server mehrere Kopien von ByWave gleichzeitig laufen",
+  "adminCaldav.confirm.multiProcess": "Manche Installationen betreiben eine Seite als mehrere Kopien des Programms, um die Last zu verteilen. Dann übernimmt nur die Kopie, mit der du gerade verbunden bist, den neuen Wert sofort; die übrigen behalten den alten Wert bis zum nächsten Neustart des Programms, ein Teil der Geräte wird also erst danach zurückgerufen. Bei einer einzelnen Kopie, der Standardinstallation, spielt das keine Rolle.",
+  "adminCaldav.confirm.submit": "Ja, alle Geräte neu abgleichen lassen",
+  "adminCaldav.confirm.cancel": "Abbrechen und zurück",
+  "adminCaldav.done": "Die Markierung für den neuen Abgleich ist gesetzt. Jedes verbundene Gerät holt sich beim jeweils nächsten Abgleich seine Terminliste erneut — nicht sofort, aber in der Regel beginnt es innerhalb weniger Minuten.",
+  "adminCaldav.needConfirm": "Diese Aktion muss zuerst auf der Bestätigungsseite bestätigt werden.",
 
 };

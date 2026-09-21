@@ -1418,6 +1418,7 @@ export const en = {
   // Sign in with Apple, refused (apps talk to /auth/apple). Shipped app builds
   // show whatever `message` we send, so each line must say what to do next —
   // never a translated error code. See src/routes/devices.ts:appleProvisionDenial.
+  "error.tooManyRequests": "Too many requests. Please try again in {n} seconds.",
   "appleLogin.emailTaken": "An account with this email already exists here, and Apple didn't confirm the address belongs to you. Please sign in the way you did before (password or single sign-on) — this account can't be reached through Sign in with Apple.",
   "appleLogin.signupClosed": "This site is not accepting new accounts at the moment. If you already have one, sign in the way you did before; otherwise please ask the site administrator.",
   "appleLogin.inviteOnly": "This site is invite-only, and Sign in with Apple can't carry an invite code. Register on the web using your invite link and the same email address, confirm your email, then come back and tap Sign in with Apple again.",
@@ -1430,6 +1431,39 @@ export const en = {
   "appleLogin.tokenInvalid": "The sign-in proof from Apple could not be verified — it may have expired. Please sign in again.",
   "appleLogin.accountDisabled": "This account has been turned off. Please ask the site administrator to restore it.",
   "appleLogin.notConfigured": "This site has not turned on Sign in with Apple yet. Please ask the site administrator to enable it, or sign in the way you did before.",
+
+
+  // /admin/caldav — 让所有设备重新同步（英文是源语言，先写这里）
+  "adminCaldav.navLabel": "Device sync",
+  "adminCaldav.heading": "Make every device re-sync its calendars",
+  "adminCaldav.lead": "Calendar apps on phones and computers look at one summary value to decide whether anything changed. Ordinary edits move that value on their own. But when an update only changes the way calendars are written out, without touching a single event, the value stays put and every client keeps using the copy it already has. This page moves it by hand, so all devices come back and take a fresh look.",
+  "adminCaldav.state.heading": "Current state",
+  "adminCaldav.state.sourceLabel": "Last time",
+  "adminCaldav.state.timeLabel": "When",
+  "adminCaldav.state.markerLabel": "Current marker",
+  "adminCaldav.state.never": "Never triggered",
+  "adminCaldav.state.manual": "Triggered by hand on this page",
+  "adminCaldav.state.release": "Written automatically by a version update",
+  "adminCaldav.action.heading": "Re-sync",
+  "adminCaldav.action.desc": "The button below opens a confirmation page that spells out exactly what will happen. Nothing runs until you confirm there.",
+  "adminCaldav.action.button": "Make every device re-sync…",
+  "adminCaldav.action.whenToUse": "You normally do not need this: when people add, edit or delete events themselves, clients notice on their own.",
+  "adminCaldav.confirm.heading": "Confirm: make every device re-sync?",
+  "adminCaldav.confirm.lead": "There is no undo. The moment you press it, every connected device is queued for its next check. Please read the four points below first.",
+  "adminCaldav.confirm.willHappenLabel": "What happens:",
+  "adminCaldav.confirm.willHappen": "Every connected calendar app (Calendar on iPhone and Mac, Outlook, DAVx⁵ and others) lists the events of each calendar it subscribes to once more, at its own next sync.",
+  "adminCaldav.confirm.wontHappenLabel": "What does not happen:",
+  "adminCaldav.confirm.wontHappen": "Event contents are not downloaded again. Each event keeps its own version number, so clients skip everything that has not changed. Calendars, events, share links and subscription addresses all stay as they are, and your users see nothing change.",
+  "adminCaldav.confirm.costLabel": "What it costs:",
+  "adminCaldav.confirm.cost": "One extra listing request per calendar per device. A listing carries only the version number of each event, not the events themselves.",
+  "adminCaldav.confirm.notInstantLabel": "Not immediate:",
+  "adminCaldav.confirm.notInstant": "Clients ask at their own pace, usually somewhere between every few minutes and every half hour. Nothing visible happens right after you press it, and that is normal.",
+  "adminCaldav.confirm.multiProcessHeading": "If this server runs several copies of ByWave at once",
+  "adminCaldav.confirm.multiProcess": "Some setups run one site as several copies of the program to share the load. In that case only the copy you are connected to right now picks this up immediately; the others keep the old value until the program is restarted, so part of the devices are called back only after that restart. A single copy, which is the default install, is not affected.",
+  "adminCaldav.confirm.submit": "Yes, make every device re-sync",
+  "adminCaldav.confirm.cancel": "Cancel and go back",
+  "adminCaldav.done": "The re-sync marker has been sent. Every connected device will list its events again at its own next sync — not instantly, but usually starting within a few minutes.",
+  "adminCaldav.needConfirm": "This action has to be confirmed on the confirmation page first.",
 
 } satisfies Record<string, string>;
 
