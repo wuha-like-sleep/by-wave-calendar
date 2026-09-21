@@ -1040,16 +1040,11 @@ app.addHook("preHandler", async (req, reply) => {
   verifyCsrf(req, reply);
 });
 
-// Enforce read-scope on API-token writes. Sits on /api/* mutating verbs only;
-// session-cookie callers are unaffected because they have no `authVia` tag.
-app.addHook("preHandler", async (req, reply) => {
-  if (!req.url.startsWith("/api/")) return;
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
-  const tag = (req as unknown as { authVia?: string }).authVia;
-  if (tag === "api_token:read") {
-    reply.code(403).send({ error: "token_is_read_only" });
-  }
-});
+// 只读 token 的写拦截**不在这里**。它曾经是一个 preHandler 钩子，读
+// req.authVia —— 而那个标记是 requireUserOrSend() 在 handler 阶段才写进去的，
+// preHandler 永远先跑，所以判断永远不成立，一行日志都不会有。
+// 现在它就写在 lib/session.ts 里认出 scope 的那一行旁边。
+// 教训：凡是依赖「请求上某个字段」的钩子，先确认那个字段是谁、在哪个阶段写的。
 // Inject DB-backed site settings into every reply.view call.
 app.addHook("onRequest", async (req, reply) => {
   const settings = await getSettings();

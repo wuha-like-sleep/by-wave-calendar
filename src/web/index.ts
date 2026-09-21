@@ -667,6 +667,12 @@ export async function webRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, reset.userId));
     await consumeReset(token);
     await destroyAllUserSessions(reset.userId);
+    // 走到「忘记密码」这一步，账号多半已被怀疑失控。App 的 refresh token
+    // 存在 devices 表里，是另一套凭据，不吊销就赶不走已配对的设备。
+    {
+      const { revokeAllUserDevices } = await import("../lib/devices.js");
+      await revokeAllUserDevices(reset.userId);
+    }
     return redirectWith(reply, "/login", { success: tr(req, "flash.resetPassword.success") });
   });
 
@@ -2299,6 +2305,12 @@ export async function webRoutes(app: FastifyInstance) {
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
     // Invalidate all sessions including current; user must re-login
     await destroyAllUserSessions(user.id);
+    // 连同已配对的 App 设备一起吊销——它们用的是 devices 表里的 refresh token，
+    // 和 sessions 是两套东西，只删 sessions 赶不走已经登过 App 的人。
+    {
+      const { revokeAllUserDevices } = await import("../lib/devices.js");
+      await revokeAllUserDevices(user.id);
+    }
     // Drop any cached CalDAV auth tokens for this user — otherwise
     // their iPhone could keep syncing for up to 60s on the old password.
     invalidateCalDavAuthCache(user.id);

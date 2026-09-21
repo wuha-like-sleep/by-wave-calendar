@@ -15,6 +15,9 @@ const SESSION_TTL_MS = 30 * ONE_DAY_MS;
 // across restarts and for tab/browser variants that hold cookies longer.
 const SESSION_TRANSIENT_TTL_MS = 1 * ONE_DAY_MS;
 
+/** 不改变服务端状态的方法——只读 token 只允许这些。 */
+const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT"]);
+
 export async function createSession(
   reply: FastifyReply,
   userId: string,
@@ -189,6 +192,16 @@ export async function requireUserOrSend(
       if (verified) {
         const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
         if (u) {
+          // 只读 token 不许写。**这道判断必须放在这里**——它曾经写成一个
+          // preHandler 钩子，而 authVia 是下面这一行、也就是 handler 阶段才写进
+          // request 的：钩子读的时候永远是 undefined，判断永远不成立，于是
+          // scope=read 的 token 能建、能改、能删日历和事件，后台还显示着「只读」。
+          // 实测过：GET 200 / POST 201。放在知道 scope 的这一行旁边，
+          // 阶段顺序就无从出错。
+          if (verified.scope === "read" && !READ_ONLY_METHODS.has(req.method)) {
+            reply.code(403).send({ error: "token_is_read_only" });
+            return null;
+          }
           req.user = u;
           void touchApiToken(verified.tokenId, req.ip).catch(() => undefined);
           // Tag the request so downstream handlers can tell session vs API.

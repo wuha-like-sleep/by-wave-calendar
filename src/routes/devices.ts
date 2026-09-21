@@ -742,17 +742,22 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { hashPassword } = await import("../lib/password.js");
     const hash = await hashPassword(body.data.newPassword);
     await db.update(schema.users).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
-    // Re-using the existing security-change email + invalidating sessions
-    // is intentional — change-password should kick all other clients out.
-    // The CURRENT device's refresh token stays valid (we don't touch
-    // the devices table here), so the APP can keep working. Other web
-    // sessions and other devices get 401 on next call.
+    // 改密码要把其它客户端全部踢掉，只留当前这台设备（否则用户在 App 里
+    // 改完密码自己就被登出了）。
+    //
+    // 注意：以前这里只删 sessions 表，而注释却写着「其它设备下次调用会 401」
+    // —— 那是错的。App 的 refresh token 存在 devices 表里，是另一套凭据，
+    // 不吊销它，盗号者只要在改密码之前登过一次 App 就赶不走。
     const { sendMail } = await import("../lib/mailer.js");
     const { securityChangeMail } = await import("../lib/email_templates.js");
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
     const { destroyAllUserSessions } = await import("../lib/session.js");
     await destroyAllUserSessions(user.id);
+    const { revokeAllUserDevices } = await import("../lib/devices.js");
+    const currentDeviceId = (req as unknown as { deviceId?: string }).deviceId;
+    const revoked = await revokeAllUserDevices(user.id, { exceptDeviceId: currentDeviceId });
+    req.log.info({ userId: user.id, revoked, keptCurrent: !!currentDeviceId }, "password_change_devices_revoked");
     return reply.send({ ok: true });
   });
 

@@ -1,7 +1,7 @@
 // Business logic for the device pairing flow. Routes delegate to these
 // functions; the routes file stays Fastify-shaped only.
 
-import { and, asc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, ne } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import {
   extractRefreshTokenPrefix,
@@ -226,6 +226,31 @@ export async function listDevicesForUser(userId: string) {
     .from(schema.devices)
     .where(and(eq(schema.devices.userId, userId), isNull(schema.devices.revokedAt)))
     .orderBy(asc(schema.devices.createdAt));
+}
+
+/**
+ * 吊销这个用户的全部设备（可留一个当前设备）。
+ *
+ * 为什么必须和 destroyAllUserSessions 一起调用：改密码/重置密码只删 sessions 表，
+ * 而 App 的 refresh token 存在 devices 表里，是另一套凭据。盗号者只要在受害者
+ * 改密码之前完成过一次 App 登录或扫码配对，改密码和邮件重置都赶不走他——
+ * refresh token 长期有效，随时能换新的 access token 继续读写日历。
+ *
+ * 而用户看到的三个信号（提示「请重新登录」、会话被清空、旧密码确实失效）
+ * 全都在告诉他已经把人踢出去了。「我被盗号了」这个唯一的自救动作是无效的。
+ */
+export async function revokeAllUserDevices(
+  userId: string,
+  opts: { exceptDeviceId?: string } = {},
+): Promise<number> {
+  const conds = [eq(schema.devices.userId, userId), isNull(schema.devices.revokedAt)];
+  if (opts.exceptDeviceId) conds.push(ne(schema.devices.id, opts.exceptDeviceId));
+  const rows = await db
+    .update(schema.devices)
+    .set({ revokedAt: new Date() })
+    .where(and(...conds))
+    .returning({ id: schema.devices.id });
+  return rows.length;
 }
 
 export async function revokeDevice(userId: string, deviceId: string): Promise<boolean> {
