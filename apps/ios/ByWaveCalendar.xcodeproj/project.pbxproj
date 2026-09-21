@@ -34,7 +34,6 @@
 		1F0001000000000000000019 /* LocalNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000019 /* LocalNotifications.swift */; };
 		1F000100000000000000001A /* PushService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001A /* PushService.swift */; };
 		1F000100000000000000001B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001B /* Assets.xcassets */; };
-		1F00010000000000000000A1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */; };
 		1F000100000000000000001C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001C /* Theme.swift */; };
 		1F000100000000000000001E /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001E /* Profile.swift */; };
 		1F000100000000000000001F /* ProfileSwitcherView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000001F /* ProfileSwitcherView.swift */; };
@@ -44,13 +43,14 @@
 		1F0001000000000000000023 /* ServerCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000023 /* ServerCapabilities.swift */; };
 		1F0001000000000000000024 /* AttendeesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000024 /* AttendeesPage.swift */; };
 		1F0001000000000000000025 /* DateFormatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000025 /* DateFormatters.swift */; };
-		1F0001000000000000000B01 /* AllDayDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000B01 /* AllDayDates.swift */; };
 		1F0001000000000000000026 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000026 /* Localizable.strings */; };
 		1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000029 /* ManageCalendarsView.swift */; };
 		1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002B /* DesktopPairScannerView.swift */; };
 		1F000100000000000000002C /* LocaleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002C /* LocaleManager.swift */; };
 		1F000100000000000000002D /* AppleSignIn.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002D /* AppleSignIn.swift */; };
 		1F0001000000000000000040 /* BookingLinksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000040 /* BookingLinksView.swift */; };
+		1F00010000000000000000A1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */; };
+		1F0001000000000000000B01 /* AllDayDates.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000B01 /* AllDayDates.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -82,7 +82,6 @@
 		1B0001000000000000000019 /* LocalNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNotifications.swift; sourceTree = "<group>"; };
 		1B000100000000000000001A /* PushService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushService.swift; sourceTree = "<group>"; };
 		1B000100000000000000001B /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		1B000100000000000000001C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		1B000100000000000000001D /* ByWaveCalendar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ByWaveCalendar.entitlements; sourceTree = "<group>"; };
 		1B000100000000000000001E /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -93,7 +92,6 @@
 		1B0001000000000000000023 /* ServerCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCapabilities.swift; sourceTree = "<group>"; };
 		1B0001000000000000000024 /* AttendeesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendeesPage.swift; sourceTree = "<group>"; };
 		1B0001000000000000000025 /* DateFormatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatters.swift; sourceTree = "<group>"; };
-		1B0001000000000000000B01 /* AllDayDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllDayDates.swift; sourceTree = "<group>"; };
 		1B0001000000000000000027 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1B0001000000000000000029 /* ManageCalendarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageCalendarsView.swift; sourceTree = "<group>"; };
@@ -101,6 +99,8 @@
 		1B000100000000000000002C /* LocaleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocaleManager.swift; sourceTree = "<group>"; };
 		1B000100000000000000002D /* AppleSignIn.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignIn.swift; sourceTree = "<group>"; };
 		1B0001000000000000000040 /* BookingLinksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookingLinksView.swift; sourceTree = "<group>"; };
+		1B00010000000000000000A1 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1B0001000000000000000B01 /* AllDayDates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllDayDates.swift; sourceTree = "<group>"; };
 		E5E1F0622FCB3E3A00ECC51B /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = es.lproj/Localizable.strings; sourceTree = "<group>"; };
 		E5E1F0632FCB3E3D00ECC51B /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
 		E5E1F0642FCB3E3F00ECC51B /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hant"; path = "zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
@@ -504,12 +504,13 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ByWaveCalendar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ByWave Calendar";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
@@ -521,7 +522,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.6.2;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
@@ -539,12 +540,13 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ByWaveCalendar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "ByWave Calendar";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "把 ByWave 的日历事件同步到 iOS 系统日历，需要使用日历权限";
@@ -556,7 +558,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.6.2;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;

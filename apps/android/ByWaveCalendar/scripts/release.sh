@@ -207,7 +207,14 @@ d.update({
     "versionName": "$VERSION_NAME",
     "filename": "$CANONICAL_FILENAME",
     "downloadUrl": "$DOWNLOAD_URL",
-    # `url` mirrors downloadUrl — it's what the Android client's GitHub-raw
+    # ⚠️ 这个 heredoc 是 <<PY（不带引号），所以 bash 会对它做替换 ——
+    # **包括反引号里的命令替换**。这一行原本写成 \`url\` mirrors downloadUrl，
+    # 于是每次发版 bash 都会去执行一个叫 url 的命令，日志里多一行
+    # 「url: command not found」，而那段文字被替换成空。
+    # 这次只是注释少了个词，但同样的写法哪天注释里出现别的反引号内容，
+    # 就是在发版脚本里执行任意命令。heredoc 里一律不写裸反引号。
+    #
+    # url 这个键是 downloadUrl 的镜像 —— 安卓客户端读 GitHub raw 的那条路认它。
     # update fallback reads (AndroidReleaseDto.url). Must be bumped together
     # or the fallback would hand out the PREVIOUS version's APK.
     "url": "$DOWNLOAD_URL",

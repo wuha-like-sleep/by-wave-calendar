@@ -1,13 +1,13 @@
 {
-  "versionCode": 20,
-  "versionName": "0.11.1",
-  "filename": "bywave-calendar-0.11.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.11.1/bywave-calendar-0.11.1.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.11.1/bywave-calendar-0.11.1.apk",
-  "sha256": "a54effa98507a7f8647548f870228583a942ab999ab7102b45eb03b5dc83f62a",
-  "sizeBytes": 24846856,
-  "releasedAt": "2026-07-03T10:08:51Z",
-  "notes": "本次更新（v0.11.1）：\n• 撤销删除：删掉事件后底部会弹「已删除 · 撤销」，手滑删错点一下就能恢复\n",
+  "versionCode": 21,
+  "versionName": "0.12.0",
+  "filename": "bywave-calendar-0.12.0.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.0/bywave-calendar-0.12.0.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.0/bywave-calendar-0.12.0.apk",
+  "sha256": "7f467f43737a24747bec047dfe3d0704ebf1472d7ddce5f534b8b2c2efb873d4",
+  "sizeBytes": 24921268,
+  "releasedAt": "2026-09-21T11:35:45Z",
+  "notes": "v0.12 — 能点到、看得全、真的会响\n\n⚠️ 提醒的默认值改成「开」了\n以前默认是关的，很多人不知道有这个开关，所以从来没收到过提醒。\n这次升级后会默认开启（事件开始前 15 分钟，全天事件除外）。\n不想要的话：设置 → 事件提醒，关掉即可。\n\n• 手机重启一次，提醒全没了 —— 现在开机会自动把提醒排回来\n  （以前必须你主动打开 App 并联网同步成功一次才恢复，而且没有任何提示）\n• 改了提醒提前量，现在立刻生效；关掉提醒开关，已经排好的也真的会停\n• 关掉「镜像到系统日历」，系统日历里那份日程真的会清掉\n\n• 新建/编辑事件的表单现在能滚动 —— 以前下半截在多数手机上根本够不到，\n  编辑时最底下那颗删除按钮按不着\n• 登录页的「登录」按钮不会再被键盘压死\n• 月视图的事件条不会再画到下一周那一行上（看起来像事件跑到了错误的日期）\n• 长标题、长地点从「硬切」改成带省略号，看得出来后面还有字\n• 跨月搜索的结果不再乱序（10 月曾被排到 2 月后面）\n• 周视图打开时停在正确的时间\n\n• 现在能在 App 里切到日文、韩文、西班牙文、法文、德文、繁体中文了 ——\n  以前只有跟随系统 / 简体中文 / English 三项，而翻译早就做好了\n• 日期时间跟着语言走，也跟着系统的 12/24 小时开关走\n• 非中文用户现在能删掉自己的账号了（以前确认框要你手打五个汉字）\n\n• 扫码批准新设备时会先停下来问你一句，并显示将被交出去的账号 ——\n  以前相机一识别到码就直接批准了\n• 撤销参与者邀请、填了一半按返回键，都会先确认\n• 冷启动头两秒点「+」建不出事件的问题修好了，按钮不可用时会说清原因\n\n• 被踢下线时终于会告诉你原因（改了密码 / 设备被后台移除）\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
