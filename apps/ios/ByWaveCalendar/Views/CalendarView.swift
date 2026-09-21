@@ -617,9 +617,14 @@ struct CalendarView: View {
             // fetches just one day → we'd lose the rest); skip when the
             // window is < 2 days to avoid clearing the long-range schedule.
             let windowDays = Calendar.current.dateComponents([.day], from: from, to: to).day ?? 0
-            if windowDays >= 2 {
+            if windowDays >= 2, let profileId = state.activeProfileId {
+                // 只给**看得见**的日历排提醒。以前传的是全部事件，于是用户在
+                // 「筛选日历」里隐藏掉的日历，界面上看不见了、到点照样弹 ——
+                // 而他关掉它正是因为不想再被它打扰。
+                let scheduled = state.visibleEvents(resp.events)
                 Task {
-                    await LocalNotifications.shared.reschedule(events: resp.events, calendars: resp.calendars)
+                    await LocalNotifications.shared.reschedule(
+                        profileId: profileId, events: scheduled, calendars: resp.calendars)
                 }
             }
         } catch let e as APIError {

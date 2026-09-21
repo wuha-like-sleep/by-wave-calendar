@@ -678,7 +678,10 @@ struct SyncSettingsPage: View {
                     }
                     .onChange(of: notifLeadMinutes) { _, newValue in
                         LocalNotifications.shared.leadMinutes = newValue
-                        Task { await LocalNotifications.shared.clearAll() }
+                        // 立刻按新提前量重排。以前这里只清不排，要等下一次日历
+                        // 加载成功才重建 —— 改完就退出 App 或当时没网，
+                        // 提醒会一直是空的，而这一行显示的是新值。
+                        Task { await LocalNotifications.shared.reapplyLeadTimeChange() }
                     }
                 }
                 if notifPermissionDenied {
@@ -744,7 +747,8 @@ struct SyncSettingsPage: View {
             }
         } else {
             LocalNotifications.shared.isEnabled = false
-            await LocalNotifications.shared.clearAll()
+            // 用户把功能整个关掉了，这一次才清所有账号的。
+            await LocalNotifications.shared.clearAllProfiles()
         }
     }
 }

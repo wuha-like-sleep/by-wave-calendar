@@ -357,11 +357,9 @@ final class AppState: ObservableObject {
             themeAccentHex = accent
         }
         persistProfiles()
-        // Clear cross-profile caches so the new profile's events don't
-        // get mixed with the previous one's.
-        Task {
-            await LocalNotifications.shared.clearAll()
-        }
+        // 提醒现在按账号分命名空间，切账号**不清**其它账号的 ——
+        // 两个账号都是用户自己加上去的，切到 B 就把 A 的提醒静音掉会很意外，
+        // 而通知正文里本来就带着日历名，分得清是哪一个。
         EventKitMirror.shared.tearDown()
         // Re-bootstrap to refresh access token + theme for the new profile.
         Task {
@@ -389,7 +387,11 @@ final class AppState: ObservableObject {
                 EventCache.shared.key(serverURL: url, userEmail: p.userEmail))
         }
         EventKitMirror.shared.tearDown()
-        Task { await LocalNotifications.shared.clearAll() }
+        // 只清退出的这个账号。以前是一刀切，多账号用户退出 A 会把 B 的提醒
+        // 一起清掉 —— 和上面那条离线缓存踩过的是同一个坑。
+        if let pid = activeProfileId {
+            Task { await LocalNotifications.shared.clearAll(profileId: pid) }
+        }
         // Stay on the same activeProfileId — SetupView pre-fills its URL.
     }
 
