@@ -1,0 +1,33 @@
+{
+  // 欠账清单的棘轮（ratchet）。
+  //
+  // tsconfig.test.json 把这 6 个存量出错的测试文件排除在外，好让「test/ 受类型
+  // 检查」这道门今天就能开起来。这份配置反过来**只**检查这 6 个，配合
+  // `npm run typecheck:test:backlog` 断言「它们仍然是失败的」。
+  //
+  // 为什么要断言「仍然失败」：排除清单最常见的坏法不是变长，而是**变陈旧**——
+  // 有人把某个文件修好了，清单却没人删，于是这个文件从此不再受检，而所有人都
+  // 以为它受检。挂账必须有个到期提醒，否则挂账就是豁免。
+  //
+  // 所以：其中任何一个变干净 → 棘轮红 → 把它从 tsconfig.test.json 的 exclude
+  // 里删掉，同时从这里删掉。清单只许变短。
+  //
+  // 反方向（新增欠账）不需要这份配置管：tsconfig.test.json 已经覆盖了除这 6 个
+  // 以外的全部 test/，新写坏的文件当场就红，没有地方可以挂新账。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  // src / scripts 要带上，否则这几个文件 import 的 ../src/*.js 全解析不了，
+  // 报的会是「找不到模块」而不是真正的类型错 —— 那样棘轮数出来的就是假的。
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
+  "files": [
+    "test/api_token_scope.test.ts",
+    "test/ical_serialize.test.ts",
+    "test/integration/external_idp.int.test.ts",
+    "test/no_send_then_throw.test.ts",
+    "test/reminder_enum_parity.test.ts",
+    "test/rrule_expand.test.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

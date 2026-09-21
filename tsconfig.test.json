@@ -1,0 +1,55 @@
+{
+  // 测试代码的类型检查。**只检查，不产出**（noEmit）。
+  //
+  // 为什么要有这道检查：刚刚真实发生过一次 —— 一个函数签名改了，调用它的集成
+  // 测试没跟着改，`npm run typecheck` 干净通过（因为主 tsconfig 的 include 里
+  // 只有 src 和 scripts），一直到跑 `npm run test:int` 才炸。类型检查看不见
+  // test/，等于测试代码没有类型检查；而集成测试正是「源码改了、调用方没跟上」
+  // 最先暴露的地方。
+  //
+  // ── 为什么单独一份，而不是把 test/ 塞进 tsconfig.json 的 include ──────────
+  //
+  //   1. tsconfig.json 是**构建配置**，不是检查配置。`npm run build` 就是
+  //      `tsc -p tsconfig.json`，rootDir 是 "./"、outDir 是 "./dist"。把 test/
+  //      加进 include，dist/ 里立刻多出 dist/test/**，而 dist/ 正是发布 tarball
+  //      和线上 pm2 跑的东西 —— 测试代码会被打包发到服务器上。
+  //   2. rootDir 是 "./"：include 里多一个顶层目录会改变 dist 的目录结构，而
+  //      dist/src/server.js 这个路径被 package.json 的 start 脚本写死了。
+  //   3. 测试 import 的是 vitest / @electric-sql/pglite 这些 devDependencies。
+  //      线上装依赖走 --omit=dev，把它们写进构建配置就等于让生产构建依赖开发
+  //      依赖 —— 本地永远绿，服务器上装完才炸。
+  //
+  // 所以：构建那份保持只有 src + scripts；检查这份额外加上 test，并且 noEmit。
+  // 两份都挂在 `npm run typecheck` 底下，CI 和 scripts/release.sh 各自跑的
+  // 那一条命令因此自动都覆盖到了，不需要谁记得多加一步。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  // src 和 scripts 也留着：测试 import 它们，少了这两个 tsc 会按 node_modules
+  // 的方式去解析 ../src/*.js，报一堆「找不到模块」而不是真正的类型错。
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+
+    // ── 欠账清单 ────────────────────────────────────────────────────────
+    // 这道检查是**现在**才打开的，打开的当天 test/ 里就有 30 个存量类型错，
+    // 分布在下面这 6 个文件里。它们是这道门要抓的那一类问题本身（尤其
+    // external_idp.int.test.ts 的 12 个：源码把返回值改成了可辨识联合，
+    // 测试还在直接读 .user / .created），不是这道门的误报。
+    //
+    // 这些文件归别人改，所以先挂账、把门开起来：**除它们之外的 test/ 全部
+    // 即刻受检**，新写的、新改的测试文件从今天起都过这道门。
+    //
+    // 清单只许变短，不许变长：tsconfig.test.backlog.json 单独盯着这 6 个，
+    // 只要其中任何一个被修好了，`npm run typecheck` 就会红并提示把它从这里
+    // 删掉 —— 否则「挂账」会变成「永久豁免」，跟没有这道门一样。
+    "test/api_token_scope.test.ts",
+    "test/ical_serialize.test.ts",
+    "test/integration/external_idp.int.test.ts",
+    "test/no_send_then_throw.test.ts",
+    "test/reminder_enum_parity.test.ts",
+    "test/rrule_expand.test.ts"
+  ]
+}
