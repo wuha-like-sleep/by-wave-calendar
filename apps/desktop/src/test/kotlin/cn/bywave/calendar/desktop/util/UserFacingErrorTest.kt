@@ -38,6 +38,32 @@ class UserFacingErrorTest {
         }
     }
 
+    /**
+     * 服务端是按用户的语言发这句话的，不是只有中文。
+     *
+     * 这一条守的是 userFacingError 里那几条「像不像内部标记」的启发式判断
+     * （contains(" failed: ") / startsWith("HTTP ") / 机器码正则）不要误伤
+     * 真实文案。英文和德文里 fail/failed 是常用词，判断稍微一收紧，整片
+     * 非中文用户就会退回通用文案 —— 而且不报任何错，中文环境下测不出来。
+     * 取的是 src/lib/i18n/locales/{en,de,fr}.ts 里 appleLogin.* 的原文。
+     */
+    @Test
+    fun `非中文的服务端文案也不许被误判成内部标记`() {
+        for (msg in listOf(
+            "This site is not accepting new accounts at the moment. If you already have one, sign in the way you did before; otherwise please ask the site administrator.",
+            "The account could not be created. Please try again in a moment; if it keeps failing, ask the site administrator.",
+            "Your sign-in could not be saved on this device. Please try again in a moment; if it keeps failing, ask the site administrator.",
+            "Das Konto konnte nicht angelegt werden. Versuche es gleich noch einmal; wenn es weiterhin fehlschlägt, wende dich an die Administration der Seite.",
+            "Ce site n'accepte pas de nouveaux comptes pour le moment. Si vous en avez déjà un, connectez-vous comme avant ; sinon, contactez la personne qui administre le site.",
+        )) {
+            assertEquals(
+                msg,
+                userFacingError(ApiException(403, msg), fallbackKey),
+                "服务端按用户语言写好的说明被当成内部标记换掉了：$msg",
+            )
+        }
+    }
+
     /** 内部标记 / 机器码 / 裸状态 一律换成通用文案。 */
     @Test
     fun `内部标记不许摆给用户`() {

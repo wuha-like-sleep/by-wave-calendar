@@ -16,6 +16,14 @@
 //   { "ok": false, "error": { "code": "...", "message": "..." } }
 // We unwrap at the call site via `unwrap<T>(resp)` — explicit beats
 // implicit here; the helper is one line.
+//
+// ⚠️ 出错的那一半**不要**照着上面这两行写死。服务端实际发出来的出错 body
+// 有好几种形状，最常见的反而是扁平的 { "error":"码", "message":"人话" }
+// （routes/devices.ts 的绝大多数分支、429 限流器、5xx 兜底处理器都是它），
+// 而且桌面端连的是用户自己那台服务器，老版本服务端一直在发这个形状。
+// 只按嵌套形状解析的代价见 ApiErrorBody.kt 开头 —— 服务端写给用户的那句话
+// 被整条丢掉，界面上只剩通用文案，不报任何错。解析统一走
+// userMessageFromErrorBody()。
 
 package cn.bywave.calendar.desktop.data.api
 
@@ -626,23 +634,33 @@ class ApiClient(val serverUrl: String) {
         } catch (e: Exception) {
             throw ApiException(resp.status.value, "decode_failed: ${e.message}")
         }
-        val okPrim = obj["ok"]?.jsonPrimitive
-        val ok = runCatching { okPrim?.boolean }.getOrNull()
+        // runCatching 要把**取 jsonPrimitive 这一步**也包进来。
+        // 原来只包了 .boolean：而 obj["ok"] 是对象或数组时 .jsonPrimitive 就抛，
+        // 异常从 unwrap 直接逃出去、连 ApiException 都不是 ——
+        // 和下面刚修掉的 obj["error"]?.jsonObject 是同一句写法、同一种失效。
+        val ok = runCatching { obj["ok"]?.jsonPrimitive?.boolean }.getOrNull()
         if (ok == true) {
             val data = obj["data"] ?: throw ApiException(resp.status.value, "missing_data")
             return jsonCfg.decodeFromJsonElement(serializer, data)
         }
         // Either non-enveloped or ok=false. Build a helpful error.
-        val err = obj["error"]?.jsonObject
-        val message = err?.get("message")?.jsonPrimitive?.contentOrNullSafe()
-            ?: err?.get("code")?.jsonPrimitive?.contentOrNullSafe()
-            ?: "HTTP ${resp.status.value}"
+        //
+        // 这里原先是 `obj["error"]?.jsonObject` —— 服务端的扁平信封
+        // { error:"码", message:"人话" } 里 error 是字符串，.jsonObject 会抛
+        // IllegalArgumentException，而这一段**没有** runCatching 兜着，异常
+        // 直接从 unwrap 逃出去，连 ApiException 都不是。信封形状见
+        // ApiErrorBody.kt，那里对每种形状都不抛。
+        //
+        // 捞不到人话时给 "HTTP nnn"：userFacingError 认 startsWith("HTTP ")
+        // 为内部标记，会换成通用文案 —— 正是想要的。注意**不要**退回成
+        // error 里那个码：码不是给用户看的。
+        val message = userMessageFromErrorBody(raw, resp.status.value) ?: "HTTP ${resp.status.value}"
         throw ApiException(resp.status.value, message)
     }
 
     /** 把一个非 2xx 响应翻成 ApiException，**并且把服务端那句人话留下来**。
-     *  body 预期是 { ok:false, error:{ code, message } }（或老的
-     *  { error, message } 形状）。
+     *  body 的几种形状（含「扁平信封里 error 是字符串」这一种）以及
+     *  「哪些算人话、哪些是机器码」的判断，全在 ApiErrorBody.kt。
      *
      *  所有不走 unwrap() 的分支都必须经过这里。这条规矩是有来历的：
      *  这些分支原先是自己拼字符串——
@@ -657,17 +675,10 @@ class ApiClient(val serverUrl: String) {
      *  " failed: "，会被 userFacingError 换成通用文案，这正是想要的。 */
     private suspend fun errorFrom(resp: HttpResponse, fallback: String): ApiException {
         val raw = runCatching { resp.bodyAsText() }.getOrDefault("")
-        val message = runCatching {
-            val obj = jsonCfg.parseToJsonElement(raw).jsonObject
-            val err = obj["error"]?.jsonObject
-            err?.get("message")?.jsonPrimitive?.contentOrNullSafe()
-                ?: err?.get("code")?.jsonPrimitive?.contentOrNullSafe()
-                ?: obj["message"]?.jsonPrimitive?.contentOrNullSafe()
-                ?: obj["error"]?.jsonPrimitive?.contentOrNullSafe()
-        }.getOrNull()
+        // 解析和形状判断全在 ApiErrorBody.kt —— 抽出去是为了能不起 HTTP 就测。
+        // 这里原先第一句是 `obj["error"]?.jsonObject`，在扁平信封上会抛，
+        // 外层 runCatching 吞掉异常回 null，服务端那句人话整条丢失。
+        val message = userMessageFromErrorBody(raw, resp.status.value)
         return ApiException(resp.status.value, message ?: "$fallback: HTTP ${resp.status.value}")
     }
 }
-
-private fun kotlinx.serialization.json.JsonPrimitive.contentOrNullSafe(): String? =
-    runCatching { content }.getOrNull()
