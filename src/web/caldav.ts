@@ -213,14 +213,41 @@ async function streamMultistatus(
     // this we could pile up megabytes in the Node write buffer for a
     // slow client.
     for await (const entry of entries) {
+      // 客户端已经走了就别再序列化剩下的事件了。
+      if (raw.destroyed || raw.writableEnded) break;
       if (!raw.write(entry + "\n")) {
-        await new Promise<void>((resolve) => raw.once("drain", resolve));
+        // 背压等待必须同时监听 close / error。
+        //
+        // 只等 "drain" 会永久挂住：socket 一旦销毁就再也不会触发 drain，
+        // 这个 promise 永不 settle，for-await 永久挂起，finally 里那句
+        // 补 </multistatus> 也跑不到 —— handler 连同它持有的整份事件数组
+        // 一起留在堆上。手机在弱网、切后台、锁屏时中断同步是常态，
+        // 每中断一次就钉住一份该次同步的全部数据。实测 31 次中断之后，
+        // 那 31 条请求永远不会结束（等 30 秒也不会），内存只涨不回。
+        //
+        // 讽刺的是：上面注释里说「try/finally 保证文档总是完整」，
+        // 恰恰在它要防的那个场景下跑不到。
+        await new Promise<void>((resolve) => {
+          const done = () => {
+            raw.off("drain", done); raw.off("close", done); raw.off("error", done);
+            resolve();
+          };
+          raw.once("drain", done);
+          raw.once("close", done);
+          raw.once("error", done);
+        });
+        if (raw.destroyed || raw.writableEnded) break;
       }
     }
   } catch (err) {
     reply.log.warn({ err }, "caldav_multistatus_stream_error");
   } finally {
-    raw.end("</multistatus>\n");
+    // socket 可能已经被客户端关掉了。对已经 end 过的响应再 end 会抛
+    // ERR_STREAM_WRITE_AFTER_END，而 reply_guard 的 isBenignDoubleWrite
+    // 只白名单了 ERR_HTTP_HEADERS_SENT —— 那会一路走到 process.exit(1)。
+    if (!raw.writableEnded) {
+      try { raw.end("</multistatus>\n"); } catch { /* socket 已消失，无事可做 */ }
+    }
   }
 }
 
@@ -611,6 +638,17 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
   let events = await loadAllEventsOf(cal.id, { start, end });
   if (start || end) {
     events = events.filter(ev => {
+      // 重复事件永远保留，和上面 SQL 里的豁免保持一致。
+      //
+      // 这里曾经漏掉这个豁免：SQL 特意把每条重复事件的主记录都捞出来
+      // （因为 DTSTART 可能在很久以前），紧接着就被这个「兜底」过滤一个不剩地
+      // 扔掉了。后果是 iPhone 的「设置 → 日历 → 同步 → 一个月前的事件」
+      // ——**这是系统默认值**——一生效，所有长期周会/例会就从手机上整个消失，
+      // 而网页端照常显示、服务端一条日志都不打。用户会以为日程被人删了。
+      //
+      // 判断「某次重复是否落在窗口内」要展开 RRULE，代价高且容易算错；
+      // 多返回一些是安全的（CalDAV 客户端自己会展开并过滤），少返回才是 bug。
+      if (ev.rrule) return true;
       if (start && ev.endsAt < start) return false;
       if (end && ev.startsAt > end) return false;
       return true;
