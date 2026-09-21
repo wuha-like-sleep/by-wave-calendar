@@ -1250,7 +1250,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "この SSO ログイン方法の連携を解除しました",
   "flash.password.badFormat": "新しいパスワードの形式が正しくありません",
   "flash.password.wrongCurrent": "現在のパスワードが違います",
-  "flash.password.updated": "パスワードを更新しました。もう一度ログインしてください",
+  "flash.password.updated": "パスワードを更新しました。スマートフォンやデスクトップアプリを含むすべての端末で再度ログインが必要です",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "入力が正しくありません：{error}",

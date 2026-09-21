@@ -1250,7 +1250,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "SSO-Anmeldemethode wurde getrennt",
   "flash.password.badFormat": "Format des neuen Passworts ist ungültig",
   "flash.password.wrongCurrent": "Das aktuelle Passwort ist falsch",
-  "flash.password.updated": "Passwort aktualisiert – bitte erneut anmelden",
+  "flash.password.updated": "Passwort aktualisiert. Alle Geräte – auch Handy und Desktop-App – müssen sich erneut anmelden",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "Ungültige Eingabe: {error}",

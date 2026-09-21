@@ -1250,7 +1250,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "Méthode de connexion SSO dissociée",
   "flash.password.badFormat": "Le format du nouveau mot de passe est invalide",
   "flash.password.wrongCurrent": "Le mot de passe actuel est incorrect",
-  "flash.password.updated": "Mot de passe mis à jour — reconnectez-vous",
+  "flash.password.updated": "Mot de passe mis à jour. Tous les appareils, y compris le mobile et l’application de bureau, devront se reconnecter",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "Saisie invalide : {error}",

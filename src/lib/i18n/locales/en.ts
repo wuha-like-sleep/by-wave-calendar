@@ -1277,7 +1277,7 @@ export const en = {
   "flash.sso.unlinked": "SSO sign-in method unlinked",
   "flash.password.badFormat": "New password format is invalid",
   "flash.password.wrongCurrent": "Current password is incorrect",
-  "flash.password.updated": "Password updated — please sign in again",
+  "flash.password.updated": "Password updated. Every device — including your phone and desktop app — must sign in again",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "Invalid input: {error}",

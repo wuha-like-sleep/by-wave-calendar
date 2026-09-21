@@ -1257,7 +1257,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "已解绑该 SSO 登录方式",
   "flash.password.badFormat": "新密码格式不正确",
   "flash.password.wrongCurrent": "当前密码错误",
-  "flash.password.updated": "密码已更新，请重新登录",
+  "flash.password.updated": "密码已更新。所有设备（含手机、电脑端）都需要重新登录",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "参数无效：{error}",

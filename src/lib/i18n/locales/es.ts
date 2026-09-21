@@ -1250,7 +1250,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "Se ha desvinculado ese método SSO",
   "flash.password.badFormat": "El formato de la nueva contraseña no es válido",
   "flash.password.wrongCurrent": "La contraseña actual es incorrecta",
-  "flash.password.updated": "Contraseña actualizada: vuelve a iniciar sesión",
+  "flash.password.updated": "Contraseña actualizada. Todos los dispositivos, incluidos el móvil y la aplicación de escritorio, deberán iniciar sesión de nuevo",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "Entrada no válida: {error}",

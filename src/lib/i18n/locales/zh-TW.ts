@@ -1236,7 +1236,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "已解除綁定該 SSO 登入方式",
   "flash.password.badFormat": "新密碼格式不正確",
   "flash.password.wrongCurrent": "目前密碼錯誤",
-  "flash.password.updated": "密碼已更新，請重新登入",
+  "flash.password.updated": "密碼已更新。所有裝置（含手機、電腦端）都需要重新登入",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "參數無效：{error}",

@@ -1250,7 +1250,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "flash.sso.unlinked": "해당 SSO 로그인 수단의 연결을 해제했습니다",
   "flash.password.badFormat": "새 비밀번호 형식이 올바르지 않습니다",
   "flash.password.wrongCurrent": "현재 비밀번호가 올바르지 않습니다",
-  "flash.password.updated": "비밀번호가 변경되었습니다. 다시 로그인하세요",
+  "flash.password.updated": "비밀번호가 변경되었습니다. 휴대폰과 데스크톱 앱을 포함한 모든 기기에서 다시 로그인해야 합니다",
 
   // flash + error view — booking links and public booking
   "flash.bookingLink.paramInvalid": "잘못된 입력: {error}",
