@@ -15,6 +15,11 @@ interface EventDao {
     @Query("SELECT * FROM events WHERE profileId = :profileId ORDER BY startsAt ASC")
     fun observeForProfile(profileId: String): Flow<List<EventEntity>>
 
+    /** 一次性读取。退出登录时要用它取消已排期的提醒——取消 PendingIntent
+     *  必须能重建出当初那一个，所以得在清库**之前**把事件读出来。 */
+    @Query("SELECT * FROM events WHERE profileId = :profileId")
+    suspend fun listForProfile(profileId: String): List<EventEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(rows: List<EventEntity>)
 

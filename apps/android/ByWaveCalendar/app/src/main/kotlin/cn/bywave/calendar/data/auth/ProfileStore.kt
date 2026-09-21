@@ -111,6 +111,24 @@ class ProfileStore(context: Context) {
 
     /** Remove a profile entirely. If it was the active one, pick the
      *  next most-recently-used as active (or null if none left). */
+    /** 上一次被动登出的原因，配对页读它显示提示。用户重新配对成功后清空。 */
+    private val _signedOutReason = MutableStateFlow<String?>(null)
+    val signedOutReason: StateFlow<String?> = _signedOutReason.asStateFlow()
+
+    fun clearSignedOutReason() { _signedOutReason.value = null }
+
+    /**
+     * 服务端吊销了这台设备（改密码 / 重置密码 / 后台移除）。
+     *
+     * 清掉凭据让启动页自然回到配对页 —— 以前不清，用户杀进程重开、重启手机
+     * 都自愈不了，因为启动页只看本地有没有账号记录。唯一出路藏在设置里，
+     * 而屏幕上唯一的线索是一行英文 HTTP 401。
+     */
+    fun markSignedOut(profileId: String, reason: String) {
+        _signedOutReason.value = reason
+        remove(profileId)
+    }
+
     fun remove(id: String) {
         accessTokens.remove(id)
         val remaining = _profiles.value.filterNot { it.id == id }

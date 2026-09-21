@@ -147,8 +147,11 @@ class CalendarViewModel : ViewModel() {
                 // Best-effort cache wipe — a Room hiccup here must NOT crash the
                 // app (unguarded, this launch had no handler) nor leave the user
                 // stuck signed in, so swallow it and still invalidate + remove.
-                runCatching { repository.wipeProfile(active.id) }
-                    .onFailure { Log.w("SignOut", "wipeProfile failed: ${it.message}") }
+                // 完整清理：Room + 已排期的系统提醒 + 系统日历里的镜像。
+                // 只清 Room 的话，提醒会按旧数据继续响、系统日历里的日程永久残留，
+                // 而 App 里已经查无此账号——用户关不掉也删不掉。
+                runCatching { repository.wipeProfileFully(active) }
+                    .onFailure { Log.w("SignOut", "wipeProfileFully failed: ${it.message}") }
                 ApiClient.invalidate(active.id)
                 profiles.remove(active.id)
             } catch (e: Exception) {

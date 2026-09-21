@@ -93,6 +93,27 @@ class EventRepository(
         AppDatabase.wipeProfile(context, profileId)
     }
 
+    /**
+     * 退出登录 / 设备被吊销时的完整清理。
+     *
+     * 只清 Room 是不够的：提醒是排进系统 AlarmManager 的，系统日历里的镜像
+     * 是写进 CalendarProvider 的，两者都活在 App 之外。以前 cancelAll() 和
+     * unmirror() 定义了却**全仓没有任何调用点**——后果是账号退出之后，
+     * 已排期的提醒会按旧数据继续响（包括早就改期或删掉的会议），
+     * 用户在设置里关掉提醒开关也撤销不了；系统日历里那份 ByWave 日程
+     * 同样永久残留，而 App 里已经查无此账号。
+     *
+     * 取消提醒需要能重建出当初的 PendingIntent，所以必须在清 Room **之前**
+     * 把事件读出来。
+     */
+    suspend fun wipeProfileFully(profile: cn.bywave.calendar.data.auth.Profile) {
+        val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
+            .getOrElse { emptyList() }
+        runCatching { reminders.cancelAll(profile, events) }
+        runCatching { mirror.unmirror(profile) }
+        AppDatabase.wipeProfile(context, profile.id)
+    }
+
     /** Wipe everything (used by "sign out all"). */
     suspend fun wipeAll() {
         AppDatabase.wipeAll(context)

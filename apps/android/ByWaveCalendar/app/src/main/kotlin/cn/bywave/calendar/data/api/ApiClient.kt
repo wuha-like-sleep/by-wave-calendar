@@ -356,7 +356,11 @@ private class AuthInterceptor(
             path.contains("/auth/login-password") ||
             path.contains("/auth/login-mfa-verify") ||
             path.contains("/auth/refresh") ||
-            path.contains("/devices/pair-claim")
+            path.contains("/devices/pair-claim") ||
+            // 改密码接口的 401 意思是「当前密码错错了」，不是「会话没了」。
+            // 不豁免的话每输错一次都会先刷新 token 再把整个请求原样重发一遍，
+            // 一次错误消耗两次限流配额——用户试到第三次就被告知「太频繁」。
+            path.contains("/account/password")
 
         val firstReq = if (isAuthEndpoint) original
                        else original.withBearer(store.accessToken(profileId))
@@ -369,7 +373,26 @@ private class AuthInterceptor(
         // access token, retry once.
         val profile = store.profiles.value.firstOrNull { it.id == profileId }
         val rt = profile?.refreshToken ?: return chain.proceed(firstReq)
-        val refreshed = runCatching { blockingRefresh(rt) }.getOrNull() ?: return chain.proceed(firstReq)
+        val refreshed = runCatching { blockingRefresh(rt) }.getOrNull()
+        if (refreshed == null) {
+            // 刷新失败：服务端不认这张 refresh token 了。改密码、重置密码、
+            // 后台移除设备都会吊销它。
+            //
+            // 以前这里是 `return chain.proceed(firstReq)` —— 拿着旧 token 原样重发，
+            // 不清凭据、不登出。结果 App 变成僵尸：日历照常显示上次同步的内容，
+            // 新建/编辑/删除全部失败，而**杀进程重开、重启手机都自愈不了**
+            // （启动页只看本地有没有账号记录），唯一出路藏在设置里的退出登录。
+            //
+            // 清掉 refresh token，启动页就会自然回到配对页；signedOutReason
+            // 让配对页能说清是为什么。
+            store.markSignedOut(profileId, "密码已更改或此设备已被移除，请重新登录")
+            return firstResp.newBuilder()
+                .body("""{"ok":false,"error":{"code":"device_revoked","message":"设备已被移除"}}"""
+                    .toResponseBody("application/json".toMediaType()))
+                .code(401)
+                .message("Unauthorized")
+                .build()
+        }
         store.setAccessToken(profileId, refreshed.accessToken)
         // Older server builds rotated the refresh token on use; current
         // /auth/refresh doesn't (it omits the field). Only persist when
