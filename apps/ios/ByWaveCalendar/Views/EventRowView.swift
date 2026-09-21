@@ -108,7 +108,16 @@ struct EventRowView: View {
         // per row was a measurable hot path (DateFormatter init is
         // surprisingly expensive on iOS).
         if event.allDay {
-            return DateFormatters.monthDay.string(from: event.startsAt) + " · " + "全天".loc
+            // 按 UTC 渲染，且末日要减一天：iCalendar 的 DTEND 是开区间，
+            // 一个「只有 9 月 21 日一天」的全天事件 endsAt 是 9 月 22 日，
+            // 直接拿去显示就成了两天的事。见 AllDayDates。
+            let f = DateFormatters.monthDayUTC
+            let start = f.string(from: event.startsAt)
+            if AllDayDates.isSingleDay(event) {
+                return start + " · " + "全天".loc
+            }
+            let last = f.string(from: AllDayDates.lastInclusiveUTCDay(of: event))
+            return start + " – " + last + " · " + "全天".loc
         }
         let sameDay = Calendar.current.isDate(event.startsAt, inSameDayAs: event.endsAt)
         // In search (showsDate) a same-day event still needs its date —

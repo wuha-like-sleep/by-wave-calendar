@@ -311,15 +311,15 @@ struct EventDetailView: View {
     }
 
     private var allDayLabel: String {
-        // Locale-aware (was hardcoded zh_CN "yyyy年M月d日" — leaked Chinese
-        // dates into non-zh UI).
-        let f = DateFormatter(); f.locale = Locale.current
-        f.setLocalizedDateFormatFromTemplate("yMMMd")
-        let cal = Calendar.current
-        if cal.isDate(current.startsAt, inSameDayAs: current.endsAt) {
+        // 两处都要按 UTC 算：全天事件存的是 UTC 午夜，而 DTEND 是开区间。
+        // 原来拿本地时区比 startsAt 和 endsAt 是不是同一天，
+        // 结果**任何一个单日全天事件都会被写成「21 日 — 22 日」** ——
+        // 因为它的 endsAt 本来就是第二天的零点。见 AllDayDates。
+        let f = DateFormatters.fullDateUTC
+        if AllDayDates.isSingleDay(current) {
             return f.string(from: current.startsAt)
         }
-        return f.string(from: current.startsAt) + " — " + f.string(from: current.endsAt)
+        return f.string(from: current.startsAt) + " — " + f.string(from: AllDayDates.lastInclusiveUTCDay(of: current))
     }
 
     private func absoluteTime(_ d: Date) -> String {

@@ -49,13 +49,16 @@ struct MonthView: View {
     }
 
     private var eventsByDay: [Date: [EventDTO]] {
+        // 以前是「按 startsAt 的本地当天」分一次桶，两个后果：
+        // ① 全天事件存的是 UTC 午夜，UTC 以西的时区会整体归到前一天；
+        // ② 跨天的事件只出现在第一格 —— 一个三天的出差，月视图上只看得到一天。
+        // 现在逐格问「这个事件占不占这一天」，两件事一起解决。
         var m = [Date: [EventDTO]]()
-        for e in events {
-            let key = calendar.startOfDay(for: e.startsAt)
-            m[key, default: []].append(e)
-        }
-        for k in m.keys {
-            m[k]?.sort { $0.startsAt < $1.startsAt }
+        for day in days {
+            let list = events
+                .filter { AllDayDates.occupies($0, localDay: day, calendar: calendar) }
+                .sorted { $0.startsAt < $1.startsAt }
+            if !list.isEmpty { m[calendar.startOfDay(for: day)] = list }
         }
         return m
     }

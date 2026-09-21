@@ -34,7 +34,20 @@ struct YearView: View {
     private var busyDays: Set<Date> {
         var s = Set<Date>()
         for e in events {
-            s.insert(calendar.startOfDay(for: e.startsAt))
+            // 全天事件按 UTC 日期归位，不按设备时区（否则 UTC 以西的时区
+            // 整排点会错到前一天）。见 AllDayDates。
+            let first = AllDayDates.firstLocalDay(of: e, calendar: calendar)
+            s.insert(first)
+            // 跨天的事件把中间每一天都点上，否则一个五天的假期在年视图里只有一个点。
+            // 92 天纯属防御：真实数据不会有这么长的单条事件，而没有上限时
+            // 一条脏数据（结束时间被写到十年后）会让这里空转十年。
+            var day = first
+            for _ in 0..<92 {
+                guard let next = calendar.date(byAdding: .day, value: 1, to: day),
+                      AllDayDates.occupies(e, localDay: next, calendar: calendar) else { break }
+                s.insert(calendar.startOfDay(for: next))
+                day = next
+            }
         }
         return s
     }

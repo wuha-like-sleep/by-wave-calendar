@@ -640,15 +640,14 @@ struct WeekView: View {
     }
 
     private func bucketAllDayByDay() -> [Date: [EventDTO]] {
+        // 以前这里拿本地时区的日界去比全天事件的 startsAt/endsAt，
+        // 而全天存的是 UTC 午夜 —— 东八区里一个「9 月 21 日」的全天事件
+        // 会同时落进 21 日和 22 日两格，界面上并排画两遍。见 AllDayDates。
         let cal = Calendar.current
         var out: [Date: [EventDTO]] = [:]
         for ev in allDayEvents {
-            for day in dayStarts {
-                let dayStart = cal.startOfDay(for: day)
-                let dayEnd = cal.date(byAdding: .day, value: 1, to: dayStart)!
-                if ev.startsAt < dayEnd && ev.endsAt > dayStart {
-                    out[day, default: []].append(ev)
-                }
+            for day in dayStarts where AllDayDates.occupies(ev, localDay: day, calendar: cal) {
+                out[day, default: []].append(ev)
             }
         }
         return out

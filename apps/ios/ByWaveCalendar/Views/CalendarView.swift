@@ -435,11 +435,11 @@ struct CalendarView: View {
     }
 
     private func eventsForDay(_ day: Date) -> [EventDTO] {
+        // 全天事件不能按本地时刻比：它存的是 UTC 午夜，东八区里一个
+        // 「9 月 21 日」的全天事件会同时落进 21 日和 22 日的日视图。见 AllDayDates。
         let cal = Calendar.current
-        let start = cal.startOfDay(for: day)
-        let end = cal.date(byAdding: .day, value: 1, to: start)!
         return state.visibleEvents(events)
-            .filter { $0.startsAt < end && $0.endsAt > start }
+            .filter { AllDayDates.occupies($0, localDay: day, calendar: cal) }
             .sorted { $0.startsAt < $1.startsAt }
     }
 

@@ -36,6 +36,13 @@ enum DateFormatters {
     /// Abbreviated weekday for week-view headers ("周一" / "Mon" / "Lun").
     static let weekdayShort: DateFormatter = makeFixed("EEE")
 
+    /// 全天事件专用：模板一样，但按 UTC 渲染。
+    /// 全天事件的 startsAt 存的是「那一天的 UTC 午夜」，用本地时区去渲染，
+    /// UTC 以西的时区会把 9 月 21 日的全天事件写成 9 月 20 日。见 AllDayDates。
+    static let monthDayUTC: DateFormatter = makeTemplate("MMMd", utc: true)
+    /// 同上，带年份（事件详情页用）。
+    static let fullDateUTC: DateFormatter = makeTemplate("yMMMd", utc: true)
+
     /// ISO8601 WITH fractional seconds (matches what the server emits).
     /// ISO8601DateFormatter is also documented thread-safe when read-only.
     static let isoFractional: ISO8601DateFormatter = {
@@ -61,10 +68,11 @@ enum DateFormatters {
 
     /// Build from a CLDR field template (no literals) so the locale picks
     /// its own field order + separators. Locale must be set before the call.
-    private static func makeTemplate(_ template: String) -> DateFormatter {
+    private static func makeTemplate(_ template: String, utc: Bool = false) -> DateFormatter {
         let f = DateFormatter()
         f.locale = Locale.current
         f.setLocalizedDateFormatFromTemplate(template)
+        if utc { f.timeZone = TimeZone(identifier: "UTC") ?? TimeZone(secondsFromGMT: 0) }
         return f
     }
 }
