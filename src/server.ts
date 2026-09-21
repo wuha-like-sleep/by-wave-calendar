@@ -12,7 +12,7 @@ import formbody from "@fastify/formbody";
 import fastifyStatic from "@fastify/static";
 import compress from "@fastify/compress";
 import ejs from "ejs";
-import { env } from "./env.js";
+import { env, trustProxyOption, describeTrustProxy, createProxyShapeWatcher } from "./env.js";
 import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { eventRoutes } from "./routes/events.js";
@@ -37,7 +37,7 @@ import { logApnsStartup } from "./lib/apns.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
 import { listEnabledProvidersPublic } from "./lib/sso_providers.js";
 import { csrfTokenFor } from "./lib/csrf.js";
-import { loadUserFromRequest } from "./lib/session.js";
+import { loadUserFromRequest, serviceClientForensicLine } from "./lib/session.js";
 // Double-writeHead crash guards — see lib/reply_guard.ts. Removing either
 // call site brings back an unauthenticated remote crash.
 import { replyAlreadySent, isBenignDoubleWrite } from "./lib/reply_guard.js";
@@ -67,7 +67,11 @@ const app = Fastify({
   logger: env.NODE_ENV === "development"
     ? { transport: { target: "pino-pretty", options: { translateTime: "HH:MM:ss.l", ignore: "pid,hostname" } } }
     : true,
-  trustProxy: true,
+  // 谁有资格告诉我们访客地址 —— 见 env.ts 的 TRUST_PROXY。
+  // 这里**不许**写字面量：true 表示 X-Forwarded-For 链上每一跳都可信，于是
+  // req.ip 取最左边那一项，而最左边那一项是客户端自己写的请求头。全站限流、
+  // 登录/注册限流、人机验证、审计日志和登录历史的 ip 列全部取自 req.ip。
+  trustProxy: trustProxyOption,
   bodyLimit: 2 * 1024 * 1024, // 2 MB (CalDAV PUTs can be larger than typical APIs)
   ...(httpsOptions ? { https: httpsOptions } : {}),
 });
@@ -151,6 +155,16 @@ app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body,
 import { randomBytes } from "node:crypto";
 app.addHook("onRequest", async (req) => {
   (req.raw as unknown as { cspNonce: string }).cspNonce = randomBytes(16).toString("base64");
+});
+
+// ---- 部署形态自检 ----
+// TRUST_PROXY 配错不会报错，只会让 req.ip 恒等于代理自己的地址：限流把所有
+// 访客塞进同一个桶，审计日志的 ip 列全是同一行字。判据和防刷屏的两层门槛写在
+// env.ts 的 createProxyShapeWatcher 注释里 —— 每种问题最多一小时一行。
+const proxyShape = createProxyShapeWatcher();
+app.addHook("onRequest", async (req) => {
+  const report = proxyShape.note({ ip: req.ip, forwardedFor: req.headers["x-forwarded-for"] });
+  if (report) app.log.warn({ event: report.issue, observedIp: report.observedIp, trustProxy: env.TRUST_PROXY }, report.message);
 });
 
 // ---- Error handler ----
@@ -304,28 +318,36 @@ app.addHook("onSend", async (req, reply, payload) => {
   return payload;
 });
 
-// ---- forensic trail for IdP service-client (cross-account) mutations ----
+// ---- forensic trail for IdP service-client (cross-account) access ----
 // A trusted Keycloak service token can act on ANY account via X-Account — the
-// most powerful auth path. requireUserOrSend() tags such requests; here we log every
-// successful mutation (POST/PUT/PATCH/DELETE) it makes so there's an immutable
-// server-log record of "client X wrote to account Y". Reads are omitted (high
-// volume, low risk); account provisioning is separately written to the admin
-// audit log. No DB write here → no audit-table bloat.
+// most powerful auth path. requireUserOrSend() tags such requests; here we write
+// the server-log record of "client X touched account Y".
+//
+// 两类各记各的：
+//   - 写操作(POST/PUT/PATCH/DELETE)：**每一条都记**，跟原来一样。
+//   - 读操作(GET/HEAD/OPTIONS)：只记这个客户端**第一次**碰这个账号那一条。
+//
+// 读为什么也要记：原来这里的注释写着「读量大风险低」所以跳过 —— 但懒建号发生
+// 在读请求上。于是「建了一个号」那条审计行旁边，没有任何记录说明当时在访问什么，
+// 事后完全没法还原这 30 个号是怎么进来的。
+//
+// 「第一次」怎么算(进程内存 / 1 小时滑动窗 / 上限 5000 对 / 重启后重新记一遍)
+// 全部写在 lib/session.ts 的 noteServiceClientTouch 上面，那是唯一的定义处。
+//
+// 这里不写库：机器可读的 JSON 日志够用了，而这条路上的请求量正是不能往审计表里灌的。
 app.addHook("onResponse", async (req, reply) => {
-  const sc = (req as unknown as { idpServiceClient?: string }).idpServiceClient;
-  if (!sc) return;
-  const m = req.method;
-  if (m === "GET" || m === "HEAD" || m === "OPTIONS") return;
-  req.log.info(
-    {
-      idpServiceClient: sc,
-      account: (req as unknown as { idpActedAs?: string }).idpActedAs,
-      method: m,
-      path: req.url.split("?")[0],
-      status: reply.statusCode,
-    },
-    "idp_service_mutation",
-  );
+  const tagged = req as unknown as { idpServiceClient?: string; idpActedAs?: string; idpActedAsId?: string };
+  if (!tagged.idpServiceClient) return;
+  const rec = serviceClientForensicLine({
+    client: tagged.idpServiceClient,
+    account: tagged.idpActedAs,
+    accountId: tagged.idpActedAsId,
+    method: req.method,
+    // 路径要去掉 query：那上面挂着搜索词、令牌之类不该进日志的东西。
+    path: req.url.split("?")[0] ?? "",
+    status: reply.statusCode,
+  });
+  if (rec) req.log.info(rec.line, rec.event);
 });
 
 // ---- Site-private extensions ----
@@ -714,8 +736,11 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
     if (rel.downloadUrl) {
       url = rel.downloadUrl;
     } else {
-      const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
-      const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+      // 走 req.protocol / req.hostname，不要自己读转发头 —— 这两个属性经过
+      // trustProxy 的信任判定，自己读等于把「这个包从哪下载」交给调用方决定。
+      // 全站其它地方都走信任判定，只有这里和下面桌面端那处曾经绕过去。
+      const proto = req.protocol;
+      const host = req.hostname;
       url = `${proto}://${host}/downloads/android/${encodeURIComponent(rel.filename)}`;
     }
     reply.header("Cache-Control", "public, max-age=60");
@@ -778,8 +803,9 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
     // Resolve each platform asset to an absolute URL — verbatim downloadUrl
     // when set, otherwise construct ${origin}/downloads/desktop/<filename>.
     // Matches how /api/app/android/latest handles the same fork.
-    const proto = (req.headers["x-forwarded-proto"] as string | undefined)?.split(",")[0]?.trim() || (req.protocol);
-    const host = (req.headers["x-forwarded-host"] as string | undefined)?.split(",")[0]?.trim() || req.headers.host;
+    // 同上：经过 trustProxy 的信任判定，不自己读转发头。
+    const proto = req.protocol;
+    const host = req.hostname;
     const origin = `${proto}://${host}`;
     const assets: Record<string, { url: string; sha256: string; sizeBytes: number }> = {};
     for (const [platform, a] of Object.entries(rel.assets)) {
@@ -1144,6 +1170,13 @@ startHousekeepingScheduler({
 });
 
 logApnsStartup({ info: (m) => app.log.info(m) });
+
+// 反向代理信任：req.ip 是限流 key、审计日志 ip 列、人机验证的输入，配错了
+// 后面所有跟地址有关的判断都对不上，所以开机就把生效值打出来。
+app.log.info(
+  { trustProxy: env.TRUST_PROXY },
+  `[startup] TRUST_PROXY=${env.TRUST_PROXY || "loopback（默认）"} — ${describeTrustProxy(trustProxyOption)}`,
+);
 
 // Surface critical APP-related toggles at startup. If apps_enabled is
 // off, the iOS / Android APP will see 403 on every auth call — this

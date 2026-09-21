@@ -8,6 +8,7 @@ import { userIsActive } from "../lib/user_state.js";
 import { ok, err } from "../lib/api_response.js";
 import { env } from "../env.js";
 import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { provisionAccount, type ProvisionDenial } from "../lib/account_provisioning.js";
 
 // Tightened schema — same length range as the web flow; the web routes
 // additionally enforce passwordPolicyError on the way in. Without this
@@ -20,7 +21,36 @@ const credsSchema = z.object({
   email: z.string().email().transform((s) => s.toLowerCase().trim()),
   password: z.string().min(10).max(200),
   displayName: z.string().min(1).max(100).optional(),
+  // 邀请码。站点切到「邀请制」之后,不给这条路一个传码的地方,它就变成了
+  // 「邀请制下谁都注册不了」而不是「邀请制」—— 而网页那边是能注册的。
+  // 可选:公开注册模式下没人需要填它(P7:不给普通用户加要填的东西)。
+  invite: z.string().max(128).optional(),
 });
+
+/**
+ * 建号被拒 → JSON 这一层的错误形态。**导出是为了能单独钉住这张表**:
+ * 它是「哪个拒绝理由回什么状态码」的唯一一份,漏一条会在编译期就报出来
+ * (switch 是穷尽的)。
+ *
+ * 两条硬约束:
+ *  - **一条都不能是 401。** 401 在 App 的 api.dart 里的意思是「会话没了」,
+ *    收到就把人登出。「这次没让你注册」跟「你是谁我不认」是两回事。
+ *  - **不把配额数字回给终端用户。** 那是管理员设的闸门,注册的人既管不着
+ *    也不该知道站点今天开了几个号。
+ */
+export function registerDenialResponse(d: ProvisionDenial): { status: number; code: string; message: string } {
+  switch (d.code) {
+    case "invalid_email": return { status: 400, code: "invalid_email", message: "邮箱格式不正确" };
+    case "registration_closed": return { status: 403, code: "registration_closed", message: "本站当前不开放注册" };
+    case "invite_required": return { status: 403, code: "invite_required", message: "本站仅限邀请注册" };
+    case "invite_invalid": return { status: 403, code: "invite_invalid", message: "邀请码无效或已失效" };
+    case "domain_not_allowed": return { status: 403, code: "domain_not_allowed", message: "该邮箱域名不在允许范围内" };
+    case "daily_quota_reached": return { status: 429, code: "signup_quota_reached", message: "今日注册名额已满，请明天再试" };
+    // 沿用原来的 code 和 409 —— 这是既有调用方已经在判的串,别顺手改名。
+    case "email_taken": return { status: 409, code: "email_already_registered", message: "邮箱已注册" };
+    case "create_failed": return { status: 500, code: "insert_failed", message: "创建账号失败" };
+  }
+}
 
 // Routes are written with paths relative to a prefix; the plugin is
 // mounted twice at /api and /api/v1 in server.ts. Response shape
@@ -28,36 +58,55 @@ const credsSchema = z.object({
 // helpers): legacy /api returns bare payloads, /api/v1 returns the
 // envelope { ok, data | error, meta? }.
 export async function authRoutes(app: FastifyInstance) {
-  app.post("/auth/register", async (req, reply) => {
+  app.post("/auth/register", {
+    // 独立限流。在这之前这条路唯一的刹车是全局 120/分钟 —— 而它是**建号**接口,
+    // 网页 /register 早就有 RATE_LIMIT_AUTH_PER_MINUTE 这道闸了。两个面上的
+    // 同一件事必须踩同一个刹车,否则「绕开网页那道闸」就只是换个 URL 的事。
+    config: { rateLimit: { max: env.RATE_LIMIT_AUTH_PER_MINUTE, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
     const body = credsSchema.parse(req.body);
     const policyErr = passwordPolicyError(body.password);
     if (policyErr) return err(req, reply, 400, "weak_password", policyErr);
-    const existing = await db.select().from(schema.users).where(eq(schema.users.email, body.email)).limit(1);
-    if (existing.length > 0) {
-      return err(req, reply, 409, "email_already_registered", "邮箱已注册");
-    }
     const passwordHash = await hashPassword(body.password);
-    // Catch unique-constraint violations explicitly: the SELECT above
-    // doesn't synchronize with a concurrent INSERT, so two parallel
-    // registers with the same email could both pass the existence check.
-    // The DB unique index on users.email protects us, but only if we
-    // surface the conflict as 409 instead of 500.
-    let user: schema.User | undefined;
-    try {
-      [user] = await db
-        .insert(schema.users)
-        .values({ email: body.email, passwordHash, displayName: body.displayName })
-        .returning();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message.toLowerCase() : "";
-      if (msg.includes("duplicate") || msg.includes("unique") || msg.includes("users_email_unique")) {
-        return err(req, reply, 409, "email_already_registered", "邮箱已注册");
-      }
-      throw e;
+    // 建号收口:注册策略 / 邀请码 / 域名白名单 / 每日配额 全在里面判,跟网页
+    // 注册走的是同一份。重复邮箱和并发撞唯一索引也由它收(refuse → email_taken),
+    // 所以这里不再自己 SELECT 一次、也不再 catch 「duplicate key」的字符串。
+    const r = await provisionAccount({
+      email: body.email,
+      origin: { kind: "self" },
+      // 这条路不发验证邮件,邮箱就是没验过,照实写 false。
+      // (写 true 的话,库里那句「已验证」是编的,后面没人还能分辨。)
+      emailVerified: false,
+      displayName: body.displayName ?? null,
+      passwordHash,
+      inviteToken: body.invite ?? null,
+      // 注册类路径:邮箱已经有账号就是「被占用」,不能把那个号交出去。
+      onExistingEmail: "refuse",
+      ctx: { ip: req.ip, userAgent: String(req.headers["user-agent"] ?? "").slice(0, 500) || null },
+    });
+    if (!r.ok) {
+      const m = registerDenialResponse(r.reason);
+      return err(req, reply, m.status, m.code, m.message);
     }
-    if (!user) return err(req, reply, 500, "insert_failed", "创建账号失败");
-    await createSession(reply, user.id);
-    return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
+    const user = r.user;
+    // **邮箱没验过就不发会话。**
+    //
+    // 这条路不发验证邮件,所以它开出来的号一律是「没验过」的。原来它当场就把
+    // 人登进去,于是「注册」和「证明这个邮箱是我的」被合成了一件事 —— 而这
+    // 正是抢注链的第一环:拿别人的邮箱在这里开一个号,当场就有一个能用的会话,
+    // 之后这个号还会被受害者的外部登录认领回来。
+    //
+    // 发会话这件事从此只归 /auth/login:注册完自己再登一次,行为对真实用户
+    // 只差一次请求,对抢注的人少了一个「立刻就能用」的号。
+    // (响应里补一条 emailVerified,调用方不用靠「有没有 set-cookie」去猜。)
+    if (user.emailVerified) await createSession(reply, user.id);
+    return ok(req, reply, {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      isAdmin: user.isAdmin,
+      emailVerified: user.emailVerified,
+    });
   });
 
   app.post("/auth/login", {

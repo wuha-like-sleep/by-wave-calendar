@@ -1,0 +1,17 @@
+<%
+  // 账号来源徽章。开通记录 / 用户列表 / 批量停用确认页共用同一份 —— 分开写的话,
+  // 「未知」在某一页被显示成「自己注册」这种错只会出现在其中一页上,
+  // 而那正是这次要避免的:管理员照着一页上的标签去做批量操作。
+  //
+  // 入参 src 是 src/web/admin.ts 里 signupSourceView() 的返回值。
+  var _labelKeys = {
+    unknown: 'adminSource.unknown',
+    self: 'adminSource.self',
+    invite: 'adminSource.invite',
+    sso: 'adminSource.sso',
+    idp: 'adminSource.idp',
+    apple: 'adminSource.apple',
+    admin: 'adminSource.admin',
+  };
+  var _labelKey = _labelKeys[src.kind];
+%><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs <%= src.badge %>"><% if (_labelKey) { %><%= t(_labelKey) %><% } else { %><%= src.raw %><% } %><% if (src.detail) { %> · <%= src.detail %><% } %></span>

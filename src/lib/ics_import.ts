@@ -66,6 +66,53 @@ export async function fetchIcsUrl(url: string): Promise<string> {
   return body;
 }
 
+/**
+ * 算出这次导入要写进 events.extra 的值：**在现有 extra 上浅合并**，不是整块替换。
+ *
+ * 原来这里是 `const extra = {}; if (sourceTag) extra.source = sourceTag;`，insert 和
+ * onConflictDoUpdate 都写这一块。于是订阅每刷新一次（默认 5 分钟一轮），用户给这个
+ * 事件设的提醒、分类、参与者、时区就被整块抹成 `{source}` —— 没有任何报错，
+ * 用户只会发现「提醒时不时就自己没了」。
+ *
+ * alarms 的口径和 CalDAV PUT 故意不同：
+ *   - 上游带了 VALARM → 以上游为准。订阅进来的日程本来就带提醒（球赛开赛前 1 小时、
+ *     课表提前 15 分钟），不落等于把上游信息丢了，用户还得自己在每个事件上重设一遍。
+ *   - 上游没带 VALARM → **保留库里已有的**，不清空。订阅刷新是我们单方面去拉的，
+ *     上游从没看过用户在我们这儿加的提醒，它「没有 VALARM」只说明这个源不发提醒
+ *     （节假日、球赛表大多如此），不构成「删掉提醒」的意思表示。
+ *     CalDAV PUT 那边能当成删除，是因为客户端刚完整读过这份资源又完整写了回来。
+ */
+export function mergeImportExtra(
+  existingExtra: unknown,
+  sourceTag: string | null,
+  alarms: IcalEvent["alarms"],
+): Record<string, unknown> | null {
+  const base = existingExtra && typeof existingExtra === "object" && !Array.isArray(existingExtra)
+    ? { ...(existingExtra as Record<string, unknown>) }
+    : {};
+  if (sourceTag) base.source = sourceTag;
+  if (Array.isArray(alarms) && alarms.length) base.alarms = alarms;
+  return Object.keys(base).length ? base : null;
+}
+
+/**
+ * 键排序后再 stringify，只用来判「这次刷新有没有真的变」。
+ *
+ * 不能直接比 JSON 文本：Postgres 的 jsonb 会按「键长度 → 字节序」重排键，读回来的
+ * `{"action":…,"trigger":…,"description":…}` 和我们刚拼出来的
+ * `{"trigger":…,"action":…,"description":…}` 内容一模一样、文本不同。
+ * 直接比就等于每 5 分钟判定一次「变了」、白写一次 updatedAt，而 CalDAV 的 etag 就是
+ * etagOf(updatedAt) —— etag 一直在动，Apple 日历带 If-Match 的 PUT 就会 412，
+ * 用户看到的是「无法更新日历」。
+ */
+function stableJson(v: unknown): string {
+  return JSON.stringify(v, (_k, val) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(Object.entries(val as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : val,
+  );
+}
+
 async function upsertEvents(
   calendarId: string,
   parsed: IcalEvent[],
@@ -98,9 +145,6 @@ async function upsertEvents(
     const desc = ev.description ?? null;
     const loc = ev.location ?? null;
     const rrule = ev.rrule ?? null;
-    const extra: Record<string, unknown> = {};
-    if (sourceTag) extra.source = sourceTag;
-    const extraVal = Object.keys(extra).length ? extra : null;
 
     // Look up the current row so we can SKIP no-op writes. Re-writing
     // updatedAt on every refresh — even when nothing changed — churns the
@@ -114,6 +158,8 @@ async function upsertEvents(
       .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
       .limit(1);
 
+    const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null);
+
     if (existing) {
       // Leave soft-deleted rows alone: don't resurrect something the user
       // (or the dedupe script) removed, and don't churn its updatedAt.
@@ -125,7 +171,11 @@ async function upsertEvents(
         existing.startsAt.getTime() === ev.startsAt.getTime() &&
         existing.endsAt.getTime() === ev.endsAt.getTime() &&
         existing.allDay === ev.allDay &&
-        (existing.rrule ?? null) === rrule;
+        (existing.rrule ?? null) === rrule &&
+        // 提醒也要算进「有没有变」。不算的话上游把提醒从「提前 1 小时」改成「提前 1 天」
+        // 而别的字段没动，这里会判定 unchanged 直接 skip，新提醒永远落不了库 ——
+        // extraVal 已经算好了，只是没人写进去，症状是「上游改了但我们这边没反应」。
+        stableJson(extraVal) === stableJson(existing.extra ?? null);
       if (unchanged) { skipped++; continue; }
     }
 

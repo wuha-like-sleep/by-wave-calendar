@@ -73,24 +73,69 @@ export async function runPendingMigrations(): Promise<void> {
   // disagrees with the actual DB schema (because of historical db:push
   // usage, manual hotfixes, lost _journal.json snapshots, etc).
   //
-  // Add a line here whenever a release adds a column the runtime code
-  // depends on. The migration file is still the canonical record for
-  // fresh installs; this is just the "fix the broken-deploy case"
-  // safety net. Remove entries once they've been live long enough that
-  // no surviving production DB could still be missing the column.
-  try {
-    const t0 = Date.now();
-    await db.execute(sql`
-      ALTER TABLE booking_links
-        ADD COLUMN IF NOT EXISTS notify_email boolean NOT NULL DEFAULT true
-    `);
-    const elapsed = Date.now() - t0;
-    if (elapsed > 50) {
-      console.log(`[auto-migrate] defensive schema patches applied in ${elapsed}ms`);
+  // 逐条执行、逐条 catch：以前是一条 db.execute 里放一条 ALTER，加到第二条起
+  // 就变成「前面一条炸了，后面几条全不跑」—— 而这里每一条修的都是不同的
+  // 故障，互相之间没有依赖关系。一条失败不该连累其余的。
+  let patched = 0;
+  const t0 = Date.now();
+  for (const patch of DEFENSIVE_SCHEMA_PATCHES) {
+    try {
+      await db.execute(sql.raw(patch.statement));
+      patched++;
+    } catch (err) {
+      console.error(`[auto-migrate] defensive patch FAILED (${patch.why}):`, err);
     }
-  } catch (err) {
-    console.error("[auto-migrate] defensive patches FAILED — /app/booking-links may 500:", err);
-  } finally {
-    await client.end({ timeout: 5 });
   }
+  const elapsed = Date.now() - t0;
+  if (elapsed > 50) {
+    console.log(`[auto-migrate] ${patched}/${DEFENSIVE_SCHEMA_PATCHES.length} defensive schema patches applied in ${elapsed}ms`);
+  }
+  await client.end({ timeout: 5 });
 }
+
+/**
+ * 开机安全网：运行时代码依赖、但存量库上可能缺的列。
+ *
+ * 什么时候该往这里加一条：**这一版的迁移新增了一个列，而代码读它**。
+ * 判据不是「重要不重要」，是「缺了这一列会怎样」——
+ *   · site_settings 的任何一列：drizzle 的 `db.select().from(siteSettings)`
+ *     会把 schema.ts 里的列名一个不落地写进 SQL。缺一列不是读到 undefined，
+ *     是这条查询直接报错，而每一个页面（包括登录页）都要读一次站点设置。
+ *     也就是说：**缺 site_settings 的一列 = 整站白屏**。
+ *   · users 的任何一列：同理，凡是 `select()`/`insert().returning()` 不带
+ *     投影的地方都会炸，登录和注册都在其中。
+ *
+ * 什么时候该删：这一条在所有还活着的生产库上都落地之后。留着不算错（每条
+ * 大约 0.5ms），但清单越长越没人看得懂哪条还在起作用。
+ *
+ * 导出成数据而不是写死在函数里，是为了让测试能把它拿去跑一遍 ——
+ * 「安全网本身是坏的」这种事只有真跑一次才看得见。
+ */
+export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: string }> = [
+  {
+    // v1.3.10。这一条就是这套安全网存在的原因，见文件顶上那段。
+    why: "booking_links.notify_email（缺了 /app/booking-links 全 500）",
+    statement: `ALTER TABLE booking_links ADD COLUMN IF NOT EXISTS notify_email boolean NOT NULL DEFAULT true`,
+  },
+  {
+    // 0047。默认空串 = 不允许任何外部站点嵌入，和站点全局 frame-ancestors 'none'
+    // 一致 —— 补出来的列必须和迁移里的默认值一字不差，否则「补上了」反而改了行为。
+    why: "site_settings.embed_frame_ancestors（缺了每一个页面都 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS embed_frame_ancestors text NOT NULL DEFAULT ''`,
+  },
+  {
+    // 0048。空串 = 不限制域名。默认值带一点限制性，升级当天注册就全死。
+    why: "site_settings.signup_domain_allowlist（缺了每一个页面都 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS signup_domain_allowlist text NOT NULL DEFAULT ''`,
+  },
+  {
+    // 0048。0 = 不限每日建号数。
+    why: "site_settings.signup_daily_quota（缺了每一个页面都 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS signup_daily_quota integer NOT NULL DEFAULT 0`,
+  },
+  {
+    // 0048。可空、不给存量行回填 —— 后台拿这一列做批量停用，猜错就是误杀真实用户。
+    why: "users.signup_source（缺了登录和注册都 500）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_source text`,
+  },
+];

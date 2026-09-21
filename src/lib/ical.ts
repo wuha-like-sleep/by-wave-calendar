@@ -4,6 +4,8 @@
 // CREATED, LAST-MODIFIED, DTSTAMP, RRULE.
 
 import { getBrandName } from "./email_templates.js";
+import { normalizeAlarms } from "./reminder_triggers.js";
+import { attendeeDetails, type AttendeeLike } from "./attendees.js";
 
 // PRODID identifies the generating product. Derive it from the site brand so a
 // self-hosted / white-labelled deploy stamps ITS OWN name into every .ics it
@@ -42,7 +44,11 @@ export type IcalEvent = {
   status?: string | null;
   categories?: string[] | null;
   organizer?: string | null;
-  attendees?: IcalAttendee[] | null;
+  // 两种存量形状都收：CalDAV 存的是 {email,cn,role,partstat} 对象数组，
+  // 网页 / JSON API 存的是邮箱字符串数组。序列化时统一过 attendeeDetails，
+  // 否则字符串那一路会被下面的 `!a.email` 整组跳过 —— 网页加的参与者在
+  // iPhone 日历里一个都不显示，正是这么来的。
+  attendees?: AttendeeLike[] | null;
   alarms?: IcalAlarm[] | null;
 };
 
@@ -161,14 +167,11 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.organizer) {
     lines.push(`ORGANIZER:mailto:${event.organizer}`);
   }
-  if (event.attendees && event.attendees.length > 0) {
-    for (const a of event.attendees) {
-      if (!a.email) continue;
-      const cn = a.cn ? `;CN=${escapeText(a.cn)}` : "";
-      const role = a.role ? `;ROLE=${a.role}` : ";ROLE=REQ-PARTICIPANT";
-      const partstat = a.partstat ? `;PARTSTAT=${a.partstat}` : ";PARTSTAT=NEEDS-ACTION";
-      lines.push(`ATTENDEE${cn}${role}${partstat};RSVP=TRUE:mailto:${a.email}`);
-    }
+  for (const a of attendeeDetails(event.attendees)) {
+    const cn = a.cn ? `;CN=${escapeText(a.cn)}` : "";
+    const role = a.role ? `;ROLE=${a.role}` : ";ROLE=REQ-PARTICIPANT";
+    const partstat = a.partstat ? `;PARTSTAT=${a.partstat}` : ";PARTSTAT=NEEDS-ACTION";
+    lines.push(`ATTENDEE${cn}${role}${partstat};RSVP=TRUE:mailto:${a.email}`);
   }
   // EXDATE: one line per excluded instance (some clients merge them into
   // a comma-joined list, but per-line is universally accepted and easier
@@ -187,6 +190,24 @@ export function serializeEvent(event: IcalEvent): string {
   }
   if (event.createdAt) lines.push(`CREATED:${formatDateTime(event.createdAt)}`);
   if (event.updatedAt) lines.push(`LAST-MODIFIED:${formatDateTime(event.updatedAt)}`);
+  // VALARM。这条不是「顺手补全」：PUT 那边已经改成「整份 VEVENT 上传，没有 VALARM
+  // 就是用户把提醒删了」。合成出来的 VEVENT（网页/API 建的事件，没有 rawIcs 可回放）
+  // 如果不带 VALARM，手机就从没见过这条提醒，它一回写就把提醒清掉 —— 等于用户在网页上
+  // 设的提醒，只要在手机上碰一下这个事件就没了，而且两端都不报错。
+  // 再过一遍 normalizeAlarms：库里可能留着历史遗留的垃圾 trigger，吐一条客户端解析
+  // 不了的 VALARM 出去，有的客户端会整份事件拒收。
+  for (const alarm of normalizeAlarms(event.alarms ?? [])) {
+    const { params, value } = splitTriggerParams(alarm.trigger);
+    const action = (alarm.action ?? "").toUpperCase();
+    lines.push("BEGIN:VALARM");
+    // ACTION 只回放 DISPLAY / AUDIO。EMAIL 提醒按 RFC 5545 还必须带 SUMMARY 和
+    // ATTENDEE，我们这条合成路径上没有这些值，与其发一份不合法的 VALARM，
+    // 不如降级成 DISPLAY —— 用户照样在手机上收到提醒。
+    lines.push(`ACTION:${action === "AUDIO" ? "AUDIO" : "DISPLAY"}`);
+    lines.push(`DESCRIPTION:${escapeText(alarm.description || event.summary)}`);
+    lines.push(`TRIGGER${params ? `;${params}` : ""}:${value}`);
+    lines.push("END:VALARM");
+  }
   lines.push("END:VEVENT");
   return lines.map(foldLine).join(CRLF);
 }
@@ -281,6 +302,29 @@ function parsePropLine(line: string): { name: string; line: ParsedLine } | null 
   return { name, line: { params, value } };
 }
 
+// TRIGGER 的参数不能只取 value 就扔掉。RELATED=END 决定这条提醒是按事件**结束**还是
+// 按开始算，VALUE=DATE-TIME 决定后面那串是绝对时刻还是相对时长。原先只取 value：
+// 「结束前 15 分钟」被静默当成「开始前 15 分钟」（一场 2 小时的会提前 2 小时响），
+// 绝对触发则因为解析不出 duration 被整条丢掉，用户永远等不到那条提醒。
+// 拼回 "RELATED=END:-PT15M" 这种带参数前缀的原样，reminder_triggers.parseTrigger 直接能吃，
+// 也就不用在这里各剥各的（剥错的代价同样是整条提醒消失）。
+function triggerWithParams(line: ParsedLine): string {
+  const params = Object.entries(line.params).map(([k, v]) => `${k}=${v}`);
+  return params.length ? `${params.join(";")}:${line.value}` : line.value;
+}
+
+// 把存着的 trigger 原文拆回「参数区 / 值」，用来重新拼一行 TRIGGER 属性。
+// 判据和 parseTrigger 保持一致：只有第一个冒号之前那段含 "=" 才算参数区，
+// 否则整串都是值（免得 "banana:x" 被当成参数化写法）。
+function splitTriggerParams(raw: string): { params: string; value: string } {
+  const text = raw.replace(/^\s*TRIGGER[;:]/i, "").trim();
+  const colon = text.indexOf(":");
+  if (colon > 0 && text.slice(0, colon).includes("=")) {
+    return { params: text.slice(0, colon).trim(), value: text.slice(colon + 1).trim() };
+  }
+  return { params: "", value: text };
+}
+
 export function parseEvent(ics: string): IcalEvent | null {
   // Unfold continuation lines (CRLF + space or tab).
   const unfolded = ics.replace(/\r?\n[\t ]/g, "");
@@ -311,10 +355,10 @@ export function parseEvent(ics: string): IcalEvent | null {
         const parsed = parsePropLine(lines[j] ?? "");
         if (parsed) alarmProps[parsed.name] = parsed.line;
       }
-      const trigger = alarmProps["TRIGGER"]?.value;
+      const trigger = alarmProps["TRIGGER"];
       if (trigger) {
         alarms.push({
-          trigger,
+          trigger: triggerWithParams(trigger),
           action: alarmProps["ACTION"]?.value ?? null,
           description: alarmProps["DESCRIPTION"] ? unescapeText(alarmProps["DESCRIPTION"].value) : null,
         });
@@ -372,6 +416,13 @@ export function parseEvent(ics: string): IcalEvent | null {
   const startTzid = dtstart.params["TZID"];
   const endTzid = dtend.params["TZID"];
 
+  // 第三方来源的口径（CalDAV PUT / .ics 导入）：解析不了的那一条丢掉，其余保留，
+  // 不要因为一条 TRIGGER 写坏了就整份事件 400 —— 这些客户端我们控制不了，
+  // 拒收的结果是用户的事件在手机上标红「无法同步」，比少一条提醒糟得多。
+  // 去重和 8 条上限也在这里一并做掉（同 trigger 两条会在同一分钟响两次，
+  // 而幂等键 (event_id, trigger, instance_start) 因为原文不同挡不住）。
+  const cleanAlarms = normalizeAlarms(alarms);
+
   return {
     uid: uid.trim(),
     summary: unescapeText(summary),
@@ -393,7 +444,7 @@ export function parseEvent(ics: string): IcalEvent | null {
     categories: categories && categories.length ? categories : null,
     organizer,
     attendees: attendees.length ? attendees : null,
-    alarms: alarms.length ? alarms : null,
+    alarms: cleanAlarms.length ? cleanAlarms : null,
   };
 }
 

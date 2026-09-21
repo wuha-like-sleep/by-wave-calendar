@@ -5,6 +5,8 @@ import { db, schema } from "../db/client.js";
 import { basicAuth } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
+import { normalizeAlarms } from "../lib/reminder_triggers.js";
+import { attendeeEmails, type AttendeeLike } from "../lib/attendees.js";
 import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
@@ -304,9 +306,12 @@ async function loadAllEventsOf(calId: string, range?: { start: Date | null; end:
 
 function rowToIcal(row: schema.Event): IcalEvent {
   const extra = (row.extra ?? null) as null | {
-    attendees?: Array<{ email: string; cn?: string | null; role?: string | null; partstat?: string | null }>;
+    // 两种存量形状都可能（见 lib/attendees.ts）：CalDAV 写的对象数组、网页 / JSON API
+    // 写的邮箱字符串数组。这里不挑形状，serializeEvent 里过 attendeeDetails 统一摊平。
+    attendees?: unknown;
     organizer?: string | null;
     timezone?: string | null;
+    alarms?: unknown;
   };
   return {
     uid: row.uid,
@@ -330,7 +335,13 @@ function rowToIcal(row: schema.Event): IcalEvent {
     // their attendee list on CalDAV clients. PARTSTAT overlay happens
     // downstream in rowToVCalendar.
     organizer: extra?.organizer ?? null,
-    attendees: Array.isArray(extra?.attendees) ? extra!.attendees! : null,
+    // 以前这里是「原样递给 serializeEvent」，而那边的 `if (!a.email) continue` 对字符串
+    // 恒为真 —— 网页上加的参与者在 iPhone 日历里一行 ATTENDEE 都没有。
+    attendees: (extra?.attendees ?? null) as AttendeeLike[] | null,
+    // 提醒也要出现在合成的 VEVENT 里。PUT 那边现在是「上传里没有 VALARM 就是删提醒」，
+    // 而合成路径正是网页/API 建的事件（没有 rawIcs 可回放）。GET 不给 VALARM，
+    // 手机就没见过这条提醒，用户在手机上动一下事件，网页设的提醒就被回写清掉了。
+    alarms: normalizeAlarms(extra?.alarms ?? []),
   };
 }
 
@@ -714,6 +725,52 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   return reply.send(ics);
 }
 
+/**
+ * PUT 上传的 VALARM 覆盖到 extra.alarms 上：**有几条就是几条，一条没有就是删光**。
+ *
+ * 为什么是「以这次上传为准」而不是「有才覆盖」：CalDAV 的 PUT 是整份日历资源替换
+ * （RFC 4791 §5.3.2），协议里根本没有「只改一个属性」的半份上传；能走到这里的请求，
+ * parseEvent 已经要到了 UID + SUMMARY + DTSTART + DTEND，拿不到就在上面 400 了。
+ * 也就是说客户端刚刚看过这份资源的完整内容，又完整地写了回来 —— 它没写 VALARM，
+ * 意思就是「我把提醒删了」。
+ *
+ * 原来这行是 `if (parsed.alarms) extraPatch.alarms = parsed.alarms;`：客户端把 VALARM
+ * 全删掉时 parsed.alarms 是 null，这行不执行，库里的老提醒被 `{...existing.extra}` 原样
+ * 带过去。结果是用户在 iPhone 自带日历里删了提醒，手机上看着确实没了，服务端还在按
+ * 老提醒给他发邮件，而且怎么删都删不掉。
+ *
+ * 注意这跟 .ics 订阅刷新是两码事（见 ics_import.ts）：订阅是我们单方面去拉的，
+ * 上游从没看过用户在我们这儿加的提醒，它「没带 VALARM」不构成删除的意思表示。
+ *
+ * --- 为什么还要一个 clientHasCurrentCopy ---
+ *
+ * 上面那套推理有个前提：客户端手上那份**看过**我们现在这版内容。而合成 VEVENT 带上
+ * VALARM 是后来才加的（rowToIcal 里那段），在那之前 GET 回去的事件根本没有 VALARM。
+ * 客户端缓存的就是那份没有 VALARM 的副本，而上线既不改 events.updated_at 也不改行数
+ * —— etag 和 ctag 都没变，客户端**不会重新拉**。用户第一次在手机上碰这个事件，
+ * 传上来的正是那份旧副本：他什么都没删，网页上设的提醒却没了。一个没人动的事件
+ * 可以在这个状态里躺一年，两端都不报错。
+ *
+ * 所以「没有 VALARM = 删除」只在能证明客户端手上是当前版本时才成立，而 CalDAV 里
+ * 唯一的证据就是 If-Match 命中当前 etag（RFC 4791 §5.3.2 建议的更新写法，iOS /
+ * macOS 日历、Thunderbird、DAVx5 都会带）。命中不了的 PUT 是一次盲写：
+ * 它没写 VALARM，只说明它不知道有 VALARM，不说明用户删了提醒。
+ * 顺带一提，同一份 PUT 里 transp / status / attendees / categories / organizer /
+ * timezone 全是「有才覆盖」，alarms 是唯一一个「没有就是删」的键 —— 而它恰好是
+ * 老客户端缓存里必然缺失的那个，两件事凑在一起才成了数据丢失。
+ */
+export function applyAlarmsFromPut(
+  extraPatch: Record<string, unknown>,
+  parsed: { alarms?: IcalEvent["alarms"] },
+  evidence: { clientHasCurrentCopy: boolean },
+): void {
+  const alarms = Array.isArray(parsed.alarms) ? parsed.alarms : [];
+  if (alarms.length) { extraPatch.alarms = alarms; return; }
+  // 没有 VALARM，而且客户端手上确实是当前这一版 → 这是一次真正的删除。
+  if (evidence.clientHasCurrentCopy) delete extraPatch.alarms;
+  // 否则什么都不做：保留库里的提醒（见上面「窗口」那段）。
+}
+
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
 async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
@@ -782,8 +839,18 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     const extraPatch: Record<string, unknown> = { ...((existing?.extra as Record<string, unknown> | null) ?? {}) };
     if (parsed.transp) extraPatch.transp = parsed.transp;
     if (parsed.status) extraPatch.status = parsed.status;
-    if (parsed.attendees) extraPatch.attendees = parsed.attendees;
-    if (parsed.alarms) extraPatch.alarms = parsed.alarms;
+    // 参与者收口成邮箱字符串数组（见 lib/attendees.ts）：库里只留一种形状，
+    // 网页和已经发出去的三端才读得回来。一个能用的邮箱都摊不出来（iOS 有时用
+    // `urn:uuid:…` 之类的内部身份当 ATTENDEE）就不动这个键 —— 覆盖成空数组等于
+    // 替用户把人删了。
+    const putAttendees = attendeeEmails(parsed.attendees);
+    if (putAttendees.length) extraPatch.attendees = putAttendees;
+    // 「客户端手上是不是当前这一版」——只有带 If-Match 且命中当前 etag 才算数。
+    // 库里没有这一行时无所谓：删不掉任何东西。
+    const clientHasCurrentCopy = !existing || (
+      typeof ifMatchHdr === "string" && ifMatchHdr !== "*" && ifMatchHdr === etagOf(existing.updatedAt)
+    );
+    applyAlarmsFromPut(extraPatch, parsed, { clientHasCurrentCopy });
     if (parsed.organizer) extraPatch.organizer = parsed.organizer;
     if (parsed.categories) extraPatch.categories = parsed.categories;
     // Persist the IANA zone the client sent (DTSTART;TZID=…). Without this
@@ -863,9 +930,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   // already a recipient from the original PUT). Already-invited people
   // get a re-REQUEST email so their phone updates the event details.
   if (parsed.attendees && parsed.attendees.length > 0) {
-    const recipientList = parsed.attendees
-      .map((a) => (a.email || "").toLowerCase().trim())
-      .filter((e) => e && e.includes("@") && e !== user.email.toLowerCase());
+    const recipientList = attendeeEmails(parsed.attendees)
+      .filter((e) => e !== user.email.toLowerCase());
     if (recipientList.length > 0) {
       // Look up who we've already invited so we know who's "new" vs
       // "re-notify". A re-creation (resurrect) treats everyone as new.

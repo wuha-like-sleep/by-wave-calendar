@@ -142,7 +142,12 @@ function interpolate(
 ): string {
   const dict = DICTIONARIES[locale] ?? DICTIONARIES.en;
   const k = key as TranslationKey;
-  let value = dict[k] ?? DICTIONARIES.en[k] ?? key;
+  // `??` 只对 undefined 回落,对空串不回落 —— 于是一个 `"key": ""` 会让这里
+  // 返回空串,页面上**真的渲染成空白**:按钮没有字、标题是空的、弹窗只剩一个
+  // 确定键。不报错、不打日志,只是那一门语言的那一处什么都没有。
+  // 空串和纯空白一律当成「没翻」,照常回落到英文,再回落到 key 本身。
+  // i18nCoverage() 用的是同一个判据,所以门禁看到的和用户看到的是同一件事。
+  let value = hasTranslation(dict[k]) ? dict[k]! : (hasTranslation(DICTIONARIES.en[k]) ? DICTIONARIES.en[k]! : key);
   if (vars) {
     for (const [name, v] of Object.entries(vars)) {
       // XSS hardening: t() output is emitted RAW (`<%- t(...) %>`) in every
@@ -176,28 +181,48 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** 一个字典条目算不算「翻过了」。
+ *
+ *  以前这里只判 `=== undefined`,于是 `"login.submit": ""` 算「已翻译」——
+ *  覆盖率报表说 100%,而登录按钮上一个字都没有。空串和纯空白(全角空格、
+ *  不换行空格也算)一律当没翻。
+ *
+ *  运行时的 interpolate() 用的是同一个判据:门禁数出来的「缺」和用户看到的
+ *  「空」必须是同一件事,否则报表绿着而页面是空的。 */
+function hasTranslation(v: string | undefined): v is string {
+  return typeof v === "string" && v.trim() !== "";
+}
+
 /** Per-locale translation coverage, for `scripts/i18n-coverage.ts`. The
  *  English dict is the source of truth (always 100%); every other locale
  *  reports how many of those keys it actually translates and which are
  *  still missing (those fall back to English at runtime). This is the tool
- *  a translator runs when adding / topping up a language. */
+ *  a translator runs when adding / topping up a language.
+ *
+ *  `missing` 是「缺 + 空」的并集(门禁看这个);`blank` 只是其中「键在、值是
+ *  空白」的那部分,单独列出来是因为这两种缺法的成因不一样:缺键通常是新功能
+ *  上线没跟上翻译,空值通常是翻译工具/人手一次误保存。报表把它们分开说,
+ *  省得拿着 1000 个缺键的清单去找那一个被清空的。 */
 export function i18nCoverage(): Array<{
   locale: LocaleCode;
   label: string;
   total: number;
   translated: number;
   missing: string[];
+  blank: string[];
 }> {
   const allKeys = Object.keys(en) as TranslationKey[];
   return LOCALES.map((l) => {
     const dict = DICTIONARIES[l.code] ?? {};
-    const missing = allKeys.filter((k) => dict[k] === undefined);
+    const missing = allKeys.filter((k) => !hasTranslation(dict[k]));
+    const blank = allKeys.filter((k) => dict[k] !== undefined && !hasTranslation(dict[k]));
     return {
       locale: l.code,
       label: l.label,
       total: allKeys.length,
       translated: allKeys.length - missing.length,
       missing,
+      blank,
     };
   });
 }

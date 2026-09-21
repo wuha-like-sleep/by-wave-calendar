@@ -10,6 +10,9 @@ export type SettingsView = {
   siteName: string;
   logoUrl: string | null;
   registrationMode: "closed" | "public" | "invite";
+  // 建号闸门。空串 = 域名不限制;0 = 每日建号数不限制。见 schema.ts 的说明。
+  signupDomainAllowlist: string;
+  signupDailyQuota: number;
   icpNumber: string | null;
   icpUrl: string;
   ssoKeycloakEnabled: boolean;
@@ -98,13 +101,35 @@ function logoFileExists(logoUrl: string | null): boolean {
   }
 }
 
-function toView(r: schema.SiteSettings): SettingsView {
+// 老库里的 site_settings 行。
+//
+// 为什么不用 schema.SiteSettings 直接当参数:这个产品的迁移是开机自动跑的,
+// 而迁移器状态和真实 schema 对不上是本仓库出过的事(见 auto_migrate.ts 顶上
+// 那段)。真发生时,读回来的行**根本没有**新列这个属性 —— 是 undefined,
+// 不是 null。行类型里它是 `string`/`number`,TS 看不出这种情况,于是
+// 「忘了写回落」这个错误能一路编译通过、部署成功,直到升级当天注册全挂。
+// 把新列在参数类型里标成可选,TS 就会逼着每一处写回落。
+// 以后每加一个新列,先加进这个 Partial 里,等它在所有存量库上都落地了再摘掉。
+type SettingsRow =
+  Omit<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota">
+  & Partial<Pick<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota">>;
+
+// 导出只是为了测试能直接喂一行进来 —— 纯逻辑测试档里没有 Postgres,
+// 走 getSettings() 就得起一个真数据库。这是「行 → 视图」的唯一回落口径。
+export function toView(r: SettingsRow): SettingsView {
   const mode = (r.registrationMode === "closed" || r.registrationMode === "public" || r.registrationMode === "invite")
     ? r.registrationMode : "public";
   return {
     siteName: r.siteName || env.SITE_NAME,
     logoUrl: logoFileExists(r.logoUrl) ? r.logoUrl : null,
     registrationMode: mode,
+    // 列不存在(老库)一律回落到「不限制」,不是回落到「全拒」。
+    // 升级不能让一台本来能注册的服务器当天开始拒绝建号 —— 管理员没改过
+    // 任何设置,不会想到去翻这两项,只会看到「注册坏了」。
+    // 用 ?? 不用 ||:管理员真把配额填成 0 就是「不限」,|| 也是 0,巧合而已;
+    // 但域名白名单那边 "" 和 undefined 语义相同,写 ?? 是为了两行口径一致。
+    signupDomainAllowlist: r.signupDomainAllowlist ?? "",
+    signupDailyQuota: r.signupDailyQuota ?? 0,
     icpNumber: r.icpNumber || env.ICP_NUMBER || null,
     icpUrl: r.icpUrl || env.ICP_URL,
     ssoKeycloakEnabled: r.ssoKeycloakEnabled,
@@ -189,6 +214,8 @@ export async function updateSettings(patch: Partial<{
   siteName: string;
   logoUrl: string | null;
   registrationMode: "closed" | "public" | "invite";
+  signupDomainAllowlist: string;
+  signupDailyQuota: number;
   icpNumber: string | null;
   icpUrl: string;
   ssoKeycloakEnabled: boolean;

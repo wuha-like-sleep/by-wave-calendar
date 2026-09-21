@@ -14,7 +14,7 @@ beforeEach(async () => { await resetDb(); });
 
 describe("provisionAccountByEmail (service-client bulk provision)", () => {
   it("creates a new account + default calendar, created:true", async () => {
-    const r = await provisionAccountByEmail("new@x.com", "New User");
+    const r = await provisionAccountByEmail("new@x.com", "New User", { client: "svc", emailVerified: true });
     expect(r.created).toBe(true);
     expect(r.user?.email).toBe("new@x.com");
     expect(r.user?.emailVerified).toBe(true);
@@ -27,8 +27,8 @@ describe("provisionAccountByEmail (service-client bulk provision)", () => {
   });
 
   it("is idempotent — second call returns the existing account with created:false", async () => {
-    const first = await provisionAccountByEmail("dup@x.com", null);
-    const second = await provisionAccountByEmail("dup@x.com", null);
+    const first = await provisionAccountByEmail("dup@x.com", null, { client: "svc", emailVerified: true });
+    const second = await provisionAccountByEmail("dup@x.com", null, { client: "svc", emailVerified: true });
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(second.user?.id).toBe(first.user?.id);
@@ -39,7 +39,7 @@ describe("provisionAccountByEmail (service-client bulk provision)", () => {
   });
 
   it("falls back to the email local-part when no display name given", async () => {
-    const r = await provisionAccountByEmail("alice@example.com", null);
+    const r = await provisionAccountByEmail("alice@example.com", null, { client: "svc", emailVerified: true });
     expect(r.user?.displayName).toBe("alice");
   });
 });

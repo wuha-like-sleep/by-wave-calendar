@@ -18,6 +18,104 @@ const SESSION_TRANSIENT_TTL_MS = 1 * ONE_DAY_MS;
 /** 不改变服务端状态的方法——只读 token 只允许这些。 */
 const READ_ONLY_METHODS = new Set(["GET", "HEAD", "OPTIONS", "PROPFIND", "REPORT"]);
 
+// ---------------------------------------------------------------------------
+// IdP 服务客户端：「第一次碰这个账号」的取证去重
+// ---------------------------------------------------------------------------
+//
+// 背景：受信任的 Keycloak 服务令牌可以带 X-Account 操作**任何**账号，是本仓库
+// 权限最大的一条认证路径。原来的取证钩子只记写操作，理由写的是「读量大风险低」。
+// 但懒建号恰恰发生在读请求上 —— 于是审计表里有一行「建了一个号」，旁边没有任何
+// 记录说明当时在访问什么。45 天 30 个号就是在这种静默里攒出来的。
+//
+// 所以读也要记，但不能每条都记（一个日历客户端一分钟能打几十个 GET）。折中：
+// 每个 (客户端, 账号) 组合在一个时间窗内只记第一条。
+//
+// **「第一次」的确切范围**，这是个真实边界，说清楚：
+//   - 范围是**单个 Node 进程的内存**。没有 DB、没有 Redis。
+//   - 窗口 1 小时，**滑动式**：记过之后这一对再来，只要距上次不到 1 小时就不记；
+//     超过 1 小时的下一条又会记一行。所以一个长期在跑的客户端，对每个账号每小时
+//     最多留一行。
+//   - 表最多 5000 对，满了按最久没用到的先淘汰（被淘汰的那一对下次会重新记一行）。
+//   - **进程重启后表是空的**，于是重启后每一对都会再记一次。这是有意的：重启是
+//     正好想要一张新快照的时刻，而「重启后第一次」本身就是有用的取证信息。
+//   - pm2 多进程 / 多机部署时，每个进程各有一张表，同一对会在每个进程各留一行。
+//     数行数去算「访问了几次」是错的；这张日志回答的是「谁在碰谁」，不是计数器。
+const SERVICE_TOUCH_WINDOW_MS = 60 * 60 * 1000;
+const SERVICE_TOUCH_MAX_ENTRIES = 5000;
+const serviceClientTouches = new Map<string, number>();
+
+/**
+ * 返回 true = 这一对是「第一次」，调用方应该记一行取证日志。
+ * 有副作用（记下时间戳），所以每个请求最多调一次。
+ */
+export function noteServiceClientTouch(client: string, accountId: string, now: number = Date.now()): boolean {
+  // JSON 数组当 key：客户端 id 里出现分隔符也拼不出跟另一对相同的串。
+  const key = JSON.stringify([client, accountId]);
+  const last = serviceClientTouches.get(key);
+  const fresh = last === undefined || now - last >= SERVICE_TOUCH_WINDOW_MS;
+  // delete + set：Map 对已存在的 key 做 set 不会改变它的插入顺序，不先删的话
+  // 下面的淘汰就变成「按第一次出现的先后淘汰」，最忙的那一对反而最先被踢掉。
+  serviceClientTouches.delete(key);
+  serviceClientTouches.set(key, fresh ? now : last!);
+  while (serviceClientTouches.size > SERVICE_TOUCH_MAX_ENTRIES) {
+    const oldest = serviceClientTouches.keys().next();
+    if (oldest.done) break;
+    serviceClientTouches.delete(oldest.value);
+  }
+  return fresh;
+}
+
+/** 测试用：把上面那张表清空。 */
+export function resetServiceClientTouches(): void {
+  serviceClientTouches.clear();
+}
+
+/** 只读方法。这里跟 READ_ONLY_METHODS 不共用：那一组是「只读 token 能发什么」，
+ *  多了 PROPFIND / REPORT —— CalDAV 的这两个方法确实不改状态，但它们一次能读走
+ *  整个日历，正是最该留痕的读。两个集合的用途不同，合并会让其中一边悄悄变错。 */
+const FORENSIC_READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+export type ServiceClientAccess = {
+  client: string;
+  account: string | undefined;
+  accountId: string | undefined;
+  method: string;
+  path: string;
+  status: number;
+};
+
+/**
+ * 服务客户端这次访问要不要留一行取证日志，留的话长什么样。返回 null = 不留。
+ *
+ *   - 写操作：每一条都留（原来就是这样，不动）。
+ *   - 读操作：只留这个客户端**第一次**碰这个账号的那一条。
+ *
+ * 一个请求只出一行：既是写又是首次时，记成 mutation 并带上 firstTouch:true。
+ *
+ * 有副作用（会更新上面那张去重表），所以每个请求只能调一次。
+ */
+export function serviceClientForensicLine(
+  a: ServiceClientAccess,
+): { event: string; line: Record<string, unknown> } | null {
+  const isRead = FORENSIC_READ_METHODS.has(a.method);
+  // 去重按账号 id，不按邮箱：邮箱是会改的，改一次同一个人就会被当成两个账号重刷一遍。
+  // 拿不到 id（理论上不该发生）就当成首次，宁可多记一行也不要漏掉一次跨账号访问。
+  const firstTouch = a.accountId ? noteServiceClientTouch(a.client, a.accountId) : true;
+  if (isRead && !firstTouch) return null;
+  return {
+    event: isRead ? "idp_service_first_touch" : "idp_service_mutation",
+    line: {
+      idpServiceClient: a.client,
+      account: a.account,
+      accountId: a.accountId,
+      method: a.method,
+      path: a.path,
+      status: a.status,
+      firstTouch,
+    },
+  };
+}
+
 export async function createSession(
   reply: FastifyReply,
   userId: string,
@@ -227,11 +325,14 @@ export async function requireUserOrSend(
           req.user = res.user;
           (req as unknown as { authVia: string }).authVia = "idp:" + res.provider;
           // Tag service-client (cross-account) access so the onResponse hook can
-          // log every mutation for forensics — this is the most powerful auth
-          // path, so its writes must leave a trail.
+          // log it for forensics — this is the most powerful auth path. 账号 id
+          // 也带上：取证日志按 (客户端, 账号) 去重，而邮箱是会改的，改一次同一个
+          // 人就会被当成两个账号重新刷一遍。
           if (res.serviceClient) {
-            (req as unknown as { idpServiceClient?: string; idpActedAs?: string }).idpServiceClient = res.serviceClient;
-            (req as unknown as { idpActedAs?: string }).idpActedAs = res.user.email;
+            const tagged = req as unknown as { idpServiceClient?: string; idpActedAs?: string; idpActedAsId?: string };
+            tagged.idpServiceClient = res.serviceClient;
+            tagged.idpActedAs = res.user.email;
+            tagged.idpActedAsId = res.user.id;
           }
           // Auto-provisioning a real account is significant + infrequent →
           // record it in the admin audit log (not just server logs).
@@ -239,7 +340,20 @@ export async function requireUserOrSend(
             const { audit } = await import("./audit.js");
             void audit(req, res.user.id, "idp.account_provisioned", {
               targetType: "user", targetId: res.user.id,
-              details: { client: res.serviceClient, email: res.user.email },
+              details: {
+                client: res.serviceClient,
+                email: res.user.email,
+                // 建号是**顺手**发生的：某个请求进来，账号不存在，于是建一个。
+                // 只记 client+email 的话，管理员在后台点开这条只能看到「有人被建出来了」，
+                // 看不到当时在干什么。方法+路径补上之后，这条审计行自己就能回答
+                // 「谁、在访问什么的时候、顺手建的」。
+                // 路径要去掉 query：那上面挂着搜索词、令牌之类不该进审计表的东西。
+                method: req.method,
+                path: String(req.url ?? "").split("?")[0],
+                // 来源标记跟 users.signup_source 是同一列的值，后台按来源筛选时
+                // 这条日志和用户列表对得上。null = 存量行，不是 self。
+                signupSource: res.user.signupSource ?? null,
+              },
             }).catch(() => undefined);
           }
           return res.user;

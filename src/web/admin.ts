@@ -36,6 +36,11 @@ import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { revokeAllUserCredentials, countActiveAdmins } from "../lib/user_state.js";
 import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
 import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
+import { tForRequest } from "../lib/i18n.js";
+// 配额窗口的起点从建号收口函数里拿,不在这里重算。后台「今天已建 N 个」这个
+// 数字必须跟真正拦人的那道闸门用同一个窗口,否则管理员看到的 N 和刹车实际
+// 数的 N 不是一回事,他会以为闸门坏了。
+import { startOfQuotaDay } from "../lib/account_provisioning.js";
 
 async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   const s = await loadSession(req);
@@ -75,6 +80,194 @@ function flashFromQuery(req: FastifyRequest) {
     error: typeof q.error === "string" ? q.error : undefined,
     success: typeof q.success === "string" ? q.success : undefined,
   };
+}
+
+// Lightweight <time data-tz> wrapper; the client-side local-time.js reformats
+// to the visitor's browser TZ on load.
+//
+// 提到模块作用域:它原来声明在 adminRoutes 中段,后面的路由用着没事,
+// 前面的路由用它就得靠「回调比声明晚执行」这个巧合成立 —— 一眼看不出来的雷。
+const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" data-style="datetime">${d.toISOString()}</time>`;
+
+/** 请求内翻译,给 flash / 页面标题用。口径跟 web/sso.ts 的 tr() 一致。 */
+function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
+  return tForRequest(req)(key, vars);
+}
+
+// ---------------------------------------------------------------------------
+// 账号来源(users.signup_source)
+// ---------------------------------------------------------------------------
+
+/**
+ * 这一列只有建号收口函数(src/lib/account_provisioning.ts)写,取值是
+ * self / invite / sso:<slug> / idp:<client> / apple / admin。
+ *
+ * **NULL 是「未知」,绝不是 self。** 这一列是这一版才加的,存量行全是 NULL 且
+ * 明确不回填猜测值。把 NULL 归进 self 那一桶的话,管理员在筛选里选「自己注册」
+ * 再点批量停用,一下就把升级之前的所有老用户全停了 —— 那正是他最不想发生的事。
+ * 所以未知在筛选下拉里是独立选项,在汇总表里是独立一行。
+ */
+export type SignupSourceKind = "unknown" | "self" | "invite" | "sso" | "idp" | "apple" | "admin" | "other";
+
+export type SignupSourceView = {
+  /** 原始列值;未知来源是 null。 */
+  raw: string | null;
+  /** 筛选下拉 / URL 里的取值。未知来源固定 "unknown" —— 它不是 signup_source
+   *  的合法取值,所以不会跟任何真实来源撞。 */
+  key: string;
+  kind: SignupSourceKind;
+  /** sso 的 slug、idp 的 client_id;其余为 null。 */
+  detail: string | null;
+  /** 徽章配色。整串写死在 .ts 里(admin.ts 在 tailwind content globs 内),
+   *  拼出来的 class 会被 purge 掉 —— 审计页那段注释踩过同一个坑。 */
+  badge: string;
+};
+
+export function signupSourceView(raw: string | null | undefined): SignupSourceView {
+  const v = (raw ?? "").trim();
+  if (!v) return { raw: null, key: "unknown", kind: "unknown", detail: null, badge: "bg-slate-100 text-slate-600" };
+  const sep = v.indexOf(":");
+  const head = sep >= 0 ? v.slice(0, sep) : v;
+  const detail = sep >= 0 ? v.slice(sep + 1).trim() || null : null;
+  switch (head) {
+    case "self": return { raw: v, key: v, kind: "self", detail: null, badge: "bg-slate-100 text-slate-700" };
+    case "invite": return { raw: v, key: v, kind: "invite", detail: null, badge: "bg-teal-100 text-teal-700" };
+    case "sso": return { raw: v, key: v, kind: "sso", detail, badge: "bg-violet-100 text-violet-700" };
+    case "idp": return { raw: v, key: v, kind: "idp", detail, badge: "bg-amber-100 text-amber-700" };
+    case "apple": return { raw: v, key: v, kind: "apple", detail: null, badge: "bg-sky-100 text-sky-700" };
+    case "admin": return { raw: v, key: v, kind: "admin", detail: null, badge: "bg-indigo-100 text-indigo-700" };
+    // 不认识的取值原样显示,**不当成 self**。以后新增一种来源而后台还没跟上时,
+    // 它至少还是自己独立的一桶,不会被针对 self 的批量操作顺手扫掉。
+    default: return { raw: v, key: v, kind: "other", detail: null, badge: "bg-slate-100 text-slate-600" };
+  }
+}
+
+export type SignupSourceFilter =
+  | { kind: "none" }
+  | { kind: "unknown" }
+  | { kind: "exact"; value: string };
+
+/** URL 上的 ?source= 解析成筛选条件。 */
+export function signupSourceFilter(raw: string | null | undefined): SignupSourceFilter {
+  const v = (raw ?? "").trim().slice(0, 120);
+  if (!v) return { kind: "none" };
+  // "unknown" 必须变成「这一列是空的」,**不能**变成按字面量 'unknown' 相等比较:
+  // 没有任何一行是这个值,结果会是一张空表,而管理员读到的意思是
+  // 「升级之前的老账号一个都没有」—— 一条不报错的假消息。
+  if (v === "unknown") return { kind: "unknown" };
+  return { kind: "exact", value: v };
+}
+
+// ---------------------------------------------------------------------------
+// 批量停用的名单计算
+// ---------------------------------------------------------------------------
+
+export type BulkDisableRow = { id: string; email: string; isAdmin: boolean; disabled: boolean };
+export type BulkDisableSkipReason = "not_found" | "self" | "already_disabled" | "last_admin";
+export type BulkDisableSkip = { id: string; email: string; reason: BulkDisableSkipReason };
+export type BulkDisablePlan = { disable: BulkDisableRow[]; skipped: BulkDisableSkip[] };
+
+/**
+ * 算出这一批里哪些真的会被停用、哪些跳过以及为什么。
+ *
+ * 单独拎成纯函数,是因为它是这次唯一一处「一个动作作用在多行上」的地方,
+ * 而所有守卫(不能停自己、不能把最后一个管理员停掉)原来都是照着单行写的。
+ */
+export function planBulkDisable(input: {
+  requestedIds: string[];
+  rows: BulkDisableRow[];
+  actorId: string;
+  activeAdminCount: number;
+}): BulkDisablePlan {
+  const byId = new Map(input.rows.map((r) => [r.id, r]));
+  const disable: BulkDisableRow[] = [];
+  const skipped: BulkDisableSkip[] = [];
+  // 这一批里最多还能停掉几个管理员。系统至少要留一个能用的管理员,留不住就
+  // 只能上数据库手改 is_admin 才能救回来。
+  //
+  // 为什么要按整批扣额度,而不是逐行问一次「这是不是最后一个管理员」:一次
+  // 勾中两个管理员、系统正好只有这两个,逐行看**每一行都不是**最后一个,
+  // 于是两行都放行,做完就是零个管理员。单行那条守卫在批量语境里天然是错的。
+  let adminBudget = Math.max(0, input.activeAdminCount - 1);
+  const seen = new Set<string>();
+  for (const id of input.requestedIds) {
+    // 同一个 id 在表单里出现两次(勾选框被复制、或者手工构造的请求)不该
+    // 在结果里算两次,更不该把管理员额度扣两次。
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const row = byId.get(id);
+    if (!row) { skipped.push({ id, email: "", reason: "not_found" }); continue; }
+    if (id === input.actorId) { skipped.push({ id, email: row.email, reason: "self" }); continue; }
+    // 已经停用的不重复停:重复停会把 disabled_at 刷成今天,管理员再也查不到
+    // 这个号当初是什么时候被停的。
+    if (row.disabled) { skipped.push({ id, email: row.email, reason: "already_disabled" }); continue; }
+    if (row.isAdmin) {
+      if (adminBudget <= 0) { skipped.push({ id, email: row.email, reason: "last_admin" }); continue; }
+      adminBudget -= 1;
+    }
+    disable.push(row);
+  }
+  return { disable, skipped };
+}
+
+/**
+ * 停用一个账号。**整个后台只有这一份停用实现** —— 单个停用和批量停用都走它。
+ *
+ * 这个仓库在封禁上吃过亏:判定和动作散在多处,就一定有某一处漏掉其中一步
+ * (会话删了但 API Token 还在、CalDAV 缓存没清)。多一条路径就多一次漏的机会。
+ * 新增任何「停用」入口都必须调这里,不要把下面这几行复制过去。
+ */
+async function disableUserAccount(
+  req: FastifyRequest,
+  actorId: string,
+  target: { id: string; email: string },
+  auditDetails: Record<string, unknown> = {},
+): Promise<void> {
+  await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, target.id));
+  // 会话是不透明 blob,没法标记撤销,只能直接删。
+  await db.delete(schema.sessions).where(eq(schema.sessions.userId, target.id));
+  // API Token(n8n / Zapier)和应用密码(Apple 日历里的 CalDAV)活得比会话长,
+  // 不撤的话人被停用了、机器还在照常同步。
+  await revokeAllUserCredentials(target.id);
+  // CalDAV 鉴权有 60s 缓存,不清的话在外面那台 iPhone 还能再同步一分钟。
+  invalidateCalDavAuthCache(target.id);
+  await audit(req, actorId, "user.disable", {
+    targetType: "user", targetId: target.id, details: { email: target.email, ...auditDetails },
+  });
+}
+
+/**
+ * 批量操作做完回到哪里 —— 带上原来的筛选条件,别把人甩回没筛过的全量列表。
+ *
+ * 只认 q 和 source 两个字段,自己重新拼 query string:直接把表单回传的
+ * 整串 query 接到 Location 上的话,那串是浏览器交回来的,里面的 & # ? 会
+ * 改变这条 URL 的结构。重拼一遍,回来的东西就只能是这两个参数。
+ */
+function bulkBackTo(body: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  const q = typeof body.q === "string" ? body.q.trim().slice(0, 100) : "";
+  const source = typeof body.source === "string" ? body.source.trim().slice(0, 120) : "";
+  if (q) params.set("q", q);
+  if (source) params.set("source", source);
+  const qs = params.toString();
+  return "/admin/users?" + (qs ? `${qs}&` : "");
+}
+
+/** 表单里重复的 name 可能是单值也可能是数组;统一成去重后的 uuid 列表。 */
+function normalizeUserIds(raw: unknown, cap = 500): string[] {
+  const list = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const v of list) {
+    if (typeof v !== "string") continue;
+    const id = v.trim();
+    if (!z.string().uuid().safeParse(id).success) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= cap) break;
+  }
+  return out;
 }
 
 export async function adminRoutes(app: FastifyInstance) {
@@ -561,14 +754,25 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent("账号已合并，源账号已删除"));
   });
 
-  app.get<{ Querystring: { q?: string } }>("/admin/users", async (req, reply) => {
+  app.get<{ Querystring: { q?: string; source?: string } }>("/admin/users", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return;
     // Read-only filter: find a user by email / display name. Escaped + capped.
     const q = (typeof req.query?.q === "string" ? req.query.q : "").trim().slice(0, 100);
-    const whereClause = q
+    const qClause = q
       ? or(ilike(schema.users.email, likeNeedle(q)), ilike(schema.users.displayName, likeNeedle(q)))
       : undefined;
+    const srcFilter = signupSourceFilter(req.query?.source);
+    const srcClause =
+      srcFilter.kind === "unknown"
+        // 未知 = 这一列没有值。存量行是 NULL,但真要有人手工写进去一个空串,
+        // 他在后台看到的也是「未知」那一行,筛选就得能把它一起捞出来。
+        ? sql`coalesce(${schema.users.signupSource}, '') = ''`
+        : srcFilter.kind === "exact"
+          ? eq(schema.users.signupSource, srcFilter.value)
+          : undefined;
+    // and() 会自己丢掉 undefined,两个都没有时返回 undefined。
+    const whereClause = and(qClause, srcClause);
     // Totals for the header summary (reflect the whole base, not the filter).
     const countRows = await db
       .select({
@@ -591,12 +795,28 @@ export async function adminRoutes(app: FastifyInstance) {
         emailVerified: schema.users.emailVerified,
         mfaEnabled: schema.users.mfaEnabled,
         ssoProviderSlug: schema.users.ssoProviderSlug,
+        signupSource: schema.users.signupSource,
         disabledAt: schema.users.disabledAt,
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
       .where(whereClause)
       .orderBy(desc(schema.users.createdAt));
+    // 筛选下拉的选项:库里真实出现过的来源 + 各自多少个。统计的是**全量**,
+    // 不跟着当前筛选走 —— 下拉自己被自己筛过之后就只剩当前那一项,人就出不去了。
+    const srcCountRows = await db
+      .select({ src: schema.users.signupSource, c: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .groupBy(schema.users.signupSource);
+    const srcOptionMap = new Map<string, { key: string; kind: SignupSourceKind; detail: string | null; raw: string | null; count: number }>();
+    for (const row of srcCountRows) {
+      const v = signupSourceView(row.src);
+      const prev = srcOptionMap.get(v.key);
+      // NULL 和空串在 group by 里是两行,在界面上是同一个「未知」桶,这里合并。
+      if (prev) prev.count += Number(row.c);
+      else srcOptionMap.set(v.key, { key: v.key, kind: v.kind, detail: v.detail, raw: v.raw, count: Number(row.c) });
+    }
+    const sourceOptions = [...srcOptionMap.values()].sort((a, b) => b.count - a.count);
     // Aggregate auxiliary methods: passkey count per user + most-recent login method.
     const userIds = rows.map((r) => r.id);
     const passkeyCounts = userIds.length === 0 ? [] : await db
@@ -627,12 +847,16 @@ export async function adminRoutes(app: FastifyInstance) {
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
+      activeNav: "/admin/users",
       users: rows.map((r) => ({
         ...r,
         passkeyCount: passkeyMap.get(r.id) ?? 0,
         lastLoginMethod: methodMap.get(r.id) ?? null,
+        source: signupSourceView(r.signupSource),
       })),
       query: q,
+      sourceFilter: srcFilter.kind === "none" ? "" : srcFilter.kind === "unknown" ? "unknown" : srcFilter.value,
+      sourceOptions,
       stats,
     });
   });
@@ -679,18 +903,104 @@ export async function adminRoutes(app: FastifyInstance) {
     if (target.isAdmin && (await countActiveAdmins()) <= 1) {
       return reply.redirect("/admin/users?error=" + encodeURIComponent("拒绝：这是最后一个管理员，停用后系统将无人可管理"));
     }
-    await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, id.data));
-    // Also kill any live sessions so logout is immediate.
-    await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data));
-    // And revoke every long-lived credential — API tokens (n8n / Zapier)
-    // and app passwords (CalDAV in Apple Calendar) outlive sessions and
-    // would otherwise keep working after the disable.
-    await revokeAllUserCredentials(id.data);
-    // Drop CalDAV auth cache so any iPhone-in-the-wild gets 401
-    // within a request instead of waiting 60s for TTL.
-    invalidateCalDavAuthCache(id.data);
-    await audit(req, me.id, "user.disable", { targetType: "user", targetId: id.data, details: { email: target.email } });
+    await disableUserAccount(req, me.id, { id: id.data, email: target.email });
     return reply.redirect("/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线，API Token 和应用密码已撤销）`));
+  });
+
+  // ---------- 批量停用 ----------
+  // 两步:先 POST 到这里出一张确认页(列清楚谁会被停、谁被跳过和为什么),
+  // 确认页再 POST 到 /apply 真的执行。
+  //
+  // 为什么不做成「点一下 + 前端弹窗」:弹窗是 JS 的事,CSP 挡掉脚本、脚本 404、
+  // 或者有人直接构造一个 POST,都能绕过去 —— 而这个动作会把一批人锁在门外。
+  // 服务端多一页,确认这一步就不依赖任何前端。
+  //
+  // 另外:两步都只接受**显式勾选的 id**,不接受「把当前筛选的全停掉」。
+  // 筛选条件写错是看不出来的,按 id 停最多错几个人,按筛选停能一次清空全站。
+  const bulkDisablePlanFor = async (requestedIds: string[], actorId: string) => {
+    const rows = requestedIds.length === 0 ? [] : await db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        isAdmin: schema.users.isAdmin,
+        disabledAt: schema.users.disabledAt,
+        signupSource: schema.users.signupSource,
+      })
+      .from(schema.users)
+      .where(inArray(schema.users.id, requestedIds));
+    const sourceById = new Map(rows.map((r) => [r.id, signupSourceView(r.signupSource)]));
+    const plan = planBulkDisable({
+      requestedIds,
+      rows: rows.map((r) => ({ id: r.id, email: r.email, isAdmin: r.isAdmin, disabled: r.disabledAt !== null })),
+      actorId,
+      activeAdminCount: await countActiveAdmins(),
+    });
+    return { plan, sourceById };
+  };
+
+  app.post("/admin/users/bulk-disable", async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ids = normalizeUserIds(body.userIds);
+    const back = bulkBackTo(body);
+    if (ids.length === 0) {
+      return reply.redirect(back + "error=" + encodeURIComponent(tr(req, "adminUsers.bulk.nothingSelected")));
+    }
+    const { plan, sourceById } = await bulkDisablePlanFor(ids, me.id);
+    return reply.view("admin/users-bulk-disable", {
+      title: tr(req, "adminUsers.bulk.confirmTitle"),
+      user: me, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/users",
+      plan,
+      sourceById,
+      backQ: typeof body.q === "string" ? body.q.slice(0, 100) : "",
+      backSource: typeof body.source === "string" ? body.source.slice(0, 120) : "",
+    });
+  });
+
+  app.post("/admin/users/bulk-disable/apply", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const me = await requireAdmin(req, reply);
+    if (!me) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ids = normalizeUserIds(body.userIds);
+    const back = bulkBackTo(body);
+    if (ids.length === 0) {
+      return reply.redirect(back + "error=" + encodeURIComponent(tr(req, "adminUsers.bulk.nothingSelected")));
+    }
+    // 名单在这里**重算一遍**,不采信确认页传回来的任何判定结果。确认页上
+    // 那些隐藏字段是浏览器交回来的,只能当「他想停这几个 id」用;
+    // 「能不能停」必须现在这一刻按库里的状态重新判 —— 中间可能已经有别的
+    // 管理员被停用了,最后一个管理员那条守卫是会变的。
+    const { plan } = await bulkDisablePlanFor(ids, me.id);
+    if (plan.disable.length === 0) {
+      return reply.redirect(back + "error=" + encodeURIComponent(tr(req, "adminUsers.bulk.noneEligible")));
+    }
+    for (const row of plan.disable) {
+      // 逐个走同一个停用函数:每个人都会各自留一条 user.disable 审计行,
+      // 跟单个停用长得一模一样 —— 审计页按 targetId 查一个人的时候,不会因为
+      // 「当时是批量做的」就查不到。
+      await disableUserAccount(req, me.id, row, { bulk: true });
+    }
+    // 再补一条汇总行,回答「这一批是谁、什么时候、一次点了多少个」。
+    // 邮箱只留前 50 个:这条 details 是 jsonb,一次勾几百人会把审计页撑爆。
+    await audit(req, me.id, "user.bulk_disable", {
+      targetType: "user",
+      details: {
+        disabled: plan.disable.length,
+        skipped: plan.skipped.length,
+        emails: plan.disable.slice(0, 50).map((r) => r.email),
+        truncated: plan.disable.length > 50,
+        skippedReasons: plan.skipped.map((s) => s.reason),
+      },
+    });
+    return reply.redirect(back + "success=" + encodeURIComponent(
+      tr(req, "adminUsers.bulk.done", { n: plan.disable.length, skipped: plan.skipped.length }),
+    ));
   });
 
   app.post("/admin/users/:id/revoke-sessions", async (req, reply) => {
@@ -710,6 +1020,132 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话，并撤销了 API Token / 应用密码`));
   });
 
+  // ---------- 开通记录(账号是从哪条路进来的) ----------
+  //
+  // 这一页回答的就是那个最初的问题:后台多出一堆不认识的账号,是谁建的。
+  // 在这之前只能一行一行点开审计详情看,而懒建号根本不经过后台操作、
+  // 审计里压根没有对应的行。
+  app.get("/admin/signups", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    const settings = await getSettings();
+
+    // 「从未登录过」的判据:login_events 里一条都没有。
+    //
+    // users 上没有 last_login_at 这种列,登录是往 login_events 记一行
+    // (src/lib/login_history.ts)。用 distinct 子查询左连接,而不是在
+    // count(*) filter 里塞相关子查询 —— 后者的可用性在不同 PG 版本上不好保证。
+    const loggedIn = db
+      .selectDistinct({ userId: schema.loginEvents.userId })
+      .from(schema.loginEvents)
+      .as("logged_in");
+
+    const rows = await db
+      .select({
+        src: schema.users.signupSource,
+        total: sql<number>`count(*)::int`,
+        firstAt: sql<Date>`min(${schema.users.createdAt})`,
+        lastAt: sql<Date>`max(${schema.users.createdAt})`,
+        neverLoggedIn: sql<number>`count(*) filter (where ${loggedIn.userId} is null)::int`,
+        disabled: sql<number>`count(*) filter (where ${schema.users.disabledAt} is not null)::int`,
+      })
+      .from(schema.users)
+      .leftJoin(loggedIn, eq(loggedIn.userId, schema.users.id))
+      .groupBy(schema.users.signupSource);
+
+    type Group = {
+      view: SignupSourceView;
+      total: number;
+      firstAt: Date | null;
+      lastAt: Date | null;
+      neverLoggedIn: number;
+      disabled: number;
+    };
+    const groups = new Map<string, Group>();
+    for (const r of rows) {
+      const view = signupSourceView(r.src);
+      const first = r.firstAt ? new Date(r.firstAt) : null;
+      const last = r.lastAt ? new Date(r.lastAt) : null;
+      const prev = groups.get(view.key);
+      if (!prev) {
+        groups.set(view.key, {
+          view, total: Number(r.total), firstAt: first, lastAt: last,
+          neverLoggedIn: Number(r.neverLoggedIn), disabled: Number(r.disabled),
+        });
+        continue;
+      }
+      // NULL 和空串在 group by 里是两行,在这一页上是同一个「未知」桶。
+      prev.total += Number(r.total);
+      prev.neverLoggedIn += Number(r.neverLoggedIn);
+      prev.disabled += Number(r.disabled);
+      if (first && (!prev.firstAt || first < prev.firstAt)) prev.firstAt = first;
+      if (last && (!prev.lastAt || last > prev.lastAt)) prev.lastAt = last;
+    }
+    const list = [...groups.values()].sort((a, b) => b.total - a.total);
+
+    // 今天已经建了几个 —— 跟每日配额那道闸门用的是同一个窗口函数。
+    const [todayRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .where(gte(schema.users.createdAt, startOfQuotaDay(new Date())));
+
+    return reply.view("admin/signups", {
+      title: tr(req, "adminSignups.title"),
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/signups",
+      groups: list.map((g) => ({
+        ...g,
+        firstAtIso: g.firstAt ? localTimeIso(g.firstAt) : null,
+        lastAtIso: g.lastAt ? localTimeIso(g.lastAt) : null,
+      })),
+      gates: {
+        registrationMode: settings.registrationMode,
+        domainAllowlist: settings.signupDomainAllowlist,
+        dailyQuota: settings.signupDailyQuota,
+        createdToday: Number(todayRow?.c ?? 0),
+      },
+    });
+  });
+
+  // 注册闸门(邮箱域名白名单 + 每日建号上限)。表单在 /admin/site。
+  // 这两项跟注册模式一样,对**所有**建号入口生效 —— 网页表单、JSON 接口、
+  // SSO、外部 IdP 懒建号、苹果登录,全都从同一个收口函数过。
+  app.post("/admin/signup-gates", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      signupDomainAllowlist: z.string().max(4000).optional(),
+      signupDailyQuota: z.string().max(12).optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return reply.redirect("/admin/site?error=" + encodeURIComponent(tr(req, "adminSite.gates.invalid")) + "#signup-gates");
+    }
+    // 切分口径跟 external_idp 的 parseClientList / 收口函数的 emailDomainAllowed
+    // 一致(逗号 / 空白 / 换行)。存进去之前就归一化成小写、去掉粘邮箱时带上的
+    // @,这样管理员看到的那一行,跟真正拿去比对的那一行是同一个东西。
+    // `.example.com` / `*.example.com` 的点和星是有含义的,不能顺手削掉。
+    const seen = new Set<string>();
+    const domains: string[] = [];
+    for (const piece of (body.data.signupDomainAllowlist ?? "").split(/[,\s]+/)) {
+      const d = piece.trim().toLowerCase().replace(/^@/, "").replace(/\.$/, "");
+      if (!d || seen.has(d)) continue;
+      seen.add(d);
+      domains.push(d);
+    }
+    const quotaRaw = (body.data.signupDailyQuota ?? "").trim();
+    const quota = quotaRaw === "" ? 0 : Number(quotaRaw);
+    if (!Number.isInteger(quota) || quota < 0 || quota > 100000) {
+      return reply.redirect("/admin/site?error=" + encodeURIComponent(tr(req, "adminSite.gates.quotaInvalid")) + "#signup-gates");
+    }
+    await updateSettings({ signupDomainAllowlist: domains.join(", "), signupDailyQuota: quota });
+    await audit(req, u.id, "signup_gates.update", {
+      targetType: "site_settings",
+      details: { domainCount: domains.length, dailyQuota: quota },
+    });
+    return reply.redirect("/admin/site?success=" + encodeURIComponent(tr(req, "adminSite.gates.saved")) + "#signup-gates");
+  });
+
   // ---------- Admin audit log ----------
   app.get("/admin/audit", async (req, reply) => {
     const u = await requireAdmin(req, reply);
@@ -721,10 +1157,13 @@ export async function adminRoutes(app: FastifyInstance) {
     // in the EJS or the colours won't be generated.
     const catMeta = (prefix: string): { label: string; badge: string } => {
       switch (prefix) {
-        case "site": case "settings": return { label: "配置", badge: "bg-slate-100 text-slate-700" };
+        case "site": case "settings": case "signup_gates": return { label: "配置", badge: "bg-slate-100 text-slate-700" };
         case "api_token": case "api": case "oauth": return { label: "API", badge: "bg-violet-100 text-violet-700" };
         case "backup": return { label: "数据", badge: "bg-amber-100 text-amber-700" };
-        case "user": case "users": return { label: "用户", badge: "bg-sky-100 text-sky-700" };
+        // signup.* 是建号收口函数写的(目前只有 signup.quota_blocked ——
+        // 撞上每日配额被挡下来的那一条)。不认领的话它会掉进「其它」,
+        // 而这正是管理员来查「谁注册不了」时要找的那一行。
+        case "user": case "users": case "signup": return { label: "用户", badge: "bg-sky-100 text-sky-700" };
         case "sso": case "idp": return { label: "SSO", badge: "bg-emerald-100 text-emerald-700" };
         case "update": case "self_update": return { label: "更新", badge: "bg-indigo-100 text-indigo-700" };
         case "invite": return { label: "邀请", badge: "bg-teal-100 text-teal-700" };
@@ -872,9 +1311,6 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // ---------- Third-party API ----------
-  // Lightweight <time data-tz> wrapper; the client-side local-time.js reformats
-  // to the visitor's browser TZ on load.
-  const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" data-style="datetime">${d.toISOString()}</time>`;
 
   app.get("/admin/api", async (req, reply) => {
     const u = await requireAdmin(req, reply);

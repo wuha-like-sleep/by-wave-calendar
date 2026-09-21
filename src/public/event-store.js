@@ -22,9 +22,97 @@
 //
 // Designed to be a drop-in for the existing /api/events fetch pattern.
 
+// ---- 出队决策（纯逻辑）----
+// 这一段不碰 IndexedDB、不碰 fetch：存储和网络由下面的 syncOutbox 以 ctx 注进来，
+// 所以它在 node 里可以直接被打（test/outbox_drain.test.js）。
+//
+// 单独拎出来的原因：「哪种失败该重试、哪种该当场出队」是这个文件里最贵的一处判断。
+// 之前的写法把「服务端拒绝」和「网络断了」当成同一回事 —— 一条被 400 拒掉的编辑
+// 会永远排在队头（攒够 5 次只是置了 giveUp，并不出队），后面排的所有修改再也发不出去；
+// 而本地镜像上那份 _dirty 副本不会被服务端数据覆盖，页面上一直显示「已经改好了」。
+// 用户换台设备打开才发现这几天白改了。
 (function () {
   "use strict";
+
+  // 服务端明确拒绝：同样的 payload 再发一百次也是同一个结果，留在队列里只会挡后面的。
+  // 408（请求超时）和 429（限流）例外 —— 它们的意思是「现在不行」，不是「这条不行」。
+  function isServerRejection(status) {
+    return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  }
+
+  // 从服务端响应里抠出一句能直接给用户看的话。
+  // /api/events 的 400 是 { error: "invalid_body", message: "<哪个字段不对>" }，
+  // Fastify 默认形状是 { statusCode, error, message } —— 都优先取 message，
+  // 因为带字段的那句才是用户能照着改的。
+  function describeServerError(data, status) {
+    let msg = "";
+    if (data && typeof data === "object") {
+      if (typeof data.message === "string") msg = data.message;
+      else if (data.error && typeof data.error.message === "string") msg = data.error.message;
+      else if (typeof data.error === "string") msg = data.error;
+    } else if (typeof data === "string") {
+      msg = data;
+    }
+    msg = msg.trim();
+    // 空的、或者网关塞回来的一整页 HTML：弹给用户没有任何意义，退成状态码。
+    if (!msg || msg.charAt(0) === "<") return "HTTP " + status;
+    return msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+  }
+
+  // 推进队列。ctx 里全是副作用，由调用方提供：
+  //   send(item)          → 发这一条，返回 { ok, status, data }；网络层面失败则 throw
+  //   applied(item, res)  → 服务端接受了，把本地镜像对齐
+  //   remove(item)        → 把这一条从队列里删掉
+  //   fail(item, err)     → 记一次可重试的失败（attempts + 1，够 5 次置 giveUp）
+  //   reject(item, info)  → 服务端拒绝：回滚本地那份乐观副本 + 把原因交给界面
+  // 返回 { sent, rejected, skipped, blocked }，调用方拿来记日志/判断要不要再来一轮。
+  async function drainOutbox(items, ctx) {
+    const stats = { sent: 0, rejected: 0, skipped: 0, blocked: false };
+    for (const item of items) {
+      // 已经放弃的条目留在队列里等用户在冲突面板里处理，但**不许挡住后面的**。
+      if (item.giveUp) { stats.skipped += 1; continue; }
+      let res;
+      try {
+        res = await ctx.send(item);
+      } catch (e) {
+        // 断网 / 超时 / 被 abort：这一条还有救，保序，等下一轮。
+        await ctx.fail(item, e);
+        stats.blocked = true;
+        break;
+      }
+      // 删除那条：404 表示服务端那边本来就没了，和删成功是一个意思。
+      const accepted = !!res && (res.ok === true || (item.op === "delete" && res.status === 404));
+      if (accepted) {
+        await ctx.applied(item, res);
+        await ctx.remove(item);
+        stats.sent += 1;
+        continue;
+      }
+      const status = res && typeof res.status === "number" ? res.status : 0;
+      if (isServerRejection(status)) {
+        await ctx.reject(item, { status: status, reason: describeServerError(res ? res.data : null, status) });
+        await ctx.remove(item);
+        stats.rejected += 1;
+        continue;  // 一条坏数据不许堵住后面排队的全部编辑
+      }
+      // 5xx 和 408/429：服务端这会儿不行，保序等下一轮。
+      await ctx.fail(item, new Error(item.op + "_failed " + status));
+      stats.blocked = true;
+      break;
+    }
+    return stats;
+  }
+
+  globalThis.bwcOutboxCore = { isServerRejection, describeServerError, drainOutbox };
+})();
+
+(function () {
+  "use strict";
+  // 没有 window 就只是被 import 进来取上面那组纯函数（测试），不启动存储层。
+  if (typeof window === "undefined") return;
   if (window.bwcStore) return;  // already loaded
+
+  const core = globalThis.bwcOutboxCore;
 
   const DB_NAME = "bywave-events";
   const DB_VERSION = 1;
@@ -307,13 +395,32 @@
     syncOutbox();
   }
 
+  // 回滚一条没能发出去的操作在本地镜像上留下的痕迹，按 op 分三种：
+  //   - "create": 删掉 local-id 那行（服务端上从来没有过它）
+  //   - "update": 保留这行，但清掉 _dirty —— 关键就在这儿：mergeIntoLocal 见到
+  //               _dirty 是不覆盖的，不清掉的话页面会一直显示那份没存上的改动
+  //   - "delete": 去掉 tombstone（本地撤销删除；服务端那份还在，无害）
+  // 用户手动丢弃（discardItem）和服务端拒绝（syncOutbox 的 reject 路径）共用这一份。
+  async function rollbackLocal(item) {
+    if (item.op === "create" && String(item.eventId).startsWith("local-")) {
+      await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
+      return;
+    }
+    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+      const r = s.get(item.eventId);
+      r.onsuccess = () => {
+        if (r.result) {
+          if (item.op === "delete") delete r.result._tombstone;
+          delete r.result._dirty;
+          s.put(r.result);
+        }
+        resolve();
+      };
+    }));
+  }
+
   // Discard a stuck outbox item. Also rolls back the local mirror so
-  // the user doesn't keep seeing the ghost optimistic edit:
-  //   - "create": delete the local-id row (it never existed on server)
-  //   - "update": leave the row, but a subsequent loadEvents() will
-  //               clobber the dirty copy with the server's version
-  //   - "delete": un-tombstone the row (un-deletes locally; server still
-  //               has it so this is harmless)
+  // the user doesn't keep seeing the ghost optimistic edit.
   async function discardItem(outboxId) {
     const item = await tx(STORE_OUTBOX, "readonly", (s) => new Promise((resolve) => {
       const r = s.get(outboxId);
@@ -321,26 +428,7 @@
     }));
     if (!item) return;
     await tx(STORE_OUTBOX, "readwrite", (s) => s.delete(outboxId));
-    if (item.op === "create" && String(item.eventId).startsWith("local-")) {
-      await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
-    } else if (item.op === "delete") {
-      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
-        const r = s.get(item.eventId);
-        r.onsuccess = () => {
-          if (r.result) { delete r.result._tombstone; delete r.result._dirty; s.put(r.result); }
-          resolve();
-        };
-      }));
-    } else {
-      // Update: leave the local copy; next sync will re-fetch from server.
-      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
-        const r = s.get(item.eventId);
-        r.onsuccess = () => {
-          if (r.result) { delete r.result._dirty; s.put(r.result); }
-          resolve();
-        };
-      }));
-    }
+    await rollbackLocal(item);
     emit("event-changed", { id: item.eventId, kind: "discarded" });
     emit("outbox-changed", { count: await pendingCount() });
   }
@@ -350,73 +438,90 @@
     if (syncing || !navigator.onLine) return;
     syncing = true;
     try {
-      const items = await tx(STORE_OUTBOX, "readonly", (s) => new Promise((resolve) => {
-        const r = s.getAll();
-        r.onsuccess = () => resolve(r.result || []);
-      }));
-      for (const item of items) {
-        try {
-          await replayOne(item);
-          await tx(STORE_OUTBOX, "readwrite", (s) => s.delete(item.id));
-        } catch (e) {
-          // Bump attempts; give up after 5 failures and surface the conflict.
-          await tx(STORE_OUTBOX, "readwrite", (s) => new Promise((resolve) => {
-            const r = s.get(item.id);
-            r.onsuccess = () => {
-              const cur = r.result;
-              if (!cur) return resolve();
-              cur.attempts = (cur.attempts || 0) + 1;
-              cur.lastError = e && e.message ? e.message : String(e);
-              if (cur.attempts >= 5) {
-                cur.giveUp = true;
-                emit("sync-conflict", { item: cur });
-              }
-              s.put(cur);
-              resolve();
-            };
-          }));
-          break;  // stop the chain on first failure to preserve order
-        }
-      }
+      const items = await listOutbox();
+      await core.drainOutbox(items, {
+        send: sendOne,
+        applied: applyAccepted,
+        remove: (item) => tx(STORE_OUTBOX, "readwrite", (s) => s.delete(item.id)),
+        fail: bumpAttempts,
+        reject: rejectOne,
+      });
     } finally {
       syncing = false;
       emit("outbox-changed", { count: await pendingCount() });
     }
   }
 
-  async function replayOne(item) {
-    if (item.giveUp) throw new Error("given up earlier");
+  // 把一条队列项发出去。只负责发，不判断成败：返回 { ok, status, data }，
+  // 网络层面的失败照旧 throw（http() 已经把超时/断网折进去了），由 drainOutbox 定夺。
+  async function sendOne(item) {
     if (item.op === "create") {
-      const r = await http("POST", "/api/events", item.payload);
-      if (!r.ok) throw new Error("create_failed " + r.status);
-      // Server assigned a real id; update local copy.
+      return http("POST", "/api/events", item.payload);
+    }
+    if (item.op === "update") {
+      // 本地 id 还是 "local-"：create 那条还在队列里排着，它会带上最新的 payload。
+      if (String(item.eventId).startsWith("local-")) return { ok: true, status: 0, data: null, skipped: true };
+      return http("PATCH", "/api/events/" + encodeURIComponent(item.eventId), item.payload);
+    }
+    if (item.op === "delete") {
+      // 从来没发到服务端过，本地丢掉就完了。
+      if (String(item.eventId).startsWith("local-")) return { ok: true, status: 0, data: null, skipped: true };
+      return http("DELETE", "/api/events/" + encodeURIComponent(item.eventId));
+    }
+    // 认不出的 op（旧版本留下的队列）：当作已处理，别把整条队列堵死。
+    return { ok: true, status: 0, data: null, skipped: true };
+  }
+
+  // 服务端接受之后把本地镜像对齐。
+  async function applyAccepted(item, res) {
+    if (item.op === "create" && !res.skipped) {
+      // 服务端给了真正的 id，把本地那份 local- 的换掉。
       await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
         const g = s.get(item.eventId);
         g.onsuccess = () => {
           if (g.result) s.delete(item.eventId);
-          s.put({ ...r.data, _syncedAt: Date.now() });
+          s.put({ ...res.data, _syncedAt: Date.now() });
           resolve();
         };
       }));
-    } else if (item.op === "update") {
-      // If the local id starts with "local-" it means the create
-      // hasn't synced yet — skip this update; create will pick up
-      // the latest payload.
-      if (String(item.eventId).startsWith("local-")) return;
-      const r = await http("PATCH", "/api/events/" + encodeURIComponent(item.eventId), item.payload);
-      if (!r.ok) throw new Error("update_failed " + r.status);
-      await tx(STORE_EVENTS, "readwrite", (s) => s.put({ ...r.data, _syncedAt: Date.now() }));
-    } else if (item.op === "delete") {
-      if (String(item.eventId).startsWith("local-")) {
-        // Never sent to server; just drop the local tombstone.
-        await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
-        return;
-      }
-      const r = await http("DELETE", "/api/events/" + encodeURIComponent(item.eventId));
-      // 204 OR 404 (already gone) both count as success.
-      if (!r.ok && r.status !== 404) throw new Error("delete_failed " + r.status);
+      return;
+    }
+    if (item.op === "update" && !res.skipped) {
+      await tx(STORE_EVENTS, "readwrite", (s) => s.put({ ...res.data, _syncedAt: Date.now() }));
+      return;
+    }
+    if (item.op === "delete") {
       await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
     }
+  }
+
+  // 可重试的失败：记一次，攒够 5 次就放弃并在冲突面板里请用户处理。
+  // 放弃的条目从此不再挡后面的（见 drainOutbox 里的 giveUp 分支）。
+  async function bumpAttempts(item, err) {
+    await tx(STORE_OUTBOX, "readwrite", (s) => new Promise((resolve) => {
+      const r = s.get(item.id);
+      r.onsuccess = () => {
+        const cur = r.result;
+        if (!cur) return resolve();
+        cur.attempts = (cur.attempts || 0) + 1;
+        cur.lastError = err && err.message ? err.message : String(err);
+        if (cur.attempts >= 5) {
+          cur.giveUp = true;
+          emit("sync-conflict", { item: cur });
+        }
+        s.put(cur);
+        resolve();
+      };
+    }));
+  }
+
+  // 服务端拒了这一条（4xx，408/429 除外）。重放没有意义，所以它会被出队；
+  // 本地那份乐观副本同时回滚 —— 不回滚的话 mergeIntoLocal 因为 _dirty 不敢覆盖，
+  // 页面会一直显示这条其实没存上的改动。原因原样往上报，由界面弹给用户。
+  async function rejectOne(item, info) {
+    await rollbackLocal(item);
+    emit("sync-rejected", { item: item, status: info.status, reason: info.reason });
+    emit("event-changed", { id: item.eventId, kind: "rejected" });
   }
 
   // ---- meta ----

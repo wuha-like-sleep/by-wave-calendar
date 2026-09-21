@@ -1,0 +1,91 @@
+<%- include('_nav', { activeNav: '/admin/signups' }) %>
+
+<div class="mb-5">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminSignups.heading") %></h1>
+  <p class="mt-1 text-sm text-slate-500"><%= t("adminSignups.lead") %></p>
+</div>
+
+<%# 当前三道闸门。管理员看完下面那张表想收紧的时候,不用再去翻是哪一页。 %>
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900"><%= t("adminSignups.gates.heading") %></h2>
+      <p class="text-sm text-slate-500 mt-1"><%= t("adminSignups.gates.desc") %></p>
+    </div>
+    <a href="/admin/site#signup-gates"
+       class="shrink-0 rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("adminSignups.gates.edit") %></a>
+  </div>
+  <dl class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+    <div>
+      <dt class="text-xs text-slate-400"><%= t("adminSignups.gates.modeLabel") %></dt>
+      <dd class="mt-0.5 text-slate-900">
+        <% if (gates.registrationMode === 'closed') { %><%= t("adminSite.registrationClosed") %>
+        <% } else if (gates.registrationMode === 'invite') { %><%= t("adminSite.registrationInvite") %>
+        <% } else { %><%= t("adminSite.registrationPublic") %><% } %>
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs text-slate-400"><%= t("adminSignups.gates.domainLabel") %></dt>
+      <dd class="mt-0.5 text-slate-900 break-all">
+        <% if (gates.domainAllowlist) { %><span class="font-mono text-xs"><%= gates.domainAllowlist %></span>
+        <% } else { %><span class="text-slate-400"><%= t("adminSignups.gates.unlimited") %></span><% } %>
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs text-slate-400"><%= t("adminSignups.gates.quotaLabel") %></dt>
+      <dd class="mt-0.5 text-slate-900">
+        <% if (gates.dailyQuota > 0) { %><%= gates.dailyQuota %>
+        <% } else { %><span class="text-slate-400"><%= t("adminSignups.gates.unlimited") %></span><% } %>
+        <div class="text-xs text-slate-400 mt-0.5"><%= t("adminSignups.gates.today", { n: gates.createdToday }) %></div>
+      </dd>
+    </div>
+  </dl>
+</section>
+
+<div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead class="bg-slate-50 border-b border-slate-200">
+      <tr class="text-left text-xs uppercase tracking-wide text-slate-500">
+        <th class="px-4 py-3"><%= t("adminSignups.col.source") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.total") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.neverLoggedIn") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.disabled") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.firstAt") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.lastAt") %></th>
+        <th class="px-4 py-3"><%= t("adminSignups.col.actions") %></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-slate-100">
+      <% if (groups.length === 0) { %>
+        <tr>
+          <td colspan="7" class="px-4 py-12 text-center text-sm text-slate-500"><%= t("adminSignups.empty") %></td>
+        </tr>
+      <% } %>
+      <% groups.forEach(function (g) { %>
+        <tr>
+          <td class="px-4 py-3"><%- include('_signup_source', { src: g.view }) %></td>
+          <td class="px-4 py-3 text-slate-900 font-medium"><%= g.total %></td>
+          <td class="px-4 py-3">
+            <% if (g.neverLoggedIn > 0) { %>
+              <span class="font-medium <%= g.neverLoggedIn === g.total ? 'text-amber-700' : 'text-slate-900' %>"><%= g.neverLoggedIn %></span>
+            <% } else { %>
+              <span class="text-slate-400">0</span>
+            <% } %>
+          </td>
+          <td class="px-4 py-3 <%= g.disabled > 0 ? 'text-slate-900' : 'text-slate-400' %>"><%= g.disabled %></td>
+          <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap"><%- g.firstAtIso || '—' %></td>
+          <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap"><%- g.lastAtIso || '—' %></td>
+          <td class="px-4 py-3">
+            <a href="/admin/users?source=<%= encodeURIComponent(g.view.key) %>"
+               class="text-xs text-brand-600 hover:text-brand-700"><%= t("adminSignups.viewAccounts") %></a>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<p class="mt-3 text-xs text-slate-500"><%= t("adminSignups.neverLoggedInNote") %></p>
+<p class="mt-1 text-xs text-slate-500"><%= t("adminSignups.unknownNote") %></p>
+
+<%- include('_nav_end') %>

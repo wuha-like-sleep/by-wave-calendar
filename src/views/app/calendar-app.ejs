@@ -268,17 +268,39 @@
             <option value="FREQ=YEARLY"><%= t("app.event.repeatYearly") %></option>
           </select>
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="flex flex-wrap items-center gap-1.5">
           <span class="text-slate-500"><%= t("app.event.reminder") %></span>
+          <%# 两组档位（定时 / 全天）一次性全渲染进来，calendar-app.js 按「是否全天」
+              重建下拉、只留当前这一组。为什么不让 JS 自己拼文案：客户端 bundle 只拿得到
+              app.js.* 前缀的串（见 src/lib/i18n.ts 的 clientStrings），app.reminder.*
+              这些标签只有服务端 t() 有，JS 只能抄 DOM 里已经渲染好的 label。
+              option 的 value 会原样存进 extra.alarms[].trigger、并且是幂等键
+              (event_id, trigger, instance_start) 的一部分，必须和
+              src/lib/reminder_triggers.ts 导出的常量逐值一致 ——
+              test/reminder_enum_parity.test.ts 会拿正则抽这里的 value 去比。
+              全天那一组锚的是「事件所在时区当天 00:00」，所以 PT9H 是当天 09:00、
+              -PT15H 是前一天 09:00；不要套定时那组的「提前 N 分钟」，
+              全天事件套上去中国用户会在前一天 23:45 收到提醒。 %>
           <select name="reminder" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
-            <option value=""><%= t("app.event.none") %></option>
-            <option value="-PT5M"><%= t("app.event.reminderMinutes", { n: 5 }) %></option>
-            <option value="-PT15M" selected><%= t("app.event.reminderMinutes", { n: 15 }) %></option>
-            <option value="-PT30M"><%= t("app.event.reminderMinutes", { n: 30 }) %></option>
-            <option value="-PT1H"><%= t("app.event.reminder1Hour") %></option>
-            <option value="-PT2H"><%= t("app.event.reminder2Hours") %></option>
-            <option value="-P1D"><%= t("app.event.reminder1Day") %></option>
+            <option value="" data-group="both"><%= t("app.reminder.none") %></option>
+            <option value="-PT0M" data-group="timed"><%= t("app.reminder.timed.atStart") %></option>
+            <option value="-PT5M" data-group="timed"><%= t("app.reminder.timed.min5") %></option>
+            <option value="-PT15M" data-group="timed"><%= t("app.reminder.timed.min15") %></option>
+            <option value="-PT30M" data-group="timed"><%= t("app.reminder.timed.min30") %></option>
+            <option value="-PT1H" data-group="timed"><%= t("app.reminder.timed.hour1") %></option>
+            <option value="-PT2H" data-group="timed"><%= t("app.reminder.timed.hour2") %></option>
+            <option value="-P1D" data-group="timed"><%= t("app.reminder.timed.day1") %></option>
+            <option value="-P1W" data-group="timed"><%= t("app.reminder.timed.week1") %></option>
+            <option value="PT9H" data-group="allday"><%= t("app.reminder.allDay.sameDay9am") %></option>
+            <option value="-PT15H" data-group="allday"><%= t("app.reminder.allDay.dayBefore9am") %></option>
+            <option value="-P1DT15H" data-group="allday"><%= t("app.reminder.allDay.twoDaysBefore9am") %></option>
+            <option value="-P6DT15H" data-group="allday"><%= t("app.reminder.allDay.weekBefore9am") %></option>
           </select>
+          <%# 这个事件除第一条以外的提醒（多半是别的客户端 / CalDAV 同步进来的）。
+              表单只编辑第一条，其余原封不动存在这个隐藏字段里、保存时一起发回去 ——
+              以前是直接丢掉：用户在网页上改个标题，手机上设的另外两条提醒就没了。 %>
+          <input type="hidden" name="extraAlarms" value="" />
+          <span id="reminder-extra-hint" class="hidden text-xs text-slate-500"></span>
         </div>
       </div>
 

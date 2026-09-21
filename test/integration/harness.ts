@@ -90,3 +90,59 @@ export async function makeDevice(userId: string, label = "Phone") {
     .returning();
   return d!;
 }
+
+// ---------------------------------------------------------------------------
+// 以下为追加：从 HTTP 真实打进去所需的两件东西。上面已有的导出一个字没动
+// （account_merge / events_query / external_idp / identities / caldav_alarms
+//  五个文件都在用）。
+// ---------------------------------------------------------------------------
+import Fastify, { type FastifyInstance } from "fastify";
+import cookie from "@fastify/cookie";
+import { newSessionId } from "../../src/lib/ids.js";
+
+// 测试内部自洽即可：签名和验签都在同一个实例上（@fastify/cookie 注册时的 secret
+// 同时供 reply.setCookie(signed) 和 req.unsignCookie 使用）。不读 env.SESSION_SECRET
+// 是为了让这套测试在没有 .env 的 CI 上也能跑。
+const TEST_COOKIE_SECRET = "integration-test-cookie-secret-32-chars-min";
+
+// session.ts 里的 COOKIE_NAME 没有导出。写死在这里，配一条断言（见
+// reminders_http.int.test.ts 的「会话 cookie 名」那条）盯着它别和源码脱节。
+export const SESSION_COOKIE_NAME = "bwc_sid";
+
+/**
+ * 起一个只挂被测路由的真 Fastify 实例。
+ *
+ * 为什么不直接 import src/server.ts：那是个 top-level await 的副作用脚本，
+ * import 的一瞬间就去连真库、监听端口、拉起 cron。这里只复刻会话鉴权真正依赖的
+ * 那一件事 —— 用一个 secret 注册 @fastify/cookie，requireUserOrSend 走的
+ * req.unsignCookie 才有东西可用。
+ *
+ * **它复刻不了的**：server.ts 在全局挂的 CSRF 钩子、rate limit、helmet、
+ * onResponse 审计。测到这些的断言不能用这个函数。
+ */
+export async function buildRoutedApp(
+  register: (app: FastifyInstance) => Promise<void> | void,
+  opts: { prefix?: string } = {},
+): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+  await app.register(cookie, { secret: TEST_COOKIE_SECRET });
+  await app.register(async (scoped) => { await register(scoped); }, { prefix: opts.prefix ?? "" });
+  await app.ready();
+  return app;
+}
+
+/**
+ * 造一个「已登录的浏览器」：真的往 sessions 表插一行，返回可直接塞进
+ * headers.cookie 的那个串。走的是生产同一条路 —— loadSession 会去查这一行、
+ * 查 expiresAt、查 users.disabledAt，没有任何一处被绕过。
+ */
+export async function loginAs(app: FastifyInstance, userId: string): Promise<string> {
+  const id = newSessionId();
+  await db.insert(schema.sessions).values({
+    id,
+    userId,
+    mfaSatisfied: true,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
+  return `${SESSION_COOKIE_NAME}=${encodeURIComponent(app.signCookie(id))}`;
+}

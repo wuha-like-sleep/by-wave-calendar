@@ -1,0 +1,80 @@
+<%- include('_nav', { activeNav: '/admin/users' }) %>
+
+<%
+  // 批量停用的确认页。这一步是服务端出的,不是前端弹窗 —— 脚本被 CSP 挡住、
+  // 文件 404、或者有人直接构造 POST,弹窗都拦不住,而这个动作会把一批人锁在门外。
+  var backHref = '/admin/users';
+  var _qs = [];
+  if (backQ) _qs.push('q=' + encodeURIComponent(backQ));
+  if (backSource) _qs.push('source=' + encodeURIComponent(backSource));
+  if (_qs.length) backHref += '?' + _qs.join('&');
+  var skipLabels = {
+    self: 'adminUsers.bulk.skip.self',
+    last_admin: 'adminUsers.bulk.skip.lastAdmin',
+    already_disabled: 'adminUsers.bulk.skip.alreadyDisabled',
+    not_found: 'adminUsers.bulk.skip.notFound',
+  };
+%>
+
+<div class="mb-5">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminUsers.bulk.confirmHeading") %></h1>
+  <p class="mt-1 text-sm text-slate-500"><%= t("adminUsers.bulk.confirmLead", { n: plan.disable.length }) %></p>
+</div>
+
+<section class="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 mb-6">
+  <p class="text-sm text-amber-900"><%= t("adminUsers.bulk.effect") %></p>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-6">
+  <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+    <%= t("adminUsers.bulk.willDisable", { n: plan.disable.length }) %>
+  </div>
+  <ul class="divide-y divide-slate-100">
+    <% if (plan.disable.length === 0) { %>
+      <li class="px-4 py-6 text-sm text-slate-500"><%= t("adminUsers.bulk.noneEligible") %></li>
+    <% } %>
+    <% plan.disable.forEach(function (r) { %>
+      <li class="px-4 py-2.5 flex flex-wrap items-center gap-2 text-sm">
+        <span class="text-slate-900"><%= r.email %></span>
+        <% var _src = sourceById.get(r.id); if (_src) { %><%- include('_signup_source', { src: _src }) %><% } %>
+        <% if (r.isAdmin) { %>
+          <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"><%= t("adminUsers.role.admin") %></span>
+        <% } %>
+      </li>
+    <% }) %>
+  </ul>
+</section>
+
+<% if (plan.skipped.length > 0) { %>
+  <section class="rounded-2xl border border-slate-200 bg-white overflow-hidden mb-6">
+    <div class="px-4 py-3 border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+      <%= t("adminUsers.bulk.willSkip", { n: plan.skipped.length }) %>
+    </div>
+    <ul class="divide-y divide-slate-100">
+      <% plan.skipped.forEach(function (s) { %>
+        <li class="px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-sm">
+          <span class="text-slate-700"><%= s.email || s.id %></span>
+          <span class="text-xs text-slate-500"><%= t(skipLabels[s.reason] || 'adminUsers.bulk.skip.notFound') %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </section>
+<% } %>
+
+<div class="flex flex-wrap items-center gap-3">
+  <form method="post" action="/admin/users/bulk-disable/apply" class="m-0">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="q" value="<%= backQ %>" />
+    <input type="hidden" name="source" value="<%= backSource %>" />
+    <% plan.disable.forEach(function (r) { %>
+      <input type="hidden" name="userIds" value="<%= r.id %>" />
+    <% }) %>
+    <button type="submit" <%= plan.disable.length === 0 ? 'disabled' : '' %>
+            class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-40 disabled:hover:bg-amber-600">
+      <%= t("adminUsers.bulk.confirmApply", { n: plan.disable.length }) %>
+    </button>
+  </form>
+  <a href="<%= backHref %>" class="text-sm text-slate-600 hover:text-slate-900"><%= t("common.cancel") %></a>
+</div>
+
+<%- include('_nav_end') %>

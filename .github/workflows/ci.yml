@@ -42,6 +42,10 @@ jobs:
         # 下载 npm 上一个同名的无关包 —— 本地就撞见过一次,它只会打印
         # "This is not the tsc command you are looking for" 然后退出 0,
         # 于是类型错误被静默放过。npm run 只认本地 bin。
+        #
+        # 这一条现在同时检查 src/ + scripts/ 和 test/(见 tsconfig.test.json)。
+        # 以前 test/ 不在类型检查范围内:集成测试的调用方没跟上源码的签名改动,
+        # typecheck 干净通过,要等 npm run test:int 才炸。
         run: npm run typecheck
 
       - name: Unit tests
@@ -54,12 +58,35 @@ jobs:
           PUBLIC_BASE_URL: http://127.0.0.1:3000
         run: npm test
 
-      # 语言包完整性:任一语言缺 key 都会在这里暴露,而不是等用户
-      # 切到该语言看到 key 名。已知的 18 个历史缺失键不阻塞构建。
+      # 集成测试(进程内 PGlite,不需要外部数据库)。
+      #
+      # 这一步以前不在 CI 里,而**这个仓库里风险最高的那批断言全在它里面**:
+      # 两条数据迁移(全天提醒档位改写、逼客户端重新同步)、账号被冒名认领的判定、
+      # 建号配额的并发、CalDAV 删提醒的口径、存量事件在网页上保存不再 400。
+      # 少了它,以后改坏这些东西的人会拿到一个全绿的 CI,而前面所有
+      # 「故意改坏验它会变红」的工作在下一次改动时就等于没做过。
+      #
+      # 它和单元测试是两套 vitest 配置,npm test 不会连带跑到。
+      - name: Integration tests
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+          SESSION_SECRET: ci-only-secret-not-used-anywhere-0123456789
+          PUBLIC_BASE_URL: http://127.0.0.1:3000
+        run: npm run test:int
+
+      # 语言包完整性:任一语言缺 key(或者 key 在、值是空白)都会在这里挡下来,
+      # 而不是等用户切到该语言看到一句英文、或者一个没有字的按钮。
+      #
+      # 这一步以前是**永远不会失败**的,两层叠在一起:
+      #   - `npm run i18n:check || true` 再加 continue-on-error,就算脚本红了
+      #     这一步也绿;
+      #   - 脚本自己不带 --min-coverage 时阈值取 0,本来也永远退 0。
+      # 两层都拆了:脚本默认要求 100%(理由写在 scripts/i18n-coverage.ts 头上),
+      # 这里也不再吞它的退出码。之前欠的 18 个键(6 门语言 × adminUpdate.upload.*)
+      # 已经补齐,八门语言现在都是 1277/1277。
       - name: i18n completeness
         env:
           DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
           SESSION_SECRET: ci-only-secret-not-used-anywhere-0123456789
           PUBLIC_BASE_URL: http://127.0.0.1:3000
-        run: npm run i18n:check || true
-        continue-on-error: true
+        run: npm run i18n:check

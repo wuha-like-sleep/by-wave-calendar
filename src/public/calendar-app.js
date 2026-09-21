@@ -1,7 +1,111 @@
 // by-wave-calendar single-page calendar app
+
+// ---- 事件表单的纯逻辑（提醒 / 下拉反显）----
+// 这一组函数不碰 DOM：入参出参都是普通对象和数组，浏览器那边只负责把结果画出来，
+// node 里可以直接 import 本文件打它们（test/event_form_reminder.test.js）。
+//
+// 为什么这几处值得单独拎出来：表单里每一个下拉的 value 都会原样进数据库
+// （extra.alarms[].trigger 还是提醒幂等键的一部分），而服务端的 extra 是浅合并 ——
+// 少发一个键 = 保留原值，多发一个 undefined = 这个键在 JSON.stringify 里直接消失。
+// 这一类错法的共同点是：页面照常保存成功，什么都不报，用户几天后在别的设备上才发现。
+// 只能靠断言挡。
 (function () {
   "use strict";
 
+  // 新建事件的默认档位。全天那档不能沿用 -PT15M：全天提醒锚的是「事件时区当天 00:00」，
+  // 再减 15 分钟就成了前一晚 23:45 响。
+  const REMINDER_DEFAULTS = { timed: "-PT15M", allday: "PT9H" };
+
+  function reminderGroupOf(isAllDay) { return isAllDay ? "allday" : "timed"; }
+
+  function groupHas(options, group, value) {
+    return options.some((o) => o.value === value && (o.group === "both" || o.group === group));
+  }
+
+  // 下拉里认不出的值不许静默丢掉：临时插一个把原文显示出来的选项，并且选中它。
+  // 浏览器在 value 设不上时会把 selectedIndex 置 -1，那个字段随即从 FormData 里
+  // 整个消失 —— 于是保存出去的是「清空这个键」，用户在手机 / CalDAV 上设的那份
+  // 存一次网页就没了，而页面照常提示保存成功。
+  function withCustomOption(options, want, customLabel) {
+    const value = String(want == null ? "" : want).trim();
+    const list = options.slice();
+    if (!value || list.some((o) => o.value === value)) {
+      return { options: list, value: list.some((o) => o.value === value) ? value : "" };
+    }
+    list.push({ value: value, label: customLabel, group: "custom", custom: true });
+    return { options: list, value: value };
+  }
+
+  // 重建提醒下拉：只留当前这一组档位，并保证 keepValue 一定选得上。
+  function buildReminderOptions(allOptions, isAllDay, keepValue, customLabel) {
+    const group = reminderGroupOf(isAllDay);
+    const inGroup = allOptions.filter((o) => o.group === "both" || o.group === group);
+    return withCustomOption(inGroup, keepValue, customLabel);
+  }
+
+  // 用户自己勾/去勾「全天」时换档：两组的语义不通用（-PT15M 挂到全天事件上按全天算法
+  // 是前一天 23:45），不属于目标组的换成目标组的默认值 —— 换完下拉里看得见，不是静默改写。
+  // 「不提醒」两组都有，原样留着。
+  function nextReminderValue(allOptions, currentValue, isAllDay) {
+    const group = reminderGroupOf(isAllDay);
+    const cur = String(currentValue == null ? "" : currentValue);
+    if (cur === "" || groupHas(allOptions, group, cur)) return cur;
+    return REMINDER_DEFAULTS[group];
+  }
+
+  // 把事件的整组 alarms 拆成「进下拉的第一条」和「其余原样寄存的几条」。
+  // 第二条起表单不提供编辑入口，但也绝不能吞掉：寄存在隐藏字段里，submit 时拼回去。
+  function splitAlarmsForForm(alarms, isAllDay, isExisting) {
+    const list = Array.isArray(alarms)
+      ? alarms.filter((a) => a && typeof a.trigger === "string" && a.trigger.trim())
+      : [];
+    const first = list.length > 0
+      ? list[0].trigger.trim()
+      : (isExisting ? "" : REMINDER_DEFAULTS[reminderGroupOf(isAllDay)]);
+    return { first: first, rest: list.slice(1) };
+  }
+
+  // submit 用：下拉选的那条 + 寄存的其余几条。选了「不提醒」返回 null。
+  function collectAlarms(triggerRaw, extraRaw, description) {
+    const trigger = String(triggerRaw == null ? "" : triggerRaw).trim();
+    // 显式 null，不是 undefined：服务端的 extra 是浅合并，省略 = 保留原值，
+    // 只有 null 才是「删掉这个键」。返回 undefined 的话 JSON.stringify 把 alarms
+    // 这个键整个丢掉，用户选了「不提醒」永远关不掉。
+    if (!trigger) return null;
+    const out = [{ trigger: trigger, action: "DISPLAY", description: description }];
+    let rest = [];
+    try { rest = JSON.parse(extraRaw || "[]"); } catch (_e) { rest = []; }
+    if (Array.isArray(rest)) {
+      for (const a of rest) {
+        if (!a || typeof a.trigger !== "string") continue;
+        const t = a.trigger.trim();
+        // 同 trigger 会撞幂等键 (event_id, trigger, instance_start)，服务端也会去重；
+        // 这里先挡一道，省得白占掉 8 条上限里的一格。
+        if (!t || t === trigger) continue;
+        out.push(Object.assign({}, a, { trigger: t }));
+      }
+    }
+    return out;
+  }
+
+  globalThis.bwcEventForm = {
+    REMINDER_DEFAULTS,
+    reminderGroupOf,
+    groupHas,
+    withCustomOption,
+    buildReminderOptions,
+    nextReminderValue,
+    splitAlarmsForForm,
+    collectAlarms,
+  };
+})();
+
+(function () {
+  "use strict";
+  // 没有 DOM 就只是被 import 进来取上面那组纯函数（测试），不启动应用。
+  if (typeof document === "undefined") return;
+
+  const FORM = globalThis.bwcEventForm;
   const ctx = window.__bwc || { calendars: [], publicBaseUrl: "", csrfToken: "" };
   const headers = () => ({ "Content-Type": "application/json", "X-CSRF-Token": ctx.csrfToken });
   const fetchOpts = (extra = {}) => Object.assign({ credentials: "same-origin", headers: headers() }, extra);
@@ -878,7 +982,94 @@
       dateRow.classList.add("hidden");
     }
   }
-  allDayCheckbox.addEventListener("change", syncAllDayUI);
+  allDayCheckbox.addEventListener("change", () => {
+    syncAllDayUI();
+    // 勾/去勾「全天」是用户自己动的手，而两组档位的语义不通用：-PT15M 挂到全天事件上
+    // 按全天的算法是「当天 00:00 往前 15 分钟」= 前一天 23:45。所以切换时把不属于
+    // 目标组的档位换成目标组的默认值 —— 换完下拉里看得见，不是静默改写。
+    switchReminderGroup(allDayCheckbox.checked);
+  });
+
+  // ---- 提醒下拉：定时 / 全天 两组档位 ----
+  // 档位的 value 和分组由 calendar-app.ejs 渲染（label 只有服务端 t() 拿得到，
+  // 客户端 bundle 只收 app.js.* 那批串），这里开页时抄一份留底，
+  // 之后每次重建下拉都从这份底稿来。
+  const reminderSelect = $('#form-event [name="reminder"]');
+  const reminderExtraInput = $('#form-event [name="extraAlarms"]');
+  const reminderExtraHint = $("#reminder-extra-hint");
+  const REMINDER_OPTIONS = reminderSelect
+    ? Array.from(reminderSelect.options).map((o) => ({
+        value: o.value,
+        label: o.textContent,
+        group: o.dataset.group || "both",
+      }))
+    : [];
+  // 档位怎么挑、认不出的值怎么办，全在文件顶上那组纯函数里（FORM.*），
+  // 这里只负责把算出来的结果画进 <select>。
+  const collectAlarms = FORM.collectAlarms;
+
+  // 分类下拉和提醒下拉是同一个形状的洞：手机 / API / CalDAV 存进来的分类不一定是
+  // 这六个固定值里的一个。设不上时浏览器把 selectedIndex 置 -1，category 这个字段
+  // 随即从 FormData 里消失，submit 里 `data.category || null` 就发出了显式 null，
+  // 服务端浅合并照做把这个键删掉 —— 用户只是在网页上改了个标题，手机上设的分类没了。
+  // 所以照提醒那边的办法：认不出就临时插一项，把原值显示出来并选中。
+  const categorySelect = $('#form-event [name="category"]');
+  const CATEGORY_OPTIONS = categorySelect
+    ? Array.from(categorySelect.options).map((o) => ({ value: o.value, label: o.textContent, group: "both" }))
+    : [];
+  function setCategoryValue(value) {
+    if (!categorySelect) return;
+    const raw = String(value == null ? "" : value).trim();
+    const built = FORM.withCustomOption(CATEGORY_OPTIONS, raw, T("app.js.form.customValue", { value: raw }));
+    paintSelect(categorySelect, built.options, built.value);
+  }
+
+  // 把一组 { value, label } 画进某个 <select>，并选中 picked。
+  // picked 一定在 options 里（withCustomOption 保证），所以 selectedIndex 不会变 -1 ——
+  // 变 -1 意味着这个字段从 FormData 里消失，保存出去就是「清空这个键」。
+  function paintSelect(sel, options, picked) {
+    sel.textContent = "";
+    for (const o of options) {
+      const el = document.createElement("option");
+      el.value = o.value;
+      el.textContent = o.label;
+      el.dataset.group = o.group || "both";
+      sel.appendChild(el);
+    }
+    sel.value = picked;
+    if (sel.selectedIndex < 0) sel.value = "";
+  }
+
+  // 重建提醒下拉：只留 isAllDay 对应的那一组，并把 keepValue 选中。
+  // keepValue 可能是两组里都没有的值（CalDAV 或手机端同步进来的 -PT10M 之类）——
+  // 这种值会被临时插成一个选项，把原文显示出来并选中。以前的做法是静默显示成「无」，
+  // 于是用户只是改个标题保存一下，那条提醒就被永久删掉了，页面还照常提示保存成功。
+  function renderReminderOptions(isAllDay, keepValue) {
+    if (!reminderSelect) return;
+    const want = keepValue == null ? reminderSelect.value : keepValue;
+    const built = FORM.buildReminderOptions(REMINDER_OPTIONS, isAllDay, want,
+      T("app.js.reminder.customValue", { trigger: String(want == null ? "" : want).trim() }));
+    paintSelect(reminderSelect, built.options, built.value);
+  }
+
+  function switchReminderGroup(isAllDay) {
+    if (!reminderSelect) return;
+    renderReminderOptions(isAllDay, FORM.nextReminderValue(REMINDER_OPTIONS, reminderSelect.value, isAllDay));
+  }
+
+  // 把事件的整组 alarms 灌进表单：第一条进下拉，其余原样寄存在隐藏字段里。
+  function setReminderFromAlarms(alarms, isAllDay, isExisting) {
+    if (!reminderSelect) return;
+    const split = FORM.splitAlarmsForForm(alarms, isAllDay, isExisting);
+    renderReminderOptions(isAllDay, split.first);
+    // 第二条起我们不提供编辑入口，但也不能吞掉：原样带走，submit 时拼回去。
+    const rest = split.rest;
+    if (reminderExtraInput) reminderExtraInput.value = rest.length > 0 ? JSON.stringify(rest) : "";
+    if (reminderExtraHint) {
+      reminderExtraHint.textContent = rest.length > 0 ? T("app.js.reminder.extraKept", { n: rest.length }) : "";
+      reminderExtraHint.classList.toggle("hidden", rest.length === 0);
+    }
+  }
 
   // ---- Timezone-aware "wall clock in event's TZ" hint ----
   // datetime-local inputs always render in the browser's local zone, no
@@ -1097,7 +1288,8 @@
     lastStartsAtDate = form.querySelector('[name="startsAtDate"]').value;
     form.querySelector('[name="allDay"]').checked = !!payload.allDay;
     const catSel = form.querySelector('[name="category"]');
-    catSel.value = payload.category || "";
+    // 认不出的分类直接往下拉上赋值等于静默丢弃，走 setCategoryValue。
+    setCategoryValue(payload.category);
     // Bind the category→passcode-visibility listener once. The initial
     // visibility sync runs further down, AFTER the passcode input is populated.
     if (catSel && !catSel.dataset.mpBound) {
@@ -1132,13 +1324,10 @@
       const opt = Array.from(rruleSelect.options).find((o) => o.value === r);
       rruleSelect.value = opt ? r : "";
     }
-    // Reminder — read first VALARM's trigger if any.
-    const reminderSelect = form.querySelector('[name="reminder"]');
-    if (reminderSelect) {
-      const t = (payload.alarms && payload.alarms[0] && payload.alarms[0].trigger) || "";
-      const opt = Array.from(reminderSelect.options).find((o) => o.value === t);
-      reminderSelect.value = opt ? t : (payload.id ? "" : "-PT15M");
-    }
+    // 提醒：第一条进下拉，其余寄存在 [name="extraAlarms"] 里等 submit 拼回去。
+    // 下拉里没有的 trigger 会被临时插成一个选项（见 renderReminderOptions），
+    // 不再静默显示成「无」——那等于用户存一次就把别的客户端设的提醒删了。
+    setReminderFromAlarms(payload.alarms, !!payload.allDay, !!payload.id);
     // Timezone field is now a hidden <input> driven by the custom
     // searchable combobox (#modal-tz). Set the underlying value, then
     // ask the picker to refresh its visible label. For a NEW event with
@@ -1326,6 +1515,23 @@
       .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
   }
 
+  // 把一个「保存失败」的异常翻译成一句能直接给用户看的话。直连 fetch 的那几条路径
+  // 抛的是 new Error(await resp.text())，body 多半是
+  // {"error":"invalid_body","message":"<哪个字段不对>"}。拿不出话来就返回空串，
+  // 由调用方退回那句笼统的「保存失败」。
+  function describeSaveError(err) {
+    const raw = (err && err.message ? String(err.message) : "").trim();
+    if (!raw) return "";
+    let data = raw;
+    try { data = JSON.parse(raw); } catch (_e) { /* 不是 JSON 就按原文处理 */ }
+    const core = globalThis.bwcOutboxCore;
+    if (core && typeof core.describeServerError === "function") {
+      const msg = core.describeServerError(data, 0);
+      return msg === "HTTP 0" ? "" : msg;
+    }
+    return raw.length > 200 ? raw.slice(0, 200) + "…" : raw;
+  }
+
   $("#form-event").addEventListener("submit", async (e) => {
     e.preventDefault();
     // Guard against double-submit. The handler awaits a conflict-check
@@ -1363,14 +1569,22 @@
       allDay: isAllDay,
       startsAt: startsIso,
       endsAt: endsIso,
-      rrule: (data.rrule || "").trim() || undefined,
+      // 编辑时空着要发**空串**，不能省略。服务端对 rrule 是「不传 = 保留原值」，
+      // 于是把重复下拉改成「不重复」再保存，页面提示成功、事件照旧每周重复，
+      // 怎么点都改不掉。（发 null 会被挡成 400，空串才是服务端认的清空写法。）
+      // 新建时没有原值可清，省略即可，免得在库里留一串空字符串。
+      rrule: (data.rrule || "").trim() || (id ? "" : undefined),
+      // extra 的每个键在「用户清空了」时都要发**显式 null**，不能靠省略。
+      // 服务端的 extra 现在是浅合并（传了才覆盖），省略的含义从「删除」变成了
+      // 「保留原值」—— 这里漏掉任何一个键，用户就再也清不掉那个字段，
+      // 而且页面照常保存成功、不报任何错。新增 extra 字段时记得一起加进来。
       extra: {
-        category: data.category || undefined,
-        timezone: data.timezone || undefined,
-        attendees: attendees.length ? attendees : undefined,
-        url: (data.url || "").trim() || undefined,
-        meetingPassword: (data.meetingPassword || "").trim() || undefined,
-        alarms: data.reminder ? [{ trigger: data.reminder, action: "DISPLAY", description: data.summary }] : undefined,
+        category: data.category || null,
+        timezone: data.timezone || null,
+        attendees: attendees.length ? attendees : null,
+        url: (data.url || "").trim() || null,
+        meetingPassword: (data.meetingPassword || "").trim() || null,
+        alarms: collectAlarms(data.reminder, data.extraAlarms, data.summary),
       },
     };
     // Conflict check (soft) — let user confirm overlap before saving.
@@ -1443,7 +1657,15 @@
       }
     } catch (err) {
       console.error(err);
-      window.bwc && window.bwc.toast(T("app.js.toast.saveFailed"), "error");
+      // 服务端的拒绝里带着哪个字段不对（/api/events 的 400 是
+      // { error, message }），以前这句话只进了 console，用户看到的是光秃秃一句
+      // 「保存失败」—— 于是他只能反复点保存，每次都被同一个原因挡掉。
+      const reason = describeSaveError(err);
+      window.bwc && window.bwc.toast(
+        reason ? T("app.js.toast.saveFailedReason", { reason: reason }) : T("app.js.toast.saveFailed"),
+        "error",
+        { durationMs: 6000 },
+      );
     }
     } finally {
       // Re-enable on every exit path (success, validation cancel, error)
@@ -2227,6 +2449,18 @@
       // happen to glance at the chip.
       if (ev.kind === "sync-conflict") {
         if (window.bwc) window.bwc.toast(T("app.js.sync.conflictToast"), "error");
+      }
+      // 服务端拒绝：那条改动已经出队、本地那份也回滚了。这里必须做两件事，
+      // 少一件用户就会以为改动还在 ——
+      //   1. 把服务端的原话弹出来（是哪个字段不对，用户照着能改）
+      //   2. 立刻重画日历，让那条只存在于本地的「改好了」当场消失
+      // 队列里排在它后面的编辑不受影响，会照常继续发。
+      if (ev.kind === "sync-rejected") {
+        const reason = (ev.payload && ev.payload.reason) || "";
+        if (window.bwc) {
+          window.bwc.toast(T("app.js.sync.rejected", { reason: reason }), "error", { durationMs: 6000 });
+        }
+        loadEvents().catch(() => {});
       }
     });
     window.addEventListener("online", refresh);

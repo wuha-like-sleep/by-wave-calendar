@@ -143,12 +143,43 @@ import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lock
 import { userIsActive } from "../lib/user_state.js";
 import { issueRefreshToken, signAccessToken } from "../lib/device_tokens.js";
 import {
+  decideEmailClaim,
+  evictAccountCredentials,
+  provisionAccount,
+  type ProvisionDenial,
+} from "../lib/account_provisioning.js";
+import {
   initPairing,
   claimPairing,
   refreshAccessToken,
   listDevicesForUser,
   revokeDevice,
 } from "../lib/devices.js";
+
+/**
+ * 苹果登录建号被拒 → 这条路的错误形态(跟本文件其它错误一样是裸
+ * `{ error: "<code>" }`,不换壳)。导出是为了能单独钉住这张表。
+ *
+ * **一条都不是 401。** 401 在 App 的 api.dart 里的意思是「会话没了」,收到就
+ * 把人登出;而「这次不让你开号」跟「你是谁我不认」完全是两回事,已发布的包
+ * 改不了那个判断。403 才是「我认得你,但这件事不行」。
+ *
+ * 也不把配额数字放进 error 串:那是管理员设的闸门,不该从 App 漏出去。
+ */
+export function appleProvisionDenial(d: ProvisionDenial): { status: number; error: string } {
+  switch (d.code) {
+    case "invalid_email": return { status: 400, error: "invalid_email" };
+    case "registration_closed": return { status: 403, error: "signup_closed" };
+    // 苹果登录带不出邀请码,所以邀请制下这两条对 App 是同一件事。
+    case "invite_required":
+    case "invite_invalid": return { status: 403, error: "signup_invite_only" };
+    case "domain_not_allowed": return { status: 403, error: "signup_domain_not_allowed" };
+    case "daily_quota_reached": return { status: 403, error: "signup_quota_reached" };
+    // 这两条是「号建不出来」,不是闸门拦的,沿用原来的 500 形态。
+    case "email_taken":
+    case "create_failed": return { status: 500, error: "account_create_failed" };
+  }
+}
 
 // Master feature gate. Reads the latest site_settings on each call so an
 // admin toggle takes effect immediately (no restart). pair-claim and
@@ -473,13 +504,41 @@ export async function deviceRoutes(app: FastifyInstance) {
     let [user] = await db.select().from(schema.users).where(eq(schema.users.appleSub, claims.sub)).limit(1);
 
     // 2) Else link an existing account by verified, non-relay email.
+    //
+    // 认领判定收口在 decideEmailClaim(见 lib/account_provisioning.ts):
+    // 苹果**没有** slug 的概念,claimProvider 只能是 null —— 也就是说这条路
+    // 永远不算「同一个 IdP 的延续」,认领一行自己没验过邮箱的账号时一定先作废
+    // 它上面的凭据。这正是这次要修的形状:攻击者拿受害者的邮箱在 /auth/register
+    // 开一个号(那条路不验邮箱),受害者随后用苹果登录,原来的代码只看苹果说
+    // 验过了、不看**这一行**验没验过,于是受害者被并进攻击者那一行,而攻击者
+    // 的密码一直有效。
     if (!user && claims.email && claims.emailVerified && !claims.isPrivateRelay) {
       const [byEmail] = await db.select().from(schema.users).where(eq(schema.users.email, claims.email)).limit(1);
       if (byEmail) {
+        const decision = decideEmailClaim({
+          row: { emailVerified: byEmail.emailVerified, ssoProviderSlug: byEmail.ssoProviderSlug },
+          claimProvider: null,
+          provenEmail: true,
+        });
+        if (decision === "refuse") {
+          // 409 而不是 401:401 在 App 的 api.dart 里的意思是「会话没了」。
+          return reply.code(409).send({ error: "email_taken" });
+        }
+        if (decision === "adopt_after_eviction") {
+          await evictAccountCredentials(byEmail.id, {
+            claimedBy: "apple",
+            ip: req.ip,
+            userAgent: String(req.headers["user-agent"] ?? "").slice(0, 500) || null,
+          });
+        }
         await db.update(schema.users)
           .set({ appleSub: claims.sub, emailVerified: true, updatedAt: new Date() })
           .where(eq(schema.users.id, byEmail.id));
-        user = { ...byEmail, appleSub: claims.sub, emailVerified: true } as schema.User;
+        // 作废动作改过这一行的一大半列(密码、MFA、锁定计数…),byEmail 这个
+        // 对象已经是旧的。回读一次,别把陈旧字段带进后面的判定。
+        const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, byEmail.id)).limit(1);
+        if (!fresh) return reply.code(500).send({ error: "account_create_failed" });
+        user = fresh;
       }
     }
 
@@ -491,34 +550,45 @@ export async function deviceRoutes(app: FastifyInstance) {
       // the sub so the notNull email column is satisfied; the user can set a
       // real email later in settings.
       const email = claims.email || `${claims.sub.replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}@appleid.local`;
-      // Guard against a race / duplicate email: if that email already exists
-      // (without an apple_sub — otherwise step 1 would've matched), link it.
+      // 这个邮箱已经有账号了(而且不带 apple_sub —— 带的话第 1 步就命中了)。
+      //
+      // 原来这里**无条件**把 apple_sub 打上去认领。但能走到第 3 步,恰恰说明
+      // 第 2 步没通过 —— 苹果对这个邮箱**什么都没断言**:要么没验过、要么是私有
+      // 转发地址(那种地址可能是任何人的隐藏别名)、要么这个邮箱压根是按 sub
+      // 拼出来的占位串。拿一个没有任何断言的邮箱去认领别人的号,就是第 2 步刚
+      // 堵掉的那个动作换了个入口。
+      //
+      // 所以这里只能拒绝。decideEmailClaim 在 provenEmail=false 且没有延续关系
+      // 时回的也是 refuse,口径是同一条,只是这条路没有第二种可能、不必再算一次。
       const [emailClash] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
       if (emailClash) {
-        await db.update(schema.users)
-          .set({ appleSub: claims.sub, updatedAt: new Date() })
-          .where(eq(schema.users.id, emailClash.id));
-        user = { ...emailClash, appleSub: claims.sub } as schema.User;
+        return reply.code(409).send({ error: "email_taken" });
       } else {
-        const { hashPassword } = await import("../lib/password.js");
-        const { randomBytes } = await import("node:crypto");
-        // Passwordless account: store a valid-but-unguessable bcrypt hash so
-        // the notNull column is satisfied and no password compare can ever
-        // succeed against it (same trick as SSO accounts).
-        const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
-        const [created] = await db.insert(schema.users).values({
+        // 建号收口:注册策略 / 邀请码 / 域名白名单 / 每日配额 全在里面判,跟网页
+        // 注册同一份。苹果登录以前完全不看这些开关 —— 站长把注册关了,从 App
+        // 用 Apple ID 进来照样开出新号。
+        //
+        // apple_sub 跟 users 行**在同一条 INSERT 里**落库(收口函数按 origin 写),
+        // 不能建完再 UPDATE:那一列上有唯一索引,分两步的话两个并发请求都能插入
+        // 成功、第二步才撞,而那时号已经建出来了。
+        //
+        // 无密码账号的 password_hash 由收口函数生成(真 bcrypt、随机 256 位,
+        // 不是哨兵串),默认日历也由它建。
+        const prov = await provisionAccount({
           email,
+          origin: { kind: "apple", sub: claims.sub },
+          // 跟随苹果的断言,不强行写 true。邮箱到底验没验过是个事实,不是我们
+          // 这一层能替它决定的。
           emailVerified: claims.emailVerified,
-          passwordHash: stubPassword,
           displayName: body.data.fullName?.trim() || null,
-          appleSub: claims.sub,
-        }).returning();
-        if (!created) return reply.code(500).send({ error: "account_create_failed" });
-        user = created;
-        // Seed a default calendar so the new user isn't staring at nothing.
-        await db.insert(schema.calendars).values({
-          ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
+          onExistingEmail: "adopt",
+          ctx: { ip: req.ip, userAgent: String(req.headers["user-agent"] ?? "").slice(0, 500) || null },
         });
+        if (!prov.ok) {
+          const m = appleProvisionDenial(prov.reason);
+          return reply.code(m.status).send({ error: m.error });
+        }
+        user = prov.user;
       }
     }
 

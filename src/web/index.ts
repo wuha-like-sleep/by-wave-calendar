@@ -16,6 +16,7 @@ import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
 import { invitationIcs } from "../lib/ical.js";
+import { attendeeEmails } from "../lib/attendees.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
@@ -23,7 +24,8 @@ import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
 import { resolveLocaleFromRequest, makeT, clientStrings, tForRequest } from "../lib/i18n.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
-import { validateInvite, consumeInvite, type InviteValidation } from "../lib/signup_invite.js";
+import { validateInvite, type InviteValidation } from "../lib/signup_invite.js";
+import { provisionAccount, emailDomainAllowed, type ProvisionDenial } from "../lib/account_provisioning.js";
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
@@ -57,6 +59,40 @@ function inviteErrorMsg(req: FastifyRequest, reason: Exclude<InviteValidation, {
     case "not_found":
     default: return tr(req, "flash.invite.invalid");
   }
+}
+
+/**
+ * 建号被拒 → 这一层要显示哪条文案。**这里只出 key,不出字**:导出它是为了
+ * 能单独钉住这张对照表(switch 穷尽,漏一条编译期就报),而 tr() 要 req,
+ * 掺进来就没法单独测了。
+ *
+ * invite_invalid 单独一支:收口函数原样透传了 signup_invite 的判定原因,
+ * 而 inviteErrorMsg 早就按那个原因分好了文案 —— 在这里合并成一句「邀请码
+ * 无效」等于把已有的五种说法扔掉。
+ *
+ * 配额那条文案里**不写数字**:那是管理员设的闸门,注册的人既管不着也不该
+ * 知道站点今天开了几个号。
+ */
+export type RegisterDenialCopy =
+  | { kind: "key"; key: string }
+  | { kind: "inviteReason"; reason: Exclude<InviteValidation, { ok: true }>["reason"] };
+
+export function registerDenialCopy(d: ProvisionDenial): RegisterDenialCopy {
+  switch (d.code) {
+    case "invalid_email": return { kind: "key", key: "flash.login.badFormat" };
+    case "registration_closed": return { kind: "key", key: "flash.register.closed" };
+    case "invite_required": return { kind: "key", key: "errorPage.inviteOnly.message" };
+    case "invite_invalid": return { kind: "inviteReason", reason: d.inviteReason };
+    case "domain_not_allowed": return { kind: "key", key: "flash.register.domainNotAllowed" };
+    case "daily_quota_reached": return { kind: "key", key: "flash.register.quotaReached" };
+    case "email_taken": return { kind: "key", key: "flash.register.emailTaken" };
+    case "create_failed": return { kind: "key", key: "flash.verifyEmail.completeFailed" };
+  }
+}
+
+function registerDenialMsg(req: FastifyRequest, d: ProvisionDenial): string {
+  const c = registerDenialCopy(d);
+  return c.kind === "inviteReason" ? inviteErrorMsg(req, c.reason) : tr(req, c.key);
 }
 
 // Round-trip cookie for "send the user back to the page they tried to
@@ -763,6 +799,14 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, registerBackUrl, { error: policyErr });
     }
     const email = body.data.email.toLowerCase().trim();
+    // 域名白名单:提前告诉他。真正的判定在建号收口函数里(账号是在验证码通过
+    // 之后才建的),这里调的是**同一个函数**,不是第二份规则 —— 否则两边会各自
+    // 长出自己的口径。
+    // 为什么要提前:不提前的话,他要先收一封验证邮件、输完验证码,才被告知
+    // 「你的邮箱域名不行」。这条是当场就能知道的事,没有理由让他走完全程。
+    if (!emailDomainAllowed(email, settings.signupDomainAllowlist)) {
+      return redirectWith(reply, registerBackUrl, { error: tr(req, "flash.register.domainNotAllowed") });
+    }
     // Invite-mode gate: a valid (non-consumed) invite is required. We validate
     // here but only CONSUME it after email verification succeeds, so abandoned
     // registrations don't burn a single-use invite.
@@ -859,32 +903,34 @@ export async function webRoutes(app: FastifyInstance) {
         .returning();
       user = updated;
     } else {
-      const [created] = await db
-        .insert(schema.users)
-        .values({
-          email,
-          emailVerified: true,
-          passwordHash: result.payload!.passwordHash,
-          displayName: result.payload!.displayName,
-        })
-        .returning();
-      user = created;
-      if (user) {
-        await db.insert(schema.calendars).values({
-          ownerId: user.id, name: "My Calendar", color: "#6366f1", timezone: "Asia/Shanghai",
-        });
-        // Consume the invite (if any) now that the account actually exists.
-        // Best-effort: a race that exhausts the invite here shouldn't fail an
-        // already-created account — log and move on.
-        const inviteToken = result.payload?.inviteToken;
-        if (inviteToken) {
-          try {
-            const consumed = await consumeInvite(inviteToken, email);
-            if (!consumed.ok) req.log.warn({ email }, "invite_consume_failed_post_signup");
-          } catch (err) {
-            req.log.warn({ err }, "invite_consume_error");
-          }
-        }
+      // 建号收口。注册策略 / 邀请码 / 域名白名单 / 每日配额 都在里面判 —— 这条
+      // 路本来就是全仓库唯一会看注册策略的入口,现在那份判定搬进去、由所有入口
+      // 共用,而不是留一份在这儿、别的门各凭本事。
+      //
+      // **顺序不能反**:账号先落地,邀请码才消费(收口函数内部就是这个顺序)。
+      // 反过来的话,一次没走完的注册会白烧掉一张单次码。
+      //
+      // 默认日历也由收口函数建。
+      const prov = await provisionAccount({
+        email,
+        origin: { kind: "self" },
+        // 验证码刚刚校验通过 —— 这个邮箱是真的验过了,这里的 true 不是硬写的。
+        emailVerified: true,
+        displayName: result.payload!.displayName,
+        passwordHash: result.payload!.passwordHash,
+        inviteToken: result.payload?.inviteToken ?? null,
+        // 上面刚查过没这个号;走到 refuse 只可能是并发的另一个请求抢先建了,
+        // 那就该告诉他邮箱已被占用,不能把别人的号交给他。
+        onExistingEmail: "refuse",
+        ctx: { ip: req.ip, userAgent: String(req.headers["user-agent"] ?? "").slice(0, 500) || null },
+      });
+      if (!prov.ok) {
+        return redirectWith(reply, "/register", { error: registerDenialMsg(req, prov.reason) });
+      }
+      user = prov.user;
+      // 号已经建好了,邀请码没记上账不该把人挡在门外 —— 跟原来一样只记一条。
+      if (result.payload?.inviteToken && !prov.inviteConsumed) {
+        req.log.warn({ email }, "invite_consume_failed_post_signup");
       }
     }
     if (!user) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.verifyEmail.completeFailed") });
@@ -1380,8 +1426,11 @@ export async function webRoutes(app: FastifyInstance) {
     if (event.deletedAt) {
       // Allow viewing the audit trail; just slap a "cancelled" badge on top.
     }
-    const extra = (event.extra as { attendees?: string[]; url?: string } | null) ?? {};
-    const attendees = Array.isArray(extra.attendees) ? extra.attendees : [];
+    // 两种存量形状都要读得出来（见 lib/attendees.ts）：CalDAV 存的是 {email,…} 对象数组，
+    // 网页存的是邮箱字符串数组。以前这里直接当字符串数组用，手机同步来的事件在这一页上
+    // 是「还没有人」，而手机上明明有一串参与者。
+    const extra = (event.extra as { attendees?: unknown; url?: string } | null) ?? {};
+    const attendees = attendeeEmails(extra.attendees);
     const tokens = await db
       .select()
       .from(schema.eventInviteTokens)
@@ -1429,7 +1478,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (!ev) return reply.redirect("/app");
     const event = ev.events;
     const extra = (event.extra as Record<string, unknown> | null) ?? {};
-    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    // 对象数组上 includes 恒为 false：手机同步来的事件点「邀请」会**重复发邀请邮件**，
+    // 发多少次都不提示「已是参与者」。
+    const current = attendeeEmails(extra.attendees);
     if (current.includes(inviteeEmail)) {
       return redirectWith(reply, `/app/events/${evId.data}/attendees`, { error: tr(req, "flash.attendee.already", { email: inviteeEmail }) });
     }
@@ -1503,7 +1554,9 @@ export async function webRoutes(app: FastifyInstance) {
     if (!ev) return reply.redirect("/app");
     const event = ev.events;
     const extra = (event.extra as Record<string, unknown> | null) ?? {};
-    const current = Array.isArray(extra.attendees) ? (extra.attendees as string[]) : [];
+    // 同上：对象数组上 `e !== target` 恒为真，这个人**永远删不掉**（页面提示「已撤销」，
+    // 刷新回来他还在）。写回去的是收口后的形状。
+    const current = attendeeEmails(extra.attendees);
     const next = current.filter((e) => e !== target);
     await db.update(schema.events).set({ extra: { ...extra, attendees: next }, updatedAt: new Date() }).where(eq(schema.events.id, event.id));
     // Invalidate pending tokens for this recipient (accepted ones stay for audit)

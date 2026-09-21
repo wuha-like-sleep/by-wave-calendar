@@ -337,6 +337,27 @@
       "when": 1786020000000,
       "tag": "0047_embed_frame_ancestors",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1789948800000,
+      "tag": "0048_signup_gates",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1789952400000,
+      "tag": "0049_allday_reminder_retune",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789956000000,
+      "tag": "0050_caldav_alarm_resync",
+      "breakpoints": true
     }
   ]
 }

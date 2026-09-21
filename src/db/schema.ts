@@ -45,6 +45,22 @@ export const users = pgTable("users", {
   // Admin can flip this to suspend an account without deleting it (login is
   // rejected with a friendly "账号已停用" message until the admin re-enables).
   disabledAt: timestamp("disabled_at", { withTimezone: true }),
+  // 这个账号是从哪条路建出来的。取值(唯一来源:建号收口函数):
+  //   self          自己在网页/JSON 接口注册
+  //   invite        拿邀请码注册
+  //   sso:<slug>    浏览器 SSO 首次登录时自动开通,<slug> 是 sso_providers.slug
+  //   idp:<client>  外部 IdP 的受信任服务客户端懒建号,<client> 是 OAuth client_id
+  //   apple         Sign in with Apple 首次登录
+  //   admin         管理员/脚本手工建
+  //
+  // 为什么要存:外部 IdP 那条路 45 天里建了 30 个号,站点管理员完全不知道
+  // 这些人是谁 —— 事后没有任何字段能把这批号跟其它注册区分开,只能靠
+  // created_at 猜。有了这列,后台能按来源筛、能整批停用。
+  //
+  // 存量行一律 NULL,**不回填**:历史上哪个号走的哪条路已经无从查证,
+  // 猜出来的来源会被当成事实用在批量停用上,错杀比留空严重得多。
+  // 读这一列的地方必须把 NULL 当「未知」,不要当成 self。
+  signupSource: text("signup_source"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -53,6 +69,9 @@ export const users = pgTable("users", {
   // treats NULLs as distinct so the many non-Apple accounts (apple_sub
   // NULL) don't collide.
   appleSubUnique: uniqueIndex("users_apple_sub_unique").on(t.appleSub),
+  // 后台「按来源筛选 / 批量停用」要走这个索引。做成部分索引:存量行全是
+  // NULL,把它们收进索引没有任何查询用得上,白占空间。
+  signupSourceIdx: index("users_signup_source_idx").on(t.signupSource).where(sql`${t.signupSource} IS NOT NULL`),
 }));
 
 export const passwordResets = pgTable("password_resets", {
@@ -80,6 +99,15 @@ export const siteSettings = pgTable("site_settings", {
   siteName: text("site_name").notNull().default("ByWave-Calendar"),
   logoUrl: text("logo_url"),
   registrationMode: text("registration_mode").notNull().default("public"),
+  // 建号闸门之二:邮箱域名白名单。逗号/空白/换行分隔的域名列表。
+  // **空字符串 = 不限制**,这是默认值,而且必须一直是默认值 ——
+  // 这是自建产品,客户的服务器升级上来会自动跑迁移,默认值但凡带一点
+  // 限制性(哪怕只是「只许站长自己的域名」),升级当天所有注册就全死了,
+  // 而且没人会把这个跟升级联系起来。
+  signupDomainAllowlist: text("signup_domain_allowlist").notNull().default(""),
+  // 建号闸门之三:每天最多新建多少个账号(跨所有入口合计)。
+  // **0 = 不限**,同上,默认值必须保持现状不变。
+  signupDailyQuota: integer("signup_daily_quota").notNull().default(0),
   icpNumber: text("icp_number"),
   icpUrl: text("icp_url").default("https://beian.miit.gov.cn/"),
   ssoKeycloakEnabled: boolean("sso_keycloak_enabled").notNull().default(false),

@@ -5,6 +5,14 @@
 #    这些"非标准"HTTP 方法。宝塔默认 nginx 配置不一定会转发它们，
 #    导致 iPhone / Mac 的「添加 CalDAV 帐户」一直转圈或报"无法验证账户"。
 #    下面的配置显式允许并转发这些方法。
+#
+# ⚠️ 关键 2：X-Forwarded-For 必须用 $remote_addr，不能用 $proxy_add_x_forwarded_for。
+#    Node 那边 .env 里对应的开关是 TRUST_PROXY，默认 loopback，也就是
+#    「只认本机回环转发来的 X-Forwarded-For」——本文件这种 proxy_pass 到
+#    127.0.0.1:3000 的部署不用改 .env，开箱即用。
+#    如果 nginx 和 Node 不在同一台机器（或在不同容器里），把 nginx 那一侧的
+#    地址/网段填进 TRUST_PROXY，例如 TRUST_PROXY=10.8.0.0/24 或 uniquelocal；
+#    否则 req.ip 会恒等于 nginx 的地址，所有访客共用一个限流桶。
 
 location / {
     # 显式允许 CalDAV / WebDAV 方法。如果宝塔上层的 server 块带
@@ -14,7 +22,35 @@ location / {
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
     proxy_set_header X-Real-IP         $remote_addr;
-    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+
+    # ⚠️ 这里是 $remote_addr，不是 $proxy_add_x_forwarded_for —— 别改回去。
+    #
+    # $proxy_add_x_forwarded_for 的含义是「把客户端发来的 X-Forwarded-For 原样
+    # 留着，再把真实对端地址追加到末尾」。追加，不是覆盖。于是客户端自己发一个
+    #     X-Forwarded-For: 9.9.9.9
+    # 过来，nginx 转给 Node 的就变成
+    #     X-Forwarded-For: 9.9.9.9, <真实地址>
+    # 伪造值排在真实地址**前面**。上游只要有一个环节按「最左边那项是客户端」
+    # 来取（这是 X-Forwarded-For 的通用读法），拿到的就是 9.9.9.9。
+    # 那是 1.6.x 之前的行为：当时服务端对 X-Forwarded-For 是「整条链都信」，
+    # 于是取到最左边的伪造值 —— 限流每次换一个伪造值连打一次都挡不下来，
+    # 审计日志和登录历史的 ip 列记的也是攻击者自己填的字符串。
+    #
+    # ⚠️ 现在**不是**这样了，别照着上面那段去吓唬人：服务端默认
+    # TRUST_PROXY=loopback，只认「从本机回环转发进来的那一跳」，从右往左解析，
+    # 伪造值排在左边够不到。实测 "9.9.9.9, 203.0.113.7" 取到的是 203.0.113.7。
+    # 也就是说**老配置（$proxy_add_x_forwarded_for）升级后一样是安全的，
+    # 站长不需要为了安全去改生产 nginx**。
+    #
+    # 这里仍然写 $remote_addr，是因为它更干净：这台 nginx 是整条链路上第一个
+    # 见到真实 TCP 对端的人，覆盖写入让链条只有一项，少一层要解析的东西。
+    # 但这是「新装机器照这个抄」，不是「已经在跑的必须改」。
+    #
+    # 例外：如果 nginx 前面还有一层你信任的 CDN（Cloudflare 等），那这里要保留
+    # CDN 传来的链条，改成 $proxy_add_x_forwarded_for，同时把 CDN 的回源网段
+    # 填进 .env 的 TRUST_PROXY（如 TRUST_PROXY=loopback,173.245.48.0/20）。
+    # 两件事必须一起做——只做前一件就等于把伪造权还给客户端。
+    proxy_set_header X-Forwarded-For   $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Upgrade           $http_upgrade;
     proxy_set_header Connection        "upgrade";
@@ -44,6 +80,10 @@ location ~ ^/ics/ {
     proxy_pass http://127.0.0.1:3000;
     proxy_http_version 1.1;
     proxy_set_header Host              $host;
+    # 这一段同样要转发真实地址：漏了的话订阅请求在 Node 眼里全是 127.0.0.1，
+    # 会挤在同一个限流桶里互相把对方顶成 429。理由同上，用 $remote_addr。
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
     add_header Access-Control-Allow-Origin * always;
 }
@@ -52,5 +92,8 @@ location ~ ^/ics/ {
 # .env 里设 USE_HTTPS=true，让 Node 直接拿端口。
 # 然后在宝塔站点设置里把 nginx 监听关掉（或改到其他端口）。
 # CalDAV WebDAV 方法转发的问题就根本不存在 —— 因为没人挡在中间。
+#
+# 走这条路径时 .env 里设 TRUST_PROXY=off：没有反向代理，谁发来的
+# X-Forwarded-For 都不该被采纳，req.ip 直接就是 TCP 对端地址。
 #
 # install.sh 默认就是这条路径；推荐生产环境用这个。

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asc, ilike, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { ok, err } from "../lib/api_response.js";
-import { verifyServiceClient, provisionAccountByEmail, type ServiceClientAuth } from "../lib/external_idp.js";
+import { verifyServiceClient, provisionAccountByEmail, idpProvisionDenial, type ServiceClientAuth } from "../lib/external_idp.js";
 import { likeNeedle } from "../lib/search_query.js";
 import { getSettings } from "../lib/site_settings.js";
 import { audit } from "../lib/audit.js";
@@ -90,8 +90,21 @@ export async function accountRoutes(app: FastifyInstance) {
       email: z.string().email().transform((s) => s.toLowerCase().trim()),
       displayName: z.string().max(100).optional(),
     }).parse(req.body);
-    const r = await provisionAccountByEmail(body.email, body.displayName ?? null);
-    if (!r.user) return err(req, reply, 500, "provision_failed", "开通失败");
+    // 这条路一样过建号收口函数:「自动开通账号」那个开关只管「这个接口开不开」,
+    // 管不了「站点现在还收不收人」。以前两者是分开的,于是后台把注册关了、
+    // 这个接口照样开号。
+    //
+    // emailVerified 写 false:服务客户端只是「报」了一个邮箱给我们,它没有对这个
+    // 邮箱做过任何验证,这里也收不到任何能证明它的东西。以前硬写 true,库里那句
+    // 「已验证」是编出来的。
+    const r = await provisionAccountByEmail(body.email, body.displayName ?? null, {
+      client: auth.client,
+      emailVerified: false,
+    });
+    if (!r.ok) {
+      const m = idpProvisionDenial(r.denial);
+      return err(req, reply, m.code, m.error, "开通失败");
+    }
     if (r.created) {
       void audit(req, r.user.id, "idp.account_provisioned", {
         targetType: "user", targetId: r.user.id,

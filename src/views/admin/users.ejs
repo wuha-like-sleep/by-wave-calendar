@@ -6,21 +6,58 @@
     <p class="mt-1 text-sm text-slate-500"><%- t("adminUsers.summary", { total: stats.total, admins: stats.admins, disabled: stats.disabled }) %></p>
     <a href="/admin/users/merge" class="mt-1 inline-block text-xs text-brand-600 hover:text-brand-700">合并重复账号 →</a>
   </div>
-  <form method="get" action="/admin/users" class="relative w-full sm:w-72">
-    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
-    <input type="search" name="q" value="<%= query %>" autocomplete="off" placeholder="<%= t('adminUsers.searchPlaceholder') %>"
-           class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+  <%# 搜索和来源筛选在同一个 form 里:分成两个的话,换来源会把搜索词丢掉。 %>
+  <form method="get" action="/admin/users" class="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+    <div class="relative w-full sm:w-64">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
+      <input type="search" name="q" value="<%= query %>" autocomplete="off" placeholder="<%= t('adminUsers.searchPlaceholder') %>"
+             class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </div>
+    <select name="source" data-bwc-autosubmit aria-label="<%= t('adminUsers.filter.sourceLabel') %>"
+            class="w-full sm:w-52 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+      <option value="" <%= sourceFilter === '' ? 'selected' : '' %>><%= t("adminUsers.filter.sourceAll") %></option>
+      <% sourceOptions.forEach(function (o) { %>
+        <option value="<%= o.key %>" <%= sourceFilter === o.key ? 'selected' : '' %>>
+          <% if (o.kind === 'unknown') { %><%= t("adminSource.unknown") %><%
+             } else if (o.kind === 'sso') { %><%= t("adminSource.sso") %> · <%= o.detail %><%
+             } else if (o.kind === 'idp') { %><%= t("adminSource.idp") %> · <%= o.detail %><%
+             } else if (o.kind === 'self') { %><%= t("adminSource.self") %><%
+             } else if (o.kind === 'invite') { %><%= t("adminSource.invite") %><%
+             } else if (o.kind === 'apple') { %><%= t("adminSource.apple") %><%
+             } else if (o.kind === 'admin') { %><%= t("adminSource.admin") %><%
+             } else { %><%= o.raw %><% } %> (<%= o.count %>)
+        </option>
+      <% }) %>
+    </select>
+    <button type="submit" class="sm:hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"><%= t("adminUsers.filter.apply") %></button>
   </form>
 </div>
+
+<%# 批量停用。勾选框长在表格里,靠 form="bwc-bulk-disable" 关联到这个 form ——
+    HTML 不许 form 套 form,而每一行的「停用/踢出」本来就各自是一个 form。
+    提交后先出一张服务端确认页,不是点一下就执行。 %>
+<form id="bwc-bulk-disable" method="post" action="/admin/users/bulk-disable"
+      class="mb-3 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+  <input type="hidden" name="q" value="<%= query %>" />
+  <input type="hidden" name="source" value="<%= sourceFilter %>" />
+  <button type="submit" class="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-50"><%= t("adminUsers.bulk.disableSelected") %></button>
+  <span class="text-xs text-slate-500"><%= t("adminUsers.bulk.hint") %></span>
+</form>
 
 <div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
   <table class="min-w-full text-sm">
     <thead class="bg-slate-50 border-b border-slate-200">
       <tr class="text-left text-xs uppercase tracking-wide text-slate-500">
+        <th class="px-4 py-3 w-10">
+          <input type="checkbox" data-bwc-checkall="input[data-bulk-user]" aria-label="<%= t('adminUsers.bulk.selectAll') %>"
+                 class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+        </th>
         <th class="px-4 py-3"><%= t("adminUsers.col.email") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.displayName") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.verified") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.loginMethod") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.source") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.createdAt") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.role") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.actions") %></th>
@@ -29,7 +66,7 @@
     <tbody class="divide-y divide-slate-100">
       <% if (users.length === 0) { %>
         <tr>
-          <td colspan="7" class="px-4 py-12 text-center">
+          <td colspan="9" class="px-4 py-12 text-center">
             <div class="text-3xl mb-2">👥</div>
             <div class="text-sm text-slate-500"><%- query ? t("adminUsers.emptyFiltered", { q: query }) : t("adminUsers.empty") %></div>
           </td>
@@ -37,6 +74,13 @@
       <% } %>
       <% users.forEach(function(u){ %>
         <tr>
+          <td class="px-4 py-3 align-top">
+            <% if (u.id !== user.id) { %>
+              <input type="checkbox" form="bwc-bulk-disable" name="userIds" value="<%= u.id %>" data-bulk-user
+                     aria-label="<%= u.email %>"
+                     class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+            <% } %>
+          </td>
           <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]">
             <%= u.email %>
             <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]"><%= t("adminUsers.badge.disabled") %></span><% } %>
@@ -66,6 +110,9 @@
               <div class="mt-0.5 text-[10px] text-slate-400"><%= t("adminUsers.lastLoginPrefix") %><%= u.lastLoginMethod %></div>
             <% } %>
           </td>
+          <%# data-source-cell 是给断言用的锚点:这一格整个被删掉时,
+              页面上别处(筛选下拉里)还留着同样的来源文字,光找文字找不出来。 %>
+          <td class="px-4 py-3" data-source-cell><%- include('_signup_source', { src: u.source }) %></td>
           <td class="px-4 py-3 text-xs text-slate-500">
             <%= new Intl.DateTimeFormat('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }).format(u.createdAt) %>
           </td>

@@ -20,7 +20,6 @@
 // provider issuer, so the caller can fall through to the device-token path.
 
 import { createRemoteJWKSet, jwtVerify, decodeJwt } from "jose";
-import { randomBytes } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -28,7 +27,7 @@ import { listAllProviders } from "./sso_providers.js";
 import { discoverOidc } from "./sso.js";
 import { getSettings } from "./site_settings.js";
 import { userIsActive } from "./user_state.js";
-import { hashPassword } from "./password.js";
+import { isUnprovenSelfSignup, provisionAccount, type ProvisionDenial } from "./account_provisioning.js";
 
 // Asymmetric algorithms only — Keycloak signs access tokens with RS256 by
 // default. Pinning this (vs letting jose accept whatever the JWK advertises)
@@ -206,10 +205,48 @@ export async function resolveExternalIdpUser(token: string, req: FastifyRequest)
   }
 
   let user = await lookupUser(decided.target);
+
+  // ---- 普通用户令牌按邮箱认到一行账号:这也是一次「认领」 -------------------
+  //
+  // 走到这里说明令牌**说**自己是这个邮箱。如果那一行是本站自助注册出来的、
+  // 而且它自己从没证明过这个邮箱(email_verified=false + signup_source 是
+  // self/invite),那就正是抢注留下的形状 —— 谁先在 /auth/register 占了这个
+  // 邮箱,谁就能被后来的 IdP 用户并进同一个号里。
+  //
+  // 这条路**只拒绝,不作废任何凭据**。作废是一次真人登录才该做的动作(浏览器
+  // SSO / 苹果登录,见 decideEmailClaim 的 adopt_after_eviction),不能由一个
+  // 后台 API 调用顺手把别人的密码、会话、设备全掀掉 —— 调用方甚至不是人。
+  // 真正的本人先从浏览器 SSO 或苹果登录进来一次,那边会把号理清楚,之后这条
+  // 路自然就通了。
+  //
+  // 服务客户端不在这条判定里:X-Account 是管理员配置出来的受信任能力,它本来
+  // 就可以替任何账号说话。
+  // signup_source 为 null 的存量行也不在里面(见 isUnprovenSelfSignup)——
+  // 那一列是后加的、明确不回填,把「不知道」当成「自助注册」会误伤一整批老账号。
+  if (user && !isServiceClient && isUnprovenSelfSignup(user)) {
+    // 403 不是 401:401 在 App 的 api.dart 里的意思是「会话没了」,会把已登录
+    // 的人直接登出。「这次不认你是这个号」跟「你是谁我不认」是两回事。
+    return { matched: true, user: null, provider, code: 403, error: "account_claim_unproven" };
+  }
+
   let provisioned = false;
   if (!user && isServiceClient && settings.idpApiAutoProvision && decided.target.includes("@")) {
     // Bulk-provision: create a ByWave account for this email on first access.
-    const r = await provisionAccountByEmail(decided.target.toLowerCase(), typeof payload.name === "string" ? payload.name : null);
+    // 令牌里的 email_verified 说的是**令牌主体自己**那个邮箱。服务客户端用
+    // X-Account 替别人开号时,那个 claim 跟目标邮箱一点关系都没有 —— 只有
+    // 目标就是令牌自己的邮箱时才能拿来用。其余一律 false:宁可标成「没验过」,
+    // 也不能凭一句说的是别人的断言,把一个邮箱写成已验证。
+    const selfTarget =
+      emailClaim !== null && emailClaim.trim().toLowerCase() === decided.target.toLowerCase();
+    const r = await provisionAccountByEmail(
+      decided.target.toLowerCase(),
+      typeof payload.name === "string" ? payload.name : null,
+      { client: serviceClient as string, emailVerified: selfTarget && payload.email_verified === true },
+    );
+    if (!r.ok) {
+      const m = idpProvisionDenial(r.denial);
+      return { matched: true, user: null, provider, code: m.code, error: m.error };
+    }
     user = r.user;
     provisioned = r.created;
   }
@@ -244,32 +281,61 @@ async function lookupUser(idOrEmail: string): Promise<schema.User | undefined> {
   return u;
 }
 
-export async function provisionAccountByEmail(email: string, displayName: string | null): Promise<{ user: schema.User | undefined; created: boolean }> {
-  // No local password — the IdP is the source of truth. passwordHash is NOT
-  // NULL, so (like the SSO signup path) store a REAL bcrypt hash of a random
-  // ~256-bit value: valid bcrypt, unguessable, and safe even if some future
-  // code path ever compares against it. (Never store a non-bcrypt sentinel.)
-  const stubPassword = await hashPassword(randomBytes(32).toString("base64"));
-  const [created] = await db
-    .insert(schema.users)
-    .values({
-      email,
-      emailVerified: true,
-      passwordHash: stubPassword,
-      displayName: displayName || email.split("@")[0] || email,
-    })
-    .onConflictDoNothing()
-    .returning();
-  if (created) {
-    await db.insert(schema.calendars).values({
-      ownerId: created.id,
-      name: "My Calendar",
-      color: "#6366f1",
-      timezone: "Asia/Shanghai",
-    });
-    return { user: created, created: true };
+export type IdpProvisionResult =
+  | { ok: true; user: schema.User; created: boolean }
+  | { ok: false; denial: ProvisionDenial };
+
+/**
+ * 建号被拒 → 这一层的 { code, error } 形态。
+ *
+ * 这里刻意不掺用户可见文案:调用它的两条路(懒建号走 ExternalResolve、
+ * /accounts 走 err())都是给机器看的,error 这个 snake_case 串就是契约。
+ *
+ * 全部走 4xx/5xx,**没有一条是 401**:401 在 App 那边的意思是「会话没了」,
+ * 会把已登录的人踢出去。「这次没让你开号」跟「你是谁我不认」是两回事。
+ */
+export function idpProvisionDenial(d: ProvisionDenial): { code: number; error: string } {
+  switch (d.code) {
+    case "invalid_email": return { code: 400, error: "invalid_email" };
+    case "registration_closed": return { code: 403, error: "signup_closed" };
+    // 邀请制下服务客户端天生带不出邀请码,所以这两条对它是同一件事:
+    // 「本站现在只认邀请码开号」。分开报也没有任何它能做的补救动作。
+    case "invite_required":
+    case "invite_invalid": return { code: 403, error: "signup_invite_only" };
+    case "domain_not_allowed": return { code: 403, error: "signup_domain_not_allowed" };
+    case "daily_quota_reached": return { code: 403, error: "signup_quota_reached" };
+    case "email_taken": return { code: 409, error: "email_taken" };
+    case "create_failed": return { code: 500, error: "provision_failed" };
   }
-  // Lost a race — re-read (the account exists, but WE didn't create it).
-  const [existing] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
-  return { user: existing, created: false };
+}
+
+/**
+ * 受信任服务客户端替某个邮箱开号。**自己不 insert**,一律过建号收口函数 ——
+ * 正是这条路在 45 天里建了 30 个号,而注册策略开关对它完全无效。
+ *
+ * emailVerified 必须由调用方给出真实值。以前这里硬写 true,于是「这个邮箱
+ * 到底验没验过」这个事实在库里被抹掉了,后面没有任何一层还能知道。
+ */
+export async function provisionAccountByEmail(
+  email: string,
+  displayName: string | null,
+  opts: { client: string; emailVerified: boolean },
+): Promise<IdpProvisionResult> {
+  const r = await provisionAccount({
+    email,
+    origin: { kind: "idp", client: opts.client },
+    emailVerified: opts.emailVerified,
+    // 显示名的回落留在这一层。收口函数不替调用方想这个 —— 搬走的话这批号的
+    // 显示名会从「张三」变成 null,而且是悄悄变。
+    displayName: displayName || email.split("@")[0] || email,
+    // 懒建号是登录类路径:邮箱已有账号就认回同一个人,不是「邮箱被占用」。
+    //
+    // 这个 adopt 只在**并发**下才会真的发生:调用方走到这里之前已经
+    // lookupUser 过一次,邮箱有主的话根本不会进来。抢注那条路是在上面
+    // isUnprovenSelfSignup 那道判定里挡的,不在这儿 —— 挪到这里的话,
+    // 服务客户端(受信任、可以替任何账号说话)会跟着一起被挡。
+    onExistingEmail: "adopt",
+  });
+  if (!r.ok) return { ok: false, denial: r.reason };
+  return { ok: true, user: r.user, created: r.created };
 }
