@@ -248,11 +248,22 @@
         return;
       }
       var msg = (body && body.error) || ('HTTP ' + xhr.status);
-      if (xhr.status === 413 && !body) {
-        // 没有 JSON body 的 413 多半是反向代理发的，不是我们发的 ——
-        // 这两件事的修法完全不同，必须分开说。
-        msg = '请求被拒绝（413），而且不是本程序发的 —— 多半是你的反向代理拦的。'
-            + '把 nginx 的 client_max_body_size 调到 320m 以上再试。';
+      // 分辨「谁拦的」——这三种情况的修法完全不同，笼统报一句
+      // 「上传失败 HTTP xxx」等于让人去猜。
+      var looksHtml = /^\s*<(!doctype|html)/i.test(xhr.responseText || '');
+      if (!body && looksHtml) {
+        if (xhr.status === 413) {
+          // 反向代理自己发的 413：请求根本没到本程序。
+          msg = '请求被拒绝（413），而且不是本程序发的 —— 是你的反向代理拦的。'
+              + '把 nginx 的 client_max_body_size 调到 320m 以上再试。';
+        } else {
+          // 最阴的一种：状态码 2xx，body 却是一张 HTML 错误页。
+          // 宝塔 WAF 拦大 body 时就是这样（提示「Nginx缓冲区溢出」），
+          // 看起来像成功，实际上请求从没到过本程序。
+          msg = '上传被中间层拦了（返回的是一张 HTML 页面，不是本程序的响应，状态码 '
+              + xhr.status + '）。常见于宝塔 Nginx 防火墙：把这个地址加进 URL 白名单'
+              + '（^/admin/client-release/.*/binary$）再试。';
+        }
       }
       say('上传失败：' + msg, 'mt-1 text-xs text-red-600');
       input.value = '';
