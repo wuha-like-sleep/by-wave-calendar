@@ -754,7 +754,11 @@ export async function deviceRoutes(app: FastifyInstance) {
   // The web flow does the same thing — we just expose JSON instead of
   // form redirects so the iOS APP can present native UI.
 
-  app.post("/account/mfa/setup", async (req, reply) => {
+  app.post("/account/mfa/setup", {
+    // 第三方 OAuth 一律不许碰:两步验证。默认拒绝已经盖住了,
+    // 这行是写给后来人看的 —— 隔壁 disable 有,这两条漏了,口径不齐。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     if (user.mfaEnabled) {
@@ -776,7 +780,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/account/mfa/verify", async (req, reply) => {
+  app.post("/account/mfa/verify", {
+    // 第三方 OAuth 一律不许碰:两步验证。默认拒绝已经盖住了,
+    // 这行是写给后来人看的 —— 隔壁 disable 有,这两条漏了,口径不齐。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const body = z.object({ code: z.string().min(6).max(8) }).safeParse(req.body);

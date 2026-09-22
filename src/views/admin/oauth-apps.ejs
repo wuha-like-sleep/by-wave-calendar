@@ -3,6 +3,20 @@
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">OAuth 应用</h1>
 <p class="text-sm text-slate-500 mb-6">注册第三方应用后，应用会带用户走到我们的「授权」页面，用户同意后才能拿到访问 token。和 API Token 不一样的是：OAuth 走用户同意流程，scope 可限定，token 受用户自己控制（可在 /app/settings 撤销）。</p>
 
+<% if (!apiEnabled) { %>
+  <%# 总闸关着时,下面建的应用一个都用不了 —— 授权页和 token 端点整条回 503。
+      默认值就是关的,所以每一台新装的服务器第一次来这儿都会撞上。 %>
+  <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 mb-6">
+    <h2 class="text-sm font-semibold text-amber-900 mb-1">第三方接入总闸当前是关闭的</h2>
+    <p class="text-xs text-amber-800">
+      在这里建的应用可以正常保存，但用户走不完授权 —— 授权页会显示「本站已关闭第三方接入」。
+      要让它们真的能用，先到
+      <a class="underline font-medium" href="/admin/api#master">设置 → 第三方 API</a>
+      把总闸打开。（新装的站点默认是关着的。）
+    </p>
+  </div>
+<% } %>
+
 <% if (issuedSecret) { %>
   <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 mb-6">
     <h2 class="text-sm font-semibold text-emerald-900 mb-2">✓ 应用已创建 —— client_secret 只显示这一次</h2>

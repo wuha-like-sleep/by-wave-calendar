@@ -292,6 +292,11 @@ export async function loadUserFromRequest(req: FastifyRequest): Promise<schema.U
   return s.user;
 }
 
+/** 路由能声明的 scope 名。写成联合类型而不是 string:写错一个字符
+ *  (比如 "read:event")会**静默变成拒绝** —— 因为判据是「granted 里有没有
+ *  这个值」,而没有任何值等于 "read:event"。类型收紧之后编译期就红。 */
+export type OAuthScopeName = "read:events" | "write:events" | "read:profile";
+
 declare module "fastify" {
   interface FastifyRequest {
     user?: schema.User;
@@ -321,7 +326,7 @@ declare module "fastify" {
      * 只影响 authVia === "oauth" 的流量。会话 cookie、设备 token、
      * bwc_ API token 走各自的判定,不看这个字段。
      */
-    oauthScope?: string;
+    oauthScope?: OAuthScopeName | "deny" | "any";
   }
 }
 

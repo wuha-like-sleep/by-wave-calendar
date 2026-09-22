@@ -814,7 +814,7 @@ export async function eventRoutes(app: FastifyInstance) {
   // Invite one email. Same flow as the web POST /attendees/invite —
   // adds to extra.attendees, creates a token row, sends .ics email.
   app.post<{ Params: { id: string } }>("/events/:id/attendees", {
-    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+    config: { oauthScope: "write:events", rateLimit: { max: 30, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;

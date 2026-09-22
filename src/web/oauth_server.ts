@@ -15,6 +15,7 @@ import { db, schema } from "../db/client.js";
 import { loadFullSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { tForRequest } from "../lib/i18n.js";
+import { verifyPasswordTimingSafe } from "../lib/password.js";
 import {
   findClientByClientId,
   issueAuthorizationCode,
@@ -266,14 +267,32 @@ export async function oauthServerRoutes(app: FastifyInstance) {
 
   // POST /oauth/revoke — user-side revocation. Caller passes their own
   // active token to invalidate it.
-  app.post("/oauth/revoke", async (req, reply) => {
+  //
+  // 这条路不认证调用方(RFC 7009 其实要求认证 client),而它每命中一个
+  // 8 位 prefix 就跑一次 cost 12 的 bcrypt。加上它**有意**跳过 API 总闸
+  // (撤销自己的授权在总闸关着时也必须能用),于是在没有独立限流时,
+  // 它同时是两样东西:一个免费的算力放大器,和一个「这个 token 还活着吗」
+  // 的探测器 —— 响应体恒为 {ok:true},但耗时不是恒定的。
+  //
+  // 独立限流按「撤销」这件事的真实频率给:一个人一辈子撤几次授权。
+  app.post("/oauth/revoke", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (req, reply) => {
     const body = z.object({ token: z.string() }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
     const { looksLikeOAuthToken, verifyOAuthToken } = await import("../lib/oauth_server.js");
-    if (!looksLikeOAuthToken(body.data.token)) return reply.send({ ok: true });
+    if (!looksLikeOAuthToken(body.data.token)) {
+      // 形状就不对:烧掉一次同等的 bcrypt 再回话,免得「格式对不对」
+      // 也能从耗时上读出来。
+      await verifyPasswordTimingSafe(body.data.token);
+      return reply.send({ ok: true });
+    }
     // "revoke":撤销自己的授权在总闸关着时也必须能用。见 OAuthTokenUse 的注释。
     const v = await verifyOAuthToken(body.data.token, "revoke");
-    if (!v) return reply.send({ ok: true });
+    if (!v) {
+      // prefix 没命中的话上面那次调用根本没跑 bcrypt,耗时会明显更短 ——
+      // 那就是一个「这个 token 还活着吗」的探测器。补一次等量开销。
+      await verifyPasswordTimingSafe(body.data.token);
+      return reply.send({ ok: true });
+    }
     await db.update(schema.oauthAccessTokens).set({ revokedAt: new Date() }).where(eq(schema.oauthAccessTokens.id, v.tokenId));
     return reply.send({ ok: true });
   });

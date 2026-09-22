@@ -2507,6 +2507,11 @@ export async function adminRoutes(app: FastifyInstance) {
       scopes: OAUTH_SCOPES,
       issuedSecret, issuedClientId,
       baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
+      // 总闸默认是**关**的(schema.ts 的 api_enabled default false),而总闸
+      // 关着时授权流程整条回 503。新装的站点在这儿建完应用会直接撞墙,
+      // 而这一页以前完全没提过总闸 —— 隔壁 api.ejs 给签发 token 的按钮做了
+      // disabled + 提示,OAuth 这页漏了。
+      apiEnabled: (await getSettings()).apiEnabled,
     });
   });
 

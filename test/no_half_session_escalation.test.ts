@@ -24,7 +24,9 @@ import path from "node:path";
 // 真实请求,得把 webauthn 那一整套挑战/验证拉起来;而这条要防的是
 // 「有人加了一行」,源码判据正好对得上。
 
-const ROOTS = ["src/web", "src/routes", "src/lib"];
+// 整个 src/,不是挑几个子目录。复查指出原来的三个根漏掉了 src/server.ts ——
+// 而那正是全站路由注册和钩子挂载的地方,是最该被盯住的一个文件。
+const ROOTS = ["src"];
 
 /**
  * 允许继续用裸 loadSession 的地方,每条都要有理由。
@@ -77,9 +79,11 @@ function collect(): Use[] {
     for (const file of walk(root)) {
       const lines = codeOnly(readFileSync(path.resolve(file), "utf8")).split("\n");
       lines.forEach((l, i) => {
-        // loadFullSession 里也含 "loadSession",所以要排掉它。
-        if (!/\bloadSession\s*\(/.test(l)) return;
-        if (/loadFullSession\s*\(/.test(l)) return;
+        // loadFullSession 里也含 "loadSession" —— 但**不能整行跳过**:
+        // 一行里既有 loadFullSession 又有裸 loadSession 的话,整行跳过就漏了。
+        // 先把 loadFullSession( 抹掉,再看还剩不剩裸的。
+        const stripped = l.replace(/\bloadFullSession\s*\(/g, "");
+        if (!/\bloadSession\s*\(/.test(stripped)) return;
         out.push({ file, line: i + 1, text: l.trim() });
       });
     }
@@ -118,6 +122,22 @@ describe("半登录会话不许用来做授权判断", () => {
         "拿它做授权判断等于二次验证不存在。要「此刻是完整登录状态」请用 loadFullSession;" +
         "确实需要读半登录会话(只有 MFA 流程本身)就把文件加进 ALLOWED 并写明理由。",
     ).toEqual([]);
+  });
+
+  it("loadUserFromRequest 仍然当场判二次验证（所有 cookie 认证路由的唯一防线）", () => {
+    // 这条是复查提出来的:门禁盯住了「谁在用裸 loadSession」,却没盯住
+    // loadUserFromRequest 自己那一行。而 /api 下每一条走 cookie 的路由
+    // 最终都落在它身上 —— 那一行没了,半登录会话直接畅通,
+    // 而上面那几条断言一条都不会红。
+    const src = codeOnly(readFileSync(path.resolve("src/lib/session.ts"), "utf8"));
+    const at = src.indexOf("export async function loadUserFromRequest");
+    expect(at, "找不到 loadUserFromRequest —— 改名了?这条断言要跟着改").toBeGreaterThan(-1);
+    const body = src.slice(at, at + 400);
+    expect(
+      /mfaEnabled\s*&&\s*!s\.mfaSatisfied/.test(body),
+      "loadUserFromRequest 里那行二次验证判断没了。它是所有走 cookie 的 API 路由" +
+        "最终依赖的那一道 —— 没了它,半登录会话直接畅通。",
+    ).toBe(true);
   });
 
   it("createSession 不再接受调用方自己声称「已过二次验证」", () => {
