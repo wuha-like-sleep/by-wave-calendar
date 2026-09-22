@@ -304,7 +304,16 @@ declare module "fastify" {
      * 忘了声明的后果是「第三方用不了」(有人会来报),而不是「第三方全都能用」
      * (没人会发现)。
      *
-     * 取值是 OAUTH_SCOPES 里的键,或者 "deny"。"deny" 用在那些**任何**第三方
+     * 取值是 OAUTH_SCOPES 里的键,或者 "deny" / "any"。
+     *
+     * "any" 用在「这个 token 是谁的」这类身份端点上:只要 token 有效就放行,
+     * 但**返回什么由 scope 决定**(个人信息要 read:profile)。这是 OIDC 的
+     * 常规做法,也是必须的 —— 授权页默认只勾 read:events、库里 allowed_scopes
+     * 的默认值也是 ["read:events"],把身份端点整个锁在 read:profile 后面
+     * 会让**所有存量集成**换完 token 的第一步就 403,而且没有迁移路径:
+     * 已签发 token 里的 scope 是写死在库里的那份,改不了。
+     *
+     * "deny" 用在那些**任何**第三方
      * 授权都不该碰的东西上:改密码、删账号、两步验证、设备增删、以及两条
      * 能把 token 换成更高权限的路(/auth/web-session 换浏览器会话、
      * /devices/*-pair-approve 换长期设备凭据)。
@@ -327,6 +336,8 @@ function oauthScopeAllows(req: FastifyRequest, granted: string[]): boolean {
   const declared = (req.routeOptions?.config as { oauthScope?: string } | undefined)?.oauthScope;
   // 没声明 → 拒绝。见 oauthScope 的注释。
   if (!declared || declared === "deny") return false;
+  // 身份端点:token 有效即可进门,个人信息在 handler 里按 scope 裁。
+  if (declared === "any") return true;
   // 数组元素全等,不是子串匹配 —— 否则 "read:events" 会被
   // "read:events.evil" 这种伪造值命中。
   return granted.includes(declared);

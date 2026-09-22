@@ -172,9 +172,22 @@ export async function authRoutes(app: FastifyInstance) {
     return ok(req, reply, { ok: true });
   });
 
-  app.get("/auth/me", { config: { oauthScope: "read:profile" } }, async (req, reply) => {
+  // "any":token 有效就能问「我是谁」,但**邮箱和显示名要 read:profile**。
+  // 不这么做的话,存量集成(默认只授了 read:events)换完 token 的第一步就 403,
+  // 而且没有迁移路径 —— 已签发 token 里的 scope 是写死在库里的那份。
+  app.get("/auth/me", { config: { oauthScope: "any" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
+    const via = (req as unknown as { authVia?: string }).authVia;
+    const scopes = (req as unknown as { oauthScopes?: string[] }).oauthScopes ?? [];
+    // 只有 OAuth 这条路要裁。会话 cookie、设备 token、bwc_ API token
+    // 走各自的判定,行为一点不变。
+    const hideProfile = via === "oauth" && !scopes.includes("read:profile");
+    return ok(req, reply, {
+      id: user.id,
+      email: hideProfile ? null : user.email,
+      displayName: hideProfile ? null : user.displayName,
+      isAdmin: hideProfile ? false : user.isAdmin,
+    });
   });
 }

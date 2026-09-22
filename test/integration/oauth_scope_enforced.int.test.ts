@@ -104,7 +104,7 @@ describe("OAuth scope 必须被真正执行", () => {
     expect(res.body, "403 是别的原因给的,不是 scope").toContain("insufficient_scope");
   });
 
-  it("read:events 的 token **不能**删日历", async () => {
+  it("read:events 的 token 打没声明 scope 的路由被拒（这条测的是默认拒绝,不是 scope 比对）", async () => {
     const { token } = await tokenWithScopes(["read:events"]);
     const res = await app.inject({
       method: "DELETE", url: "/api/v1/calendars/00000000-0000-0000-0000-000000000000",
@@ -156,5 +156,34 @@ describe("OAuth scope 必须被真正执行", () => {
     const res = await app.inject({ method: "GET", url: "/api/v1/devices/me", headers: bearer(token) });
     expect(res.statusCode).toBe(403);
     expect(res.body).toContain("insufficient_scope");
+  });
+});
+
+describe("身份端点:token 有效就能问「我是谁」,但个人信息按 scope 裁", () => {
+  it("只有 read:events 的存量 token 仍然能调 /auth/me（不这么做,所有现有集成会静默全挂）", async () => {
+    // 授权页默认只勾 read:events、库里 allowed_scopes 默认值也是 ["read:events"],
+    // 所以绝大多数存量 token 的 scope 就只有这一个。把身份端点整个锁在
+    // read:profile 后面的话,它们换完 token 的第一步(「我是谁」)就 403,
+    // 而且没有迁移路径 —— 已签发 token 里的 scope 是写死在库里的那份。
+    const { token } = await tokenWithScopes(["read:events"]);
+    const res = await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: bearer(token) });
+    expect(res.statusCode, `存量 token 调 /auth/me 被拒了。响应: ${res.body.slice(0, 200)}`).toBe(200);
+  });
+
+  it("但它拿不到邮箱和显示名（read:profile 这个 scope 的全部意义就在这儿）", async () => {
+    const { token } = await tokenWithScopes(["read:events"]);
+    const res = await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: bearer(token) });
+    const body = JSON.parse(res.body) as { data?: { id?: string; email?: string | null } };
+    const data = body.data ?? (body as unknown as { id?: string; email?: string | null });
+    expect(data.id, "连 id 都没给 —— 那这条端点就没用了").toBeTruthy();
+    expect(data.email, "没授 read:profile 却把邮箱给出去了").toBeNull();
+  });
+
+  it("授了 read:profile 就能拿到（证明不是一刀切全裁）", async () => {
+    const { token } = await tokenWithScopes(["read:events", "read:profile"]);
+    const res = await app.inject({ method: "GET", url: "/api/v1/auth/me", headers: bearer(token) });
+    const body = JSON.parse(res.body) as { data?: { email?: string | null } };
+    const data = body.data ?? (body as unknown as { email?: string | null });
+    expect(data.email, "授了 read:profile 还是拿不到邮箱").toBeTruthy();
   });
 });

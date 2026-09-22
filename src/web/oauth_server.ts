@@ -242,16 +242,24 @@ export async function oauthServerRoutes(app: FastifyInstance) {
   // GET /oauth/userinfo — sugar for "who is this token" introspection.
   // Bearer-only; works with both OAuth and API tokens (via requireUserOrSend
   // chain) but exposes scope info only for OAuth.
-  app.get("/oauth/userinfo", { config: { oauthScope: "read:profile" } }, async (req, reply) => {
+  // OIDC 的常规做法:token 有效就回 sub,**个人信息按 scope 裁**。
+  // 整条锁在 read:profile 后面的话,存量集成(默认只授 read:events)
+  // 换完 token 的第一步就 403,而且没有迁移路径。
+  app.get("/oauth/userinfo", { config: { oauthScope: "any" } }, async (req, reply) => {
     const { requireUserOrSend } = await import("../lib/session.js");
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const scopes = (req as unknown as { oauthScopes?: string[] }).oauthScopes ?? null;
+    const canReadProfile = !!scopes && scopes.includes("read:profile");
     return reply.send({
       sub: user.id,
-      email: user.email,
-      name: user.displayName,
-      email_verified: user.emailVerified,
+      // 没授 read:profile 就只给 sub。字段整个不出现,而不是给 null ——
+      // OIDC 客户端按「有没有这个 claim」判断,给 null 会被当成「邮箱是空的」。
+      ...(canReadProfile ? {
+        email: user.email,
+        name: user.displayName,
+        email_verified: user.emailVerified,
+      } : {}),
       ...(scopes ? { scope: scopes.join(" ") } : {}),
     });
   });
