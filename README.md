@@ -61,7 +61,7 @@ ByWave Calendar 是一个**自己服务器上跑的日历共享平台**。一个
 | 平台 | 版本 | 下载 |
 |---|---|---|
 | 🌐 Web / PWA | — | 浏览器打开你的 ByWave 服务器即可，支持装到桌面 / 主屏 |
-| 📱 iOS | v1.6.2 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
+| 📱 iOS | v1.7.0 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
 | 🤖 Android | v0.12.0 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.0/bywave-calendar-0.12.0.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
 | 🍎 macOS | v1.1.1 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-arm64.dmg) — 已 Apple 公证 |
 | 🪟 Windows | v1.1.1 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-x64.msi) |
