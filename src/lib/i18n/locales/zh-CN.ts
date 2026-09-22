@@ -1330,6 +1330,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "授权 {name}",
   "errorPage.oauth.badRequestHeading": "OAuth 请求参数无效",
   "errorPage.oauth.badRequestMessage": "缺少必填字段，或字段格式不对。",
+  "errorPage.oauth.apiDisabledHeading": "本站已关闭第三方接入",
+  "errorPage.oauth.apiDisabledMessage": "站点管理员关闭了第三方应用接入。你的账号没有问题 —— 需要连接这个应用的话，请联系站点管理员。",
   "errorPage.oauth.unknownClientHeading": "应用不存在或已禁用",
   "errorPage.oauth.unknownClientMessage": "client_id 无效：{clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri 不在白名单",

@@ -1500,6 +1500,9 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ apiEnabled: enabled });
+    // 这是止血阀:出事时它被按下的时刻,是事后复盘里最要紧的一条时间线。
+    // 隔壁 apps.toggle / qr-login.toggle 都记,只有它漏了。
+    await audit(req, u.id, enabled ? "api.enable" : "api.disable", { targetType: "site_settings" });
     return reply.redirect("/admin/api?success=" + encodeURIComponent(enabled ? "API 已启用" : "API 已关闭（现存 token 暂停工作）"));
   });
 

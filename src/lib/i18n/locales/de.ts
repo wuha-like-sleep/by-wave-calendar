@@ -1343,6 +1343,8 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "{name} autorisieren",
   "errorPage.oauth.badRequestHeading": "Ungültige OAuth-Anfrageparameter",
   "errorPage.oauth.badRequestMessage": "Ein Pflichtfeld fehlt oder ein Feld hat das falsche Format.",
+  "errorPage.oauth.apiDisabledHeading": "Zugriff für Drittanbieter ist deaktiviert",
+  "errorPage.oauth.apiDisabledMessage": "Die Administration dieser Website hat den Zugriff für Drittanbieter-Apps deaktiviert. Mit Ihrem Konto ist alles in Ordnung – wenden Sie sich an die Administration, wenn Sie diese App verbinden möchten.",
   "errorPage.oauth.unknownClientHeading": "App existiert nicht oder ist deaktiviert",
   "errorPage.oauth.unknownClientMessage": "Ungültige client_id: {clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri steht nicht auf der Positivliste",

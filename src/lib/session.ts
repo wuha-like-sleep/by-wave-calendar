@@ -269,7 +269,7 @@ export async function requireUserOrSend(
     // Try OAuth access token first (cheap looksLike check).
     const { looksLikeOAuthToken, verifyOAuthToken, touchOAuthToken } = await import("./oauth_server.js");
     if (looksLikeOAuthToken(token)) {
-      const verified = await verifyOAuthToken(token);
+      const verified = await verifyOAuthToken(token, "api");
       if (verified) {
         const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
         if (u) {

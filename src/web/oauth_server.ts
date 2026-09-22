@@ -8,7 +8,7 @@
 // For an end-to-end walkthrough see the /admin/oauth-apps "如何接入"
 // section, which the admin UI links to.
 
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -39,10 +39,32 @@ function tr(req: FastifyRequest, key: string, vars?: Record<string, string | num
   return tForRequest(req)(key, vars);
 }
 
+/** 后台「第三方 API」总闸是不是关着的。
+ *
+ *  关着的时候授权流程的**三个端点**都要停,不只是不认旧 token。否则
+ *  「关掉」的实际含义变成「旧的不认、新的照发」:用户在同意页点一下,
+ *  就能换到一个新的 30 天 token,站长看到的是「我明明关了,外面还在进来」。
+ *  后台那句文案(adminApi.master.desc)承诺的是「任何已签发的 token 调用都会被拒」,
+ *  签发这一侧也得跟上,否则那句话仍然是半真的。 */
+async function apiMasterSwitchOff(): Promise<boolean> {
+  const { getSettings } = await import("../lib/site_settings.js");
+  return !(await getSettings()).apiEnabled;
+}
+
+/** 总闸关着时给授权页的回复。不泄露客户端是否存在 —— 在这之前就拦下。 */
+function oauthDisabledView(req: FastifyRequest, reply: FastifyReply) {
+  return reply.code(503).view("error", {
+    title: tr(req, "page.oauthError"), user: null, csrfToken: csrfTokenFor(req), flash: {},
+    statusCode: 503, heading: tr(req, "errorPage.oauth.apiDisabledHeading"),
+    message: tr(req, "errorPage.oauth.apiDisabledMessage"),
+  });
+}
+
 export async function oauthServerRoutes(app: FastifyInstance) {
   // GET /oauth/authorize — consent screen. If the user isn't logged in,
   // redirect them to /login with a return-to so they bounce back here.
   app.get("/oauth/authorize", async (req, reply) => {
+    if (await apiMasterSwitchOff()) return oauthDisabledView(req, reply);
     const q = authorizeQuery.safeParse(req.query);
     if (!q.success) {
       return reply.code(400).view("error", {
@@ -114,6 +136,7 @@ export async function oauthServerRoutes(app: FastifyInstance) {
 
   // POST /oauth/authorize — user clicked Approve / Deny.
   app.post("/oauth/authorize", async (req, reply) => {
+    if (await apiMasterSwitchOff()) return oauthDisabledView(req, reply);
     if (!verifyCsrf(req, reply)) return;
     const session = await loadSession(req);
     if (!session) return reply.redirect("/login");
@@ -156,6 +179,11 @@ export async function oauthServerRoutes(app: FastifyInstance) {
   // POST /oauth/token — code → access token. Standard OAuth-style form.
   // Accepts client_id+client_secret in body OR Basic Auth header.
   app.post("/oauth/token", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (req, reply) => {
+    // 总闸关着就不发新 token。用 RFC 6749 §5.2 的 invalid_client —— 对客户端
+    // 来说「这个授权服务器现在不接待你」就是最准确的描述,而且不透露站点配置。
+    if (await apiMasterSwitchOff()) {
+      return reply.code(503).send({ error: "invalid_client", error_description: "authorization server disabled" });
+    }
     const body = z.object({
       grant_type: z.literal("authorization_code"),
       code: z.string(),
@@ -226,7 +254,8 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     if (!body.success) return reply.code(400).send({ error: "invalid_request" });
     const { looksLikeOAuthToken, verifyOAuthToken } = await import("../lib/oauth_server.js");
     if (!looksLikeOAuthToken(body.data.token)) return reply.send({ ok: true });
-    const v = await verifyOAuthToken(body.data.token);
+    // "revoke":撤销自己的授权在总闸关着时也必须能用。见 OAuthTokenUse 的注释。
+    const v = await verifyOAuthToken(body.data.token, "revoke");
     if (!v) return reply.send({ ok: true });
     await db.update(schema.oauthAccessTokens).set({ revokedAt: new Date() }).where(eq(schema.oauthAccessTokens.id, v.tokenId));
     return reply.send({ ok: true });

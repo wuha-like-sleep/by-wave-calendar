@@ -14,6 +14,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
+import { getSettings } from "./site_settings.js";
 import { userIsActive } from "./user_state.js";
 
 const TOKEN_PREFIX = "bwo_";
@@ -160,8 +161,28 @@ export function looksLikeOAuthToken(s: string): boolean {
   return /^bwo_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}$/.test(s);
 }
 
-export async function verifyOAuthToken(token: string): Promise<{ userId: string; scopes: string[]; tokenId: string } | null> {
+/** 这次校验是干什么用的 —— 决定要不要看后台的「第三方 API」总闸。
+ *
+ *  必填,不给默认值:默认值正是这个洞的形状。api_token.ts 里的 bwc_ token
+ *  一直在 verifyApiToken 开头看这个总闸(:169),而这里从来没看过 —— 于是
+ *  站长在 /admin/api 关掉开关、页面写着「现存 token 暂停工作」,bwc_ 那批
+ *  确实停了,OAuth 签出去的 bwo_ 照常读写日历。止血阀只关了一半,而站长
+ *  以为全关了。 */
+export type OAuthTokenUse =
+  /** 拿 token 去访问接口。总闸关着时一律不认。 */
+  | "api"
+  /** 用户拿自己的 token 来注销它。**总闸关着也必须能注销** ——
+   *  否则站长一关总闸,用户就再也撤不掉已经授出去的授权,
+   *  等于把止血阀和善后手段绑死在同一个开关上。 */
+  | "revoke";
+
+export async function verifyOAuthToken(token: string, use: OAuthTokenUse): Promise<{ userId: string; scopes: string[]; tokenId: string } | null> {
   if (!looksLikeOAuthToken(token)) return null;
+  // 总闸。位置对齐 api_token.ts:169 —— 在查库之前,关着就连存在性都不透露。
+  if (use === "api") {
+    const settings = await getSettings();
+    if (!settings.apiEnabled) return null;
+  }
   const m = token.match(/^bwo_([A-Za-z0-9]{8})_/);
   if (!m) return null;
   const prefix = m[1]!;

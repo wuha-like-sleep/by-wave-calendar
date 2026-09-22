@@ -1343,6 +1343,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "{name} 승인",
   "errorPage.oauth.badRequestHeading": "OAuth 요청 매개변수가 잘못되었습니다",
   "errorPage.oauth.badRequestMessage": "필수 항목이 없거나 형식이 올바르지 않습니다.",
+  "errorPage.oauth.apiDisabledHeading": "서드파티 연동이 꺼져 있습니다",
+  "errorPage.oauth.apiDisabledMessage": "이 사이트의 관리자가 서드파티 앱 연동을 껐습니다. 계정에는 문제가 없습니다. 연동이 필요하면 사이트 관리자에게 문의하세요.",
   "errorPage.oauth.unknownClientHeading": "앱이 없거나 비활성화되었습니다",
   "errorPage.oauth.unknownClientMessage": "client_id가 유효하지 않습니다: {clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri가 허용 목록에 없습니다",

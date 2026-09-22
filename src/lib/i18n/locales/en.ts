@@ -1350,6 +1350,8 @@ export const en = {
   "page.oauthAuthorize": "Authorize {name}",
   "errorPage.oauth.badRequestHeading": "Invalid OAuth request parameters",
   "errorPage.oauth.badRequestMessage": "A required field is missing, or a field has the wrong format.",
+  "errorPage.oauth.apiDisabledHeading": "Third-party access is turned off",
+  "errorPage.oauth.apiDisabledMessage": "The owner of this site has turned off third-party app access. Nothing is wrong with your account — contact the site owner if you need this app connected.",
   "errorPage.oauth.unknownClientHeading": "App not found or disabled",
   "errorPage.oauth.unknownClientMessage": "Invalid client_id: {clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri is not allow-listed",

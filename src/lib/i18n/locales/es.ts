@@ -1343,6 +1343,8 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "Autorizar {name}",
   "errorPage.oauth.badRequestHeading": "Parámetros de la solicitud OAuth no válidos",
   "errorPage.oauth.badRequestMessage": "Falta un campo obligatorio o algún campo tiene un formato incorrecto.",
+  "errorPage.oauth.apiDisabledHeading": "El acceso de terceros está desactivado",
+  "errorPage.oauth.apiDisabledMessage": "El administrador de este sitio ha desactivado el acceso de aplicaciones de terceros. Tu cuenta no tiene ningún problema: contacta con el administrador si necesitas conectar esta aplicación.",
   "errorPage.oauth.unknownClientHeading": "La aplicación no existe o está desactivada",
   "errorPage.oauth.unknownClientMessage": "client_id no válido: {clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri no está en la lista permitida",

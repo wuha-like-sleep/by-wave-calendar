@@ -1329,6 +1329,8 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "授權 {name}",
   "errorPage.oauth.badRequestHeading": "OAuth 請求參數無效",
   "errorPage.oauth.badRequestMessage": "缺少必填欄位，或欄位格式不對。",
+  "errorPage.oauth.apiDisabledHeading": "本站已關閉第三方接入",
+  "errorPage.oauth.apiDisabledMessage": "站台管理員關閉了第三方應用程式接入。你的帳號沒有問題 —— 需要連接這個應用程式的話，請聯絡站台管理員。",
   "errorPage.oauth.unknownClientHeading": "應用程式不存在或已停用",
   "errorPage.oauth.unknownClientMessage": "client_id 無效：{clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri 不在白名單",

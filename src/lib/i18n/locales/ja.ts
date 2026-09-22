@@ -1343,6 +1343,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "page.oauthAuthorize": "{name} を承認",
   "errorPage.oauth.badRequestHeading": "OAuth リクエストのパラメーターが無効です",
   "errorPage.oauth.badRequestMessage": "必須項目が不足しているか、形式が正しくありません。",
+  "errorPage.oauth.apiDisabledHeading": "サードパーティ連携は停止中です",
+  "errorPage.oauth.apiDisabledMessage": "このサイトの管理者がサードパーティアプリの連携を停止しています。アカウントに問題はありません。連携が必要な場合はサイト管理者にご連絡ください。",
   "errorPage.oauth.unknownClientHeading": "アプリが存在しないか無効です",
   "errorPage.oauth.unknownClientMessage": "client_id が無効です：{clientId}",
   "errorPage.oauth.redirectUriHeading": "redirect_uri が許可リストにありません",
