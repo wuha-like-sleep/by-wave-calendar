@@ -86,7 +86,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       // Same sanitization gate as src/web/index.ts:sanitizeReturnTo
       if (v.length === 0 || v.length > 200) return "/app";
       if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return "/app";
-      if (!/^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(v)) return "/app";
+      if (!/^\/(app|admin|web-pair|desktop-pair|oauth)(\/|$|\?|#)/.test(v)) return "/app";
       return v.split("#")[0] ?? "/app";
     };
 

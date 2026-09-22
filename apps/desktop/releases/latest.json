@@ -1,30 +1,30 @@
 {
-  "versionCode": 23,
-  "versionName": "1.1.0",
-  "releasedAt": "2026-09-21T11:52:00Z",
-  "notes": "桌面端 v1.1 —— 提醒真的会响，出错时说人话\n\n【提醒】\n• 以前提醒只对「你此刻正在看的那几天」生效 —— 切到日视图、或者翻到下个月，\n  今天的会就再也不会响，而且没有任何迹象。现在跟你在看哪一天无关。\n• 关掉提醒开关之后，程序真的不再联网查提醒（以前关着也照样每两分钟问一次服务器）。\n\n【看得见的日历】\n• 周视图以前完全不显示全天事件 —— 月视图和日视图都有，只有周视图没有，\n  看起来像事件丢了。\n• 刚打开的头两秒会谎报「今天没有事件」。\n• 窗口拖窄一点，顶栏右边的搜索 / 刷新 / 设置会被静默切掉，设置入口就此消失。\n• 超宽屏上，填服务器地址的那个输入框不再横跨整个屏幕。\n• 误点账号旁边的「移除」会当场删掉凭据、加回来得重新扫码，现在会先问一句。\n\n【出错的时候】\n• 服务器拒绝你时，现在会把它给的原话显示出来 ——\n  比如「本站只接受受邀注册，请先在网页上……」。以前不管什么原因都只有一句「出错了」。\n• 密码改过、或者这台设备在网页端被移除之后，程序以前会变成僵尸：\n  日历照常显示上次同步的内容，但新建、编辑、删除全部失败，也不告诉你为什么。\n  现在会直接回到登录页，并说明是哪一种原因。\n• 正式版不再往你的电脑上写日志文件。",
+  "versionCode": 24,
+  "versionName": "1.1.1",
+  "releasedAt": "2026-09-22T06:40:00Z",
+  "notes": "桌面端 v1.1.1 —— Windows 的自动更新，现在是真的了\n\n【只有一件事，但请 Windows 用户务必装一次】\n\n如果你用的是 Windows 版：从你第一次安装那一版起，**你收到的所有「更新」\n其实一次都没装上**。程序会下载、会显示进度、会重启、会告诉你「更新成功」，\n然后把旧版本重新打开。下次启动又弹同一个更新，如此循环。\n\n原因是安装包内部的版本号一直写死成同一个值，Windows 据此认为「这个程序\n已经装过了」，于是既不升级也不并排安装，什么都没做就返回了成功。\n\n这一版修好了这个判断。装上 1.1.1 之后，以后的更新会真的生效。\n\n【Mac 和 Linux 用户】\n你们不受这个问题影响，自动更新一直是正常的。这一版对你们没有功能变化，\n可以直接跳过，也可以照常更新。\n\n（顺带：Linux 用 dpkg -l 看到的版本号以前永远是 1.0.0，现在会显示真实版本。）",
   "mandatory": false,
   "assets": {
     "mac": {
-      "filename": "ByWaveCalendar-1.1.0-arm64.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/ByWaveCalendar-1.1.0-arm64.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/ByWaveCalendar-1.1.0-arm64.dmg",
-      "sha256": "8f3386190adbd5e330d28675efaf20f2956df3c21e3734391df4502987b08624",
-      "sizeBytes": 114682985
+      "filename": "ByWaveCalendar-1.1.1-arm64.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-arm64.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-arm64.dmg",
+      "sha256": "f9bdf23d59aecd42c6bf0af868936fa1c7e1970660fa4012bbec9c61d04e5a39",
+      "sizeBytes": 114677672
     },
     "win": {
-      "filename": "ByWaveCalendar-1.1.0-x64.msi",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/ByWaveCalendar-1.1.0-x64.msi",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/ByWaveCalendar-1.1.0-x64.msi",
-      "sha256": "ba23f84c4ade71dd1f677bebf83aaa57755068058b21549d565e1b4af0aed832",
-      "sizeBytes": 104333885
+      "filename": "ByWaveCalendar-1.1.1-x64.msi",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-x64.msi",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/ByWaveCalendar-1.1.1-x64.msi",
+      "sha256": "5ce958698083db48a4253151a6592a1a4b38a9acacba9a2511c98fc8bddfc145",
+      "sizeBytes": 104337980
     },
     "linux": {
-      "filename": "bywave-calendar_1.1.0_amd64.deb",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/bywave-calendar_1.1.0_amd64.deb",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.0/bywave-calendar_1.1.0_amd64.deb",
-      "sha256": "319b3ad4439af0648e80917df7b3aff5fd2e5aaabdc9c89273bbe8689612a448",
-      "sizeBytes": 96127400
+      "filename": "bywave-calendar_1.1.1_amd64.deb",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/bywave-calendar_1.1.1_amd64.deb",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.1/bywave-calendar_1.1.1_amd64.deb",
+      "sha256": "ffec7a4f2ae0af7c9da45fb12ea36e2df687f97fcc741f3f110b702800a4d4ae",
+      "sizeBytes": 96127526
     }
   }
 }

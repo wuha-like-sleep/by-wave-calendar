@@ -13,6 +13,7 @@ import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { loadFullSession } from "../lib/session.js";
+import { sanitizeReturnTo } from "./index.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { tForRequest } from "../lib/i18n.js";
 import { verifyPasswordTimingSafe } from "../lib/password.js";
@@ -110,11 +111,18 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     // Need to be logged in to consent.
     const session = await loadFullSession(req);
     if (!session) {
-      // Stash the authorize URL in a cookie so /login can bounce back.
-      const back = req.url;
-      reply.setCookie("bwc_post_login_url", back, {
-        path: "/", maxAge: 600, httpOnly: true, sameSite: "lax",
-      });
+      // 回到授权页用的是全站那一套 bwc_return_to —— 登录、邮箱验证码、
+      // 两步验证、passkey、SSO 五条路的末尾都会读它。
+      // 这里原来写的是一个叫 bwc_post_login_url 的 cookie,而**全仓库没有
+      // 任何地方读它**:用户登完掉在 /app,得让第三方重新发起一次授权。
+      // 必须 signed —— 读取侧用 req.unsignCookie,没签名的一律当作无效。
+      const back = sanitizeReturnTo(req.raw.url ?? "");
+      if (back) {
+        reply.setCookie("bwc_return_to", back, {
+          path: "/", maxAge: 600, httpOnly: true, sameSite: "lax",
+          secure: process.env.NODE_ENV === "production", signed: true,
+        });
+      }
       return reply.redirect("/login?notice=" + encodeURIComponent(tr(req, "flash.oauth.signInToAuthorize", { name: client.name })));
     }
 

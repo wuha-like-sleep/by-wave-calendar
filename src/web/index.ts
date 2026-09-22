@@ -110,9 +110,16 @@ const RETURN_TO_TTL_S = 15 * 60;
  *   - Overly long values                (DOS the cookie store)
  *
  * Only paths under our known authenticated surface area are allowed:
- * /app, /admin, /web-pair, /desktop-pair. Everything else (including
- * unsanitized inputs and external URLs) returns null and the caller
- * falls back to /app.
+ * /app, /admin, /web-pair, /desktop-pair, /oauth. Everything else
+ * (including unsanitized inputs and external URLs) returns null and the
+ * caller falls back to /app.
+ *
+ * /oauth 是后加的:第三方把用户带到 /oauth/authorize,没登录(或者只登了
+ * 一半、还没过两步验证)时会被弹去 /login —— 而登完如果回不到授权页,
+ * 用户就掉在 /app,得让第三方重新发起一次。原来那里写的是一个叫
+ * bwc_post_login_url 的 cookie,**全仓库没有任何地方读它**,所以那条路
+ * 一直是断的。redirect_uri 本身不走这里(它是 query 参数,由客户端注册的
+ * 白名单严格全等校验),这里放行的只是我们自己的 /oauth/* 路径。
  */
 export function sanitizeReturnTo(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -120,7 +127,7 @@ export function sanitizeReturnTo(raw: unknown): string | null {
   if (!raw.startsWith("/")) return null;
   if (raw.startsWith("//") || raw.startsWith("/\\")) return null;
   // Match the path prefix only; query string + fragment are allowed after.
-  if (!/^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(raw)) return null;
+  if (!/^\/(app|admin|web-pair|desktop-pair|oauth)(\/|$|\?|#)/.test(raw)) return null;
   // Strip fragment — we re-add on the client side anyway. Server-side
   // redirects don't carry fragments.
   return raw.split("#")[0] ?? null;
