@@ -91,7 +91,7 @@
         <span class="text-xs text-slate-500">次被挡下</span>
       </div>
       <div class="text-xs text-slate-500 mt-0.5">
-        <%= caldavThrottle.lockedKeys %> 次触发锁定 · 跟踪中 <%= caldavThrottle.trackedAccounts %> 账号 / <%= caldavThrottle.trackedIps %> IP
+        <%= caldavThrottle.lockedAccounts %> 个账号被猜到上限 · <%= caldavThrottle.cpuRejections %> 次算力拒绝 · 跟踪中 <%= caldavThrottle.trackedAccounts %> 账号 / <%= caldavThrottle.trackedIps %> IP
       </div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">

@@ -6,9 +6,11 @@ import { verifyPassword } from "./password.js";
 import { looksLikeAppPassword, verifyAppPassword } from "./app_password.js";
 import { userIsActive } from "./user_state.js";
 import {
-  calDavAuthRetryAfter, recordCalDavAuthFailure, clearCalDavAuthFailures,
+  acquireBcryptSlot, releaseBcryptSlot,
+  guessRetryAfter, recordGuessFailure, clearGuessFailures,
   sendCalDavThrottled, logCalDavAuthFailure,
 } from "./caldav_throttle.js";
+import { isLocked } from "./login_lockout.js";
 
 const REALM = "ByWave Calendar CalDAV";
 
@@ -127,14 +129,14 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   }
   cacheMisses++;
 
-  // ── 节流闸门 ──
-  // 位置是关键:**在 bcrypt 之前**。挡在后面的话 DoS 那一半完全没挡住 ——
-  // 攻击者要的就是让你在唯一的主线程上跑 cost 12 的 bcrypt,他不在乎你最后回什么。
-  // 也在缓存命中之后:缓存命中说明凭据是对的,不该因为同 IP 有人在撞而被连坐。
-  const retryAfter = calDavAuthRetryAfter(req.ip, email);
-  if (retryAfter > 0) {
-    logCalDavAuthFailure(req, email, "throttled");
-    return sendCalDavThrottled(reply, retryAfter);
+  // ── 闸二：这个邮箱被猜太多次了吗 ──
+  // 键里不含 IP:换 IP 换不掉(第一版的键是 `${ip}\0${email}`,一个 IPv6 /64
+  // 就是 2^64 个键,等于没有上限)。放在缓存命中之后 —— 缓存命中说明凭据是
+  // 对的,不该被别人对同一个邮箱的乱猜连坐。
+  const guessWait = guessRetryAfter(email);
+  if (guessWait > 0) {
+    logCalDavAuthFailure(req, email, "guess_throttled");
+    return sendCalDavThrottled(reply, guessWait);
   }
 
   // In-flight dedup: while one request is paying for bcrypt, parallel
@@ -143,9 +145,28 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   // connections during a sync, so this cuts cold-start auth cost from
   // 10×bcrypt to 1×bcrypt.
   let verifyPromise: Promise<VerifyResult> | undefined = inFlight.get(ckey);
+  // 名额跟着「真的要跑一次 bcrypt」走,不是跟着请求走。
+  // 一次正常同步是 10 个并发请求 × **同一条凭据**,去重之后只跑 1 次 bcrypt ——
+  // 按请求占名额的话,并发上限会把一次正常同步挡掉一大半(实测 10 条挡 6 条)。
+  // 而攻击者用的是互不相同的密码,每条都是新 ckey、新 bcrypt,照样一人一个名额。
+  let heldSlot = false;
   if (verifyPromise) {
     coalesced++;
   } else {
+    // ── 闸一：算力准入 ──
+    // **名额在这里占、在下面的 finally 里还。** 第一版把「记一次失败」放在
+    // await 之后,于是并发一波请求全部在计数还是 0 的时候通过 —— 闸门位置对
+    // (在 bcrypt 之前),判据却在它要守的那个窗口里恒为 0。典型的
+    // 「绿着而洞开着」:门开着,只是没人走到写计数那一行。占坑必须在进门那一刻。
+    //
+    // 它不看密码内容,所以「重复同一个错误密码」也照样算 —— 那正是第一版
+    // 漏掉的变体:不同凭据集合永远是 1,而每一发都跑一次 bcrypt。
+    const cpuWait = acquireBcryptSlot(req.ip);
+    if (cpuWait > 0) {
+      logCalDavAuthFailure(req, email, "cpu_throttled");
+      return sendCalDavThrottled(reply, cpuWait);
+    }
+    heldSlot = true;
     // .finally 必须接在同一条链上再赋值，**不能单独调用**。
     // `fresh.finally(...)` 会派生出一条新 promise，而那条没有任何人 await：
     // 数据库抖一下（ECONNREFUSED / 连接被重置）verifyAndCache 一 reject，
@@ -160,18 +181,23 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
     inFlight.set(ckey, fresh);
     verifyPromise = fresh;
   }
-  const verified = await verifyPromise;
+  let verified: VerifyResult;
+  try {
+    verified = await verifyPromise;
+  } finally {
+    // 漏还一次,这个 IP 的并发额度就永久少一个 —— 占了就必须还。
+    if (heldSlot) releaseBcryptSlot(req.ip);
+  }
   if (!verified.ok) {
     // 只有走到这里才算「给了凭据但不对」。上面那个「完全没带 Authorization 头」
     // 的 401 绝不能算 —— Apple 的发现流程第一个请求按设计就是不带凭据的,
     // 算上它等于每次正常同步都自罚一次。
-    recordCalDavAuthFailure(req.ip, email, password);
+    recordGuessFailure(email, password);
     logCalDavAuthFailure(req, email, verified.errParam ?? "bad_credentials");
     return send401(reply, verified.message, verified.errParam);
   }
-  // 对了就把这个 (IP, 邮箱) 的失败记录清掉 —— 人只是打错了几次,改对了
-  // 不该继续背着。IP 那一层不清:横扫是另一回事。
-  clearCalDavAuthFailures(req.ip, email);
+  // 对了就把这个邮箱的失败记录清掉 —— 人只是打错了几次,改对了不该继续背着。
+  clearGuessFailures(email);
 
   // Re-fetch the (possibly cached-only-by-id) user row so we apply the
   // disabled-account check on every request even when the verify path
@@ -193,6 +219,13 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
 async function verifyAndCache(email: string, password: string, ckey: string): Promise<VerifyResult> {
   const [user] = await db.select().from(schema.users).where(eq(schema.users.email, email)).limit(1);
   if (!user) return { ok: false, message: "Unauthorized" };
+
+  // 全站的账号锁定,CalDAV 以前完全不看 —— 于是一个已经被网页端撞库锁掉的
+  // 账号,从 CalDAV 依然可以接着猜。这里**只读不写**:CalDAV 不认证也能打,
+  // 让它能把别人的账号锁死等于开了一条针对任意用户的拒绝服务。
+  // 读而不写,既堵住「网页锁了还能从这儿继续猜」,又不给攻击者一根锁人的杠杆。
+  // 位置在 bcrypt 之前:锁着的账号连密码都不用算。
+  if (isLocked(user)) return { ok: false, message: "Account temporarily locked" };
 
   let verified = false;
   let usedAppPassword = false;
