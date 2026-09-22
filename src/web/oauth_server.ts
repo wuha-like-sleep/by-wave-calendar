@@ -12,7 +12,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { loadSession } from "../lib/session.js";
+import { loadFullSession } from "../lib/session.js";
 import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { tForRequest } from "../lib/i18n.js";
 import {
@@ -107,7 +107,7 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     }
 
     // Need to be logged in to consent.
-    const session = await loadSession(req);
+    const session = await loadFullSession(req);
     if (!session) {
       // Stash the authorize URL in a cookie so /login can bounce back.
       const back = req.url;
@@ -138,7 +138,7 @@ export async function oauthServerRoutes(app: FastifyInstance) {
   app.post("/oauth/authorize", async (req, reply) => {
     if (await apiMasterSwitchOff()) return oauthDisabledView(req, reply);
     if (!verifyCsrf(req, reply)) return;
-    const session = await loadSession(req);
+    const session = await loadFullSession(req);
     if (!session) return reply.redirect("/login");
 
     const body = z.object({

@@ -548,7 +548,7 @@ export async function webRoutes(app: FastifyInstance) {
       return reply.redirect("/login/challenge");
     }
 
-    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled, rememberMe });
+    await createSession(reply, user.id, { kind: "password" }, { rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
@@ -600,7 +600,7 @@ export async function webRoutes(app: FastifyInstance) {
     reply.clearCookie("bwc_login_remember", { path: "/" });
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, result.userId)).limit(1);
     if (!user) return redirectWith(reply, "/login", { error: tr(req, "flash.login.userNotFound") });
-    await createSession(reply, user.id, { mfaSatisfied: !user.mfaEnabled, rememberMe });
+    await createSession(reply, user.id, { kind: "password" }, { rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
@@ -938,7 +938,9 @@ export async function webRoutes(app: FastifyInstance) {
     reply.clearCookie(PENDING_EMAIL_COOKIE, { path: "/" });
     // Don't overwrite an existing session if the user was already logged in.
     const existingSession = await loadSession(req);
-    if (!existingSession) await createSession(reply, user.id);
+    // 验邮箱这条路证明的是「邮箱是我的」,不是「我过了二次验证」——
+    // 开了 TOTP 的账号在这里拿到的必须是半登录会话。
+    if (!existingSession) await createSession(reply, user.id, { kind: "password" });
     if (!existing) {
       void sendMail(welcomeMail(user.email, user.displayName)).catch((err) => req.log.warn({ err }, "welcome_mail_failed"));
     }
@@ -2142,7 +2144,10 @@ export async function webRoutes(app: FastifyInstance) {
       });
     }
     const { createSession } = await import("../lib/session.js");
-    await createSession(reply, userId, { mfaSatisfied: true });
+    await createSession(reply, userId, {
+      kind: "delegated",
+      why: "原生 App 侧已经完成登录(含二次验证),这里只是把那次登录换成浏览器会话",
+    });
     // Validate next — must be a relative /app/ path. The Zod regex on
     // the API side already enforces this, but defense-in-depth at the
     // consumer end too in case future callers forget.

@@ -116,11 +116,57 @@ export function serviceClientForensicLine(
   };
 }
 
+/**
+ * 这个会话**凭什么**算已经过了二次验证。
+ *
+ * 以前这里是 `opts.mfaSatisfied?: boolean`,默认 `?? true` —— 也就是
+ * 「不说就算过了」。于是 POST /api/auth/login 只要不传(它确实没传),
+ * 开了 TOTP 的账号拿账号密码就能换到一个**完整**会话:网页、后台、API
+ * 全放行,连 forceAdminMfa 也拦不住 —— 它信的是会话行上这个 flag。
+ * 而读取侧(loadSession :221)只读这个 flag、不当场重算,签发时写错了
+ * 永远救不回来。签发点的默认值是开着的,这是这个洞的全部。
+ *
+ * 现在换成必填的判别联合,且 mfaSatisfied 由 createSession **自己回读
+ * users 行算出来**,调用方没有机会声称自己过了。新入口想拿到一个
+ * 「已验证」的会话,只能显式说出自己凭的是哪个因子 —— 而那一行会被人看见。
+ *
+ * 形状对齐 src/lib/account_provisioning.ts(全仓库只有那一个模块能往
+ * users 表插行)。
+ */
+export type SessionFactor =
+  /** 只验了密码。开了二次验证的账号拿到的是**半登录**会话,
+   *  必须再过 /login/mfa 才会被 loadSession 放行。 */
+  | { kind: "password" }
+  /** 当场过了 TOTP 或备用码。 */
+  | { kind: "totp" }
+  /** passkey —— 本身就是「你有的东西 + 你验过的」,不再要 TOTP。 */
+  | { kind: "passkey" }
+  /** 外部身份源登录。认证是对方做的,本站不再要 TOTP。 */
+  | { kind: "sso"; slug: string }
+  /** 上游流程已经验过,这里只是把结果换成浏览器会话。
+   *  why 必填且是给人看的:把「上游」是谁写清楚。这类调用点最容易被
+   *  后来的人照抄到一个上游其实没验过的地方,而那正是这个洞的复发形状。 */
+  | { kind: "delegated"; why: string };
+
 export async function createSession(
   reply: FastifyReply,
   userId: string,
-  opts: { mfaSatisfied?: boolean; rememberMe?: boolean } = {},
+  factor: SessionFactor,
+  opts: { rememberMe?: boolean } = {},
 ): Promise<string> {
+  // 「过没过二次验证」在这里算,不接受调用方的说法。
+  let mfaSatisfied: boolean;
+  if (factor.kind === "password") {
+    const [u] = await db
+      .select({ mfaEnabled: schema.users.mfaEnabled })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    // 查不到用户就当作「开着二次验证」—— 出错时往严的那边倒。
+    mfaSatisfied = u ? !u.mfaEnabled : false;
+  } else {
+    mfaSatisfied = true;
+  }
   const id = newSessionId();
   // Default rememberMe=true preserves the pre-checkbox behavior for all
   // call sites we haven't audited (SSO, register, native-bridge, etc.).
@@ -132,7 +178,7 @@ export async function createSession(
     id,
     userId,
     expiresAt,
-    mfaSatisfied: opts.mfaSatisfied ?? true,
+    mfaSatisfied,
   });
   // Cookie shape:
   //   rememberMe=true  → persistent cookie with expires=<30d>
@@ -213,6 +259,30 @@ export async function loadSession(req: FastifyRequest): Promise<LoadedSession | 
     return null;
   }
   return { user: row.user, sessionId: unsigned.value, mfaSatisfied: row.mfaSatisfied };
+}
+
+/**
+ * 完整会话。**半登录一律当作没登录。**
+ *
+ * loadSession 故意不查二次验证 —— /login/mfa 那一页自己就得先读到那个
+ * 半登录会话才能让人补验证码。代价是:除了 MFA 流程本身之外,任何地方
+ * 直接用 loadSession 都等于「密码对了就放行」。
+ *
+ * 实际踩到的三条(都是持久化后门,受害者改密码也清不掉):
+ *   · 半登录状态下能给账号注册一个新 passkey → 之后永远免密登录;
+ *   · 能删掉受害者已有的 passkey;
+ *   · 能替受害者点掉一次 OAuth 授权,把 token 交出去。
+ * 也就是说,就算攻击者停在 /login/mfa 那一页,他也已经能做成事了。
+ *
+ * 需要「这个人此刻是完整登录状态」的地方一律用这个。
+ * 还要用裸 loadSession 的只有 MFA 流程本身 —— test/no_half_session_escalation.test.ts
+ * 守着这条,新加的用法必须显式进白名单。
+ */
+export async function loadFullSession(req: FastifyRequest): Promise<LoadedSession | null> {
+  const s = await loadSession(req);
+  if (!s) return null;
+  if (s.user.mfaEnabled && !s.mfaSatisfied) return null;
+  return s;
 }
 
 export async function loadUserFromRequest(req: FastifyRequest): Promise<schema.User | null> {

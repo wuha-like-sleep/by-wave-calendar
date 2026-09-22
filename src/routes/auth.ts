@@ -99,7 +99,7 @@ export async function authRoutes(app: FastifyInstance) {
     // 发会话这件事从此只归 /auth/login:注册完自己再登一次,行为对真实用户
     // 只差一次请求,对抢注的人少了一个「立刻就能用」的号。
     // (响应里补一条 emailVerified,调用方不用靠「有没有 set-cookie」去猜。)
-    if (user.emailVerified) await createSession(reply, user.id);
+    if (user.emailVerified) await createSession(reply, user.id, { kind: "password" });
     return ok(req, reply, {
       id: user.id,
       email: user.email,
@@ -142,7 +142,28 @@ export async function authRoutes(app: FastifyInstance) {
     // disabled-vs-doesn't-exist distinction.
     if (!userIsActive(user)) return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
     await resetFailedLogin(user.id);
-    await createSession(reply, user.id);
+    // **开了二次验证的账号,这条路不发会话。**
+    //
+    // 以前这里直接 createSession(reply, user.id) —— 而当时 createSession 的
+    // mfaSatisfied 默认是 true。结果是:只要有账号密码(撞库、泄露库、钓鱼),
+    // 打这个接口就能拿到一个**已过二次验证**的完整会话,网页、后台、API 全放行。
+    // 网页表单那条路一直是对的(见 src/web/index.ts:551 → /login/mfa),
+    // 同一件事两条路口径不同,而没防住的那条正好是不需要浏览器的那条。
+    //
+    // 这条路本身没有补验证码的下一步(/login/mfa 是网页表单,要 CSRF;
+    // /auth/login-mfa-verify 建的是设备不是会话),所以不发半登录会话、
+    // 直接如实拒绝,并指向两条真的能走完的路。
+    //
+    // 403 不是 401:401 在原生端的含义是「会话没了,去重新登录」,
+    // 而这里根本还没有会话。三端 App 用的都是 /auth/login-password,
+    // 没有一个调这条,所以这次改动不影响任何已发布的版本。
+    if (user.mfaEnabled) {
+      return err(
+        req, reply, 403, "mfa_required",
+        "这个账号开启了两步验证。请在网页上登录，或改用 /auth/login-password（App 用的那条，支持在应用内输入验证码）。",
+      );
+    }
+    await createSession(reply, user.id, { kind: "password" });
     return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });
   });
 

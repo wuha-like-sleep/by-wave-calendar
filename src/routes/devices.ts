@@ -1316,7 +1316,10 @@ export async function deviceRoutes(app: FastifyInstance) {
       webPairs.delete(code);
       return reply.code(403).send({ status: "account_disabled" });
     }
-    await createSession(reply, user.id, { mfaSatisfied: true });
+    await createSession(reply, user.id, {
+      kind: "delegated",
+      why: "批准这次配对的是手机上那个已经过了二次验证的会话",
+    });
     const { setThemeCookies } = await import("../lib/user_theme.js");
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     // Fire-and-forget the security-conscious notifications. Don't block

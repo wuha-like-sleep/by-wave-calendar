@@ -12,7 +12,7 @@ import {
   verifyRegistration,
 } from "../lib/webauthn.js";
 import { verifyCsrf } from "../lib/csrf.js";
-import { createSession, loadSession } from "../lib/session.js";
+import { createSession, loadFullSession } from "../lib/session.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
@@ -23,7 +23,7 @@ import { userIsActive } from "../lib/user_state.js";
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
   app.post("/webauthn/register/options", async (req, reply) => {
-    const s = await loadSession(req);
+    const s = await loadFullSession(req);
     if (!s) return reply.code(401).send({ error: "unauthorized" });
     if (!verifyCsrf(req, reply)) return;
 
@@ -42,7 +42,7 @@ export async function webauthnRoutes(app: FastifyInstance) {
   });
 
   app.post("/webauthn/register/verify", async (req, reply) => {
-    const s = await loadSession(req);
+    const s = await loadFullSession(req);
     if (!s) return reply.code(401).send({ error: "unauthorized" });
     if (!verifyCsrf(req, reply)) return;
 
@@ -88,7 +88,7 @@ export async function webauthnRoutes(app: FastifyInstance) {
   });
 
   app.post<{ Params: { id: string } }>("/webauthn/credentials/:id/delete", async (req, reply) => {
-    const s = await loadSession(req);
+    const s = await loadFullSession(req);
     if (!s) return reply.code(401).send({ error: "unauthorized" });
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
@@ -193,7 +193,7 @@ export async function webauthnRoutes(app: FastifyInstance) {
 
     // Passkey login = both factors satisfied (something-you-have + verification).
     // rememberMe honors the「记住我」checkbox on the /login page.
-    await createSession(reply, credRow.userId, { mfaSatisfied: true, rememberMe });
+    await createSession(reply, credRow.userId, { kind: "passkey" }, { rememberMe });
     if (usr) {
       void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);

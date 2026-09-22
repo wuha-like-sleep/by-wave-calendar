@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
-import { createSession, loadSession } from "../lib/session.js";
+import { createSession, loadFullSession } from "../lib/session.js";
 import { getProviderBySlug, listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { findUserIdByIdentity, linkIdentity } from "../lib/identities.js";
 import {
@@ -281,7 +281,7 @@ export async function ssoRoutes(app: FastifyInstance) {
     // Link mode: a logged-in user is BINDING this SSO identity to their current
     // account (rather than logging in/switching). Only honored when a session
     // actually exists; the callback re-checks the session as the authority.
-    const linkMode = req.query.link === "1" && Boolean(await loadSession(req));
+    const linkMode = req.query.link === "1" && Boolean(await loadFullSession(req));
     try {
       const state = randomState();
       const nonce = randomState();
@@ -362,7 +362,7 @@ export async function ssoRoutes(app: FastifyInstance) {
         // as the authority (the state cookie only flags intent). We do NOT
         // switch/create accounts in this branch.
         if (parsed.link) {
-          const session = await loadSession(req);
+          const session = await loadFullSession(req);
           if (!session) {
             return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
           }
@@ -409,7 +409,7 @@ export async function ssoRoutes(app: FastifyInstance) {
           }
         }
 
-        await createSession(reply, user.id, { mfaSatisfied: true });
+        await createSession(reply, user.id, { kind: "sso", slug: parsed.slug });
         setThemeCookies(reply, user.themePalette, user.themeDensity);
         void notifyLoginSuccess(req, user, "sso").catch((err) => req.log.warn({ err }, "login_alert_failed"));
         void recordLoginEvent(req, user.id, "sso").catch((err) => req.log.warn({ err }, "login_event_failed"));
