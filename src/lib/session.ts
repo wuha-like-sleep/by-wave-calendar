@@ -296,6 +296,40 @@ declare module "fastify" {
   interface FastifyRequest {
     user?: schema.User;
   }
+  interface FastifyContextConfig {
+    /**
+     * 这条路由对「第三方拿 OAuth token 来调」的态度。**必须显式声明。**
+     *
+     * 不声明 = 拒绝。新加的路由天生对第三方是关着的 —— 这个方向是故意的:
+     * 忘了声明的后果是「第三方用不了」(有人会来报),而不是「第三方全都能用」
+     * (没人会发现)。
+     *
+     * 取值是 OAUTH_SCOPES 里的键,或者 "deny"。"deny" 用在那些**任何**第三方
+     * 授权都不该碰的东西上:改密码、删账号、两步验证、设备增删、以及两条
+     * 能把 token 换成更高权限的路(/auth/web-session 换浏览器会话、
+     * /devices/*-pair-approve 换长期设备凭据)。
+     *
+     * 只影响 authVia === "oauth" 的流量。会话 cookie、设备 token、
+     * bwc_ API token 走各自的判定,不看这个字段。
+     */
+    oauthScope?: string;
+  }
+}
+
+/** 第三方拿 OAuth token 调这条路由,允许吗。
+ *
+ *  判断必须留在「刚认出 scope 的那一行」旁边,**不能写成 preHandler** ——
+ *  隔壁 api_token 那条判断就是因为写成钩子而失效过:authVia / oauthScopes
+ *  是 handler 阶段才写进 request 的,钩子读到的永远是 undefined,
+ *  于是判断永远不成立,只读 token 能建能删,后台还显示着「只读」。
+ *  实测过 GET 200 / POST 201。放在这里,阶段顺序就无从出错。 */
+function oauthScopeAllows(req: FastifyRequest, granted: string[]): boolean {
+  const declared = (req.routeOptions?.config as { oauthScope?: string } | undefined)?.oauthScope;
+  // 没声明 → 拒绝。见 oauthScope 的注释。
+  if (!declared || declared === "deny") return false;
+  // 数组元素全等,不是子串匹配 —— 否则 "read:events" 会被
+  // "read:events.evil" 这种伪造值命中。
+  return granted.includes(declared);
 }
 
 /**
@@ -343,6 +377,19 @@ export async function requireUserOrSend(
       if (verified) {
         const [u] = await db.select().from(s.users).where(eq(s.users.id, verified.userId)).limit(1);
         if (u) {
+          // **scope 在这里被执行。** 在此之前它只被「记录」和「展示」:
+          // 授权页把 scope 列给用户看、userinfo 把 scope 回显给客户端,
+          // 而全仓库没有一个地方拿它做过判断。后果是勾「只读日历」的第三方
+          // 能建能改能删事件、能删整本日历,还能走两条路把 token 换成
+          // 完整账号控制权 —— 而用户撤销授权也收不回换出去的那些。
+          if (!oauthScopeAllows(req, verified.scopes)) {
+            reply.code(403).send({
+              error: "insufficient_scope",
+              // 照实说缺哪个,方便第三方开发者自查;不泄露用户数据。
+              message: "这个授权的权限范围不包含此操作",
+            });
+            return null;
+          }
           req.user = u;
           void touchOAuthToken(verified.tokenId).catch(() => undefined);
           (req as unknown as { authVia: string; oauthScopes: string[] }).authVia = "oauth";

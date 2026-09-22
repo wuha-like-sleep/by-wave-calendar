@@ -803,7 +803,10 @@ export async function deviceRoutes(app: FastifyInstance) {
     return reply.send({ ok: true, backupCodes: codes.plain });
   });
 
-  app.post("/account/mfa/disable", async (req, reply) => {
+  app.post("/account/mfa/disable", {
+    // 第三方 OAuth 一律不许碰:关掉两步验证。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     if (!user.mfaEnabled) return reply.send({ ok: true });  // already off
@@ -841,7 +844,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // stay on the Safari bridge for now (they need additional native UI).
 
   app.post("/account/password", {
-    config: { rateLimit: { max: 6, timeWindow: "1 minute" } },
+    // 第三方 OAuth 一律不许碰:改密码。
+    config: { oauthScope: "deny", rateLimit: { max: 6, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
@@ -885,7 +889,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   });
 
   app.post("/account/delete", {
-    config: { rateLimit: { max: 3, timeWindow: "5 minutes" } },
+    // 第三方 OAuth 一律不许碰:删账号。
+    config: { oauthScope: "deny", rateLimit: { max: 3, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
@@ -948,7 +953,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   // It's validated server-side (path must start with /app/) so we can't
   // be turned into an open redirect to a phishing page.
   app.post("/auth/web-session", {
-    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    // 第三方 OAuth 一律不许碰:把 token 换成完整浏览器会话。
+    config: { oauthScope: "deny", rateLimit: { max: 20, timeWindow: "1 minute" } },
   }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
@@ -1109,7 +1115,10 @@ export async function deviceRoutes(app: FastifyInstance) {
   // Same token mint as the cookie-auth /desktop-pair/<code>/approve
   // route; just a different auth method on the way in. Anonymous
   // status poll on the desktop side picks up the approval the same way.
-  app.post<{ Body: { code?: string } }>("/devices/desktop-pair-approve", async (req, reply) => {
+  app.post<{ Body: { code?: string } }>("/devices/desktop-pair-approve", {
+    // 第三方 OAuth 一律不许碰:把 token 换成长期设备凭据,撤销授权也收不回。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
     _purgeExpiredDesktopPairs();
     const user = await requireUserOrSend(req, reply);
@@ -1349,7 +1358,10 @@ export async function deviceRoutes(app: FastifyInstance) {
   // Phone APP scans the browser's QR — encoding https://<host>/web-pair/<CODE>
   // — extracts CODE, posts here with its Bearer access token. Approves
   // on behalf of the APP user without bouncing through SFSafariView.
-  app.post<{ Body: { code?: string } }>("/devices/web-pair-approve", async (req, reply) => {
+  app.post<{ Body: { code?: string } }>("/devices/web-pair-approve", {
+    // 第三方 OAuth 一律不许碰:同上,换的是浏览器那一侧。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
     if (!(await ensureQrLoginEnabled(reply, req))) return;
     _purgeExpiredWebPairs();

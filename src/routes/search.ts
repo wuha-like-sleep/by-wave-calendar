@@ -34,7 +34,7 @@ const MAX_BOOKING_RESULTS = 8;
 const EMPTY = { events: [], calendars: [], bookingLinks: [] } as const;
 
 export async function searchRoutes(app: FastifyInstance) {
-  app.get("/search", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
+  app.get("/search", { config: { oauthScope: "read:events", rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const parsed = z.object({

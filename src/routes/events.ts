@@ -233,7 +233,7 @@ function zodMessage(error: z.ZodError): string {
 export async function eventRoutes(app: FastifyInstance) {
   // Fetch events across all (or a subset of) user's calendars in a date range.
   // Used by the calendar app view to populate the grid.
-  app.get("/events", async (req, reply) => {
+  app.get("/events", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const q = z
@@ -311,7 +311,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send({ calendars: visible, events: expanded });
   });
 
-  app.get("/calendars/:id/events", async (req, reply) => {
+  app.get("/calendars/:id/events", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
@@ -337,7 +337,7 @@ export async function eventRoutes(app: FastifyInstance) {
 
   // Cheap overlap check for the client — POST so we can keep tomorrow's
   // "exclude editing self" form clean without putting an event UUID in the URL.
-  app.post("/events/conflicts", async (req, reply) => {
+  app.post("/events/conflicts", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const body = z.object({
@@ -376,7 +376,7 @@ export async function eventRoutes(app: FastifyInstance) {
   // iOS / Android / desktop all behave identically instead of each reimplementing
   // it. `now` is the caller's local wall-clock so results are timezone-correct
   // regardless of the server's zone; we never touch the DB here.
-  app.post("/parse-event", async (req, reply) => {
+  app.post("/parse-event", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     // 丢弃返回值会让 TypeScript 沉默，所以这里显式判空（漏掉的话未认证请求会执行下面的副作用）。
     if (!(await requireUserOrSend(req, reply))) return reply;
     const body = z.object({
@@ -388,7 +388,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send(parsed);
   });
 
-  app.post("/events", async (req, reply) => {
+  app.post("/events", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     // 校验失败要的是 400。以前是 createSchema.parse()：ZodError 身上没有 statusCode，
@@ -580,7 +580,7 @@ export async function eventRoutes(app: FastifyInstance) {
     recurrenceId: z.string().datetime({ offset: true }).optional(),
   }).optional();
 
-  app.patch("/events/:id", async (req, reply) => {
+  app.patch("/events/:id", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
@@ -729,7 +729,7 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.send(row ? forClient(row) : row);
   });
 
-  app.delete("/events/:id", async (req, reply) => {
+  app.delete("/events/:id", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const parsed = idParam.safeParse(req.params);
@@ -785,7 +785,7 @@ export async function eventRoutes(app: FastifyInstance) {
   // semantics for native APP clients. Mirror: extra.attendees array
   // on the event row + per-recipient tokens in event_invite_tokens.
 
-  app.get<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
+  app.get<{ Params: { id: string } }>("/events/:id/attendees", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
@@ -888,7 +888,7 @@ export async function eventRoutes(app: FastifyInstance) {
   });
 
   // Revoke. iOS sends email in body (avoid URL-encoding @ in path).
-  app.delete<{ Params: { id: string } }>("/events/:id/attendees", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>("/events/:id/attendees", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
@@ -918,7 +918,7 @@ export async function eventRoutes(app: FastifyInstance) {
   // user just deleted something and immediately wants it back. Idempotent.
   // Only the owner of the calendar can restore. CANCEL emails already
   // sent stay sent — we don't try to "un-cancel" iMIP, that's a no-go.
-  app.post("/events/:id/restore", async (req, reply) => {
+  app.post("/events/:id/restore", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);

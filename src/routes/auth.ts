@@ -172,7 +172,7 @@ export async function authRoutes(app: FastifyInstance) {
     return ok(req, reply, { ok: true });
   });
 
-  app.get("/auth/me", async (req, reply) => {
+  app.get("/auth/me", { config: { oauthScope: "read:profile" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     return ok(req, reply, { id: user.id, email: user.email, displayName: user.displayName, isAdmin: user.isAdmin });

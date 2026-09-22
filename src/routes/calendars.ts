@@ -22,7 +22,7 @@ const idParam = z.object({ id: z.string().uuid() });
 // double-registers this plugin at /api (legacy) and /api/v1 (current);
 // the ok()/err() helpers branch based on the inbound URL.
 export async function calendarRoutes(app: FastifyInstance) {
-  app.get("/calendars", async (req, reply) => {
+  app.get("/calendars", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const rows = await db

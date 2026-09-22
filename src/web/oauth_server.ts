@@ -164,7 +164,16 @@ export async function oauthServerRoutes(app: FastifyInstance) {
     }
 
     // Approve: issue auth code, redirect to client with code + state.
-    const scopes = body.data.scope.split(" ").filter(Boolean);
+    //
+    // scope 要在这里**再裁一次**。GET 那一步裁过一遍(只留客户端 allowedScopes
+    // 里有的),但用户看到的和最终写进 token 的中间隔着一个表单提交,而这里
+    // 原来是直接信表单里那个字符串的。以前 scope 根本不生效,多写几个也没后果;
+    // 现在它是真闸门了,「页面上写着只读、发出去的 token 是读写」就成了一件
+    // 做得到的事。同意页展示什么,签发的就必须是什么。
+    const requestedOnApprove = body.data.scope.split(" ").filter(Boolean);
+    const clientAllowed = client.allowedScopes as string[];
+    const scopes = requestedOnApprove.filter((s) => clientAllowed.includes(s));
+    if (scopes.length === 0) return reply.code(400).send("invalid_scope");
     const code = await issueAuthorizationCode({
       clientId: client.id,
       userId: session.user.id,
@@ -233,7 +242,7 @@ export async function oauthServerRoutes(app: FastifyInstance) {
   // GET /oauth/userinfo — sugar for "who is this token" introspection.
   // Bearer-only; works with both OAuth and API tokens (via requireUserOrSend
   // chain) but exposes scope info only for OAuth.
-  app.get("/oauth/userinfo", async (req, reply) => {
+  app.get("/oauth/userinfo", { config: { oauthScope: "read:profile" } }, async (req, reply) => {
     const { requireUserOrSend } = await import("../lib/session.js");
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
