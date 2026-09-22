@@ -113,7 +113,16 @@ describe("下载页：本站有文件就本站优先，GitHub 作备选", () => 
     expect(html, "本站优先之后就把 GitHub 那条路彻底藏了 —— 本站下不动的人没退路").toContain(GITHUB_URL);
   });
 
-  it("空文件不算数（半截传上来的文件比没有还糟）", async () => {
+  // 名字只说它实际测的那一件事。第一版叫「半截传上来的文件比没有还糟」,
+  // 而写进去的是 0 字节 —— 标题里说的那个场景(50MB 的半截包)一次都没被覆盖,
+  // 而它确实能一路通过(判据是 size > 0)。
+  //
+  // 那个场景现在是**结构上不会发生**的:后台上传走 .part → 校验 → rename,
+  // 半截文件永远不会以最终名字存在(见 admin_binary_upload.int.test.ts 的
+  // 「同名重传被拒时线上那份一个字节都没变」)。只有人绕过后台直接往目录里
+  // 塞半截文件才会出现,那种情况下判据要改成「大小 == 清单里写的」——
+  // 还没做,别让这条用例的名字假装已经做了。
+  it("0 字节的文件不算数", async () => {
     await mkdir(DESKTOP_DIR, { recursive: true });
     await writeFile(path.join(DESKTOP_DIR, DMG), "", "utf8");
     const html = await downloadHtml();
