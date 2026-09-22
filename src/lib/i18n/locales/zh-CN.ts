@@ -1090,6 +1090,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "download.ios.testflightPrimary": "通过 TestFlight 加入 Beta",
   "download.ios.reviewPending": "App Store 正式版审核中 · 预计 {eta}",
   "download.ios.inReview": "App Store 审核中",
+  "download.mirror.prefix": "下载慢？换",
+  "download.mirror.github": "GitHub",
   "download.etaPrefix": "预计 {eta}",
   "download.android.feature1": "Android 8.0+ · Kotlin Compose 原生",
   "download.android.feature2": "APP 内自动更新 · 不上应用商店",

@@ -320,11 +320,31 @@ export async function webRoutes(app: FastifyInstance) {
     // back to "not yet published" placeholders if the manifest is missing.
     // Prefers the manifest's downloadUrl (typically a GitHub Releases URL)
     // and falls back to the legacy server-hosted /downloads/android/ path.
-    const { getLatestRelease } = await import("../lib/android_release.js");
+    const { getLatestRelease, apkPathFor } = await import("../lib/android_release.js");
     const rel = await getLatestRelease();
-    const apkUrl = rel
-      ? (rel.downloadUrl || `/downloads/android/${encodeURIComponent(rel.filename)}`)
+
+    /**
+     * 这台服务器上到底有没有这个安装包。
+     *
+     * **必须真的 stat 一次**,不能靠「清单里有 filename」推断 —— 清单是上游
+     * 给的,filename 一定有,而文件在不在这台服务器上完全是另一回事。
+     * 推断的话国内用户点了会撞 404,比老老实实给 GitHub 链接还糟。
+     */
+    const hasLocal = async (abs: string | null): Promise<boolean> => {
+      if (!abs) return false;
+      const { stat } = await import("node:fs/promises");
+      return stat(abs).then((st) => st.isFile() && st.size > 0).catch(() => false);
+    };
+
+    // 本站有就本站优先 —— 这台服务器多半离它自己的用户更近(尤其国内,
+    // 从 GitHub 下 100MB+ 的包经常直接失败)。本站没有就回落到 GitHub。
+    // 两个都有的时候,另一个作为备选链接一起给出来,让用户自己选。
+    const apkLocal = rel?.filename && await hasLocal(apkPathFor(rel.filename))
+      ? `/downloads/android/${encodeURIComponent(rel.filename)}`
       : "";
+    const apkUrl = apkLocal || (rel ? (rel.downloadUrl || "") : "");
+    // 备选只在「本站有文件、且上游也给了地址」时才出现。
+    const apkAltUrl = apkLocal && rel?.downloadUrl ? rel.downloadUrl : "";
     const apkSize = rel
       ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
       : "~15 MB";
@@ -335,17 +355,22 @@ export async function webRoutes(app: FastifyInstance) {
     // /downloads/desktop/<filename> when the manifest only supplies a
     // filename (self-hoster mode). Manifest is optional; absence renders
     // "coming soon" placeholders.
-    const { getLatestRelease: getDesktopRelease } = await import("../lib/desktop_release.js");
+    const { getLatestRelease: getDesktopRelease, binaryPathFor } = await import("../lib/desktop_release.js");
     const desktop = await getDesktopRelease();
     const fmtSize = (n?: number) => n && n > 0 ? `${(n / 1024 / 1024).toFixed(1)} MB` : "";
-    const assetUrl = (a?: { downloadUrl: string; filename: string }) => {
-      if (!a) return "";
-      if (a.downloadUrl) return a.downloadUrl;
-      return a.filename ? `/downloads/desktop/${encodeURIComponent(a.filename)}` : "";
+    /** 返回 [主链接, 备选链接]。本站有文件就本站优先,GitHub 作为备选;
+     *  本站没有就只给 GitHub,备选为空。 */
+    const assetUrls = async (a?: { downloadUrl: string; filename: string }): Promise<[string, string]> => {
+      if (!a) return ["", ""];
+      const local = a.filename && await hasLocal(binaryPathFor(a.filename))
+        ? `/downloads/desktop/${encodeURIComponent(a.filename)}`
+        : "";
+      if (local) return [local, a.downloadUrl || ""];
+      return [a.downloadUrl || "", ""];
     };
-    const desktopMacUrl = assetUrl(desktop?.assets.mac);
-    const desktopWinUrl = assetUrl(desktop?.assets.win);
-    const desktopLinuxUrl = assetUrl(desktop?.assets.linux);
+    const [desktopMacUrl, desktopMacAltUrl] = await assetUrls(desktop?.assets.mac);
+    const [desktopWinUrl, desktopWinAltUrl] = await assetUrls(desktop?.assets.win);
+    const [desktopLinuxUrl, desktopLinuxAltUrl] = await assetUrls(desktop?.assets.linux);
     return reply.view("download", {
       title: tr(req, "page.download"),
       user: await loadUserFromRequest(req),
@@ -371,6 +396,7 @@ export async function webRoutes(app: FastifyInstance) {
       // download button as a collapsible "本版更新内容" disclosure.
       androidVersion: rel?.versionName || "0.8.0",
       androidApkUrl: apkUrl,
+      androidApkAltUrl: apkAltUrl,
       androidApkSize: apkSize,
       androidNotes: rel?.notes || "",
       androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
@@ -390,6 +416,9 @@ export async function webRoutes(app: FastifyInstance) {
       desktopWinSize: fmtSize(desktop?.assets.win?.sizeBytes),
       desktopLinuxUrl,
       desktopLinuxSize: fmtSize(desktop?.assets.linux?.sizeBytes),
+      // 备选（上游）链接。只在「本站真的有这个文件」时才非空 ——
+      // 也就是说它出现 = 主链接走的是本站，这一条是给下不动本站的人兜底。
+      desktopMacAltUrl, desktopWinAltUrl, desktopLinuxAltUrl,
       desktopGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       desktopGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
       desktopEtaWeek: tr(req, "download.eta.thisMonth"),

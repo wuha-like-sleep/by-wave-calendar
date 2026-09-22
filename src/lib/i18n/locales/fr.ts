@@ -1103,6 +1103,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "download.ios.testflightPrimary": "Rejoindre la bêta via TestFlight",
   "download.ios.reviewPending": "Version App Store en cours d'examen · prévue {eta}",
   "download.ios.inReview": "En examen sur l'App Store",
+  "download.mirror.prefix": "Lent ? Essayez",
+  "download.mirror.github": "GitHub",
   "download.etaPrefix": "Prévu {eta}",
   "download.android.feature1": "Android 8.0+ · natif Kotlin Compose",
   "download.android.feature2": "Mises à jour dans l'app · absente des stores",

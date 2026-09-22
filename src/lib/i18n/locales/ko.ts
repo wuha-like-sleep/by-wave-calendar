@@ -1103,6 +1103,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "download.ios.testflightPrimary": "TestFlight로 베타 참여",
   "download.ios.reviewPending": "App Store 정식판 심사 중 · 예정 {eta}",
   "download.ios.inReview": "App Store 심사 중",
+  "download.mirror.prefix": "느리면",
+  "download.mirror.github": "GitHub",
   "download.etaPrefix": "예정 {eta}",
   "download.android.feature1": "Android 8.0+ · Kotlin Compose 네이티브",
   "download.android.feature2": "앱 내 자동 업데이트 · 스토어 미등록",

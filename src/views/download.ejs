@@ -105,6 +105,15 @@
            class="block w-full text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
           <%= t("download.android.apkButton", { size: androidApkSize }) %>
         </a>
+        <%# 备选链接只在「本站真的有这个文件」时才非空（服务端 stat 过）。
+            它出现 = 主按钮走的是本站，这一条是给下不动本站的人兜底。 %>
+        <% if (androidApkAltUrl) { %>
+          <p class="text-center text-[11px] text-slate-400 pt-0.5">
+            <%= t("download.mirror.prefix") %>
+            <a href="<%= androidApkAltUrl %>" target="_blank" rel="noopener"
+               class="underline hover:text-slate-600"><%= t("download.mirror.github") %></a>
+          </p>
+        <% } %>
       <% } else { %>
         <button disabled
                 class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
@@ -170,6 +179,17 @@
         </button>
         <p class="text-xs text-slate-400 text-center pt-1">
           <%= t("download.etaPrefix", { eta: desktopEtaWeek }) %>
+        </p>
+      <% } %>
+
+      <%# 桌面端的备选链接。同样只在本站真的有文件时出现。
+          三个平台各自独立 —— 站长可能只往服务器上放了其中一两个。 %>
+      <% if (desktopMacAltUrl || desktopWinAltUrl || desktopLinuxAltUrl) { %>
+        <p class="text-center text-[11px] text-slate-400 pt-0.5">
+          <%= t("download.mirror.prefix") %>
+          <% if (desktopMacAltUrl) { %><a href="<%= desktopMacAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">macOS</a><% } %><%
+          %><% if (desktopWinAltUrl) { %><%= desktopMacAltUrl ? ' · ' : '' %><a href="<%= desktopWinAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Windows</a><% } %><%
+          %><% if (desktopLinuxAltUrl) { %><%= (desktopMacAltUrl || desktopWinAltUrl) ? ' · ' : '' %><a href="<%= desktopLinuxAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Linux</a><% } %>
         </p>
       <% } %>
 
