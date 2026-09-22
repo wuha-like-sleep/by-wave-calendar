@@ -2580,5 +2580,128 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/oauth-apps?success=" + encodeURIComponent("应用已删除（已撤销所有访问令牌）"));
   });
 
+
+  // ---------- 客户端更新清单 ----------
+  //
+  // 服务端读清单的顺序是:先 data/app-{android,desktop}-manifest.json(运行期
+  // 覆盖),再 apps/{android,desktop}/releases/latest.json(随代码走)。
+  // 后者现在会随发版包到服务器(见 scripts/release.sh + self_update 的
+  // APPLY_FILES),所以「什么都不做」的站长自动拿到上游的版本。
+  //
+  // 这一页管的是另一半:站长想**自己决定**推哪一版的时候 —— 他自己编译了
+  // 客户端分发给自己的用户,或者想把版本钉住不跟上游走。以前唯一的办法是
+  // SSH 上去往 data/ 里丢文件。
+  //
+  // 为什么覆盖文件放在 data/:那是两条更新路径都不碰的地方 —— 不在 git 里
+  // (git 更新路径的 reset --hard 冲不掉),也不在 tarball 的应用白名单里
+  // (上传更新路径不碰)。所以放进去的东西对随便怎么升级都是持久的。
+  const CLIENT_MANIFEST_RUNTIME = {
+    android: path.join(process.cwd(), "data", "app-android-manifest.json"),
+    desktop: path.join(process.cwd(), "data", "app-desktop-manifest.json"),
+  } as const;
+  const CLIENT_MANIFEST_COMMITTED = {
+    android: path.join(process.cwd(), "apps", "android", "releases", "latest.json"),
+    desktop: path.join(process.cwd(), "apps", "desktop", "releases", "latest.json"),
+  } as const;
+  type ClientPlatform = keyof typeof CLIENT_MANIFEST_RUNTIME;
+
+  /** 这个平台现在**实际生效**的是哪一份、长什么样、从哪儿来。
+   *  站长最需要知道的就是这个,而以前后台完全看不到。 */
+  async function describeClientRelease(platform: ClientPlatform) {
+    const fs = await import("node:fs/promises");
+    const live = platform === "android"
+      ? await (await import("../lib/android_release.js")).getLatestRelease()
+      : await (await import("../lib/desktop_release.js")).getLatestRelease();
+    const overrideRaw = await fs.readFile(CLIENT_MANIFEST_RUNTIME[platform], "utf8").catch(() => null);
+    const committedExists = await fs.stat(CLIENT_MANIFEST_COMMITTED[platform]).then(() => true).catch(() => false);
+    return {
+      platform,
+      label: platform === "android" ? "安卓" : "桌面端",
+      // 「没数据」也要有骨架:整块消失的话,「还没发布过」和「这一页坏了」
+      // 看起来一模一样。
+      versionName: live?.versionName ?? null,
+      versionCode: live?.versionCode ?? null,
+      releasedAt: live?.releasedAt ?? null,
+      source: overrideRaw ? "override" : committedExists ? "committed" : "none",
+      overrideRaw,
+      committedExists,
+    };
+  }
+
+  app.get("/admin/client-release", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    return reply.view("admin/client-release", {
+      title: "客户端更新 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      activeNav: "/admin/client-release",
+      platforms: [await describeClientRelease("android"), await describeClientRelease("desktop")],
+    });
+  });
+
+  app.post<{ Params: { platform: string } }>("/admin/client-release/:platform", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const back = (msg: string, ok = false) =>
+      reply.redirect("/admin/client-release?" + (ok ? "success=" : "error=") + encodeURIComponent(msg));
+
+    const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+    if (!p.success) return reply.code(400).send("bad_platform");
+    const body = z.object({ manifest: z.string().min(2).max(200_000) }).safeParse(req.body);
+    if (!body.success) return back("内容是空的 —— 没有保存");
+
+    let parsed: unknown;
+    try { parsed = JSON.parse(body.data.manifest); }
+    catch { return back("这不是合法的 JSON —— 没有保存"); }
+
+    // **校验复用读取侧那一份。** 自己写一套「看起来差不多」的,就会出现
+    // 「页面说保存成功、而 /api/app/*/latest 直接 404」—— 因为真正决定成败
+    // 的是读取侧,而它对解析失败和形状不符一律静默 return null。
+    const now = new Date().toISOString();
+    const ok = p.data === "android"
+      ? (await import("../lib/android_release.js")).parseAndroidManifest(parsed, now)
+      : (await import("../lib/desktop_release.js")).parseDesktopManifest(parsed, now);
+    if (!ok) {
+      return back("这份清单读取侧认不出来（缺 versionCode / versionName，或者没有任何可下载的资产）—— 没有保存");
+    }
+
+    // 下载地址只许 https。这个地址会被推给所有装了本站 App 的用户 ——
+    // 管理员会话一旦被盗,这就是一条「向全站用户推送任意下载地址」的路。
+    // 安卓那边还有系统的安装包签名校验兜底,桌面端 DMG/MSI 没有等价闸门。
+    const urls = p.data === "android"
+      ? [(ok as { downloadUrl: string }).downloadUrl]
+      : Object.values((ok as { assets: Record<string, { downloadUrl: string }> }).assets).map((a) => a.downloadUrl);
+    const bad = urls.filter((x) => x && !x.startsWith("https://"));
+    if (bad.length) return back("下载地址必须是 https:// —— 没有保存：" + bad.join("、"));
+
+    await mkdir(path.dirname(CLIENT_MANIFEST_RUNTIME[p.data]), { recursive: true });
+    // 存**规范化之后**那份,不是原文 —— 存原文的话,页面上显示的和接口实际
+    // 返回的可能不是一回事。
+    await writeFile(CLIENT_MANIFEST_RUNTIME[p.data], JSON.stringify(ok, null, 2) + "\n", "utf8");
+    await audit(req, u.id, "app_manifest.override_set", {
+      targetType: "client_release", targetId: p.data,
+      details: { versionCode: ok.versionCode, versionName: ok.versionName },
+    });
+    return back(`已保存${p.data === "android" ? "安卓" : "桌面端"}清单：${ok.versionName}（${ok.versionCode}）`, true);
+  });
+
+  app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/clear", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+    if (!p.success) return reply.code(400).send("bad_platform");
+    await unlink(CLIENT_MANIFEST_RUNTIME[p.data]).catch(() => undefined);
+    await audit(req, u.id, "app_manifest.override_cleared", {
+      targetType: "client_release", targetId: p.data,
+    });
+    return reply.redirect("/admin/client-release?success=" + encodeURIComponent("已清除覆盖，恢复成随代码走的那一份"));
+  });
+
   void asc;
 }
