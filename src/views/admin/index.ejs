@@ -77,6 +77,23 @@
         <%= caldavCache.hits %> 命中 / <%= caldavCache.misses %> bcrypt / <%= caldavCache.coalesced %> 合并 · <%= caldavCache.size %> session
       </div>
     </div>
+    <!-- CalDAV 认证失败节流。这一块**没数据时也要在** —— 整块消失的话，
+         「今天没人撞」和「这个功能坏了」看起来一模一样。
+         正常运行时这里全是 0：配置正确的客户端稳态下不产生认证失败。
+         被挡次数持续上涨 = 有人在猜密码，去日志里搜 caldav_auth_failed
+         能看到是哪个 IP、哪个邮箱。 -->
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <div class="text-xs text-slate-500 mb-1">CalDAV 认证失败</div>
+      <div class="flex items-baseline gap-2">
+        <span class="text-lg font-semibold <%= caldavThrottle.blockedRequests > 0 ? "text-amber-600" : "text-slate-900" %>">
+          <%= caldavThrottle.blockedRequests > 0 ? caldavThrottle.blockedRequests : "—" %>
+        </span>
+        <span class="text-xs text-slate-500">次被挡下</span>
+      </div>
+      <div class="text-xs text-slate-500 mt-0.5">
+        <%= caldavThrottle.lockedKeys %> 次触发锁定 · 跟踪中 <%= caldavThrottle.trackedAccounts %> 账号 / <%= caldavThrottle.trackedIps %> IP
+      </div>
+    </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">
       <div class="text-xs text-slate-500 mb-1">事件邀请</div>
       <div class="flex items-baseline gap-2">

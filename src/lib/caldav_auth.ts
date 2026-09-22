@@ -5,6 +5,10 @@ import { db, schema } from "../db/client.js";
 import { verifyPassword } from "./password.js";
 import { looksLikeAppPassword, verifyAppPassword } from "./app_password.js";
 import { userIsActive } from "./user_state.js";
+import {
+  calDavAuthRetryAfter, recordCalDavAuthFailure, clearCalDavAuthFailures,
+  sendCalDavThrottled, logCalDavAuthFailure,
+} from "./caldav_throttle.js";
 
 const REALM = "ByWave Calendar CalDAV";
 
@@ -123,6 +127,16 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   }
   cacheMisses++;
 
+  // ── 节流闸门 ──
+  // 位置是关键:**在 bcrypt 之前**。挡在后面的话 DoS 那一半完全没挡住 ——
+  // 攻击者要的就是让你在唯一的主线程上跑 cost 12 的 bcrypt,他不在乎你最后回什么。
+  // 也在缓存命中之后:缓存命中说明凭据是对的,不该因为同 IP 有人在撞而被连坐。
+  const retryAfter = calDavAuthRetryAfter(req.ip, email);
+  if (retryAfter > 0) {
+    logCalDavAuthFailure(req, email, "throttled");
+    return sendCalDavThrottled(reply, retryAfter);
+  }
+
   // In-flight dedup: while one request is paying for bcrypt, parallel
   // requests with the same credentials wait on its Promise instead of
   // each running their own bcrypt. iOS Calendar opens ~10 concurrent
@@ -147,7 +161,17 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
     verifyPromise = fresh;
   }
   const verified = await verifyPromise;
-  if (!verified.ok) return send401(reply, verified.message, verified.errParam);
+  if (!verified.ok) {
+    // 只有走到这里才算「给了凭据但不对」。上面那个「完全没带 Authorization 头」
+    // 的 401 绝不能算 —— Apple 的发现流程第一个请求按设计就是不带凭据的,
+    // 算上它等于每次正常同步都自罚一次。
+    recordCalDavAuthFailure(req.ip, email, password);
+    logCalDavAuthFailure(req, email, verified.errParam ?? "bad_credentials");
+    return send401(reply, verified.message, verified.errParam);
+  }
+  // 对了就把这个 (IP, 邮箱) 的失败记录清掉 —— 人只是打错了几次,改对了
+  // 不该继续背着。IP 那一层不清:横扫是另一回事。
+  clearCalDavAuthFailures(req.ip, email);
 
   // Re-fetch the (possibly cached-only-by-id) user row so we apply the
   // disabled-account check on every request even when the verify path

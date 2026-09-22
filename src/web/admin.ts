@@ -35,6 +35,7 @@ import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { revokeAllUserCredentials, countActiveAdmins } from "../lib/user_state.js";
 import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
+import { getCalDavThrottleStats } from "../lib/caldav_throttle.js";
 import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
 import { tForRequest } from "../lib/i18n.js";
 // 配额窗口的起点从建号收口函数里拿,不在这里重算。后台「今天已建 N 个」这个
@@ -396,6 +397,10 @@ export async function adminRoutes(app: FastifyInstance) {
       // 0% hit rate would indicate every request is doing bcrypt
       // (which is what makes CalDAV sync take 5-10 seconds).
       caldavCache: getCalDavAuthCacheStats(),
+      // CalDAV 认证失败节流。修之前「正在被撞库」这件事在服务端是完全
+      // 不可见的 —— 没有失败计数、没有锁定、没有审计,只有缓存命中率
+      // 会莫名变低。这两个数就是拿来看这件事的。
+      caldavThrottle: getCalDavThrottleStats(),
     });
   });
 
