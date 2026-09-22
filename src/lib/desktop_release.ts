@@ -52,48 +52,51 @@ const BINARY_DIR = path.join(process.cwd(), "data", "desktop-binaries");
 interface CacheEntry { mtime: number; release: DesktopRelease | null }
 const fileCache = new Map<string, CacheEntry>();
 
+/**
+ * 校验 + 规范化一份桌面端更新清单。**读取侧和后台上传共用这一份。**
+ * 理由同 android_release.ts 的 parseAndroidManifest:后台自己写一套
+ * 「看起来差不多」的校验,就会出现「页面说保存成功、接口却 404」。
+ *
+ * 返回 null = 这份清单不可用,别落盘。
+ */
+export function parseDesktopManifest(raw: unknown, fallbackReleasedAt: string): DesktopRelease | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<DesktopRelease>;
+  if (typeof r.versionCode !== "number" || !Number.isFinite(r.versionCode)) return null;
+  if (typeof r.versionName !== "string" || !r.versionName) return null;
+  if (!r.assets || typeof r.assets !== "object") return null;
+  const assets: DesktopRelease["assets"] = {};
+  for (const platform of ["mac", "win", "linux"] as const) {
+    const a = r.assets[platform] as Partial<DesktopReleaseAsset> | undefined;
+    if (!a) continue;
+    const filename = String(a.filename || "");
+    const downloadUrl = String(a.downloadUrl || "");
+    // 两种投递方式一个都没有 —— 没地方可下。
+    if (!filename && !downloadUrl) continue;
+    assets[platform] = {
+      filename, downloadUrl,
+      sha256: String(a.sha256 || "").toLowerCase(),
+      sizeBytes: Number(a.sizeBytes || 0),
+    };
+  }
+  if (Object.keys(assets).length === 0) return null;
+  return {
+    versionCode: r.versionCode,
+    versionName: r.versionName,
+    releasedAt: String(r.releasedAt || fallbackReleasedAt),
+    notes: String(r.notes || ""),
+    mandatory: r.mandatory === true,
+    assets,
+  };
+}
+
 async function readManifestAt(p: string): Promise<DesktopRelease | null> {
   try {
     const st = await stat(p);
     const cached = fileCache.get(p);
     if (cached && cached.mtime === st.mtimeMs) return cached.release;
     const text = await readFile(p, "utf8");
-    const raw = JSON.parse(text) as Partial<DesktopRelease>;
-    if (
-      typeof raw.versionCode !== "number" ||
-      typeof raw.versionName !== "string" ||
-      !raw.assets || typeof raw.assets !== "object"
-    ) {
-      fileCache.set(p, { mtime: st.mtimeMs, release: null });
-      return null;
-    }
-    const assets: DesktopRelease["assets"] = {};
-    for (const platform of ["mac", "win", "linux"] as const) {
-      const a = raw.assets[platform] as Partial<DesktopReleaseAsset> | undefined;
-      if (!a) continue;
-      const filename = String(a.filename || "");
-      const downloadUrl = String(a.downloadUrl || "");
-      // Reject entries with neither hosting mode — nowhere to fetch from.
-      if (!filename && !downloadUrl) continue;
-      assets[platform] = {
-        filename,
-        downloadUrl,
-        sha256: String(a.sha256 || "").toLowerCase(),
-        sizeBytes: Number(a.sizeBytes || 0),
-      };
-    }
-    if (Object.keys(assets).length === 0) {
-      fileCache.set(p, { mtime: st.mtimeMs, release: null });
-      return null;
-    }
-    const release: DesktopRelease = {
-      versionCode: raw.versionCode,
-      versionName: raw.versionName,
-      releasedAt: String(raw.releasedAt || new Date(st.mtimeMs).toISOString()),
-      notes: String(raw.notes || ""),
-      mandatory: raw.mandatory === true,
-      assets,
-    };
+    const release = parseDesktopManifest(JSON.parse(text), new Date(st.mtimeMs).toISOString());
     fileCache.set(p, { mtime: st.mtimeMs, release });
     return release;
   } catch {

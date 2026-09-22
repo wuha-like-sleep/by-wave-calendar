@@ -327,7 +327,26 @@ export type UploadedUpdateProgressEvent = UpdateProgressEvent;
 // 应用上传包时，只把这些已知路径从解压目录覆盖到项目根。绝不执行包里的脚本，
 // 也不拷贝 deploy/ 之类含可执行内容的目录 —— 只搬运代码产物与依赖清单。
 const APPLY_DIRS = ["dist", "src/views", "src/public", "drizzle"] as const;
-const APPLY_FILES = ["package.json", "package-lock.json"] as const;
+const APPLY_FILES = [
+  "package.json",
+  "package-lock.json",
+  // 三端 App 的更新清单。**必须走 APPLY_FILES 而不是 APPLY_DIRS** ——
+  // 上面那段对非 dist 的目录会先 rm -rf 整个目标目录,把 apps/ 加进去
+  // 会连站长自己放在那儿的别的东西一起删掉。
+  //
+  // 为什么要加:服务端的 /api/app/{android,desktop}/latest 读的就是这两个
+  // 文件(android_release.ts / desktop_release.ts 的 COMMITTED_MANIFEST_PATH)。
+  // 而发版 tarball 以前不含 apps/,所以用后台「系统更新」升级的站长永远
+  // 拿不到随代码走的那份清单,只能手工往 data/ 里丢文件 —— 不丢的话
+  // 他的 /download 页面会一直对所有访客显示旧版本号和旧下载链接。
+  //
+  // ⚠️ 只加 scripts/release.sh 那一侧是不够的:包里有了文件,而这张白名单
+  // 不认它,上传更新会验签、解压、体检、npm ci、迁移**五步全绿**,而清单
+  // 静默落不了地。判据必须落在「应用完之后服务器上那份清单的 versionCode」,
+  // 不能落在「tarball 里有没有这个文件」。
+  "apps/android/releases/latest.json",
+  "apps/desktop/releases/latest.json",
+] as const;
 
 /** tar 条目路径是否安全：拒绝绝对路径、`..` 逃逸、以及 Windows 盘符。 */
 function isUnsafeTarEntry(entry: string): boolean {
@@ -465,6 +484,10 @@ export async function* applyUploadedUpdate(
         const to = path.join(CWD, rel);
         const exists = await stat(from).catch(() => null);
         if (!exists) continue;
+        // copyFile 不会自己建父目录。package.json 那两个的父目录就是项目根、
+        // 一定存在,但 apps/*/releases/ 在 tarball 模式部署上压根不存在 ——
+        // 少这一行的话它们会静默失败(被上面那个 try 吞成整步报错)。
+        await mkdir(path.dirname(to), { recursive: true });
         await copyFile(from, to);
         applied.push(rel);
       }

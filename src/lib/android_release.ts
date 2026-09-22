@@ -53,6 +53,38 @@ const APK_DIR = path.join(process.cwd(), "data", "android-apks");
 interface CacheEntry { mtime: number; release: AndroidRelease | null }
 const fileCache = new Map<string, CacheEntry>();
 
+/**
+ * 校验 + 规范化一份安卓更新清单。**读取侧和后台上传共用这一份。**
+ *
+ * 为什么必须共用:后台如果自己写一套「看起来差不多」的校验,就会出现
+ * 「页面说保存成功、而 /api/app/android/latest 直接 404」—— 因为真正决定
+ * 成败的是这里,而这里对解析失败和形状不符一律静默 return null。
+ * 站长看到的是一次成功的保存和一个不工作的接口,中间没有任何提示。
+ *
+ * 返回 null = 这份清单不可用,别落盘。
+ */
+export function parseAndroidManifest(raw: unknown, fallbackReleasedAt: string): AndroidRelease | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<AndroidRelease>;
+  if (typeof r.versionCode !== "number" || !Number.isFinite(r.versionCode)) return null;
+  if (typeof r.versionName !== "string" || !r.versionName) return null;
+  const release: AndroidRelease = {
+    versionCode: r.versionCode,
+    versionName: r.versionName,
+    filename: String(r.filename || ""),
+    downloadUrl: String(r.downloadUrl || ""),
+    sha256: String(r.sha256 || "").toLowerCase(),
+    sizeBytes: Number(r.sizeBytes || 0),
+    releasedAt: String(r.releasedAt || fallbackReleasedAt),
+    notes: String(r.notes || ""),
+    mandatory: r.mandatory === true,
+    minSupportedVersionCode: Number(r.minSupportedVersionCode || 1),
+  };
+  // 两种投递方式一个都没有 —— App 无处可下。
+  if (!release.downloadUrl && !release.filename) return null;
+  return release;
+}
+
 /** Try to read + parse a manifest from a path. Returns null on missing
  *  file, parse error, or schema mismatch. mtime-cached so a single page
  *  hitting both /api/app/android/latest AND /download doesn't double-read. */
@@ -62,32 +94,7 @@ async function readManifestAt(p: string): Promise<AndroidRelease | null> {
     const cached = fileCache.get(p);
     if (cached && cached.mtime === st.mtimeMs) return cached.release;
     const text = await readFile(p, "utf8");
-    const raw = JSON.parse(text) as Partial<AndroidRelease>;
-    if (
-      typeof raw.versionCode !== "number" ||
-      typeof raw.versionName !== "string"
-    ) {
-      fileCache.set(p, { mtime: st.mtimeMs, release: null });
-      return null;
-    }
-    const release: AndroidRelease = {
-      versionCode: raw.versionCode,
-      versionName: raw.versionName,
-      filename: String(raw.filename || ""),
-      downloadUrl: String(raw.downloadUrl || ""),
-      sha256: String(raw.sha256 || "").toLowerCase(),
-      sizeBytes: Number(raw.sizeBytes || 0),
-      releasedAt: String(raw.releasedAt || new Date(st.mtimeMs).toISOString()),
-      notes: String(raw.notes || ""),
-      mandatory: raw.mandatory === true,
-      minSupportedVersionCode: Number(raw.minSupportedVersionCode || 1),
-    };
-    // Reject manifests that have neither hosting mode — there's nowhere
-    // for the APP to download from.
-    if (!release.downloadUrl && !release.filename) {
-      fileCache.set(p, { mtime: st.mtimeMs, release: null });
-      return null;
-    }
+    const release = parseAndroidManifest(JSON.parse(text), new Date(st.mtimeMs).toISOString());
     fileCache.set(p, { mtime: st.mtimeMs, release });
     return release;
   } catch {

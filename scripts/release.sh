@@ -51,6 +51,21 @@ cp    package-lock.json "$STAGE/package-lock.json"
 cp    .env.example     "$STAGE/.env.example"
 cp    README.md        "$STAGE/README.md"
 
+# 三端 App 的更新清单。**只打这两个 JSON，不是整个 apps/** ——
+# apps/ 下有 gradle / Xcode 的构建产物，几百 MB，会直接撞上后台上传的 100MB 上限。
+#
+# 为什么要打进来：服务端的 /api/app/{android,desktop}/latest 和公开的 /download
+# 页面读的就是这两个文件。以前 tarball 不含 apps/，走后台「系统更新」升级的
+# 站长永远拿不到它们，只能手工往 data/ 里丢文件 —— 不丢的话他的下载页会一直
+# 对所有访客显示旧版本号和旧下载链接，而 App 那边只能靠客户端自己回源 GitHub。
+#
+# ⚠️ 光加这里没用：src/lib/self_update.ts 的 APPLY_FILES 白名单也得认它们，
+# 否则上传更新会验签、解压、体检、npm ci、迁移五步全绿，而文件静默落不了地。
+# 两处必须一起改，验收判据也必须落在「应用完之后服务器上那份清单的 versionCode」。
+mkdir -p "$STAGE/apps/android/releases" "$STAGE/apps/desktop/releases"
+cp apps/android/releases/latest.json "$STAGE/apps/android/releases/latest.json"
+cp apps/desktop/releases/latest.json "$STAGE/apps/desktop/releases/latest.json"
+
 # Strip macOS metadata files (.DS_Store + any stray AppleDouble ._* on disk)
 find "$STAGE" -name ".DS_Store" -delete
 find "$STAGE" -name "._*" -delete
