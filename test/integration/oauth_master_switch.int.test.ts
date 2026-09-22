@@ -51,9 +51,11 @@ async function buildOAuthApp(): Promise<FastifyInstance> {
   await a.register(calendarRoutes, { prefix: "/api/v1" });
   // 授权端点会 reply.view("error", ...) —— 这一档不关心渲染结果,只关心状态码,
   // 所以给一个最小的 view 实现,别为了跑测试把 EJS 整套拉起来。
-  a.decorateReply("view", function (this: { code: (n: number) => unknown; send: (b: unknown) => unknown }, _tpl: string, _data: unknown) {
-    return (this as unknown as { send: (b: unknown) => unknown }).send({ rendered: "error" });
-  });
+  // 这个签名和 Fastify 的 GetterSetter 对不上,下面那个 cast 只为绕开类型,
+  // 不是在掩盖真问题。
+  a.decorateReply("view", function (this: unknown) {
+    return (this as { send: (b: unknown) => unknown }).send({ rendered: "error" });
+  } as never);
   await a.register(oauthServerRoutes);
   await a.ready();
   return a;

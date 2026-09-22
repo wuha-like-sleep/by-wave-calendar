@@ -53,8 +53,16 @@ function basic(email: string, pw: string): string {
   return "Basic " + Buffer.from(`${email}:${pw}`).toString("base64");
 }
 
+// PROPFIND 不在 Fastify 的 HTTPMethods 联合里（它是我们用 addHttpMethod
+// 注册进去的），inject 的重载因此对不上。窄接口的写法抄自
+// caldav_sync_epoch.int.test.ts —— 那边同样的问题。
+type InjectLike = (opts: Record<string, unknown>) => Promise<{
+  statusCode: number; body: string; headers: Record<string, unknown>;
+}>;
+
 async function probe(headers: Record<string, string>, remoteAddress?: string) {
-  return app.inject({
+  const inject = app.inject as unknown as InjectLike;
+  return inject({
     method: "PROPFIND", url: "/caldav/",
     ...(remoteAddress ? { remoteAddress } : {}),
     headers: { depth: "0", "content-type": "application/xml", ...headers },
