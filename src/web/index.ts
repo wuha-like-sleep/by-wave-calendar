@@ -318,59 +318,28 @@ export async function webRoutes(app: FastifyInstance) {
     // Read the Android release manifest so the version + APK link shown on
     // /download stays in sync with what the in-app updater sees. Falls
     // back to "not yet published" placeholders if the manifest is missing.
-    // Prefers the manifest's downloadUrl (typically a GitHub Releases URL)
-    // and falls back to the legacy server-hosted /downloads/android/ path.
-    const { getLatestRelease, apkPathFor } = await import("../lib/android_release.js");
+    const { getLatestRelease } = await import("../lib/android_release.js");
     const rel = await getLatestRelease();
 
-    /**
-     * 这台服务器上到底有没有这个安装包。
-     *
-     * **必须真的 stat 一次**,不能靠「清单里有 filename」推断 —— 清单是上游
-     * 给的,filename 一定有,而文件在不在这台服务器上完全是另一回事。
-     * 推断的话国内用户点了会撞 404,比老老实实给 GitHub 链接还糟。
-     */
-    const hasLocal = async (abs: string | null): Promise<boolean> => {
-      if (!abs) return false;
-      const { stat } = await import("node:fs/promises");
-      return stat(abs).then((st) => st.isFile() && st.size > 0).catch(() => false);
-    };
-
-    // 本站有就本站优先 —— 这台服务器多半离它自己的用户更近(尤其国内,
-    // 从 GitHub 下 100MB+ 的包经常直接失败)。本站没有就回落到 GitHub。
-    // 两个都有的时候,另一个作为备选链接一起给出来,让用户自己选。
-    const apkLocal = rel?.filename && await hasLocal(apkPathFor(rel.filename))
-      ? `/downloads/android/${encodeURIComponent(rel.filename)}`
-      : "";
-    const apkUrl = apkLocal || (rel ? (rel.downloadUrl || "") : "");
-    // 备选只在「本站有文件、且上游也给了地址」时才出现。
-    const apkAltUrl = apkLocal && rel?.downloadUrl ? rel.downloadUrl : "";
+    // 「本站有就本站优先、GitHub 作备选」的口径收口在 android_release.ts /
+    // desktop_release.ts 里,/download 网页和 /api/app/*/latest 三处共用同一份。
+    // 以前这里有一份自己的实现,而那两条接口是另一套口径(有 downloadUrl 就永远
+    // 用 GitHub),于是「传到本地的包」对 App 的自动更新毫无作用。
+    const { resolveApkUrls } = await import("../lib/android_release.js");
+    const origin = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    const [apkUrl, apkAltUrl] = await resolveApkUrls(origin, rel);
     const apkSize = rel
       ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
       : "~15 MB";
 
-    // Desktop release (DMG / MSI / DEB). Per-asset, prefer the manifest's
-    // `downloadUrl` (typically a GitHub Releases asset) so users get the
-    // canonical, world-mirrored binary; fall back to server-hosted
-    // /downloads/desktop/<filename> when the manifest only supplies a
-    // filename (self-hoster mode). Manifest is optional; absence renders
-    // "coming soon" placeholders.
-    const { getLatestRelease: getDesktopRelease, binaryPathFor } = await import("../lib/desktop_release.js");
+    // 桌面端三个平台。清单缺失时模板渲染「即将推出」的分支。
+    const { getLatestRelease: getDesktopRelease } = await import("../lib/desktop_release.js");
     const desktop = await getDesktopRelease();
     const fmtSize = (n?: number) => n && n > 0 ? `${(n / 1024 / 1024).toFixed(1)} MB` : "";
-    /** 返回 [主链接, 备选链接]。本站有文件就本站优先,GitHub 作为备选;
-     *  本站没有就只给 GitHub,备选为空。 */
-    const assetUrls = async (a?: { downloadUrl: string; filename: string }): Promise<[string, string]> => {
-      if (!a) return ["", ""];
-      const local = a.filename && await hasLocal(binaryPathFor(a.filename))
-        ? `/downloads/desktop/${encodeURIComponent(a.filename)}`
-        : "";
-      if (local) return [local, a.downloadUrl || ""];
-      return [a.downloadUrl || "", ""];
-    };
-    const [desktopMacUrl, desktopMacAltUrl] = await assetUrls(desktop?.assets.mac);
-    const [desktopWinUrl, desktopWinAltUrl] = await assetUrls(desktop?.assets.win);
-    const [desktopLinuxUrl, desktopLinuxAltUrl] = await assetUrls(desktop?.assets.linux);
+    const { resolveAssetUrls } = await import("../lib/desktop_release.js");
+    const [desktopMacUrl, desktopMacAltUrl] = await resolveAssetUrls(origin, desktop?.assets.mac);
+    const [desktopWinUrl, desktopWinAltUrl] = await resolveAssetUrls(origin, desktop?.assets.win);
+    const [desktopLinuxUrl, desktopLinuxAltUrl] = await resolveAssetUrls(origin, desktop?.assets.linux);
     return reply.view("download", {
       title: tr(req, "page.download"),
       user: await loadUserFromRequest(req),

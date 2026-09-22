@@ -111,6 +111,39 @@ export async function getLatestRelease(): Promise<AndroidRelease | null> {
   return readManifestAt(COMMITTED_MANIFEST_PATH);
 }
 
+/** 这台服务器上有没有这个 APK —— 真的 stat 一次,0 字节不算。
+ *  理由同 desktop_release.ts 的 hasLocalBinary。 */
+export async function hasLocalApk(filename: string | undefined | null): Promise<boolean> {
+  if (!filename || !isServableApkName(filename)) return false;
+  const abs = apkPathFor(filename);
+  if (!abs) return false;
+  const { stat } = await import("node:fs/promises");
+  return stat(abs).then((st) => st.isFile() && st.size > 0).catch(() => false);
+}
+
+/** APK 该给什么下载地址 —— 全站唯一口径。来龙去脉见 desktop_release.ts
+ *  的 resolveAssetUrls。返回 [主地址, 备选地址]。 */
+export async function resolveApkUrls(
+  origin: string,
+  rel: { downloadUrl?: string; filename?: string } | null | undefined,
+): Promise<[string, string]> {
+  if (!rel) return ["", ""];
+  const local = await hasLocalApk(rel.filename)
+    ? `${origin}/downloads/android/${encodeURIComponent(rel.filename!)}`
+    : "";
+  if (local) return [local, rel.downloadUrl || ""];
+  return [rel.downloadUrl || "", ""];
+}
+
+/** 这个 APK 文件名发得出去吗。理由同 desktop_release.ts 的 isServableBinaryName:
+ *  三处需要同一份判据,各写一份必然漂移,而漂移的表现是
+ *  「上传成功、落盘成功、下载页有按钮、点下去 400」。 */
+export function isServableApkName(name: string): boolean {
+  if (typeof name !== "string") return false;
+  if (Buffer.byteLength(name, "utf8") > 120) return false;
+  return /^[\w.\-]+\.apk$/i.test(name);
+}
+
 /** Absolute path to the APK file that backs a given filename. Returns
  *  null if the filename escapes the APK_DIR (defense-in-depth against
  *  someone editing the manifest to point at /etc/passwd). */
