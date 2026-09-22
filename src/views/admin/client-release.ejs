@@ -17,8 +17,37 @@
   };
 %>
 
+<%
+  const fmtMB = (n) => n == null ? '—' : (n / 1048576).toFixed(1) + ' MB';
+  const fmtGB = (n) => n == null ? '—' : (n / 1073741824).toFixed(1) + ' GB';
+  const totalBin = binaries.android.totalBytes + binaries.desktop.totalBytes;
+%>
+
+<%# 磁盘。全仓以前一处检查都没有 —— 而 data/ 和数据库通常在同一个文件系统上，
+    写满之后不是「上传失败」这么干净，是数据库拒绝写入。 %>
+<div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 mb-6">
+  <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
+    <span class="text-slate-500">安装包占用</span>
+    <span class="font-semibold text-slate-900"><%= fmtMB(totalBin) %></span>
+    <span class="text-slate-500">磁盘剩余</span>
+    <span class="font-semibold <%= disk && disk.freeBytes < 3 * 1073741824 ? 'text-amber-600' : 'text-slate-900' %>">
+      <%= disk ? fmtGB(disk.freeBytes) : '—' %><% if (disk) { %> / <%= fmtGB(disk.totalBytes) %><% } %>
+    </span>
+    <span class="text-slate-500">单个上限</span>
+    <span class="font-semibold text-slate-900"><%= Math.round(maxBinaryBytes / 1048576) %> MB</span>
+  </div>
+  <p class="mt-2 text-xs text-amber-700">
+    ⚠️ <strong>你如果走 nginx 之类的反向代理，那一层也要放行。</strong>
+    部署示例里 <code class="bg-slate-100 px-1 rounded">client_max_body_size</code> 默认只有 10m ——
+    不改的话，包连本程序都到不了，浏览器只会显示一个没头没尾的失败，服务端日志里什么都没有。
+    建议改成 <code class="bg-slate-100 px-1 rounded">client_max_body_size 320m;</code>
+    并加上 <code class="bg-slate-100 px-1 rounded">proxy_request_buffering off;</code>。
+  </p>
+</div>
+
 <div class="space-y-6">
 <% platforms.forEach(function (p) { %>
+  <% const bin = binaries[p.platform]; %>
   <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <h2 class="text-lg font-semibold text-slate-900"><%= p.label %></h2>
@@ -53,6 +82,62 @@
         下载页也不会显示它。升级一次服务端就会自动带上，或者在下面贴一份。
       </p>
     <% } %>
+
+    <%# 服务器上实际有哪些包。做这一块的理由很直接：只能传不能看不能删的话，
+        盘迟早满，站长还是得回宝塔。 %>
+    <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 mb-5">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+        <h3 class="text-sm font-semibold text-slate-800">服务器上的安装包</h3>
+        <span class="text-xs text-slate-500"><%= bin.files.length %> 个 · <%= fmtMB(bin.totalBytes) %></span>
+      </div>
+
+      <% if (bin.files.length === 0) { %>
+        <p class="text-xs text-slate-500">
+          这个目录是空的，所以下载和 App 内更新都会走上游的地址。
+          传一个上来之后，本站就会优先发自己的。
+        </p>
+      <% } else { %>
+        <ul class="divide-y divide-slate-200">
+          <% bin.files.forEach(function (f) { %>
+            <li class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-xs">
+              <code class="font-mono text-slate-800 break-all"><%= f.name %></code>
+              <span class="text-slate-500"><%= fmtMB(f.size) %></span>
+              <% if (f.partial) { %>
+                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500">上传残留</span>
+              <% } else if (!f.servable) { %>
+                <span class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">文件名发不出去</span>
+              <% } else if (!f.referenced) { %>
+                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500">清单没引用它</span>
+              <% } else if (f.sizeMatches === false) { %>
+                <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">大小和清单对不上</span>
+              <% } else { %>
+                <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">正在用</span>
+              <% } %>
+              <form method="post" class="ml-auto"
+                    action="/admin/client-release/<%= p.platform %>/binary/<%= encodeURIComponent(f.name) %>/delete"
+                    data-confirm="删除 <%= f.name %>？<% if (f.referenced) { %>清单还在引用它，删掉之后这个平台会回去走上游地址。<% } %>"
+                    data-confirm-danger="1" data-confirm-ok="删除">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="text-red-600 hover:text-red-700">删除</button>
+              </form>
+            </li>
+          <% }); %>
+        </ul>
+      <% } %>
+
+      <%# 上传。走 fetch + x-csrf-token 头 —— multipart 请求读不到 _csrf 字段
+          （解析器只 done() 不塞 body），所以令牌只能走头。 %>
+      <div class="mt-3 pt-3 border-t border-slate-200">
+        <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+          <input type="file" class="text-xs" data-bwc-binary-upload="<%= p.platform %>"
+                 accept="<%= p.platform === 'android' ? '.apk' : '.dmg,.msi,.deb' %>" />
+        </label>
+        <p class="mt-1 text-xs text-slate-500" data-bwc-upload-status="<%= p.platform %>">
+          选一个文件就开始上传。上传前会和清单里的 sha256 比对，对不上不会保存 ——
+          客户端下载完会校验这个值，不匹配的话用户会一直重试而且不知道为什么。
+        </p>
+      </div>
+    </div>
 
     <form method="post" action="/admin/client-release/<%= p.platform %>" class="space-y-3">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
@@ -101,5 +186,81 @@
   </section>
 <% }); %>
 </div>
+
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+(function () {
+  var CSRF = <%- JSON.stringify(csrfToken) %>;
+  var MAX = <%= maxBinaryBytes %>;
+
+  function mb(n) { return (n / 1048576).toFixed(1) + ' MB'; }
+
+  document.addEventListener('change', function (ev) {
+    var input = ev.target;
+    if (!input || !input.dataset || !input.dataset.bwcBinaryUpload) return;
+    var platform = input.dataset.bwcBinaryUpload;
+    var file = input.files && input.files[0];
+    if (!file) return;
+    var status = document.querySelector('[data-bwc-upload-status="' + platform + '"]');
+    var say = function (text, cls) {
+      if (!status) return;
+      status.textContent = text;
+      status.className = 'mt-1 text-xs ' + (cls || 'text-slate-500');
+    };
+
+    // 本地先拦一道 —— 让人白传 109MB 再告诉他超限是很不体面的。
+    if (file.size > MAX) {
+      say('这个文件 ' + mb(file.size) + '，超过上限 ' + mb(MAX) + ' —— 没有上传。', 'mt-1 text-xs text-red-600');
+      input.value = '';
+      return;
+    }
+
+    var form = new FormData();
+    form.append('binary', file, file.name);
+
+    // 用 XHR 不用 fetch：**fetch 报不了上传进度**。109MB 传着不动的话，
+    // 人会以为卡死了然后去刷新页面 —— 而刷新会中断上传。
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/admin/client-release/' + platform + '/binary');
+    // multipart 的 req.body 是 undefined，_csrf 字段读不到 —— 令牌只能走头。
+    xhr.setRequestHeader('x-csrf-token', CSRF);
+    xhr.withCredentials = true;
+
+    xhr.upload.onprogress = function (e) {
+      if (!e.lengthComputable) return;
+      var pct = Math.round((e.loaded / e.total) * 100);
+      say('正在上传 ' + file.name + ' —— ' + pct + '%（' + mb(e.loaded) + ' / ' + mb(e.total) + '）。别关这个页面。');
+    };
+    xhr.onerror = function () {
+      say('上传失败：连不上服务器。如果你走反向代理，先确认那一层的 client_max_body_size 放开了。',
+          'mt-1 text-xs text-red-600');
+      input.value = '';
+    };
+    xhr.onload = function () {
+      var body = null;
+      try { body = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+        var extra = '';
+        if (body.unverified) extra = ' ⚠️ 清单里没写 sha256，这一版发出去不会有任何客户端校验。';
+        else if (!body.referenced) extra = ' ⚠️ 清单没有引用这个文件名，所以它暂时不会被发给任何人。';
+        say('已保存 ' + body.file + '（' + mb(body.sizeBytes) + '）。' + extra + ' 刷新页面看结果。',
+            'mt-1 text-xs text-emerald-700');
+        setTimeout(function () { window.location.reload(); }, 1200);
+        return;
+      }
+      var msg = (body && body.error) || ('HTTP ' + xhr.status);
+      if (xhr.status === 413 && !body) {
+        // 没有 JSON body 的 413 多半是反向代理发的，不是我们发的 ——
+        // 这两件事的修法完全不同，必须分开说。
+        msg = '请求被拒绝（413），而且不是本程序发的 —— 多半是你的反向代理拦的。'
+            + '把 nginx 的 client_max_body_size 调到 320m 以上再试。';
+      }
+      say('上传失败：' + msg, 'mt-1 text-xs text-red-600');
+      input.value = '';
+    };
+    say('正在上传 ' + file.name + '…… 别关这个页面。');
+    xhr.send(form);
+  });
+})();
+</script>
 
 <%- include('_nav_end') %>

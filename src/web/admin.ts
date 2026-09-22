@@ -3,6 +3,7 @@ import { z } from "zod";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink, mkdtemp, rm } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -2636,6 +2637,12 @@ export async function adminRoutes(app: FastifyInstance) {
       user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
       activeNav: "/admin/client-release",
       platforms: [await describeClientRelease("android"), await describeClientRelease("desktop")],
+      binaries: {
+        android: await listBinaries("android"),
+        desktop: await listBinaries("desktop"),
+      },
+      disk: await diskFree(process.cwd()),
+      maxBinaryBytes: MAX_BINARY_BYTES,
     });
   });
 
@@ -2702,6 +2709,297 @@ export async function adminRoutes(app: FastifyInstance) {
     });
     return reply.redirect("/admin/client-release?success=" + encodeURIComponent("已清除覆盖，恢复成随代码走的那一份"));
   });
+
+
+  // ---------- 上传安装包 ----------
+  //
+  // 目标很具体:**做完这件事,站长就不用再开宝塔的文件管理器了。**
+  // 所以这一页必须能做完整闭环:看见服务器上有什么 → 传新的 → 删旧的 →
+  // 知道还剩多少磁盘。只能传不能删的话,盘迟早满,他还是得回宝塔。
+  //
+  // ── 这条路上每一个「照抄现成写法」都会踩到的坑 ────────────────────
+  //
+  // 1. **临时文件不能放 os.tmpdir()**。Linux 上 /tmp 常是独立分区甚至 tmpfs,
+  //    跨设备 rename 直接 EXDEV;tmpfs 的话 109MB 先吃进内存。
+  //    落在目标目录旁边的 .part,同目录 rename 是原子的。
+  // 2. **一个字节都不许进内存**。part.toBuffer() 峰值是 2× 文件大小,而
+  //    deploy 的 PM2 配置写着 max_memory_restart: 512M、单进程 —— 一次
+  //    buffer 就是整站重启。边写边算 sha256,内存常数级。
+  // 3. **同名重传会当场把线上那份打成 0 字节**:createWriteStream 默认
+  //    flags 'w',打开的瞬间就 truncate。站长发现包传错了重传的那三分钟里,
+  //    正在下载的人拿到的是逐渐增长的垃圾。所以必须 .part → 校验 → rename,
+  //    线上那份在新包校验通过之前一个字节都不动。
+  // 4. **超限的判据只有 part.file.truncated 是真的**。隔壁那条上传路写了
+  //    三道闸,实测只有这一道会响:另外两道一个恒不成立(busboy 最多吐
+  //    fileSize 字节)、一个是空放(ws 的 finish 先 resolve)。
+  //    而且超大文件如果是表单最后一个 part,插件的错误会从 for-await 里
+  //    抛出来 —— 不单独 catch 的话变成 500 + 英文原文。
+  // 5. **反向代理会先把你拦了**。deploy 的 nginx 示例写的是
+  //    client_max_body_size 10m,109MB 的包连 Node 都到不了,浏览器只看到
+  //    一个没头没尾的失败,服务端日志干干净净。页面上必须写明这件事。
+  //
+  // ── 这个功能最值钱的一步 ──────────────────────────────────────────
+  //
+  // 落盘之后、rename 之前,把边写边算出来的 sha256 跟清单里的比一比。
+  // 对不上的话:桌面端 UpdateDownloader / 安卓 ApkDownloader 下载完会校验,
+  // 不匹配就删掉重下 —— 用户陷入无限重试,而站长完全不知道为什么。
+  // 上传时就拦掉,把两个值并排摆给他看。
+
+  /** 单个安装包的上限。比现有「系统更新」那条(100MB)大 ——
+   *  DMG 已经 109MB,MSI 99.5MB 离 100MB 只剩 0.5% 余量,下一版必炸。 */
+  const MAX_BINARY_BYTES = 300 * 1024 * 1024;
+
+  const BIN_DIRS = {
+    android: path.join(process.cwd(), "data", "android-apks"),
+    desktop: path.join(process.cwd(), "data", "desktop-binaries"),
+  } as const;
+  type BinPlatform = keyof typeof BIN_DIRS;
+
+  /** 同一个目标文件名同时只允许一个人在传。两个管理员同时传同名文件的话,
+   *  临时名不同、rename 有先后,结果是「后到的赢」而**没有任何人被告知** ——
+   *  那比报错更糟。 */
+  const binaryUploadsInFlight = new Set<string>();
+
+  /** 列出一个目录里的安装包 + 它和清单的关系。
+   *  「清单引用了它吗」和「sha256 对得上吗」是站长唯一需要知道的两件事。 */
+  async function listBinaries(platform: BinPlatform) {
+    const fs = await import("node:fs/promises");
+    const dir = BIN_DIRS[platform];
+    const names = await fs.readdir(dir).catch(() => [] as string[]);
+    const desktop = await import("../lib/desktop_release.js");
+    const android = await import("../lib/android_release.js");
+    const rel = platform === "android"
+      ? await android.getLatestRelease()
+      : await desktop.getLatestRelease();
+    /** 清单里提到的文件名 → 它声明的 sha256 / 大小。 */
+    const wanted = new Map<string, { sha256: string; sizeBytes: number }>();
+    if (rel) {
+      if (platform === "android") {
+        const r = rel as { filename: string; sha256: string; sizeBytes: number };
+        if (r.filename) wanted.set(r.filename, { sha256: r.sha256, sizeBytes: r.sizeBytes });
+      } else {
+        for (const a of Object.values((rel as { assets: Record<string, { filename: string; sha256: string; sizeBytes: number }> }).assets)) {
+          if (a?.filename) wanted.set(a.filename, { sha256: a.sha256, sizeBytes: a.sizeBytes });
+        }
+      }
+    }
+    const out: Array<{
+      name: string; size: number; referenced: boolean; sizeMatches: boolean | null;
+      servable: boolean; partial: boolean;
+    }> = [];
+    let total = 0;
+    for (const name of names.sort()) {
+      // .part 是上传中途的临时文件 —— 单独标出来,别让人以为那是个可用的包。
+      const partial = name.endsWith(".part");
+      const st = await fs.stat(path.join(dir, name)).catch(() => null);
+      if (!st || !st.isFile()) continue;
+      total += st.size;
+      const w = wanted.get(name);
+      out.push({
+        name, size: st.size, partial,
+        referenced: !!w,
+        // 只比大小,不在列表页重算 109MB 的 sha256(那会卡住整个后台)。
+        sizeMatches: w ? (w.sizeBytes > 0 ? st.size === w.sizeBytes : null) : null,
+        servable: platform === "android"
+          ? android.isServableApkName(name)
+          : desktop.isServableBinaryName(name),
+      });
+    }
+    return { dir, files: out, totalBytes: total };
+  }
+
+  /** 磁盘还剩多少。全仓以前一处检查都没有 —— 而 data/ 和 Postgres 通常在
+   *  同一个文件系统上,写满之后不是「上传失败」这么干净,是数据库拒绝写入。 */
+  async function diskFree(dir: string): Promise<{ freeBytes: number; totalBytes: number } | null> {
+    try {
+      const fs = await import("node:fs");
+      const st = fs.statfsSync(dir);
+      return { freeBytes: st.bavail * st.bsize, totalBytes: st.blocks * st.bsize };
+    } catch { return null; }
+  }
+
+  app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/binary", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    // multipart 的 req.body 是 undefined(解析器只 done() 不塞 body),
+    // 所以 _csrf 字段读不到 —— 客户端改用 x-csrf-token 头,这里照常验。
+    // (隔壁那条上传路干脆不验 CSRF,注释里的理由是错的:cookie 照常发,
+    //  而 CORS 从不拦跨站的 multipart 表单 POST。真正挡住的是 sameSite=lax。)
+    if (!verifyCsrf(req, reply)) return;
+
+    const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+    if (!p.success) return reply.code(400).send({ ok: false, error: "bad_platform" });
+    const platform = p.data;
+    const dir = BIN_DIRS[platform];
+
+    const desktop = await import("../lib/desktop_release.js");
+    const android = await import("../lib/android_release.js");
+    const nameOk = (n: string) => platform === "android"
+      ? android.isServableApkName(n) : desktop.isServableBinaryName(n);
+
+    const fs = await import("node:fs/promises");
+    await mkdir(dir, { recursive: true });
+
+    let saved: { name: string; size: number; sha256: string } | null = null;
+    let rejected: { code: number; msg: string } | null = null;
+    let tmpPath: string | null = null;
+    let lockedName: string | null = null;
+
+    try {
+      const parts = req.parts({
+        limits: {
+          fileSize: MAX_BINARY_BYTES,
+          files: 1,
+          fields: 5,
+          fieldSize: 64 * 1024,
+          // 显式写:不写会 deepmerge 继承插件默认的 1000。
+          parts: 20,
+        },
+      });
+
+      for await (const part of parts) {
+        if (rejected) { if (part.type === "file") part.file.resume(); continue; }
+        if (part.type !== "file") continue;
+
+        const fname = (part.filename || "").trim();
+        if (!nameOk(fname)) {
+          rejected = { code: 400, msg: `文件名不合规：${fname.slice(0, 80)}。只能用英文字母、数字、点、下划线和连字符，扩展名必须是 ${platform === "android" ? ".apk" : ".dmg / .msi / .deb"}。` };
+          part.file.resume();
+          continue;
+        }
+        if (binaryUploadsInFlight.has(`${platform}/${fname}`)) {
+          rejected = { code: 409, msg: `${fname} 正在被另一个上传占用，请稍候再试。` };
+          part.file.resume();
+          continue;
+        }
+        lockedName = `${platform}/${fname}`;
+        binaryUploadsInFlight.add(lockedName);
+
+        // 临时文件落在**目标目录旁边**:同目录 rename 才是原子的,也不跨设备。
+        const rand = randomBytes(6).toString("hex");
+        tmpPath = path.join(dir, `.upload-${rand}.part`);
+        const hash = createHash("sha256");
+        let bytes = 0;
+        const ws = createWriteStream(tmpPath);
+        await new Promise<void>((resolve, reject) => {
+          part.file.on("data", (c: Buffer) => { bytes += c.length; hash.update(c); });
+          part.file.on("error", reject);
+          ws.on("error", reject);
+          ws.on("finish", () => resolve());
+          part.file.pipe(ws);
+        });
+        // **唯一真正生效的超限判据。** 别在旁边再写「双保险」——
+        // 那两道实测都不响,留着只会让人以为有冗余而把这一道删掉。
+        if ((part.file as unknown as { truncated?: boolean }).truncated) {
+          rejected = { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` };
+          continue;
+        }
+        saved = { name: fname, size: bytes, sha256: hash.digest("hex") };
+      }
+    } catch (err) {
+      // 超大文件排在最后一个 part 时,插件的 RequestFileTooLargeError 是从
+      // for-await 里抛出来的,不 catch 的话变成 500 + 英文原文。
+      const e = err as { code?: string; statusCode?: number; message?: string };
+      rejected = (e.code === "FST_REQ_FILE_TOO_LARGE" || e.statusCode === 413)
+        ? { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` }
+        : { code: 500, msg: e.message || "上传失败" };
+    } finally {
+      if (lockedName) binaryUploadsInFlight.delete(lockedName);
+    }
+
+    const cleanup = async () => { if (tmpPath) await fs.unlink(tmpPath).catch(() => undefined); };
+
+    if (rejected || !saved) {
+      await cleanup();
+      const r = rejected ?? { code: 400, msg: "没有收到文件。" };
+      await audit(req, u.id, "app_binary.upload_rejected", {
+        targetType: "client_release", targetId: platform, details: { reason: r.msg.slice(0, 200) },
+      });
+      return reply.code(r.code).send({ ok: false, error: r.msg });
+    }
+
+    // ── 最值钱的一步:和清单比对 ──
+    const rel = platform === "android"
+      ? await android.getLatestRelease()
+      : await desktop.getLatestRelease();
+    let declared: { sha256: string; sizeBytes: number } | null = null;
+    if (rel) {
+      if (platform === "android") {
+        const r = rel as { filename: string; sha256: string; sizeBytes: number };
+        if (r.filename === saved.name) declared = { sha256: r.sha256, sizeBytes: r.sizeBytes };
+      } else {
+        for (const a of Object.values((rel as { assets: Record<string, { filename: string; sha256: string; sizeBytes: number }> }).assets)) {
+          if (a?.filename === saved.name) declared = { sha256: a.sha256, sizeBytes: a.sizeBytes };
+        }
+      }
+    }
+    if (declared && declared.sha256 && declared.sha256.toLowerCase() !== saved.sha256) {
+      await cleanup();
+      await audit(req, u.id, "app_binary.upload_rejected", {
+        targetType: "client_release", targetId: platform,
+        details: { reason: "sha256_mismatch", file: saved.name },
+      });
+      return reply.code(409).send({
+        ok: false,
+        error: "这个包和清单里写的对不上 —— 没有保存。\n"
+          + `清单里写的：${declared.sha256}\n`
+          + `你传上来的：${saved.sha256}\n`
+          + "客户端下载完会校验这个值，不匹配就会一直重试而且不告诉用户为什么。"
+          + "要么重传正确的包，要么先把清单里的 sha256 改成上面这个值。",
+      });
+    }
+
+    // 校验过了才原子落位。线上那份在这之前一个字节都没动过。
+    const finalPath = path.join(dir, saved.name);
+    await fs.rename(tmpPath!, finalPath);
+    tmpPath = null;
+
+    await audit(req, u.id, "app_binary.upload", {
+      targetType: "client_release", targetId: platform,
+      details: { file: saved.name, sizeBytes: saved.size, sha256: saved.sha256 },
+    });
+    return reply.send({
+      ok: true,
+      file: saved.name,
+      sizeBytes: saved.size,
+      sha256: saved.sha256,
+      // 清单里没写 sha256 的话要**明确告诉他**,别默默通过 ——
+      // 那意味着这一版发出去不会有任何客户端校验。
+      unverified: !declared || !declared.sha256,
+      referenced: !!declared,
+    });
+  });
+
+  app.post<{ Params: { platform: string; filename: string } }>(
+    "/admin/client-release/:platform/binary/:filename/delete", {
+      config: { oauthScope: "deny", rateLimit: { max: 20, timeWindow: "10 minutes" } },
+    }, async (req, reply) => {
+      const u = await requireAdmin(req, reply);
+      if (!u) return reply;
+      if (!verifyCsrf(req, reply)) return;
+      const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+      if (!p.success) return reply.code(400).send("bad_platform");
+      const name = req.params.filename;
+      // 删除也要过文件名判据 —— 它同时挡住了目录穿越。
+      const desktop = await import("../lib/desktop_release.js");
+      const android = await import("../lib/android_release.js");
+      const ok = p.data === "android" ? android.isServableApkName(name)
+        : desktop.isServableBinaryName(name);
+      // .part 是上传残留,也允许删(它不满足上面的判据)。
+      const isPart = /^\.upload-[0-9a-f]{12}\.part$/.test(name);
+      if (!ok && !isPart) return reply.code(400).send("invalid_filename");
+      const full = path.join(BIN_DIRS[p.data], name);
+      // 二次确认没跑出目录:path.join 对 .. 不设防,判据在上面,这里兜底。
+      if (!full.startsWith(BIN_DIRS[p.data] + path.sep)) return reply.code(400).send("invalid_filename");
+      await unlink(full).catch(() => undefined);
+      await audit(req, u.id, "app_binary.delete", {
+        targetType: "client_release", targetId: p.data, details: { file: name },
+      });
+      return reply.redirect("/admin/client-release?success=" + encodeURIComponent(`已删除 ${name}`));
+    },
+  );
 
   void asc;
 }

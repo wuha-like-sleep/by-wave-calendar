@@ -55,15 +55,31 @@ location / {
     proxy_set_header Upgrade           $http_upgrade;
     proxy_set_header Connection        "upgrade";
 
-    # CalDAV REPORT 请求体可以很大（一次拉一个月的事件 multiget），
-    # 默认 1MB 太小会触发 413。
-    client_max_body_size       10m;
+    # 这一项决定「后台能不能传大文件」，而且**拦下来的是 nginx 不是本程序**：
+    # 超过之后 nginx 自己回一个 HTML 413 并切断连接，浏览器只看到一个
+    # 没头没尾的失败，Node 那边一行日志都没有、审计表里也没有记录 ——
+    # 很容易被误判成「后台上传功能坏了」而去改代码。
+    #
+    # 三个用得上的地方，按大小排：
+    #   · 后台「客户端更新」传安装包 —— DMG 约 110MB，上限 300MB
+    #   · 后台「系统更新」传发版包   —— 目前约 2MB，上限 100MB
+    #   · CalDAV REPORT（一次拉一个月的事件 multiget）—— 几 MB
+    # 320m 覆盖上面全部并留了余量。**这里以前写的是 10m**，也就是说
+    # 照本文件部署的站，连 100MB 的系统更新上传都从来没能成功过。
+    client_max_body_size       320m;
     client_body_buffer_size    1m;
+
+    # 大文件上传必须关掉请求体缓冲。默认 on 的话 nginx 会先把整个 110MB
+    # 落到自己的临时目录、收完才转发给 Node —— 磁盘写两遍，而且上传进度条
+    # 会在 100% 之后再干等一段时间（那段时间是 nginx 在转发）。
+    proxy_request_buffering     off;
 
     # CalDAV REPORT 在大日历上可能需要几秒响应；默认 60s 在网络不稳
     # 的时候够用，但留点余地。
-    proxy_read_timeout         120s;
-    proxy_send_timeout         120s;
+    # send_timeout 对上传尤其重要：110MB 在慢连接上要传好几分钟，
+    # 120s 会在传到一半时直接断开。
+    proxy_read_timeout         600s;
+    proxy_send_timeout         600s;
     proxy_connect_timeout      10s;
 
     # 关掉响应 buffering 让 push 通知（SSE）和长响应能流式送出
