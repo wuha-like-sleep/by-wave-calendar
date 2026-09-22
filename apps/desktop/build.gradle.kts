@@ -28,17 +28,32 @@ plugins {
 }
 
 group = "cn.bywave.calendar.desktop"
-// macOS pkgbuild + Win MSI both require MAJOR ≥ 1 in their native
-// installer version metadata, even if our marketing version is < 1.
-// We keep installer `version` ≥ 1.0.0 (set on packageVersion below),
-// and surface the real marketing version via BuildInfo.VERSION_NAME.
+// 安装器的版本号就是这里的 `version`,不再单独写死一个。
+//
+// 以前 nativeDistributions.packageVersion 硬编码成 "1.0.0",结果是
+// **Windows 用户从装上第一版起就没收到过任何更新**,而程序每次都告诉他们
+// 「更新成功」。原因是 jpackage 的 ProductCode 是从版本号算出来的:
+//   ProductCode = UUIDv3( MD5("ProductCode/<vendor>/<appName>/<version>") )
+// 版本号钉死 → 每一版的 ProductCode 逐字节相同 → msiexec 认为「同一个产品
+// 已经装过了」,既不升级也不并排安装,只能进维护模式;而 Upgrade 表的可升级
+// 区间是「严格小于 1.0.0」,装着 1.0.0 的机器正好掉在两行中间的缝里。
+// 安装命令没带 REINSTALL=ALL,所以维护模式一个文件都不换,大概率还返回 0 ——
+// 于是 UpdateInstaller 走 else 分支写「update ok」,把**旧版** exe 拉起来。
+// 用户看到进度条、看到程序重启、以为好了,下次启动又弹同一个更新。
+//
+// 平台对版本号的真实约束(Compose 1.7.0 的 validatePackageVersions 实测):
+//   · Windows:正好 3 段,MAJOR 0-255、MINOR 0-255、BUILD 0-65535。
+//     **MAJOR 允许为 0** —— 这里原来的注释写的「Win MSI 要求 MAJOR ≥ 1」是错的。
+//   · macOS:1-3 段,全非负整数,**第一段必须 > 0**(这条才是真的)。
+//   · Linux deb:([0-9]+:)?[0-9][0-9a-zA-Z.+~-]*
+// 也就是说三平台的交集是「第一段 > 0 的三段式」,1.1.1 满足。
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 23). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 24). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.1.0"
+version = "1.1.1"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
@@ -101,7 +116,11 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "ByWaveCalendar"
-            packageVersion = "1.0.0"  // installer version — must be ≥ 1.0
+            // 不设 packageVersion —— Compose 的回落链是
+            //   format-specific → OS-specific → packageVersion → project.version
+            // 所以它自动拿上面那个 `version`。**别再写死。**
+            // 写死会让每一版的 MSI ProductCode 相同,Windows 的自动更新
+            // 从此静默失效(见文件头那段)。
             vendor = "ByWave"
             // ASCII-only for installer-level metadata. WiX 3.11 light.exe
             // (the linker jpackage uses for MSI) exits 311 when
