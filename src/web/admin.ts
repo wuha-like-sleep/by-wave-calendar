@@ -1677,6 +1677,8 @@ export async function adminRoutes(app: FastifyInstance) {
         lockoutThreshold: z.coerce.number().int().min(1).max(100),
         lockoutMinutes: z.coerce.number().int().min(1).max(10080),
         forceAdminMfa: z.string().optional(),
+        requirePasskeyUv: z.string().optional(),
+        ssoSatisfiesMfa: z.string().optional(),
         embedEnabled: z.string().optional(),
       })
       .safeParse(req.body);
@@ -1689,6 +1691,8 @@ export async function adminRoutes(app: FastifyInstance) {
       lockoutThreshold: body.data.lockoutThreshold,
       lockoutMinutes: body.data.lockoutMinutes,
       forceAdminMfa: body.data.forceAdminMfa === "on",
+      requirePasskeyUv: body.data.requirePasskeyUv === "on",
+      ssoSatisfiesMfa: body.data.ssoSatisfiesMfa === "on",
       embedEnabled: body.data.embedEnabled === "on",
     });
     return reply.redirect("/admin/security?success=" + encodeURIComponent("安全设置已保存"));

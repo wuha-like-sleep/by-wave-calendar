@@ -192,6 +192,16 @@ export const siteSettings = pgTable("site_settings", {
   // When true, admin accounts MUST have MFA enabled — login is gated on the
   // /app/settings/mfa/setup flow until they do.
   forceAdminMfa: boolean("force_admin_mfa").notNull().default(false),
+  // passkey 登录要不要求认证器真的做过「用户验证」(指纹 / 面容 / PIN)。
+  // 关着时:一把插上就能用、不需要任何验证的硬件钥匙,等同于过了两步验证。
+  // 开着时:没做用户验证的 passkey **只等于密码** —— 开了两步验证的账号
+  // 还要补验证码,没开的照常登录。所以这个开关不会把任何人关在门外。
+  requirePasskeyUv: boolean("require_passkey_uv").notNull().default(true),
+  // 外部身份源(SSO)登录算不算已经过了本站的两步验证。
+  // 关着时:SSO 登录之后仍然要补本站的验证码。
+  // 什么时候该关:你接的登录源允许用户自己填邮箱 —— 那样别人注册一个
+  // 你的管理员邮箱就能登进来,而本站的两步验证被整条绕过。
+  ssoSatisfiesMfa: boolean("sso_satisfies_mfa").notNull().default(true),
   // When false, /embed/<token> returns 404 site-wide. Admin can flip this
   // off if they don't want third-party sites embedding the calendar iframe.
   // Doesn't affect the underlying ICS share — those still work via /ics/.

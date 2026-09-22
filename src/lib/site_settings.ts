@@ -38,6 +38,8 @@ export type SettingsView = {
   qrLoginEnabled: boolean;
   defaultLocale: string;
   forceAdminMfa: boolean;
+  requirePasskeyUv: boolean;
+  ssoSatisfiesMfa: boolean;
   embedEnabled: boolean;
   embedFrameAncestors: string;
   vapidPublicKey: string | null;
@@ -158,6 +160,10 @@ export function toView(r: SettingsRow): SettingsView {
     qrLoginEnabled: r.qrLoginEnabled,
     defaultLocale: r.defaultLocale || "zh-CN",
     forceAdminMfa: r.forceAdminMfa,
+    // 列不存在(老库、或者迁移器记账脱节)时回落到**保持现状**那一侧,
+    // 和列默认值一致 —— 三处写别的,「补上了」反而是改了行为。
+    requirePasskeyUv: r.requirePasskeyUv ?? true,
+    ssoSatisfiesMfa: r.ssoSatisfiesMfa ?? true,
     embedEnabled: r.embedEnabled,
     embedFrameAncestors: r.embedFrameAncestors ?? "",
     vapidPublicKey: r.vapidPublicKey,
@@ -250,6 +256,8 @@ export async function updateSettings(patch: Partial<{
   qrLoginEnabled: boolean;
   defaultLocale: string;
   forceAdminMfa: boolean;
+  requirePasskeyUv: boolean;
+  ssoSatisfiesMfa: boolean;
   embedEnabled: boolean;
   embedFrameAncestors: string;
   vapidPublicKey: string | null;

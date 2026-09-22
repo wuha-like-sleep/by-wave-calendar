@@ -54,7 +54,7 @@
     <div class="flex items-start justify-between gap-4 mb-3">
       <div>
         <h2 class="text-lg font-semibold text-slate-900">管理员强制启用 MFA</h2>
-        <p class="mt-1 text-sm text-slate-500">勾上之后任何管理员账号必须先在 <code class="bg-slate-100 px-1 rounded">/app/settings/mfa/setup</code> 启用 TOTP 才能进入后台。Passkey 登录也算（Passkey 等同二要素）。</p>
+        <p class="mt-1 text-sm text-slate-500">勾上之后任何管理员账号必须先在 <code class="bg-slate-100 px-1 rounded">/app/settings/mfa/setup</code> 启用 TOTP 才能进入后台。Passkey 登录算不算，取决于下面「Passkey 必须做过用户验证」那个开关。</p>
       </div>
     </div>
     <label class="inline-flex items-center gap-2 cursor-pointer">
@@ -63,6 +63,50 @@
       <span class="text-sm font-medium text-slate-700">管理员必须启用 MFA</span>
     </label>
     <p class="mt-2 text-xs text-amber-700">⚠️ 开启前确认所有管理员（包括你自己）已经启用 MFA；否则会被自己锁在门外，需要数据库手工恢复。</p>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="flex items-start justify-between gap-4 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">Passkey 必须做过用户验证</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Passkey 要算「两个因素都过了」，认证器得真的验过人 —— 指纹、面容或 PIN。
+          一把插上就能用、不做任何验证的硬件钥匙只是「你有的东西」，不是两个因素。
+          关掉这个开关的话，那种钥匙也等同于过了两步验证。
+        </p>
+      </div>
+    </div>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="requirePasskeyUv" <%= settings.requirePasskeyUv ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm font-medium text-slate-700">Passkey 必须做过用户验证（默认开启）</span>
+    </label>
+    <p class="mt-2 text-xs text-slate-500">
+      这个开关<strong>不会把任何人关在门外</strong>：没做用户验证的 Passkey 不是被拒绝，
+      而是只等于密码 —— 开了两步验证的账号补一次验证码，没开的照常登录。
+    </p>
+  </section>
+
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <div class="flex items-start justify-between gap-4 mb-3">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-900">SSO 登录算作已通过两步验证</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          开着时，用外部身份源登录的人不再需要补本站的验证码（认证是对方做的）。
+          关掉之后，SSO 登录完仍然要过一次本站的两步验证。
+        </p>
+      </div>
+    </div>
+    <label class="inline-flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" name="ssoSatisfiesMfa" <%= settings.ssoSatisfiesMfa ? "checked" : "" %>
+             class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
+      <span class="text-sm font-medium text-slate-700">SSO 登录算作已通过两步验证（默认开启）</span>
+    </label>
+    <p class="mt-2 text-xs text-amber-700">
+      ⚠️ <strong>你接的登录源允许用户自己填邮箱的话，请关掉它。</strong>
+      那种情况下，别人在对方那边注册一个你的管理员邮箱就能登进来，
+      而本站的两步验证被整条绕过。公司自建、邮箱由 HR 系统同步的 Keycloak 没有这个问题。
+    </p>
   </section>
 
   <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">

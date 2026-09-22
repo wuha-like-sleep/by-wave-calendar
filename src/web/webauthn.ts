@@ -191,9 +191,16 @@ export async function webauthnRoutes(app: FastifyInstance) {
       .set({ counter: verification.authenticationInfo.newCounter, lastUsedAt: new Date() })
       .where(eq(schema.webauthnCredentials.id, credRow.id));
 
-    // Passkey login = both factors satisfied (something-you-have + verification).
+    // passkey 算不算「两个因素都过了」,取决于认证器有没有真的做过用户验证
+    // (指纹 / 面容 / PIN)。以前这里无条件当成过了 —— 一把插上就能用、
+    // 不做任何验证的硬件钥匙也照样拿到完整会话。userVerified 是库从
+    // authenticatorData 的 UV 位读出来的事实,不是客户端说了算。
     // rememberMe honors the「记住我」checkbox on the /login page.
-    await createSession(reply, credRow.userId, { kind: "passkey" }, { rememberMe });
+    await createSession(
+      reply, credRow.userId,
+      { kind: "passkey", userVerified: verification.authenticationInfo.userVerified },
+      { rememberMe },
+    );
     if (usr) {
       void notifyLoginSuccess(req, usr, "passkey").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);

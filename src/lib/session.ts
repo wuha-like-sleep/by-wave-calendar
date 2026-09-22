@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
+import { getSettings } from "./site_settings.js";
 import { newSessionId } from "./ids.js";
 import { env } from "../env.js";
 
@@ -139,9 +140,15 @@ export type SessionFactor =
   | { kind: "password" }
   /** 当场过了 TOTP 或备用码。 */
   | { kind: "totp" }
-  /** passkey —— 本身就是「你有的东西 + 你验过的」,不再要 TOTP。 */
-  | { kind: "passkey" }
-  /** 外部身份源登录。认证是对方做的,本站不再要 TOTP。 */
+  /** passkey。**要不要算「已过两步验证」取决于认证器有没有真的做过用户验证**
+   *  (指纹 / 面容 / PIN),以及站点的 requirePasskeyUv 开关。
+   *  一把插上就能用、不做任何验证的硬件钥匙,只是「你有的东西」,不是两个因素。
+   *  不满足时不是拒绝登录,而是降级成密码那一档 —— 开了两步验证的补验证码,
+   *  没开的照常登录。所以这条开关不会把任何人关在门外。 */
+  | { kind: "passkey"; userVerified: boolean }
+  /** 外部身份源登录。认证是对方做的 —— 但**算不算满足本站的两步验证**
+   *  取决于站点的 ssoSatisfiesMfa 开关:如果那个登录源允许用户自己填邮箱,
+   *  别人注册一个管理员邮箱就能登进来,而本站的两步验证被整条绕过。 */
   | { kind: "sso"; slug: string }
   /** 上游流程已经验过,这里只是把结果换成浏览器会话。
    *  why 必填且是给人看的:把「上游」是谁写清楚。这类调用点最容易被
@@ -155,8 +162,26 @@ export async function createSession(
   opts: { rememberMe?: boolean } = {},
 ): Promise<string> {
   // 「过没过二次验证」在这里算,不接受调用方的说法。
+  //
+  // 三档:
+  //   · 无条件满足 —— totp(当场验过)、delegated(上游验过)
+  //   · 看站点策略 —— passkey(用户验证 + 开关)、sso(开关)
+  //   · 只等于密码 —— password,以及上面两档不满足时的降级
+  let strong: boolean;
+  if (factor.kind === "totp" || factor.kind === "delegated") {
+    strong = true;
+  } else if (factor.kind === "passkey") {
+    strong = factor.userVerified || !(await getSettings()).requirePasskeyUv;
+  } else if (factor.kind === "sso") {
+    strong = (await getSettings()).ssoSatisfiesMfa;
+  } else {
+    strong = false;  // password
+  }
+
   let mfaSatisfied: boolean;
-  if (factor.kind === "password") {
+  if (strong) {
+    mfaSatisfied = true;
+  } else {
     const [u] = await db
       .select({ mfaEnabled: schema.users.mfaEnabled })
       .from(schema.users)
@@ -164,8 +189,6 @@ export async function createSession(
       .limit(1);
     // 查不到用户就当作「开着二次验证」—— 出错时往严的那边倒。
     mfaSatisfied = u ? !u.mfaEnabled : false;
-  } else {
-    mfaSatisfied = true;
   }
   const id = newSessionId();
   // Default rememberMe=true preserves the pre-checkbox behavior for all

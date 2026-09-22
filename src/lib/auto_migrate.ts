@@ -146,4 +146,15 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "site_settings.caldav_sync_epoch（缺了每一个页面都 500）",
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS caldav_sync_epoch text NOT NULL DEFAULT ''`,
   },
+  {
+    // 0052。两个默认值和迁移里一字不差。
+    // 补出来的都是**保持现状**那一侧:passkey 要求用户验证(不会把人关在门外,
+    // 最坏是多补一次验证码)、SSO 仍然算满足两步验证(不改变升级前的行为)。
+    why: "site_settings.require_passkey_uv（缺了登录路径直接 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS require_passkey_uv boolean NOT NULL DEFAULT true`,
+  },
+  {
+    why: "site_settings.sso_satisfies_mfa（缺了 SSO 回调直接 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS sso_satisfies_mfa boolean NOT NULL DEFAULT true`,
+  },
 ];
