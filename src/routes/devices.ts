@@ -876,7 +876,7 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     const { hashPassword } = await import("../lib/password.js");
     const hash = await hashPassword(body.data.newPassword);
-    await db.update(schema.users).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    await db.update(schema.users).set({ passwordHash: hash, passwordSet: true, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     // 改密码要把其它客户端全部踢掉，只留当前这台设备（否则用户在 App 里
     // 改完密码自己就被登出了）。
     //

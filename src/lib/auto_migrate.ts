@@ -157,4 +157,13 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "site_settings.sso_satisfies_mfa（缺了 SSO 回调直接 500）",
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS sso_satisfies_mfa boolean NOT NULL DEFAULT true`,
   },
+  {
+    // 0053。默认值和迁移里一字不差(true)。
+    // **这里故意不做 0053 里那段按注册来源回填的 UPDATE** —— 这一条的职责只是
+    // 「别让读 users 的请求 500」,不是替迁移做决定。补出来的 true 的代价是:
+    // 后台会把 SSO 建的号也显示成「有密码」,也就是退回修之前的样子;
+    // 迁移器一旦恢复记账,那句 UPDATE 会把它们改对。
+    why: "users.password_set（缺了登录和后台用户页都 500）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set boolean NOT NULL DEFAULT true`,
+  },
 ];

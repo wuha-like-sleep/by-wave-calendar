@@ -16,6 +16,13 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   emailVerified: boolean("email_verified").notNull().default(false),
   passwordHash: text("password_hash").notNull(),
+  // 这个账号有没有一把**自己设过**的密码。
+  //
+  // password_hash 是 NOT NULL，而 SSO / IdP / Apple 建出来的号拿到的是一串随机
+  // 不可用的哈希（见 account_provisioning.ts，故意的：任何路径拿它比对都只会
+  // 安全地失败）。所以光看有没有哈希分不出「有密码」和「有一把谁也用不了的假钥匙」，
+  // 后台因此给每个人都挂了「密码」徽章——包括根本没法用密码登录的那些人。
+  passwordSet: boolean("password_set").notNull().default(true),
   displayName: text("display_name"),
   isAdmin: boolean("is_admin").notNull().default(false),
   mfaEnabled: boolean("mfa_enabled").notNull().default(false),

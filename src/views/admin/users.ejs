@@ -1,18 +1,43 @@
 <%- include('_nav', { activeNav: '/admin/users' }) %>
 
-<div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminUsers.heading") %></h1>
-    <p class="mt-1 text-sm text-slate-500"><%- t("adminUsers.summary", { total: stats.total, admins: stats.admins, disabled: stats.disabled }) %></p>
-    <a href="/admin/users/merge" class="mt-1 inline-block text-xs text-brand-600 hover:text-brand-700">合并重复账号 →</a>
+<div class="flex flex-col gap-3 mb-5">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminUsers.heading") %></h1>
+      <p class="mt-1 text-sm text-slate-500">
+        <%- t("adminUsers.summary", { total: stats.total, admins: stats.admins, disabled: stats.disabled }) %>
+        <% if (stats.unverified > 0) { %> · <%= t("adminUsers.stats.unverified", { n: stats.unverified }) %><% } %>
+        <% if (stats.locked > 0) { %> · <span class="text-amber-600"><%= t("adminUsers.stats.locked", { n: stats.locked }) %></span><% } %>
+      </p>
+      <a href="/admin/users/merge" class="mt-1 inline-block text-xs text-brand-600 hover:text-brand-700"><%= t("adminUsers.mergeLink") %></a>
+    </div>
   </div>
-  <%# 搜索和来源筛选在同一个 form 里:分成两个的话,换来源会把搜索词丢掉。 %>
-  <form method="get" action="/admin/users" class="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+
+  <%# 搜索和所有筛选在**同一个 form** 里:分成几个的话,换一个条件会把别的条件丢掉。
+      翻页链接那边靠 qs() 把这些条件原样带上,同理。 %>
+  <form method="get" action="/admin/users" class="flex flex-wrap items-center gap-2">
     <div class="relative w-full sm:w-64">
       <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
       <input type="search" name="q" value="<%= query %>" autocomplete="off" placeholder="<%= t('adminUsers.searchPlaceholder') %>"
              class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
+
+    <select name="role" data-bwc-autosubmit aria-label="<%= t('adminUsers.filter.roleLabel') %>"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+      <option value="" <%= roleFilter === '' ? 'selected' : '' %>><%= t("adminUsers.filter.roleAll") %></option>
+      <option value="admin" <%= roleFilter === 'admin' ? 'selected' : '' %>><%= t("adminUsers.filter.roleAdmin") %></option>
+      <option value="normal" <%= roleFilter === 'normal' ? 'selected' : '' %>><%= t("adminUsers.filter.roleNormal") %></option>
+    </select>
+
+    <select name="status" data-bwc-autosubmit aria-label="<%= t('adminUsers.filter.statusLabel') %>"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+      <option value="" <%= statusFilter === '' ? 'selected' : '' %>><%= t("adminUsers.filter.statusAll") %></option>
+      <option value="active" <%= statusFilter === 'active' ? 'selected' : '' %>><%= t("adminUsers.filter.statusActive") %></option>
+      <option value="disabled" <%= statusFilter === 'disabled' ? 'selected' : '' %>><%= t("adminUsers.filter.statusDisabled") %></option>
+      <option value="unverified" <%= statusFilter === 'unverified' ? 'selected' : '' %>><%= t("adminUsers.filter.statusUnverified") %></option>
+      <option value="locked" <%= statusFilter === 'locked' ? 'selected' : '' %>><%= t("adminUsers.filter.statusLocked") %></option>
+    </select>
+
     <select name="source" data-bwc-autosubmit aria-label="<%= t('adminUsers.filter.sourceLabel') %>"
             class="w-full sm:w-52 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
       <option value="" <%= sourceFilter === '' ? 'selected' : '' %>><%= t("adminUsers.filter.sourceAll") %></option>
@@ -29,7 +54,26 @@
         </option>
       <% }) %>
     </select>
-    <button type="submit" class="sm:hidden rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700"><%= t("adminUsers.filter.apply") %></button>
+
+    <%# 排序做成一个下拉而不是可点的表头:表头排序在手机上点不准,
+        而且「现在按什么排」在下拉里是一眼可见的,表头上只有一个小箭头。
+        值是 "字段:方向" 一个串,由服务端拆 —— **不能用内联 onchange 去写两个隐藏域**:
+        CSP 里 script-src-attr 是 'none',内联事件属性根本不会执行,
+        而且门禁 test 盯着「模板里不许出现 on*=」。 %>
+    <select name="sortdir" data-bwc-autosubmit aria-label="<%= t('adminUsers.sort.label') %>"
+            class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+      <% var cur = sort + ':' + dir; %>
+      <option value="createdAt:desc" <%= cur === 'createdAt:desc' ? 'selected' : '' %>><%= t("adminUsers.sort.newest") %></option>
+      <option value="createdAt:asc"  <%= cur === 'createdAt:asc'  ? 'selected' : '' %>><%= t("adminUsers.sort.oldest") %></option>
+      <option value="email:asc"      <%= cur === 'email:asc'      ? 'selected' : '' %>><%= t("adminUsers.sort.emailAsc") %></option>
+      <option value="email:desc"     <%= cur === 'email:desc'     ? 'selected' : '' %>><%= t("adminUsers.sort.emailDesc") %></option>
+    </select>
+
+    <button type="submit" class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 sm:hidden"><%= t("adminUsers.filter.apply") %></button>
+    <% if (query || roleFilter || statusFilter || sourceFilter) { %>
+      <a href="/admin/users" class="text-xs text-slate-500 hover:text-slate-700 underline"><%= t("adminUsers.filter.reset") %></a>
+      <span class="text-xs text-slate-500"><%= t("adminUsers.filtered", { n: filtered }) %></span>
+    <% } %>
   </form>
 </div>
 
@@ -41,6 +85,9 @@
   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
   <input type="hidden" name="q" value="<%= query %>" />
   <input type="hidden" name="source" value="<%= sourceFilter %>" />
+  <input type="hidden" name="role" value="<%= roleFilter %>" />
+  <input type="hidden" name="status" value="<%= statusFilter %>" />
+  <input type="hidden" name="page" value="<%= page %>" />
   <button type="submit" class="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-700 hover:bg-amber-50"><%= t("adminUsers.bulk.disableSelected") %></button>
   <span class="text-xs text-slate-500"><%= t("adminUsers.bulk.hint") %></span>
 </form>
@@ -55,7 +102,7 @@
         </th>
         <th class="px-4 py-3"><%= t("adminUsers.col.email") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.displayName") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.verified") %></th>
+        <th class="px-4 py-3"><%= t("adminUsers.col.status") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.loginMethod") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.source") %></th>
         <th class="px-4 py-3"><%= t("adminUsers.col.createdAt") %></th>
@@ -68,7 +115,9 @@
         <tr>
           <td colspan="9" class="px-4 py-12 text-center">
             <div class="text-3xl mb-2">👥</div>
-            <div class="text-sm text-slate-500"><%- query ? t("adminUsers.emptyFiltered", { q: query }) : t("adminUsers.empty") %></div>
+            <div class="text-sm text-slate-500"><%- query ? t("adminUsers.emptyFiltered", { q: query })
+                  : (roleFilter || statusFilter || sourceFilter) ? t("adminUsers.emptyPage")
+                  : t("adminUsers.empty") %></div>
           </td>
         </tr>
       <% } %>
@@ -87,15 +136,29 @@
           </td>
           <td class="px-4 py-3 text-slate-700"><%= u.displayName || '—' %></td>
           <td class="px-4 py-3">
-            <% if (u.emailVerified) { %>
-              <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminUsers.badge.emailVerified") %></span>
-            <% } else { %>
-              <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.emailUnverified") %></span>
-            <% } %>
+            <div class="flex flex-wrap gap-1">
+              <% if (u.emailVerified) { %>
+                <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminUsers.badge.emailVerified") %></span>
+              <% } else { %>
+                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.emailUnverified") %></span>
+              <% } %>
+              <%# 锁定是有时效的,路由里已经比过时间了(isLocked),模板不再自己比 —— 
+                  每个模板各比一次,迟早有一处忘了,然后挂着一个早就能登录的人。 %>
+              <% if (u.isLocked) { %>
+                <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700" title="<%= t("adminUsers.badge.lockedTitle") %>">🔒 <%= t("adminUsers.badge.locked") %></span>
+              <% } %>
+            </div>
           </td>
           <td class="px-4 py-3">
             <div class="flex flex-wrap gap-1 max-w-[220px]">
-              <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
+              <%# 以前这一格对**每个人**都挂「密码」。而 SSO / Apple 建的号拿的是
+                  一串随机不可用的哈希,根本没法用密码登录 —— 站长照着看会以为
+                  关掉 SSO 之后这些人还有退路,其实没有。现在按真实情况显示。 %>
+              <% if (u.passwordSet) { %>
+                <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
+              <% } else { %>
+                <span class="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-400 border border-dashed border-slate-300" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUsers.badge.noPassword") %></span>
+              <% } %>
               <% if (u.passkeyCount > 0) { %>
                 <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>
               <% } %>
@@ -114,7 +177,8 @@
               页面上别处(筛选下拉里)还留着同样的来源文字,光找文字找不出来。 %>
           <td class="px-4 py-3" data-source-cell><%- include('_signup_source', { src: u.source }) %></td>
           <td class="px-4 py-3 text-xs text-slate-500">
-            <%= new Intl.DateTimeFormat('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }).format(u.createdAt) %>
+            <%# 写死 zh-CN 的话,德语站长看到的是中文格式的日期。 %>
+            <%= new Intl.DateTimeFormat(currentLocale, { year:'numeric', month:'2-digit', day:'2-digit' }).format(u.createdAt) %>
           </td>
           <td class="px-4 py-3">
             <% if (u.isAdmin) { %>
@@ -159,5 +223,31 @@
     </tbody>
   </table>
 </div>
+
+<%# 翻页。qs() 把当前所有筛选条件原样带上 —— 少带一个,翻一页筛选就没了,
+    而站长看到的是「第二页怎么突然多出一堆人」。
+    两端各自禁用而不是隐藏:按钮位置不跳,连点也不会翻过头。 %>
+<% if (pageCount > 1) { %>
+  <nav class="mt-4 flex items-center justify-between gap-3 text-sm" aria-label="<%= t("adminUsers.page.info", { page: page, pageCount: pageCount }) %>">
+    <div class="text-slate-500">
+      <%= t("adminUsers.page.info", { page: page, pageCount: pageCount }) %>
+      · <%= t("adminUsers.filtered", { n: filtered }) %>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if (page > 1) { %>
+        <a href="/admin/users<%= qs({ page: page - 1 }) %>" rel="prev"
+           class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50">← <%= t("adminUsers.page.prev") %></a>
+      <% } else { %>
+        <span class="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-300 cursor-not-allowed" aria-disabled="true">← <%= t("adminUsers.page.prev") %></span>
+      <% } %>
+      <% if (page < pageCount) { %>
+        <a href="/admin/users<%= qs({ page: page + 1 }) %>" rel="next"
+           class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-700 hover:bg-slate-50"><%= t("adminUsers.page.next") %> →</a>
+      <% } else { %>
+        <span class="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-300 cursor-not-allowed" aria-disabled="true"><%= t("adminUsers.page.next") %> →</span>
+      <% } %>
+    </div>
+  </nav>
+<% } %>
 
 <%- include('_nav_end') %>

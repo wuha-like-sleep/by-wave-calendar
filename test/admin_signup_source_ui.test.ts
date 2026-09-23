@@ -188,12 +188,27 @@ function render(view: string, data: Record<string, unknown>): string {
 
 const adminUser = { id: "me", email: "admin@example.com", isAdmin: true };
 
-describe("admin/users.ejs", () => {
-  const baseLocals = {
+/** admin/users.ejs 需要的全部 locals 的默认值。**两处渲染共用这一份** ——
+ *  以前各写各的,页面一加新 local 就得两边都记得改,漏一处就是一条
+ *  「ReferenceError: xxx is not defined」而看起来像是页面坏了。 */
+function usersLocals(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
     user: adminUser,
-    query: "",
-    sourceFilter: "",
-    stats: { total: 2, admins: 1, disabled: 0 },
+    query: "", sourceFilter: "", roleFilter: "", statusFilter: "",
+    sort: "createdAt", dir: "desc",
+    filtered: 0, page: 1, pageCount: 1, pageSize: 50,
+    currentLocale: "zh-CN",
+    qs: () => "",
+    stats: { total: 0, admins: 0, disabled: 0, unverified: 0, locked: 0 },
+    sourceOptions: [], users: [],
+    ...over,
+  };
+}
+
+describe("admin/users.ejs", () => {
+  const baseLocals = usersLocals({
+    filtered: 2,
+    stats: { total: 2, admins: 1, disabled: 0, unverified: 0, locked: 0 },
     sourceOptions: [
       { key: "unknown", kind: "unknown", detail: null, raw: null, count: 7 },
       { key: "idp:acme", kind: "idp", detail: "acme", raw: "idp:acme", count: 30 },
@@ -212,7 +227,7 @@ describe("admin/users.ejs", () => {
         source: signupSourceView("idp:acme"),
       },
     ],
-  };
+  });
 
   // 来源那一格用 data-source-cell 定位。直接在整页 HTML 里找文字是不行的:
   // 筛选下拉里也有同样的来源名字,来源列整个被删掉都发现不了。
@@ -383,18 +398,12 @@ describe("模板用的委托钩子在 app.js 里真的存在", () => {
   const appJs = readFileSync(path.resolve("src/public/app.js"), "utf8");
 
   it("data-bwc-checkall 有对应实现", () => {
-    expect(render("admin/users.ejs", {
-      user: adminUser, query: "", sourceFilter: "", stats: { total: 0, admins: 0, disabled: 0 },
-      sourceOptions: [], users: [],
-    })).toContain("data-bwc-checkall");
+    expect(render("admin/users.ejs", usersLocals())).toContain("data-bwc-checkall");
     expect(appJs).toContain("dataset.bwcCheckall");
   });
 
   it("data-bwc-autosubmit 有对应实现", () => {
-    expect(render("admin/users.ejs", {
-      user: adminUser, query: "", sourceFilter: "", stats: { total: 0, admins: 0, disabled: 0 },
-      sourceOptions: [], users: [],
-    })).toContain("data-bwc-autosubmit");
+    expect(render("admin/users.ejs", usersLocals())).toContain("data-bwc-autosubmit");
     expect(appJs).toContain("dataset.bwcAutosubmit");
   });
 });

@@ -712,7 +712,7 @@ export async function webRoutes(app: FastifyInstance) {
     const passwordHash = await hashPassword(body.data.password);
     await db
       .update(schema.users)
-      .set({ passwordHash, failedLoginCount: 0, lockedUntil: null, updatedAt: new Date() })
+      .set({ passwordHash, passwordSet: true, failedLoginCount: 0, lockedUntil: null, updatedAt: new Date() })
       .where(eq(schema.users.id, reset.userId));
     await consumeReset(token);
     await destroyAllUserSessions(reset.userId);
@@ -2394,7 +2394,7 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/app/settings/security", { error: tr(req, "flash.password.wrongCurrent") });
     }
     const passwordHash = await hashPassword(body.data.newPassword);
-    await db.update(schema.users).set({ passwordHash, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    await db.update(schema.users).set({ passwordHash, passwordSet: true, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
     // Invalidate all sessions including current; user must re-login

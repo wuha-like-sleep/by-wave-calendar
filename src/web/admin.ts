@@ -282,12 +282,160 @@ async function disableUserAccount(
  * 整串 query 接到 Location 上的话,那串是浏览器交回来的,里面的 & # ? 会
  * 改变这条 URL 的结构。重拼一遍,回来的东西就只能是这两个参数。
  */
+
+// ---------------------------------------------------------------------------
+// 用户管理：筛选 / 排序 / 分页
+// ---------------------------------------------------------------------------
+
+export type UsersQuery = {
+  q?: string; source?: string; role?: string; status?: string;
+  /** "字段:方向",例如 "email:asc"。做成一个参数而不是两个,是因为界面上
+   *  它就是一个下拉 —— 拆成两个就得靠内联脚本去同步,而 CSP 不允许内联事件。 */
+  sortdir?: string; page?: string;
+};
+export type UsersFilter = {
+  q: string;
+  source: SignupSourceFilter;
+  /** 角色：全部 / 只看管理员 / 只看普通用户 */
+  role: "" | "admin" | "normal";
+  /** 状态：全部 / 正常 / 已停用 / 邮箱未验证 / 被锁定 */
+  status: "" | "active" | "disabled" | "unverified" | "locked";
+  sort: "createdAt" | "email";
+  dir: "asc" | "desc";
+  page: number;
+};
+
+/** "字段:方向" 拆成两半,两边都过白名单 —— 排序字段直接拼进 SQL 是注入,
+ *  而且乱传一个列名会让这一页 500。 */
+function splitSortDir(raw: unknown): { sort: UsersFilter["sort"]; dir: UsersFilter["dir"] } {
+  const [f, d] = (typeof raw === "string" ? raw : "").split(":");
+  return {
+    sort: f === "email" ? "email" : "createdAt",
+    dir: d === "asc" ? "asc" : "desc",
+  };
+}
+
+/** URL 上的查询串解析成筛选条件。**所有取值都收敛到白名单**——
+ *  排序字段尤其不能直接拼进 SQL，也不能信任它是合法列名。 */
+export function parseUsersQuery(raw: UsersQuery | undefined): UsersFilter {
+  const pick = <T extends string>(v: unknown, allowed: readonly T[], dflt: T): T =>
+    typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : dflt;
+  const pageRaw = Number.parseInt(typeof raw?.page === "string" ? raw.page : "", 10);
+  return {
+    q: (typeof raw?.q === "string" ? raw.q : "").trim().slice(0, 100),
+    source: signupSourceFilter(raw?.source),
+    role: pick(raw?.role, ["", "admin", "normal"] as const, ""),
+    status: pick(raw?.status, ["", "active", "disabled", "unverified", "locked"] as const, ""),
+    ...splitSortDir(raw?.sortdir),
+    page: Number.isFinite(pageRaw) && pageRaw > 0 ? Math.min(pageRaw, 100_000) : 1,
+  };
+}
+
+/** 筛选条件 → where。and() 会自己丢掉 undefined。 */
+export function usersWhere(f: UsersFilter) {
+  const qClause = f.q
+    ? or(ilike(schema.users.email, likeNeedle(f.q)), ilike(schema.users.displayName, likeNeedle(f.q)))
+    : undefined;
+  const srcClause =
+    f.source.kind === "unknown"
+      // 未知 = 这一列没有值。存量行是 NULL，但真要有人手工写进去一个空串，
+      // 他在后台看到的也是「未知」那一行，筛选就得能把它一起捞出来。
+      ? sql`coalesce(${schema.users.signupSource}, '') = ''`
+      : f.source.kind === "exact"
+        ? eq(schema.users.signupSource, f.source.value)
+        : undefined;
+  const roleClause =
+    f.role === "admin" ? eq(schema.users.isAdmin, true)
+      : f.role === "normal" ? eq(schema.users.isAdmin, false)
+        : undefined;
+  const statusClause =
+    f.status === "disabled" ? isNotNull(schema.users.disabledAt)
+      : f.status === "active" ? isNull(schema.users.disabledAt)
+        : f.status === "unverified" ? eq(schema.users.emailVerified, false)
+          // 锁定是有时效的：早就过期的 locked_until 不该算在里面，
+          // 否则「被锁定」那一栏会一直挂着几个其实早就能登录的人。
+          : f.status === "locked" ? sql`${schema.users.lockedUntil} > now()`
+            : undefined;
+  return and(qClause, srcClause, roleClause, statusClause);
+}
+
+export function usersOrderBy(f: UsersFilter) {
+  const col = f.sort === "email" ? schema.users.email : schema.users.createdAt;
+  return f.dir === "asc" ? asc(col) : desc(col);
+}
+
+/** 拼回 URL 查询串，保留当前所有条件，只覆盖传进来的那几个。
+ *  翻页和改排序都用它 —— 少带一个参数，筛选就在翻页时悄悄没了。 */
+export function usersQueryString(
+  f: UsersFilter,
+  page: number,
+  over: Record<string, string | number | undefined> = {},
+): string {
+  const base: Record<string, string> = {};
+  if (f.q) base.q = f.q;
+  if (f.source.kind === "unknown") base.source = "unknown";
+  else if (f.source.kind === "exact") base.source = f.source.value;
+  if (f.role) base.role = f.role;
+  if (f.status) base.status = f.status;
+  if (f.sort !== "createdAt" || f.dir !== "desc") base.sortdir = `${f.sort}:${f.dir}`;
+  if (page > 1) base.page = String(page);
+  for (const [k, v] of Object.entries(over)) {
+    if (v === undefined || v === "" ) delete base[k];
+    else base[k] = String(v);
+  }
+  const qs = new URLSearchParams(base).toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** 每个用户有几个 Passkey。 */
+export async function passkeyCountsFor(userIds: string[]): Promise<Map<string, number>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({ userId: schema.webauthnCredentials.userId, count: sql<number>`count(*)::int` })
+    .from(schema.webauthnCredentials)
+    .where(inArray(schema.webauthnCredentials.userId, userIds))
+    .groupBy(schema.webauthnCredentials.userId);
+  return new Map(rows.map((r) => [r.userId, Number(r.count)]));
+}
+
+/** 每个用户**最近一次**用的登录方式。
+ *
+ *  原来的写法是「把这些人最新的 500 条登录事件拉出来，谁先出现算谁的」——
+ *  于是几个活跃用户就能把 500 条占满，剩下所有人的这一栏都是空的。
+ *  空白看起来像「这个人从没登录过」，而实际上只是被挤出了那个窗口。
+ *
+ *  DISTINCT ON 是按用户分组取各自最新的一条，和这一页有多少人无关。 */
+export async function lastLoginMethodsFor(userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  // 用 drizzle 的 selectDistinctOn 而不是 db.execute 写裸 SQL：
+  // execute 的返回形状**跟驱动走**（有的直接给数组，有的给 { rows }），
+  // 本地测试和线上用的不是同一个驱动，写裸 SQL 会出现「本地好好的、线上 500」。
+  const rows = await db
+    .selectDistinctOn([schema.loginEvents.userId], {
+      userId: schema.loginEvents.userId,
+      method: schema.loginEvents.method,
+    })
+    .from(schema.loginEvents)
+    .where(inArray(schema.loginEvents.userId, userIds))
+    .orderBy(schema.loginEvents.userId, desc(schema.loginEvents.createdAt));
+  return new Map(rows.map((r) => [r.userId, r.method]));
+}
+
 function bulkBackTo(body: Record<string, unknown>): string {
   const params = new URLSearchParams();
-  const q = typeof body.q === "string" ? body.q.trim().slice(0, 100) : "";
-  const source = typeof body.source === "string" ? body.source.trim().slice(0, 120) : "";
+  const str = (k: string, cap: number) => (typeof body[k] === "string" ? (body[k] as string).trim().slice(0, cap) : "");
+  const q = str("q", 100);
+  const source = str("source", 120);
+  // 角色 / 状态 / 页码也要带回去。少带一个,批量操作完跳回来的就是另一批人,
+  // 而站长以为自己还在刚才那一页上继续操作。
+  const role = str("role", 10);
+  const status = str("status", 20);
+  const page = str("page", 8);
   if (q) params.set("q", q);
   if (source) params.set("source", source);
+  if (role) params.set("role", role);
+  if (status) params.set("status", status);
+  if (page && page !== "1") params.set("page", page);
   const qs = params.toString();
   return "/admin/users?" + (qs ? `${qs}&` : "");
 }
@@ -811,38 +959,50 @@ export async function adminRoutes(app: FastifyInstance) {
     return reply.redirect("/admin/users?success=" + encodeURIComponent("账号已合并，源账号已删除"));
   });
 
-  app.get<{ Querystring: { q?: string; source?: string } }>("/admin/users", async (req, reply) => {
+  // 一页多少个。用户上万之后，原来那种「一次查出全部、一次渲染全部」会让
+  // 这一页越来越慢，最后变成打不开 —— 而站长第一次发现是在他最需要用它的时候。
+  const USERS_PAGE_SIZE = 50;
+
+  app.get<{ Querystring: UsersQuery }>("/admin/users", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return reply;
-    // Read-only filter: find a user by email / display name. Escaped + capped.
-    const q = (typeof req.query?.q === "string" ? req.query.q : "").trim().slice(0, 100);
-    const qClause = q
-      ? or(ilike(schema.users.email, likeNeedle(q)), ilike(schema.users.displayName, likeNeedle(q)))
-      : undefined;
-    const srcFilter = signupSourceFilter(req.query?.source);
-    const srcClause =
-      srcFilter.kind === "unknown"
-        // 未知 = 这一列没有值。存量行是 NULL,但真要有人手工写进去一个空串,
-        // 他在后台看到的也是「未知」那一行,筛选就得能把它一起捞出来。
-        ? sql`coalesce(${schema.users.signupSource}, '') = ''`
-        : srcFilter.kind === "exact"
-          ? eq(schema.users.signupSource, srcFilter.value)
-          : undefined;
-    // and() 会自己丢掉 undefined,两个都没有时返回 undefined。
-    const whereClause = and(qClause, srcClause);
-    // Totals for the header summary (reflect the whole base, not the filter).
+
+    const f = parseUsersQuery(req.query);
+
+    // ---- 顶部那三个数字：始终是**全量**，不跟着筛选走 ----
+    // 它们回答的是「这个站一共什么情况」。筛选后有多少条单独算（下面的 filtered），
+    // 两个数字分开摆，免得站长以为筛选把人弄丢了。
     const countRows = await db
       .select({
         total: sql<number>`count(*)::int`,
         admins: sql<number>`count(*) filter (where ${schema.users.isAdmin})::int`,
         disabled: sql<number>`count(*) filter (where ${schema.users.disabledAt} is not null)::int`,
+        unverified: sql<number>`count(*) filter (where not ${schema.users.emailVerified})::int`,
+        locked: sql<number>`count(*) filter (where ${schema.users.lockedUntil} > now())::int`,
       })
       .from(schema.users);
     const stats = {
       total: Number(countRows[0]?.total ?? 0),
       admins: Number(countRows[0]?.admins ?? 0),
       disabled: Number(countRows[0]?.disabled ?? 0),
+      unverified: Number(countRows[0]?.unverified ?? 0),
+      locked: Number(countRows[0]?.locked ?? 0),
     };
+
+    const whereClause = usersWhere(f);
+
+    // 筛选命中多少条 —— 分页要靠它算总页数。
+    const [filteredRow] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .where(whereClause);
+    const filtered = Number(filteredRow?.c ?? 0);
+    const pageCount = Math.max(1, Math.ceil(filtered / USERS_PAGE_SIZE));
+    // 页码越界就夹回最后一页：筛选条件变了之后 URL 上的旧页码常常越界，
+    // 直接给一张空表会让人以为「这个条件下没有人」。
+    const page = Math.min(f.page, pageCount);
+    const offset = (page - 1) * USERS_PAGE_SIZE;
+
     const rows = await db
       .select({
         id: schema.users.id,
@@ -851,16 +1011,23 @@ export async function adminRoutes(app: FastifyInstance) {
         isAdmin: schema.users.isAdmin,
         emailVerified: schema.users.emailVerified,
         mfaEnabled: schema.users.mfaEnabled,
+        passwordSet: schema.users.passwordSet,
         ssoProviderSlug: schema.users.ssoProviderSlug,
+        appleSub: schema.users.appleSub,
         signupSource: schema.users.signupSource,
         disabledAt: schema.users.disabledAt,
+        lockedUntil: schema.users.lockedUntil,
+        failedLoginCount: schema.users.failedLoginCount,
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
       .where(whereClause)
-      .orderBy(desc(schema.users.createdAt));
-    // 筛选下拉的选项:库里真实出现过的来源 + 各自多少个。统计的是**全量**,
-    // 不跟着当前筛选走 —— 下拉自己被自己筛过之后就只剩当前那一项,人就出不去了。
+      .orderBy(usersOrderBy(f))
+      .limit(USERS_PAGE_SIZE)
+      .offset(offset);
+
+    // 筛选下拉的选项：库里真实出现过的来源 + 各自多少个。统计的是**全量**，
+    // 不跟着当前筛选走 —— 下拉自己被自己筛过之后就只剩当前那一项，人就出不去了。
     const srcCountRows = await db
       .select({ src: schema.users.signupSource, c: sql<number>`count(*)::int` })
       .from(schema.users)
@@ -869,38 +1036,18 @@ export async function adminRoutes(app: FastifyInstance) {
     for (const row of srcCountRows) {
       const v = signupSourceView(row.src);
       const prev = srcOptionMap.get(v.key);
-      // NULL 和空串在 group by 里是两行,在界面上是同一个「未知」桶,这里合并。
+      // NULL 和空串在 group by 里是两行，在界面上是同一个「未知」桶，这里合并。
       if (prev) prev.count += Number(row.c);
       else srcOptionMap.set(v.key, { key: v.key, kind: v.kind, detail: v.detail, raw: v.raw, count: Number(row.c) });
     }
     const sourceOptions = [...srcOptionMap.values()].sort((a, b) => b.count - a.count);
-    // Aggregate auxiliary methods: passkey count per user + most-recent login method.
+
     const userIds = rows.map((r) => r.id);
-    const passkeyCounts = userIds.length === 0 ? [] : await db
-      .select({ userId: schema.webauthnCredentials.userId, count: sql<number>`count(*)::int` })
-      .from(schema.webauthnCredentials)
-      .where(inArray(schema.webauthnCredentials.userId, userIds))
-      .groupBy(schema.webauthnCredentials.userId);
-    const passkeyMap = new Map(passkeyCounts.map((r) => [r.userId, Number(r.count)]));
-    const methodMap = new Map<string, string>();
-    if (userIds.length > 0) {
-      const recent = await db
-        .select({
-          userId: schema.loginEvents.userId,
-          method: schema.loginEvents.method,
-          createdAt: schema.loginEvents.createdAt,
-        })
-        .from(schema.loginEvents)
-        .where(inArray(schema.loginEvents.userId, userIds))
-        .orderBy(desc(schema.loginEvents.createdAt))
-        .limit(500);
-      // Walk newest-first and keep the first method seen per user.
-      for (const r of recent) {
-        if (!methodMap.has(r.userId)) methodMap.set(r.userId, r.method);
-      }
-    }
+    const passkeyMap = await passkeyCountsFor(userIds);
+    const methodMap = await lastLoginMethodsFor(userIds);
+
     return reply.view("admin/users", {
-      title: "用户管理",
+      title: tr(req, "adminUsers.heading"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: flashFromQuery(req),
@@ -910,11 +1057,24 @@ export async function adminRoutes(app: FastifyInstance) {
         passkeyCount: passkeyMap.get(r.id) ?? 0,
         lastLoginMethod: methodMap.get(r.id) ?? null,
         source: signupSourceView(r.signupSource),
+        // 「锁定」是有时效的，过期了就不算 —— 直接把 lockedUntil 丢给模板
+        // 让它自己比较的话，每个模板都得记得比一次，迟早有一处忘了。
+        isLocked: !!r.lockedUntil && r.lockedUntil.getTime() > Date.now(),
       })),
-      query: q,
-      sourceFilter: srcFilter.kind === "none" ? "" : srcFilter.kind === "unknown" ? "unknown" : srcFilter.value,
+      query: f.q,
+      sourceFilter: f.source.kind === "none" ? "" : f.source.kind === "unknown" ? "unknown" : f.source.value,
+      roleFilter: f.role,
+      statusFilter: f.status,
+      sort: f.sort,
+      dir: f.dir,
       sourceOptions,
       stats,
+      filtered,
+      page,
+      pageCount,
+      pageSize: USERS_PAGE_SIZE,
+      // 翻页 / 改排序时要把其它条件原样带上，否则一翻页筛选就没了。
+      qs: (over: Record<string, string | number | undefined>) => usersQueryString(f, page, over),
     });
   });
 

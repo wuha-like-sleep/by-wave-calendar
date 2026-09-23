@@ -123,6 +123,8 @@ export type InsertUserValues = {
   email: string;
   emailVerified: boolean;
   passwordHash: string;
+  /** 上面那个哈希是不是一把真能用的密码（false = 随机占位，SSO/Apple 建的号）。 */
+  passwordSet: boolean;
   displayName: string | null;
   signupSource: string;
   ssoProviderSlug: string | null;
@@ -364,6 +366,7 @@ const dbEvictionStore: EvictionStore = {
       // 将来多一条不带断言的认领路径就会顺手把这一列抬上去。
       await tx.update(schema.users).set({
         passwordHash: newPasswordHash,
+        passwordSet: true,
         // 这两列都是「登录方式」:留着就等于留了一把钥匙。
         appleSub: null,
         ssoProviderSlug: null,
@@ -580,10 +583,15 @@ export async function provisionAccount(
   // bcrypt 哈希:随机 ~256 位的散列值,猜不出来,而且哪天有别的代码路径拿它
   // 去 compare 也只会安全地失败。**绝不存非 bcrypt 的哨兵串。**
   const passwordHash = reqInput.passwordHash || (await hashPassword(randomBytes(32).toString("base64")));
+  // 调用方给了真哈希 = 这个人自己设过密码；没给 = 上面那串随机占位，谁也用不了。
+  // 这一位决定后台用户管理页上显不显示「密码」这个登录方式 —— 不记的话，
+  // 站长看到的是「所有人都能用密码登录」，而 SSO 建的号根本不行。
+  const passwordSet = !!reqInput.passwordHash;
   const values: InsertUserValues = {
     email,
     emailVerified: reqInput.emailVerified,
     passwordHash,
+    passwordSet,
     displayName: reqInput.displayName?.trim() || null,
     signupSource: source,
     ssoProviderSlug: reqInput.origin.kind === "sso" ? reqInput.origin.slug : null,
