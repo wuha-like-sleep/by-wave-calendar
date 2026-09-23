@@ -18,7 +18,7 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
 import { cancelEvent } from "../lib/event_cancel.js";
-import { availableSlots, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
+import { availableSlots, BookingError, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -2610,7 +2610,11 @@ export async function webRoutes(app: FastifyInstance) {
       }
       return reply.redirect(`/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent(tr(req, "flash.booking.success"))}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : tr(req, "flash.booking.failed");
+      // BookingError 带的是原因码，翻译在这里做 —— 以前这里贴的是 err.message，
+      // 而那是一句硬编码中文，德语 / 日语访客看到的就是中文。
+      const msg = err instanceof BookingError
+        ? tr(req, `flash.booking.${err.code}`)
+        : tr(req, "flash.booking.failed");
       return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: msg });
     }
   });

@@ -1320,6 +1320,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "flash.booking.needEmailName": "メールアドレスと名前を入力してください",
   "flash.booking.success": "予約が完了しました。確認メールを送信しました。",
   "flash.booking.failed": "予約に失敗しました",
+  "flash.booking.slotUnavailable": "その時間は予約できません。ページに表示されている枠からお選びください。",
+  "flash.booking.slotTaken": "その枠はちょうど埋まりました。別の時間をお選びください。",
   "flash.booking.alreadyCancelled": "この予約はすでにキャンセル済みです",
   "flash.booking.cancelled": "予約をキャンセルしました",
 

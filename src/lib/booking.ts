@@ -5,6 +5,15 @@ import { newEventUid, newInvitationToken } from "./ids.js";
 export type WeeklyAvailability = Record<string, [string, string][] | null>;
 export type Slot = { startsAt: Date; endsAt: Date };
 
+/** 预约失败的原因码。路由拿 code 去查文案 —— 原来这里直接抛中文字符串，
+ *  而路由把 err.message 原样贴给访客，于是德语 / 日语访客看到的是中文。 */
+export class BookingError extends Error {
+  constructor(public readonly code: "slotTaken" | "slotUnavailable") {
+    super(code);
+    this.name = "BookingError";
+  }
+}
+
 export const DEFAULT_AVAILABILITY: WeeklyAvailability = {
   "0": null, // Sun
   "1": [["09:00", "18:00"]], // Mon
@@ -113,7 +122,27 @@ export async function bookSlot(input: {
   guestName: string;
   guestMessage?: string;
 }): Promise<CreatedBooking> {
+  // **请求体里的 startsAt 必须真的是一个可约时段。**
+  //
+  // 原来这里只查「有没有和已有事件撞上」，于是任何人都能往店主日历里写任意
+  // 时间的事件：凌晨三点、周日、去年、五年以后都行 —— 只要那个时刻恰好没排东西。
+  // 页面上根本不会显示这些时段，但那张表单是公开的，谁都可以自己拼一个 POST。
+  // CSRF 挡不住：访客本来就能打开页面拿到 token，它防的是跨站，不是越权。
+  //
+  // 判据直接问 availableSlots —— 也就是页面用来画可选时段的那一个函数。
+  // 不另写一份「合法性校验」：两份判据迟早会各走各的，而那种偏差没人看得见。
+  // 它一并覆盖了可用时间窗、时长对齐、最短预约提前量、可约天数上限，
+  // 以及前后缓冲（缓冲是下面那个 conflicts 查询没有的）。
+  const now = new Date();
+  const bookable = await availableSlots(input.link, now, input.link.maxDaysAhead);
+  const wanted = input.startsAt.getTime();
+  if (!bookable.some((s) => s.startsAt.getTime() === wanted)) {
+    throw new BookingError("slotUnavailable");
+  }
+
   return await db.transaction(async (tx) => {
+    // 上面那一步是按「刚才那一瞬间」算的；这里再查一次是为了守住并发窗口
+    // ——两个人同时点同一个时段。
     const conflicts = await tx
       .select({ id: schema.events.id })
       .from(schema.events)
@@ -125,7 +154,7 @@ export async function bookSlot(input: {
       ))
       .limit(1);
     if (conflicts.length > 0) {
-      throw new Error("时段已被占用，请选择其他时间");
+      throw new BookingError("slotTaken");
     }
 
     const [event] = await tx.insert(schema.events).values({

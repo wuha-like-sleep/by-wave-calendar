@@ -1327,6 +1327,8 @@ export const en = {
   "flash.booking.needEmailName": "Enter your email and name",
   "flash.booking.success": "Booked! A confirmation email is on its way.",
   "flash.booking.failed": "Booking failed",
+  "flash.booking.slotUnavailable": "That time isn't available — please pick one of the slots shown on the page.",
+  "flash.booking.slotTaken": "That slot has just been taken. Please choose another time.",
   "flash.booking.alreadyCancelled": "This booking was already cancelled",
   "flash.booking.cancelled": "Booking cancelled",
 

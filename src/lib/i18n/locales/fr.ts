@@ -1320,6 +1320,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "flash.booking.needEmailName": "Saisissez votre e-mail et votre nom",
   "flash.booking.success": "Réservation confirmée ! Un e-mail de confirmation vous a été envoyé.",
   "flash.booking.failed": "Échec de la réservation",
+  "flash.booking.slotUnavailable": "Ce créneau n'est pas disponible — choisissez-en un parmi ceux affichés sur la page.",
+  "flash.booking.slotTaken": "Ce créneau vient d'être pris. Veuillez en choisir un autre.",
   "flash.booking.alreadyCancelled": "Cette réservation a déjà été annulée",
   "flash.booking.cancelled": "Réservation annulée",
 

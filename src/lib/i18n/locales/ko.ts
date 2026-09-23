@@ -1320,6 +1320,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "flash.booking.needEmailName": "이메일과 이름을 입력하세요",
   "flash.booking.success": "예약이 완료되었습니다. 확인 메일을 보냈습니다.",
   "flash.booking.failed": "예약에 실패했습니다",
+  "flash.booking.slotUnavailable": "해당 시간은 예약할 수 없습니다. 페이지에 표시된 시간 중에서 선택해 주세요.",
+  "flash.booking.slotTaken": "방금 해당 시간이 마감되었습니다. 다른 시간을 선택해 주세요.",
   "flash.booking.alreadyCancelled": "이 예약은 이미 취소되었습니다",
   "flash.booking.cancelled": "예약을 취소했습니다",
 

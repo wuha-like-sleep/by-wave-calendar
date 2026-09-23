@@ -1307,6 +1307,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "flash.booking.needEmailName": "请填写邮箱和姓名",
   "flash.booking.success": "预约成功！确认邮件已发到你的邮箱。",
   "flash.booking.failed": "预约失败",
+  "flash.booking.slotUnavailable": "该时段不可预约，请从页面上的可选时段里选一个",
+  "flash.booking.slotTaken": "时段已被占用，请选择其他时间",
   "flash.booking.alreadyCancelled": "这个预约已经取消过了",
   "flash.booking.cancelled": "预约已取消",
 

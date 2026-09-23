@@ -1306,6 +1306,8 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "flash.booking.needEmailName": "請填寫信箱和姓名",
   "flash.booking.success": "預約成功！確認郵件已寄到你的信箱。",
   "flash.booking.failed": "預約失敗",
+  "flash.booking.slotUnavailable": "該時段無法預約，請從頁面上的可選時段裡選一個",
+  "flash.booking.slotTaken": "時段已被佔用，請選擇其他時間",
   "flash.booking.alreadyCancelled": "這個預約已經取消過了",
   "flash.booking.cancelled": "預約已取消",
 
