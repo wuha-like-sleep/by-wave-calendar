@@ -132,6 +132,37 @@ function foldLine(line: string): string {
   return parts.join(CRLF);
 }
 
+/**
+ * 全天事件的 DTEND —— RFC 5545 要求它是**不含**的（次日）。
+ *
+ * ── 为什么不能直接 formatDate(endsAt) ────────────────────────────────
+ *
+ * 库里的全天事件有**两套约定**，历史原因：
+ *   · 网页 / 三端 App 写的是「当天 23:59:59.999Z」（闭区间）
+ *     —— src/public/calendar-app.js 的 T23:59:59.999Z
+ *   · .ics 导入写的是「次日 00:00:00Z」（半开区间，RFC 的口径）
+ *     —— parseICalDateValue 里的 Date.UTC(y, m, d)
+ *
+ * 直接 formatDate(endsAt) 对后者是对的，对前者会输出**和 DTSTART 同一天**
+ * —— 按 RFC 那是一个零长度事件，Apple 日历 / DAVx⁵ 要么不显示、要么
+ * 画到前一天。也就是说：**在网页或 App 上建的每一个全天事件，
+ * 同步到手机自带日历里都是错的**，而 .ics 导入进来的反而是对的。
+ *
+ * 这里用一条**和约定无关**的规则：
+ *   最后一个被覆盖的日子 = (endsAt - 1ms) 的 UTC 日期，DTEND = 它的次日。
+ * 闭区间的 23:59:59.999 减 1ms 还在当天；半开区间的次日 00:00 减 1ms
+ * 退回最后一天。两种都对，所以不需要先迁移存量数据。
+ *
+ * 另外钳一道下界（至少 DTSTART + 1 天）：历史上有过 start == end 的坏行
+ * （一次错误的导出-导入往返造出来的），不钳的话会输出 DTEND < DTSTART。
+ */
+function formatAllDayEnd(startsAt: Date, endsAt: Date): string {
+  const last = new Date(endsAt.getTime() - 1);
+  const exclusive = new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate() + 1));
+  const atLeast = new Date(Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), startsAt.getUTCDate() + 1));
+  return formatDate(exclusive < atLeast ? atLeast : exclusive);
+}
+
 export function serializeEvent(event: IcalEvent): string {
   const lines: string[] = [
     "BEGIN:VEVENT",
@@ -140,7 +171,7 @@ export function serializeEvent(event: IcalEvent): string {
   ];
   if (event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(event.startsAt)}`);
-    lines.push(`DTEND;VALUE=DATE:${formatDate(event.endsAt)}`);
+    lines.push(`DTEND;VALUE=DATE:${formatAllDayEnd(event.startsAt, event.endsAt)}`);
   } else if (event.timezone) {
     // Emit wall-clock in the event's zone with TZID parameter. iOS /
     // macOS / Google / Outlook all render this as "this is 6pm Shanghai
@@ -247,7 +278,7 @@ export function invitationIcs(opts: {
   ];
   if (opts.event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(opts.event.startsAt)}`);
-    lines.push(`DTEND;VALUE=DATE:${formatDate(opts.event.endsAt)}`);
+    lines.push(`DTEND;VALUE=DATE:${formatAllDayEnd(opts.event.startsAt, opts.event.endsAt)}`);
   } else {
     lines.push(`DTSTART:${formatDateTime(opts.event.startsAt)}`);
     lines.push(`DTEND:${formatDateTime(opts.event.endsAt)}`);
