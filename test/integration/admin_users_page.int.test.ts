@@ -264,3 +264,74 @@ describe("页面上写的是不是真的", () => {
     expect(leaked, `这些文案没有对应的翻译，页面上直接显示成了 key：${leaked.join(", ")}`).toEqual([]);
   });
 });
+
+describe("单个用户的详情页", () => {
+  it("打得开，而且列表能点进来（presence）", async () => {
+    const u = await makeUser("detail@example.com");
+    const list = await get("/admin/users?q=detail@example.com");
+    expect(list, "列表里没有指向详情页的链接，这一页等于不存在").toContain(`/admin/users/${u.id}`);
+    const html = await get(`/admin/users/${u.id}`);
+    expect(html).toContain("detail@example.com");
+  });
+
+  it("把这个号占的东西摆出来 —— 0 也要显示，整行不许消失", async () => {
+    const u = await makeUser("owner2@example.com");
+    const [cal] = await db.insert(schema.calendars).values({
+      ownerId: u.id, name: "工作", color: "#6366f1", timezone: "Asia/Shanghai",
+    }).returning();
+    await db.insert(schema.events).values({
+      calendarId: cal!.id, uid: "x@example.com", summary: "会",
+      startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000),
+    });
+    const html = await get(`/admin/users/${u.id}`);
+    expect(html, "日历名没显示出来").toContain("工作");
+    // 没有的那些也要有行 —— 少一行，读的人分不清是「没有」还是「这一版没做」。
+    for (const k of ["预约链接", "应用密码", "API Token", "第三方授权"]) {
+      expect(html, `「${k}」那一行整个没了`).toContain(k);
+    }
+  });
+
+  it("「能不能登进来」那一块反映真实情况", async () => {
+    const [sso] = await db.insert(schema.users).values({
+      email: "ssod@example.com", emailVerified: true, passwordHash: "unusable",
+      passwordSet: false, signupSource: "sso:keycloak",
+      lockedUntil: new Date(Date.now() + 3600_000), failedLoginCount: 7,
+    }).returning();
+    const html = await get(`/admin/users/${sso!.id}`);
+    expect(html, "没显示锁定状态 —— 而「登不进去」最常见的原因就是它").toContain("已锁定");
+    expect(html, "连续输错次数没显示").toContain("7");
+  });
+
+  it("最近登录记录列得出来", async () => {
+    const u = await makeUser("lg@example.com");
+    await db.insert(schema.loginEvents).values({
+      userId: u.id, method: "passkey", ip: "203.0.113.9", userAgent: "probe",
+    });
+    const html = await get(`/admin/users/${u.id}`);
+    expect(html).toContain("passkey");
+    expect(html).toContain("203.0.113.9");
+  });
+
+  it("不存在的 id 跳回列表并说明，而不是 500 或白页", async () => {
+    for (const bad of ["not-a-uuid", "00000000-0000-0000-0000-000000000000"]) {
+      const res = await app.inject({ method: "GET", url: `/admin/users/${bad}`, headers: { cookie: cookieHeader } });
+      expect([302, 303], `${bad} 回的是 ${res.statusCode}`).toContain(res.statusCode);
+      expect(decodeURIComponent(String(res.headers.location))).toMatch(/找不到/);
+    }
+  });
+
+  it("非管理员进不来", async () => {
+    const plain = await makeUser("plain@example.com");
+    const c = await loginAs(plain.id);
+    const res = await app.inject({ method: "GET", url: `/admin/users/${plain.id}`, headers: { cookie: c } });
+    expect([302, 303, 403]).toContain(res.statusCode);
+    expect(res.body).not.toContain("plain@example.com");
+  });
+
+  it("详情页上也不该出现未翻译的 key", async () => {
+    const u = await makeUser("k@example.com");
+    const html = await get(`/admin/users/${u.id}`);
+    const leaked = [...html.matchAll(/adminUserDetail\.[a-zA-Z.]+/g)].map((m) => m[0]);
+    expect(leaked, `这些文案没有翻译，页面上直接显示成了 key：${leaked.join(", ")}`).toEqual([]);
+  });
+});

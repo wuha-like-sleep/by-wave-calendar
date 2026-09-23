@@ -1078,6 +1078,97 @@ export async function adminRoutes(app: FastifyInstance) {
     });
   });
 
+  /** 一个人的全貌。
+   *
+   *  为什么要有这一页：列表能告诉站长「有这么个人」，但他真正会遇到的问题是
+   *  「有人说登不进去」「这个号到底占了多少东西」「这人最近在干嘛」。
+   *  这些数据本来就在库里，只是界面上够不着 —— 站长以前只能去数据库里手敲。
+   *
+   *  全是只读。危险动作仍然走列表页上那几条已经有确认弹窗的路由。 */
+  app.get<{ Params: { id: string } }>("/admin/users/:id", async (req, reply) => {
+    const admin = await requireAdmin(req, reply);
+    if (!admin) return reply;
+    const id = z.string().uuid().safeParse(req.params.id);
+    // 不是合法 uuid 就当成「没有这个人」——回列表，不要抛 400 给站长看。
+    if (!id.success) return reply.redirect("/admin/users?error=" + encodeURIComponent(tr(req, "adminUserDetail.notFound")));
+    const [target] = await db.select().from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
+    if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent(tr(req, "adminUserDetail.notFound")));
+
+    const uid = target.id;
+    // 一次性把各处的计数取回来。这一页是单个用户的，数量固定，
+    // 不会随站点规模增长 —— 不像列表页那样需要提防 N+1。
+    const [
+      calendars, eventCount, devices, sessionCount, passkeys,
+      appPasswordCount, apiTokenCount, bookingLinkCount, shareTokenCount,
+      subscriptionCount, identities, oauthGrantCount, recentLogins,
+    ] = await Promise.all([
+      db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color })
+        .from(schema.calendars).where(eq(schema.calendars.ownerId, uid)).orderBy(asc(schema.calendars.name)).limit(50),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.events)
+        .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+        .where(and(eq(schema.calendars.ownerId, uid), isNull(schema.events.deletedAt))),
+      db.select({
+        id: schema.devices.id, label: schema.devices.label, kind: schema.devices.kind,
+        lastSeenAt: schema.devices.lastSeenAt, appVersion: schema.devices.appVersion,
+        revokedAt: schema.devices.revokedAt,
+      }).from(schema.devices).where(eq(schema.devices.userId, uid))
+        .orderBy(desc(schema.devices.lastSeenAt)).limit(30),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.sessions)
+        .where(and(eq(schema.sessions.userId, uid), gte(schema.sessions.expiresAt, new Date()))),
+      db.select({
+        id: schema.webauthnCredentials.id, deviceName: schema.webauthnCredentials.deviceName,
+        lastUsedAt: schema.webauthnCredentials.lastUsedAt,
+      }).from(schema.webauthnCredentials).where(eq(schema.webauthnCredentials.userId, uid))
+        .orderBy(desc(schema.webauthnCredentials.lastUsedAt)).limit(20),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.appPasswords).where(eq(schema.appPasswords.userId, uid)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.apiTokens).where(eq(schema.apiTokens.userId, uid)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, uid)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.shareTokens)
+        .innerJoin(schema.calendars, eq(schema.calendars.id, schema.shareTokens.calendarId))
+        .where(eq(schema.calendars.ownerId, uid)),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.calendarSubscriptions)
+        .innerJoin(schema.calendars, eq(schema.calendars.id, schema.calendarSubscriptions.calendarId))
+        .where(eq(schema.calendars.ownerId, uid)),
+      db.select({ provider: schema.userIdentities.provider, subject: schema.userIdentities.subject })
+        .from(schema.userIdentities).where(eq(schema.userIdentities.userId, uid)).limit(20),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.oauthAccessTokens)
+        .where(and(eq(schema.oauthAccessTokens.userId, uid), isNull(schema.oauthAccessTokens.revokedAt))),
+      // 最近的登录记录 —— 「有人说登不进去」时第一眼要看的就是这个。
+      db.select({
+        method: schema.loginEvents.method, ip: schema.loginEvents.ip,
+        userAgent: schema.loginEvents.userAgent, createdAt: schema.loginEvents.createdAt,
+      }).from(schema.loginEvents).where(eq(schema.loginEvents.userId, uid))
+        .orderBy(desc(schema.loginEvents.createdAt)).limit(20),
+    ]);
+
+    const n = (rows: { c: number }[]) => Number(rows[0]?.c ?? 0);
+    return reply.view("admin/user-detail", {
+      title: target.email,
+      user: admin,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/users",
+      target: {
+        ...target,
+        source: signupSourceView(target.signupSource),
+        isLocked: !!target.lockedUntil && target.lockedUntil.getTime() > Date.now(),
+        isSelf: target.id === admin.id,
+      },
+      calendars,
+      devices,
+      passkeys,
+      identities,
+      recentLogins,
+      counts: {
+        events: n(eventCount), sessions: n(sessionCount),
+        appPasswords: n(appPasswordCount), apiTokens: n(apiTokenCount),
+        bookingLinks: n(bookingLinkCount), shareTokens: n(shareTokenCount),
+        subscriptions: n(subscriptionCount), oauthGrants: n(oauthGrantCount),
+        calendars: calendars.length, devices: devices.length, passkeys: passkeys.length,
+      },
+    });
+  });
+
   app.post("/admin/users/:id/toggle-admin", async (req, reply) => {
     const me = await requireAdmin(req, reply);
     if (!me) return reply;

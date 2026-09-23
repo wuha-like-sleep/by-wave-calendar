@@ -130,8 +130,8 @@
                      class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
             <% } %>
           </td>
-          <td class="px-4 py-3 text-slate-900 truncate max-w-[260px]">
-            <%= u.email %>
+          <td class="px-4 py-3 truncate max-w-[260px]">
+            <a href="/admin/users/<%= u.id %>" class="text-slate-900 hover:text-brand-600 hover:underline"><%= u.email %></a>
             <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]"><%= t("adminUsers.badge.disabled") %></span><% } %>
           </td>
           <td class="px-4 py-3 text-slate-700"><%= u.displayName || '—' %></td>

@@ -1,0 +1,183 @@
+<%- include('_nav', { activeNav: '/admin/users' }) %>
+
+<%# 一个人的全貌。全是只读 —— 危险动作仍然走列表页上那几条带确认弹窗的路由，
+    不在这里重复一套(两处各写一遍,护栏迟早只有一处记得加)。 %>
+
+<div class="mb-5">
+  <a href="/admin/users" class="text-sm text-brand-600 hover:text-brand-700">← <%= t("adminUserDetail.back") %></a>
+  <div class="mt-2 flex flex-wrap items-center gap-2">
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 break-all"><%= target.email %></h1>
+    <% if (target.isAdmin) { %>
+      <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"><%= t("adminUsers.role.admin") %></span>
+    <% } %>
+    <% if (target.disabledAt) { %>
+      <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.disabled") %></span>
+    <% } %>
+    <% if (target.isLocked) { %>
+      <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700" title="<%= t("adminUsers.badge.lockedTitle") %>">🔒 <%= t("adminUsers.badge.locked") %></span>
+    <% } %>
+  </div>
+  <p class="mt-1 text-sm text-slate-500"><%= target.displayName || t("adminUserDetail.noDisplayName") %></p>
+</div>
+
+<div class="grid gap-4 lg:grid-cols-2">
+
+  <%# ── 能不能登进来 ──────────────────────────────────────────────────
+      站长最常遇到的问题是「有人说登不进去」。这一块把「他手上有哪几把钥匙」
+      和「有没有被什么挡着」摆在一起 —— 分开看的话,得来回翻两处才拼得出结论。 %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.access.heading") %></h2>
+    <dl class="space-y-2 text-sm">
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-slate-500"><%= t("adminUserDetail.access.password") %></dt>
+        <dd class="text-right">
+          <% if (target.passwordSet) { %><span class="text-slate-900"><%= t("adminUserDetail.yes") %></span>
+          <% } else { %><span class="text-slate-400" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUserDetail.no") %></span><% } %>
+        </dd>
+      </div>
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-slate-500"><%= t("adminUserDetail.access.mfa") %></dt>
+        <dd class="text-right text-slate-900"><%= target.mfaEnabled ? t("adminUserDetail.yes") : t("adminUserDetail.no") %></dd>
+      </div>
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-slate-500"><%= t("adminUserDetail.access.passkeys") %></dt>
+        <dd class="text-right text-slate-900"><%= counts.passkeys %></dd>
+      </div>
+      <% if (passkeys.length > 0) { %>
+        <div class="pl-3 border-l-2 border-slate-100 space-y-1">
+          <% passkeys.forEach(function (k) { %>
+            <div class="text-xs text-slate-500 flex justify-between gap-3">
+              <span class="truncate"><%= k.deviceName || t("adminUserDetail.unnamed") %></span>
+              <span class="shrink-0"><%= k.lastUsedAt ? new Intl.DateTimeFormat(currentLocale, { dateStyle: 'short' }).format(k.lastUsedAt) : '—' %></span>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-slate-500"><%= t("adminUserDetail.access.emailVerified") %></dt>
+        <dd class="text-right"><%= target.emailVerified ? t("adminUserDetail.yes") : t("adminUserDetail.no") %></dd>
+      </div>
+      <div class="flex items-start justify-between gap-3">
+        <dt class="text-slate-500"><%= t("adminUserDetail.access.failedLogins") %></dt>
+        <dd class="text-right <%= target.failedLoginCount > 0 ? 'text-amber-700' : 'text-slate-900' %>"><%= target.failedLoginCount %></dd>
+      </div>
+      <% if (target.isLocked) { %>
+        <div class="flex items-start justify-between gap-3">
+          <dt class="text-slate-500"><%= t("adminUserDetail.access.lockedUntil") %></dt>
+          <dd class="text-right text-red-700"><%= new Intl.DateTimeFormat(currentLocale, { dateStyle: 'short', timeStyle: 'short' }).format(target.lockedUntil) %></dd>
+        </div>
+      <% } %>
+      <% if (identities.length > 0) { %>
+        <div class="pt-2 border-t border-slate-100">
+          <dt class="text-slate-500 mb-1"><%= t("adminUserDetail.access.identities") %></dt>
+          <% identities.forEach(function (i) { %>
+            <dd class="text-xs text-slate-600">
+              <span class="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-violet-700"><%= i.provider %></span>
+            </dd>
+          <% }) %>
+        </div>
+      <% } %>
+    </dl>
+  </section>
+
+  <%# ── 这个号占了多少东西 ──────────────────────────────────────────
+      停用或清理之前站长会想知道影响面。0 也要显示出来,整行不许消失 ——
+      少了一行,读的人分不清是「没有」还是「这一版没做」。 %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.assets.heading") %></h2>
+    <%# 键写全、不拼接。t("前缀" + 变量) 这种写法会让「每个用到的键都存在」那条
+        门禁失灵 —— 它扫的是模板里的字面量,拼出来的键它看不见,于是少一条翻译
+        就直接把键名显示给站长看,而且一路全绿。 %>
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <% [
+        [t("adminUserDetail.assets.calendars"),     counts.calendars],
+        [t("adminUserDetail.assets.events"),        counts.events],
+        [t("adminUserDetail.assets.devices"),       counts.devices],
+        [t("adminUserDetail.assets.sessions"),      counts.sessions],
+        [t("adminUserDetail.assets.bookingLinks"),  counts.bookingLinks],
+        [t("adminUserDetail.assets.shareTokens"),   counts.shareTokens],
+        [t("adminUserDetail.assets.subscriptions"), counts.subscriptions],
+        [t("adminUserDetail.assets.appPasswords"),  counts.appPasswords],
+        [t("adminUserDetail.assets.apiTokens"),     counts.apiTokens],
+        [t("adminUserDetail.assets.oauthGrants"),   counts.oauthGrants]
+      ].forEach(function (row) { %>
+        <div class="flex items-baseline justify-between gap-2">
+          <dt class="text-slate-500 truncate"><%= row[0] %></dt>
+          <dd class="font-medium tabular-nums <%= row[1] > 0 ? 'text-slate-900' : 'text-slate-300' %>"><%= row[1] %></dd>
+        </div>
+      <% }) %>
+    </dl>
+    <% if (calendars.length > 0) { %>
+      <div class="mt-3 pt-3 border-t border-slate-100 space-y-1">
+        <% calendars.forEach(function (c) { %>
+          <div class="flex items-center gap-2 text-xs text-slate-600">
+            <span class="h-2.5 w-2.5 rounded-full shrink-0" style="background: <%= c.color %>"></span>
+            <span class="truncate"><%= c.name %></span>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+
+  <%# ── 设备 ── %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.devices.heading") %></h2>
+    <% if (devices.length === 0) { %>
+      <p class="text-sm text-slate-400"><%= t("adminUserDetail.devices.none") %></p>
+    <% } else { %>
+      <div class="space-y-2">
+        <% devices.forEach(function (d) { %>
+          <div class="flex items-center justify-between gap-3 text-sm <%= d.revokedAt ? 'opacity-50' : '' %>">
+            <div class="min-w-0">
+              <div class="text-slate-900 truncate"><%= d.label %></div>
+              <div class="text-xs text-slate-400"><%= d.kind %><%= d.appVersion ? ' · ' + d.appVersion : '' %><%= d.revokedAt ? ' · ' + t("adminUserDetail.devices.revoked") : '' %></div>
+            </div>
+            <div class="text-xs text-slate-500 shrink-0">
+              <%= d.lastSeenAt ? new Intl.DateTimeFormat(currentLocale, { dateStyle: 'short' }).format(d.lastSeenAt) : '—' %>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+
+  <%# ── 最近登录 ──────────────────────────────────────────────────
+      「有人说登不进去」时第一眼要看的就是这个:有没有记录、来自哪、用什么方式。 %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.logins.heading") %></h2>
+    <% if (recentLogins.length === 0) { %>
+      <p class="text-sm text-slate-400"><%= t("adminUserDetail.logins.none") %></p>
+    <% } else { %>
+      <div class="space-y-1.5">
+        <% recentLogins.forEach(function (l) { %>
+          <div class="flex items-center justify-between gap-3 text-xs">
+            <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 shrink-0"><%= l.method %></span>
+            <span class="text-slate-400 truncate flex-1"><%= l.ip %></span>
+            <span class="text-slate-500 shrink-0"><%= new Intl.DateTimeFormat(currentLocale, { dateStyle: 'short', timeStyle: 'short' }).format(l.createdAt) %></span>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </section>
+
+  <%# ── 基本信息 ── %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.meta.heading") %></h2>
+    <dl class="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+      <div class="flex items-baseline justify-between gap-2">
+        <dt class="text-slate-500"><%= t("adminUsers.col.source") %></dt>
+        <dd><%- include('_signup_source', { src: target.source }) %></dd>
+      </div>
+      <div class="flex items-baseline justify-between gap-2">
+        <dt class="text-slate-500"><%= t("adminUsers.col.createdAt") %></dt>
+        <dd class="text-slate-900"><%= new Intl.DateTimeFormat(currentLocale, { dateStyle: 'medium' }).format(target.createdAt) %></dd>
+      </div>
+      <div class="flex items-baseline justify-between gap-2">
+        <dt class="text-slate-500"><%= t("adminUserDetail.meta.locale") %></dt>
+        <dd class="text-slate-900"><%= target.locale || t("adminUserDetail.meta.localeDefault") %></dd>
+      </div>
+    </dl>
+  </section>
+</div>
+
+<%- include('_nav_end') %>
