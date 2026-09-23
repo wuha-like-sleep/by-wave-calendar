@@ -562,16 +562,29 @@ struct EventEditView: View {
     private func buildExtra() -> EventExtra {
         let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPassword = meetingPassword.trimmingCharacters(in: .whitespacesAndNewlines)
+        // **手上这份事件根本没带 extra 的话，这个界面对这几个字段就「不归我管」。**
+        // 区分不了「用户清空了」和「我从来没加载过」，就会把没加载过当成清空：
+        // 搜索结果不带 extra（里面有入会密码，按设计不回），从搜索点进去改个标题，
+        // 会议链接、入会密码、时区当场全没 —— 一个错都不报。
+        // 注意这对「本来就没有 extra 的事件」是安全的：没东西可保，发不发 null 一样。
+        let extraLoaded = mode.existing?.extra != nil
+        func field(_ v: String?) -> ExtraField<String> {
+            // 用户填了东西 —— 不管加载没加载过，都要发出去，否则「给一个没有 extra
+            // 的事件加会议链接」会静默存不上。**「不归我管」只适用于空着的字段。**
+            if let v { return managed(v) }
+            // 空着：只有真的加载过、确认它原来有值，才当成「用户清空了」。
+            return extraLoaded ? managed(nil) : .unmanaged
+        }
         return EventExtra(
             // 全天事件这个界面不提供时区选择，所以它不是「被清空」而是「不归我管」。
             // 写成清空会把别的端设的时区删掉，而服务端算全天事件的提醒正要用它。
-            timezone: allDay ? .unmanaged : managed(timezone.isEmpty ? nil : timezone),
+            timezone: allDay ? .unmanaged : field(timezone.isEmpty ? nil : timezone),
             // 参与者有自己的页面和接口，分类和提醒由网页 / 其它端维护 ——
             // 在这里发 null 等于把别人设的东西抹掉。
             attendees: .unmanaged,
             category: .unmanaged,
-            url: managed(trimmedURL.isEmpty ? nil : trimmedURL),
-            meetingPassword: managed(trimmedPassword.isEmpty ? nil : trimmedPassword),
+            url: field(trimmedURL.isEmpty ? nil : trimmedURL),
+            meetingPassword: field(trimmedPassword.isEmpty ? nil : trimmedPassword),
         )
     }
 

@@ -68,7 +68,7 @@ export async function searchRoutes(app: FastifyInstance) {
     // first, recency as tie-breaker.
     type EventRow = {
       id: string; calendarId: string; summary: string; location: string | null;
-      startsAt: Date; endsAt: Date;
+      startsAt: Date; endsAt: Date; allDay: boolean; rrule: string | null;
     };
     let eventRows: EventRow[] = [];
     if (allowedIds.length > 0) {
@@ -84,6 +84,13 @@ export async function searchRoutes(app: FastifyInstance) {
           location: schema.events.location,
           startsAt: schema.events.startsAt,
           endsAt: schema.events.endsAt,
+          // allDay / rrule 跟着结果一起回去。少了这两个，客户端只能替它们编一个
+          // 默认值（全天=否、不重复），而**编出来的默认值会被当成用户的修改原样存回去**：
+          // 从搜索结果点进去改个标题，全天事件当场变成定时事件、时间跟着时区挪；
+          // 重复事件因为看不见 rrule 不弹「改这一个还是整个系列」，于是整条系列被改掉。
+          // description 不在这里 —— 见文件头，那是特意不返回的。
+          allDay: schema.events.allDay,
+          rrule: schema.events.rrule,
         })
         .from(schema.events)
         .where(and(inArray(schema.events.calendarId, allowedIds), isNull(schema.events.deletedAt), ...termConds))
@@ -107,6 +114,8 @@ export async function searchRoutes(app: FastifyInstance) {
       location: e.location,
       startsAt: e.startsAt,
       endsAt: e.endsAt,
+      allDay: e.allDay,
+      rrule: e.rrule,
     }));
 
     // ---- Calendars (filter the already-scoped owned+shared list in memory) ----

@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { fetchEventMastersInWindow } from "../lib/events_query.js";
@@ -591,6 +591,28 @@ export async function eventRoutes(app: FastifyInstance) {
     return reply.code(201).send(row ? forClient(row) : row);
   });
 
+  /** 按 id 取一个事件的完整内容。
+   *
+   *  以前没有这条路由，于是「手上只有半个事件」的客户端没有任何办法补齐它。
+   *  搜索结果就是这种半个：它按设计不返回 description 和 extra，客户端只能替
+   *  缺的字段编一个默认值，而**编出来的值会被当成用户的修改原样存回去** ——
+   *  从搜索结果点进去改一下标题，会议链接和入会密码就没了。
+   *
+   *  返回的形状和列表接口一模一样（forClient 归一 extra），调用方不用分两套解析。
+   *  重复事件这里回的是主行，展开成一个个日程是 GET /events 那条路的事。 */
+  app.get<{ Params: { id: string } }>("/events/:id", { config: { oauthScope: "read:events" } }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    const parsed = idParam.safeParse(req.params);
+    if (!parsed.success) return reply.code(400).send({ error: "bad_id" });
+    // 范围要和列表 / 搜索一致：自己的 + 共享给自己的。只认 owner 的话会出现
+    // 「搜得到、点进去 404」——而搜索恰恰是这条路由的主要来路。
+    // 读不到一律 404 不回 403：403 等于告诉对方「这个 id 是存在的」。
+    const event = await loadReadableEvent(parsed.data.id, user.id);
+    if (!event) return reply.code(404).send({ error: "not_found" });
+    return reply.send(forClient(event));
+  });
+
   // Validation: scope (this/future/series) + recurrenceId (the original
   // instance start). When scope=this or scope=future we MUST have a
   // recurrenceId to know which occurrence the user means.
@@ -987,6 +1009,32 @@ async function ownsCalendar(calendarId: string, userId: string): Promise<boolean
     .where(and(eq(schema.calendars.id, calendarId), eq(schema.calendars.ownerId, userId)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** 读权限下的取行：自己的日历 **加上**共享给自己的。
+ *
+ *  跟 loadOwnedEvent（只认 owner，写操作用）是两个判据，别混用：列表和搜索
+ *  都会把共享日历上的事件返回给用户，按 id 单取要是只认 owner，就会出现
+ *  「搜得到、点进去 404」。 */
+async function loadReadableEvent(eventId: string, userId: string) {
+  const rows = await db
+    .select({ event: schema.events })
+    .from(schema.events)
+    .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+    .leftJoin(
+      schema.calendarMembers,
+      and(
+        eq(schema.calendarMembers.calendarId, schema.calendars.id),
+        eq(schema.calendarMembers.userId, userId),
+      ),
+    )
+    .where(and(
+      eq(schema.events.id, eventId),
+      isNull(schema.events.deletedAt),
+      or(eq(schema.calendars.ownerId, userId), isNotNull(schema.calendarMembers.userId)),
+    ))
+    .limit(1);
+  return rows[0]?.event ?? null;
 }
 
 async function loadOwnedEvent(eventId: string, userId: string) {
