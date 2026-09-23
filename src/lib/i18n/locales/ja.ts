@@ -514,7 +514,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "adminBackup.structure.intro": "トップレベルの JSON は次のようになります：",
   "adminBackup.structure.verifyNote": "復元時に <code>productId</code> と <code>bundleVersion</code> が検証されます — ByWave Calendar のバックアップでないもの、または bundleVersion が新しいもの（より新しいビルドからエクスポートされたもの）は拒否されます。",
   "adminBackup.structure.included": "<strong>含まれるテーブル：</strong>site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens",
-  "adminBackup.structure.excluded": "<strong>除外されるテーブル：</strong>sessions / password_resets / email_verifications / login_challenges（一時的なもの — 期限切れになるためバックアップしても無意味で、復元後に再構築されます）",
+  "adminBackup.structure.excluded": "<strong>除外されるテーブル：</strong>sessions / password_resets / email_verifications / login_challenges / device_pairings（一時的なもの — 期限切れになるためバックアップしても無意味で、復元後に再構築されます）",
   "adminBackup.structure.transactional": "<strong>復元はトランザクションで行われます：</strong>INSERT が失敗するとインポート前の状態にロールバックされます。中途半端に復元された不整合な状態に<em>陥ることはありません</em>。",
 
   // /admin/api

@@ -514,7 +514,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "adminBackup.structure.intro": "Das JSON auf oberster Ebene sieht so aus:",
   "adminBackup.structure.verifyNote": "Bei der Wiederherstellung werden <code>productId</code> und <code>bundleVersion</code> validiert — alles, was keine ByWave Calendar-Sicherung ist oder dessen bundleVersion neuer ist (aus einem neueren Build exportiert), wird abgelehnt.",
   "adminBackup.structure.included": "<strong>Enthaltene Tabellen:</strong> site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens",
-  "adminBackup.structure.excluded": "<strong>Ausgeschlossene Tabellen:</strong> sessions / password_resets / email_verifications / login_challenges (vorübergehend — sinnlos zu sichern, da sie ablaufen; werden nach der Wiederherstellung neu aufgebaut)",
+  "adminBackup.structure.excluded": "<strong>Ausgeschlossene Tabellen:</strong> sessions / password_resets / email_verifications / login_challenges / device_pairings (vorübergehend — sinnlos zu sichern, da sie ablaufen; werden nach der Wiederherstellung neu aufgebaut)",
   "adminBackup.structure.transactional": "<strong>Die Wiederherstellung ist transaktional:</strong> jeder fehlgeschlagene INSERT rollt auf den Zustand vor dem Import zurück; Sie landen <em>nie</em> in einem halb wiederhergestellten, inkonsistenten Zustand.",
 
   // /admin/api

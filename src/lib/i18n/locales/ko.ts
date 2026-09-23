@@ -514,7 +514,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "adminBackup.structure.intro": "최상위 JSON은 다음과 같습니다:",
   "adminBackup.structure.verifyNote": "복원 시 <code>productId</code>와 <code>bundleVersion</code>이 검증됩니다 — ByWave Calendar 백업이 아니거나 bundleVersion이 더 새로운(더 새 빌드에서 내보낸) 파일은 거부됩니다.",
   "adminBackup.structure.included": "<strong>포함 테이블:</strong> site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens",
-  "adminBackup.structure.excluded": "<strong>제외 테이블:</strong> sessions / password_resets / email_verifications / login_challenges (일시적 — 만료되므로 백업할 의미가 없으며 복원 후 재구성됨)",
+  "adminBackup.structure.excluded": "<strong>제외 테이블:</strong> sessions / password_resets / email_verifications / login_challenges / device_pairings (일시적 — 만료되므로 백업할 의미가 없으며 복원 후 재구성됨)",
   "adminBackup.structure.transactional": "<strong>복원은 트랜잭션입니다:</strong> 어떤 INSERT 실패도 가져오기 전 상태로 롤백됩니다; <em>절대로</em> 반쯤 복원된 더러운 상태로 끝나지 않습니다.",
 
   // /admin/api

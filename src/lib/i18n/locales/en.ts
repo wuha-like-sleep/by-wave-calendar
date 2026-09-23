@@ -521,7 +521,7 @@ export const en = {
   "adminBackup.structure.intro": "Top-level JSON looks like:",
   "adminBackup.structure.verifyNote": "On restore, <code>productId</code> and <code>bundleVersion</code> are validated — anything that isn't a ByWave Calendar backup, or whose bundleVersion is newer (exported from a newer build), is rejected.",
   "adminBackup.structure.included": "<strong>Included tables:</strong> site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens",
-  "adminBackup.structure.excluded": "<strong>Excluded tables:</strong> sessions / password_resets / email_verifications / login_challenges (transient — meaningless to back up since they expire; rebuilt after restore)",
+  "adminBackup.structure.excluded": "<strong>Excluded tables:</strong> sessions / password_resets / email_verifications / login_challenges / device_pairings (transient — meaningless to back up since they expire; rebuilt after restore)",
   "adminBackup.structure.transactional": "<strong>Restore is transactional:</strong> any INSERT failure rolls back to the pre-import state; you will <em>never</em> end up in a half-restored dirty state.",
 
   // /admin/api

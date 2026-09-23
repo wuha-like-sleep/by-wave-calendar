@@ -502,7 +502,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "adminBackup.structure.intro": "顶层 JSON 形如：",
   "adminBackup.structure.verifyNote": "恢复时 <code>productId</code> 和 <code>bundleVersion</code> 会校验 —— 不是 ByWave Calendar 的备份、或者 bundleVersion 更高（说明从更新版本导出），都会被拒绝。",
   "adminBackup.structure.included": "<strong>包含的表：</strong>site_settings · users · sso_providers · login_alerts · login_events · webauthn_credentials · app_passwords · api_tokens · calendars · events · calendar_members · calendar_invitations · share_tokens · calendar_subscriptions · event_invite_tokens",
-  "adminBackup.structure.excluded": "<strong>不包含的表：</strong>sessions / password_resets / email_verifications / login_challenges（临时数据，备份完了过期就没意义，恢复后会重新积累）",
+  "adminBackup.structure.excluded": "<strong>不包含的表：</strong>sessions / password_resets / email_verifications / login_challenges / device_pairings（临时数据，备份完了过期就没意义，恢复后会重新积累）",
   "adminBackup.structure.transactional": "<strong>恢复是事务化的：</strong>中途任何表 INSERT 失败都会回滚到导入前的状态，<em>不会</em>出现部分恢复成功 + 部分失败的脏状态",
 
   // /admin/api

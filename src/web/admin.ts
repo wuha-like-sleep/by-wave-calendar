@@ -1382,8 +1382,21 @@ export async function adminRoutes(app: FastifyInstance) {
         .map((r) => `${r.table}: ${r.inserted}${r.error ? ` (✗ ${r.error.slice(0, 50)})` : ""}`)
         .join("; ");
       await audit(req, u.id, "backup.restore", {
-        details: { totalInserted: result.totalInserted, exportedAt: bundle.exportedAt, sizeBytes: buf.length },
+        details: {
+          totalInserted: result.totalInserted, exportedAt: bundle.exportedAt,
+          sizeBytes: buf.length, missingTables: result.missingTables,
+        },
       });
+      // 文件里整张表都没有的，恢复后会是空的 —— 这必须摆在最前面说，
+      // 不能埋在一句「恢复完成」里。旧版本导出的备份就会是这种情况。
+      if (result.missingTables.length > 0) {
+        return reply.redirect("/admin/backup?error=" + encodeURIComponent(
+          `恢复完成，但这份备份文件里没有下面这些表，它们现在是空的：` +
+          `${result.missingTables.join("、")}。` +
+          `这通常是旧版本导出的备份 —— 这些数据已经不在库里了，` +
+          `如果还有更新的备份请改用那一份。建议立即重启服务。`
+        ));
+      }
       return reply.redirect("/admin/backup?success=" + encodeURIComponent(
         `恢复完成 —— 共 ${result.totalInserted} 行（${summary}）。建议立即重启服务。`
       ));
