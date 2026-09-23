@@ -864,6 +864,7 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
         post: { summary: "Create event" },
       },
       "/events/{id}": {
+        get: { summary: "Fetch one event in full (owned or shared calendars)" },
         patch: { summary: "Update event" },
         delete: { summary: "Soft-delete event + fire CANCEL emails" },
       },
