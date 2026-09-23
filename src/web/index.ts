@@ -244,6 +244,14 @@ async function ownsCalendar(calendarId: string, userId: string) {
   return rows.length > 0;
 }
 
+/** 上传 .ics 文件的上限。以前这里写 5MB，而实际生效的是全局那 2MB。 */
+export const MAX_ICS_IMPORT_BYTES = 8 * 1024 * 1024;
+
+/** 粘贴 .ics 文本的上限（字符数）。
+ *  它受 Fastify 的 bodyLimit（2MB）封顶，而 urlencoded 转义还会再吃掉一部分，
+ *  所以这个值必须明显小于 bodyLimit —— 写 5MB 的话那一段永远到不了 zod。 */
+export const MAX_ICS_PASTE_CHARS = 1_000_000;
+
 export async function webRoutes(app: FastifyInstance) {
   // -------- Public pages --------
   app.get("/", async (req, reply) => {
@@ -1198,13 +1206,32 @@ export async function webRoutes(app: FastifyInstance) {
     if (!calId.success) return reply.redirect("/app");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
 
-    const file = await req.file();
+    // **limits 必须显式写。** 不写的话继承全局的 2MB，而下面那句「文件过大」
+    // 写的是 5MB —— 于是 2MB 到 5MB 之间的 .ics（一个用了几年的日历很容易
+    // 就这么大）在 toBuffer() 处抛 RequestFileTooLargeError，用户收到的是
+    // Fastify 默认的英文 413，而不是任何能看懂的提示。
+    // 这和备份导入那条是同一个形状：代码里写着一个上限，实际生效的是另一个。
+    let file: Awaited<ReturnType<typeof req.file>>;
+    try {
+      file = await req.file({ limits: { fileSize: MAX_ICS_IMPORT_BYTES } });
+    } catch (err) {
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
+      }
+      throw err;
+    }
     if (!file) {
       return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pickFile") });
     }
-    const buf = await file.toBuffer();
-    if (buf.length > 5 * 1024 * 1024) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
+    let buf: Buffer;
+    try {
+      buf = await file.toBuffer();
+    } catch (err) {
+      // 真正触顶的是 toBuffer，不是上面那次 req.file()。
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
+      }
+      throw err;
     }
     const text = buf.toString("utf8");
     if (!text.toUpperCase().includes("BEGIN:VCALENDAR")) {
@@ -1229,7 +1256,11 @@ export async function webRoutes(app: FastifyInstance) {
     if (!calId.success) return reply.redirect("/app");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
 
-    const body = z.object({ text: z.string().min(20).max(5 * 1024 * 1024) }).safeParse(req.body);
+    // 这里的上限只能写成**实际生效的那个**。Fastify 的 bodyLimit 在解析
+    // 请求体时就先拦一道（2MB），zod 写 5MB 的话，2MB 到 5MB 之间的粘贴
+    // 内容根本到不了这行 —— 用户收到的是一个通用 413，而不是「内容太长」。
+    // 而 urlencoded 编码还会让实际能装的原文再打折（换行、冒号都会被转义）。
+    const body = z.object({ text: z.string().min(20).max(MAX_ICS_PASTE_CHARS) }).safeParse(req.body);
     if (!body.success) {
       return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteText") });
     }

@@ -2924,13 +2924,25 @@ export async function adminRoutes(app: FastifyInstance) {
         const hash = createHash("sha256");
         let bytes = 0;
         const ws = createWriteStream(tmpPath);
-        await new Promise<void>((resolve, reject) => {
-          part.file.on("data", (c: Buffer) => { bytes += c.length; hash.update(c); });
-          part.file.on("error", reject);
-          ws.on("error", reject);
-          ws.on("finish", () => resolve());
-          part.file.pipe(ws);
-        });
+        part.file.on("data", (c: Buffer) => { bytes += c.length; hash.update(c); });
+        // **用 stream/promises 的 pipeline,不要手写 pipe + on('finish')。**
+        //
+        // 手写那版在「客户端中途断开」这条路上既不 resolve 也不 reject:
+        // @fastify/multipart 在 request 的 'close' 里调 currentFile.destroy()
+        // **不带错误**,于是源流只发 'close' 不发 'error';而 Node 的 pipe()
+        // 不监听源的 'close',写流既不会 end 也不会 finish。三个 settle 分支
+        // 一个都到不了,那个 await 永远挂着。
+        //
+        // 后果不是「这次传失败」,是**锁永远删不掉**(下面的 finally 到不了),
+        // 那个文件名从此每次重传都撞 409「正在被另一个上传占用」——
+        // 而实际上没有任何人在传,站长只能重启服务,也就是回到这一页想消灭的
+        // 那个宝塔/SSH。顺带还漏一个 .part 文件和一个一直开着的写句柄。
+        //
+        // 而触发条件正是这个功能的日常:109MB 传到一半关标签页、或者网断一下。
+        // pipeline 会在源被 destroy 时以 ERR_STREAM_PREMATURE_CLOSE 结束,
+        // 并且负责把两端都收干净。
+        const { pipeline } = await import("node:stream/promises");
+        await pipeline(part.file, ws);
         // **唯一真正生效的超限判据。** 别在旁边再写「双保险」——
         // 那两道实测都不响,留着只会让人以为有冗余而把这一道删掉。
         if ((part.file as unknown as { truncated?: boolean }).truncated) {
@@ -2943,10 +2955,21 @@ export async function adminRoutes(app: FastifyInstance) {
       // 超大文件排在最后一个 part 时,插件的 RequestFileTooLargeError 是从
       // for-await 里抛出来的,不 catch 的话变成 500 + 英文原文。
       const e = err as { code?: string; statusCode?: number; message?: string };
-      rejected = (e.code === "FST_REQ_FILE_TOO_LARGE" || e.statusCode === 413)
-        ? { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` }
-        : { code: 500, msg: e.message || "上传失败" };
+      if (e.code === "FST_REQ_FILE_TOO_LARGE" || e.statusCode === 413) {
+        rejected = { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` };
+      } else if (e.code === "ERR_STREAM_PREMATURE_CLOSE") {
+        // 客户端中途断了(关标签页 / 网断)。响应多半发不出去了,但这一条的
+        // 意义在于让下面的 finally 跑到、把锁和临时文件收干净。
+        rejected = { code: 499, msg: "上传中断（连接断开）" };
+      } else if (e.code === "ENOSPC") {
+        // 盘满。errno 原文对站长毫无意义,而这件事他一看就知道怎么办。
+        rejected = { code: 507, msg: "服务器磁盘空间不足，没有保存。先在「客户端更新」页删掉用不到的旧安装包再试。" };
+      } else {
+        rejected = { code: 500, msg: e.message || "上传失败" };
+      }
     } finally {
+      // 无论走哪条路都必须释放 —— 漏一次,那个文件名在进程重启之前
+      // 永远传不了,而页面上看不到锁,站长没有任何线索。
       if (lockedName) binaryUploadsInFlight.delete(lockedName);
     }
 

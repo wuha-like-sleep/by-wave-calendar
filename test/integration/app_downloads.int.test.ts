@@ -39,6 +39,25 @@ let app: FastifyInstance;
 
 async function buildApp(): Promise<FastifyInstance> {
   const a = Fastify({ logger: false });
+  // **必须真的注册 @fastify/compress，而且要把安装包那几种 MIME 配成可压缩。**
+  //
+  // 两个坑叠在一起：
+  //  · 不注册插件的话，「不压缩」那条测的是「一个没有压缩功能的实例没有压缩」。
+  //  · 注册了但不配 customTypes 的话，它**仍然**恒绿 —— DMG/MSI/DEB 的 MIME
+  //    在 mime-db 里 compressible 不为 true，插件本来就不压它们。也就是说
+  //    有没有路由上的 compress:false，结果一模一样。A/B 当场证实：把
+  //    compress:false 删掉，13 条照样全绿。
+  //
+  // 配上 customTypes 之后，**唯一**还在挡着压缩的就是路由 config 里的
+  // compress:false —— 这才是要守的那件事。这也正好复刻了那个未来场景：
+  // 有人为了支持 .zip/.exe 放宽扩展名，安装包落到 application/octet-stream，
+  // 而那个类型命中插件的默认可压缩正则。
+  const compress = await import("@fastify/compress");
+  await a.register(compress.default, {
+    global: true,
+    threshold: 1,
+    customTypes: /^application\/(x-apple-diskimage|x-msi|vnd\.debian\.binary-package|vnd\.android\.package-archive|octet-stream)/,
+  });
   await a.register(appDownloadRoutes);
   await a.ready();
   return a;
@@ -161,11 +180,35 @@ describe("发文件这条路要能被 100MB 级别的下载真的用上", () => 
   });
 
   it("不压缩 —— 压了会删掉 Content-Length 并破坏 Range", async () => {
+    // 第一版断言的是 `content-encoding === "identity"` —— 而那个头是路由
+    // 自己刚设的，等于自己验自己；更糟的是它**关不掉** @fastify/compress
+    //（插件读的是请求的 content-encoding，那是解压用的）。
+    // 正确的关法是路由 config 里的 compress: false，而验它的唯一办法是
+    // 真的装上插件、真的带 Accept-Encoding 来请求、看回来的是不是原文。
     const res = await app.inject({
       method: "GET", url: `/downloads/desktop/${DMG}`,
       headers: { "accept-encoding": "gzip, deflate, br" },
     });
-    expect(res.headers["content-encoding"]).toBe("identity");
+    expect(
+      res.headers["content-encoding"],
+      "响应被压了 —— 压缩会删掉 Content-Length 并让 Range 失效，" +
+        "109MB 的安装包既白烧 CPU 又断了续传",
+    ).toBeUndefined();
+    expect(res.rawPayload.length, "发出去的不是原文").toBe(CONTENT.length);
+    expect(res.headers["content-length"]).toBe(String(CONTENT.length));
+  });
+
+  it("压缩插件确实是装着的（presence —— 没有这条，上面那条测的是「没有压缩功能的实例没有压缩」）", async () => {
+    // 找一条**应该**被压的路由来证明插件在工作。/api/app/desktop/latest
+    // 回的是 JSON，默认可压缩。
+    const res = await app.inject({
+      method: "GET", url: "/api/app/desktop/latest",
+      headers: { "accept-encoding": "gzip" },
+    });
+    expect(
+      res.headers["content-encoding"],
+      "连 JSON 都没被压 —— 说明这个实例上压缩插件根本没生效，上面那条断言是空的",
+    ).toBe("gzip");
   });
 
   it("文件名不合规 → 400，而且判据和上传共用一份", async () => {

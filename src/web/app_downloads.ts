@@ -19,15 +19,17 @@
 // 3. **压缩**。今天这几种安装包不被压是 mime-db 凑巧(它们的 compressible
 //    不为 true),不是设计。扩展名一旦放宽到 .zip / .exe,或者落到
 //    application/octet-stream 兜底分支,就会命中 @fastify/compress 的默认
-//    正则:白烧 CPU、删掉 Content-Length、还破坏 Range。显式关掉。
+//    正则:白烧 CPU、删掉 Content-Length、还破坏 Range。
+//    关法是路由的 `config: { compress: false }`(插件 index.js:54-55、:67)。
+//    **不是**在响应上发 Content-Encoding: identity —— 那一行是空操作,
+//    插件读的是**请求**的 content-encoding(index.js:339),那是解压用的。
+//    第一版就写错成了后者,而守它的测试断言的正好是那个自己刚设的头。
 // 4. **限流**。原来是 rateLimit: false(完全不挂钩子)。公开下载确实不该按
 //    普通接口的额度算,但也不该彻底不设防 —— 给一个宽松的专用桶。
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
-/** 单次响应最多发多少 —— Range 请求里 end 缺省时的兜底,避免一个
- *  `Range: bytes=0-` 变成「和没有 Range 一样」。这里给足够大的值,
- *  实际由文件大小封顶。 */
+/** 一次要发的那个文件。 */
 type Served = { path: string; size: number; contentType: string; filename: string };
 
 /** 解析单段 Range。返回 null = 没带 Range(发整个文件);
@@ -90,8 +92,6 @@ async function sendBinary(
   reply.header("Cache-Control", "public, max-age=2592000, immutable");
   // **无条件发**。不发这个头,客户端根本不会尝试续传,哪怕我们支持。
   reply.header("Accept-Ranges", "bytes");
-  // 显式关掉压缩:见文件头第 3 条。
-  reply.header("Content-Encoding", "identity");
 
   if (range) {
     const len = range.end - range.start + 1;
@@ -163,9 +163,9 @@ export async function appDownloadRoutes(app: FastifyInstance) {
   // 「Method 'HEAD' already declared」—— **服务起不来**。
   // (这条是被集成测试当场抓住的:全量单元测试里没有任何一处真的启动服务。)
   app.get<{ Params: { filename: string } }>("/downloads/android/:filename",
-    { exposeHeadRoute: false, config: { rateLimit: DOWNLOAD_RATE } }, apkHandler(false));
+    { exposeHeadRoute: false, config: { rateLimit: DOWNLOAD_RATE, compress: false } }, apkHandler(false));
   app.head<{ Params: { filename: string } }>("/downloads/android/:filename",
-    { config: { rateLimit: DOWNLOAD_RATE } }, apkHandler(true));
+    { config: { rateLimit: DOWNLOAD_RATE, compress: false } }, apkHandler(true));
 
   // ---- 桌面：有没有新版本 ----
   app.get("/api/app/desktop/latest", { config: { rateLimit: false } }, async (req, reply) => {
@@ -206,7 +206,7 @@ export async function appDownloadRoutes(app: FastifyInstance) {
     };
   // exposeHeadRoute: false —— 理由同安卓那两行。
   app.get<{ Params: { filename: string } }>("/downloads/desktop/:filename",
-    { exposeHeadRoute: false, config: { rateLimit: DOWNLOAD_RATE } }, desktopHandler(false));
+    { exposeHeadRoute: false, config: { rateLimit: DOWNLOAD_RATE, compress: false } }, desktopHandler(false));
   app.head<{ Params: { filename: string } }>("/downloads/desktop/:filename",
-    { config: { rateLimit: DOWNLOAD_RATE } }, desktopHandler(true));
+    { config: { rateLimit: DOWNLOAD_RATE, compress: false } }, desktopHandler(true));
 }

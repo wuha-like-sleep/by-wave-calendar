@@ -81,6 +81,7 @@ async function loginAs(userId: string) {
     expiresAt: new Date(Date.now() + 86400_000),
   });
   return {
+    raw: sid,
     cookie: `bwc_sid=${encodeURIComponent(app.signCookie(sid))}`,
     csrf: createHmac("sha256", SESSION_SECRET).update(sid).digest("hex"),
   };
@@ -280,6 +281,75 @@ describe("上传安装包", () => {
     expect(String(res.headers.location)).toContain("success=");
     expect(await dirNames()).not.toContain(DMG);
     expect(await macUrl(), "删掉了还在发本站地址 —— 用户会撞 404").toBe(GITHUB_URL);
+  });
+
+  it("上传中途断线：锁要放掉、临时文件要清掉（这条 inject 测不出来，必须起真服务器）", async () => {
+    // **这是这个功能最常见的失败方式**：109MB 传好几分钟，用户关标签页或者网断。
+    //
+    // 第一版在这条路上既不 resolve 也不 reject：@fastify/multipart 在 request
+    // 'close' 时 destroy 源流**不带错误**，源只发 'close' 不发 'error'，
+    // 而 Node 的 pipe() 不监听源的 'close' —— 写流既不 end 也不 finish，
+    // 那个 await 永远挂着，于是 finally 到不了、锁永远删不掉。
+    // 后果是那个文件名从此每次重传都撞 409，只能重启服务。
+    //
+    // 之前 11 条用例一条都抓不到它：全部用 app.inject 发**完整**请求，
+    // 结构上就没有「中途断开」这件事。这一条必须真的起 HTTP 服务器、
+    // 真的把 socket 掐掉。
+    //
+    // 用**自己的实例**：在共享的 app 上 listen/close 会把后面的用例一起弄挂。
+    const admin = await makeUser("a@example.com", { isAdmin: true });
+    const s2 = await loginAs(admin.id);
+    const server = await buildApp();
+    await server.listen({ port: 0, host: "127.0.0.1" });
+    const port = (server.server.address() as { port: number }).port;
+
+    try {
+      const http = await import("node:http");
+      const { payload, contentType } = multipartBody(DMG, Buffer.alloc(4 * 1024 * 1024, 0x41));
+      await new Promise<void>((resolve) => {
+        const req = http.request({
+          host: "127.0.0.1", port, method: "POST",
+          path: "/admin/client-release/desktop/binary",
+          headers: {
+            cookie: `bwc_sid=${encodeURIComponent(server.signCookie(s2.raw))}`,
+            "x-csrf-token": s2.csrf,
+            "content-type": contentType,
+            "content-length": String(payload.length),
+          },
+        });
+        req.on("error", () => resolve());
+        // 先写一小段，让服务端进到「已拿锁、正在写盘」的状态，再掐断。
+        req.write(payload.subarray(0, 64 * 1024));
+        setTimeout(() => { req.destroy(); resolve(); }, 200);
+      });
+      // 给服务端一点时间跑完它的清理路径。
+      await new Promise((r) => setTimeout(r, 500));
+
+      // 断言一：锁放掉了 —— 用「同名还能不能再传」来验，不去读那个 Set。
+      // 读内部状态的话，把锁换成别的实现这条就瞎了。
+      const again = await server.inject({
+        method: "POST", url: "/admin/client-release/desktop/binary",
+        headers: {
+          cookie: `bwc_sid=${encodeURIComponent(server.signCookie(s2.raw))}`,
+          "x-csrf-token": s2.csrf,
+          "content-type": multipartBody(DMG, BODY).contentType,
+        },
+        payload: multipartBody(DMG, BODY).payload,
+      });
+      expect(
+        again.statusCode,
+        `断线之后同名再传撞 409 —— 锁没放掉，那个文件名在重启前永远传不了，` +
+          `而页面上看不到锁，站长没有任何线索。响应: ${again.body.slice(0, 200)}`,
+      ).not.toBe(409);
+
+      // 断言二：临时文件清掉了 —— 否则传几次断几次就把盘塞满。
+      expect(
+        (await dirNames()).filter((n) => n.endsWith(".part")),
+        "断线留下了 .part 残留",
+      ).toEqual([]);
+    } finally {
+      await server.close();
+    }
   });
 
   it("每次上传和删除都留审计", async () => {
