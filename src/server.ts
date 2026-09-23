@@ -15,6 +15,7 @@ import ejs from "ejs";
 import { env, trustProxyOption, describeTrustProxy, createProxyShapeWatcher } from "./env.js";
 import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
+import { registerApiCsrf } from "./lib/api_csrf.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
@@ -888,62 +889,10 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
   });
 });
 
-// ---- API security: CSRF for state-changing /api/* under session-cookie auth ----
-// SameSite=Lax already blocks cross-site cookie attachment on POST, but
-// defense-in-depth: require an X-CSRF-Token header (HMAC-bound to the
-// session) on every mutating /api/* request that's NOT using a Bearer
-// API token. Bearer auth lives in the Authorization header which the
-// browser can't auto-attach cross-origin, so CSRF doesn't apply there.
-//
-// Anonymous bootstrap routes (/auth/login, /auth/register) are exempt
-// because there's no session to protect yet.
-const CSRF_EXEMPT_PATHS = new Set([
-  "/api/auth/login", "/api/v1/auth/login",
-  "/api/auth/register", "/api/v1/auth/register",
-  // Native APP bootstrap endpoints — anonymous, NOT cookie-bound. The
-  // one-time pair code / email+password / refresh token IS the auth.
-  // CSRF only protects session cookies that browsers auto-attach
-  // cross-site; these endpoints don't use cookies at all, so the
-  // attack model doesn't apply. Without these exemptions iOS / Android
-  // / desktop APP login returns a confusing 403 even when admin's
-  // appsEnabled toggle is on — the real reason got swallowed by the
-  // global preHandler before reaching the route. (Same logic as
-  // /api/auth/login above.)
-  "/api/v1/devices/pair-claim",
-  "/api/v1/auth/login-password",
-  "/api/v1/auth/refresh",
-  // Desktop scan-login pair flow — first call is anonymous (the
-  // desktop has no account yet, the QR code IS the proof of
-  // authorization once the phone scans + approves). Status polling
-  // is GET so it's already exempt; approve is POST but goes via
-  // Bearer (matched by the Bearer check below), so only init needs
-  // an explicit entry here.
-  "/api/v1/devices/desktop-pair-init",
-  // Web scan-login (browser-side QR): same logic as desktop-pair-init.
-  // The browser calling /web-pair-init is anonymous (no cookie session
-  // yet) — the random code IS the proof once the phone approves. CSRF
-  // protects session cookies; there's no session here to protect.
-  // (web-pair-status is GET so already exempt; web-pair-approve takes
-  // Bearer from the phone APP and matches the bearer-bypass below.)
-  "/api/v1/devices/web-pair-init",
-  // CSP violation reports are POSTed by the browser itself with no
-  // cookies (per spec credentials are omitted). No session = no CSRF
-  // surface; the endpoint just logs the report and returns 204.
-  "/csp-report",
-]);
-app.addHook("preHandler", async (req, reply) => {
-  if (!req.url.startsWith("/api/")) return;
-  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return;
-  // Strip query string for the exempt match.
-  const path = req.url.split("?")[0] || "";
-  if (CSRF_EXEMPT_PATHS.has(path)) return;
-  // Bearer token: header-only, browsers can't auto-attach. Skip.
-  const auth = String(req.headers.authorization || "");
-  if (auth.toLowerCase().startsWith("bearer ")) return;
-  // Session-cookie path: must carry CSRF. verifyCsrf sends the 403 itself.
-  const { verifyCsrf } = await import("./lib/csrf.js");
-  verifyCsrf(req, reply);
-});
+// /api/* 的 CSRF 闸门。判据和豁免名单在 src/lib/api_csrf.ts —— 搬出去是为了
+// 让测试能把它装到真实路由上打一遍（写在这里的时候没有任何测试装得上它，
+// 于是两条匿名登录接口漏进名单外，开了两步验证的人在三个 App 上全登不进来）。
+registerApiCsrf(app);
 
 // 只读 token 的写拦截**不在这里**。它曾经是一个 preHandler 钩子，读
 // req.authVia —— 而那个标记是 requireUserOrSend() 在 handler 阶段才写进去的，
