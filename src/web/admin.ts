@@ -309,6 +309,20 @@ function normalizeUserIds(raw: unknown, cap = 500): string[] {
   return out;
 }
 
+/**
+ * 导入备份的大小上限。
+ *
+ * 为什么不是 100MB(路由里原来写的那个数字):这条路要把整份 JSON
+ * **读进内存**(toBuffer,峰值 2× 文件),再 JSON.parse 成 JS 对象
+ * (又是几倍的内存)。而 deploy 的 PM2 配置是 max_memory_restart 512M、
+ * 单进程 —— 100MB 的备份在 parse 那一步就会把进程打掉,表现是
+ * 「导到一半站挂了」,比干脆拒绝还糟。
+ *
+ * 64MB 是能活下来的量级。真有人撞到这个上限,正确的解法是把导入改成
+ * 流式解析(落临时文件 + 逐表读),而不是把这个数字调大。
+ */
+export const MAX_BACKUP_IMPORT_BYTES = 64 * 1024 * 1024;
+
 export async function adminRoutes(app: FastifyInstance) {
   // Overview / settings dashboard
   app.get("/admin", async (req, reply) => {
@@ -1318,15 +1332,42 @@ export async function adminRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
-    // multipart: no CSRF cookie reliably — gate on admin status.
-    const file = await req.file();
-    if (!file) return reply.redirect("/admin/backup?error=" + encodeURIComponent("请选择备份文件"));
-    if (file.mimetype && !file.mimetype.toLowerCase().includes("json") && file.mimetype !== "application/octet-stream") {
-      return reply.redirect("/admin/backup?error=" + encodeURIComponent("文件类型应为 JSON"));
+    const back = (msg: string) => reply.redirect("/admin/backup?error=" + encodeURIComponent(msg));
+    // multipart 的 req.body 是 undefined（解析器只 done() 不塞 body），
+    // 所以 _csrf 字段读不到 —— 这条路靠 requireAdmin + cookie 的 sameSite=lax。
+    //
+    // **limits 必须显式写。** 不写的话继承全局的 2MB，而下面那句
+    // 「文件过大」写的是另一个数字 —— 于是真实的备份（任何有内容的站点
+    // 导出来都远不止 2MB）在 toBuffer() 处就抛 RequestFileTooLargeError，
+    // 站长收到的是 Fastify 默认的英文 413，而不是任何能看懂的提示。
+    // 代码里写着一个上限、实际生效的是另一个：两个数字各自看都合理，
+    // 只有放在一起看才会发现前一个是死的。
+    let file: Awaited<ReturnType<typeof req.file>>;
+    try {
+      file = await req.file({ limits: { fileSize: MAX_BACKUP_IMPORT_BYTES } });
+    } catch (err) {
+      const e = err as { code?: string };
+      if (e.code === "FST_REQ_FILE_TOO_LARGE") {
+        return back(`文件过大（上限 ${Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576)}MB）`);
+      }
+      throw err;
     }
-    const buf = await file.toBuffer();
-    if (buf.length === 0) return reply.redirect("/admin/backup?error=" + encodeURIComponent("空文件"));
-    if (buf.length > 100 * 1024 * 1024) return reply.redirect("/admin/backup?error=" + encodeURIComponent("文件过大（>100MB）"));
+    if (!file) return back("请选择备份文件");
+    if (file.mimetype && !file.mimetype.toLowerCase().includes("json") && file.mimetype !== "application/octet-stream") {
+      return back("文件类型应为 JSON");
+    }
+    let buf: Buffer;
+    try {
+      buf = await file.toBuffer();
+    } catch (err) {
+      // toBuffer() 才是真正触顶的地方 —— 上面的 req.file() 只是拿到 part。
+      const e = err as { code?: string };
+      if (e.code === "FST_REQ_FILE_TOO_LARGE") {
+        return back(`文件过大（上限 ${Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576)}MB）`);
+      }
+      throw err;
+    }
+    if (buf.length === 0) return back("空文件");
 
     let bundle: BackupBundle;
     try {
