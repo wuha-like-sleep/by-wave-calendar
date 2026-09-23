@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
 import { and, asc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -227,6 +227,78 @@ function zodMessage(error: z.ZodError): string {
       return path ? `${path}: ${issue.message}` : issue.message;
     })
     .join("; ");
+}
+
+/** 给事件的参与者发带 .ics 的邀请（METHOD:REQUEST），每人一个回调 token。
+ *
+ *  抽出来是因为**它原来只长在建事件那条路上**：改事件那条路把新加的人
+ *  合并进 extra 就完事了，不建 token 也不发信。于是给一个已经存在的会加人，
+ *  名字进了列表、存得下、一个错都不报，而对方永远收不到任何东西 ——
+ *  组织者以为已经发过了。桌面端把参与者做在编辑表单里，走的正是那条路。
+ *
+ *  发信是 fire-and-forget 的：发不出去只记日志，不影响这次请求的结果。
+ *  所以**调用点必须自己挑准收件人**，别指望这里的失败能被谁看见。 */
+async function inviteAttendees(
+  log: FastifyBaseLogger,
+  user: { email: string; displayName?: string | null },
+  row: {
+    id: string; uid: string; summary: string; description: string | null;
+    location: string | null; startsAt: Date; endsAt: Date; allDay: boolean;
+    extra: unknown; updatedAt: Date;
+  },
+  emails: string[],
+): Promise<void> {
+  if (emails.length === 0) return;
+  const organizerName = user.displayName || user.email;
+  const extra = (row.extra as { timezone?: string; url?: string; meetingPassword?: string } | null) ?? null;
+  const ics = invitationIcs({
+    event: {
+      uid: row.uid,
+      summary: row.summary,
+      description: row.description,
+      location: row.location,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      allDay: row.allDay,
+      updatedAt: row.updatedAt,
+    },
+    organizerEmail: user.email,
+    organizerName,
+    attendees: emails.map((email) => ({ email })),
+    method: "REQUEST",
+  });
+  const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  for (const to of emails) {
+    // 每人一个 token，好让邮件里那个「添加到我的日历」一键跳回来。
+    const inviteToken = newInvitationToken();
+    try {
+      await db.insert(schema.eventInviteTokens).values({
+        token: inviteToken,
+        sourceEventId: row.id,
+        recipientEmail: to,
+        expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+      });
+    } catch (err) {
+      log.warn({ err, to }, "event_invite_token_failed");
+    }
+    sendMail(eventInviteMail(to, {
+      organizerEmail: user.email,
+      organizerName,
+      summary: row.summary,
+      description: row.description,
+      location: row.location,
+      startsAt: row.startsAt,
+      endsAt: row.endsAt,
+      allDay: row.allDay,
+      uid: row.uid,
+      // 带上事件自己的时区，邮件里才写「上海下午 6 点」而不是服务器的 UTC。
+      timezone: extra?.timezone ?? null,
+      meetingUrl: extra?.url ?? null,
+      meetingPassword: extra?.meetingPassword ?? null,
+      icsBody: ics,
+      inviteToken,
+    })).catch((err) => log.warn({ err, to }, "event_invite_mail_failed"));
+  }
 }
 
 
@@ -501,66 +573,13 @@ export async function eventRoutes(app: FastifyInstance) {
       throw e;
     }
 
-    // Fire-and-forget RSVP emails to attendees listed in extra.attendees.
-    // The email carries a METHOD:REQUEST .ics so Gmail / Outlook / Apple Mail
-    // render the "Add to calendar" / "Yes / Maybe / No" buttons natively.
-    const extra = (body.extra as { attendees?: unknown; timezone?: string } | null) ?? null;
-    // 收件人也走收口模块：zod 那层出来的已经是规范形状，这里再过一遍是为了让
-    // 「谁是参与者」在整个仓库里只有一处判据（下面原来还各自 trim / includes("@") 了一遍）。
-    const inviteTo = attendeeEmails(extra?.attendees);
-    if (row && inviteTo.length > 0) {
-      const organizerName = user.displayName || user.email;
-      const ics = invitationIcs({
-        event: {
-          uid: row.uid,
-          summary: row.summary,
-          description: row.description,
-          location: row.location,
-          startsAt: row.startsAt,
-          endsAt: row.endsAt,
-          allDay: row.allDay,
-          updatedAt: row.updatedAt,
-        },
-        organizerEmail: user.email,
-        organizerName,
-        attendees: inviteTo.map((email) => ({ email })),
-        method: "REQUEST",
-      });
-      const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-      for (const to of inviteTo) {
-        // Generate a per-recipient token so the "添加到我的日历" button in the
-        // email can jump back to the app and add the event with one click.
-        const inviteToken = newInvitationToken();
-        try {
-          await db.insert(schema.eventInviteTokens).values({
-            token: inviteToken,
-            sourceEventId: row.id,
-            recipientEmail: to,
-            expiresAt: new Date(Date.now() + INVITE_TTL_MS),
-          });
-        } catch (err) {
-          req.log.warn({ err, to }, "event_invite_token_failed");
-        }
-        sendMail(eventInviteMail(to, {
-          organizerEmail: user.email,
-          organizerName,
-          summary: row.summary,
-          description: row.description,
-          location: row.location,
-          startsAt: row.startsAt,
-          endsAt: row.endsAt,
-          allDay: row.allDay,
-          uid: row.uid,
-          // Pass the event's stored timezone so the email shows
-          // "上海下午6点" rather than the server's UTC equivalent.
-          timezone: extra?.timezone ?? null,
-          meetingUrl: (row.extra as { url?: string } | null)?.url ?? null,
-          meetingPassword: (row.extra as { meetingPassword?: string } | null)?.meetingPassword ?? null,
-          icsBody: ics,
-          inviteToken,
-        })).catch((err) => req.log.warn({ err, to }, "event_invite_mail_failed"));
-      }
+    // 建事件时 extra.attendees 里的人，当场发邀请。
+    // 收件人走收口模块 attendeeEmails，让「谁是参与者」在整个仓库里只有一处判据。
+    const extra = (body.extra as { attendees?: unknown } | null) ?? null;
+    if (row) {
+      await inviteAttendees(req.log, user, row, attendeeEmails(extra?.attendees));
     }
+
     // Fire-and-forget webhook dispatch. Failures are logged in the
     // webhook_deliveries table; never blocks the API response.
     if (row) {
@@ -723,6 +742,19 @@ export async function eventRoutes(app: FastifyInstance) {
       .where(eq(schema.events.id, id))
       .returning();
     if (row) {
+      // **新加进来的人也要收到邀请。** 原来这里什么都不做：名字合并进 extra 就完事，
+      // 不建 token 也不发信。于是给一个已经存在的会加人，界面上看得见他、存得下、
+      // 一个错都不报，而对方永远收不到任何东西。
+      //
+      // 判据是「合并后」减「合并前」——不是请求体里那一份：extra 是浅合并的，
+      // 请求体里那份既可能是全量也可能只是增量，拿它当判据会把原有的参与者
+      // 重发一遍（每改一次事件所有人的邮箱响一次），或者漏掉真正新加的那个。
+      if (body.extra !== undefined) {
+        const before = new Set(attendeeEmails((target.extra as { attendees?: unknown } | null)?.attendees));
+        const added = attendeeEmails((row.extra as { attendees?: unknown } | null)?.attendees)
+          .filter((email) => !before.has(email));
+        await inviteAttendees(req.log, user, row, added);
+      }
       void dispatchWebhook("event.updated", eventToWebhookPayload(row)).catch(() => undefined);
       void pushEventChanged(user.id, row.id, "event.updated").catch(() => undefined);
     }
