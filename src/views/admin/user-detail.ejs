@@ -161,6 +161,55 @@
     <% } %>
   </section>
 
+  <%# ── 帮他解决登录问题 ──────────────────────────────────────────
+      站长真实会被求助的四件事。每一条都记审计。
+      重置密码那封信**只发到用户自己的邮箱** —— 站长看不到也用不了那个链接,
+      所以这不构成「站长可以接管任何账号」。
+      解绑两步验证是唯一真的降低了别人账号安全等级的,所以本人会收到提醒信。 %>
+  <section class="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+    <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserActions.heading") %></h2>
+    <div class="flex flex-wrap gap-2">
+      <% if (target.isLocked) { %>
+        <form method="post" action="/admin/users/<%= target.id %>/unlock" class="m-0"
+              data-confirm="<%= t("adminUserActions.confirmUnlock") %>" data-confirm-ok="<%= t("adminUserActions.unlock") %>">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-50"><%= t("adminUserActions.unlock") %></button>
+        </form>
+      <% } %>
+      <% if (!target.emailVerified) { %>
+        <form method="post" action="/admin/users/<%= target.id %>/resend-verification" class="m-0">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("adminUserActions.resendVerification") %></button>
+        </form>
+      <% } %>
+      <form method="post" action="/admin/users/<%= target.id %>/send-password-reset" class="m-0"
+            data-confirm="<%= t("adminUserActions.confirmReset") %>" data-confirm-ok="<%= t("adminUserActions.sendReset") %>">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <button type="submit" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("adminUserActions.sendReset") %></button>
+      </form>
+      <% if (target.mfaEnabled) { %>
+        <form method="post" action="/admin/users/<%= target.id %>/disable-mfa" class="m-0"
+              data-confirm="<%= t("adminUserActions.confirmMfa") %>" data-confirm-danger="1" data-confirm-ok="<%= t("adminUserActions.disableMfa") %>">
+          <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+          <button type="submit" class="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-50"><%= t("adminUserActions.disableMfa") %></button>
+        </form>
+      <% } %>
+    </div>
+    <p class="mt-2 text-xs text-slate-500"><%= t("adminUserActions.resetHint") %></p>
+    <% if (target.mfaEnabled) { %>
+      <p class="mt-1 text-xs text-slate-500"><%= t("adminUserActions.mfaHint") %></p>
+    <% } %>
+
+    <%# 删号单独摆在最下面、和上面隔开。它和上面那几条不是一类东西 ——
+        上面是「帮他」,这个是「他没了」。 %>
+    <% if (!target.isSelf) { %>
+      <div class="mt-4 pt-4 border-t border-slate-100">
+        <div class="text-xs uppercase tracking-wide text-slate-400 mb-1"><%= t("adminUserActions.danger") %></div>
+        <a href="/admin/users/<%= target.id %>/delete" class="text-sm text-red-600 hover:text-red-700 hover:underline"><%= t("adminUserDelete.link") %></a>
+      </div>
+    <% } %>
+  </section>
+
   <%# ── 基本信息 ── %>
   <section class="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
     <h2 class="text-sm font-semibold text-slate-900 mb-3"><%= t("adminUserDetail.meta.heading") %></h2>

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, ne, or, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink, mkdtemp, rm } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
@@ -14,11 +14,14 @@ import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
 import { bumpCaldavSyncEpoch, getSettings, updateSettings } from "../lib/site_settings.js";
 import { CAPTCHA_PROVIDERS, isCaptchaProvider, isBuiltinMode } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
+import { createReset } from "../lib/password_reset.js";
+import { issueCode } from "../lib/email_verification.js";
 import {
   calendarInviteMail,
   inviteSignupMail,
   loginAlertMail,
   passwordResetMail,
+  securityChangeMail,
   verificationCodeMail,
   welcomeMail,
   EMAIL_PREVIEW_TEMPLATES,
@@ -419,6 +422,83 @@ export async function lastLoginMethodsFor(userIds: string[]): Promise<Map<string
     .where(inArray(schema.loginEvents.userId, userIds))
     .orderBy(schema.loginEvents.userId, desc(schema.loginEvents.createdAt));
   return new Map(rows.map((r) => [r.userId, r.method]));
+}
+
+
+/** 后台操作的目标用户。找不到 / id 不合法就跳回列表并说明，不抛 400 给站长看。
+ *  **不拦「目标是自己」** —— 解锁、重发验证、发重置邮件对自己都是合理操作；
+ *  真正不能对自己做的是改管理员身份和停用，那两条各自有自己的判断。 */
+async function adminTargetUser(req: FastifyRequest, reply: FastifyReply) {
+  const id = z.string().uuid().safeParse((req.params as { id?: string }).id);
+  if (!id.success) {
+    reply.redirect("/admin/users?error=" + encodeURIComponent(tr(req, "adminUserDetail.notFound")));
+    return null;
+  }
+  const [row] = await db.select().from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
+  if (!row) {
+    reply.redirect("/admin/users?error=" + encodeURIComponent(tr(req, "adminUserDetail.notFound")));
+    return null;
+  }
+  return row;
+}
+
+
+/** 删号会带走什么。预览页和审计记录**共用这一份** —— 审计里留一份快照，
+ *  好让「当时到底删掉了多少东西」在行没了之后还答得上来。 */
+export async function deleteImpact(userId: string) {
+  const n = (rows: { c: number }[]) => Number(rows[0]?.c ?? 0);
+  const [cals, events, bookings, devices, links, shares, subs, tokens, appPw] = await Promise.all([
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.calendars).where(eq(schema.calendars.ownerId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+      .where(eq(schema.calendars.ownerId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.bookings)
+      .innerJoin(schema.bookingLinks, eq(schema.bookingLinks.id, schema.bookings.linkId))
+      .where(eq(schema.bookingLinks.userId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.devices).where(eq(schema.devices.userId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.shareTokens)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.shareTokens.calendarId))
+      .where(eq(schema.calendars.ownerId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.calendarSubscriptions)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.calendarSubscriptions.calendarId))
+      .where(eq(schema.calendars.ownerId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.apiTokens).where(eq(schema.apiTokens.userId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.appPasswords).where(eq(schema.appPasswords.userId, userId)),
+  ]);
+  return {
+    calendars: n(cals), events: n(events), bookings: n(bookings), devices: n(devices),
+    bookingLinks: n(links), shareTokens: n(shares), subscriptions: n(subs),
+    apiTokens: n(tokens), appPasswords: n(appPw),
+  };
+}
+
+/** 不能删的理由，没有就是 null。预览页和真删那条路共用。
+ *
+ *  判据是「删掉之后还剩几个**能登进来**的管理员」：
+ *   · 已停用的管理员不算 —— 把他算进来，会出现「站里一个登得进来的管理员都没有」
+ *     而判据还说没事；
+ *   · 反过来也要当心：**要排除目标自己再数**。第一版是「管理员总数 ≤ 1 就拦」，
+ *     于是「我是唯一在岗的管理员，去删一个早就停用的管理员账号」也被拦下了 ——
+ *     删他不会让任何人失去管理权，拦他只是挡住一次正常的清理。
+ *   · 目标本来就是停用状态的话，删他不改变「还剩几个能登进来的」，直接放行。 */
+export async function deleteBlockReason(
+  target: { id: string; isAdmin: boolean; disabledAt: Date | null },
+  actorId: string,
+): Promise<"self" | "lastAdmin" | null> {
+  if (target.id === actorId) return "self";
+  if (target.isAdmin && !target.disabledAt) {
+    const [row] = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .where(and(
+        eq(schema.users.isAdmin, true),
+        isNull(schema.users.disabledAt),
+        ne(schema.users.id, target.id),
+      ));
+    if (Number(row?.c ?? 0) === 0) return "lastAdmin";
+  }
+  return null;
 }
 
 function bulkBackTo(body: Record<string, unknown>): string {
@@ -1167,6 +1247,166 @@ export async function adminRoutes(app: FastifyInstance) {
         calendars: calendars.length, devices: devices.length, passkeys: passkeys.length,
       },
     });
+  });
+
+  // ---------- 帮用户解决登录问题 ----------
+  //
+  // 这四条都是站长真实会被求助的事：「我被锁了」「验证邮件没收到」
+  // 「密码忘了」「手机丢了两步验证进不去」。数据本来就在库里，以前站长
+  // 只能去数据库里手敲。
+  //
+  // 共同的规矩：
+  //  · 每一条都记审计（谁、对谁、什么时候、从哪个 IP）。
+  //  · 重置密码**只发到用户自己的邮箱**——站长看不到也用不了那个链接，
+  //    所以这不构成「站长可以接管任何账号」。
+  //  · 两步验证是唯一一条真的降低了别人账号安全等级的，所以它额外给
+  //    本人发一封安全提醒信，和用户自己关掉两步验证时发的是同一封。
+
+  /** 解除登录锁定。连续输错被锁之后，本来到点会自动解除，这里是提前解。 */
+  app.post<{ Params: { id: string } }>("/admin/users/:id/unlock", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    await db.update(schema.users)
+      .set({ lockedUntil: null, failedLoginCount: 0, updatedAt: new Date() })
+      .where(eq(schema.users.id, t.id));
+    await audit(req, u.id, "user.unlock", { targetType: "user", targetId: t.id, details: { email: t.email } });
+    return reply.redirect("/admin/users/" + t.id + "?success=" + encodeURIComponent(tr(req, "adminUserActions.unlocked", { email: t.email })));
+  });
+
+  /** 重发邮箱验证码。 */
+  app.post<{ Params: { id: string } }>("/admin/users/:id/resend-verification", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    const back = "/admin/users/" + t.id;
+    if (t.emailVerified) {
+      return reply.redirect(back + "?error=" + encodeURIComponent(tr(req, "adminUserActions.alreadyVerified")));
+    }
+    // issueCode 这条路原本是给注册流程用的，需要一份 pending payload；
+    // 对已经存在的账号原样传它自己的哈希即可（和用户自己点「重发」走的是同一条）。
+    const r = await issueCode(t.email, { passwordHash: t.passwordHash, displayName: t.displayName });
+    // **必须看 r.ok。** 发信在这个仓库里是「不抛异常、只回布尔」，
+    // 用 try/catch 判成败会得到一个永远成功的假象，站长会告诉用户「已经发了」。
+    if (!r.ok) {
+      await audit(req, u.id, "user.resend_verification_failed", { targetType: "user", targetId: t.id, details: { email: t.email } });
+      return reply.redirect(back + "?error=" + encodeURIComponent(tr(req, "adminUserActions.mailFailed")));
+    }
+    await audit(req, u.id, "user.resend_verification", { targetType: "user", targetId: t.id, details: { email: t.email } });
+    return reply.redirect(back + "?success=" + encodeURIComponent(tr(req, "adminUserActions.verificationSent", { email: t.email })));
+  });
+
+  /** 给用户发一封重置密码邮件。链接只到他自己的邮箱，站长拿不到。 */
+  app.post<{ Params: { id: string } }>("/admin/users/:id/send-password-reset", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    const back = "/admin/users/" + t.id;
+    const token = await createReset(t.id);
+    const sent = await sendMail(passwordResetMail(t.email, token));
+    if (!sent.ok) {
+      await audit(req, u.id, "user.password_reset_mail_failed", { targetType: "user", targetId: t.id, details: { email: t.email, reason: sent.reason ?? null } });
+      return reply.redirect(back + "?error=" + encodeURIComponent(tr(req, "adminUserActions.mailFailed")));
+    }
+    await audit(req, u.id, "user.send_password_reset", { targetType: "user", targetId: t.id, details: { email: t.email } });
+    return reply.redirect(back + "?success=" + encodeURIComponent(tr(req, "adminUserActions.resetSent", { email: t.email })));
+  });
+
+  /** 解绑两步验证。手机丢了的标准解法，但这**确实降低了别人账号的安全等级**，
+   *  所以除了审计，还要给本人发一封和他自己关掉时一模一样的安全提醒信 ——
+   *  真要是管理员账号被盗用来做这件事，本人那边至少会收到一声响。 */
+  app.post<{ Params: { id: string } }>("/admin/users/:id/disable-mfa", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    const back = "/admin/users/" + t.id;
+    if (!t.mfaEnabled) {
+      return reply.redirect(back + "?error=" + encodeURIComponent(tr(req, "adminUserActions.mfaNotOn")));
+    }
+    await db.update(schema.users)
+      .set({ mfaEnabled: false, mfaTotpSecret: null, mfaPendingSecret: null, mfaBackupCodes: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, t.id));
+    await audit(req, u.id, "user.disable_mfa", { targetType: "user", targetId: t.id, details: { email: t.email } });
+    void sendMail(securityChangeMail(t.email, { kind: "mfa_disabled" }))
+      .catch((err) => req.log.warn({ err }, "admin_mfa_disable_mail_failed"));
+    return reply.redirect(back + "?success=" + encodeURIComponent(tr(req, "adminUserActions.mfaDisabled", { email: t.email })));
+  });
+
+  // ---------- 真的删号 ----------
+  //
+  // 和「停用」不是一回事：停用可以恢复，这个不能。删掉之后，这个人的日历、
+  // 事件、已经收到的预约、设备、分享出去的链接全部跟着消失（数据库里的
+  // 级联删除），而且**客人手上那些预约取消链接会当场失效**。
+  //
+  // 所以分两步：先出一页把「会删掉多少东西」逐项列清楚，要求站长**照着打出
+  // 这个人的邮箱**才能确认。打字确认不是仪式感 —— 它把「点错了一行」和
+  // 「我确实要删这个人」分开了，而这两件事在一个弹窗上长得一模一样。
+
+  /** 第一步：预览。这一页什么也不改。 */
+  app.get<{ Params: { id: string } }>("/admin/users/:id/delete", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    const block = await deleteBlockReason(t, u.id);
+    const impact = await deleteImpact(t.id);
+    return reply.view("admin/user-delete", {
+      title: tr(req, "adminUserDelete.title"),
+      user: u,
+      csrfToken: csrfTokenFor(req),
+      flash: flashFromQuery(req),
+      activeNav: "/admin/users",
+      target: t,
+      impact,
+      blockReason: block,
+    });
+  });
+
+  /** 第二步：真删。 */
+  app.post<{ Params: { id: string } }>("/admin/users/:id/delete", {
+    config: { rateLimit: { max: 10, timeWindow: "10 minute" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const t = await adminTargetUser(req, reply);
+    if (!t) return reply;
+    const back = "/admin/users/" + t.id + "/delete";
+
+    // 护栏和预览页用的是**同一个判据**。两处各写一遍的话，预览页上说着
+    // 「不能删」而 POST 照删不误 —— 这种偏差没人看得见。
+    const block = await deleteBlockReason(t, u.id);
+    if (block) {
+      // 键写全、不拼接：拼出来的键「每个用到的键都存在」那条门禁看不见，
+      // 少一条翻译就直接把键名显示给站长，而且一路全绿。
+      const msg = block === "self"
+        ? tr(req, "adminUserDelete.blocked.self")
+        : tr(req, "adminUserDelete.blocked.lastAdmin");
+      return reply.redirect(back + "?error=" + encodeURIComponent(msg));
+    }
+
+    const body = z.object({ confirmEmail: z.string().max(254) }).safeParse(req.body);
+    const typed = (body.success ? body.data.confirmEmail : "").trim().toLowerCase();
+    if (typed !== t.email.toLowerCase()) {
+      return reply.redirect(back + "?error=" + encodeURIComponent(tr(req, "adminUserDelete.emailMismatch")));
+    }
+
+    // **先记审计再删。** 反过来的话，删完那一刻进程挂了就什么都没留下，
+    // 而这是一条不可逆的操作 —— 「谁在什么时候删了谁」必须留得住。
+    const impact = await deleteImpact(t.id);
+    await audit(req, u.id, "user.delete", {
+      targetType: "user", targetId: t.id,
+      details: {
+        email: t.email, displayName: t.displayName, isAdmin: t.isAdmin,
+        signupSource: t.signupSource, createdAt: t.createdAt.toISOString(),
+        impact,
+      },
+    });
+    await db.delete(schema.users).where(eq(schema.users.id, t.id));
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(tr(req, "adminUserDelete.done", { email: t.email })));
   });
 
   app.post("/admin/users/:id/toggle-admin", async (req, reply) => {
