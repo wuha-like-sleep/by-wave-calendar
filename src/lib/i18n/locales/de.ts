@@ -542,6 +542,8 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "Gesperrt",
   "adminUsers.badge.lockedTitle": "Zu viele fehlgeschlagene Passwortversuche — die Anmeldung ist vorübergehend gesperrt und wird nach Ablauf automatisch wieder freigegeben.",
   "adminUsers.badge.noPassword": "Kein Passwort",
+  "adminUsers.badge.passwordUnknown": "Unbekannt",
+  "adminUsers.badge.passwordUnknownTitle": "Dieses Konto stammt aus der Zeit vor diesem Feld, daher lässt es sich nachträglich nicht feststellen — von einem externen Identitätsanbieter angelegte Konten sehen in der Datenbank genauso aus wie selbst registrierte. Zur Klärung die Person anmelden lassen oder „Passwort vergessen“ nutzen.",
   "adminUsers.badge.noPasswordTitle": "Dieses Konto wurde beim Anmelden vom Server angelegt (SSO / Apple / externer Identitätsanbieter) und hat nie ein Passwort erhalten — eine Anmeldung per Passwort ist daher nicht möglich. Über „Passwort vergessen“ kann die Person selbst eines setzen.",
   "adminUsers.col.status": "Status",
   "adminUsers.filtered": "{n} Treffer",

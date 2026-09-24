@@ -542,6 +542,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "Verrouillé",
   "adminUsers.badge.lockedTitle": "Trop de tentatives de mot de passe échouées : la connexion est bloquée temporairement et se débloque d'elle-même à l'expiration.",
   "adminUsers.badge.noPassword": "Sans mot de passe",
+  "adminUsers.badge.passwordUnknown": "Inconnu",
+  "adminUsers.badge.passwordUnknownTitle": "Ce compte est antérieur à ce champ, impossible de le déterminer après coup : les comptes créés par un fournisseur d'identité externe sont identiques aux comptes auto-inscrits dans la base. Pour en avoir le cœur net, demandez à la personne d'essayer de se connecter ou d'utiliser « Mot de passe oublié ».",
   "adminUsers.badge.noPasswordTitle": "Ce compte a été créé par le serveur lors de la connexion (SSO / Apple / fournisseur d'identité externe) et n'a jamais eu de mot de passe : la connexion par mot de passe ne fonctionnera pas. La personne peut en définir un via « Mot de passe oublié ».",
   "adminUsers.col.status": "Statut",
   "adminUsers.filtered": "{n} résultat(s)",

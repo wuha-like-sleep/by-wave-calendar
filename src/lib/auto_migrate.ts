@@ -158,12 +158,11 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS sso_satisfies_mfa boolean NOT NULL DEFAULT true`,
   },
   {
-    // 0053。默认值和迁移里一字不差(true)。
-    // **这里故意不做 0053 里那段按注册来源回填的 UPDATE** —— 这一条的职责只是
-    // 「别让读 users 的请求 500」,不是替迁移做决定。补出来的 true 的代价是:
-    // 后台会把 SSO 建的号也显示成「有密码」,也就是退回修之前的样子;
-    // 迁移器一旦恢复记账,那句 UPDATE 会把它们改对。
+    // 0053。可空三态，**不给默认值**：补出来的每一行都是 NULL = 「不知道」。
+    // 这一条的职责只是「别让读 users 的请求 500」,不是替迁移做决定 ——
+    // 补成 true 就等于替所有存量账号断言「有密码」,而那正是这一列要修的谎。
+    // 迁移器一旦恢复记账,0053 里那两段回填会把能确定的改对,剩下的留 NULL。
     why: "users.password_set（缺了登录和后台用户页都 500）",
-    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set boolean NOT NULL DEFAULT true`,
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set boolean`,
   },
 ];

@@ -154,10 +154,14 @@
               <%# 以前这一格对**每个人**都挂「密码」。而 SSO / Apple 建的号拿的是
                   一串随机不可用的哈希,根本没法用密码登录 —— 站长照着看会以为
                   关掉 SSO 之后这些人还有退路,其实没有。现在按真实情况显示。 %>
-              <% if (u.passwordSet) { %>
+              <% if (u.passwordSet === true) { %>
                 <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
-              <% } else { %>
+              <% } else if (u.passwordSet === false) { %>
                 <span class="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-400 border border-dashed border-slate-300" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUsers.badge.noPassword") %></span>
+              <% } else { %>
+                <%# NULL = 升级之前建的号,库里没记这一项。**不许显示成「有密码」** ——
+                    站长会照着它判断「关掉第三方登录谁还进得来」,而那个答案是错的。 %>
+                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700" title="<%= t("adminUsers.badge.passwordUnknownTitle") %>"><%= t("adminUsers.badge.passwordUnknown") %></span>
               <% } %>
               <% if (u.passkeyCount > 0) { %>
                 <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>

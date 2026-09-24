@@ -542,6 +542,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "ロック中",
   "adminUsers.badge.lockedTitle": "パスワードの失敗が続いたため、一時的にログインできません。期限が来ると自動的に解除されます。",
   "adminUsers.badge.noPassword": "パスワード未設定",
+  "adminUsers.badge.passwordUnknown": "不明",
+  "adminUsers.badge.passwordUnknownTitle": "このアカウントはこの項目より前に作られたため、後から判別できません。外部 ID プロバイダが作成したアカウントは、データベース上では自分で登録したものと区別がつきません。確認するには本人にログインを試してもらうか「パスワードをお忘れですか」を使ってもらってください。",
   "adminUsers.badge.noPasswordTitle": "このアカウントはログイン時にサーバーが作成したもの（SSO / Apple / 外部 ID プロバイダ）で、パスワードを設定したことがないため、パスワードではログインできません。本人が「パスワードをお忘れですか」から設定できます。",
   "adminUsers.col.status": "状態",
   "adminUsers.filtered": "該当 {n} 件",

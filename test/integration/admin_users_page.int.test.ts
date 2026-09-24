@@ -211,11 +211,29 @@ describe("页面上写的是不是真的", () => {
     ).toContain("未设密码");
   });
 
+  it("**升级之前建的老账号显示「不确定」，不显示成「有密码」**", async () => {
+    // 这一列是后加的，老行没法回头判断：0048 之前外部身份源开通的号，
+    // 在 users 表上和自助注册的完全一样。猜成「有密码」会让站长以为
+    // 「关掉第三方登录这些人还有退路」——而那个答案是错的。
+    const [legacy] = await db.insert(schema.users).values({
+      email: "legacy@example.com", emailVerified: true, passwordHash: "whatever",
+      passwordSet: null, signupSource: null,
+    }).returning();
+    expect(legacy).toBeTruthy();
+    const html = await get("/admin/users?q=legacy@example.com");
+    expect(rowCount(html)).toBe(1);
+    expect(
+      html,
+      "老账号被当成「有密码」显示了 —— 站长照着它判断谁还进得来，答案是错的",
+    ).toContain("不确定");
+  });
+
   it("自己设过密码的仍然显示「密码」（别把对的也改坏了）", async () => {
     await makeUser("pw@example.com");
     const html = await get("/admin/users?q=pw@example.com");
     expect(rowCount(html)).toBe(1);
     expect(html).not.toContain("未设密码");
+    expect(html, "确定有密码的被显示成「不确定」了").not.toContain("不确定");
   });
 
   it("**每个人的「最近登录方式」是他自己的**，不会被活跃用户挤掉", async () => {

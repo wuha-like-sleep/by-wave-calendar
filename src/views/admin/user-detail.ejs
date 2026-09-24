@@ -31,8 +31,9 @@
       <div class="flex items-start justify-between gap-3">
         <dt class="text-slate-500"><%= t("adminUserDetail.access.password") %></dt>
         <dd class="text-right">
-          <% if (target.passwordSet) { %><span class="text-slate-900"><%= t("adminUserDetail.yes") %></span>
-          <% } else { %><span class="text-slate-400" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUserDetail.no") %></span><% } %>
+          <% if (target.passwordSet === true) { %><span class="text-slate-900"><%= t("adminUserDetail.yes") %></span>
+          <% } else if (target.passwordSet === false) { %><span class="text-slate-400" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUserDetail.no") %></span>
+          <% } else { %><span class="text-amber-700" title="<%= t("adminUsers.badge.passwordUnknownTitle") %>"><%= t("adminUsers.badge.passwordUnknown") %></span><% } %>
         </dd>
       </div>
       <div class="flex items-start justify-between gap-3">

@@ -16,13 +16,18 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   emailVerified: boolean("email_verified").notNull().default(false),
   passwordHash: text("password_hash").notNull(),
-  // 这个账号有没有一把**自己设过**的密码。
+  // 这个账号有没有一把**自己设过**的密码。**三态，NULL = 不知道。**
   //
   // password_hash 是 NOT NULL，而 SSO / IdP / Apple 建出来的号拿到的是一串随机
   // 不可用的哈希（见 account_provisioning.ts，故意的：任何路径拿它比对都只会
   // 安全地失败）。所以光看有没有哈希分不出「有密码」和「有一把谁也用不了的假钥匙」，
   // 后台因此给每个人都挂了「密码」徽章——包括根本没法用密码登录的那些人。
-  passwordSet: boolean("password_set").notNull().default(true),
+  //
+  // 为什么可空而不是 default true：存量行没法判断。注册来源靠 signup_source，
+  // 而那一列 0048 才加、且不回填；再往前外部 IdP 建的号连 sso_provider_slug 都没写，
+  // 在这张表上和自助注册的号完全一样。**分不出来就别猜** —— 猜成「有密码」会让
+  // 站长以为这些人还有退路，代价比「不确定」大得多。界面对 NULL 显示「不确定」。
+  passwordSet: boolean("password_set"),
   displayName: text("display_name"),
   isAdmin: boolean("is_admin").notNull().default(false),
   mfaEnabled: boolean("mfa_enabled").notNull().default(false),

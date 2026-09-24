@@ -549,6 +549,8 @@ export const en = {
   "adminUsers.badge.locked": "Locked",
   "adminUsers.badge.lockedTitle": "Too many failed password attempts — sign-in is blocked for now and unblocks itself when the lock expires.",
   "adminUsers.badge.noPassword": "No password",
+  "adminUsers.badge.passwordUnknown": "Unknown",
+  "adminUsers.badge.passwordUnknownTitle": "This account predates the field, so there's no way to tell after the fact — accounts provisioned by an external identity provider look identical to self-registered ones in the database. To find out, have them try signing in or run “Forgot password”.",
   "adminUsers.badge.noPasswordTitle": "This account was created by the server at sign-in (SSO / Apple / external identity provider) and has never had a password set, so password sign-in won't work. The owner can set one via “Forgot password”.",
   "adminUsers.col.status": "Status",
   "adminUsers.filtered": "{n} match the filter",

@@ -530,6 +530,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "已锁定",
   "adminUsers.badge.lockedTitle": "连续输错密码太多次，暂时禁止登录；到时间会自动解除。",
   "adminUsers.badge.noPassword": "未设密码",
+  "adminUsers.badge.passwordUnknown": "不确定",
+  "adminUsers.badge.passwordUnknownTitle": "这个号是升级之前建的，当时没有记录「有没有自己设过密码」这一项，现在没法回头判断——外部身份源开通的账号在库里和自助注册的长得一模一样。要确认，让本人试一次或者走一次「忘记密码」。",
   "adminUsers.badge.noPasswordTitle": "这个账号是登录时由服务端建的（SSO / Apple / 外部身份源），没有自己设过密码，所以用密码登不进来。本人走一次「忘记密码」就能设一个。",
   "adminUsers.col.status": "状态",
   "adminUsers.filtered": "筛选出 {n} 个",

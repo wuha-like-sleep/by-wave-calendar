@@ -542,6 +542,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "잠김",
   "adminUsers.badge.lockedTitle": "비밀번호를 여러 번 틀려 일시적으로 로그인이 차단되었습니다. 시간이 지나면 자동으로 풀립니다.",
   "adminUsers.badge.noPassword": "비밀번호 없음",
+  "adminUsers.badge.passwordUnknown": "알 수 없음",
+  "adminUsers.badge.passwordUnknownTitle": "이 계정은 해당 항목이 생기기 전에 만들어져 나중에 판별할 수 없습니다. 외부 ID 공급자가 만든 계정은 데이터베이스상 직접 가입한 계정과 구별되지 않습니다. 확인하려면 본인이 로그인을 시도하거나 '비밀번호 찾기'를 사용하게 하세요.",
   "adminUsers.badge.noPasswordTitle": "로그인할 때 서버가 만든 계정입니다(SSO / Apple / 외부 ID 공급자). 비밀번호를 설정한 적이 없어 비밀번호로는 로그인할 수 없습니다. 본인이 '비밀번호 찾기'로 설정할 수 있습니다.",
   "adminUsers.col.status": "상태",
   "adminUsers.filtered": "{n}명 일치",

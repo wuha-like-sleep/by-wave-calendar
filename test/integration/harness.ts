@@ -44,7 +44,9 @@ export async function resetDb(): Promise<void> {
 export async function makeUser(email: string, opts: { isAdmin?: boolean; disabledAt?: Date | null } = {}) {
   const [u] = await db
     .insert(schema.users)
-    .values({ email, emailVerified: true, passwordHash: "x", isAdmin: opts.isAdmin ?? false, disabledAt: opts.disabledAt ?? null })
+    // passwordSet: true —— 这个 helper 造的是「自己注册、自己设过密码」的普通用户。
+    // 不写的话这一列是 NULL(不知道),而那是升级之前老账号才该有的状态。
+    .values({ email, emailVerified: true, passwordHash: "x", passwordSet: true, isAdmin: opts.isAdmin ?? false, disabledAt: opts.disabledAt ?? null })
     .returning();
   return u!;
 }

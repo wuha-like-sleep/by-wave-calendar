@@ -529,6 +529,8 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "已鎖定",
   "adminUsers.badge.lockedTitle": "連續輸錯密碼太多次，暫時禁止登入；時間到會自動解除。",
   "adminUsers.badge.noPassword": "未設密碼",
+  "adminUsers.badge.passwordUnknown": "不確定",
+  "adminUsers.badge.passwordUnknownTitle": "這個帳號是升級之前建立的，當時沒有記錄「有沒有自己設過密碼」這一項，現在沒辦法回頭判斷——外部身分來源開通的帳號在資料庫裡和自助註冊的長得一模一樣。要確認，請本人試一次或走一次「忘記密碼」。",
   "adminUsers.badge.noPasswordTitle": "這個帳號是登入時由伺服器建立的（SSO / Apple / 外部身分來源），沒有自己設過密碼，所以無法用密碼登入。本人走一次「忘記密碼」就能設一個。",
   "adminUsers.col.status": "狀態",
   "adminUsers.filtered": "篩選出 {n} 個",

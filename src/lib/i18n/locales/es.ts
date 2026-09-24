@@ -542,6 +542,8 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "adminUsers.badge.locked": "Bloqueada",
   "adminUsers.badge.lockedTitle": "Demasiados intentos fallidos de contraseña: el acceso está bloqueado temporalmente y se desbloquea solo al expirar.",
   "adminUsers.badge.noPassword": "Sin contraseña",
+  "adminUsers.badge.passwordUnknown": "Desconocido",
+  "adminUsers.badge.passwordUnknownTitle": "Esta cuenta es anterior a este campo, así que no se puede determinar a posteriori: las cuentas creadas por un proveedor de identidad externo son idénticas a las de registro propio en la base de datos. Para saberlo, pide a la persona que intente entrar o que use «Olvidé mi contraseña».",
   "adminUsers.badge.noPasswordTitle": "El servidor creó esta cuenta al iniciar sesión (SSO / Apple / proveedor de identidad externo) y nunca ha tenido contraseña, así que no puede entrar con contraseña. La persona puede establecer una con «Olvidé mi contraseña».",
   "adminUsers.col.status": "Estado",
   "adminUsers.filtered": "{n} coinciden",
