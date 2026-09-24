@@ -379,6 +379,13 @@
       "when": 1789966800000,
       "tag": "0053_password_set_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1789970400000,
+      "tag": "0054_users_created_at_index",
+      "breakpoints": true
     }
   ]
 }

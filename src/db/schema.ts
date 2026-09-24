@@ -9,7 +9,7 @@ import {
   uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -77,6 +77,10 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   emailUnique: uniqueIndex("users_email_unique").on(t.email),
+  // 用户管理页默认按注册时间倒序翻页。带 id 是为了让排序完全确定 ——
+  // created_at 相同的行在不同次查询里顺序可能不一样，翻页会出现
+  // 「同一个人在两页上都看到」或者「有人一页都没出现过」。
+  createdAtIdx: index("users_created_at_idx").on(desc(t.createdAt), desc(t.id)),
   // Partial unique index: at most one account per Apple `sub`. Postgres
   // treats NULLs as distinct so the many non-Apple accounts (apple_sub
   // NULL) don't collide.

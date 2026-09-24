@@ -364,7 +364,13 @@ export function usersWhere(f: UsersFilter) {
 
 export function usersOrderBy(f: UsersFilter) {
   const col = f.sort === "email" ? schema.users.email : schema.users.createdAt;
-  return f.dir === "asc" ? asc(col) : desc(col);
+  // **必须带一个唯一列兜底。** 只按 created_at 排的话，同一时刻注册的几行
+  // （批量导入、同一秒注册）在不同次查询里顺序可以不一样，翻页就会出现
+  // 「同一个人在两页上都看到」或者「有人一页都没出现过」——而站长不会察觉，
+  // 他只会觉得人数对不上。email 有唯一索引，id 是主键，都能当这个兜底。
+  return f.dir === "asc"
+    ? [asc(col), asc(schema.users.id)]
+    : [desc(col), desc(schema.users.id)];
 }
 
 /** 拼回 URL 查询串，保留当前所有条件，只覆盖传进来的那几个。
@@ -1049,18 +1055,31 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const f = parseUsersQuery(req.query);
 
-    // ---- 顶部那三个数字：始终是**全量**，不跟着筛选走 ----
-    // 它们回答的是「这个站一共什么情况」。筛选后有多少条单独算（下面的 filtered），
-    // 两个数字分开摆，免得站长以为筛选把人弄丢了。
-    const countRows = await db
-      .select({
+    const whereClause = usersWhere(f);
+
+    // 这一页原来是**四条各扫一遍 users 全表、而且一条接一条 await**：
+    // 全量统计、筛选命中数、本页那 50 行、来源下拉的分组计数。
+    // 它们互相不依赖，串起来等于把四次往返的时间加在一起，而每换一个筛选
+    // 下拉（选中即提交）就再来一整轮。并发发出去，等最慢的那一条就行。
+    const [countRows, filteredRow, srcCountRows] = await Promise.all([
+      // 顶部那几个数字：始终是**全量**，不跟着筛选走 —— 它们回答的是
+      // 「这个站一共什么情况」。筛选后有多少条单独算，两个数字分开摆，
+      // 免得站长以为筛选把人弄丢了。
+      db.select({
         total: sql<number>`count(*)::int`,
         admins: sql<number>`count(*) filter (where ${schema.users.isAdmin})::int`,
         disabled: sql<number>`count(*) filter (where ${schema.users.disabledAt} is not null)::int`,
         unverified: sql<number>`count(*) filter (where not ${schema.users.emailVerified})::int`,
         locked: sql<number>`count(*) filter (where ${schema.users.lockedUntil} > now())::int`,
-      })
-      .from(schema.users);
+      }).from(schema.users),
+      // 筛选命中多少条 —— 分页要靠它算总页数。
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.users).where(whereClause),
+      // 筛选下拉的选项：库里真实出现过的来源 + 各自多少个。统计的是**全量**，
+      // 不跟着当前筛选走 —— 下拉自己被自己筛过之后就只剩当前那一项，人就出不去了。
+      db.select({ src: schema.users.signupSource, c: sql<number>`count(*)::int` })
+        .from(schema.users).groupBy(schema.users.signupSource),
+    ]);
+
     const stats = {
       total: Number(countRows[0]?.total ?? 0),
       admins: Number(countRows[0]?.admins ?? 0),
@@ -1068,15 +1087,7 @@ export async function adminRoutes(app: FastifyInstance) {
       unverified: Number(countRows[0]?.unverified ?? 0),
       locked: Number(countRows[0]?.locked ?? 0),
     };
-
-    const whereClause = usersWhere(f);
-
-    // 筛选命中多少条 —— 分页要靠它算总页数。
-    const [filteredRow] = await db
-      .select({ c: sql<number>`count(*)::int` })
-      .from(schema.users)
-      .where(whereClause);
-    const filtered = Number(filteredRow?.c ?? 0);
+    const filtered = Number(filteredRow[0]?.c ?? 0);
     const pageCount = Math.max(1, Math.ceil(filtered / USERS_PAGE_SIZE));
     // 页码越界就夹回最后一页：筛选条件变了之后 URL 上的旧页码常常越界，
     // 直接给一张空表会让人以为「这个条件下没有人」。
@@ -1102,16 +1113,10 @@ export async function adminRoutes(app: FastifyInstance) {
       })
       .from(schema.users)
       .where(whereClause)
-      .orderBy(usersOrderBy(f))
+      .orderBy(...usersOrderBy(f))
       .limit(USERS_PAGE_SIZE)
       .offset(offset);
 
-    // 筛选下拉的选项：库里真实出现过的来源 + 各自多少个。统计的是**全量**，
-    // 不跟着当前筛选走 —— 下拉自己被自己筛过之后就只剩当前那一项，人就出不去了。
-    const srcCountRows = await db
-      .select({ src: schema.users.signupSource, c: sql<number>`count(*)::int` })
-      .from(schema.users)
-      .groupBy(schema.users.signupSource);
     const srcOptionMap = new Map<string, { key: string; kind: SignupSourceKind; detail: string | null; raw: string | null; count: number }>();
     for (const row of srcCountRows) {
       const v = signupSourceView(row.src);

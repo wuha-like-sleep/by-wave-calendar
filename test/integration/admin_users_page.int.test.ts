@@ -353,3 +353,39 @@ describe("单个用户的详情页", () => {
     expect(leaked, `这些文案没有翻译，页面上直接显示成了 key：${leaked.join(", ")}`).toEqual([]);
   });
 });
+
+describe("翻页不能把人弄丢", () => {
+  it("**注册时间完全相同的一批人，翻完每一页正好每人出现一次**", async () => {
+    // 批量导入 / 同一秒注册都会造出 created_at 一模一样的行。只按 created_at
+    // 排序时，这些行在不同次查询里的相对顺序是不保证的 —— 翻页就会出现
+    // 「同一个人在两页上都看到」或者「有人一页都没出现过」。
+    // 站长不会察觉，他只会觉得人数对不上。
+    const same = new Date("2026-03-01T00:00:00Z");
+    const emails: string[] = [];
+    for (let i = 0; i < 120; i++) emails.push(`same${String(i).padStart(3, "0")}@example.com`);
+    await db.insert(schema.users).values(
+      emails.map((email) => ({
+        email, emailVerified: true, passwordHash: "x", passwordSet: true, createdAt: same,
+      })),
+    );
+
+    const seen = new Set<string>();
+    const dupes: string[] = [];
+    for (let p = 1; p <= 3; p++) {
+      const html = await get(`/admin/users?page=${p}`);
+      for (const e of emails) {
+        if (html.includes(e)) {
+          if (seen.has(e)) dupes.push(e);
+          seen.add(e);
+        }
+      }
+    }
+    expect(dupes, `这些人在多页上重复出现：${dupes.slice(0, 5).join(", ")}`).toEqual([]);
+    const missing = emails.filter((e) => !seen.has(e));
+    expect(
+      missing,
+      `这些人翻遍每一页都没出现过：${missing.slice(0, 5).join(", ")}。` +
+        "排序不唯一时，分页会静默丢人 —— 站长只会觉得人数对不上，查不出原因。",
+    ).toEqual([]);
+  });
+});
