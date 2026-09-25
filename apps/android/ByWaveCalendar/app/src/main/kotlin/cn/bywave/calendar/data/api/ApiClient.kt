@@ -353,20 +353,24 @@ private class AuthInterceptor(
         // refresh on a 401 from them (because their 401 means real
         // credential failure, not "token expired").
         val path = original.url.encodedPath
-        val isAuthEndpoint =
-            path.contains("/auth/login-password") ||
-            path.contains("/auth/login-mfa-verify") ||
-            path.contains("/auth/refresh") ||
-            path.contains("/devices/pair-claim") ||
-            // 改密码接口的 401 意思是「当前密码错错了」，不是「会话没了」。
-            // 不豁免的话每输错一次都会先刷新 token 再把整个请求原样重发一遍，
-            // 一次错误消耗两次限流配额——用户试到第三次就被告知「太频繁」。
-            path.contains("/account/password")
 
-        val firstReq = if (isAuthEndpoint) original
+        // **这里是两件不同的事，以前混成了一个开关。**
+        //
+        //  · 不带 token：还没有 token 的引导接口（登录、刷新、配对）。
+        //  · 不因 401 去刷新：上面那些，**再加上改密码** —— 它的 401 意思是
+        //    「你输的当前密码不对」，不是「会话没了」。不豁免的话每输错一次
+        //    都会先刷新再把整个请求重发一遍，一次错误吃两次限流配额。
+        //
+        // 混成一个开关的后果：改密码那条请求连 token 都不带了，服务端当然
+        // 回 401，而这条路又被豁免了刷新，于是**安卓上永远改不了密码** ——
+        // 不管输对输错都提示当前密码错误。
+        val isBootstrapEndpoint = isBootstrapPath(path)
+        val skipRefreshOn401 = skipRefreshOn401Path(path)
+
+        val firstReq = if (isBootstrapEndpoint) original
                        else original.withBearer(store.accessToken(profileId))
         val firstResp = chain.proceed(firstReq)
-        if (firstResp.code != 401 || isAuthEndpoint) return firstResp
+        if (firstResp.code != 401 || skipRefreshOn401) return firstResp
         firstResp.close()
 
         // Refresh path — read the profile's refresh token (might have
@@ -374,8 +378,21 @@ private class AuthInterceptor(
         // access token, retry once.
         val profile = store.profiles.value.firstOrNull { it.id == profileId }
         val rt = profile?.refreshToken ?: return chain.proceed(firstReq)
-        val refreshed = runCatching { blockingRefresh(rt) }.getOrNull()
+        val attempt = runCatching { blockingRefresh(rt) }
+        val refreshed = attempt.getOrNull()
         if (refreshed == null) {
+            // **先分清是「服务端不认这张票」还是「根本没问到服务端」。**
+            //
+            // 以前这里不分：任何异常都当成被吊销，把整个账号从这台设备上删掉。
+            // 于是地铁里、飞机上、或者服务器抖一下，用户打开 App 就发现账号没了，
+            // 要重新扫码配对 —— 而他的账号什么事都没有。
+            //
+            // 只有服务端明确回 401 才算吊销（改密码 / 重置密码 / 后台移除设备）。
+            // 网络错误、超时、5xx 一律保持凭据不动，把原来那个 401 原样交回去，
+            // 调用方该报错报错，下一次请求会自己再试一次刷新。
+            if (!isRefreshRevocation(attempt.exceptionOrNull())) {
+                return firstResp
+            }
             // 刷新失败：服务端不认这张 refresh token 了。改密码、重置密码、
             // 后台移除设备都会吊销它。
             //
@@ -432,6 +449,38 @@ private class AuthInterceptor(
  *
  *  Avoids `/` `*` adjacency in this doc comment because Kotlin parses
  *  it as a nested block-comment opener inside KDoc. */
+
+/** 刷新失败是不是「服务端明确不认这张 refresh token」。
+ *
+ *  **只有 HTTP 401 算。** 超时、DNS 失败、连接被拒、5xx 都只说明这次没问到
+ *  服务端，不说明凭据坏了 —— 把它们当成吊销，就会在地铁里、飞机上、或者
+ *  服务器抖一下的时候把用户的账号从这台设备上删掉，而他的账号什么事都没有。
+ *
+ *  放在顶层而不是拦截器私有方法里，是为了能直接写单元测试 ——
+ *  这条判据错一次的代价是用户重新扫码配对，值得钉住。 */
+internal fun isRefreshRevocation(err: Throwable?): Boolean =
+    err is retrofit2.HttpException && err.code() == 401
+
+
+/** 这条路**还没有 token**，所以不带 Authorization 头：登录、刷新、扫码配对。 */
+internal fun isBootstrapPath(path: String): Boolean =
+    path.contains("/auth/login-password") ||
+    path.contains("/auth/login-mfa-verify") ||
+    path.contains("/auth/refresh") ||
+    path.contains("/devices/pair-claim")
+
+/** 这条路的 401 **不是**「会话没了」，所以收到 401 不要去刷新再重发。
+ *
+ *  比上面多一条改密码：它的 401 意思是「你输的当前密码不对」。不豁免的话
+ *  每输错一次都会先刷新再把整个请求重发一遍，一次错误吃两次限流配额，
+ *  用户试到第三次就被告知「太频繁」。
+ *
+ *  **但改密码这条路必须照常带 token。** 两件事合成一个开关的后果是：
+ *  改密码请求连 token 都不带，服务端当然回 401，而这条路又被豁免了刷新，
+ *  于是安卓上永远改不了密码 —— 不管输对输错都提示当前密码错误。 */
+internal fun skipRefreshOn401Path(path: String): Boolean =
+    isBootstrapPath(path) || path.contains("/account/password")
+
 private class EnvelopeInterceptor : Interceptor {
     private val json = Json { ignoreUnknownKeys = true }
 

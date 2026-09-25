@@ -87,6 +87,27 @@ import kotlinx.serialization.json.jsonPrimitive
 
 class ApiException(val status: Int, message: String) : RuntimeException(message)
 
+/** 刷新一次登录令牌的结果。
+ *
+ *  **必须把「服务端不认这张票」和「根本没问到服务端」分开。**
+ *  以前这里只有 true/false，调用方把 false 一律当成被吊销，于是网络一抖
+ *  就把用户的账号从这台机器上清掉 —— 而他的账号什么事都没有。 */
+internal enum class RefreshOutcome { OK, REVOKED, UNREACHABLE }
+
+/** HTTP 状态码 → 该怎么理解这次刷新失败。
+ *
+ *  只有 401 是服务端**明确**说这张票作废（改密码 / 重置密码 / 后台移除设备）。
+ *  5xx、502、网关超时只说明这次没问成，凭据不动。
+ *
+ *  放在顶层是为了能直接写单元测试 —— 判错一次的代价是用户的账号被删掉。 */
+internal fun refreshOutcomeForStatus(status: Int): RefreshOutcome = when {
+    status == 401 -> RefreshOutcome.REVOKED
+    status in 200..299 -> RefreshOutcome.OK
+    else -> RefreshOutcome.UNREACHABLE
+}
+
+
+
 class ApiClient(val serverUrl: String) {
     private val baseUrl: String = serverUrl.trimEnd('/')
 
@@ -583,40 +604,47 @@ class ApiClient(val serverUrl: String) {
             // engine pools connections aggressively and an unread 401
             // body can pin a connection.
             runCatching { resp.bodyAsText() }
-            if (tryRefresh()) {
-                resp = block()
-            } else {
-                // 刷新失败 = 服务端不认这张 refresh token 了（改密码、重置密码、
+            when (tryRefresh()) {
+                RefreshOutcome.OK -> resp = block()
+                // 服务端明确不认这张 refresh token 了（改密码、重置密码、
                 // 后台移除设备都会吊销它）。
                 //
-                // 以前这里什么都不做，把 401 原样抛给调用方：桌面端变成僵尸——
-                // 日历照常显示上次同步的内容，新建/编辑/删除全部失败，
-                // 而界面上没有任何地方说明原因。
-                ProfileStore.markSignedOut("auth.sessionRevoked")
+                // 这一步不能省：省了桌面端会变成僵尸 —— 日历照常显示上次同步的
+                // 内容，新建/编辑/删除全部失败，而界面上没有任何地方说明原因。
+                RefreshOutcome.REVOKED -> ProfileStore.markSignedOut("auth.sessionRevoked")
+                // 这次没问到服务端（断网、超时、5xx）。**凭据不动。**
+                // 把 401 原样交回去，调用方该报错报错；下一次请求会再试一次刷新。
+                RefreshOutcome.UNREACHABLE -> Unit
             }
         }
         return resp
     }
 
-    /** Single-flight refresh. Returns true on success; saves the new
-     *  access token in ProfileStore (and the refresh token if rotated). */
-    private suspend fun tryRefresh(): Boolean = refreshMutex.withLock {
-        val rt = ProfileStore.profile.value?.refreshToken ?: return@withLock false
+    /** Single-flight refresh. 成功时把新的 access token 存进 ProfileStore
+     *  （refresh token 轮换了也一并存）。 */
+    private suspend fun tryRefresh(): RefreshOutcome = refreshMutex.withLock {
+        val rt = ProfileStore.profile.value?.refreshToken ?: return@withLock RefreshOutcome.REVOKED
         return@withLock try {
             val resp = client.post("$baseUrl/api/v1/auth/refresh") {
                 contentType(ContentType.Application.Json)
                 setBody(RefreshRequest(rt))
             }
-            if (!resp.status.isSuccess()) return@withLock false
+            // 401 = 服务端明确说这张票作废了。其余非 2xx（5xx、502、网关超时）
+            // 只说明这次没问成，不说明凭据坏了。
+            val outcome = refreshOutcomeForStatus(resp.status.value)
+            if (outcome != RefreshOutcome.OK) return@withLock outcome
             val refreshed = unwrap(resp, RefreshResponse.serializer())
             ProfileStore.setAccessToken(refreshed.accessToken)
             val newRt = refreshed.refreshToken
             if (!newRt.isNullOrBlank() && newRt != rt) {
                 ProfileStore.updateRefreshToken(newRt)
             }
-            true
+            RefreshOutcome.OK
+        } catch (e: ApiException) {
+            refreshOutcomeForStatus(e.status)
         } catch (_: Exception) {
-            false
+            // 连不上、超时、DNS 失败、解析炸了 —— 都不是「凭据坏了」。
+            RefreshOutcome.UNREACHABLE
         }
     }
 
