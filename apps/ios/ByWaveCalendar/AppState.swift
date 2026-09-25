@@ -235,10 +235,24 @@ final class AppState: ObservableObject {
         do {
             try await refreshIfNeeded(force: true)
             isSignedIn = true
-        } catch {
-            // Refresh failed — token revoked / network down. User sees
-            // SetupView (since there's no signed-in profile right now).
+        } catch APIError.deviceRevoked {
+            // 服务端明确说这台设备不认了（改密码 / 重置密码 / 后台移除设备）。
+            // refreshIfNeeded 里已经 signOut 过了，这里只是把状态收一下。
             isSignedIn = false
+        } catch APIError.notSignedIn {
+            // 真的没有凭据可用（profile 没了 / Keychain 读不到）。
+            isSignedIn = false
+        } catch {
+            // **网络不好、服务器挂了、DNS 解析不了，一律不算「没登录」。**
+            //
+            // refreshIfNeeded 特意把 401 和这些分开了（见那边的注释：前者要登出，
+            // 后者应当保持登录、继续用离线缓存），而这里原来是一个 catch 全抹平：
+            // 飞机上、地铁里、或者服务器抖一下，打开 App 看到的就是登录页 ——
+            // 而他的账号什么事都没有。重新登一次又好了，于是这事看起来很随机。
+            //
+            // 凭据还在 Keychain 里，保持登录状态；下一次请求会自己再试一次刷新，
+            // 真被吊销了那一次会走上面的 deviceRevoked 分支。
+            isSignedIn = true
         }
         // Fire-and-forget theme fetch for the active profile.
         Task { await self.refreshThemeFromServer() }
