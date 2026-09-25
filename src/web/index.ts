@@ -38,6 +38,13 @@ import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
 import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES, setThemeCookies } from "../lib/user_theme.js";
+import {
+  RETURN_TO_COOKIE,
+  RETURN_TO_TTL_S,
+  consumeReturnTo,
+  returnToOrApp,
+  sanitizeReturnTo,
+} from "../lib/return_to.js";
 
 const PENDING_EMAIL_COOKIE = "bwc_pending_email";
 
@@ -99,8 +106,6 @@ function registerDenialMsg(req: FastifyRequest, d: ProvisionDenial): string {
 // open before being bounced to /login." Lifetime is 15 min — long enough
 // for password + MFA + risk-challenge but short enough that a stale
 // value can't outlive the login session it belongs to.
-const RETURN_TO_COOKIE = "bwc_return_to";
-const RETURN_TO_TTL_S = 15 * 60;
 
 /**
  * Validate an absolute path before redirecting to it. Defends against:
@@ -121,17 +126,9 @@ const RETURN_TO_TTL_S = 15 * 60;
  * 一直是断的。redirect_uri 本身不走这里(它是 query 参数,由客户端注册的
  * 白名单严格全等校验),这里放行的只是我们自己的 /oauth/* 路径。
  */
-export function sanitizeReturnTo(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  if (raw.length === 0 || raw.length > 200) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//") || raw.startsWith("/\\")) return null;
-  // Match the path prefix only; query string + fragment are allowed after.
-  if (!/^\/(app|admin|web-pair|desktop-pair|oauth)(\/|$|\?|#)/.test(raw)) return null;
-  // Strip fragment — we re-add on the client side anyway. Server-side
-  // redirects don't carry fragments.
-  return raw.split("#")[0] ?? null;
-}
+// sanitizeReturnTo 现在收在 lib/return_to.ts，这里原样再导出：
+// 已有测试和别处按这个名字引它。
+export { sanitizeReturnTo };
 
 /** The path the unauth'd request was trying to reach. Used by the
  *  auth-gate helpers below to populate bwc_return_to before bouncing
@@ -156,17 +153,6 @@ function bounceToLogin(req: FastifyRequest, reply: FastifyReply, flash?: Flash):
   return null;
 }
 
-/** Read + clear the return-to cookie. Returns a sanitized path or null.
- *  Call at the end of any successful login path; the redirect target is
- *  the returned value or "/app" if absent. */
-function consumeReturnTo(req: FastifyRequest, reply: FastifyReply): string | null {
-  const raw = req.cookies[RETURN_TO_COOKIE];
-  reply.clearCookie(RETURN_TO_COOKIE, { path: "/" });
-  if (!raw) return null;
-  const unsigned = req.unsignCookie(raw);
-  if (!unsigned.valid || !unsigned.value) return null;
-  return sanitizeReturnTo(unsigned.value);
-}
 
 type Flash = { error?: string; success?: string };
 

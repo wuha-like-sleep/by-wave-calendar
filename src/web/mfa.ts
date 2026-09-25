@@ -24,6 +24,7 @@ import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
+import { returnToOrApp } from "../lib/return_to.js";
 
 function flashFromQuery(req: any) {
   const q = (req.query ?? {}) as Record<string, unknown>;
@@ -72,23 +73,9 @@ export async function mfaRoutes(app: FastifyInstance) {
     const secret = s.user.mfaTotpSecret;
     if (!secret) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.mfa.configError")));
 
-    // Helper: consume bwc_return_to cookie and return the path, or
-    // fall back to /app. Mirrors the consumeReturnTo helper in web/
-    // index.ts — duplicated here to avoid a circular import for one
-    // 12-line function. Keep both in sync.
-    const consumeMfaReturnTo = (): string => {
-      const raw = req.cookies["bwc_return_to"];
-      reply.clearCookie("bwc_return_to", { path: "/" });
-      if (!raw) return "/app";
-      const unsigned = req.unsignCookie(raw);
-      if (!unsigned.valid || !unsigned.value) return "/app";
-      const v = unsigned.value;
-      // Same sanitization gate as src/web/index.ts:sanitizeReturnTo
-      if (v.length === 0 || v.length > 200) return "/app";
-      if (!v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return "/app";
-      if (!/^\/(app|admin|web-pair|desktop-pair|oauth)(\/|$|\?|#)/.test(v)) return "/app";
-      return v.split("#")[0] ?? "/app";
-    };
+    // 回到原本要去的那一页。判据收在 lib/return_to.ts，四条登录路共用一份 ——
+    // 这里原来是手抄的第三份，注释还写着「keep both in sync」。
+    const consumeMfaReturnTo = () => returnToOrApp(req, reply);
 
     if (verifyTotpCode(secret, code)) {
       await markSessionMfaSatisfied(req);

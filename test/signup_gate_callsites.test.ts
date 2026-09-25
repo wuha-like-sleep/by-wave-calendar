@@ -247,10 +247,18 @@ describe("建号门禁：五个入口全部走收口函数", () => {
     const sample = `const DOCS = "https://example.com/docs"; await db.insert(schema.users).values(v);`;
     expect(codeOf(sample)).toContain("db.insert(schema.users)");
     expect(codeOf(sample).length).toBe(sample.length);
-    // 真文件上也验一遍:这一行洗完必须还带着 return
-    const line = read("src/web/index.ts").split("\n").find((l) => l.includes(`raw.startsWith("//")`));
-    expect(line, "src/web/index.ts 里那行 startsWith(\"//\") 不见了").toBeDefined();
-    expect(codeOf(line!)).toContain("return");
+    // 真文件上也验一遍:这一行洗完必须还带着 return。
+    // 这个形状现在在 lib/return_to.ts（本来在 web/index.ts,登录后回原页的
+    // 判据从四份手抄收成一份时搬过去了）。**不写死在某一个文件上** ——
+    // 代码一搬家这条就红，而它其实什么也没坏。
+    const candidates = ["src/lib/return_to.ts", "src/web/index.ts"]
+      .map((f) => read(f).split("\n").find((l) => l.includes(`startsWith("//")`)))
+      .filter((l): l is string => !!l);
+    expect(
+      candidates.length,
+      '没在任何一处找到 startsWith("//") 那一行 —— 这条用例的夹具没了，什么也没验到',
+    ).toBeGreaterThan(0);
+    for (const line of candidates) expect(codeOf(line)).toContain("return");
   });
 
   it("一处都不许再往 users 表插行（表名存进变量也算）", () => {

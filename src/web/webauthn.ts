@@ -19,6 +19,7 @@ import { setThemeCookies } from "../lib/user_theme.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
 import { userIsActive } from "../lib/user_state.js";
+import { returnToOrApp } from "../lib/return_to.js";
 
 export async function webauthnRoutes(app: FastifyInstance) {
   // ---- Registration (must be authed) ----
@@ -206,23 +207,10 @@ export async function webauthnRoutes(app: FastifyInstance) {
       setThemeCookies(reply, usr.themePalette, usr.themeDensity);
     }
     void recordLoginEvent(req, credRow.userId, "passkey").catch((err) => req.log.warn({ err }, "login_event_failed"));
-    // 返回到失效前的页面 —— 同 password / MFA 走的是同一个 bwc_return_to
-    // cookie。读+清+回，没有就回 /app。inline so this module doesn't
-    // pull in src/web/index.ts (the helper is duplicated there).
-    let redirect = "/app";
-    const raw = req.cookies["bwc_return_to"];
-    if (raw) {
-      const unsigned = req.unsignCookie(raw);
-      if (unsigned.valid && unsigned.value) {
-        const v = unsigned.value;
-        if (v.length > 0 && v.length <= 200 &&
-            v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") &&
-            /^\/(app|admin|web-pair|desktop-pair)(\/|$|\?|#)/.test(v)) {
-          redirect = v.split("#")[0] ?? "/app";
-        }
-      }
-      reply.clearCookie("bwc_return_to", { path: "/" });
-    }
+    // 返回到失效前的页面。判据收在 lib/return_to.ts —— 这里原来是一份手抄，
+    // 而那份抄件的白名单少了 /oauth：第三方应用发起授权、用户用 Passkey 登录，
+    // 就会落到日历首页，授权断在半路。
+    const redirect = returnToOrApp(req, reply);
     return reply.send({ ok: true, redirect });
   });
 }
