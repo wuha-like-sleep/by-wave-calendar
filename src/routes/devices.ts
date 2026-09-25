@@ -43,6 +43,26 @@ function _purgeExpiredMfa(): void {
   const now = Date.now();
   for (const [k, v] of mfaPendingTokens) if (v.expiresAt < now) mfaPendingTokens.delete(k);
 }
+/** 第一步已经过了（密码对 / Apple 验过），账号开了两步验证 —— 先不发令牌，
+ *  存下建设备要用的参数，发一张 5 分钟的一次性票，让客户端带着验证码去
+ *  /auth/login-mfa-verify 换真正的令牌。
+ *
+ *  **密码登录和 Apple 登录共用这一份。** 以前只有密码那条有这一步，Apple 那条
+ *  验完 Apple 的令牌就直接发了设备令牌 —— 对走 Apple 的人，这个号上开着的
+ *  两步验证等于不存在；拿这张设备令牌还能换出一个被记成「已过二次验证」的
+ *  浏览器会话，网页后台全部放行。 */
+async function beginMfaPending(
+  userId: string,
+  device: Omit<MfaPendingState, "userId" | "expiresAt">,
+): Promise<{ mfaPending: true; mfaToken: string; mfaExpiresAt: string }> {
+  _purgeExpiredMfa();
+  const { randomBytes } = await import("node:crypto");
+  const mfaToken = randomBytes(24).toString("hex");
+  const ttlMs = 5 * 60 * 1000;
+  mfaPendingTokens.set(mfaToken, { userId, ...device, expiresAt: Date.now() + ttlMs });
+  return { mfaPending: true, mfaToken, mfaExpiresAt: new Date(Date.now() + ttlMs).toISOString() };
+}
+
 function _purgeExpiredWebSessions(): void {
   const now = Date.now();
   for (const [k, v] of webSessionTokens) if (v.expiresAt < now) webSessionTokens.delete(k);
@@ -376,25 +396,14 @@ export async function deviceRoutes(app: FastifyInstance) {
     // Stash the device-creation params and return a token the client
     // must echo back to /auth/login-mfa-verify with the code.
     if (user.mfaEnabled) {
-      _purgeExpiredMfa();
-      const { randomBytes } = await import("node:crypto");
-      const mfaToken = randomBytes(24).toString("hex");
-      const ttlMs = 5 * 60 * 1000;
-      mfaPendingTokens.set(mfaToken, {
-        userId: user.id,
+      return reply.send(await beginMfaPending(user.id, {
         label: body.data.label,
         kind: body.data.kind,
         appVersion: body.data.appVersion ?? null,
         clientDeviceId: body.data.clientDeviceId ?? null,
         ip: req.ip,
         userAgent: ua,
-        expiresAt: Date.now() + ttlMs,
-      });
-      return reply.send({
-        mfaPending: true,
-        mfaToken,
-        mfaExpiresAt: new Date(Date.now() + ttlMs).toISOString(),
-      });
+      }));
     }
 
     // Create the device row + tokens (or reuse existing one for the same
@@ -649,8 +658,23 @@ export async function deviceRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "account_disabled", message: t("appleLogin.accountDisabled") });
     }
 
-    // Mint device tokens — identical to /auth/login-password's happy path.
     const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
+
+    // **开了两步验证就要过两步验证，不管第一步走的是哪条路。**
+    // 这里原来没有这一段，注释还写着「和密码登录的正常路径一模一样」——
+    // 而密码登录那条正是在这一步分出了两步验证。
+    if (user.mfaEnabled) {
+      return reply.send(await beginMfaPending(user.id, {
+        label: body.data.label,
+        kind: body.data.kind,
+        appVersion: body.data.appVersion ?? null,
+        clientDeviceId: body.data.clientDeviceId ?? null,
+        ip: req.ip,
+        userAgent: ua,
+      }));
+    }
+
+    // 发设备令牌 —— 到这里为止和密码登录的正常路径一致（含上面的两步验证分支）。
     const refresh = await issueRefreshToken();
     const { upsertDeviceForUser } = await import("../lib/devices.js");
     const device = await upsertDeviceForUser({
@@ -887,12 +911,12 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { securityChangeMail } = await import("../lib/email_templates.js");
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
-    const { destroyAllUserSessions } = await import("../lib/session.js");
-    await destroyAllUserSessions(user.id);
-    const { revokeAllUserDevices } = await import("../lib/devices.js");
+    // 所有钥匙一起作废，**只留当前这台**（否则用户在 App 里改完密码自己就被登出了）。
+    // 以前这里只清了会话和其它设备，应用密码、第三方授权、CalDAV 缓存都没动。
+    const { evictAllCredentials } = await import("../lib/user_state.js");
     const currentDeviceId = (req as unknown as { deviceId?: string }).deviceId;
-    const revoked = await revokeAllUserDevices(user.id, { exceptDeviceId: currentDeviceId });
-    req.log.info({ userId: user.id, revoked, keptCurrent: !!currentDeviceId }, "password_change_devices_revoked");
+    const { devicesRevoked } = await evictAllCredentials(user.id, { exceptDeviceId: currentDeviceId });
+    req.log.info({ userId: user.id, revoked: devicesRevoked, keptCurrent: !!currentDeviceId }, "password_change_devices_revoked");
     return reply.send({ ok: true });
   });
 

@@ -26,6 +26,13 @@ import Foundation
 import AuthenticationServices
 import UIKit
 
+/// 「通过 Apple 登录」的结果：要么直接登进去了，要么这个账号开了两步验证、
+/// 还要一个验证码。后一种和密码登录遇到两步验证时是同一件事。
+enum AppleSignInOutcome {
+    case signedIn(PasswordLoginResponse)
+    case mfaRequired(mfaToken: String)
+}
+
 enum AppleSignInError: Error, LocalizedError {
     /// User dismissed the Apple sheet — handled silently by the caller
     /// (no error banner), same as WebAuthError.userCancelled.
@@ -83,7 +90,7 @@ final class AppleSignIn: NSObject {
 
     /// The continuation for the in-flight request. Set when start() kicks
     /// off the controller, resumed exactly once from a delegate callback.
-    private var continuation: CheckedContinuation<PasswordLoginResponse, Error>?
+    private var continuation: CheckedContinuation<AppleSignInOutcome, Error>?
     /// Server URL captured for the duration of one request so the delegate
     /// callback knows where to POST the identityToken.
     private var serverURL: URL?
@@ -92,11 +99,11 @@ final class AppleSignIn: NSObject {
     /// decoded token bundle on success. Throws AppleSignInError otherwise
     /// (caller treats `.userCancelled` as a silent no-op, like the browser
     /// login path).
-    static func start(serverURL: URL) async throws -> PasswordLoginResponse {
+    static func start(serverURL: URL) async throws -> AppleSignInOutcome {
         try await shared.run(serverURL: serverURL)
     }
 
-    private func run(serverURL: URL) async throws -> PasswordLoginResponse {
+    private func run(serverURL: URL) async throws -> AppleSignInOutcome {
         self.serverURL = serverURL
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
@@ -117,7 +124,7 @@ final class AppleSignIn: NSObject {
     /// Resume the pending continuation exactly once, then clear per-request
     /// state. Guards against double-resume (which would crash) if Apple ever
     /// fires both success + error.
-    private func finish(_ result: Result<PasswordLoginResponse, Error>) {
+    private func finish(_ result: Result<AppleSignInOutcome, Error>) {
         guard let cont = continuation else { return }
         continuation = nil
         serverURL = nil
@@ -134,7 +141,7 @@ final class AppleSignIn: NSObject {
         serverURL: URL,
         identityToken: String,
         fullName: String?
-    ) async throws -> PasswordLoginResponse {
+    ) async throws -> AppleSignInOutcome {
         var req = URLRequest(url: serverURL.appendingPathComponent("/api/v1/auth/apple"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -172,8 +179,16 @@ final class AppleSignIn: NSObject {
             // matches PairingService.claim's defensive unwrap.
             let outer = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
             let payload = (outer["data"] as? [String: Any]) ?? outer
+            // 账号开了两步验证：服务端不发令牌，先要验证码。和密码登录是同一个形状，
+            // 交给 SetupView 用同一个验证码输入框接着走 /auth/login-mfa-verify。
+            // 以前这里直接按「登录成功」去解码 —— 服务端一旦开始要求两步验证，
+            // 用户看到的会是一个解码失败的报错，而不是验证码输入框。
+            if let pending = payload["mfaPending"] as? Bool, pending,
+               let mfaToken = payload["mfaToken"] as? String {
+                return .mfaRequired(mfaToken: mfaToken)
+            }
             let payloadData = try JSONSerialization.data(withJSONObject: payload)
-            return try JSONDecoder().decode(PasswordLoginResponse.self, from: payloadData)
+            return .signedIn(try JSONDecoder().decode(PasswordLoginResponse.self, from: payloadData))
         } catch let e as AppleSignInError {
             throw e
         } catch {

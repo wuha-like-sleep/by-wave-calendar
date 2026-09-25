@@ -395,6 +395,9 @@ const dbEvictionStore: EvictionStore = {
         .where(and(eq(schema.apiTokens.userId, userId), isNull(schema.apiTokens.revokedAt)));
       await tx.update(schema.appPasswords).set({ revokedAt: now })
         .where(and(eq(schema.appPasswords.userId, userId), isNull(schema.appPasswords.revokedAt)));
+      // 第三方授权：抢注者替这个号点过的「同意」，换出来的令牌照样能读写日历。
+      await tx.update(schema.oauthAccessTokens).set({ revokedAt: now })
+        .where(and(eq(schema.oauthAccessTokens.userId, userId), isNull(schema.oauthAccessTokens.revokedAt)));
 
       // 留一条管理员看得见的记录:这是一次「账号换人」,事后有人来问
       // 「我的密码怎么不管用了」时,后台要能答得上来。

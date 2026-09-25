@@ -29,6 +29,7 @@ import { provisionAccount, emailDomainAllowed, type ProvisionDenial } from "../l
 import { listTimezones } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
+import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
@@ -701,13 +702,9 @@ export async function webRoutes(app: FastifyInstance) {
       .set({ passwordHash, passwordSet: true, failedLoginCount: 0, lockedUntil: null, updatedAt: new Date() })
       .where(eq(schema.users.id, reset.userId));
     await consumeReset(token);
-    await destroyAllUserSessions(reset.userId);
-    // 走到「忘记密码」这一步，账号多半已被怀疑失控。App 的 refresh token
-    // 存在 devices 表里，是另一套凭据，不吊销就赶不走已配对的设备。
-    {
-      const { revokeAllUserDevices } = await import("../lib/devices.js");
-      await revokeAllUserDevices(reset.userId);
-    }
+    // 走到「忘记密码」这一步，账号多半已被怀疑失控 —— 所有钥匙一起作废。
+    // 以前这里只清了会话和 App，应用密码、第三方授权、CalDAV 认证缓存都没动。
+    await evictAllCredentials(reset.userId);
     return redirectWith(reply, "/login", { success: tr(req, "flash.resetPassword.success") });
   });
 
@@ -2383,17 +2380,10 @@ export async function webRoutes(app: FastifyInstance) {
     await db.update(schema.users).set({ passwordHash, passwordSet: true, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
-    // Invalidate all sessions including current; user must re-login
-    await destroyAllUserSessions(user.id);
-    // 连同已配对的 App 设备一起吊销——它们用的是 devices 表里的 refresh token，
-    // 和 sessions 是两套东西，只删 sessions 赶不走已经登过 App 的人。
-    {
-      const { revokeAllUserDevices } = await import("../lib/devices.js");
-      await revokeAllUserDevices(user.id);
-    }
-    // Drop any cached CalDAV auth tokens for this user — otherwise
-    // their iPhone could keep syncing for up to 60s on the old password.
-    invalidateCalDavAuthCache(user.id);
+    // 改密码 = 这个号上所有的钥匙一起作废，包括当前这个浏览器会话（要重新登录）。
+    // 清单收在 evictAllCredentials 一处：以前这里自己列了一张，漏了应用密码和
+    // 第三方授权 —— 用户以为改完密码就把盗号的人赶走了，对方还能继续同步他的日历。
+    await evictAllCredentials(user.id);
     await destroySession(req, reply);
     return redirectWith(reply, "/login", { success: tr(req, "flash.password.updated") });
   });

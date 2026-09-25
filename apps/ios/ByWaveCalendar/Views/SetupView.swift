@@ -558,7 +558,16 @@ struct SetupView: View {
             // AppleSignIn returns the SAME PasswordLoginResponse the
             // password / MFA paths use — so we go through the identical
             // completePairing landing as every other login method.
-            let r = try await AppleSignIn.start(serverURL: url)
+            let outcome = try await AppleSignIn.start(serverURL: url)
+            let r: PasswordLoginResponse
+            switch outcome {
+            case .signedIn(let resp):
+                r = resp
+            case .mfaRequired(let mfaToken):
+                // 账号开了两步验证 —— 和密码登录走同一个验证码输入框。
+                pendingMfa = PendingMfa(serverURL: url, mfaToken: mfaToken)
+                return
+            }
             // Lenient parse — server emits Date.toISOString() with
             // fractional seconds which the default ISO8601DateFormatter
             // rejects. See AppState.parseIsoLenient.

@@ -37,7 +37,7 @@ import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken }
 import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
-import { revokeAllUserCredentials, countActiveAdmins } from "../lib/user_state.js";
+import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
 import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
 import { getCalDavThrottleStats } from "../lib/caldav_throttle.js";
 import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
@@ -266,13 +266,10 @@ async function disableUserAccount(
   auditDetails: Record<string, unknown> = {},
 ): Promise<void> {
   await db.update(schema.users).set({ disabledAt: new Date(), updatedAt: new Date() }).where(eq(schema.users.id, target.id));
-  // 会话是不透明 blob,没法标记撤销,只能直接删。
-  await db.delete(schema.sessions).where(eq(schema.sessions.userId, target.id));
-  // API Token(n8n / Zapier)和应用密码(Apple 日历里的 CalDAV)活得比会话长,
-  // 不撤的话人被停用了、机器还在照常同步。
-  await revokeAllUserCredentials(target.id);
-  // CalDAV 鉴权有 60s 缓存,不清的话在外面那台 iPhone 还能再同步一分钟。
-  invalidateCalDavAuthCache(target.id);
+  // 所有钥匙一起作废。以前这里漏了手机 App：停用期间它刷不到新令牌，
+  // 可手上那张刷新令牌一直是有效的 —— **停用再启用，手机会自己复活**，
+  // 站长以为那台设备早就被踢了。
+  await evictAllCredentials(target.id);
   await audit(req, actorId, "user.disable", {
     targetType: "user", targetId: target.id, details: { email: target.email, ...auditDetails },
   });
@@ -1271,6 +1268,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/admin/users/:id/unlock", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
     const t = await adminTargetUser(req, reply);
     if (!t) return reply;
     await db.update(schema.users)
@@ -1284,6 +1282,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/admin/users/:id/resend-verification", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
     const t = await adminTargetUser(req, reply);
     if (!t) return reply;
     const back = "/admin/users/" + t.id;
@@ -1307,6 +1306,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/admin/users/:id/send-password-reset", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
     const t = await adminTargetUser(req, reply);
     if (!t) return reply;
     const back = "/admin/users/" + t.id;
@@ -1326,6 +1326,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/admin/users/:id/disable-mfa", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
     const t = await adminTargetUser(req, reply);
     if (!t) return reply;
     const back = "/admin/users/" + t.id;
@@ -1377,6 +1378,9 @@ export async function adminRoutes(app: FastifyInstance) {
   }, async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    // 不能只靠 cookie 的 SameSite：本站和同一个上级域名下的几十个站点算「同站」，
+    // 其中任何一个被攻破，都能带着管理员的会话来 POST 这里。CSRF 令牌是真正的闸。
+    if (!verifyCsrf(req, reply)) return;
     const t = await adminTargetUser(req, reply);
     if (!t) return reply;
     const back = "/admin/users/" + t.id + "/delete";
@@ -1564,13 +1568,19 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!id.success) return reply.redirect("/admin/users");
     const [target] = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
     if (!target) return reply.redirect("/admin/users?error=" + encodeURIComponent("用户不存在"));
-    const deleted = await db.delete(schema.sessions).where(eq(schema.sessions.userId, id.data)).returning({ id: schema.sessions.id });
-    // Kick = nuclear option: also revoke API tokens + app passwords so the
-    // user's mobile CalDAV client and n8n workflows stop syncing too.
-    await revokeAllUserCredentials(id.data);
-    invalidateCalDavAuthCache(id.data);
-    await audit(req, me.id, "user.revoke_sessions", { targetType: "user", targetId: id.data, details: { email: target.email, sessionsKilled: deleted.length } });
-    return reply.redirect("/admin/users?success=" + encodeURIComponent(`已踢出 ${target.email} 的 ${deleted.length} 个登录会话，并撤销了 API Token / 应用密码`));
+    // 「踢出登录」= 这个人所有的钥匙一起作废。以前这里只清了浏览器会话、
+    // API Token 和应用密码，**手机和桌面 App 照常能用**，第三方授权也照常能用 ——
+    // 而提示语说的是「已踢出」。
+    const sessionsBefore = await db.select({ id: schema.sessions.id }).from(schema.sessions)
+      .where(eq(schema.sessions.userId, id.data));
+    const { devicesRevoked } = await evictAllCredentials(id.data);
+    await audit(req, me.id, "user.revoke_sessions", {
+      targetType: "user", targetId: id.data,
+      details: { email: target.email, sessionsKilled: sessionsBefore.length, devicesRevoked },
+    });
+    return reply.redirect("/admin/users?success=" + encodeURIComponent(
+      `已踢出 ${target.email}：${sessionsBefore.length} 个网页登录、${devicesRevoked} 台 App 设备，` +
+      `并撤销了 API Token、应用密码和第三方授权`));
   });
 
   // ---------- 开通记录(账号是从哪条路进来的) ----------

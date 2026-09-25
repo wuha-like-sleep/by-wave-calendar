@@ -35,6 +35,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { ensureSchema, resetDb, db, schema, makeUser, makeCalendar } from "./harness.js";
 import { newSessionId } from "../../src/lib/ids.js";
+import { createHmac } from "node:crypto";
 
 process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= "postgres://integration-test/unused";
@@ -44,7 +45,9 @@ const { adminRoutes } = await import("../../src/web/admin.js");
 const { makeT } = await import("../../src/lib/i18n.js");
 
 let app: FastifyInstance;
-let adminCookie: string;
+/** 会话 cookie 和它配套的 CSRF 令牌，两样一起带才算一个真实的浏览器请求。 */
+type Sess = { cookie: string; csrf: string };
+let adminCookie: Sess;
 let admin: Awaited<ReturnType<typeof makeUser>>;
 
 beforeAll(async () => {
@@ -67,15 +70,23 @@ beforeAll(async () => {
   await app.ready();
 });
 
-async function loginAs(userId: string) {
+async function loginAs(userId: string): Promise<Sess> {
   const sid = newSessionId();
   await db.insert(schema.sessions).values({
     id: sid, userId, mfaSatisfied: true, expiresAt: new Date(Date.now() + 86400_000),
   });
-  return `bwc_sid=${encodeURIComponent(app.signCookie(sid))}`;
+  return {
+    cookie: `bwc_sid=${encodeURIComponent(app.signCookie(sid))}`,
+    csrf: createHmac("sha256", process.env.SESSION_SECRET!).update(sid).digest("hex"),
+  };
 }
-function post(url: string, payload: Record<string, string> = {}, c = adminCookie) {
-  return app.inject({ method: "POST", url, headers: { cookie: c }, payload });
+/** 真实浏览器那样：带会话 cookie，表单里带 _csrf。 */
+function post(url: string, payload: Record<string, string> = {}, c: Sess = adminCookie) {
+  return app.inject({ method: "POST", url, headers: { cookie: c.cookie }, payload: { _csrf: c.csrf, ...payload } });
+}
+/** 同站的别的页面伪造过来的请求：带得上 cookie，拿不到令牌。 */
+function forgedPost(url: string, payload: Record<string, string> = {}, c: Sess = adminCookie) {
+  return app.inject({ method: "POST", url, headers: { cookie: c.cookie }, payload });
 }
 const flash = (res: { headers: Record<string, unknown> }) =>
   decodeURIComponent(String(res.headers.location ?? ""));
@@ -207,7 +218,7 @@ describe("真的删号", () => {
 
   it("预览页把会删掉的东西列出来，而且什么也没改（presence）", async () => {
     const u = await seedOwner("d1@example.com");
-    const res = await app.inject({ method: "GET", url: `/admin/users/${u.id}/delete`, headers: { cookie: adminCookie } });
+    const res = await app.inject({ method: "GET", url: `/admin/users/${u.id}/delete`, headers: { cookie: adminCookie.cookie } });
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("d1@example.com");
     expect(await row(u.id), "只是看一眼预览就把人删了").toBeTruthy();
@@ -288,7 +299,7 @@ describe("真的删号", () => {
 
   it("预览页和真删用的是同一个判据", async () => {
     // 预览页说「不能删」而 POST 照删不误，这种偏差没人看得见。
-    const res = await app.inject({ method: "GET", url: `/admin/users/${admin.id}/delete`, headers: { cookie: adminCookie } });
+    const res = await app.inject({ method: "GET", url: `/admin/users/${admin.id}/delete`, headers: { cookie: adminCookie.cookie } });
     expect(res.body, "预览页没说不能删自己").toMatch(/不能删自己/);
     expect(res.body, "预览页上还摆着确认输入框").not.toContain('name="confirmEmail"');
   });
@@ -305,5 +316,47 @@ describe("真的删号", () => {
     const del = await post(`/admin/users/${victim.id}/delete`, { confirmEmail: "victim@example.com" }, c);
     expect([302, 303, 403]).toContain(del.statusCode);
     expect(await row(victim.id), "非管理员把人删了").toBeTruthy();
+  });
+});
+
+describe("**这几条危险操作不能被同站的别的页面代发**", () => {
+  // 本站和同一个上级域名下的几十个站点，在浏览器眼里是「同站」：
+  // SameSite=Lax 的 cookie 会跟着带过来。其中任何一个站被攻破，
+  // 就能在管理员浏览时替他点这些按钮。CSRF 令牌是真正挡住它的那道闸 ——
+  // 而这几条路第一版一条都没校验，测试也没发现，因为测试本来就没带令牌。
+  const victims = ["unlock", "resend-verification", "send-password-reset", "disable-mfa"] as const;
+
+  it.each(victims)("POST %s 没带令牌 → 拒绝，库里什么都没变", async (action) => {
+    const u = await makeUser(`v-${action}@example.com`);
+    await db.update(schema.users).set({
+      mfaEnabled: true, mfaTotpSecret: "S", emailVerified: false,
+      lockedUntil: new Date(Date.now() + 3600_000), failedLoginCount: 5,
+    }).where(eq(schema.users.id, u.id));
+    const before = await row(u.id);
+    sent.length = 0;
+
+    const res = await forgedPost(`/admin/users/${u.id}/${action}`);
+    expect(res.statusCode, `${action} 在没有令牌时没被拒绝`).toBe(403);
+
+    const after = await row(u.id);
+    expect(after!.mfaEnabled, "两步验证被伪造请求解绑了").toBe(before!.mfaEnabled);
+    expect(after!.lockedUntil?.getTime(), "锁被伪造请求解开了").toBe(before!.lockedUntil?.getTime());
+    expect(sent.length, "伪造请求发出了邮件").toBe(0);
+  });
+
+  it("删号没带令牌 → 拒绝，人还在", async () => {
+    const u = await makeUser("vdel@example.com");
+    const res = await forgedPost(`/admin/users/${u.id}/delete`, { confirmEmail: "vdel@example.com" });
+    expect(res.statusCode).toBe(403);
+    expect(await row(u.id), "伪造请求把人删了").toBeTruthy();
+  });
+
+  it("带着令牌的正常请求照常生效（presence —— 否则上面几条在「全都 403」时也绿）", async () => {
+    const u = await makeUser("ok@example.com");
+    await db.update(schema.users).set({ lockedUntil: new Date(Date.now() + 3600_000) })
+      .where(eq(schema.users.id, u.id));
+    const res = await post(`/admin/users/${u.id}/unlock`);
+    expect([302, 303]).toContain(res.statusCode);
+    expect((await row(u.id))!.lockedUntil).toBeNull();
   });
 });
