@@ -10,7 +10,7 @@ import sharp from "sharp";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { loadSession } from "../lib/session.js";
-import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
+import { csrfTokenFor, verifyCsrf, verifyMultipartCsrf } from "../lib/csrf.js";
 import { bumpCaldavSyncEpoch, getSettings, updateSettings } from "../lib/site_settings.js";
 import { CAPTCHA_PROVIDERS, isCaptchaProvider, isBuiltinMode } from "../lib/captcha/index.js";
 import { sendMail } from "../lib/mailer.js";
@@ -706,6 +706,9 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const file = await req.file();
     if (!file) return reply.redirect("/admin/smtp?error=" + encodeURIComponent("请选择 SVG 文件") + "#bimi");
+    // 这个 logo 会出现在收件人邮箱里本站每一封信的旁边。以前不校验令牌 ——
+    // 表单里压根没放 _csrf —— 同站的别的页面能替管理员把它换掉。
+    if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
     const isSvg = file.mimetype.toLowerCase().includes("svg") || /\.svg$/i.test(file.filename || "");
     if (!isSvg) {
       return reply.redirect("/admin/smtp?error=" + encodeURIComponent("BIMI logo 必须是 SVG（矢量）文件，位图无法用于 BIMI") + "#bimi");
@@ -938,10 +941,13 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post("/admin/logo", async (req, reply) => {
     const user = await requireAdmin(req, reply);
     if (!user) return reply;
-    // multipart requests don't carry CSRF cookie token reliably; rely on auth + admin check + same-origin.
+    // 上传表单也要校验 CSRF —— 见 lib/csrf.ts 的 verifyMultipartCsrf。
+    // 以前这里写着「multipart 读不到令牌，靠 SameSite 兜底」，而同一个上级域名下
+    // 的其它站点在浏览器眼里是「同站」，那道兜底拦不住它们。
 
     const file = await req.file();
     if (!file) return reply.redirect("/admin/logo?error=" + encodeURIComponent("请选择文件"));
+    if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
 
     const allowed = new Set([
       "image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp",
@@ -1839,8 +1845,10 @@ export async function adminRoutes(app: FastifyInstance) {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
     const back = (msg: string) => reply.redirect("/admin/backup?error=" + encodeURIComponent(msg));
-    // multipart 的 req.body 是 undefined（解析器只 done() 不塞 body），
-    // 所以 _csrf 字段读不到 —— 这条路靠 requireAdmin + cookie 的 sameSite=lax。
+    // CSRF 在拿到上传那一段之后校验（见下面 verifyMultipartCsrf）。以前这条路
+    // 不校验，注释说靠 cookie 的 SameSite=Lax —— 而那道闸在这里不成立：同一个
+    // 上级域名下的几十个站点算「同站」，其中任何一个被攻破，就能替正在浏览的
+    // 管理员导入一份伪造的备份，把整个库换掉。
     //
     // **limits 必须显式写。** 不写的话继承全局的 2MB，而下面那句
     // 「文件过大」写的是另一个数字 —— 于是真实的备份（任何有内容的站点
@@ -1859,6 +1867,8 @@ export async function adminRoutes(app: FastifyInstance) {
       throw err;
     }
     if (!file) return back("请选择备份文件");
+    // **任何读文件、改库之前。** 表单里 _csrf 排在文件框前面，所以已经在 fields 里了。
+    if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
     if (file.mimetype && !file.mimetype.toLowerCase().includes("json") && file.mimetype !== "application/octet-stream") {
       return back("文件类型应为 JSON");
     }
@@ -2746,6 +2756,7 @@ export async function adminRoutes(app: FastifyInstance) {
     let stagingDir: string | null = null;
     let tarballPath: string | null = null;
     let sigBase64: string | null = null;
+    let csrfField: string | null = null;
     let tarballName = "";
     let aborted: string | null = null;
 
@@ -2808,9 +2819,20 @@ export async function adminRoutes(app: FastifyInstance) {
         } else if (part.type === "field") {
           if (part.fieldname === "signature" && typeof part.value === "string") {
             sigBase64 = String(part.value).trim();
+          } else if (part.fieldname === "_csrf" && typeof part.value === "string") {
+            // 这里原来的注释是「其它字段（如 _csrf）忽略」—— 页面的 JS 一直在发令牌，
+            // 服务端一直把它扔掉。
+            csrfField = part.value;
           }
-          // 其它字段（如 _csrf）忽略
         }
+      }
+
+      // **表单一读完就校验 CSRF，排在其它任何判断之前。** 签名挡得住「伪造的包」，挡不住「真的旧包」：
+      // 同一个上级域名下的别的站点被攻破后，可以替正在浏览的管理员上传一个
+      // 签名完好的**旧版本**，把服务端降级回一个有已知漏洞的版本。
+      if (!verifyMultipartCsrf(req, reply, { _csrf: { value: csrfField } })) {
+        await audit(req, user.id, "update.upload_rejected", { details: { reason: "csrf_invalid", file: tarballName.slice(0, 200) } });
+        return reply;
       }
 
       if (aborted) {

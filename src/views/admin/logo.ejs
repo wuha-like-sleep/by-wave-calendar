@@ -16,6 +16,8 @@
     <% } %>
   </div>
   <form method="post" action="/admin/logo" enctype="multipart/form-data" class="space-y-3 max-w-md">
+    <%# _csrf 必须排在文件框前面:服务端拿到文件那一刻,只有排在它前面的字段解析好了。 %>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml,image/webp" required
            class="block w-full text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white file:hover:bg-brand-700" />
     <p class="text-xs text-slate-500">支持 PNG / JPG / SVG / WEBP，最大 2MB。建议正方形 ≥ 256×256。</p>

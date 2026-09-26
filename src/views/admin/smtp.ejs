@@ -86,6 +86,8 @@
   </div>
 
   <form method="post" action="/admin/bimi/logo" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
+    <%# _csrf 必须排在文件框前面:服务端拿到文件那一刻,只有排在它前面的字段解析好了。 %>
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="file" name="file" accept=".svg,image/svg+xml" required
            class="flex-1 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100" />
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">上传 SVG</button>

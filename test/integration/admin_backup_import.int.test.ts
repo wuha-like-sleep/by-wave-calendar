@@ -92,9 +92,13 @@ function bigBackup(atLeastBytes: number): Buffer {
   return buf;
 }
 
-function multipartBody(filename: string, content: Buffer) {
+function multipartBody(filename: string, content: Buffer, csrf: string | null) {
   const b = "----bwc" + Math.random().toString(36).slice(2);
+  // _csrf 排在文件**前面**，和真实表单一样 —— 排在后面的字段，服务端拿到文件那一刻还没解析到。
+  const csrfPart = csrf === null ? "" :
+    `--${b}\r\nContent-Disposition: form-data; name="_csrf"\r\n\r\n${csrf}\r\n`;
   const head = Buffer.from(
+    csrfPart +
     `--${b}\r\nContent-Disposition: form-data; name="backup"; filename="${filename}"\r\n` +
     `Content-Type: application/json\r\n\r\n`,
   );
@@ -102,8 +106,8 @@ function multipartBody(filename: string, content: Buffer) {
            contentType: `multipart/form-data; boundary=${b}` };
 }
 
-async function importBackup(s: { cookie: string }, content: Buffer) {
-  const { payload, contentType } = multipartBody("backup.json", content);
+async function importBackup(s: { cookie: string; csrf: string | null }, content: Buffer) {
+  const { payload, contentType } = multipartBody("backup.json", content, s.csrf);
   return app.inject({
     method: "POST", url: "/admin/backup/import",
     headers: { cookie: s.cookie, "content-type": contentType },
@@ -162,5 +166,27 @@ describe("导入备份", () => {
     const res = await importBackup(s, bigBackup(1000));
     expect([302, 303, 403]).toContain(res.statusCode);
     expect(String(res.headers.location ?? "")).not.toContain("/admin/backup?success");
+  });
+});
+
+describe("导入备份不能被同站的别的页面代发", () => {
+  // 同一个上级域名下的几十个站点在浏览器眼里是「同站」，cookie 会跟着带过来。
+  // 其中任何一个被攻破，就能替正在浏览的管理员导入一份伪造的备份，把整个库换掉。
+  // 以前这条路不校验令牌，注释说「multipart 读不到，靠 SameSite 兜底」。
+  it("**没带令牌 → 拒绝，库里什么都没变**", async () => {
+    const admin = await makeUser("a@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const before = await db.select().from(schema.users);
+    const res = await importBackup({ cookie: s.cookie, csrf: null }, bigBackup(1000));
+    expect(res.statusCode, "伪造的导入请求没被拒绝 —— 整个库可以被同站页面换掉").toBe(403);
+    const after = await db.select().from(schema.users);
+    expect(after.length, "库被改了").toBe(before.length);
+  });
+
+  it("令牌是错的也拒绝", async () => {
+    const admin = await makeUser("a@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const res = await importBackup({ cookie: s.cookie, csrf: "0".repeat(64) }, bigBackup(1000));
+    expect(res.statusCode).toBe(403);
   });
 });
