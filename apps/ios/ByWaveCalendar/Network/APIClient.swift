@@ -21,12 +21,29 @@ enum APIError: Error, LocalizedError {
     /// 继续显示离线缓存。
     case deviceRevoked
 
+    /// 从服务端的错误响应里取出错误码。认两种形状：
+    /// `{"ok":false,"error":{"code":"…"}}`（/api/v1 的信封）和 `{"error":"…"}`。
+    static func serverErrorCode(_ body: String?) -> String? {
+        guard let data = body?.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let e = obj["error"] as? [String: Any] { return e["code"] as? String }
+        return obj["error"] as? String
+    }
+
     var errorDescription: String? {
         switch self {
         case .notSignedIn: return "请先登录".loc
         // 不要把服务端返回的 body 原样摊给用户——那会显示成
         // 「服务器错误 403 — {"ok":false,"error":{...}}」。
-        case .server(let s, _): return "操作失败，请稍后再试（%lld）".locFormat(s)
+        case .server(let s, let body):
+            // 用户刚输的东西不对时，要说清楚是什么不对 —— 以前一律显示
+            // 「操作失败，请稍后再试（401）」，输错当前密码的人被告知「稍后再试」。
+            // 只认码、按本地语言出文案；不把服务端 body 原样摊给用户。
+            switch Self.serverErrorCode(body) {
+            case "invalid_credentials": return "密码错误".loc
+            case "invalid_code": return "验证码错误".loc
+            default: return "操作失败，请稍后再试（%lld）".locFormat(s)
+            }
         case .decode: return "数据读取失败，请稍后再试".loc
         case .network: return "网络连接失败，请检查网络后重试".loc
         case .refreshFailed: return "登录已失效，请重新登录".loc

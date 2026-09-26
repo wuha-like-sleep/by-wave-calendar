@@ -832,7 +832,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     const { verifyTotpCode, generateBackupCodes } = await import("../lib/mfa.js");
     if (!verifyTotpCode(user.mfaPendingSecret, body.data.code)) {
-      return reply.code(401).send({ error: "invalid_code", message: "验证码错误，请重试。" });
+      // **已登录的接口里，「你刚输的密码 / 验证码不对」用 403，不用 401。**
+      // 三端 App 都把 401 当成「会话没了」：先刷新令牌、再把整个请求重发一遍。
+      // 于是每输错一次都吃掉两次限流额度 —— 删账号每 5 分钟只准 3 次，输错两次
+      // 就被挡住。这个仓库的约定是：401 = 会话没了，403 = 这次没验过。
+      return reply.code(403).send({ error: "invalid_code", message: "验证码错误，请重试。" });
     }
     const codes = generateBackupCodes(10);
     await db.update(schema.users).set({
@@ -862,11 +866,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "bad_request" });
     if (!user.passwordHash || !(await verifyPassword(body.data.password, user.passwordHash))) {
-      return reply.code(401).send({ error: "invalid_credentials", message: "密码错误。" });
+      return reply.code(403).send({ error: "invalid_credentials", message: "密码错误。" });
     }
     const { verifyTotpCode } = await import("../lib/mfa.js");
     if (!user.mfaTotpSecret || !verifyTotpCode(user.mfaTotpSecret, body.data.code)) {
-      return reply.code(401).send({ error: "invalid_code", message: "验证码错误。" });
+      return reply.code(403).send({ error: "invalid_code", message: "验证码错误。" });
     }
     await db.update(schema.users).set({
       mfaEnabled: false,
@@ -905,7 +909,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       return reply.code(412).send({ error: "no_local_password", message: "你的账号通过 SSO 登录，没有本地密码可改。" });
     }
     if (!(await verifyPassword(body.data.currentPassword, user.passwordHash))) {
-      return reply.code(401).send({ error: "invalid_credentials", message: "当前密码错误" });
+      return reply.code(403).send({ error: "invalid_credentials", message: "当前密码错误" });
     }
     const { passwordPolicyError } = await import("../lib/password.js");
     const policy = passwordPolicyError(body.data.newPassword);
@@ -971,7 +975,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       return reply.code(412).send({ error: "no_local_password", message: "SSO 账号请联系管理员删除。" });
     }
     if (!(await verifyPassword(body.data.password, user.passwordHash))) {
-      return reply.code(401).send({ error: "invalid_credentials", message: "密码错误，账号未删除" });
+      return reply.code(403).send({ error: "invalid_credentials", message: "密码错误，账号未删除" });
     }
     if (user.isAdmin) {
       const { countActiveAdmins } = await import("../lib/user_state.js");
