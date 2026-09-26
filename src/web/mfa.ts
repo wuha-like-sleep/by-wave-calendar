@@ -9,8 +9,10 @@ import {
   loadSession,
   markSessionMfaSatisfied,
   destroyAllUserSessions,
+  destroySession,
   createSession,
 } from "../lib/session.js";
+import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import {
   consumeBackupCode,
   generateBackupCodes,
@@ -73,11 +75,20 @@ export async function mfaRoutes(app: FastifyInstance) {
     const secret = s.user.mfaTotpSecret;
     if (!secret) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.mfa.configError")));
 
+    // 账号已经被锁（不管是密码错的还是验证码错的）：这个半登录作废，回登录页。
+    // 否则锁着的账号在这一页照样能继续猜验证码。
+    if (isLocked(s.user)) {
+      await destroySession(req, reply);
+      return reply.redirect("/login?error=" + encodeURIComponent(
+        tr(req, "flash.login.lockedMinutes", { minutes: lockedRemainingMinutes(s.user) })));
+    }
+
     // 回到原本要去的那一页。判据收在 lib/return_to.ts，四条登录路共用一份 ——
     // 这里原来是手抄的第三份，注释还写着「keep both in sync」。
     const consumeMfaReturnTo = () => returnToOrApp(req, reply);
 
     if (verifyTotpCode(secret, code)) {
+      await resetFailedLogin(s.user.id);
       await markSessionMfaSatisfied(req);
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
@@ -93,6 +104,7 @@ export async function mfaRoutes(app: FastifyInstance) {
         .update(schema.users)
         .set({ mfaBackupCodes: consumed.updated as unknown as object, updatedAt: new Date() })
         .where(eq(schema.users.id, s.user.id));
+      await resetFailedLogin(s.user.id);
       await markSessionMfaSatisfied(req);
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
@@ -106,6 +118,17 @@ export async function mfaRoutes(app: FastifyInstance) {
     }
 
     req.log.warn({ userId: s.user.id, ip: req.ip }, "mfa_failed");
+    // **验证码输错也算进账号锁定。** 以前只有密码错才算：拿到密码的人停在这一页，
+    // 半登录能活好几天，只受「每个 IP 每分钟 10 次」限制，可以一直猜下去。
+    // 锁定的次数和时长就是后台已经在配的那一套，没有另起一套。
+    await recordFailedLogin(s.user);
+    const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, s.user.id)).limit(1);
+    if (fresh && isLocked(fresh)) {
+      // 刚被锁上：这个半登录作废，要猜就得重新输密码 —— 而密码那一关也锁着。
+      await destroySession(req, reply);
+      return reply.redirect("/login?error=" + encodeURIComponent(
+        tr(req, "flash.login.lockedMinutes", { minutes: lockedRemainingMinutes(fresh) })));
+    }
     return reply.redirect("/login/mfa?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
   });
 

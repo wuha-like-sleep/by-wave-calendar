@@ -464,6 +464,11 @@ export async function deviceRoutes(app: FastifyInstance) {
       mfaPendingTokens.delete(body.data.mfaToken);
       return reply.code(401).send({ error: "mfa_state_invalid" });
     }
+    // 账号已经被锁：这张票作废，要重新输密码 —— 而密码那一关也锁着。
+    if (isLocked(user)) {
+      mfaPendingTokens.delete(body.data.mfaToken);
+      return reply.code(429).send({ error: "account_locked", message: "登录失败次数过多，请稍后再试" });
+    }
 
     // Try TOTP first, then backup codes. Same precedence as the web flow.
     const { verifyTotpCode, consumeBackupCode } = await import("../lib/mfa.js");
@@ -480,8 +485,17 @@ export async function deviceRoutes(app: FastifyInstance) {
       }
     }
     if (!verified) {
+      // **验证码输错也算进账号锁定。** 以前这张票在输错之后还留着，5 分钟里只受
+      // 每分钟 12 次的限流约束，输错不计入账号锁定。现在和密码错走同一套锁定。
+      await recordFailedLogin(user);
+      const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1);
+      if (fresh && isLocked(fresh)) {
+        mfaPendingTokens.delete(body.data.mfaToken);
+        return reply.code(429).send({ error: "account_locked", message: "登录失败次数过多，请稍后再试" });
+      }
       return reply.code(401).send({ error: "invalid_code", message: "验证码错误" });
     }
+    await resetFailedLogin(user.id);
 
     // Consume the mfa token now — single-use.
     mfaPendingTokens.delete(body.data.mfaToken);
