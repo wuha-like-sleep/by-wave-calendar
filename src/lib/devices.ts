@@ -121,12 +121,25 @@ export async function upsertDeviceForUser(input: {
   userAgent: string | null;
 }): Promise<schema.Device | null> {
   if (input.clientDeviceId) {
+    // **设备名也要对得上，才算「同一台」。**
+    //
+    // iOS 把 clientDeviceId 存在会走 iCloud 同步的钥匙串里（本意是卸载重装后还认得
+    // 这台设备），副作用是：同一个 Apple ID 下的 iPhone 和 iPad 拿到的是**同一个** id。
+    // 只按 id 认的话，在 iPad 上登录会被当成「iPhone 重新登录」，原地换掉 iPhone
+    // 那张刷新令牌 —— iPhone 一小时内被踢下线，看到的提示还是「密码已更改或此设备
+    // 已被移除」；再回 iPhone 登一次，iPad 又被踢。两台来回顶。
+    //
+    // 设备名是 App 自己上报的型号（iPhone 是「iPhone (iPhone)」、iPad 是
+    // 「iPad (iPad)」，安卓是厂商 + 型号），本站也没有改设备名的地方，所以它对
+    // 同一台设备是稳定的。加上这一条，已经装在用户手上的旧版本 App 也立刻不再互踢。
+    // 根治在 iOS 那边（id 改成只存在本机），但那要等下一个版本上架。
     const [existing] = await db
       .select()
       .from(schema.devices)
       .where(and(
         eq(schema.devices.userId, input.userId),
         eq(schema.devices.clientDeviceId, input.clientDeviceId),
+        eq(schema.devices.label, input.label.trim() || "未命名设备"),
         isNull(schema.devices.revokedAt),
       ))
       .limit(1);
