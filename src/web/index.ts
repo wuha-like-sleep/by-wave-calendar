@@ -1350,6 +1350,19 @@ export async function webRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string().uuid(), subId: z.string().uuid() }).safeParse(req.params);
     if (!params.success) return reply.redirect("/app");
     if (!(await ownsCalendar(params.data.id, user.id))) return reply.redirect("/app");
+    // **订阅也得是这个日历的。** 以前只校验了路径里的日历是自己的，subId 原样
+    // 交给刷新 —— 拿自己的日历 id 配上别人的订阅 id，就能触发别人订阅的导入，
+    // 还能从返回的提示里读到对方上游地址的响应片段。下面那条「删除订阅」一直是
+    // 两个条件一起查的，这条漏了。
+    const [ownedSub] = await db
+      .select({ id: schema.calendarSubscriptions.id })
+      .from(schema.calendarSubscriptions)
+      .where(and(
+        eq(schema.calendarSubscriptions.id, params.data.subId),
+        eq(schema.calendarSubscriptions.calendarId, params.data.id),
+      ))
+      .limit(1);
+    if (!ownedSub) return reply.redirect(`/app/calendars/${params.data.id}`);
     const refresh = await refreshSubscription(params.data.subId);
     if (!refresh.ok) {
       return redirectWith(reply, `/app/calendars/${params.data.id}`, { error: tr(req, "flash.subscription.syncFailed", { error: refresh.error }) });
