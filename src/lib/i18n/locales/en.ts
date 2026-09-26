@@ -385,6 +385,7 @@ export const en = {
 
   // booking.public
   "booking.public.withHost": "With <strong>{host}</strong> · {minutes} min",
+  "booking.public.duration": "{minutes} minutes",
   "booking.public.noSlots": "No bookable slots right now. Ask the host to open more time, or try again later.",
   "booking.public.pickTime": "Pick a time",
   "booking.public.slotCount": "{count} slots",

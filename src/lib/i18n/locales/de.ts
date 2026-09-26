@@ -378,6 +378,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
 
   // booking.public
   "booking.public.withHost": "Mit <strong>{host}</strong> · {minutes} Min.",
+  "booking.public.duration": "{minutes} Minuten",
   "booking.public.noSlots": "Derzeit keine buchbaren Zeitfenster. Bitten Sie den Gastgeber, mehr Zeit freizugeben, oder versuchen Sie es später erneut.",
   "booking.public.pickTime": "Eine Zeit wählen",
   "booking.public.slotCount": "{count} Zeitfenster",

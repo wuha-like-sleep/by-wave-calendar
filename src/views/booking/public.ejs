@@ -2,7 +2,9 @@
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
     <div class="border-l-4 border-brand-500 pl-4 mb-6">
       <h1 class="text-xl font-semibold text-slate-900"><%= link.title %></h1>
-      <div class="mt-1 text-sm text-slate-600"><%- t("booking.public.withHost", { host: owner.displayName || owner.email, minutes: link.durationMinutes }) %></div>
+      <%# 店主没设昵称时**不拿邮箱顶上**。这是一张公开页面,会被转发、被抓取;
+          店主从来没有选过「把我的邮箱公开」。原来这里是 displayName || email。 %>
+      <div class="mt-1 text-sm text-slate-600"><% if (owner.displayName) { %><%- t("booking.public.withHost", { host: owner.displayName, minutes: link.durationMinutes }) %><% } else { %><%= t("booking.public.duration", { minutes: link.durationMinutes }) %><% } %></div>
       <% if (link.description) { %>
         <p class="mt-2 text-sm text-slate-600 whitespace-pre-wrap"><%= link.description %></p>
       <% } %>

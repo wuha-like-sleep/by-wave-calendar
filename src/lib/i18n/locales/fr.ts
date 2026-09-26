@@ -378,6 +378,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
 
   // booking.public
   "booking.public.withHost": "Avec <strong>{host}</strong> · {minutes} min",
+  "booking.public.duration": "{minutes} minutes",
   "booking.public.noSlots": "Aucun créneau réservable pour le moment. Demandez à l'hôte d'ouvrir plus de temps, ou réessayez plus tard.",
   "booking.public.pickTime": "Choisir une heure",
   "booking.public.slotCount": "{count} créneaux",

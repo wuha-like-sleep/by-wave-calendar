@@ -365,6 +365,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
 
   // booking.public
   "booking.public.withHost": "與 <strong>{host}</strong> · {minutes} 分鐘",
+  "booking.public.duration": "{minutes} 分鐘",
   "booking.public.noSlots": "最近沒有可預約時段。請聯絡發布方調整可用時段，或晚點再試。",
   "booking.public.pickTime": "選個時間",
   "booking.public.slotCount": "{count} 個時段",

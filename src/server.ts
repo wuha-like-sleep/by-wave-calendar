@@ -16,6 +16,7 @@ import { env, trustProxyOption, describeTrustProxy, createProxyShapeWatcher } fr
 import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { registerApiCsrf } from "./lib/api_csrf.js";
+import { isNoindexPath, robotsTxt } from "./lib/crawler_policy.js";
 import { makeSharedRouteStore } from "./lib/rate_limit_store.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
@@ -301,16 +302,9 @@ app.addHook("onRequest", async (_req, reply) => {
 // crawler ignores robots.txt or stumbles onto a deep link (e.g. a forwarded
 // password-reset URL). Public marketing/legal pages (/, /download, /about,
 // /privacy, /terms, /support) are NOT listed, so they stay indexable.
-const NOINDEX_PREFIXES = [
-  "/app", "/admin", "/api", "/login", "/register", "/forgot-password",
-  "/reset-password", "/verify-email", "/locale", "/booking", "/embed",
-  "/invite", "/event-invite", "/oauth", "/sign-out",
-];
+// 名单收在 lib/crawler_policy.ts（robots.txt 也从它生成，两份不会再各写各的）。
 app.addHook("onRequest", async (req, reply) => {
-  const p = (req.url.split("?")[0] || "/");
-  if (NOINDEX_PREFIXES.some((pre) => p === pre || p.startsWith(pre + "/"))) {
-    reply.header("X-Robots-Tag", "noindex, nofollow");
-  }
+  if (isNoindexPath(req.url)) reply.header("X-Robots-Tag", "noindex, nofollow");
 });
 
 // ---- admin-uploaded SVGs: never render as a top-level document ----
@@ -657,24 +651,7 @@ const JS_BASE_PATH = env.NODE_ENV === "production" ? "/static/_built" : "/static
 // not to fetch, the header tells them not to index what they do fetch.
 app.get("/robots.txt", { config: { rateLimit: false } }, async (_req, reply) => {
   reply.type("text/plain; charset=utf-8");
-  return [
-    "User-agent: *",
-    "Disallow: /app",
-    "Disallow: /admin",
-    "Disallow: /api",
-    "Disallow: /login",
-    "Disallow: /register",
-    "Disallow: /forgot-password",
-    "Disallow: /reset-password",
-    "Disallow: /verify-email",
-    "Disallow: /booking",
-    "Disallow: /embed",
-    "Disallow: /invite",
-    "Disallow: /event-invite",
-    "Disallow: /oauth",
-    "Disallow: /locale",
-    "",
-  ].join("\n");
+  return robotsTxt();
 });
 
 app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, reply) => {

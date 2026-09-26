@@ -366,6 +366,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
 
   // booking.public
   "booking.public.withHost": "与 <strong>{host}</strong> · {minutes} 分钟",
+  "booking.public.duration": "{minutes} 分钟",
   "booking.public.noSlots": "最近没有可预约时段。请联系发布方调整可用时段，或晚些再试。",
   "booking.public.pickTime": "选个时间",
   "booking.public.slotCount": "{count} 个时段",
