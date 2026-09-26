@@ -16,6 +16,7 @@ import { env, trustProxyOption, describeTrustProxy, createProxyShapeWatcher } fr
 import { authRoutes } from "./routes/auth.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { registerApiCsrf } from "./lib/api_csrf.js";
+import { makeSharedRouteStore } from "./lib/rate_limit_store.js";
 import { eventRoutes } from "./routes/events.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
@@ -400,6 +401,9 @@ await app.register(rateLimit, {
   timeWindow: "1 minute",
   hook: "preHandler",
   keyGenerator: (req) => req.ip,
+  // 同一条路由在 /api 和 /api/v1 下共用一个计数器 —— 否则换着前缀打，每条的
+  // 额度都翻倍（登录、两步验证码、配对码都在其中）。见 lib/rate_limit_store.ts。
+  store: makeSharedRouteStore(),
   // 按请求方的语言给这句话。以前是写死的中文 —— 而三端 App 是直接把服务端的
   // message 摆给用户看的，于是德语/日语用户撞上限流会突然看到一句中文。
   // 限流在生产里是常态，不是边角。
