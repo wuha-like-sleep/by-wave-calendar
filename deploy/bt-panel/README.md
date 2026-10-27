@@ -110,6 +110,26 @@ pm2 reload by-wave-calendar
 
 ---
 
+## 四点五、开机自启（服务器重启后自动拉起）
+
+**以 root 跑 `install.sh` 时已自动配置**（脚本会执行 `pm2 startup` 装好 systemd 开机单元 + `pm2 save` 存进程列表）。服务器重启后 systemd 会自动 `pm2 resurrect` 把应用拉回来。
+
+验证开机钩子在位：
+```bash
+systemctl status pm2-root       # 应为 enabled
+pm2 save                         # 想手动刷新"重启后要拉起的列表"时跑
+```
+
+如果当初没以 root 装、或 `install.sh` 报过 `pm2 startup 失败`，手动补一次：
+```bash
+pm2 startup       # 以 root 跑会直接装好；非 root 会打印一条 sudo 命令，照着执行
+pm2 save
+```
+
+⚠️ **升级 Node 版本后**：systemd 单元里写死的是旧 node 路径，开机会拉不起来（就是"PM2 被 Node 升级搞成孤儿"那类）。**重新部署一次**（`bash deploy/bt-panel/install.sh`）即可用新路径刷新单元；或手动 `pm2 unstartup && pm2 startup && pm2 save`。
+
+---
+
 ## 五、日常维护
 
 | 操作 | 命令 |

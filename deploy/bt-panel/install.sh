@@ -327,6 +327,22 @@ else
   pm2 start deploy/bt-panel/ecosystem.config.cjs >/dev/null
 fi
 pm2 save >/dev/null
+
+# 开机自启：pm2 save 只是存了进程列表；真正让服务器「重启后自动拉起」的是
+# pm2 startup —— 它装一个 systemd 开机单元，开机时跑 pm2 resurrect 读回那份列表。
+# 以 root 运行时 pm2 startup 会直接把单元装好（无需再手动执行它打印的 sudo 命令）。
+# 每次部署都重跑一遍是幂等的，而且会用「当前的 node 路径」重装单元 —— 这正好能
+# 修掉「升级 Node 后 systemd 单元指向旧 node、开机拉不起来」那类孤儿问题。
+if [ "$(id -u)" = "0" ]; then
+  if pm2 startup >/dev/null 2>&1; then
+    pm2 save >/dev/null   # 装好开机钩子后再存一次，确保 resurrect 读到当前列表
+    ok "开机自启已配置（systemd —— 服务器重启后自动拉起）"
+  else
+    warn "pm2 startup 失败，重启后可能不会自动拉起。手动修：pm2 startup（按提示执行后再 pm2 save）"
+  fi
+else
+  hint "非 root 运行，开机自启未配置。请以 root 跑一次：pm2 startup  然后  pm2 save"
+fi
 ok "PM2 已启动"
 
 # ========== Smoke test ==========
@@ -418,4 +434,5 @@ if [ -n "${APPS_ENABLED:-}" ]; then
   fi
 fi
 echo
-echo "  开机自启（一次性，需要 root）: pm2 startup"
+echo "  🔁 开机自启：root 部署时已自动配置（systemd），服务器重启后会自动拉起。"
+echo "     升级 Node 版本后重新部署一次即可刷新；手动验证：systemctl status pm2-root"
