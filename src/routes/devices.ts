@@ -265,9 +265,13 @@ async function ensureAppsEnabled(reply: FastifyReply, req?: { log: { warn: (msg:
   if (req) {
     // Surface this loudly in pm2 logs so the admin can grep for it.
     // Pino structured logging — "apps_disabled" is the searchable token.
-    req.log.warn({ event: "apps_disabled_block", path: req.url, ip: req.ip }, "APP request blocked: appsEnabled=false. Toggle in admin → API & APPs.");
+    req.log.warn({ event: "apps_disabled_block", path: req.url, ip: req.ip }, "APP request blocked: appsEnabled=false. Turn on Admin → API → Native app sync → \"Allow native app sync\" (/admin/api#apps).");
   }
-  reply.code(403).send({ error: "apps_disabled", message: "管理员已停用 APP 同步。请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" });
+  // 这句是给 App 用户看的，路径必须和后台**真实的**叫法一字不差：网页顶栏「管理后台」
+  // → 左侧「API」（页面标题「第三方 API 集成」）→「原生 APP 同步」卡片里的
+  // 「允许原生 APP 同步」开关（src/views/admin/_nav.ejs、src/views/admin/api.ejs）。
+  // 以前写的「管理 → API & APPs →『打开 APP 登录』」后台里一个都找不到。
+  reply.code(403).send({ error: "apps_disabled", message: "管理员已停用原生 APP 同步。请让管理员在网页「管理后台 → API → 原生 APP 同步」里打开「允许原生 APP 同步」开关后重试。" });
   return false;
 }
 
