@@ -46,14 +46,14 @@ group = "cn.bywave.calendar.desktop"
 //     **MAJOR 允许为 0** —— 这里原来的注释写的「Win MSI 要求 MAJOR ≥ 1」是错的。
 //   · macOS:1-3 段,全非负整数,**第一段必须 > 0**(这条才是真的)。
 //   · Linux deb:([0-9]+:)?[0-9][0-9a-zA-Z.+~-]*
-// 也就是说三平台的交集是「第一段 > 0 的三段式」,1.1.2 满足。
+// 也就是说三平台的交集是「第一段 > 0 的三段式」,1.1.1 满足。
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 25). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 24). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.1.2"
+version = "1.1.1"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
