@@ -359,7 +359,7 @@
 "解析错误：%@" = "Error de análisis: %@";
 "令牌刷新失败 (HTTP %lld) — 请重新登录" = "Error al renovar el token (HTTP %lld); vuelve a iniciar sesión";
 "二维码内容无效，请确认从 ByWave Calendar 网页生成" = "Contenido del QR no válido. Asegúrate de generarlo desde el sitio web de ByWave Calendar";
-"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "El administrador no ha habilitado la sincronización de la app.\nEn la web, abre «Panel de administración» → «API» (/admin/api#apps), marca «Permitir sincronización de apps nativas» en «Sincronización de apps nativas», guarda y vuelve a intentarlo.";
+"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "El administrador no ha habilitado la sincronización de la app.\nEn la web, abre «Administración» → «API» (/admin/api#apps), marca «Permitir sincronización de apps nativas» en «Sincronización de apps nativas», guarda y vuelve a intentarlo.";
 "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。" = "El código de emparejamiento ha caducado o ya se usó.\nVuelve a /app/settings#devices y toca «Emparejar nuevo dispositivo» para generar otro.";
 "配对码格式不对。请确认是 6 位字符（字母 + 数字）。" = "El formato del código de emparejamiento no es correcto. Debe tener 6 caracteres (letras + números).";
 "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）" = "El servidor debe actualizarse a la versión v0.7.4 o posterior.\n(La protección CSRF de las versiones antiguas bloquea por error las solicitudes de la app.)";

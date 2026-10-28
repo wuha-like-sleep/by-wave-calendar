@@ -23,4 +23,15 @@ internal object AuthRouting {
      */
     fun mustResetToSetup(signedIn: Boolean, stack: List<String?>): Boolean =
         !signedIn && stack.any { it != null && it !in signedOutRoutes }
+
+    /**
+     * 日历页「已被登出」提示条上点「重新登录」，这一下要不要真的去登录页（连带放预填）。
+     *
+     * [topRoute] 是返回栈顶那一页。导航是同步的：第一下点完，栈顶当场就是登录页，
+     * 而日历页还在退场动画里、按钮还点得到 —— 连点的第二下落在这里，什么都不该做。
+     * 以前第二下照样放一份预填，可 launchSingleTop 不会再建登录页、没人来取，它就
+     * 一直留在格子里，等到「最后一个账号也没了、清栈回登录页」时冒出来，把那个
+     * 已登出账号的地址和邮箱填在一张本该空白的登录页上。
+     */
+    fun signInAgainOpensSetup(topRoute: String?): Boolean = topRoute !in signedOutRoutes
 }

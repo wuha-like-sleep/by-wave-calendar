@@ -130,7 +130,8 @@ class ProfileStore(context: Context) {
     fun clearSignedOutReason() { _signedOutReason.value = null }
 
     /** 下一次打开登录页时要预填的服务器和邮箱，见 SignInPrefill.kt。只在内存里：
-     *  它从点按钮到登录页建出来只活一瞬间。 */
+     *  正常情况下它从点按钮到登录页建出来只活一瞬间；万一放进去没人取，下一张登录页
+     *  也捡不到它 —— 往登录页跳的每一处都会先重新放一次（放账号或清空）。 */
     private val signInPrefill = SignInPrefillSlot()
 
     /** 打开登录页之前调：传被登出的那个账号就预填它，传 null 就是一张空白登录页。 */
