@@ -532,7 +532,10 @@ struct SetupView: View {
                     // 用本地文案，不用服务端的 message：那句是中文，其它语言的用户看不懂。
                     errorMessage = "登录失败次数过多，请稍后再试。".loc
                 } else if err == "apps_disabled" {
-                    errorMessage = "管理员未启用 APP 同步功能".loc
+                    // 和扫码登录、通过 Apple 登录、安卓同一句：带上后台里去哪打开开关，
+                    // 用户才有东西可以转给站长。这串中文只是查表的键（和 PairingService
+                    // 那处同一个），显示的是各语言 Localizable.strings 里写着真实路径的那句。
+                    errorMessage = "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。".loc
                 } else {
                     // 5xx 的 message 已被丢掉（那是一句写死的中文），这里换成本地文案。
                     errorMessage = msg
@@ -771,8 +774,8 @@ struct MfaCodeEntrySheet: View {
                     errorMessage = "验证码会话已过期，请重新登录".loc
                 } else if err == "apps_disabled" {
                     // 输完密码到输验证码之间管理员关了 APP 同步，这一步也会被拦。
-                    // 服务端那句 message 是中文，用本地文案。
-                    errorMessage = "管理员未启用 APP 同步功能".loc
+                    // 服务端那句 message 是中文，用本地文案（和密码那一步同一句，带后台路径）。
+                    errorMessage = "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。".loc
                 } else {
                     errorMessage = msg
                         ?? APIError.unavailableMessage(status: http.statusCode)
