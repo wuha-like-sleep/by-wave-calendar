@@ -22,14 +22,19 @@ import cn.bywave.calendar.desktop.data.api.ApiException
  */
 private val MACHINE_CODE = Regex("^[a-z0-9]+(_[a-z0-9]+)+$")
 
-internal fun userFacingError(e: Throwable, fallbackKey: String): String {
-    val fallback = cn.bywave.calendar.desktop.i18n.I18n.t(fallbackKey)
+internal fun userFacingError(e: Throwable, fallbackKey: String): String =
+    userFacingDetail(e) ?: cn.bywave.calendar.desktop.i18n.I18n.t(fallbackKey)
+
+/** 服务端写给用户的那句话；没有（内部标记、机器码、网络层异常）就是 null。
+ *  调用方自己有一句「没能删除『X』」这样的标题时用它：有理由就接在后面，
+ *  没有就只说标题，不再重复一句通用的「删除失败」。 */
+internal fun userFacingDetail(e: Throwable): String? {
     val msg = (e as? ApiException)?.message?.trim().orEmpty()
-    if (msg.isEmpty()) return fallback
+    if (msg.isEmpty()) return null
     val internal = msg.startsWith("decode_failed") ||
         msg == "missing_data" ||
         msg.startsWith("HTTP ") ||
         msg.contains(" failed: ") ||
         MACHINE_CODE.matches(msg)
-    return if (internal) fallback else msg
+    return if (internal) null else msg
 }

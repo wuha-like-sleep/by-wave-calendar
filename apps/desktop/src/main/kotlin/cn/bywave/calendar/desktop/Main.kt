@@ -273,12 +273,35 @@ private fun Root() {
     // onSignedIn() flips this back off, bringing MainScreen back with
     // the freshly-paired account selected.
     var forceSetup by remember { mutableStateOf(false) }
+    val cancelAddAccount = remember { { forceSetup = false } }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        if (profile == null || forceSetup) {
-            SetupScreen(onSignedIn = { forceSetup = false })
-        } else {
-            MainScreen(onAddAccount = { forceSetup = true })
+        when (val dest = rootDestination(hasActiveProfile = profile != null, addingAccount = forceSetup)) {
+            is RootDestination.Setup -> SetupScreen(
+                onSignedIn = { forceSetup = false },
+                onCancel = if (dest.cancelable) cancelAddAccount else null,
+            )
+            RootDestination.Main -> MainScreen(onAddAccount = { forceSetup = true })
         }
     }
+}
+
+/** 顶层该显示哪一屏。 */
+internal sealed interface RootDestination {
+    /** 登录页。`cancelable` = 能不能退回去（本机还登着别的账号时才能）。 */
+    data class Setup(val cancelable: Boolean) : RootDestination
+    data object Main : RootDestination
+}
+
+/**
+ * 抽出来是为了能测「从添加账号进来的登录页有没有退路」。
+ *
+ * 以前已登录状态下点「添加账号」进到登录页，那一页既没有取消也没有返回，
+ * 只能配对成功或者退出 App。本机一个账号都没有时则不该给退路 —— 退回去
+ * 也没有东西可看（包括「添加账号」途中原来的账号被服务端登出了的情况）。
+ */
+internal fun rootDestination(hasActiveProfile: Boolean, addingAccount: Boolean): RootDestination = when {
+    !hasActiveProfile -> RootDestination.Setup(cancelable = false)
+    addingAccount -> RootDestination.Setup(cancelable = true)
+    else -> RootDestination.Main
 }

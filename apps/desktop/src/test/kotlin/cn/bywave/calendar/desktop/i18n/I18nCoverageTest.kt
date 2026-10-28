@@ -78,6 +78,35 @@ class I18nCoverageTest {
         assertTrue(problems.isEmpty(), "占位符对不上，界面上会缺一段：\n" + problems.joinToString("\n"))
     }
 
+    /** 账号被登出提示、添加账号可取消、扫码轮询、弹窗外操作失败 —— 这一批新文案
+     *  八门语言都要有，且不许直接照抄英文（{action}{reason} 这种纯拼接模板除外）。 */
+    @Test
+    fun `被登出提示和操作失败提示八门语言齐全`() {
+        val keys = listOf(
+            "auth.otherAccountSignedOut", "auth.signInAgain", "setup.cancelAddAccount",
+            "setup.pollRetry", "setup.pollGaveUp", "setup.pollFailed",
+            "action.deleteFailed", "action.moveFailed", "action.restoreFailed",
+        )
+        val en = I18n.DICTIONARIES[I18n.Locale.EN]!!
+        for (key in keys) {
+            assertTrue(en.containsKey(key), "英文里没有 $key")
+            for (loc in locales) {
+                val v = I18n.DICTIONARIES[loc]?.get(key)
+                assertTrue(!v.isNullOrBlank(), "${loc.code} 缺 $key")
+                if (loc != I18n.Locale.EN) {
+                    assertTrue(v != en[key], "${loc.code} 的 $key 是英文原文，没翻")
+                }
+            }
+        }
+        // 轮询重试那句以前带着 {message}，被填进去的是「HTTP 502」—— 不许再带。
+        for (loc in locales) {
+            assertTrue(
+                I18n.DICTIONARIES[loc]?.get("setup.pollRetry")?.contains("{") == false,
+                "${loc.code} 的 setup.pollRetry 又带上了占位符",
+            )
+        }
+    }
+
     /** 本轮新增的这两条（一句话录入失败的提示）八门语言都要有，且不许直接照抄英文。 */
     @Test
     fun `一句话录入的失败提示八门语言齐全`() {

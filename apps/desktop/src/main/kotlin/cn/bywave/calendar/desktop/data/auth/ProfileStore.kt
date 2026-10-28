@@ -39,7 +39,35 @@ private data class ProfilesFile(
      *  separately so even after sign-out (which drops the profile)
      *  the next setup pre-fills it. */
     val lastServerUrl: String = "",
+    /** 用过的先后顺序，最近用的在最前。被服务端登出之后切去哪个账号由它决定
+     *  —— 存盘是因为「最近用过」要跨重启才有意义。老文件没有这个字段，读出来
+     *  是空列表，回落到列表顺序。 */
+    val recentIds: List<String> = emptyList(),
 )
+
+/**
+ * 某个账号被服务端登出、而本机还登着别的账号时，界面上要挂出来的那条提示。
+ *
+ * 以前这种情况是**静默**切到另一个账号：原因只记进了 signedOutReasonKey，
+ * 而那个值只有登录页在读 —— 还有别的账号时根本不会回登录页，于是用户以为
+ * 自己还在原来那个账号里，看着的却是另一个账号的日历。
+ *
+ * 存邮箱和 I18n key，不存翻好的整句：提示可能挂很久，期间用户可能切了语言。
+ */
+data class SignedOutNotice(
+    /** 被登出的那个 profile（deviceId），关提示时按它找。 */
+    val profileId: String,
+    val email: String,
+    val serverUrl: String,
+    val reasonKey: String,
+)
+
+/** 当前账号没了之后该切去哪个。最近用过的优先，没有记录就按列表顺序。
+ *
+ *  放在顶层是为了能直接测 —— 以前写死成「列表里第一个」，用户刚刚还在用的
+ *  那个账号排第三的话，就被切进一个他很久没碰过的账号。 */
+internal fun pickFallbackProfileId(remaining: List<String>, recentFirst: List<String>): String? =
+    recentFirst.firstOrNull { it in remaining } ?: remaining.firstOrNull()
 
 object ProfileStore {
     private val json = Json {
@@ -71,20 +99,31 @@ object ProfileStore {
     // Keeping it off disk means a stolen profiles.json (e.g. backup
     // leak) only buys the attacker refresh tokens, which the user can
     // revoke from settings.
-    private val accessTokens = mutableMapOf<String, String>()
+    //
+    // 按 profile 存、按 profile 取，**不读「当前活动账号」**：ApiClient 绑定的是
+    // 建立它的那个账号，切账号之后还在飞的请求不能拿到另一个账号的票。
+    private val accessTokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** 最近用过的顺序（deviceId），最近的在前。 */
+    private val recentIds = mutableListOf<String>()
 
     init { load() }
 
     // ---- Read ----
 
-    /** Bearer token for the currently-active profile. */
-    fun accessToken(): String? = _activeId.value?.let { accessTokens[it] }
+    /** 某个账号的 Bearer token（只在内存里）。 */
+    fun accessToken(profileId: String): String? = accessTokens[profileId]
 
-    /** Set the access token for the currently-active profile. */
-    fun setAccessToken(token: String) {
-        val id = _activeId.value ?: return
-        accessTokens[id] = token
+    /** 存某个账号的 access token。账号已经被移除了就不存 —— 不然刚被删掉的
+     *  账号会在内存里留一张能用的票。 */
+    fun setAccessToken(profileId: String, token: String) {
+        if (_profiles.value.none { it.deviceId == profileId }) return
+        accessTokens[profileId] = token
     }
+
+    /** 某个账号的 refresh token；账号已经不在了返回 null。 */
+    fun refreshToken(profileId: String): String? =
+        _profiles.value.firstOrNull { it.deviceId == profileId }?.refreshToken
 
     // ---- Write ----
 
@@ -101,6 +140,11 @@ object ProfileStore {
         _profiles.value = newList
         _activeId.value = profile.deviceId
         _lastServerUrl.value = profile.serverUrl
+        touch(profile.deviceId)
+        // 重新登回了被踢掉的那个账号：那条「已被登出」的提示说完了，收掉。
+        _signedOutNotices.value = _signedOutNotices.value.filterNot {
+            it.email.equals(profile.email, ignoreCase = true) && it.serverUrl == profile.serverUrl
+        }
         recomputeActive()
         persist()
     }
@@ -121,15 +165,14 @@ object ProfileStore {
         if (_profiles.value.none { it.deviceId == id }) return
         if (_activeId.value == id) return
         _activeId.value = id
+        touch(id)
         recomputeActive()
         persist()
     }
 
-    /** Remove the given profile. If it was active, fall back to the
-     *  first remaining profile (or null when the list empties).
-     *  Also wipes the event cache so removed-then-re-added accounts
-     *  don't see ghost events from before. */
     /** 上一次被动登出的原因，存的是 I18n 的 key 不是已翻译好的文案。
+     *  **只在本机一个账号都不剩时才设**（那时回登录页，登录页显示它）；
+     *  还有别的账号时走 [signedOutNotices]。
      *
      *  存 key 而不是成品字符串，是因为这个值可能在界面上停留很久（用户
      *  被踢回登录页之后可能先去切了语言），存成品字符串的话就会卡在
@@ -139,33 +182,66 @@ object ProfileStore {
 
     fun clearSignedOutReason() { _signedOutReasonKey.value = null }
 
-    /**
-     * 服务端吊销了这台设备（改密码 / 重置密码 / 后台移除）。
-     *
-     * 清掉凭据让界面自然回到登录页。以前刷新失败只是把 401 原样抛出、
-     * 不碰这里，结果桌面端变成僵尸：日历照常显示上次同步的内容，
-     * 新建/编辑/删除全部失败，而没有任何地方告诉用户「你被登出了」。
-     *
-     * 注意：光记下原因还不够——1.0.17 之前这个 flow 没有任何地方在读，
-     * 用户看到的只是「界面自己跳回了登录页」。登录页现在会把它显示成
-     * 一条横幅（见 SetupScreen）。
-     */
-    fun markSignedOut(reasonKey: String) {
-        _signedOutReasonKey.value = reasonKey
-        _activeId.value?.let { remove(it) }
+    /** 还有别的账号时，被登出的那几个账号的提示（主界面顶部显示，可关闭）。 */
+    private val _signedOutNotices = MutableStateFlow<List<SignedOutNotice>>(emptyList())
+    val signedOutNotices: StateFlow<List<SignedOutNotice>> = _signedOutNotices.asStateFlow()
+
+    fun dismissSignedOutNotice(profileId: String) {
+        _signedOutNotices.value = _signedOutNotices.value.filterNot { it.profileId == profileId }
     }
 
+    /**
+     * 服务端吊销了**这个账号**在这台设备上的登录（改密码 / 重置密码 / 后台移除设备 / 后台停用）。
+     *
+     * 清掉凭据。以前刷新失败只是把 401 原样抛出、不碰这里，结果桌面端变成僵尸：
+     * 日历照常显示上次同步的内容，新建/编辑/删除全部失败，而没有任何地方告诉
+     * 用户「你被登出了」。
+     *
+     * 按 profileId 删，不是删「当前活动账号」：发现吊销的那个请求属于哪个账号，
+     * 就只删那个账号。以前删的是活动账号 —— 切账号之后还在飞的旧请求一旦判成
+     * 吊销，删掉的是用户刚切过去、什么事都没有的那个账号。
+     *
+     * 删完之后：
+     *  · 本机还有别的账号 → 切到最近用过的那个，**同时**挂一条可关闭的提示，写明
+     *    哪个账号、为什么被登出。以前是静默切走，用户以为自己还在原来那个账号里。
+     *  · 一个都不剩 → 回登录页，登录页上显示原因（见 SetupScreen 的横幅）。
+     */
+    fun markSignedOut(profileId: String, reasonKey: String) {
+        // 已经不在了：同一个账号的另一个请求先一步处理过，或者用户刚手动移除。
+        val gone = _profiles.value.firstOrNull { it.deviceId == profileId } ?: return
+        remove(profileId)
+        if (_profiles.value.isEmpty()) {
+            // 登录页那条横幅会说明原因；主界面的提示用不上了。
+            _signedOutNotices.value = emptyList()
+            _signedOutReasonKey.value = reasonKey
+        } else {
+            _signedOutNotices.value = _signedOutNotices.value.filterNot { it.profileId == profileId } +
+                SignedOutNotice(
+                    profileId = profileId,
+                    email = gone.email.ifBlank { gone.displayName ?: gone.userId },
+                    serverUrl = gone.serverUrl,
+                    reasonKey = reasonKey,
+                )
+        }
+    }
+
+    /** Remove the given profile. If it was active, fall back to the most
+     *  recently used remaining profile (or null when the list empties).
+     *  Also wipes the event cache so removed-then-re-added accounts
+     *  don't see ghost events from before. */
     fun remove(id: String) {
         val list = _profiles.value
         val newList = list.filterNot { it.deviceId == id }
         accessTokens.remove(id)
+        recentIds.remove(id)
         // Cache cleanup is best-effort; don't block sign-out on it.
         try {
             cn.bywave.calendar.desktop.data.cache.EventCache.clear(id)
         } catch (_: Exception) { /* swallow */ }
         _profiles.value = newList
         if (_activeId.value == id) {
-            _activeId.value = newList.firstOrNull()?.deviceId
+            _activeId.value = pickFallbackProfileId(newList.map { it.deviceId }, recentIds)
+            _activeId.value?.let { touch(it) }
         }
         recomputeActive()
         persist()
@@ -177,12 +253,13 @@ object ProfileStore {
         _activeId.value?.let { remove(it) }
     }
 
-    /** Refresh-rotated token. Updates the active profile's stored
-     *  refreshToken on disk (the server occasionally rotates them). */
-    fun updateRefreshToken(newRefresh: String) {
-        val id = _activeId.value ?: return
+    /** Refresh-rotated token. Updates **that profile's** stored
+     *  refreshToken on disk (the server occasionally rotates them) — not
+     *  the active one's: the refresh may belong to a profile the user has
+     *  since switched away from. */
+    fun updateRefreshToken(profileId: String, newRefresh: String) {
         val list = _profiles.value.toMutableList()
-        val idx = list.indexOfFirst { it.deviceId == id }
+        val idx = list.indexOfFirst { it.deviceId == profileId }
         if (idx < 0) return
         list[idx] = list[idx].copy(refreshToken = newRefresh)
         _profiles.value = list
@@ -191,6 +268,25 @@ object ProfileStore {
     }
 
     // ---- Internals ----
+
+    /** 把 id 挪到「最近用过」的最前面。 */
+    private fun touch(id: String) {
+        recentIds.remove(id)
+        recentIds.add(0, id)
+    }
+
+    /** 只给测试用：丢掉内存里的一切，按磁盘重新读一遍（等于重启一次 App）。 */
+    internal fun reloadForTest() {
+        accessTokens.clear()
+        recentIds.clear()
+        _profiles.value = emptyList()
+        _activeId.value = null
+        _lastServerUrl.value = ""
+        _signedOutReasonKey.value = null
+        _signedOutNotices.value = emptyList()
+        _profile.value = null
+        load()
+    }
 
     private fun recomputeActive() {
         val id = _activeId.value
@@ -205,6 +301,9 @@ object ProfileStore {
                 _profiles.value = parsed.profiles
                 _activeId.value = parsed.activeId?.takeIf { id -> parsed.profiles.any { it.deviceId == id } }
                     ?: parsed.profiles.firstOrNull()?.deviceId
+                recentIds.clear()
+                recentIds.addAll(parsed.recentIds.filter { id -> parsed.profiles.any { it.deviceId == id } }.distinct())
+                _activeId.value?.let { touch(it) }
                 _lastServerUrl.value = parsed.lastServerUrl.ifEmpty {
                     // Fallback for stores written before lastServerUrl existed:
                     // derive from the active (or first) profile's URL.
@@ -241,6 +340,7 @@ object ProfileStore {
             activeId = _activeId.value,
             profiles = _profiles.value,
             lastServerUrl = _lastServerUrl.value,
+            recentIds = recentIds.toList(),
         )
         val serialized = json.encodeToString(ProfilesFile.serializer(), body)
 

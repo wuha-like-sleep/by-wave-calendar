@@ -106,12 +106,13 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     // 一个账号一个 ApiClient,日历视图和提醒共用它。
     //
-    // 共用是有意的:刷新令牌的单飞锁(ApiClient.refreshMutex)是**实例**级别的。
-    // 给提醒单开一个 ApiClient,就等于多一个每两分钟固定发请求的实例,迟早和
-    // 用户的操作同时撞上 401 —— 两个实例各自去换令牌,服务端轮换之后必然有
-    // 一个手里拿的是旧的,刷新失败会走 markSignedOut(),把人直接踢回登录页。
-    val client = remember(p?.serverUrl, p?.userId) {
-        if (p == null) null else ApiClient(p.serverUrl)
+    // ApiClient 绑定的是建立它的那个账号(deviceId):令牌按那个账号读、按那个
+    // 账号换、吊销了也只登出那个账号。所以 key 必须是 deviceId —— 以前按
+    // serverUrl + userId 认,同一台服务器上的两个配对会共用一个 client,而 client
+    // 里读的又是「当前活动账号」的票。换票的单飞锁现在按账号全进程共用
+    // (见 ApiClient.refreshLockFor),设置页另起的 client 也不会和这里抢着换票。
+    val client = remember(p?.deviceId, p?.serverUrl) {
+        if (p == null) null else ApiClient(p)
     }
     val state = remember(client) {
         if (client == null) null else CalendarState(client, scope)
@@ -256,6 +257,7 @@ fun MainScreen(
     }
 
     val ui by state.ui.collectAsState()
+    val signedOutNotices by ProfileStore.signedOutNotices.collectAsState()
     // Observe locale so the anchor label (date formatters + agenda range)
     // and the inline "up to date" dialog re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -290,6 +292,23 @@ fun MainScreen(
                 onOpenSettings = { showSettings = true },
             )
             HorizontalDivider()
+
+            // 另一个账号被服务端登出了、本机切到了这个账号。放在最上面、用醒目的
+            // 颜色、要用户自己点掉 —— 以前是静默切走,用户以为自己还在原来那个
+            // 账号里,看着的却是另一个账号的日历。
+            for (notice in signedOutNotices) {
+                SignedOutNoticeBanner(
+                    notice = notice,
+                    currentEmail = p.email.ifBlank { p.displayName ?: p.userId },
+                    onSignInAgain = {
+                        // 登录页的服务器地址预填成被登出的那个账号的服务器。
+                        ProfileStore.rememberServerUrl(notice.serverUrl)
+                        ProfileStore.dismissSignedOutNotice(notice.profileId)
+                        onAddAccount()
+                    },
+                    onDismiss = { ProfileStore.dismissSignedOutNotice(notice.profileId) },
+                )
+            }
 
             // Staged-update banner (re-added in v0.8; a minimal banner was
             // removed in v0.7.3). Non-blocking: a new version has already
@@ -361,8 +380,15 @@ fun MainScreen(
                             onEventDelete = { state.delete(it) },
                         )
                     }
-                    if (ui.error != null) {
-                        ErrorBanner(message = ui.error!!, onRetry = { state.load() })
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        if (ui.error != null) {
+                            ErrorBanner(message = ui.error!!, onRetry = { state.load() })
+                        }
+                        // 删除 / 拖动改时间 / 撤销删除失败。这几条路上没有弹窗,
+                        // 以前失败写进 formError(只有编辑弹窗会画它),等于没写。
+                        ui.actionError?.let { msg ->
+                            ActionErrorBanner(message = msg, onDismiss = { state.dismissActionError() })
+                        }
                     }
                     ui.undoDelete?.let { undo ->
                         UndoDeleteSnackbar(
@@ -486,7 +512,7 @@ fun MainScreen(
     // closes the dialog. Floats above everything via AlertDialog.
     if (showSearch) {
         SearchDialog(
-            serverUrl = p.serverUrl,
+            profile = p,
             onJumpToDate = { day ->
                 state.jumpToDay(day)
                 showSearch = false
@@ -816,6 +842,87 @@ private fun ErrorBanner(message: String, onRetry: () -> Unit) {
         Spacer(Modifier.width(12.dp))
         OutlinedButton(onClick = onRetry) {
             Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("error.retry") })
+        }
+    }
+}
+
+/** 弹窗外的操作（删除 / 拖动改时间 / 撤销删除）失败的提示条。不自动消失：
+ *  这是「你刚才那一下没成」，一闪而过就又回到了「什么都没发生」。 */
+@Composable
+private fun ActionErrorBanner(message: String, onDismiss: () -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        IconButton(onClick = onDismiss) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("event.detail.close") },
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/** 「某账号已被登出，现在显示的是另一个账号」。醒目、可关闭，带「重新登录」。 */
+@Composable
+private fun SignedOutNoticeBanner(
+    notice: cn.bywave.calendar.desktop.data.auth.SignedOutNotice,
+    currentEmail: String,
+    onSignInAgain: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    // 存的是邮箱 + key，这里才翻译：提示挂着的时候用户切了语言也跟得上。
+    val message = remember(locale, notice, currentEmail) {
+        cn.bywave.calendar.desktop.i18n.I18n.t(
+            "auth.otherAccountSignedOut",
+            mapOf("email" to notice.email, "current" to currentEmail),
+        )
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.AutoMirrored.Filled.Logout,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(12.dp))
+        TextButton(onClick = onSignInAgain) {
+            Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("auth.signInAgain") })
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("event.detail.close") },
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
