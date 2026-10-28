@@ -1,7 +1,10 @@
 package cn.bywave.calendar
 
+import cn.bywave.calendar.data.auth.SignInPrefill
+import cn.bywave.calendar.data.auth.SignInPrefillSlot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -48,6 +51,34 @@ class AuthRoutingTest {
     fun `还登着就从不清栈`() {
         assertFalse(AuthRouting.mustResetToSetup(signedIn = true, stack = listOf("calendar", "settings")))
         assertFalse(AuthRouting.mustResetToSetup(signedIn = true, stack = listOf("calendar", "setup")))
+    }
+
+    @Test
+    fun `重新登录_从日历页点才去登录页_登录页已经在栈顶就不去`() {
+        assertTrue("日历页上点「重新登录」要去登录页", AuthRouting.signInAgainOpensSetup(AuthRouting.CALENDAR))
+        assertFalse("连点的第二下：第一下已经进了登录页", AuthRouting.signInAgainOpensSetup(AuthRouting.SETUP))
+        assertFalse("登录页上面压着扫码页，也是已经在登录流程里了", AuthRouting.signInAgainOpensSetup(AuthRouting.SCANNER))
+    }
+
+    @Test
+    fun `连点两下重新登录_格子里不留没人取的预填`() {
+        // 照 MainActivity 里 onSignInAgain 的样子走一遍（接线在 SignInWiringTest 里盯）：
+        // 过闸 → 放预填 → 进登录页（launchSingleTop）；登录页一建出来就取走。
+        val slot = SignInPrefillSlot()
+        val stack = mutableListOf(AuthRouting.CALENDAR)
+        val bob = SignInPrefill(serverUrl = "https://cal.example.com", email = "bob@example.com")
+        fun tapSignInAgain() {
+            if (AuthRouting.signInAgainOpensSetup(stack.last())) {
+                slot.put(bob)
+                if (stack.last() != AuthRouting.SETUP) stack += AuthRouting.SETUP
+            }
+        }
+
+        tapSignInAgain()
+        assertEquals("登录页建出来时该取到预填", bob, slot.take())
+        // 第二下落在日历页的退场动画上 —— 导航是同步的，栈顶已经是登录页。
+        tapSignInAgain()
+        assertNull("第二下放的预填没人取：以后清栈回登录页时会把 bob 填在空白登录页上", slot.take())
     }
 
     // ---- MainActivity 的接线 ----

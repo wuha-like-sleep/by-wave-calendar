@@ -111,6 +111,10 @@ private fun AppRoot() {
             .filter { it.destination !is NavGraph }
             .map { it.destination.route }
         if (AuthRouting.mustResetToSetup(signedIn = loggedIn, stack = stack)) {
+            // 这一张登录页是空白的。往登录页跳的每一处都先说清楚要不要预填（「添加账号」
+            // 清空、「重新登录」放那个账号），这里也一样：格子里不管留着什么，都不能
+            // 被这张登录页捡到。
+            profiles.prefillNextSignIn(null)
             nav.navigate(AuthRouting.SETUP) {
                 popUpTo(nav.graph.id) { inclusive = true }
                 launchSingleTop = true
@@ -196,9 +200,16 @@ private fun AppRoot() {
                     // 从「已被登出」提示条进来：登录页预填那个账号的服务器和邮箱，只差输密码。
                     // 提示不在这里收：重新登回那个账号时 upsertAndActivate 会收掉；
                     // 进了登录页又按返回回来，提示还得在。
-                    profiles.prefillNextSignIn(SignInPrefill(serverUrl = notice.serverUrl, email = notice.email))
-                    // 连点两下不能压两张登录页：第二张建出来时预填已经被第一张取走，是空白的。
-                    nav.navigate(AuthRouting.SETUP) { launchSingleTop = true }
+                    //
+                    // 连点两下：第一下点完，返回栈顶当场就是登录页（日历页还在退场动画里，
+                    // 按钮还点得到）。第二下既不放预填、也不进登录页 —— 放了也没有新登录页
+                    // 来取，它会一直留在格子里，到「最后一个账号也没了、清栈回登录页」时
+                    // 把这个已登出账号填出来。见 AuthRouting.signInAgainOpensSetup。
+                    if (AuthRouting.signInAgainOpensSetup(nav.currentDestination?.route)) {
+                        profiles.prefillNextSignIn(SignInPrefill(serverUrl = notice.serverUrl, email = notice.email))
+                        // launchSingleTop 兜底：上面那道闸万一漏了，也不会压两张登录页。
+                        nav.navigate(AuthRouting.SETUP) { launchSingleTop = true }
+                    }
                 },
                 onOpenSearch = { nav.navigate("search") },
             )
