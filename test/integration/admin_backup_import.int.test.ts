@@ -325,6 +325,55 @@ describe("旧备份缺表：先拦下，站长确认了才清空", () => {
     expect(Object.keys(blockedTables(res.body)).sort()).toEqual(["bookings", "devices"]);
   });
 
+  // ── 拦截自己写的那条审计记录 ──────────────────────────────────────────
+  // 被拦那一下会往 admin_audit_log 写一条 backup.restore_blocked。旧备份里多半也没有
+  // admin_audit_log；库里这张表本来是空的话，第一次它不在清单上，站长按清单确认、
+  // 重新提交 —— 以前这时它多了上一轮拦截自己写的那一行，变成「缺、有数据、没确认」，
+  // 于是再被拦一轮，清单里莫名多出一张 admin_audit_log (1)。
+  async function bundleWithout(...tables: string[]): Promise<Buffer> {
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    for (const t of tables) delete bundle.tables[t];
+    return Buffer.from(JSON.stringify(bundle));
+  }
+
+  it("**被拦那一下写的审计记录，不会让确认后的提交再被拦一轮**", async () => {
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    const file = await bundleWithout("bookings", "devices", "admin_audit_log");
+    expect((await db.select().from(schema.adminAuditLog)).length, "起点不是空的审计表，验不出这条").toBe(0);
+
+    const blocked = await importBackup(s, file);
+    expect(blocked.statusCode).toBe(200);
+    expect(Object.keys(blockedTables(blocked.body)).sort()).toEqual(["bookings", "devices"]);
+    const written = (await db.select().from(schema.adminAuditLog)).map((r) => r.action);
+    expect(written, "拦截时没写审计记录 —— 下面这条什么也没验到").toEqual(["backup.restore_blocked"]);
+
+    const value = /name="confirmEmptyTables"[^>]*value="([^"]*)"/.exec(confirmForm(blocked.body))?.[1] ?? "";
+    const res = await importBackup(s, file, { confirmEmptyTables: value });
+    expect(
+      [302, 303],
+      `站长按清单确认之后又被拦了一轮：${JSON.stringify(blockedTables(res.body))} —— ` +
+        "多出来的 admin_audit_log 那一行是上一轮拦截自己写的",
+    ).toContain(res.statusCode);
+    expect(decodeURIComponent(String(res.headers.location))).toContain("success=");
+    expect((await counts()).bookings).toBe(0);
+  });
+
+  it("审计表里真有别的记录 → 照样拦，行数里不算拦截记录", async () => {
+    // 少了这条，「数审计表时一行都不算」的实现也能让上面那条绿 —— 那就是把真的审计底账
+    // 不打招呼地清掉了。
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    await db.insert(schema.adminAuditLog).values({ actorUserId: admin.id, action: "api_token.create", ip: "127.0.0.1" });
+    const file = await bundleWithout("bookings", "devices", "admin_audit_log");
+
+    const first = await importBackup(s, file);
+    expect(blockedTables(first.body), "真的审计记录没被当成数据").toEqual({ bookings: 1, devices: 1, admin_audit_log: 1 });
+    // 第二次（没确认）：库里多了一条 restore_blocked，但清单上的行数还是 1。
+    const second = await importBackup(s, file);
+    expect(blockedTables(second.body).admin_audit_log, "拦截自己写的记录被算进了行数").toBe(1);
+  });
+
   it("缺的表库里本来就没数据 → 不拦，直接恢复", async () => {
     // 少了这条，「凡是缺表就拦」的实现也能让上面几条绿。
     const admin = await seedInUse();

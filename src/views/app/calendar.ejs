@@ -169,6 +169,8 @@
 
   <div data-pane="file" class="import-pane">
     <form method="post" action="/app/calendars/<%= calendar.id %>/import/file" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-2">
+      <%# _csrf 必须排在文件框前面：服务端拿到文件那一刻，只解析过文件之前的字段。 %>
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="file" name="file" accept=".ics,text/calendar" required
              class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.fileSubmit") %></button>

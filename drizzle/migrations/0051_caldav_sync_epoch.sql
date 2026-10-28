@@ -38,7 +38,9 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS caldav_sync_epoch text NOT NU
 -- src/lib/auto_migrate.ts 每次开机都跑迁移器,而历史上出现过「迁移器记账和
 -- 真实 schema 对不上、整条链重放」的情况。写 now() / 自增的话,第二遍会再 bump
 -- 一次,全体客户端再白列一轮,而且「跑两遍结果一致」这条根本没法断言。
--- 写死字面量 + `IS DISTINCT FROM` 之后,第二遍匹配不到任何行,是真正的 no-op。
+-- 写死字面量 + `IS DISTINCT FROM` 之后,两次运行之间没人在后台按过「让所有设备重新同步」
+-- 的话,第二遍匹配不到任何行,什么都不改;按过的话会被写回这个字面量,客户端多列一遍,
+-- 不会少东西。
 --
 -- 为什么用 `IS DISTINCT FROM` 而不是 `<`(或者干脆换成自增整数):
 -- 这一列以后会有第二个 bump 源(后台按钮,见 site_settings.ts 的
@@ -48,7 +50,7 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS caldav_sync_epoch text NOT NU
 -- 而后台写进去的串和任何一版的常量都不同,两个源互相遮不住。
 --
 -- 整条链一次性重放(0051 设 A、将来的 00NN 设 B)也是安全的:末尾以最后一条为准,
--- 和重放前的值相同,净效果是 no-op。
+-- 后台没按过的话和重放前的值相同,净效果是 no-op。
 --
 -- 匹配不到行的唯一情况是**全新安装**——site_settings 那一行是第一次读设置时
 -- 才懒插入的(src/lib/site_settings.ts loadFromDb),此刻还不存在,于是它带着
