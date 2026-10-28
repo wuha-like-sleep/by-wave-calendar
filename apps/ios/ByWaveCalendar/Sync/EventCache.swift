@@ -30,8 +30,13 @@ final class EventCache: @unchecked Sendable {
 
     private let fileManager = FileManager.default
     /// Dedicated serial queue so reads + writes can't trample each
-    /// other. Background QoS — cache work is never user-blocking.
-    private let queue = DispatchQueue(label: "cn.bywave.calendar.eventcache", qos: .background)
+    /// other.
+    ///
+    /// 不能用 .background：日历一打开就在等这次读取（读完才去发网络请求），
+    /// 它是挡在用户眼前的。.background 在系统忙、低电量模式、发热降频时会被饿上
+    /// 很久——实测机器负载高时日历一直转圈，网络请求一分钟都没发出去，
+    /// 离线缓存明明就在磁盘上。
+    private let queue = DispatchQueue(label: "cn.bywave.calendar.eventcache", qos: .userInitiated)
 
     // Bump on schema-breaking changes so old cache files get ignored
     // instead of crashing on decode.
