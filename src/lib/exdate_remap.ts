@@ -9,16 +9,22 @@
 //   · 那个时刻在新排法里还是一次：原样不动。
 //   · 不是了（以前画在周二的「每周一」例会、夏令时后 10:30 的 9:30 例会）：换成新排法里
 //     离它最近的那一次。两种排法同一次最多差「一天 + 夏令时」，超过 26 小时就不是同一次，原样保留。
+//     「差一天」只会往一个方向差：新时区比旧时区快（UTC → 墨尔本 / 北京）新的那次只会更早，
+//     慢（UTC → 纽约）只会更晚。所以只在那一侧找一天，另一侧只容夏令时那几个小时 ——
+//     不然「每周一三五」这种隔天的规则两边各有一次，夏令时一来最近的就成了错的那边。
 //   · 那个时刻本来就不是旧排法里的一次（规则后来改过留下的、写坏的）：原样保留，不猜。
 // 「原样不动」优先，所以跑完再跑一遍什么都不改；恢复一份升级后的备份再跑也一样。
 //
 // 纯函数，只依赖 rrule_expand：scripts/migrate.ts 也要用。
 
 import { seriesStartsBetween } from "./rrule_expand.js";
+import { zoneOffsetMs } from "./zoned_time.js";
 
 const HOUR = 60 * 60 * 1000;
 /** exdate：旧的一次和新的一次最多差「一天 + 夏令时」= 25 小时。 */
 const EXDATE_WINDOW_MS = 26 * HOUR;
+/** 不会错一天的那一侧只容夏令时：两个时区的夏令时一进一出，最多差 2 小时。 */
+const DST_ONLY_WINDOW_MS = 3 * HOUR;
 /**
  * UNTIL 只在「同一天、只差夏令时」时跟着挪。差一天的（「每周一」以前画在周二）不挪：
  * 「这次及以后」拆出来的新系列从周二开始、规则是每周一，按新排法周二那次本来就不算；
@@ -54,15 +60,36 @@ export type ZoneChangeResult = {
 
 const NOTHING: ZoneChangeResult = { rewritten: 0, unmapped: 0 };
 
-function nearest(candidates: Date[], t: number, windowMs: number): Date | null {
+/** 往前、往后各看多远。新时区在 DTSTART 那一刻比旧时区快：错一天只会往前错；慢：只会往后。 */
+function searchWindow(startsAt: Date, fromZone: string, toZone: string): { before: number; after: number } {
+  const s0 = startsAt.getTime();
+  const d0 = (zoneOffsetMs(s0, toZone) ?? 0) - (zoneOffsetMs(s0, fromZone) ?? 0);
+  return {
+    before: d0 > 0 ? EXDATE_WINDOW_MS : DST_ONLY_WINDOW_MS,
+    after: d0 < 0 ? EXDATE_WINDOW_MS : DST_ONLY_WINDOW_MS,
+  };
+}
+
+function nearest(candidates: Date[], t: number, win: { before: number; after: number }): Date | null {
   let best: Date | null = null;
   let bestDist = Infinity;
   for (const c of candidates) {
-    const dist = Math.abs(c.getTime() - t);
+    const delta = c.getTime() - t;
+    if (delta < -win.before || delta > win.after) continue;
     // 一样近取早的那个（< 不是 <=，candidates 是升序的）。
-    if (dist <= windowMs && dist < bestDist) { best = c; bestDist = dist; }
+    const dist = Math.abs(delta);
+    if (dist < bestDist) { best = c; bestDist = dist; }
   }
   return best;
+}
+
+/** 升序数组里落在 [t − before, t + after] 的那几个（二分找起点）。 */
+function candidatesAround(sorted: Date[], t: number, win: { before: number; after: number }): Date[] {
+  let a = 0, b = sorted.length;
+  while (a < b) { const m = (a + b) >> 1; if (sorted[m]!.getTime() < t - win.before) a = m + 1; else b = m; }
+  const out: Date[] = [];
+  for (let i = a; i < sorted.length && sorted[i]!.getTime() <= t + win.after; i++) out.push(sorted[i]!);
+  return out;
 }
 
 function isStartOf(ev: { startsAt: Date; rrule: string }, zone: string, t: number): boolean {
@@ -71,25 +98,39 @@ function isStartOf(ev: { startsAt: Date; rrule: string }, zone: string, t: numbe
   return !!hit && hit.some((d) => d.getTime() === t);
 }
 
-/** exdates 部分。null = 规则解析不了，整件事不做。 */
+/**
+ * 一个事件的全部 exdate 只展开两遍（新、旧排法各一遍，窗口盖住最早到最晚那条），
+ * 不是每条各展开一遍：rrule 每次都从 DTSTART 数起，一个日历几千个事件时按条展开要几十秒。
+ */
+const SCAN_CAP = 200_000;
+
+/** exdates 部分。null = 规则解析不了（或者窗口里多到数不完），整件事不做。 */
 function remapExdates(
   ev: { startsAt: Date; rrule: string }, raw: string[], fromZone: string, toZone: string,
 ): { exdates: string[]; rewritten: number; unmapped: number } | null {
+  const win = searchWindow(ev.startsAt, fromZone, toZone);
+  const times = raw.map((s) => +new Date(s)).filter((t) => !Number.isNaN(t));
+  if (times.length === 0) return { exdates: raw, rewritten: 0, unmapped: 0 };
+  const lo = Math.min(...times);
+  const hi = Math.max(...times);
+  const series = (zone: string, from: number, to: number) => seriesStartsBetween(
+    { startsAt: ev.startsAt, rrule: ev.rrule, allDay: false, timeZone: zone }, new Date(from), new Date(to), SCAN_CAP,
+  );
+  const fresh = series(toZone, lo - win.before, hi + win.after);
+  const legacy = series(fromZone, lo, hi);
+  if (!fresh || !legacy || fresh.length >= SCAN_CAP || legacy.length >= SCAN_CAP) return null;
+  const freshSet = new Set(fresh.map((d) => d.getTime()));
+  const legacySet = new Set(legacy.map((d) => d.getTime()));
+
   let unmapped = 0;
   const plan: { value: string; ms: number; moved: boolean }[] = [];
   for (const s of raw) {
     const t = +new Date(s);
-    if (Number.isNaN(t)) { plan.push({ value: s, ms: t, moved: false }); continue; }
-    const near = seriesStartsBetween(
-      { startsAt: ev.startsAt, rrule: ev.rrule, allDay: false, timeZone: toZone },
-      new Date(t - EXDATE_WINDOW_MS), new Date(t + EXDATE_WINDOW_MS),
-    );
-    if (!near) return null;
-    if (near.some((d) => d.getTime() === t) || !isStartOf(ev, fromZone, t)) {
+    if (Number.isNaN(t) || freshSet.has(t) || !legacySet.has(t)) {
       plan.push({ value: s, ms: t, moved: false });
       continue;
     }
-    const target = nearest(near, t, EXDATE_WINDOW_MS);
+    const target = nearest(candidatesAround(fresh, t, win), t, win);
     if (!target) { unmapped++; plan.push({ value: s, ms: t, moved: false }); continue; }
     plan.push({ value: target.toISOString(), ms: target.getTime(), moved: true });
   }
@@ -130,7 +171,7 @@ function remapSplitUntil(ev: { startsAt: Date; rrule: string }, fromZone: string
     { ...bare, allDay: false, timeZone: toZone }, new Date(u - UNTIL_WINDOW_MS), new Date(u + UNTIL_WINDOW_MS),
   );
   if (!near || near.some((d) => d.getTime() === u) || !isStartOf(bare, fromZone, u)) return null;
-  const target = nearest(near, u, UNTIL_WINDOW_MS);
+  const target = nearest(near, u, { before: UNTIL_WINDOW_MS, after: UNTIL_WINDOW_MS });
   if (!target) return null;
   const next = [...parts];
   next[idx] = `UNTIL=${formatUntil(new Date(target.getTime() - 1000))}`;

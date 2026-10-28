@@ -136,6 +136,38 @@ describe("墨尔本早上 9:30「每个工作日」站会：以前画在周二�
   });
 });
 
+describe("隔天的规则（一三五）：两边各有一次，只能往错一天的那一侧找", () => {
+  const rrule = "FREQ=WEEKLY;BYDAY=MO,WE,FR";
+  const label = (tz: string, x: string) => `${dayIn(tz, x)} ${weekdayIn(tz, x)}`;
+
+  it("墨尔本 9 月建的 09:30，10 月（夏令时）删的：画在周二 10:30 的是周一那次，不是周三", () => {
+    const startsAt = D("2026-09-27T23:30:00Z");   // 周一 09-28 09:30 AEST
+    // 旧算法按 UTC 的一三五 23:30Z = 墨尔本二四六 10:30 AEDT
+    const tue = "2026-10-12T23:30:00.000Z", thu = "2026-10-14T23:30:00.000Z", sat = "2026-10-16T23:30:00.000Z";
+    expect([tue, thu, sat].map((x) => weekdayIn(MEL, x))).toEqual(["Tue", "Thu", "Sat"]);
+    const r = remap(startsAt, rrule, [tue, thu, sat]);
+    expect(r.exdates.map((x) => label(MEL, x))).toEqual(["2026-10-12 Mon", "2026-10-14 Wed", "2026-10-16 Fri"]);
+  });
+
+  it("纽约周一三五晚上 8 点（冬令时）：画在周二的是周三那次，不是周一（两边一样近也不能取早的）", () => {
+    const startsAt = D("2026-11-03T01:00:00Z");   // 纽约 11-02 周一 20:00 EST
+    // 旧算法：UTC 的一三五 01:00Z = 纽约日二四 20:00
+    const tue = "2026-11-11T01:00:00.000Z", thu = "2026-11-13T01:00:00.000Z";
+    expect([tue, thu].map((x) => weekdayIn(NY, x))).toEqual(["Tue", "Thu"]);
+    const r = remap(startsAt, rrule, [tue, thu], NY);
+    expect(r.exdates.map((x) => label(NY, x))).toEqual(["2026-11-11 Wed", "2026-11-13 Fri"]);
+  });
+
+  it("改日历时区（上海 → 纽约），纽约周一三五 13:00：上海排法里画在周二的对到周三", () => {
+    // 纽约 11-02 周一 13:00 EST = 18:00Z = 上海周二 02:00。按上海排的「一三五」落在纽约的日二四。
+    const startsAt = D("2026-11-02T18:00:00Z");
+    const tue = "2026-11-10T18:00:00.000Z";   // 上海 11-11 周三 02:00 = 纽约 11-10 周二 13:00
+    expect(weekdayIn(NY, tue)).toBe("Tue");
+    const r = remapSeriesForZoneChange({ startsAt, rrule, allDay: false, exdates: [tue], fromZone: "Asia/Shanghai", toZone: NY });
+    expect(r.exdates!.map((x) => label(NY, x))).toEqual(["2026-11-11 Wed"]);
+  });
+});
+
 describe("只差夏令时（不带 BYDAY）", () => {
   const startsAt = D("2026-09-20T23:30:00Z");   // 2026-09-21 周一 09:30 AEST
   const rrule = "FREQ=WEEKLY";
@@ -252,13 +284,14 @@ describe("展开本身的几处边角", () => {
   });
 
   it("UNTIL 按真实时刻截：夏令时拨回那一小时里也不多给、不少给", () => {
-    // 墨尔本 2027-04-04 03:00 AEDT 拨回 02:00 AEST。每小时一次，UNTIL = 第二遍 02:30 AEST（16:30Z）。
-    const s = D("2027-04-03T14:30:00Z");   // 04-04 01:30 AEDT
+    // 墨尔本 2027-04-04 03:00 AEDT 拨回 02:00 AEST。每小时一次，从 01:30 AEDT（14:30Z）起，
+    // UNTIL = 15:30Z（= 02:30 AEDT，拨回之前那一遍）。墙上读数里第二遍 02:30 AEST（16:30Z）
+    // 和它读数相同，只按墙上时间比会多给一次；UNTIL 那一次本身（含）要给。
+    const s = D("2027-04-03T14:30:00Z");
     const occ = expandEvent(
       { id: "e", startsAt: s, endsAt: new Date(s.getTime() + 60_000), rrule: "FREQ=HOURLY;UNTIL=20270403T153000Z", allDay: false, timeZone: MEL },
       D("2027-04-03T00:00:00Z"), D("2027-04-05T00:00:00Z"),
     );
-    expect(occ.every((o) => o.startsAt.getTime() <= D("2027-04-03T15:30:00Z").getTime())).toBe(true);
-    expect(occ.map((o) => o.startsAt.toISOString())).toContain("2027-04-03T14:30:00.000Z");
+    expect(occ.map((o) => o.startsAt.toISOString())).toEqual(["2027-04-03T14:30:00.000Z", "2027-04-03T15:30:00.000Z"]);
   });
 });

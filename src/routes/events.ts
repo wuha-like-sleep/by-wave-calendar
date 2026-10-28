@@ -761,7 +761,8 @@ export async function eventRoutes(app: FastifyInstance) {
       allDay: body.allDay ?? target.allDay,
       rrule: body.rrule ?? target.rrule,
       extra: nextExtra !== undefined ? nextExtra : target.extra,
-      rruleSentByClient: body.rrule != null,
+      // App 保存时会把没改的规则原样带回来，那不算「用户刚设了结束时间」。
+      rruleSentByClient: body.rrule != null && body.rrule !== target.rrule,
     });
     const [row] = await db
       .update(schema.events)

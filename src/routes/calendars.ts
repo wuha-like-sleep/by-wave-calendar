@@ -39,7 +39,10 @@ async function resyncRecurringForZoneChange(tx: Tx, calendarId: string, oldTz: s
     .where(and(
       eq(schema.events.calendarId, calendarId), isNull(schema.events.deletedAt),
       eq(schema.events.allDay, false), isNotNull(schema.events.rrule), ne(schema.events.rrule, ""),
-    ));
+    ))
+    // 锁住这批行：循环要逐条算，期间手机 PUT、「删掉这一次」改了同一条的话，
+    // 会被这里读进来的旧 exdates / 旧规则盖掉。锁着就排在后面、改的是改过之后的那份。
+    .for("update");
   for (const ev of rows) {
     const zoneWith = (calendarTimezone: string) => expansionTimeZone({
       allDay: false, extra: ev.extra, calendarTimezone, rawStartIsUtc: rawIcsStartIsUtc(ev.rawIcs),

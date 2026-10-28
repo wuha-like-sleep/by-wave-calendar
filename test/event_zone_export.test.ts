@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { expansionTimeZone, exportTimeZone, rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../src/lib/event_zone.js";
-import { serializeEvent, type IcalEvent } from "../src/lib/ical.js";
+import { parseEvent, serializeEvent, type IcalEvent } from "../src/lib/ical.js";
 import { importTimeZone, mergeImportExtra } from "../src/lib/ics_import.js";
 
 // 「按哪个时区展开 / 导出」只有一份口径（event_zone.ts）。展开（服务端）和导出（手机）
@@ -56,13 +56,17 @@ describe("expansionTimeZone 的顺序", () => {
     })).toBe("UTC");
   });
 
-  it("Intl 认、手机不认的写法不算时区名：+08:00、CST、EST 一律回落", () => {
-    for (const tz of ["+08:00", "CST", "EST", "GMT+8"]) {
+  it("偏移写法不算时区名（+08:00、GMT+8 一律回落）；别名规范成 IANA 名（PRC、US/Eastern、GMT）", () => {
+    for (const tz of ["+08:00", "-05:00", "GMT+8"]) {
       expect(expansionTimeZone({ allDay: false, extra: { timezone: tz }, calendarTimezone: tz }), tz).toBe("UTC");
     }
+    expect(expansionTimeZone({ allDay: false, extra: { timezone: "PRC" }, calendarTimezone: null })).toBe("Asia/Shanghai");
+    expect(expansionTimeZone({ allDay: false, extra: null, calendarTimezone: "US/Eastern" })).toBe("America/New_York");
+    expect(expansionTimeZone({ allDay: false, extra: { timezone: "GMT" }, calendarTimezone: "Asia/Shanghai" })).toBe("UTC");
+    expect(exportTimeZone({ allDay: false, extra: { timezone: "PRC" }, calendarTimezone: null, rrule: "FREQ=WEEKLY" })).toBe("Asia/Shanghai");
     expect(expansionTimeZone({ allDay: false, extra: { timezone: "Etc/GMT-8" }, calendarTimezone: null })).toBe("Etc/GMT-8");
     expect(expansionTimeZone({ allDay: false, extra: { timezone: "America/Argentina/Buenos_Aires" }, calendarTimezone: null }))
-      .toBe("America/Argentina/Buenos_Aires");
+      .toMatch(/Buenos_Aires$/);   // 三段式的名字照样认（ICU 会规范成 America/Buenos_Aires）
   });
 
   it("extra.timezone 是 UTC 的导出写成 …Z，不写 TZID=UTC", () => {
@@ -75,6 +79,7 @@ describe("importTimeZone：导入 / 订阅进来的重复事件记下按哪个�
     expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: "America/New_York" })).toBe("America/New_York");
     expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: null })).toBe("UTC");
     expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: "China Standard Time" })).toBe("UTC");
+    expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: "US/Eastern" })).toBe("America/New_York");
   });
   it("不重复、全天：不记", () => {
     expect(importTimeZone({ allDay: false, rrule: null, timezone: "America/New_York" })).toBeNull();
@@ -156,5 +161,22 @@ describe("serializeEvent：重复事件的 DTSTART / EXDATE 写成同一时区�
     expect(ics).toContain("DTSTART;VALUE=DATE:20261005");
     expect(ics).toContain("EXDATE;VALUE=DATE:20261012");
     expect(ics).not.toContain("TZID=");
+  });
+});
+
+describe("读 TZID 时刻：夏令时切换前十来个小时也不差一小时", () => {
+  it("墨尔本 10-03 18:00（还是 AEST +10，第二天凌晨才进夏令时）= 08:00Z", () => {
+    const ev = parseEvent([
+      "BEGIN:VEVENT", "UID:dst-edge", "SUMMARY:x",
+      "DTSTART;TZID=Australia/Melbourne:20260926T180000", "DTEND;TZID=Australia/Melbourne:20260926T190000",
+      "RRULE:FREQ=WEEKLY", "EXDATE;TZID=Australia/Melbourne:20261003T180000", "END:VEVENT",
+    ].join("\r\n"))!;
+    expect(ev.exdates).toEqual(["2026-10-03T08:00:00.000Z"]);
+    // 夏令时之后的那一周：+11
+    const after = parseEvent([
+      "BEGIN:VEVENT", "UID:dst-edge2", "SUMMARY:x",
+      "DTSTART;TZID=Australia/Melbourne:20261010T180000", "DTEND;TZID=Australia/Melbourne:20261010T190000", "END:VEVENT",
+    ].join("\r\n"))!;
+    expect(after.startsAt.toISOString()).toBe("2026-10-10T07:00:00.000Z");
   });
 });

@@ -206,7 +206,7 @@ const OUT_OF_WINDOW_CALL_LIMIT = 50_000;
  * 不占这个额度 —— 占的话，密集规则（FREQ=SECONDLY）光余量就把额度用光，返回 0 次，
  * 事件整个从日历和提醒里消失；UTC 那条路是 366 次。
  */
-function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date): Date[] {
+function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date, cap = MAX_OCCURRENCES_PER_EVENT): Date[] {
   const offFrom = toWallClock(from, tz).getTime() - from.getTime();
   const offTo = toWallClock(to, tz).getTime() - to.getTime();
   const wallFrom = new Date(from.getTime() + Math.min(offFrom, offTo) - WALL_WINDOW_SLACK_MS);
@@ -226,7 +226,7 @@ function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date): D
     } else {
       outside++;
     }
-    return out.length < MAX_OCCURRENCES_PER_EVENT && outside < OUT_OF_WINDOW_CALL_LIMIT;
+    return out.length < cap && outside < OUT_OF_WINDOW_CALL_LIMIT;
   });
   return out.sort((a, b) => a.getTime() - b.getTime());
 }
@@ -242,9 +242,13 @@ function wallToReal(d: Date, wall: WallRule, tz: string): Date {
 // 要对到新的日子上」用（exdate_remap.ts）。和 expandEvent 是同一条路，口径只有一份。
 // ---------------------------------------------------------------------------
 
-/** 解析不了返回 null。全天 / UTC 走原来那条路。 */
+/**
+ * 解析不了返回 null。全天 / UTC 走原来那条路。
+ * cap 默认和 expandEvent 一样；数据迁移一次要看很长一段，传大的，收满了自己判「数不完」。
+ */
 export function seriesStartsBetween(
   event: Pick<EventForExpansion, "startsAt" | "rrule" | "allDay" | "timeZone">, from: Date, to: Date,
+  cap = MAX_OCCURRENCES_PER_EVENT,
 ): Date[] | null {
   if (!event.rrule) return null;
   let utcRule: RRuleType;
@@ -252,8 +256,8 @@ export function seriesStartsBetween(
   const tz = zoneFor(event);
   const wall = tz ? toWallClockRule(utcRule, event.startsAt, tz) : null;
   try {
-    if (wall && tz) return zonedStartsBetween(wall, tz, from, to);
-    return utcRule.between(from, to, true, (_d: Date, i: number) => i < MAX_OCCURRENCES_PER_EVENT);
+    if (wall && tz) return zonedStartsBetween(wall, tz, from, to, cap);
+    return utcRule.between(from, to, true, (_d: Date, i: number) => i < cap);
   } catch {
     return null;
   }

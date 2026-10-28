@@ -43,16 +43,26 @@ function formatterFor(tz: string): Intl.DateTimeFormat | null {
 }
 
 /**
- * 是不是一个 IANA 时区名（"Australia/Melbourne"、"UTC"…）。空串、非字符串一律 false。
- * 只认「地区/城市」形状和 UTC、GMT（个别安卓设备报的就是 GMT）：Node 的 Intl 也认 "+08:00"、"CST"、"EST"，可这些会原样写进
- * 导出的 TZID，手机和别的日历软件不认识，按 UTC 或本机时间去解释。
+ * 规范成 IANA 的「地区/城市」名（或 UTC）。认不出、或者规范完还不是这种形状的返回 null。
+ *   · 别名先按 Intl 规范：PRC → Asia/Shanghai、US/Eastern → America/New_York、GMT → UTC。
+ *     不规范的话这些名字会被当成非法、退回日历时区，而手机照着它们排，两边对不上。
+ *   · "+08:00" 这类偏移写法规范完还是它自己：不收。它会原样写进导出的 TZID，手机和别的
+ *     日历软件不认识，按 UTC 或本机时间去解释。
  */
-export function isValidTimeZone(tz: unknown): tz is string {
-  if (typeof tz !== "string") return false;
+export function canonicalTimeZone(tz: unknown): string | null {
+  if (typeof tz !== "string") return null;
   const t = tz.trim();
-  if (!t || t !== tz) return false;
-  if (t !== "UTC" && t !== "GMT" && !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/.test(t)) return false;
-  return formatterFor(t) !== null;
+  if (!t || t !== tz) return null;
+  const fmt = formatterFor(t);
+  if (!fmt) return null;
+  const name = fmt.resolvedOptions().timeZone;
+  if (name !== "UTC" && !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/.test(name)) return null;
+  return name;
+}
+
+/** 规范得了（见 canonicalTimeZone）。空串、非字符串一律 false。用的时候拿规范后的名字。 */
+export function isValidTimeZone(tz: unknown): tz is string {
+  return canonicalTimeZone(tz) !== null;
 }
 
 const MS_HOUR = 60 * 60 * 1000;

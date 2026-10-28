@@ -6,7 +6,7 @@
 import { getBrandName } from "./email_templates.js";
 import { normalizeAlarms } from "./reminder_triggers.js";
 import { attendeeDetails, type AttendeeLike } from "./attendees.js";
-import { formatWallClockStamp, isValidTimeZone } from "./zoned_time.js";
+import { canonicalTimeZone, formatWallClockStamp, fromWallClock } from "./zoned_time.js";
 
 // PRODID identifies the generating product. Derive it from the site brand so a
 // self-hosted / white-labelled deploy stamps ITS OWN name into every .ics it
@@ -155,7 +155,7 @@ function formatAllDayEnd(startsAt: Date, endsAt: Date): string {
 export function serializeEvent(event: IcalEvent): string {
   // 认不出来的时区名不带 TZID 写出去：以前会写成「TZID=认不出的名字:按 UTC 读出来的
   // 墙上时间」，手机不认识这个 TZID 就当成本机时间，整个事件挪了一个时差。
-  const zone = !event.allDay && isValidTimeZone(event.timezone) ? event.timezone : null;
+  const zone = event.allDay ? null : canonicalTimeZone(event.timezone);
   const lines: string[] = [
     "BEGIN:VEVENT",
     `UID:${event.uid}`,
@@ -279,7 +279,8 @@ export function serializePublishedCalendar(
     `X-WR-CALNAME:${escapeText(cal.name)}`,
   ];
   if (cal.description) head.push(`X-WR-CALDESC:${escapeText(cal.description)}`);
-  if (isValidTimeZone(cal.timezone)) head.push(`X-WR-TIMEZONE:${cal.timezone}`);
+  const calZone = canonicalTimeZone(cal.timezone);
+  if (calZone) head.push(`X-WR-TIMEZONE:${calZone}`);
   if (cal.url) head.push(`URL:${cal.url}`);
   return [
     ...head.map(foldLine),
@@ -552,6 +553,11 @@ function parseICalDateValue(val: string, allDay: boolean, tzid?: string): Date {
   if (isUtc || !tzid) {
     return new Date(Date.UTC(y, mo, d, h, mi, s));
   }
+  // 合法时区走 zoned_time（按目标时刻的偏移迭代求解）。wallClockInZoneToUtc 只按「把读数当 UTC」
+  // 那一刻的偏移估一次：夏令时切换前十来个小时里读错一小时 —— 手机上删掉的那次（EXDATE 带 TZID）
+  // 在网页、App、提醒里删不掉。那个函数只留给 Intl 认、我们不当时区名的写法（+08:00）。
+  const zone = canonicalTimeZone(tzid);
+  if (zone) return fromWallClock(new Date(Date.UTC(y, mo, d, h, mi, s)), zone);
   return wallClockInZoneToUtc(y, mo, d, h, mi, s, tzid);
 }
 

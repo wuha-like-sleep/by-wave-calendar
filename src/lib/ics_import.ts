@@ -3,7 +3,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
 import { safeFetch, SsrfBlockedError } from "./ssrf_guard.js";
-import { isValidTimeZone } from "./zoned_time.js";
+import { canonicalTimeZone } from "./zoned_time.js";
+import { expansionTimeZone, rawIcsStartIsUtc } from "./event_zone.js";
+import { remapSeriesForZoneChange } from "./exdate_remap.js";
 import { env } from "../env.js";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -102,14 +104,16 @@ export function mergeImportExtra(
  * 导入 / 订阅进来的定时重复事件要记下按哪个时区展开（event_zone.ts 第 3 条）。
  * 不记的话会退到日历的时区 —— 每个账号的默认日历都是 Asia/Shanghai，欧美来的订阅源里
  * 「每周一」晚上的课会按上海时间算、错一天。
- *   · 源文件 DTSTART 带合法的 TZID：就用它（和 CalDAV PUT 同一个口径）。
+ *   · 源文件 DTSTART 带 TZID、规范得成 IANA 名（PRC、US/Eastern 这类别名也算）：用规范后的名字。
  *   · 写成 UTC（…Z）、浮动时间、TZID 不认识：UTC。这三种 parseICalDateValue 都是按 UTC
  *     读进来的，按 UTC 展开才和读进来的那个时刻是一回事（也就是 1.7.4 之前的展开方式）。
+ *     「+08:00」这种 Intl 认、但不算时区名的写法例外：时刻是按 +8 读的，按 UTC 排的话
+ *     晚上 8 点前后的会错一天。这种源极少见，先记 UTC。
  * 不重复的、全天的不记：单个时刻写成 UTC 是精确的，不需要。
  */
 export function importTimeZone(ev: Pick<IcalEvent, "allDay" | "rrule" | "timezone">): string | null {
   if (ev.allDay || !ev.rrule) return null;
-  return isValidTimeZone(ev.timezone) ? ev.timezone : "UTC";
+  return canonicalTimeZone(ev.timezone) ?? "UTC";
 }
 
 /**
@@ -130,6 +134,12 @@ function stableJson(v: unknown): string {
   );
 }
 
+async function calendarTimezoneOf(calendarId: string): Promise<string | null> {
+  const [cal] = await db.select({ timezone: schema.calendars.timezone })
+    .from(schema.calendars).where(eq(schema.calendars.id, calendarId)).limit(1);
+  return cal?.timezone ?? null;
+}
+
 async function upsertEvents(
   calendarId: string,
   parsed: IcalEvent[],
@@ -138,6 +148,7 @@ async function upsertEvents(
   let inserted = 0;
   let updated = 0;
   let skipped = 0;
+  let calendarTimezone: string | null | undefined;
 
   for (const ev of parsed) {
     if (!ev.uid || !ev.summary) { skipped++; continue; }
@@ -176,6 +187,19 @@ async function upsertEvents(
       .limit(1);
 
     const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null, importTimeZone(ev));
+    // 这次刷新 / 重新导入把展开时区换了（升级后第一次刷新补上源时区就是这样）：用户在我们这边
+    // 「删掉这一次」记下的那几次要跟着对过去，不然删过的又冒出来。规则是上游给的，UNTIL 不替它挪。
+    let remappedExdates: string[] | undefined;
+    if (existing && !existing.allDay && !ev.allDay && rrule && Array.isArray(existing.exdates) && existing.exdates.length) {
+      calendarTimezone ??= await calendarTimezoneOf(calendarId);
+      const fromZone = expansionTimeZone({
+        allDay: false, extra: existing.extra, calendarTimezone, rawStartIsUtc: rawIcsStartIsUtc(existing.rawIcs),
+      });
+      const toZone = expansionTimeZone({ allDay: false, extra: extraVal, calendarTimezone });
+      remappedExdates = remapSeriesForZoneChange({
+        startsAt: ev.startsAt, rrule, allDay: false, exdates: existing.exdates, fromZone, toZone,
+      }).exdates;
+    }
 
     if (existing) {
       // Leave soft-deleted rows alone: don't resurrect something the user
@@ -192,7 +216,8 @@ async function upsertEvents(
         // 提醒也要算进「有没有变」。不算的话上游把提醒从「提前 1 小时」改成「提前 1 天」
         // 而别的字段没动，这里会判定 unchanged 直接 skip，新提醒永远落不了库 ——
         // extraVal 已经算好了，只是没人写进去，症状是「上游改了但我们这边没反应」。
-        stableJson(extraVal) === stableJson(existing.extra ?? null);
+        stableJson(extraVal) === stableJson(existing.extra ?? null) &&
+        !remappedExdates;
       if (unchanged) { skipped++; continue; }
     }
 
@@ -222,6 +247,7 @@ async function upsertEvents(
           allDay: ev.allDay,
           rrule,
           extra: extraVal,
+          ...(remappedExdates ? { exdates: remappedExdates } : {}),
           updatedAt: new Date(),
         },
       })

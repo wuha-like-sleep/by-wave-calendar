@@ -481,3 +481,34 @@ describe("导入 / 订阅进来的重复事件记下源时区", () => {
     expect(wd).toEqual(["Mon", "Mon", "Mon", "Mon"]);
   });
 });
+
+describe("订阅刷新补上源时区时，删过的那次跟着对过去", () => {
+  it("上海日历订阅一个 UTC 写法的「每周一」，删过 10-12 那次：升级迁移 + 第一次刷新之后仍是删的", async () => {
+    const { importIcsText } = await import("../../src/lib/ics_import.js");
+    const cal = await calendarIn("Asia/Shanghai");
+    const startsAt = new Date("2026-10-05T20:00:00.000Z");   // UTC 周一 20:00 = 上海周二 04:00
+    const deleted = "2026-10-12T20:00:00.000Z";               // 旧算法（按 UTC）的第 2 次
+    // 升级前的样子：订阅进来的、没有时区、用户删过一次
+    const ev = await seed(cal.id, {
+      uid: "sub-weekly-0001", startsAt, endsAt: new Date(startsAt.getTime() + 3600_000),
+      rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=6", extra: { source: "sub:s1" }, exdates: [deleted],
+    });
+    await runDataMigrations(db, { log: quiet });
+    const ics = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//t//t//EN", "BEGIN:VEVENT", "UID:sub-weekly-0001", "SUMMARY:sub-weekly-0001",
+      "DTSTART:20261005T200000Z", "DTEND:20261005T210000Z", "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=6", "END:VEVENT", "END:VCALENDAR", "",
+    ].join("\r\n");
+    await importIcsText(cal.id, ics, { sourceTag: "sub:s1" });
+    const row = await rowOf(ev.id);
+    expect((row.extra as { timezone?: string }).timezone).toBe("UTC");
+    expect(row.exdates, "刷新换了展开时区却没把删过的那次对过去").toEqual([deleted]);
+    const res = await api.inject({
+      method: "GET",
+      url: `/api/v1/events?from=${encodeURIComponent("2026-10-01T00:00:00Z")}&to=${encodeURIComponent("2026-12-01T00:00:00Z")}`,
+      headers: { cookie },
+    });
+    const starts = (res.json() as { events: { id: string; startsAt: string }[] }).events.filter((e) => e.id === ev.id).map((e) => e.startsAt);
+    expect(starts).toHaveLength(5);
+    expect(starts).not.toContain(deleted);
+  });
+});

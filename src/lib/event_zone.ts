@@ -18,7 +18,7 @@
 //
 // 只依赖 zoned_time，不 import env / db：scripts/migrate.ts 也要用它。
 
-import { isValidTimeZone } from "./zoned_time.js";
+import { canonicalTimeZone } from "./zoned_time.js";
 
 /**
  * 原文 VEVENT 的 DTSTART 是不是写成了 UTC 时刻。
@@ -43,13 +43,12 @@ export type EventZoneInputs = {
   rawStartIsUtc?: boolean;
 };
 
-/** extra.timezone，合法才算数。 */
+/** extra.timezone，合法才算数（规范成 IANA 名）。 */
 export function extraTimeZoneOf(extra: unknown): string | null {
   if (!extra || typeof extra !== "object" || Array.isArray(extra)) return null;
   const tz = (extra as { timezone?: unknown }).timezone;
   if (typeof tz !== "string") return null;
-  const t = tz.trim();
-  return isValidTimeZone(t) ? t : null;
+  return canonicalTimeZone(tz.trim());
 }
 
 /** 展开重复规则用的时区。永远返回一个合法的时区名（兜底 "UTC"）。 */
@@ -58,9 +57,8 @@ export function expansionTimeZone(e: EventZoneInputs): string {
   if (e.rawStartIsUtc) return "UTC";
   const own = extraTimeZoneOf(e.extra);
   if (own) return own;
-  const cal = typeof e.calendarTimezone === "string" ? e.calendarTimezone.trim() : "";
-  if (cal && isValidTimeZone(cal)) return cal;
-  return "UTC";
+  const cal = typeof e.calendarTimezone === "string" ? canonicalTimeZone(e.calendarTimezone.trim()) : null;
+  return cal ?? "UTC";
 }
 
 /**
