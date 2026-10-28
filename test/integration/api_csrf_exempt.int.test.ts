@@ -62,7 +62,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await app?.close(); });
 
-function post(url: string, payload: unknown = {}) {
+function post(url: string, payload: Record<string, unknown> = {}) {
   return app.inject({ method: "POST", url, payload });
 }
 /** 被 CSRF 闸门拦下来的特征。路由自己的校验错（400 bad_request）不算。 */

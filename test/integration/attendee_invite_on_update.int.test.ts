@@ -61,7 +61,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { await app.close(); });
 
-function send(method: "POST" | "PATCH", url: string, payload?: unknown) {
+function send(method: "POST" | "PATCH", url: string, payload?: Record<string, unknown>) {
   return app.inject({ method, url, headers: { cookie }, ...(payload === undefined ? {} : { payload }) });
 }
 

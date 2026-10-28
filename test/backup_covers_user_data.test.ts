@@ -49,7 +49,7 @@ describe("备份清单必须盖住库里每一张表", () => {
 
   it.each(allTables())("%s 要么进备份，要么明确排除", (name) => {
     expect(
-      included.has(name) || BACKUP_EXCLUDED_TABLES.has(name),
+      (included as ReadonlySet<string>).has(name) || (BACKUP_EXCLUDED_TABLES as ReadonlySet<string>).has(name),
       `${name} 既不在备份清单里，也不在「明确不备份」名单里。\n` +
         "恢复备份时它会被 users 的级联删除带走，而且永远插不回来 —— " +
         "站长看到的只有一句「恢复完成」。\n" +

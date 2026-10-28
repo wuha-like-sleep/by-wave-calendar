@@ -85,6 +85,7 @@ function values(email: string): InsertUserValues {
     email,
     emailVerified: false,
     passwordHash: "$2a$12$3GVAJUNGYRfPaWdgnQ2yyOzcQGw.j6sHCk0i9JdRZ7JFqVfTXVfTC",
+    passwordSet: true,
     displayName: null,
     signupSource: "self",
     ssoProviderSlug: null,

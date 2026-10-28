@@ -253,8 +253,8 @@ describe("admin/users.ejs", () => {
   it("每一行都能勾选,唯独自己那一行不能", () => {
     const html = render("admin/users.ejs", {
       ...baseLocals,
-      users: [...baseLocals.users, {
-        ...baseLocals.users[0]!, id: "me", email: "admin@example.com", source: signupSourceView("self"),
+      users: [...(baseLocals.users as Record<string, unknown>[]), {
+        ...(baseLocals.users as Record<string, unknown>[])[0]!, id: "me", email: "admin@example.com", source: signupSourceView("self"),
       }],
     });
     expect(html).toContain('name="userIds" value="u-legacy"');
