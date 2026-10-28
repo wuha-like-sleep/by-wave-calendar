@@ -359,7 +359,7 @@
 "解析错误：%@" = "Analysefehler: %@";
 "令牌刷新失败 (HTTP %lld) — 请重新登录" = "Token-Aktualisierung fehlgeschlagen (HTTP %lld) – bitte erneut anmelden";
 "二维码内容无效，请确认从 ByWave Calendar 网页生成" = "Ungültiger QR-Code-Inhalt. Stelle sicher, dass er auf der ByWave-Calendar-Website erzeugt wurde";
-"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "Der Administrator hat die App-Synchronisierung nicht aktiviert.\nGehe im Web-Backend zu Verwalten → API & Apps → aktiviere „App-Anmeldung“ und versuche es erneut.";
+"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "Der Administrator hat die App-Synchronisierung nicht aktiviert.\nÖffne im Web „Admin-Bereich“ → „API“ (/admin/api#apps), setze unter „Native App-Synchronisierung“ den Haken bei „Native App-Synchronisierung erlauben“, speichere und versuche es erneut.";
 "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。" = "Der Kopplungscode ist abgelaufen oder wurde bereits verwendet.\nGehe zurück zu /app/settings#devices und tippe auf „Neues Gerät koppeln“, um einen neuen zu erzeugen.";
 "配对码格式不对。请确认是 6 位字符（字母 + 数字）。" = "Falsches Format des Kopplungscodes. Er sollte 6 Zeichen haben (Buchstaben + Ziffern).";
 "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）" = "Der Server muss auf Version v0.7.4 oder neuer aktualisiert werden.\n(Der CSRF-Schutz älterer Versionen blockiert App-Anfragen fälschlicherweise.)";

@@ -523,7 +523,7 @@ struct SetupView: View {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if http.statusCode != 200 {
-                let (err, msg) = APIError.serverError(data)
+                let (err, msg) = APIError.serverError(data, status: http.statusCode)
                 if err == "invalid_credentials" {
                     errorMessage = "邮箱或密码错误".loc
                 } else if err == "account_disabled" {
@@ -534,7 +534,10 @@ struct SetupView: View {
                 } else if err == "apps_disabled" {
                     errorMessage = "管理员未启用 APP 同步功能".loc
                 } else {
-                    errorMessage = msg ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
+                    // 5xx 的 message 已被丢掉（那是一句写死的中文），这里换成本地文案。
+                    errorMessage = msg
+                        ?? APIError.unavailableMessage(status: http.statusCode)
+                        ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
                 }
                 return
             }
@@ -758,7 +761,7 @@ struct MfaCodeEntrySheet: View {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if http.statusCode != 200 {
-                let (err, msg) = APIError.serverError(data)
+                let (err, msg) = APIError.serverError(data, status: http.statusCode)
                 if err == "invalid_code" {
                     errorMessage = "验证码错误".loc
                 } else if err == "account_locked" {
@@ -766,8 +769,14 @@ struct MfaCodeEntrySheet: View {
                     errorMessage = "登录失败次数过多，请稍后再试。".loc
                 } else if err == "mfa_token_expired" || err == "mfa_state_invalid" {
                     errorMessage = "验证码会话已过期，请重新登录".loc
+                } else if err == "apps_disabled" {
+                    // 输完密码到输验证码之间管理员关了 APP 同步，这一步也会被拦。
+                    // 服务端那句 message 是中文，用本地文案。
+                    errorMessage = "管理员未启用 APP 同步功能".loc
                 } else {
-                    errorMessage = msg ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
+                    errorMessage = msg
+                        ?? APIError.unavailableMessage(status: http.statusCode)
+                        ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
                 }
                 return
             }

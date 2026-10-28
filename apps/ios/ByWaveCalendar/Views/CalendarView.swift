@@ -333,8 +333,6 @@ struct CalendarView: View {
                 Text(anchorLabel)
                     .font(.callout.weight(.medium))
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
             }
             Spacer()
             Button {
@@ -348,7 +346,11 @@ struct CalendarView: View {
     @ToolbarContentBuilder
     private var dateNavToolbar: some ToolbarContent {
         ToolbarItem(placement: .principal) {
+            // 顶栏只有一行高，日期必须挤在一行里，放不下就缩小字号。
+            // 只加在这里：分段控件下面那一行（navBar）照旧，长日期可以折行。
             dateNavRow
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
@@ -824,6 +826,11 @@ extension Color {
 }
 
 // MARK: - iPhone Duo 外屏的竖栏
+//
+// Mac 版（Mac Catalyst）用的是 macOS 的 SDK，里面没有 axisBehavior / verticalBarEdge
+// 这几样东西。`if #available(iOS 27.1, *)` 只管运行时，挡不住编译 —— 不隔开的话
+// Mac 版整个编不过。Mac 上也没有竖栏，所以那边 hasVerticalBar 恒为 false、
+// 工具栏照旧排在顶上。
 
 /// 把整组工具栏按钮声明成「有竖栏就优先放竖栏」（iOS 27.1 的 axisBehavior）。
 /// ToolbarContentBuilder 不支持 `if #available`，所以版本判断放在 View 这一层。
@@ -836,6 +843,9 @@ private struct VerticalPreferredToolbar<Items: ToolbarContent, VerticalOnly: Too
     let hasVerticalBar: Bool
 
     func body(content: Content) -> some View {
+        #if targetEnvironment(macCatalyst)
+        content.toolbar { items }
+        #else
         if #available(iOS 27.1, *) {
             content.toolbar {
                 items.axisBehavior(.verticalPreferred)
@@ -848,6 +858,7 @@ private struct VerticalPreferredToolbar<Items: ToolbarContent, VerticalOnly: Too
         } else {
             content.toolbar { items }
         }
+        #endif
     }
 }
 
@@ -874,11 +885,13 @@ private struct VerticalBarProbe: UIViewRepresentable {
             super.init(frame: frame)
             isUserInteractionEnabled = false
             isAccessibilityElement = false
+            #if !targetEnvironment(macCatalyst)
             if #available(iOS 27.1, *) {
                 registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) { (view: ProbeView, _) in
                     view.report()
                 }
             }
+            #endif
         }
 
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -891,9 +904,11 @@ private struct VerticalBarProbe: UIViewRepresentable {
         private func report() {
             guard window != nil else { return }
             var present = false
+            #if !targetEnvironment(macCatalyst)
             if #available(iOS 27.1, *) {
                 present = traitCollection.verticalBarEdge != .unspecified
             }
+            #endif
             // 不在 SwiftUI 更新视图的这一轮里改状态。
             DispatchQueue.main.async { [weak self] in self?.onChange?(present) }
         }
