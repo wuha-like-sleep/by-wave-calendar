@@ -50,6 +50,27 @@ enum APIError: Error, LocalizedError {
         return (code, message)
     }
 
+    /// 同上，但只留下**能直接给用户看**的那句话：5xx 的 message 丢掉。
+    ///
+    /// 服务端出了未预料的错（5xx）时，全局错误处理器回的是一句写死的中文
+    /// 「服务器内部错误」，不看请求是什么语言。以前登录、两步验证、扫码配对、
+    /// Apple 登录几处都把它原样摊出来，英文、日文用户看到的是一句中文。
+    /// 5xx 时调用方改用本地文案，见 `unavailableMessage(status:)`。
+    ///
+    /// `keeping`：服务端专门按请求语言翻译过、而且话里写着下一步该怎么做的 5xx 码，
+    /// 这些码的 message 照旧留着（Apple 登录建号失败：「这个邮箱已有账号」和
+    /// 「建号失败」要做的事完全不同，换成「稍后重试」就把人引错了路）。
+    static func serverError(_ data: Data, status: Int, keeping localizedCodes: Set<String> = []) -> (code: String?, message: String?) {
+        let (code, message) = serverError(data)
+        if status >= 500, !localizedCodes.contains(code ?? "") { return (code, nil) }
+        return (code, message)
+    }
+
+    /// 5xx 时给用户看的那句本地文案；不是 5xx 返回 nil，调用方接着用自己的兜底。
+    static func unavailableMessage(status: Int) -> String? {
+        status >= 500 ? "服务器暂时无法响应（HTTP %lld），稍后重试。".locFormat(status) : nil
+    }
+
     var errorDescription: String? {
         switch self {
         case .notSignedIn: return "请先登录".loc

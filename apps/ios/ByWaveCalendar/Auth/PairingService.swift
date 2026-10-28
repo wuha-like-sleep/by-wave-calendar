@@ -82,9 +82,11 @@ enum PairingError: Error, LocalizedError {
                 // hasn't pulled the fix.
                 return "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）".loc
             default:
+                // 5xx 的 message 在 claim() 里已经丢掉了（服务端那句是写死的中文），
+                // 走到这里的 msg 只会是 4xx 的。
                 if let msg, !msg.isEmpty { return msg }
                 if s == 429 { return "请求太频繁，请等一会再试。".loc }
-                if s == 502 || s == 503 || s == 504 { return "服务器暂时无法响应（HTTP %lld），稍后重试。".locFormat(s) }
+                if let text = APIError.unavailableMessage(status: s) { return text }
                 return "服务器错误 (HTTP %lld)".locFormat(s) + (code.map { " - \($0)" } ?? "")
             }
         case .network(let e):
@@ -124,7 +126,7 @@ enum PairingService {
             }
             if http.statusCode != 200 {
                 // 错误码和人话都交给 PairingError.server 去挑合适的文案。
-                let (code, msg) = APIError.serverError(data)
+                let (code, msg) = APIError.serverError(data, status: http.statusCode)
                 throw PairingError.server(status: http.statusCode, errorCode: code, message: msg)
             }
             // Both shapes: {accessToken, ...} or {data: {accessToken, ...}}

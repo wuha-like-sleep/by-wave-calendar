@@ -74,10 +74,10 @@ enum AppleSignInError: Error, LocalizedError {
             case "apps_disabled":
                 return "管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。".loc
             default:
+                // 5xx 的 message 只有服务端专门翻译过的那几个码会留到这里（见 exchange 里的
+                // serverError 调用）；全局错误处理器那句写死的中文已经丢掉了。
                 if let msg, !msg.isEmpty { return msg }
-                if status == 502 || status == 503 || status == 504 {
-                    return "服务器暂时无法响应（HTTP %lld），稍后重试。".locFormat(status)
-                }
+                if let text = APIError.unavailableMessage(status: status) { return text }
                 return "Apple 登录失败 (HTTP %lld)".locFormat(status) + (code.map { " - \($0)" } ?? "")
             }
         case .network(let e):
@@ -179,7 +179,12 @@ final class AppleSignIn: NSObject {
                 throw AppleSignInError.network(URLError(.badServerResponse))
             }
             if http.statusCode != 200 {
-                let (code, msg) = APIError.serverError(data)
+                // 这条路上建号 / 建设备失败也回 5xx，但服务端那几句是按请求语言翻译过的，
+                // 而且说清了下一步（比如「这个邮箱已有账号」），留着。其余 5xx 的 message 丢掉。
+                let (code, msg) = APIError.serverError(
+                    data, status: http.statusCode,
+                    keeping: ["account_create_failed", "device_create_failed"],
+                )
                 throw AppleSignInError.server(status: http.statusCode, errorCode: code, message: msg)
             }
             // Accept both {accessToken,...} and {data:{accessToken,...}} —
