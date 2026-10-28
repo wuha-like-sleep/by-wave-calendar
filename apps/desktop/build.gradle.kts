@@ -96,6 +96,15 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // 测试进程的 home 指到构建目录里一个空文件夹。ProfileStore / EventCache /
+    // ReminderPrefs 都往 ~/.bywave-calendar 里写 —— 不隔开的话，跑一遍测试就会
+    // 改掉（甚至清空）开发机上真实登录着的账号。
+    val testHome = layout.buildDirectory.dir("test-home").get().asFile
+    doFirst {
+        testHome.deleteRecursively()
+        testHome.mkdirs()
+    }
+    systemProperty("user.home", testHome.absolutePath)
     testLogging {
         events("passed", "failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

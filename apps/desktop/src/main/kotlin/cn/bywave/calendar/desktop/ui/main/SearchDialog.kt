@@ -89,7 +89,7 @@ private fun resultTimeLabel(iso: String): String =
 /**
  * Search dialog.
  *
- * @param serverUrl active profile's server (for a short-lived ApiClient,
+ * @param profile the account to search in (a short-lived ApiClient bound to it,
  *   same one-shot pattern the Settings dialogs use).
  * @param onJumpToDate called with the chosen result's local date — the
  *   caller wires this to CalendarState.jumpToDay() then closes the dialog.
@@ -97,7 +97,7 @@ private fun resultTimeLabel(iso: String): String =
  */
 @Composable
 fun SearchDialog(
-    serverUrl: String,
+    profile: cn.bywave.calendar.desktop.data.model.Profile,
     onJumpToDate: (java.time.LocalDate) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -148,7 +148,7 @@ fun SearchDialog(
         searching = true
         errorMsg = null
         kotlinx.coroutines.delay(300)
-        val api = ApiClient(serverUrl)
+        val api = ApiClient(profile)
         runCatching { api.search(trimmed, limit = 100) }
             .onSuccess {
                 api.close()

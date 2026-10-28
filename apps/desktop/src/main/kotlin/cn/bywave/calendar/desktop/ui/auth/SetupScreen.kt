@@ -63,9 +63,15 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
 import cn.bywave.calendar.desktop.data.api.ApiClient
+import cn.bywave.calendar.desktop.data.api.pairPollRetryDelayMs
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.model.Profile
+import cn.bywave.calendar.desktop.ui.main.ShortcutAction
+import cn.bywave.calendar.desktop.ui.main.ShortcutBus
 import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.delay
@@ -76,6 +82,10 @@ private enum class Phase { ServerUrl, GeneratingCode, ShowingQr, Approved }
 @Composable
 fun SetupScreen(
     onSignedIn: () -> Unit,
+    /** 非 null = 用户是从「添加账号」进来的，本机还登着别的账号：显示「取消」、
+     *  响应 Esc，回到原来的账号。以前这一页没有任何退路，只能配对成功或者退出 App。
+     *  null = 本机一个账号都没有，这一页就是唯一的去处，不给取消。 */
+    onCancel: (() -> Unit)? = null,
 ) {
     var phase by remember { mutableStateOf(Phase.ServerUrl) }
     // Pre-fill from ProfileStore.lastServerUrl — the last URL the user
@@ -128,15 +138,28 @@ fun SetupScreen(
         }
     }
 
+    // 从「添加账号」进来时可以按 Esc 退回原来的账号，和「取消」按钮一个意思。
+    // 窗口级的按键都走 ShortcutBus；主界面此刻没挂着，不会和它抢。
+    if (onCancel != null) {
+        LaunchedEffect(onCancel) {
+            ShortcutBus.flow.collect { if (it == ShortcutAction.Escape) onCancel() }
+        }
+    }
+
     // Poll while the QR is visible. Cancels automatically when the user
     // navigates away from this composable, or when phase changes.
     LaunchedEffect(phase, code) {
         if (phase != Phase.ShowingQr) return@LaunchedEffect
         val c = client ?: return@LaunchedEffect
         val codeNow = code ?: return@LaunchedEffect
+        // 连续问不成的次数。问成一次（哪怕还在等扫码）就清零。
+        var failures = 0
         while (true) {
             when (val s = c.desktopPairStatus(codeNow)) {
-                is ApiClient.PairStatus.Pending -> { pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollWaiting") }
+                is ApiClient.PairStatus.Pending -> {
+                    failures = 0
+                    pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollWaiting")
+                }
                 is ApiClient.PairStatus.Approved -> {
                     val r = s.resp
                     val profile = Profile(
@@ -148,7 +171,7 @@ fun SetupScreen(
                         refreshToken = r.refreshToken.orEmpty(),
                     )
                     ProfileStore.save(profile)
-                    r.accessToken?.let(ProfileStore::setAccessToken)
+                    r.accessToken?.let { ProfileStore.setAccessToken(profile.deviceId, it) }
                     // 重新登录成功 = 上一次被踢的事说完了，横幅该收掉。
                     ProfileStore.clearSignedOutReason()
                     phase = Phase.Approved
@@ -165,8 +188,25 @@ fun SetupScreen(
                     phase = Phase.ServerUrl
                     return@LaunchedEffect
                 }
-                is ApiClient.PairStatus.Error -> {
-                    pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollRetry", mapOf("message" to s.message))
+                // 这次没问成（断网、网关 5xx、限流）：退避后再问，有上限。
+                // 以前这里把「HTTP 502」原样摆给用户，而且每 2 秒一次、永不停止。
+                is ApiClient.PairStatus.Unreachable -> {
+                    failures++
+                    val wait = pairPollRetryDelayMs(failures)
+                    if (wait == null) {
+                        errorMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollGaveUp")
+                        phase = Phase.ServerUrl
+                        return@LaunchedEffect
+                    }
+                    pollMessage = cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollRetry")
+                    delay(wait)
+                    continue
+                }
+                // 服务端明确拒绝（400 之类）：再问也一样，停下来把话说清楚。
+                is ApiClient.PairStatus.Failed -> {
+                    errorMessage = s.message
+                    phase = Phase.ServerUrl
+                    return@LaunchedEffect
                 }
             }
             delay(2_000)
@@ -232,6 +272,19 @@ fun SetupScreen(
                         remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.openingCalendar") },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+            // 每个阶段都给退路（填地址、等二维码、已经在转圈要码）。离开这一页时
+            // 配对轮询和要码的协程会跟着这个 composable 一起取消。
+            if (onCancel != null && phase != Phase.Approved) {
+                TextButton(onClick = onCancel) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("setup.cancelAddAccount") })
                 }
             }
         }

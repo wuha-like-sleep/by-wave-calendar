@@ -655,7 +655,7 @@ private fun ShareLinksDialog(
     androidx.compose.runtime.LaunchedEffect(reloadKey) {
         loading = true
         loadError = null
-        val api = ApiClient(profile.serverUrl)
+        val api = ApiClient(profile)
         runCatching { api.listShareTokens(calendar.id) }
             .onSuccess {
                 api.close()
@@ -709,7 +709,7 @@ private fun ShareLinksDialog(
                             generating = true
                             actionError = null
                             scope.launch {
-                                val api = ApiClient(profile.serverUrl)
+                                val api = ApiClient(profile)
                                 runCatching {
                                     api.createShareToken(
                                         calendarId = calendar.id,
@@ -851,7 +851,7 @@ private fun ShareLinksDialog(
                         working = true
                         revokeError = null
                         scope.launch {
-                            val api = ApiClient(profile.serverUrl)
+                            val api = ApiClient(profile)
                             runCatching {
                                 api.revokeShareToken(calendar.id, tok.token)
                             }.onSuccess {
@@ -998,11 +998,11 @@ private fun CalendarEditDialog(
                     saving = true
                     errorMsg = null
                     scope.launch {
-                        // Short-lived ApiClient for the active profile —
+                        // Short-lived ApiClient bound to this profile —
                         // same one-shot pattern as OpenInWebRow. The
-                        // bearer token comes from ProfileStore (active
-                        // profile), so we don't thread one in here.
-                        val api = ApiClient(profile.serverUrl)
+                        // bearer token comes from ProfileStore keyed by
+                        // this profile's deviceId, so we don't thread one in.
+                        val api = ApiClient(profile)
                         val tz = timezone.trim().ifBlank { null }
                         val desc = description.trim().ifBlank { null }
                         runCatching {
@@ -1106,7 +1106,7 @@ private fun CalendarDeleteDialog(
                     working = true
                     errorMsg = null
                     scope.launch {
-                        val api = ApiClient(profile.serverUrl)
+                        val api = ApiClient(profile)
                         runCatching {
                             api.deleteCalendar(calendar.id)
                         }.onSuccess {
@@ -1205,7 +1205,7 @@ private fun BookingSection(
     androidx.compose.runtime.LaunchedEffect(reloadKey) {
         loading = true
         loadError = null
-        val api = ApiClient(profile.serverUrl)
+        val api = ApiClient(profile)
         runCatching { api.listBookingLinks() }
             .onSuccess {
                 api.close()
@@ -1281,7 +1281,7 @@ private fun BookingSection(
                                     toggling = link.id
                                     actionError = null
                                     scope.launch {
-                                        val api = ApiClient(profile.serverUrl)
+                                        val api = ApiClient(profile)
                                         runCatching {
                                             api.setBookingLinkEnabled(link.id, wantEnabled)
                                         }.onSuccess {
@@ -1582,7 +1582,7 @@ private fun BookingCreateDialog(
                     saving = true
                     errorMsg = null
                     scope.launch {
-                        val api = ApiClient(profile.serverUrl)
+                        val api = ApiClient(profile)
                         runCatching {
                             api.createBookingLink(
                                 BookingLinkCreateInput(
@@ -1677,7 +1677,7 @@ private fun BookingDeleteDialog(
                     working = true
                     errorMsg = null
                     scope.launch {
-                        val api = ApiClient(profile.serverUrl)
+                        val api = ApiClient(profile)
                         runCatching {
                             api.deleteBookingLink(link.id)
                         }.onSuccess {
@@ -1869,7 +1869,7 @@ private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
                             working = true
                             errorMsg = null
                             scope.launch {
-                                val api = ApiClient(profile.serverUrl)
+                                val api = ApiClient(profile)
                                 runCatching {
                                     api.changePassword(currentPassword = current, newPassword = next)
                                 }.onSuccess {
@@ -1925,7 +1925,7 @@ private fun DevicesSection(profile: Profile) {
     androidx.compose.runtime.LaunchedEffect(reloadKey) {
         loading = true
         loadError = null
-        val api = ApiClient(profile.serverUrl)
+        val api = ApiClient(profile)
         runCatching { api.listDevices() }
             .onSuccess {
                 api.close()
@@ -2086,7 +2086,7 @@ private fun RevokeDeviceDialog(
                     working = true
                     errorMsg = null
                     scope.launch {
-                        val api = ApiClient(profile.serverUrl)
+                        val api = ApiClient(profile)
                         runCatching {
                             api.revokeDevice(device.id)
                         }.onSuccess {
@@ -2477,7 +2477,7 @@ private fun OpenInWebRow(
                 working = true
                 scope.launch {
                     runCatching {
-                        val api = ApiClient(profile.serverUrl)
+                        val api = ApiClient(profile)
                         val resp = api.webSession(next)
                         Desktop.getDesktop().browse(URI(resp.url))
                         api.close()
@@ -2538,7 +2538,7 @@ private fun OpenInWebButton(profile: Profile, next: String, label: String) {
             working = true
             scope.launch {
                 runCatching {
-                    val api = ApiClient(profile.serverUrl)
+                    val api = ApiClient(profile)
                     val resp = api.webSession(next)
                     Desktop.getDesktop().browse(URI(resp.url))
                     api.close()

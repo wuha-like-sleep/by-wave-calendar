@@ -12,7 +12,6 @@
 package cn.bywave.calendar.desktop.ui.calendar
 
 import cn.bywave.calendar.desktop.data.api.ApiClient
-import cn.bywave.calendar.desktop.data.auth.ProfileStore
 import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
@@ -20,6 +19,7 @@ import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.notify.ReminderFeed
+import cn.bywave.calendar.desktop.util.userFacingDetail
 import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -69,7 +69,45 @@ data class PendingEdit(
     val sourceId: String,
     val sourceStartsAt: String,
     val body: EventUpdateInput,
+    /** 非 null = 这次修改来自主界面上的拖动 / 拉伸，不是编辑弹窗。 */
+    val dragged: DraggedEvent? = null,
 )
+
+/**
+ * 拖动 / 拉伸松手之后，事件先按新时间画在新位置（[moved]）；请求失败就换回
+ * [original]，弹回原位。
+ *
+ * 以前没有这一步：失败写进 formError，而 formError 只在编辑弹窗里渲染 ——
+ * 拖动根本没有弹窗，于是失败了界面上一个字都没有。
+ */
+data class DraggedEvent(val original: EventDTO, val moved: EventDTO)
+
+/** 编辑弹窗（新建 / 编辑 / 复制）开着没有 —— 开着的话错误写进弹窗里。 */
+internal fun isFormSheet(sheet: ActiveSheet?): Boolean =
+    sheet is ActiveSheet.Create || sheet is ActiveSheet.Edit || sheet is ActiveSheet.Duplicate
+
+/** 弹窗外的操作失败了，给主界面提示条的那句话：「没能删除『X』。」+ 服务端给的理由（有的话）。 */
+internal fun actionFailureText(titleKey: String, name: String, e: Throwable): String {
+    val title = cn.bywave.calendar.desktop.i18n.I18n.t(titleKey, mapOf("name" to name))
+    val reason = userFacingDetail(e) ?: return title
+    return cn.bywave.calendar.desktop.i18n.I18n.t(
+        "action.failedWithReason",
+        mapOf("action" to title, "reason" to reason),
+    )
+}
+
+/** 把 [list] 里「是 [from] 那一条」的事件换成 [to]。重复事件的各次发生共用 id，
+ *  所以按 id + startsAt 认。找不到就原样返回（比如中途刷新过，列表已经是服务端的了）。 */
+internal fun replaceEvent(list: List<EventDTO>, from: EventDTO, to: EventDTO): List<EventDTO> {
+    var hit = false
+    val out = list.map {
+        if (!hit && it.id == from.id && it.startsAt == from.startsAt && it.endsAt == from.endsAt) {
+            hit = true
+            to
+        } else it
+    }
+    return if (hit) out else list
+}
 
 /** Same shape for delete — we park the source while the scope picker
  *  asks for the scope. */
@@ -102,6 +140,10 @@ data class CalendarUiState(
     val pendingScopeEdit: PendingEdit? = null,
     val pendingScopeDelete: PendingDelete? = null,
     val undoDelete: UndoDelete? = null,
+    /** 弹窗外的操作（删除、拖动改时间、撤销删除）失败时给用户看的那句话，
+     *  主界面顶部提示条显示，用户点 × 关掉。和 [formError] 分开：那个只在
+     *  编辑弹窗里渲染，弹窗外的失败写进去等于没写。 */
+    val actionError: String? = null,
 )
 
 class CalendarState(
@@ -117,8 +159,12 @@ class CalendarState(
      *  cache entry exists for the current (deviceId, window), we paint
      *  it immediately so the user sees data the moment they open the
      *  APP / navigate; the network call happens in the background and
-     *  replaces the in-memory state when it lands. */
-    fun load() {
+     *  replaces the in-memory state when it lands.
+     *
+     *  `useCache = false`：刚改完数据（新建 / 改时间 / 删除 / 撤销）之后的那次
+     *  刷新不先画缓存 —— 缓存还是改之前的样子，先画它的话刚拖好的事件会先跳回
+     *  原位、等网络回来再跳过去，刚删掉的事件也会先冒出来一下。 */
+    fun load(useCache: Boolean = true) {
         loadJob?.cancel()
         loadJob = scope.launch {
             val s = _ui.value
@@ -130,8 +176,11 @@ class CalendarState(
             //    this exact (profile, window) tuple. Cache miss → leave
             //    current state alone but flip `loading=true` so the
             //    user sees the network spinner.
-            val deviceId = ProfileStore.profile.value?.deviceId
-            val cached = deviceId?.let { EventCache.read(it, fromIso, toIso) }
+            //
+            //    缓存按**这个 client 的账号**读写，不按「当前活动账号」：切账号
+            //    时还在飞的那次加载，结果不能写进另一个账号的缓存。
+            val deviceId = client.profileId
+            val cached = if (useCache) deviceId?.let { EventCache.read(it, fromIso, toIso) } else null
             if (cached != null) {
                 _ui.value = _ui.value.copy(
                     events = cached.events,
@@ -264,15 +313,33 @@ class CalendarState(
             try {
                 client.createEvent(body, clientUid = clientUid)
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
-                load()
+                load(useCache = false)
                 // 提醒有自己的一份数据（ReminderFeed），跟这里的 load() 不是同一份。
                 // 本机刚建的会要立刻进那一份，否则最坏要等到它下一个刷新间隔——
                 // 「新建一个 10 分钟后的会，结果没响」就是这么来的。
                 ReminderFeed.requestRefresh()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.saveFailed"))
+                reportFormFailure(e)
             }
         }
+    }
+
+    /** 编辑弹窗里发起的保存失败了：弹窗还开着就写进弹窗；用户已经把弹窗关了
+     *  （保存途中按了 Esc）就改走主界面提示条 —— 否则这次失败谁也看不见。 */
+    private fun reportFormFailure(e: Exception) {
+        val msg = userFacingError(e, "error.saveFailed")
+        _ui.value = if (isFormSheet(_ui.value.activeSheet)) {
+            _ui.value.copy(saving = false, formError = msg)
+        } else {
+            _ui.value.copy(saving = false, actionError = msg)
+        }
+    }
+
+    /** 用户点了提示条上的 ×。 */
+    fun dismissActionError() {
+        _ui.value = _ui.value.copy(actionError = null)
     }
 
     /** 一句话录入：把「明天下午三点牙医」交给服务端解析成字段。
@@ -293,14 +360,17 @@ class CalendarState(
         sourceRrule: String?,
         sourceStartsAt: String,
         body: EventUpdateInput,
+        /** 非 null = 主界面上的拖动 / 拉伸（见 [applyMove]），null = 编辑弹窗。 */
+        dragged: DraggedEvent? = null,
     ) {
         if (sourceRrule != null) {
+            // 重复事件先问范围；问的时候事件还画在原位，取消就什么都不用改。
             _ui.value = _ui.value.copy(
-                pendingScopeEdit = PendingEdit(sourceId, sourceStartsAt, body),
+                pendingScopeEdit = PendingEdit(sourceId, sourceStartsAt, body, dragged),
             )
             return
         }
-        sendUpdate(sourceId, body)
+        sendUpdate(sourceId, body, dragged)
     }
 
     /** Scope picker callback for edits. scope=null means "user cancelled". */
@@ -312,19 +382,35 @@ class CalendarState(
             scope = scope,
             recurrenceId = if (scope == "series") null else pending.sourceStartsAt,
         )
-        sendUpdate(pending.sourceId, body)
+        sendUpdate(pending.sourceId, body, pending.dragged)
     }
 
-    private fun sendUpdate(sourceId: String, body: EventUpdateInput) {
+    private fun sendUpdate(sourceId: String, body: EventUpdateInput, dragged: DraggedEvent? = null) {
+        if (dragged != null) {
+            // 先画在松手的位置，别让它弹回原处、等请求回来再跳过去。
+            _ui.value = _ui.value.copy(events = replaceEvent(_ui.value.events, dragged.original, dragged.moved))
+        }
         scope.launch {
-            _ui.value = _ui.value.copy(saving = true, formError = null)
+            // 拖动不是弹窗里的保存：不碰 saving / formError，免得用户这时打开的
+            // 编辑弹窗被莫名其妙地置灰或清掉提示。
+            if (dragged == null) _ui.value = _ui.value.copy(saving = true, formError = null)
             try {
                 client.updateEvent(sourceId, body)
-                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
-                load()
+                if (dragged == null) _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                load(useCache = false)
                 ReminderFeed.requestRefresh()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.saveFailed"))
+                if (dragged == null) {
+                    reportFormFailure(e)
+                } else {
+                    // 弹回原位 + 说清楚。以前写进 formError，而拖动根本没有弹窗。
+                    _ui.value = _ui.value.copy(
+                        events = replaceEvent(_ui.value.events, dragged.moved, dragged.original),
+                        actionError = actionFailureText("action.moveFailed", dragged.original.summary, e),
+                    )
+                }
             }
         }
     }
@@ -374,7 +460,8 @@ class CalendarState(
             startsAt = iso.format(newStart.atZone(zone)),
             endsAt = iso.format(newEnd.atZone(zone)),
         )
-        update(event.id, event.rrule, event.startsAt, body)
+        val moved = event.copy(startsAt = body.startsAt!!, endsAt = body.endsAt!!)
+        update(event.id, event.rrule, event.startsAt, body, DraggedEvent(original = event, moved = moved))
     }
 
     /** Drag-released on the bottom-edge resize handle: stretch the
@@ -392,7 +479,8 @@ class CalendarState(
         val body = cn.bywave.calendar.desktop.data.model.EventUpdateInput(
             endsAt = iso.format(finalEnd.atZone(zone)),
         )
-        update(event.id, event.rrule, event.startsAt, body)
+        val moved = event.copy(endsAt = body.endsAt!!)
+        update(event.id, event.rrule, event.startsAt, body, DraggedEvent(original = event, moved = moved))
     }
 
     private fun sendDelete(id: String, scope: String?, recurrenceId: String?, summary: String? = null) {
@@ -408,11 +496,19 @@ class CalendarState(
                     UndoDelete(eventId = id, summary = summary, token = System.nanoTime())
                 else null
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null, undoDelete = undo ?: _ui.value.undoDelete)
-                load()
+                load(useCache = false)
                 // 删掉的会不该再响。
                 ReminderFeed.requestRefresh()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(saving = false, formError = userFacingError(e, "error.deleteFailed"))
+                // 删除从来不在编辑弹窗里发起（右键菜单、详情弹窗先关再删、范围
+                // 选择器），以前写进 formError 等于没写 —— 用户点了删除，事件还在，
+                // 一个字的说明都没有。事件本来就没先删，界面保持原样即可。
+                _ui.value = _ui.value.copy(
+                    saving = false,
+                    actionError = actionFailureText("action.deleteFailed", summary ?: "", e),
+                )
             }
         }
     }
@@ -425,10 +521,15 @@ class CalendarState(
             try {
                 client.restoreEvent(undo.eventId)
                 _ui.value = _ui.value.copy(undoDelete = null)
-                load()
+                load(useCache = false)
                 ReminderFeed.requestRefresh()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                _ui.value = _ui.value.copy(formError = userFacingError(e, "error.deleteFailed"))
+                // 撤销条留着（还没到时间的话用户可以再点一次），同时说清楚没恢复成。
+                _ui.value = _ui.value.copy(
+                    actionError = actionFailureText("action.restoreFailed", undo.summary, e),
+                )
             }
         }
     }

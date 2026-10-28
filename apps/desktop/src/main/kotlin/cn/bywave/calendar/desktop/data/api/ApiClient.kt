@@ -46,6 +46,7 @@ import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.ParseEventInput
 import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.EventsResponse
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
@@ -54,7 +55,6 @@ import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
 import cn.bywave.calendar.desktop.data.model.WebSessionRequest
 import cn.bywave.calendar.desktop.data.model.WebSessionResponse
-import cn.bywave.calendar.desktop.util.userFacingError
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -106,10 +106,65 @@ internal fun refreshOutcomeForStatus(status: Int): RefreshOutcome = when {
     else -> RefreshOutcome.UNREACHABLE
 }
 
+/** 扫码登录轮询一次之后该怎么办。 */
+internal enum class PairPollKind {
+    APPROVED, PENDING, DENIED, EXPIRED,
+    /** 这次没问成（网关 5xx、限流、超时）：退避一会儿再问，有次数上限。 */
+    RETRY,
+    /** 服务端明确拒绝了这次查询（400 之类）：再问一百次也一样，停。 */
+    FAIL,
+}
 
+/** desktop-pair-status 的状态码 → 下一步。服务端的约定见 src/routes/devices.ts：
+ *  200 批准、202 等待、410 拒绝、404 过期、400 缺 code。
+ *
+ *  以前「预期外的状态码」一律变成 `"HTTP 502"` 这种字符串原样摆给用户，
+ *  而且每 2 秒一次无限重试 —— 网关挂着的话就永远停在这里转圈。 */
+internal fun pairPollKindForStatus(status: Int): PairPollKind = when (status) {
+    200 -> PairPollKind.APPROVED
+    202 -> PairPollKind.PENDING
+    410 -> PairPollKind.DENIED
+    404 -> PairPollKind.EXPIRED
+    408, 425, 429 -> PairPollKind.RETRY
+    in 500..599 -> PairPollKind.RETRY
+    else -> PairPollKind.FAIL
+}
 
-class ApiClient(val serverUrl: String) {
+/** 连着问不成几次就放弃。8 次退避合计约 2.5 分钟，在二维码 5 分钟有效期之内。 */
+internal const val PAIR_POLL_MAX_FAILURES = 8
+
+/** 第 n 次（从 1 数）连续问不成之后，等多久再问；超过上限返回 null = 别再问了。
+ *  2s、4s、8s、16s，之后封顶 30s。 */
+internal fun pairPollRetryDelayMs(consecutiveFailures: Int): Long? {
+    if (consecutiveFailures < 1) return 2_000L
+    if (consecutiveFailures > PAIR_POLL_MAX_FAILURES) return null
+    val shift = (consecutiveFailures - 1).coerceAtMost(10)
+    return (2_000L shl shift).coerceAtMost(30_000L)
+}
+
+/**
+ * 一个 ApiClient 代表**一个账号**：`profileId` 是 ProfileStore 里那个账号的
+ * deviceId。带登录的请求用的 access token、401 之后去换票用的 refresh token、
+ * 换来的新票存给谁、判定吊销之后登出谁 —— 全都按这个 id 来，**不读「当前活动账号」**。
+ *
+ * 以前全读活动账号，而 baseUrl 却是建立 client 时那台服务器。两个账号在不同
+ * 服务器上时，切账号之后还在飞的请求会拿 B 的票去 A 的服务器换，A 当然回 401，
+ * 于是被判成吊销 —— 删掉的还是 B，一个什么事都没有的账号。
+ *
+ * `profileId == null` 是匿名 client，只用于扫码配对那两个不带登录的接口；
+ * 它碰到 401 什么都不做（没有票可换，也没有账号可登出）。
+ */
+class ApiClient(
+    val serverUrl: String,
+    val profileId: String? = null,
+) {
+    /** 绑定到一个已登录的账号。除了扫码配对，所有地方都该用这个。 */
+    constructor(profile: Profile) : this(profile.serverUrl, profile.deviceId)
+
     private val baseUrl: String = serverUrl.trimEnd('/')
+
+    /** 这个账号当前的 access token（匿名 client 永远是 null）。 */
+    private fun accessToken(): String? = profileId?.let { ProfileStore.accessToken(it) }
 
     /** Shared JSON config — ignoreUnknownKeys so server-side additions
      *  don't crash older clients; explicitNulls=false so we don't ship
@@ -127,11 +182,6 @@ class ApiClient(val serverUrl: String) {
         }
         expectSuccess = false  // we read status codes manually
     }
-
-    /** Serialize refresh attempts so a burst of parallel 401s doesn't
-     *  spawn N parallel refresh calls — they'd each rotate the token
-     *  and a race would leave most retries holding stale tokens. */
-    private val refreshMutex = Mutex()
 
     fun close() { client.close() }
 
@@ -155,7 +205,10 @@ class ApiClient(val serverUrl: String) {
         data class Approved(val resp: DesktopPairStatusResponse) : PairStatus()
         object Denied : PairStatus()
         object Expired : PairStatus()
-        data class Error(val message: String) : PairStatus()
+        /** 这次没问成（断网、超时、网关 5xx、限流）。调用方退避后再问，有次数上限。 */
+        object Unreachable : PairStatus()
+        /** 服务端明确拒绝了这次查询，重试没用。`message` 是能直接给用户看的话。 */
+        data class Failed(val message: String) : PairStatus()
     }
 
     suspend fun desktopPairStatus(code: String): PairStatus {
@@ -163,17 +216,27 @@ class ApiClient(val serverUrl: String) {
             val resp = client.get("$baseUrl/api/v1/devices/desktop-pair-status") {
                 parameter("code", code)
             }
-            when (resp.status) {
-                HttpStatusCode.OK -> PairStatus.Approved(
+            when (pairPollKindForStatus(resp.status.value)) {
+                PairPollKind.APPROVED -> PairStatus.Approved(
                     unwrap(resp, DesktopPairStatusResponse.serializer()),
                 )
-                HttpStatusCode.Accepted -> PairStatus.Pending
-                HttpStatusCode.Gone -> PairStatus.Denied
-                HttpStatusCode.NotFound -> PairStatus.Expired
-                else -> PairStatus.Error("HTTP ${resp.status.value}")
+                PairPollKind.PENDING -> PairStatus.Pending
+                PairPollKind.DENIED -> PairStatus.Denied
+                PairPollKind.EXPIRED -> PairStatus.Expired
+                PairPollKind.RETRY -> PairStatus.Unreachable
+                // 服务端那句人话优先（userMessageFromErrorBody 会滤掉机器码）；
+                // 没有就用本地化的通用说明。**绝不**把「HTTP 400」这种标记摆出来。
+                PairPollKind.FAIL -> PairStatus.Failed(
+                    userMessageFromErrorBody(runCatching { resp.bodyAsText() }.getOrDefault(""), resp.status.value)
+                        ?: cn.bywave.calendar.desktop.i18n.I18n.t("setup.pollFailed"),
+                )
             }
-        } catch (e: Exception) {
-            PairStatus.Error(userFacingError(e, "api.networkError"))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // 用户离开了登录页 / 点了「重新生成」：别当成网络错误吞掉。
+            throw e
+        } catch (_: Exception) {
+            // 连不上、超时、200 却解析不了（被中间页劫持）—— 都按「这次没问成」处理。
+            PairStatus.Unreachable
         }
     }
 
@@ -234,7 +297,7 @@ class ApiClient(val serverUrl: String) {
      *  that the status is success. */
     suspend fun deleteCalendar(id: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.delete("$baseUrl/api/v1/calendars/$id") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
             }
@@ -277,9 +340,9 @@ class ApiClient(val serverUrl: String) {
      *  only — same pattern as deleteCalendar / revokeDevice. */
     suspend fun revokeShareToken(calendarId: String, token: String) {
         val resp = withRefresh {
-            val accessToken = ProfileStore.accessToken()
+            val bearer = accessToken()
             client.delete("$baseUrl/api/v1/calendars/$calendarId/share-tokens/$token") {
-                if (!accessToken.isNullOrEmpty()) bearerAuth(accessToken)
+                if (!bearer.isNullOrEmpty()) bearerAuth(bearer)
             }
         }
         if (!resp.status.isSuccess()) {
@@ -338,7 +401,7 @@ class ApiClient(val serverUrl: String) {
      *  same pattern as deleteCalendar / revokeShareToken. */
     suspend fun deleteBookingLink(id: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.delete("$baseUrl/api/v1/booking-links/$id") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
             }
@@ -382,7 +445,7 @@ class ApiClient(val serverUrl: String) {
      *  data loss for the user who only meant "this occurrence"). */
     suspend fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.delete("$baseUrl/api/v1/events/$id") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
                 if (scope != null) parameter("scope", scope)
@@ -413,7 +476,7 @@ class ApiClient(val serverUrl: String) {
      *  caller reloads afterwards (parity with web's undo toast). */
     suspend fun restoreEvent(id: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.post("$baseUrl/api/v1/events/$id/restore") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
             }
@@ -461,7 +524,7 @@ class ApiClient(val serverUrl: String) {
      *  dialog can show "当前密码错误" / "weak_password" inline. */
     suspend fun changePassword(currentPassword: String, newPassword: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             val jsonBody = jsonCfg.encodeToString(
                 ChangePasswordInput.serializer(),
                 ChangePasswordInput(currentPassword = currentPassword, newPassword = newPassword),
@@ -493,7 +556,7 @@ class ApiClient(val serverUrl: String) {
      *  revoke button on the active device. */
     suspend fun revokeDevice(id: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.delete("$baseUrl/api/v1/devices/$id") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
             }
@@ -511,7 +574,7 @@ class ApiClient(val serverUrl: String) {
         // Server returns the updated AttendeesResponse, but we don't need
         // it — the caller will re-list. Use a discard-result helper.
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             val jsonBody = jsonCfg.encodeToString(
                 AttendeeInviteRequest.serializer(), AttendeeInviteRequest(email),
             )
@@ -532,7 +595,7 @@ class ApiClient(val serverUrl: String) {
      *  body for parity with iOS/Android. */
     suspend fun revokeAttendee(eventId: String, email: String) {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             val jsonBody = jsonCfg.encodeToString(
                 AttendeeRevokeRequest.serializer(), AttendeeRevokeRequest(email),
             )
@@ -559,7 +622,7 @@ class ApiClient(val serverUrl: String) {
         configure: HttpRequestBuilder.() -> Unit = {},
     ): T {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             client.get("$baseUrl$path") {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
                 configure()
@@ -579,7 +642,7 @@ class ApiClient(val serverUrl: String) {
         respSerializer: KSerializer<R>,
     ): R {
         val resp = withRefresh {
-            val token = ProfileStore.accessToken()
+            val token = accessToken()
             val jsonBody = jsonCfg.encodeToString(bodySerializer, body)
             val builder: HttpRequestBuilder.() -> Unit = {
                 if (!token.isNullOrEmpty()) bearerAuth(token)
@@ -600,18 +663,21 @@ class ApiClient(val serverUrl: String) {
     private suspend fun withRefresh(block: suspend () -> HttpResponse): HttpResponse {
         var resp = block()
         if (resp.status == HttpStatusCode.Unauthorized) {
+            // 匿名 client：没有票可换，也没有账号可登出，401 原样交回去。
+            val id = profileId ?: return resp
             // Drain the body BEFORE kicking off refresh — Ktor's CIO
             // engine pools connections aggressively and an unread 401
             // body can pin a connection.
             runCatching { resp.bodyAsText() }
-            when (tryRefresh()) {
+            when (tryRefresh(id)) {
                 RefreshOutcome.OK -> resp = block()
                 // 服务端明确不认这张 refresh token 了（改密码、重置密码、
-                // 后台移除设备都会吊销它）。
+                // 后台移除设备都会吊销它）。登出的是**这个 client 的账号**，
+                // 不是此刻的活动账号。
                 //
                 // 这一步不能省：省了桌面端会变成僵尸 —— 日历照常显示上次同步的
                 // 内容，新建/编辑/删除全部失败，而界面上没有任何地方说明原因。
-                RefreshOutcome.REVOKED -> ProfileStore.markSignedOut("auth.sessionRevoked")
+                RefreshOutcome.REVOKED -> ProfileStore.markSignedOut(id, "auth.sessionRevoked")
                 // 这次没问到服务端（断网、超时、5xx）。**凭据不动。**
                 // 把 401 原样交回去，调用方该报错报错；下一次请求会再试一次刷新。
                 RefreshOutcome.UNREACHABLE -> Unit
@@ -620,10 +686,13 @@ class ApiClient(val serverUrl: String) {
         return resp
     }
 
-    /** Single-flight refresh. 成功时把新的 access token 存进 ProfileStore
-     *  （refresh token 轮换了也一并存）。 */
-    private suspend fun tryRefresh(): RefreshOutcome = refreshMutex.withLock {
-        val rt = ProfileStore.profile.value?.refreshToken ?: return@withLock RefreshOutcome.REVOKED
+    /** Single-flight refresh（按账号单飞，见 [refreshLockFor]）。成功时把新的
+     *  access token 存进 ProfileStore（refresh token 轮换了也一并存），存给
+     *  的都是 [id] 这个账号。 */
+    private suspend fun tryRefresh(id: String): RefreshOutcome = refreshLockFor(id).withLock {
+        // 账号已经不在本机了（用户刚手动移除，或者同一账号的另一个请求已经判定
+        // 吊销并删掉了它）：什么都别动，把 401 原样交回去就好。
+        val rt = ProfileStore.refreshToken(id) ?: return@withLock RefreshOutcome.UNREACHABLE
         return@withLock try {
             val resp = client.post("$baseUrl/api/v1/auth/refresh") {
                 contentType(ContentType.Application.Json)
@@ -634,10 +703,10 @@ class ApiClient(val serverUrl: String) {
             val outcome = refreshOutcomeForStatus(resp.status.value)
             if (outcome != RefreshOutcome.OK) return@withLock outcome
             val refreshed = unwrap(resp, RefreshResponse.serializer())
-            ProfileStore.setAccessToken(refreshed.accessToken)
+            ProfileStore.setAccessToken(id, refreshed.accessToken)
             val newRt = refreshed.refreshToken
             if (!newRt.isNullOrBlank() && newRt != rt) {
-                ProfileStore.updateRefreshToken(newRt)
+                ProfileStore.updateRefreshToken(id, newRt)
             }
             RefreshOutcome.OK
         } catch (e: ApiException) {
@@ -708,5 +777,18 @@ class ApiClient(val serverUrl: String) {
         // 外层 runCatching 吞掉异常回 null，服务端那句人话整条丢失。
         val message = userMessageFromErrorBody(raw, resp.status.value)
         return ApiException(resp.status.value, message ?: "$fallback: HTTP ${resp.status.value}")
+    }
+
+    companion object {
+        /** 换票的单飞锁，**按账号**、全进程共用。
+         *
+         *  以前是每个 ApiClient 实例一把锁，而设置页每个操作都 new 一个
+         *  ApiClient —— 同一个账号的两个实例同时撞上 401 就会各自去换票，服务端
+         *  一轮换，后到的那个拿着旧票必被拒，被判成吊销把人踢出去。按账号共用
+         *  一把锁，后到的在锁里读到的已经是新票。 */
+        private val refreshLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
+
+        private fun refreshLockFor(profileId: String): Mutex =
+            refreshLocks.computeIfAbsent(profileId) { Mutex() }
     }
 }
