@@ -58,7 +58,15 @@ function scan(file: string): Route[] {
     let methods: string[];
     let p: string;
     const short = /^ {2,4}app\.(post|put|patch|delete|all)(?:<[^>]*>)?\(\s*"([^"]+)"/.exec(line);
-    if (short) {
+    // 路径写在下一行的：`app.post<{...}>(` 换行再写 `"/admin/..."`。以前这种直接被当成
+    // GET 丢掉，不检查 —— admin.ts 里就有两条这么写的。取不到路径的写操作按 "?" 判红。
+    const wrapped = short ? null : /^ {2,4}app\.(post|put|patch|delete|all)\b/.exec(line);
+    if (wrapped) {
+      methods = [wrapped[1] === "all" ? "ALL" : wrapped[1]!.toUpperCase()];
+      const nextLine = lines.slice(i + 1, i + 3).find((l) => l.trim() !== "") ?? "";
+      p = /^\s*"([^"]+)"/.exec(nextLine)?.[1] ?? "?";
+      if (p === "?") methods = ["?"];
+    } else if (short) {
       methods = [short[1] === "all" ? "ALL" : short[1]!.toUpperCase()];
       p = short[2]!;
       // app.post("/x", someHandler); —— 处理函数是个具名常量，去它的定义里看。
@@ -90,8 +98,15 @@ const MULTIPART = /req\.(file|files|parts|saveRequestFiles)\(/;
 const READS_SESSION = /loadSession\(|loadAuthedUser\(|loadUserFromRequest\(|requireAdmin\(|requireUser\w*\(|req\.cookies|unsignCookie\(|bwc_sid/;
 
 type Verdict = "ok" | "missing" | "multipart-needs-verifyMultipartCsrf" | "unknown-method";
+/** 去掉注释再判：注释里写到 `verifyCsrf(` 不等于代码里调了（admin.ts 就有一句这样的注释）。
+ *  行注释只认前面是空白的 `//`，免得把字符串里的 `https://` 当成注释。 */
+function codeOnly(block: string): string {
+  return block.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+}
+
 function verdict(r: Route): Verdict {
   if (r.method === "?") return "unknown-method";
+  r = { ...r, block: codeOnly(r.block) };
   if (r.path.startsWith("/api/") && !API_CSRF_EXEMPT_PATHS.has(r.path)) return "ok"; // 全局钩子
   if (MULTIPART.test(r.block)) return /verifyMultipartCsrf\(/.test(r.block) ? "ok" : "multipart-needs-verifyMultipartCsrf";
   return /verifyCsrf\(/.test(r.block) ? "ok" : "missing";
@@ -124,6 +139,10 @@ describe("网页端每个写操作都校验 CSRF", () => {
     expect(count("admin.ts"), "admin.ts 里一条写操作都没扫到").toBeGreaterThan(40);
     expect(count("index.ts"), "index.ts 里一条写操作都没扫到").toBeGreaterThan(30);
     expect(all.some((r) => r.path === "/admin/backup/import"), "连导入备份都没扫到").toBe(true);
+    // 路径写在下一行的两条（以前被当成 GET 漏掉）。
+    for (const wrappedPath of ["/admin/api/tokens/:id/rotate", "/admin/client-release/:platform/binary/:filename/delete"]) {
+      expect(all.some((r) => r.method === "POST" && r.path === wrappedPath), `换行写路径的 ${wrappedPath} 没扫到`).toBe(true);
+    }
     const icsUpload = all.find((r) => r.path === "/app/calendars/:id/import/file");
     expect(icsUpload, "连导入 .ics 文件都没扫到").toBeDefined();
     expect(MULTIPART.test(icsUpload!.block), "导入 .ics 文件没被认成上传 —— 上传的判据失效了").toBe(true);

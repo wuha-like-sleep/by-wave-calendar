@@ -186,7 +186,8 @@ const NOT_COUNTED_AS_DATA: Partial<Record<(typeof EXPORT_TABLES)[number]["name"]
  * 只锁缺的那几张：文件里有的表，不管库里有什么都会按文件整张替换，数不数都一样。
  *
  * 换成 SERIALIZABLE 也能发现冲突，但发现的方式是「提交时报序列化失败」—— 站长看到的是一次
- * 莫名其妙的恢复失败，还得重来；锁是让并发的那一笔写等一下，两边都不失败。
+ * 莫名其妙的恢复失败，还得重来；锁一般只是让并发的那一笔写等一下。极少数情况下（并发事务先锁了文件里有的某张表的行、再来写缺的表）
+ * 会和恢复互等成死锁，Postgres 会整体回滚其中一边：恢复被回滚时不丢数据，重试即可。
  *
  * 导出只为了让测试在事务里调它、再去 pg_locks 里看锁到底拿没拿到（test/integration/backup_restore_lock.int.test.ts）。
  */
