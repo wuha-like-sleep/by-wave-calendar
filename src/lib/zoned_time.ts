@@ -44,14 +44,14 @@ function formatterFor(tz: string): Intl.DateTimeFormat | null {
 
 /**
  * 是不是一个 IANA 时区名（"Australia/Melbourne"、"UTC"…）。空串、非字符串一律 false。
- * 只认「地区/城市」形状和 UTC：Node 的 Intl 也认 "+08:00"、"CST"、"EST"，可这些会原样写进
+ * 只认「地区/城市」形状和 UTC、GMT（个别安卓设备报的就是 GMT）：Node 的 Intl 也认 "+08:00"、"CST"、"EST"，可这些会原样写进
  * 导出的 TZID，手机和别的日历软件不认识，按 UTC 或本机时间去解释。
  */
 export function isValidTimeZone(tz: unknown): tz is string {
   if (typeof tz !== "string") return false;
   const t = tz.trim();
   if (!t || t !== tz) return false;
-  if (t !== "UTC" && !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/.test(t)) return false;
+  if (t !== "UTC" && t !== "GMT" && !/^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)+$/.test(t)) return false;
   return formatterFor(t) !== null;
 }
 
