@@ -150,8 +150,12 @@ final class LocalNotifications {
         await reschedule(profileId: input.profileId, events: input.events, calendars: input.calendars)
     }
 
-    /// 清掉某一个账号的待发提醒。退出登录走这条 —— 别动其它账号的。
+    /// 清掉某一个账号的待发提醒。退出登录 / 被登出 / 移除账号走这条 —— 别动其它账号的。
     func clearAll(profileId: String) async {
+        // 上一次排程用的如果正是这个账号的数据，一起扔掉：不然用户接着在设置里改
+        // 「提前多久」，reapplyLeadTimeChange 会照着它把刚清掉的提醒原样排回去 ——
+        // 而这个账号已经退出了。
+        if lastInput?.profileId == profileId { lastInput = nil }
         await removePending(matching: Self.prefix(for: profileId))
     }
 

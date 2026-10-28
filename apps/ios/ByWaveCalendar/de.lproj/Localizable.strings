@@ -390,3 +390,9 @@
 "删除后 5 秒内可撤销。" = "Innerhalb von 5 Sekunden nach dem Löschen widerrufbar.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Innerhalb von 5 Sekunden widerrufbar. Wiederkehrende Termine über die Details löschen.";
 "密码错误" = "Passwort falsch";
+
+// Vom Server abgemeldet (Passwort geändert / zurückgesetzt, Gerät entfernt, Konto deaktiviert)
+"密码已更改或此设备已被移除，请重新登录" = "Das Passwort wurde geändert oder dieses Gerät wurde entfernt. Melde dich erneut an";
+"%@ 已被登出" = "%@ wurde abgemeldet";
+"密码已更改或此设备已被移除。现在使用的是 %@。" = "Das Passwort wurde geändert oder dieses Gerät wurde entfernt. Du verwendest jetzt %@.";
+"Apple 登录正在进行，请稍候" = "Die Anmeldung mit Apple läuft bereits. Bitte warte kurz.";

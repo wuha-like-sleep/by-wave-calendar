@@ -390,3 +390,9 @@
 "删除后 5 秒内可撤销。" = "Vous pouvez annuler dans les 5 secondes après la suppression.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Annulation possible pendant 5 secondes. Pour les événements récurrents, supprimez depuis les détails.";
 "密码错误" = "Mot de passe incorrect";
+
+// Déconnecté par le serveur (mot de passe modifié / réinitialisé, appareil retiré, compte désactivé)
+"密码已更改或此设备已被移除，请重新登录" = "Le mot de passe a été modifié ou cet appareil a été retiré. Reconnectez-vous";
+"%@ 已被登出" = "Le compte %@ a été déconnecté";
+"密码已更改或此设备已被移除。现在使用的是 %@。" = "Le mot de passe a été modifié ou cet appareil a été retiré. Vous utilisez maintenant %@.";
+"Apple 登录正在进行，请稍候" = "La connexion avec Apple est déjà en cours. Veuillez patienter.";

@@ -19,6 +19,10 @@ struct RootView: View {
                 // 「设置 / 账号 / 退出」，日历自己的工具栏都有。宽屏的日、周、月格子
                 // 本来就按宽度铺开，不需要另一套外壳。
                 CalendarView()
+                    // 换了账号就整个重新挂载日历：CalendarView 的日程、日历列表、
+                    // 同步时间都存在它自己的 @State 里，不重新挂载的话，
+                    // 换账号之后手上还是上一个账号的日程，要等下一次轮询（最长 60 秒）才换。
+                    .id(state.activeProfileId)
                     .transition(.opacity)
             } else {
                 SetupView()
