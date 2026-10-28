@@ -359,7 +359,7 @@
 "解析错误：%@" = "Parse error: %@";
 "令牌刷新失败 (HTTP %lld) — 请重新登录" = "Token refresh failed (HTTP %lld) — please sign in again";
 "二维码内容无效，请确认从 ByWave Calendar 网页生成" = "Invalid QR contents. Make sure it was generated from the ByWave Calendar website.";
-"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "The admin hasn't enabled app sync.\nGo to the web admin → Manage → API & APPs → turn on “App sign-in”, then retry.";
+"管理员未启用 APP 同步功能。\n请进入网页后台 → 管理 → API & APPs → 「打开 APP 登录」开关后重试。" = "The admin hasn't enabled app sync.\nOn the web, open Admin console → API (/admin/api#apps), tick “Allow native app sync” under “Native app sync”, save, then retry.";
 "配对码已过期或被使用。\n请回到网页 /app/settings#devices 点「绑定新设备」重新生成。" = "The pair code has expired or been used.\nGo back to /app/settings#devices and tap “Pair new device” to generate a new one.";
 "配对码格式不对。请确认是 6 位字符（字母 + 数字）。" = "Invalid pair-code format. It should be 6 characters (letters + digits).";
 "服务器需要升级到 v0.7.4 或更高版本。\n（旧版本的 CSRF 防护误拦了 APP 请求。）" = "The server needs to be upgraded to v0.7.4 or later.\n(Older versions' CSRF protection wrongly blocks app requests.)";
