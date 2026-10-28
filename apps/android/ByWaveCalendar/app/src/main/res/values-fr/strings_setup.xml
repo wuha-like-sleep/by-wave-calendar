@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">E-mail ou mot de passe incorrect</string>
     <string name="setupvm_err_account_locked">Trop de tentatives échouées. Réessayez plus tard.</string>
     <string name="setupvm_err_account_disabled">Compte désactivé — contactez l’administrateur</string>
-    <string name="setupvm_err_apps_disabled">L’administrateur n’a pas activé la synchronisation de l’app.\nAllez dans le panneau web → Gérer → API et apps → activez « Connexion de l’app », puis réessayez.</string>
+    <string name="setupvm_err_apps_disabled">L’administrateur n’a pas activé la synchronisation de l’app.\nSur le web, allez dans « Administration » → « API » → « Synchronisation des apps natives », cochez « Autoriser la synchronisation des apps natives », cliquez sur « Enregistrer », puis réessayez.</string>
     <string name="setupvm_err_mfa_expired">La session de vérification a expiré. Reconnectez-vous</string>
     <string name="setupvm_err_pair_code_expired">Ce code de connexion a expiré ou a déjà été utilisé. Générez-en un nouveau sur le web.</string>
     <string name="setupvm_err_http">Échec de la connexion (HTTP %1$d)</string>
+    <string name="setupvm_err_bad_format">Le format de l’e-mail ou du mot de passe n’est pas valide</string>
+    <string name="setupvm_err_rate_limited">Trop de tentatives. Réessayez plus tard.</string>
+    <string name="setupvm_err_server">Erreur du serveur. Réessayez plus tard.</string>
 </resources>

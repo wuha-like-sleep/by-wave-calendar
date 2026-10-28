@@ -35,6 +35,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import cn.bywave.calendar.data.auth.SignInPrefill
 import cn.bywave.calendar.i18n.LocaleHelper
 import cn.bywave.calendar.ui.calendar.CalendarScreen
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
@@ -186,7 +187,19 @@ private fun AppRoot() {
                     val title = java.net.URLEncoder.encode(ev.summary, "UTF-8")
                     nav.navigate("attendees/${ev.id}/$title")
                 },
-                onAddAccount = { nav.navigate(AuthRouting.SETUP) },
+                onAddAccount = {
+                    // 普通的「添加账号」是一张空白登录页。
+                    profiles.prefillNextSignIn(null)
+                    nav.navigate(AuthRouting.SETUP)
+                },
+                onSignInAgain = { notice ->
+                    // 从「已被登出」提示条进来：登录页预填那个账号的服务器和邮箱，只差输密码。
+                    // 提示不在这里收：重新登回那个账号时 upsertAndActivate 会收掉；
+                    // 进了登录页又按返回回来，提示还得在。
+                    profiles.prefillNextSignIn(SignInPrefill(serverUrl = notice.serverUrl, email = notice.email))
+                    // 连点两下不能压两张登录页：第二张建出来时预填已经被第一张取走，是空白的。
+                    nav.navigate(AuthRouting.SETUP) { launchSingleTop = true }
+                },
                 onOpenSearch = { nav.navigate("search") },
             )
         }

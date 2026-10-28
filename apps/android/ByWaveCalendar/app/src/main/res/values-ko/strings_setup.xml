@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">이메일 또는 비밀번호가 올바르지 않습니다</string>
     <string name="setupvm_err_account_locked">로그인 실패가 너무 많습니다. 잠시 후 다시 시도하세요.</string>
     <string name="setupvm_err_account_disabled">계정이 비활성화되었습니다. 관리자에게 문의하세요</string>
-    <string name="setupvm_err_apps_disabled">관리자가 앱 동기화를 활성화하지 않았습니다.\n웹 관리자 → 관리 → API &amp; APPs → ‘앱 로그인’을 켠 뒤 다시 시도하세요.</string>
+    <string name="setupvm_err_apps_disabled">관리자가 앱 동기화를 활성화하지 않았습니다.\n웹의 ‘관리자’ → ‘API’ → ‘네이티브 앱 동기화’에서 ‘네이티브 앱 동기화 허용’을 체크하고 ‘저장’을 누른 뒤 다시 시도하세요.</string>
     <string name="setupvm_err_mfa_expired">인증 세션이 만료되었습니다. 다시 로그인하세요</string>
     <string name="setupvm_err_pair_code_expired">이 로그인 코드는 만료되었거나 이미 사용되었습니다. 웹에서 새로 생성하세요.</string>
     <string name="setupvm_err_http">로그인 실패 (HTTP %1$d)</string>
+    <string name="setupvm_err_bad_format">이메일 또는 비밀번호 형식이 올바르지 않습니다</string>
+    <string name="setupvm_err_rate_limited">시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.</string>
+    <string name="setupvm_err_server">서버 오류가 발생했습니다. 잠시 후 다시 시도하세요.</string>
 </resources>

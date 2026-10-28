@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">E-Mail oder Passwort falsch</string>
     <string name="setupvm_err_account_locked">Zu viele fehlgeschlagene Versuche. Versuche es später erneut.</string>
     <string name="setupvm_err_account_disabled">Konto deaktiviert – wende dich an den Administrator</string>
-    <string name="setupvm_err_apps_disabled">Der Administrator hat die App-Synchronisierung nicht aktiviert.\nGehe im Web-Backend zu Verwalten → API &amp; Apps → aktiviere „App-Anmeldung“ und versuche es erneut.</string>
+    <string name="setupvm_err_apps_disabled">Der Administrator hat die App-Synchronisierung nicht aktiviert.\nÖffne im Web „Verwaltung“ → „API“ → „Native App-Synchronisierung“, aktiviere „Native App-Synchronisierung erlauben“, klicke auf „Speichern“ und versuche es erneut.</string>
     <string name="setupvm_err_mfa_expired">Die Bestätigungssitzung ist abgelaufen. Melde dich erneut an</string>
     <string name="setupvm_err_pair_code_expired">Dieser Anmeldecode ist abgelaufen oder wurde bereits verwendet. Erzeuge im Web einen neuen.</string>
     <string name="setupvm_err_http">Anmeldung fehlgeschlagen (HTTP %1$d)</string>
+    <string name="setupvm_err_bad_format">E-Mail oder Passwort hat ein ungültiges Format</string>
+    <string name="setupvm_err_rate_limited">Zu viele Versuche. Versuche es später erneut.</string>
+    <string name="setupvm_err_server">Serverfehler. Versuche es später erneut.</string>
 </resources>
