@@ -52,6 +52,15 @@ struct CalendarView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // 「某个账号被服务端登出、已切到这个账号」的提示。放在导航栏下面、
+                // 视图切换条上面：放到 NavigationStack 外面（safeAreaInset）的话，
+                // iOS 26 起的浮动导航栏不会让位，提示条会盖住设置 / 头像 / 日周月年。
+                if let notice = state.accountNotice, let current = state.activeProfile {
+                    AccountNoticeBanner(notice: notice, current: current) {
+                        withAnimation(.snappy) { state.dismissAccountNotice() }
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 navBar
                 ZStack(alignment: .top) {
                     contentForMode
@@ -71,6 +80,7 @@ struct CalendarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .animation(.snappy, value: state.accountNotice)
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -579,6 +589,12 @@ struct CalendarView: View {
         // swipe-spam.
         let path = "/events?from=\(DateFormatters.isoPlain.string(from: from).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)&to=\(DateFormatters.isoPlain.string(from: to).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!)"
 
+        // 这次加载是替哪个账号取的。下面每个 await 之后都可能已经换了账号
+        // （切账号、被服务端登出后自动切走、移除账号）；
+        // 缓存键、提醒、系统日历镜像要是在 await 之后才去读「当前账号」，
+        // 上一个账号的日程就会写进下一个账号的离线缓存、按下一个账号的名义排提醒。
+        let loadingProfileId = state.activeProfileId
+
         do {
             let client = APIClient(state: state)
             let resp: EventsResponse = try await client.get(path)
@@ -590,6 +606,9 @@ struct CalendarView: View {
             let sortedEvents = await Task.detached(priority: .userInitiated) {
                 resp.events.sorted { $0.startsAt < $1.startsAt }
             }.value
+            // 账号已经换了（或已退出）：这份数据不属于现在的账号，整个丢掉。
+            // 这个视图本身也马上会被 RootView 按新账号重新挂载。
+            guard state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
             self.calendars = resp.calendars
             self.events = sortedEvents
             self.lastSyncedAt = Date()
@@ -629,6 +648,9 @@ struct CalendarView: View {
             }
         } catch let e as APIError {
             errorMessage = e.localizedDescription
+        } catch is CancellationError {
+            // 账号在请求途中换了（AppState.refreshIfNeeded 丢掉了上一个账号的令牌），
+            // 或者视图正在被撤下。不是错误，别在界面上写一行看不懂的英文。
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -669,6 +691,64 @@ struct CalendarView: View {
     private func stopPolling() {
         pollTask?.cancel()
         pollTask = nil
+    }
+}
+
+/// 「某个账号被服务端登出、已经换到另一个账号」的提示条。
+///
+/// 被登出的是谁、为什么、现在用的是谁，三样都写出来 —— 悄悄换过去的话，
+/// 用户会以为自己还在原来那个账号里。不自动消失，点 × 才关。
+private struct AccountNoticeBanner: View {
+    let notice: AccountNotice
+    let current: Profile
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("%@ 已被登出".locFormat(labels.gone))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Text("密码已更改或此设备已被移除。现在使用的是 %@。".locFormat(labels.now))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 4)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("关闭"))
+        }
+        .padding(12)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.orange.opacity(0.4), lineWidth: 0.5),
+        )
+        .frame(maxWidth: 560)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
+    }
+
+    /// 两个账号邮箱一样（在不同服务器上）时只写邮箱分不出谁是谁，补上服务器。
+    private var labels: (gone: String, now: String) {
+        let gone = notice.accountLabel
+        let now = current.displayLabel
+        guard gone == now else { return (gone, now) }
+        return ("\(gone) · \(notice.accountHost)", "\(now) · \(current.displaySubtitle)")
     }
 }
 

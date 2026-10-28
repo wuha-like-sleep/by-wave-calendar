@@ -16,13 +16,18 @@ struct RootView: View {
                 // iPad / unfolded layouts get a 2-column split: sidebar
                 // with view mode + nav, main area shows the active grid.
                 // iPhone keeps the single-column CalendarView as-is.
-                if horizontalSizeClass == .regular {
-                    iPadShell()
-                        .transition(.opacity)
-                } else {
-                    CalendarView()
-                        .transition(.opacity)
+                Group {
+                    if horizontalSizeClass == .regular {
+                        iPadShell()
+                    } else {
+                        CalendarView()
+                    }
                 }
+                // 换了账号就整个重新挂载日历：CalendarView 的日程、日历列表、
+                // 同步时间都存在它自己的 @State 里，不重新挂载的话，
+                // 换账号之后手上还是上一个账号的日程，要等下一次轮询（最长 60 秒）才换。
+                .id(state.activeProfileId)
+                .transition(.opacity)
             } else {
                 SetupView()
                     .transition(.opacity)

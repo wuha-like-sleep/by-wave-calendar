@@ -390,3 +390,9 @@
 "删除后 5 秒内可撤销。" = "You can undo within 5 seconds after deleting.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "You can undo within 5 seconds. For recurring events, open details to delete.";
 "密码错误" = "Incorrect password";
+
+// Signed out by the server (password changed / reset, device removed, account disabled)
+"密码已更改或此设备已被移除，请重新登录" = "Your password was changed or this device was removed. Please sign in again.";
+"%@ 已被登出" = "%@ was signed out";
+"密码已更改或此设备已被移除。现在使用的是 %@。" = "Its password was changed or this device was removed. You’re now using %@.";
+"Apple 登录正在进行，请稍候" = "Sign in with Apple is already in progress. Please wait.";

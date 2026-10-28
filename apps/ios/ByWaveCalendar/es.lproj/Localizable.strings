@@ -390,3 +390,9 @@
 "删除后 5 秒内可撤销。" = "Puedes deshacer en los 5 segundos posteriores a la eliminación.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Puedes deshacer en 5 segundos. Para eventos recurrentes, elimínalos desde los detalles.";
 "密码错误" = "Contraseña incorrecta";
+
+// Sesión cerrada por el servidor (contraseña cambiada / restablecida, dispositivo quitado, cuenta desactivada)
+"密码已更改或此设备已被移除，请重新登录" = "Se cambió la contraseña o se quitó este dispositivo. Vuelve a iniciar sesión";
+"%@ 已被登出" = "Se cerró la sesión de %@";
+"密码已更改或此设备已被移除。现在使用的是 %@。" = "Se cambió la contraseña o se quitó este dispositivo. Ahora estás usando %@.";
+"Apple 登录正在进行，请稍候" = "Ya hay un inicio de sesión con Apple en curso. Espera un momento.";
