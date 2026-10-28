@@ -48,11 +48,16 @@ enum AppleSignInError: Error, LocalizedError {
     /// `error` slug so the caller can map it to friendly Chinese text.
     case server(status: Int, errorCode: String?, message: String?)
     case network(Error)
+    /// 上一次「通过 Apple 登录」还没结束又发起了一次。拒绝这一次，
+    /// 上一次照常走完（见 AppleSignIn.run）。调用方静默处理。
+    case alreadyInProgress
 
     var errorDescription: String? {
         switch self {
         case .userCancelled:
             return "已取消".loc
+        case .alreadyInProgress:
+            return "Apple 登录正在进行，请稍候".loc
         case .missingIdentityToken:
             return "未能从 Apple 获取登录凭证，请重试".loc
         case .unexpectedCredential:
@@ -104,6 +109,11 @@ final class AppleSignIn: NSObject {
     }
 
     private func run(serverURL: URL) async throws -> AppleSignInOutcome {
+        // 已经有一次在等 Apple 回话了：拒绝这一次，**不许**覆盖 continuation。
+        // 以前这里直接覆盖：前一次的 continuation 再也没人 resume，等它的那个登录
+        // 永远挂着（按钮一直转圈），而且两次请求的回调会抢同一个 continuation、
+        // 同一个 serverURL。单例 + 只有一个槽位，只能一次一个。
+        guard continuation == nil else { throw AppleSignInError.alreadyInProgress }
         self.serverURL = serverURL
         return try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation

@@ -157,6 +157,11 @@ struct SetupView: View {
                 {
                     serverURLInput = last
                 }
+                // 没记过（这个版本之前扫码登录的人一直没记上）就用当前账号的服务器：
+                // 退出 / 被登出之后回到这里，当前账号就是刚退出的那个。
+                if serverURLInput.isEmpty, let current = state.activeProfile?.serverURLString {
+                    serverURLInput = current
+                }
             }
             .onChange(of: method) { _, _ in
                 // Clear errors when user switches methods — prior error
@@ -456,18 +461,40 @@ struct SetupView: View {
         if s.isEmpty { return nil }
         guard let url = await PairingService.probeServerURL(s) else { return nil }
         // Save eagerly so a failed login attempt doesn't make the user
-        // re-type the URL next time. completePairing also writes this
-        // key on success — duplicate write is harmless.
-        UserDefaults.standard.set(url.absoluteString, forKey: Self.lastServerURLKey)
+        // re-type the URL next time.
+        rememberServerURL(url)
         return url
     }
 
+    /// 记下这次登录用的服务器，下次回到登录页（退出登录 / 被登出）时地址栏预先填好。
+    ///
+    /// 扫码登录不经过上面的 normalizedServerURL（地址在二维码里），以前这里的注释
+    /// 说「completePairing 成功时也会写」，其实它从来没写过 —— 扫码登录的用户
+    /// 一退出，登录页的地址栏就是空的。现在扫码成功也走这一句。
+    private func rememberServerURL(_ url: URL) {
+        UserDefaults.standard.set(url.absoluteString, forKey: Self.lastServerURLKey)
+    }
+
+    /// 点下任何一个登录按钮的第一件事：先把「正在处理」立起来，再去做任何要等的事。
+    ///
+    /// 以前 isWorking 是在探测服务器地址（normalizedServerURL：没写 http(s):// 时
+    /// 先试 https、不通再试 http，每次最长 5 秒）**之后**才置上的：这几秒里按钮
+    /// 既不转圈也不置灰，用户以为没点上、再点一次，就同时跑起两次登录
+    /// （「通过 Apple 登录」还会因此卡死，见 AppleSignIn.run）。
+    /// 返回 false 表示已经有一次在跑了，这次点击什么都不做。
+    private func beginWork() -> Bool {
+        guard !isWorking else { return false }
+        isWorking = true
+        errorMessage = nil
+        return true
+    }
+
     private func loginWithPassword() async {
+        guard beginWork() else { return }
+        defer { isWorking = false }
         guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效".loc; return
         }
-        isWorking = true; errorMessage = nil
-        defer { isWorking = false }
         do {
             var req = URLRequest(url: url.appendingPathComponent("/api/v1/auth/login-password"))
             req.httpMethod = "POST"
@@ -532,11 +559,11 @@ struct SetupView: View {
     }
 
     private func loginViaBrowser() async {
+        guard beginWork() else { return }
+        defer { isWorking = false }
         guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效".loc; return
         }
-        isWorking = true; errorMessage = nil
-        defer { isWorking = false }
         do {
             let code = try await WebAuthLogin.start(serverURL: url)
             await doClaim(serverURL: url, code: code)
@@ -549,11 +576,11 @@ struct SetupView: View {
     }
 
     private func loginWithApple() async {
+        guard beginWork() else { return }
+        defer { isWorking = false }
         guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效".loc; return
         }
-        isWorking = true; errorMessage = nil
-        defer { isWorking = false }
         do {
             // AppleSignIn returns the SAME PasswordLoginResponse the
             // password / MFA paths use — so we go through the identical
@@ -585,6 +612,8 @@ struct SetupView: View {
             dismiss()
         } catch let e as AppleSignInError {
             if case .userCancelled = e { return }  // silent — user tapped Cancel
+            // 上一次「通过 Apple 登录」还没走完：那一次会自己给出结果，这一次安静地退掉。
+            if case .alreadyInProgress = e { return }
             errorMessage = e.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
@@ -592,6 +621,8 @@ struct SetupView: View {
     }
 
     private func pairFromScan(_ raw: String) async {
+        guard beginWork() else { return }
+        defer { isWorking = false }
         guard let payload = PairingService.parseScanned(raw) else {
             errorMessage = "二维码不是来自 ByWave Calendar 的".loc; return
         }
@@ -602,15 +633,17 @@ struct SetupView: View {
     }
 
     private func pairWithCode() async {
+        guard beginWork() else { return }
+        defer { isWorking = false }
         guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效".loc; return
         }
         await doClaim(serverURL: url, code: manualCode.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    /// 用配对码换令牌。调用方（扫码 / 配对码 / 浏览器登录）已经用 beginWork() 立起了
+    /// isWorking、也负责放下它，这里不再碰。
     private func doClaim(serverURL: URL, code: String) async {
-        isWorking = true; errorMessage = nil
-        defer { isWorking = false }
         do {
             let resp = try await PairingService.claim(
                 serverURL: serverURL,
@@ -623,6 +656,8 @@ struct SetupView: View {
             // rejects. See AppState.parseIsoLenient comment for the
             // session-cripping bug that caused.
             let expDate = AppState.parseIsoLenient(resp.accessTokenExpiresAt) ?? Date().addingTimeInterval(3600)
+            // 扫码登录的地址来自二维码，没有经过 normalizedServerURL —— 在这里补记。
+            rememberServerURL(serverURL)
             state.completePairing(
                 serverURL: serverURL,
                 refreshToken: resp.refreshToken,
