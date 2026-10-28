@@ -200,9 +200,22 @@ private struct DayCell: View {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
     }
 
+    /// 这一格放得下几行事件，按格子的真实高度算。
+    /// 以前是「高于 60pt 就放三行 + 一行 +N」，而那四行加日期要将近 100pt：
+    /// iPhone Duo 外屏只有 678pt 高，一格才 72pt 左右，有三件事的那天格子
+    /// 被撑高、上下各盖住半行。现在按行数放，放不下的进右上角的 +N。
+    /// 4+4 上下内边距、22 日期圆；每行 13pt 字 + 4pt 间距。末尾 Spacer 前那 4pt 间距
+    /// 不算进去：它落在下内边距里，被裁掉的只是空白。
+    private var eventLineCapacity: Int {
+        max(0, Int((height - 30) / 17))
+    }
+
     var body: some View {
+        let lines = min(eventLineCapacity, 3)
+        let shown = events.count <= lines ? events.count : lines
+        let hidden = events.count - shown
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
+            HStack(spacing: 2) {
                 // 只能有一个 .foregroundStyle。以前写了两遍：先 numberColor、
                 // 后 .white，而 SwiftUI 里靠外层的那次会被内层覆盖——加上
                 // numberColor 对「今天」返回的正好是品牌蓝，于是蓝底配蓝字，
@@ -213,28 +226,32 @@ private struct DayCell: View {
                     .frame(minWidth: 22, minHeight: 22)
                     .background(isToday ? Color.accentColor : .clear, in: Circle())
                     .foregroundStyle(isToday ? Color.white : numberColor)
-                Spacer()
+                Spacer(minLength: 0)
+                // 「还有几件」放在日期同一行的右边，不再单独占一行。
+                if lines > 0 && hidden > 0 {
+                    Text("+\(hidden)")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
             }
             // Up to 3 events with a colored bar; more compressed when no space.
             // Text bumped from 9pt → 10.5pt with medium weight for legibility
             // — 9pt was readable on a Retina screen but too thin in dark mode
             // / for older eyes.
-            if height > 60 {
-                ForEach(events.prefix(3)) { ev in
+            if lines > 0 {
+                ForEach(events.prefix(shown)) { ev in
                     HStack(spacing: 3) {
+                        // 色条要定高：不定高它会跟着格子拉长，空出来的高度被摊进每一行。
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
-                            .frame(width: 3)
+                            .frame(width: 3, height: 12)
                         Text(ev.summary)
                             .font(.system(size: 10.5, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
-                }
-                if events.count > 3 {
-                    Text("+\(events.count - 3)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
                 }
             } else {
                 // Compact: just colored dots in a row.
@@ -252,7 +269,10 @@ private struct DayCell: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 4).padding(.vertical, 4)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // 格线跟着格子本身画、超出的内容裁掉：上面的行数是按默认字号算的，
+        // 系统调大字号时宁可少露半行，也不许压到隔壁格子上。
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         .background(
             Rectangle().stroke(Theme.gridLine, lineWidth: 0.5)
         )

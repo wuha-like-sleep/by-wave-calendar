@@ -6,23 +6,20 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var state: AppState
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         Group {
             if state.isBootstrapping {
                 BootSplashView()
             } else if state.isSignedIn {
-                // iPad / unfolded layouts get a 2-column split: sidebar
-                // with view mode + nav, main area shows the active grid.
-                // iPhone keeps the single-column CalendarView as-is.
-                if horizontalSizeClass == .regular {
-                    iPadShell()
-                        .transition(.opacity)
-                } else {
-                    CalendarView()
-                        .transition(.opacity)
-                }
+                // 不按 horizontalSizeClass 换外壳。以前宽屏（iPad / 展开的 iPhone Duo）
+                // 走一套带侧栏的 NavigationSplitView、窄屏走 CalendarView，两边各有
+                // 一个 CalendarView：Duo 每次折叠/展开、iPad 每次拖分屏，整棵日历都被
+                // 换掉——看到哪天、正在写一半的新事件全部丢失。侧栏里也只有
+                // 「设置 / 账号 / 退出」，日历自己的工具栏都有。宽屏的日、周、月格子
+                // 本来就按宽度铺开，不需要另一套外壳。
+                CalendarView()
+                    .transition(.opacity)
             } else {
                 SetupView()
                     .transition(.opacity)
@@ -30,45 +27,6 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.2), value: state.isSignedIn)
         .animation(.easeOut(duration: 0.2), value: state.isBootstrapping)
-    }
-}
-
-// iPad / regular-size layout. We use NavigationSplitView's sidebar
-// column for quick view-mode switching + settings entry, freeing up
-// the main column for full-width day/week/month/year grids.
-private struct iPadShell: View {
-    @EnvironmentObject var state: AppState
-    @State private var showingSettings = false
-
-    var body: some View {
-        NavigationSplitView {
-            List {
-                Section("视图") {
-                    NavigationLink("日历") { CalendarView() }
-                }
-                Section("快捷") {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Label("设置", systemImage: "gearshape")
-                    }
-                }
-                Section("账号") {
-                    if let email = state.currentUserEmail {
-                        Text(email).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Button(role: .destructive) {
-                        state.signOut()
-                    } label: {
-                        Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
-                    }
-                }
-            }
-            .navigationTitle("ByWave")
-        } detail: {
-            CalendarView()
-        }
-        .sheet(isPresented: $showingSettings) { SettingsView() }
     }
 }
 

@@ -31,6 +31,8 @@ struct CalendarView: View {
     @State private var events: [EventDTO] = []
     @State private var calendars: [CalendarMeta] = []
     @State private var isLoading = false
+    /// 系统现在有没有给竖栏（iPhone Duo 外屏）。见 VerticalBarProbe。
+    @State private var hasVerticalBar = false
     @State private var lastSyncedAt: Date?
     @State private var errorMessage: String?
     @State private var showingCreate = false
@@ -62,7 +64,10 @@ struct CalendarView: View {
                         // empty space above. Day/Month/Year are all happy
                         // to fill too.
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    if isLoading && events.isEmpty {
+                    // 还没有任何结果（缓存没读出来、第一次请求也还没回）时同样显示加载中。
+                    // 以前只看 isLoading，而 .task 开跑之前那一段它还是 false，
+                    // 冷启动先闪一下「今天没有事件」，几秒后日程才冒出来。
+                    if events.isEmpty && (isLoading || (lastSyncedAt == nil && errorMessage == nil)) {
                         // Cache miss + first fetch in flight
                         ProgressView()
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -73,59 +78,16 @@ struct CalendarView: View {
             }
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel(Text("设置"))
-                }
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        anchor = Calendar.current.startOfDay(for: Date())
-                    } label: {
-                        Text("今天").font(.callout.weight(.medium))
-                    }
-                    .disabled(Calendar.current.isDateInToday(anchor) && mode == .day)
-                }
-                // Profile-switcher button — Google-style avatar circle
-                // top-right. Tinted with brand accent, first letter of
-                // email inside. Tap → opens ProfileSwitcherView sheet.
-                // A small dot badge in the lower-right indicates "more
-                // than one account stashed" so the affordance is
-                // discoverable for users who don't know about multi-acct.
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showingProfileSwitcher = true
-                    } label: {
-                        profileAvatarBadge
-                    }
-                    .accessibilityLabel(Text("切换账号"))
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            showingSearch = true
-                        } label: { Label("搜索", systemImage: "magnifyingglass") }
-                        Button {
-                            showingFilter = true
-                        } label: {
-                            Label(state.hiddenCalendarIds.isEmpty ? "筛选日历".loc : "筛选日历 (%lld)".locFormat(visibleCalCount),
-                                  systemImage: "line.3.horizontal.decrease.circle")
-                        }
-                        Button {
-                            Task { await load(force: true) }
-                        } label: { Label("刷新", systemImage: "arrow.clockwise") }
-                            .disabled(isLoading)
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                    }
-                    .accessibilityLabel(Text("筛选日历"))
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showingCreate = true } label: { Image(systemName: "plus") }
-                        .disabled(calendars.isEmpty)
-                        .accessibilityLabel(Text("新建事件"))
-                }
-            }
+            // 所有按钮都声明「有竖栏就放竖栏」：iPhone Duo 外屏右边（横拿时左边）那条
+            // 竖栏是系统给的，按钮放进去，顶上的空间就留给日历本身。没有竖栏的机型
+            // 照旧排在顶上，这个声明不起作用。
+            .modifier(VerticalPreferredToolbar(
+                items: calendarToolbar,
+                verticalOnly: modeToolbar,
+                horizontalOnly: dateNavToolbar,
+                hasVerticalBar: hasVerticalBar,
+            ))
+            .background(VerticalBarProbe(isPresent: $hasVerticalBar))
             .refreshable { await load(force: true) }
             .task {
                 // On first appearance, hydrate from cache → instant render,
@@ -228,6 +190,82 @@ struct CalendarView: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var calendarToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                .accessibilityLabel(Text("设置"))
+        }
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                anchor = Calendar.current.startOfDay(for: Date())
+            } label: {
+                Text("今天").font(.callout.weight(.medium))
+            }
+            .disabled(Calendar.current.isDateInToday(anchor) && mode == .day)
+        }
+        // Profile-switcher button — Google-style avatar circle
+        // top-right. Tinted with brand accent, first letter of
+        // email inside. Tap → opens ProfileSwitcherView sheet.
+        // A small dot badge in the lower-right indicates "more
+        // than one account stashed" so the affordance is
+        // discoverable for users who don't know about multi-acct.
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingProfileSwitcher = true
+            } label: {
+                profileAvatarBadge
+            }
+            .accessibilityLabel(Text("切换账号"))
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button {
+                    showingSearch = true
+                } label: { Label("搜索", systemImage: "magnifyingglass") }
+                Button {
+                    showingFilter = true
+                } label: {
+                    Label(state.hiddenCalendarIds.isEmpty ? "筛选日历".loc : "筛选日历 (%lld)".locFormat(visibleCalCount),
+                          systemImage: "line.3.horizontal.decrease.circle")
+                }
+                Button {
+                    Task { await load(force: true) }
+                } label: { Label("刷新", systemImage: "arrow.clockwise") }
+                    .disabled(isLoading)
+            } label: {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+            }
+            .accessibilityLabel(Text("筛选日历"))
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button { showingCreate = true } label: { Image(systemName: "plus") }
+                .disabled(calendars.isEmpty)
+                .accessibilityLabel(Text("新建事件"))
+        }
+    }
+
+    /// 有竖栏时，日/周/月/年 也进竖栏，竖排成单独一组；顶上那条分段控件就不画了。
+    @ToolbarContentBuilder
+    private var modeToolbar: some ToolbarContent {
+        // 用普通 Button：试过按钮样式的 Toggle（收进「•••」时会打勾），但它每个
+        // 都更占高度，竖拿时四个只放得下两个，得不偿失。
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            ForEach(ViewMode.allCases) { m in
+                Button {
+                    mode = m
+                } label: {
+                    Text(m.rawValue.loc)
+                        .font(.callout.weight(mode == m ? .bold : .regular))
+                        .foregroundStyle(mode == m ? Color.accentColor : Color.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .accessibilityAddTraits(mode == m ? .isSelected : [])
+            }
+        }
+    }
+
     private var visibleCalCount: Int {
         calendars.filter { !state.hiddenCalendarIds.contains($0.id) }.count
     }
@@ -271,36 +309,55 @@ struct CalendarView: View {
         return "?"
     }
 
+    /// ‹ 日期 › 这一行。平时在分段控件下面；有竖栏时搬进顶栏正中，
+    /// 顶栏原来只写着「日历」两个字，等于白占一行。
+    private var dateNavRow: some View {
+        HStack(spacing: 6) {
+            Button {
+                UISelectionFeedbackGenerator().selectionChanged()
+                shiftAnchor(by: -1)
+            } label: { Image(systemName: "chevron.left") }
+                .accessibilityLabel(Text("上一页"))
+            Spacer()
+            Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
+                Text(anchorLabel)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Spacer()
+            Button {
+                UISelectionFeedbackGenerator().selectionChanged()
+                shiftAnchor(by: 1)
+            } label: { Image(systemName: "chevron.right") }
+                .accessibilityLabel(Text("下一页"))
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var dateNavToolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) {
+            dateNavRow
+        }
+    }
+
     // MARK: - Header (mode picker + nav arrows + anchor date)
     private var navBar: some View {
         VStack(spacing: 6) {
-            Picker("视图", selection: $mode) {
-                ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 14)
-
-            HStack(spacing: 6) {
-                Button {
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    shiftAnchor(by: -1)
-                } label: { Image(systemName: "chevron.left") }
-                    .accessibilityLabel(Text("上一页"))
-                Spacer()
-                Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
-                    Text(anchorLabel)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(.primary)
+            if !hasVerticalBar {
+                Picker("视图", selection: $mode) {
+                    ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
                 }
-                Spacer()
-                Button {
-                    UISelectionFeedbackGenerator().selectionChanged()
-                    shiftAnchor(by: 1)
-                } label: { Image(systemName: "chevron.right") }
-                    .accessibilityLabel(Text("下一页"))
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 14)
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, 4)
+
+            if !hasVerticalBar {
+                dateNavRow
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 4)
+            }
 
             // 错误独立一行，且优先于「X 分钟前同步」。
             //
@@ -683,5 +740,82 @@ extension Color {
         let g = Double((v >> 8) & 0xff) / 255
         let b = Double(v & 0xff) / 255
         self = Color(red: r, green: g, blue: b)
+    }
+}
+
+// MARK: - iPhone Duo 外屏的竖栏
+
+/// 把整组工具栏按钮声明成「有竖栏就优先放竖栏」（iOS 27.1 的 axisBehavior）。
+/// ToolbarContentBuilder 不支持 `if #available`，所以版本判断放在 View 这一层。
+private struct VerticalPreferredToolbar<Items: ToolbarContent, VerticalOnly: ToolbarContent, HorizontalOnly: ToolbarContent>: ViewModifier {
+    let items: Items
+    /// 只在有竖栏时才加的一组（日/周/月/年），和上面那组之间隔开。
+    let verticalOnly: VerticalOnly
+    /// 只在有竖栏时才加、但必须留在顶栏的（‹ 日期 ›）。
+    let horizontalOnly: HorizontalOnly
+    let hasVerticalBar: Bool
+
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.toolbar {
+                items.axisBehavior(.verticalPreferred)
+                if hasVerticalBar {
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                    verticalOnly.axisBehavior(.verticalPreferred)
+                    horizontalOnly.axisBehavior(.horizontalOnly)
+                }
+            }
+        } else {
+            content.toolbar { items }
+        }
+    }
+}
+
+/// 系统此刻有没有给竖栏。这个值只在 UIKit 的 trait 里（verticalBarEdge），
+/// SwiftUI 没有对应的环境变量，所以垫一个看不见、不接触摸的 UIView 去读，
+/// 折叠/展开、转屏时 trait 变了再报一次。
+private struct VerticalBarProbe: UIViewRepresentable {
+    @Binding var isPresent: Bool
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onChange = { present in
+            if isPresent != present { isPresent = present }
+        }
+        return view
+    }
+
+    func updateUIView(_ uiView: ProbeView, context: Context) {}
+
+    final class ProbeView: UIView {
+        var onChange: ((Bool) -> Void)?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isUserInteractionEnabled = false
+            isAccessibilityElement = false
+            if #available(iOS 27.1, *) {
+                registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) { (view: ProbeView, _) in
+                    view.report()
+                }
+            }
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            report()
+        }
+
+        private func report() {
+            guard window != nil else { return }
+            var present = false
+            if #available(iOS 27.1, *) {
+                present = traitCollection.verticalBarEdge != .unspecified
+            }
+            // 不在 SwiftUI 更新视图的这一轮里改状态。
+            DispatchQueue.main.async { [weak self] in self?.onChange?(present) }
+        }
     }
 }
