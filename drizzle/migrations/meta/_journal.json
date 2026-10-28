@@ -393,6 +393,13 @@
       "when": 1789974000000,
       "tag": "0055_device_dedup_includes_label",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1789977600000,
+      "tag": "0056_allday_dtend_resync",
+      "breakpoints": true
     }
   ]
 }
