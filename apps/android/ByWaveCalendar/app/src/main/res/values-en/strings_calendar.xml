@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">Couldn’t undo</string>
     <string name="cal_err_signout_failed">Couldn’t sign out</string>
     <string name="cal_err_not_signed_in">Sign in first</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">%1$s was signed out</string>
+    <string name="cal_signed_out_reason">The password was changed, or this device was removed.</string>
+    <string name="cal_signed_out_now_showing">Now showing the calendar for %1$s.</string>
+    <string name="cal_signed_out_sign_in_again">Sign in again</string>
 </resources>

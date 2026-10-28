@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">No se pudo deshacer</string>
     <string name="cal_err_signout_failed">No se pudo cerrar sesión</string>
     <string name="cal_err_not_signed_in">Inicia sesión primero</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">Se cerró la sesión de %1$s</string>
+    <string name="cal_signed_out_reason">La contraseña cambió o se quitó este dispositivo.</string>
+    <string name="cal_signed_out_now_showing">Ahora ves el calendario de %1$s.</string>
+    <string name="cal_signed_out_sign_in_again">Volver a iniciar sesión</string>
 </resources>
