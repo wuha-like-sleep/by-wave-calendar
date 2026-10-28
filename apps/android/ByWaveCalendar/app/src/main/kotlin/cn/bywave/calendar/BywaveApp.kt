@@ -9,6 +9,7 @@ import android.app.Application
 import android.content.Context
 import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.store.EventRepository
+import kotlinx.coroutines.launch
 import cn.bywave.calendar.i18n.LocaleHelper
 
 class BywaveApp : Application() {
@@ -32,7 +33,17 @@ class BywaveApp : Application() {
         // Configuration 的动作在 attachBaseContext（12 及以下）或者平台
         // LocaleManager（13+）里，见 LocaleHelper.kt。
         LocaleHelper.applyEarly(this)
+        // 被服务端踢掉的账号：和用户自己退出一样，把排好的提醒、系统日历里的镜像、
+        // 本地缓存一起清掉。见 ProfileStore.markSignedOut。
+        profiles.onPassiveRemoval = { gone ->
+            appScope.launch { runCatching { repository.wipeProfileFully(gone) } }
+        }
     }
+
+    /** 不跟任何页面同生共死的后台活儿（清理被踢掉的账号这种）。 */
+    private val appScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+    )
 
     companion object {
         @Volatile lateinit var instance: BywaveApp

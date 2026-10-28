@@ -129,8 +129,20 @@ class ProfileStore(context: Context) {
      */
     fun markSignedOut(profileId: String, @androidx.annotation.StringRes reason: Int) {
         _signedOutReason.value = reason
+        // 先拿住这个账号，删掉之后就找不到它了。
+        val gone = _profiles.value.firstOrNull { it.id == profileId }
         remove(profileId)
+        // **被服务端踢掉也要清干净本机的东西。** 以前只从账号列表里摘掉：
+        // 它排好的提醒照样按时响（通知里带着日程标题），系统「日历」App 里的
+        // 镜像日程永久留着 —— 而 App 里已经查无此账号，用户关不掉也删不掉。
+        // 自己点「退出登录」那条路早就会清（CalendarViewModel.signOutActive），
+        // 被动登出这条没跟上。
+        if (gone != null) onPassiveRemoval?.invoke(gone)
     }
+
+    /** 被服务端踢掉（不是用户自己退出）时要做的本机清理。由 BywaveApp 在启动时接上 ——
+     *  清理要用到数据库、提醒、系统日历，那些都不归账号列表这一层管。 */
+    @Volatile var onPassiveRemoval: ((Profile) -> Unit)? = null
 
     fun remove(id: String) {
         accessTokens.remove(id)
