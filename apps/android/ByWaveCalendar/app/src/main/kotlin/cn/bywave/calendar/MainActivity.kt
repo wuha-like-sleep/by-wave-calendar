@@ -1,14 +1,16 @@
 // Single-Activity entry point. v0.5 — multi-account aware.
 //
-// Sign-in state is now derived from ProfileStore.activeId being
-// non-null (instead of TokenStore.isSignedIn). The NavHost watches
-// it as a State<String?> so login completion + sign-out + last-
-// account removal all flip start destination without manual handoff.
+// Sign-in state is derived from ProfileStore.activeId being non-null
+// (instead of TokenStore.isSignedIn).
+//
+// 登录态驱动的跳转只有两条，各管一件事（见 AppRoot）：
+//   · 登录成功 → 只由登录页的 onSignedIn 跳日历页（冷启动首次登录、已登录后
+//     「添加另一个账号」都走它）。
+//   · 一个账号都不剩 → 由 activeId 变成 null 触发，清栈回登录页。
+// 起始页只在进 App 那一刻定一次，不再跟着 activeId 变。
 //
 // "Add another account" enters the setup screen WHILE staying signed
-// in to the current account — distinguished from cold-start setup
-// by passing addingExtra=true so the screen knows not to "auto-
-// return to calendar" if the user cancels.
+// in to the current account; backing out of it returns to the calendar.
 
 package cn.bywave.calendar
 
@@ -20,12 +22,14 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavGraph
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -90,6 +94,29 @@ private fun AppRoot() {
     val nav = rememberNavController()
     val loggedIn = activeId != null
 
+    // 起始页只在进 App 那一刻定一次，之后**不跟着登录态变**。
+    //
+    // 以前是 `startDestination = if (loggedIn) "calendar" else "setup"`：首次登录成功
+    // 那一刻 activeId 一变，整张导航图按新起始页重建，返回栈直接变成 [calendar]；
+    // 同一帧里登录页的 onSignedIn 又 navigate 了一次 calendar（它要 popUpTo 的 setup
+    // 已经不在栈里，被静默忽略）。栈里于是压着两个日历页：按返回键退到一个一模一样的
+    // 日历页，要再按一次才退出 App。
+    val startRoute = remember { AuthRouting.startRoute(signedIn = loggedIn) }
+
+    // 一个账号都不剩了（自己退出最后一个 / 最后一个被服务端登出）→ 清空返回栈回登录页。
+    // 以前这一步是「起始页跟着变、整张图重建」顺带做掉的；起始页定死之后要显式做。
+    LaunchedEffect(loggedIn) {
+        val stack = nav.currentBackStack.value
+            .filter { it.destination !is NavGraph }
+            .map { it.destination.route }
+        if (AuthRouting.mustResetToSetup(signedIn = loggedIn, stack = stack)) {
+            nav.navigate(AuthRouting.SETUP) {
+                popUpTo(nav.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     // In-app updater sheet — surfaces above whatever screen is showing
     // whenever UpdateChecker flips to Available. Sits at the root so
     // "settings → 立即检查更新" or a forced check from anywhere bubbles
@@ -106,31 +133,28 @@ private fun AppRoot() {
 
     NavHost(
         navController = nav,
-        startDestination = if (loggedIn) "calendar" else "setup",
+        startDestination = startRoute,
     ) {
-        composable("setup") {
+        composable(AuthRouting.SETUP) {
             val setupVm: SetupViewModel = viewModel()
             SetupScreen(
                 vm = setupVm,
                 onSignedIn = {
-                    // If we got here from "add another account", the
-                    // calendar route is already on the back stack; pop
-                    // back to it. Otherwise this was cold-start setup
-                    // and we navigate fresh.
-                    if (nav.previousBackStackEntry?.destination?.route == "calendar") {
-                        nav.popBackStack("calendar", inclusive = false)
-                    } else {
-                        nav.navigate("calendar") {
-                            popUpTo("setup") { inclusive = true }
-                        }
+                    // 登录成功的**唯一**跳转路径。冷启动首次登录：[setup] → [calendar]；
+                    // 「添加另一个账号」：[calendar, setup] → 弹掉 setup，下面那个日历页
+                    // 正好在栈顶，launchSingleTop 让它原地复用（它的 ViewModel 跟着
+                    // activeId 自己换账号），不会再压一个新的。
+                    nav.navigate(AuthRouting.CALENDAR) {
+                        popUpTo(AuthRouting.SETUP) { inclusive = true }
+                        launchSingleTop = true
                     }
                 },
-                onScanQr = { nav.navigate("scanner") },
+                onScanQr = { nav.navigate(AuthRouting.SCANNER) },
             )
         }
 
-        composable("scanner") {
-            val parentEntry = remember(nav) { nav.getBackStackEntry("setup") }
+        composable(AuthRouting.SCANNER) {
+            val parentEntry = remember(nav) { nav.getBackStackEntry(AuthRouting.SETUP) }
             val setupVm: SetupViewModel = viewModel(viewModelStoreOwner = parentEntry)
             ScannerScreen(
                 onResult = { raw ->
@@ -150,7 +174,7 @@ private fun AppRoot() {
             )
         }
 
-        composable("calendar") {
+        composable(AuthRouting.CALENDAR) {
             val calVm: CalendarViewModel = viewModel()
             CalendarScreen(
                 vm = calVm,
@@ -162,7 +186,7 @@ private fun AppRoot() {
                     val title = java.net.URLEncoder.encode(ev.summary, "UTF-8")
                     nav.navigate("attendees/${ev.id}/$title")
                 },
-                onAddAccount = { nav.navigate("setup") },
+                onAddAccount = { nav.navigate(AuthRouting.SETUP) },
                 onOpenSearch = { nav.navigate("search") },
             )
         }
@@ -205,9 +229,9 @@ private fun AppRoot() {
                     calVm.signOutActive()
                     // If there are still other profiles, stay on calendar
                     // (ProfileStore will have picked one as active);
-                    // else fall through to setup as the activeId Flow
-                    // flips and start-destination recomputes.
-                    nav.popBackStack("calendar", inclusive = false)
+                    // else activeId flips to null and AppRoot's reset
+                    // effect clears the stack back to setup.
+                    nav.popBackStack(AuthRouting.CALENDAR, inclusive = false)
                 },
                 onManageCalendars = { nav.navigate("calendars") },
                 onManageBookingLinks = { nav.navigate("booking_links") },
