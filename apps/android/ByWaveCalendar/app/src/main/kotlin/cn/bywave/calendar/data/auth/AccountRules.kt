@@ -69,6 +69,14 @@ internal object AccountRules {
         return SignOutTell(notices = current.filterNot { it == notice } + notice, reasonOnSetupPage = false)
     }
 
+    /** 删掉一个账号之后还留哪些「已被登出」提示。一个账号都不剩时日历页不会出现，
+     *  留着的提示只会在下次登录后冒出来、早已过时 —— 不管是被服务端踢掉的最后一个，
+     *  还是用户自己在设置里退出的最后一个，都要清空。 */
+    fun noticesAfterRemoval(
+        current: List<SignedOutNotice>,
+        remaining: List<Profile>,
+    ): List<SignedOutNotice> = if (remaining.isEmpty()) emptyList() else current
+
     /** 重新登录了某个账号，关于它的「已被登出」提示就过时了。 */
     fun noticesAfterSignIn(
         current: List<SignedOutNotice>,

@@ -58,4 +58,14 @@
 
     <!-- 被动登出时配对页顶部的说明 -->
     <string name="setup_signed_out_reason">Votre mot de passe a changé ou cet appareil a été retiré. Reconnectez-vous.</string>
+
+    <!-- 登录出错时的说明（LoginErrors.kt）。以前一律显示 Retrofit 的「HTTP 401」。 -->
+    <string name="setupvm_err_network">Impossible de joindre le serveur. Vérifiez l’adresse du serveur et votre réseau.</string>
+    <string name="setupvm_err_invalid_credentials">E-mail ou mot de passe incorrect</string>
+    <string name="setupvm_err_account_locked">Trop de tentatives échouées. Réessayez plus tard.</string>
+    <string name="setupvm_err_account_disabled">Compte désactivé — contactez l’administrateur</string>
+    <string name="setupvm_err_apps_disabled">L’administrateur n’a pas activé la synchronisation de l’app.\nAllez dans le panneau web → Gérer → API et apps → activez « Connexion de l’app », puis réessayez.</string>
+    <string name="setupvm_err_mfa_expired">La session de vérification a expiré. Reconnectez-vous</string>
+    <string name="setupvm_err_pair_code_expired">Ce code de connexion a expiré ou a déjà été utilisé. Générez-en un nouveau sur le web.</string>
+    <string name="setupvm_err_http">Échec de la connexion (HTTP %1$d)</string>
 </resources>

@@ -94,8 +94,34 @@ class SignedOutNoticeWiringTest {
 
     @Test
     fun `提示落盘_切完那一刻进程被杀也不会变成静默切走`() {
-        assertTrue("persist 没写提示", funBody(store, "private fun persist(").contains("KEY_SIGNED_OUT_NOTICES"))
-        assertTrue("loadFromDisk 没读提示", funBody(store, "private fun loadFromDisk(").contains("KEY_SIGNED_OUT_NOTICES"))
+        // 落盘只发生在 persist()，而被登出那条路唯一调 persist 的地方是 remove()。
+        // 所以要同时成立：提示先写进内存 → 再 remove → remove 里调 persist →
+        // persist 把**当下的**提示队列编码进 KEY_SIGNED_OUT_NOTICES。少一环，切账号存盘了、
+        // 提示却没存，进程在用户看到之前被杀，下次启动就成了静默切走。
+        val mark = funBody(store, "fun markSignedOut(")
+        val assign = Regex("""_signedOutNotices\.value\s*=\s*tell\.notices""").find(mark)
+        assertTrue("markSignedOut 没把提示写回 _signedOutNotices", assign != null)
+        val rm = mark.indexOf("remove(profileId)")
+        assertTrue("提示必须在 remove(profileId) 之前写进内存，remove 落盘时才带得上", rm > assign!!.range.first)
+
+        val remove = funBody(store, "fun remove(")
+        assertTrue("remove 没有落盘", remove.contains("persist()"))
+
+        val persist = funBody(store, "private fun persist(")
+        assertTrue(
+            "persist 没把当下的提示队列编码进去",
+            Regex("""encodeToString\([^)]*SignedOutNotice\.serializer\(\)\)\s*,\s*_signedOutNotices\.value""").containsMatchIn(persist),
+        )
+        assertTrue("persist 没写提示", persist.contains(".putString(KEY_SIGNED_OUT_NOTICES"))
+        assertTrue("loadFromDisk 没读提示", funBody(store, "private fun loadFromDisk(").contains("getString(KEY_SIGNED_OUT_NOTICES"))
+    }
+
+    @Test
+    fun `自己退出最后一个账号也清提示`() {
+        val remove = funBody(store, "fun remove(")
+        val clear = remove.indexOf("AccountRules.noticesAfterRemoval(")
+        assertTrue("remove 没有走 noticesAfterRemoval —— 自己退出最后一个账号后旧提示会留在盘上", clear >= 0)
+        assertTrue("要先算好提示再落盘", clear < remove.indexOf("persist()"))
     }
 
     @Test

@@ -50,6 +50,14 @@ class SetupViewModel : ViewModel() {
      *  Application, so it's a valid Context — no AndroidViewModel needed). */
     private fun str(resId: Int): String = BywaveApp.instance.getString(resId)
 
+    /** 登录类请求失败时给用户看的那句话，见 LoginErrors.kt。 */
+    private fun describe(e: Throwable, fallback: Int): String = when (val t = loginErrorText(e)) {
+        is LoginErrorText.Res -> str(t.id)
+        is LoginErrorText.Server -> t.message
+        is LoginErrorText.Status -> BywaveApp.instance.getString(R.string.setupvm_err_http, t.status)
+        LoginErrorText.Unknown -> str(fallback)
+    }
+
     fun onServerChange(v: String) = _state.update { it.copy(server = v, errorMessage = null) }
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
@@ -99,7 +107,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = e.localizedMessage ?: str(R.string.setupvm_qr_login_failed),
+                        errorMessage = describe(e, R.string.setupvm_qr_login_failed),
                     )
                 }
             }
@@ -141,7 +149,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = e.localizedMessage ?: str(R.string.setupvm_login_failed),
+                        errorMessage = describe(e, R.string.setupvm_login_failed),
                     )
                 }
             }
@@ -168,7 +176,7 @@ class SetupViewModel : ViewModel() {
                 _state.update { it.copy(busy = false, signedIn = true, mfaToken = null) }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(busy = false, errorMessage = e.localizedMessage ?: str(R.string.setupvm_mfa_code_error))
+                    it.copy(busy = false, errorMessage = describe(e, R.string.setupvm_mfa_code_error))
                 }
             }
         }

@@ -101,4 +101,18 @@ class AccountRulesTest {
         val after = AccountRules.noticesAfterSignIn(notices, serverUrl = alice.serverUrl, email = alice.email)
         assertEquals(listOf("carol@example.com"), after.map { it.email })
     }
+
+    // ---- 删账号之后提示还留不留 ----
+
+    @Test
+    fun `自己退出了最后一个账号_旧提示一起清掉`() {
+        val notice = SignedOutNotice(serverUrl = bob.serverUrl, email = bob.email)
+        assertEquals(emptyList<SignedOutNotice>(), AccountRules.noticesAfterRemoval(listOf(notice), remaining = emptyList()))
+    }
+
+    @Test
+    fun `还剩账号_提示原样留着`() {
+        val notice = SignedOutNotice(serverUrl = bob.serverUrl, email = bob.email)
+        assertEquals(listOf(notice), AccountRules.noticesAfterRemoval(listOf(notice), remaining = listOf(alice)))
+    }
 }

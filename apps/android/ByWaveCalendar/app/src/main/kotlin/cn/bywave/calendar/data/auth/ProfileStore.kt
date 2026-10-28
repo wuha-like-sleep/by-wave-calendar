@@ -176,6 +176,9 @@ class ProfileStore(context: Context) {
         // 别的线程读 active() 不会读到 null（null 的意思是「一个账号都没了」）。
         _activeId.value = next.activeId
         _profiles.value = next.remaining
+        // 以前只有被服务端踢掉那条路会清提示；用户自己在设置里退出最后一个账号走的是这里，
+        // 旧提示会跟着空账号列表一起落盘，下次登录进来冒出一条早就过时的「某某已被登出」。
+        _signedOutNotices.value = AccountRules.noticesAfterRemoval(_signedOutNotices.value, next.remaining)
         persist()
     }
 

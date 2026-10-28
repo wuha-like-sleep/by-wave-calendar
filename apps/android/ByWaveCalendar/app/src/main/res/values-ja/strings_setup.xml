@@ -58,4 +58,14 @@
 
     <!-- 被动登出时配对页顶部的说明 -->
     <string name="setup_signed_out_reason">パスワードが変更されたか、この端末が解除されました。もう一度サインインしてください。</string>
+
+    <!-- 登录出错时的说明（LoginErrors.kt）。以前一律显示 Retrofit 的「HTTP 401」。 -->
+    <string name="setupvm_err_network">サーバーに接続できません。サーバーアドレスとネットワークを確認してください。</string>
+    <string name="setupvm_err_invalid_credentials">メールアドレスまたはパスワードが違います</string>
+    <string name="setupvm_err_account_locked">サインインの失敗が多すぎます。しばらくしてから再試行してください。</string>
+    <string name="setupvm_err_account_disabled">アカウントが無効です。管理者にお問い合わせください</string>
+    <string name="setupvm_err_apps_disabled">管理者がアプリ同期を有効にしていません。\nウェブ管理画面 → 管理 → API &amp; APPs →「アプリのサインイン」をオンにしてから再試行してください。</string>
+    <string name="setupvm_err_mfa_expired">確認セッションの有効期限が切れました。もう一度サインインしてください</string>
+    <string name="setupvm_err_pair_code_expired">このサインインコードは期限切れか、すでに使用されています。ウェブで新しく作成してください。</string>
+    <string name="setupvm_err_http">サインインに失敗しました（HTTP %1$d）</string>
 </resources>
