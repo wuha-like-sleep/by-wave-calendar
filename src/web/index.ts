@@ -35,6 +35,7 @@ import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
+import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
@@ -1921,6 +1922,21 @@ export async function webRoutes(app: FastifyInstance) {
     // Copy the event into the recipient's chosen calendar with a fresh UID so
     // it shows up as their own row. Owner edits to the source won't propagate;
     // for two-way sync the recipient should accept the calendar invitation.
+    const copiedExtra: Record<string, unknown> = {
+      ...((sourceEvent.extra as Record<string, unknown> | null) ?? {}), importedFromInvite: tok.token,
+    };
+    // 重复事件按时区展开（event_zone.ts）。原事件没有自己的时区时用的是**组织者日历**的时区；
+    // 抄进收件人的日历后会改用收件人日历的时区，「每周一」就可能变成别的日子。
+    // 把原来那个时区钉在副本上，两边展开出同一批时刻。
+    if (sourceEvent.rrule && !sourceEvent.allDay) {
+      const [srcCal] = await db.select({ timezone: schema.calendars.timezone })
+        .from(schema.calendars).where(eq(schema.calendars.id, sourceEvent.calendarId)).limit(1);
+      const pin = timeZoneToPinOnCopy({
+        allDay: sourceEvent.allDay, extra: sourceEvent.extra, rrule: sourceEvent.rrule,
+        calendarTimezone: srcCal?.timezone, rawStartIsUtc: rawIcsStartIsUtc(sourceEvent.rawIcs),
+      });
+      if (pin) copiedExtra.timezone = pin;
+    }
     await db.insert(schema.events).values({
       calendarId: body.data.calendarId,
       uid: newEventUid(),
@@ -1931,7 +1947,7 @@ export async function webRoutes(app: FastifyInstance) {
       endsAt: sourceEvent.endsAt,
       allDay: sourceEvent.allDay,
       rrule: sourceEvent.rrule,
-      extra: { ...((sourceEvent.extra as Record<string, unknown> | null) ?? {}), importedFromInvite: tok.token },
+      extra: copiedExtra,
     });
     await db.update(schema.eventInviteTokens).set({ acceptedAt: new Date() }).where(eq(schema.eventInviteTokens.token, tok.token));
     return redirectWith(reply, "/app", { success: tr(req, "flash.eventInvite.added", { summary: sourceEvent.summary }) });

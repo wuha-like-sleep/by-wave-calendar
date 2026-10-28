@@ -12,6 +12,7 @@ import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { getSettings } from "../lib/site_settings.js";
+import { exportTimeZone } from "../lib/event_zone.js";
 
 // ---------- XML helpers ----------
 
@@ -331,7 +332,7 @@ async function loadAllEventsOf(calId: string, range?: { start: Date | null; end:
   return db.select().from(schema.events).where(and(...conds)).orderBy(asc(schema.events.startsAt));
 }
 
-function rowToIcal(row: schema.Event): IcalEvent {
+function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEvent {
   const extra = (row.extra ?? null) as null | {
     // 两种存量形状都可能（见 lib/attendees.ts）：CalDAV 写的对象数组、网页 / JSON API
     // 写的邮箱字符串数组。这里不挑形状，serializeEvent 里过 attendeeDetails 统一摊平。
@@ -354,7 +355,11 @@ function rowToIcal(row: schema.Event): IcalEvent {
     // clients see DTSTART;TZID=Asia/Shanghai:… (wall-clock) instead of
     // DTSTART:…Z. Makes the event display correctly when the recipient
     // is in a different timezone than the organizer.
-    timezone: extra?.timezone ?? null,
+    // 没有自己时区的**重复**事件带日历的时区：手机按 DTSTART 的时区去算「每周一」，
+    // 写成 UTC 就会和服务端（event_zone.ts）算出不同的日子。口径见 exportTimeZone。
+    timezone: exportTimeZone({
+      allDay: row.allDay, extra: row.extra, calendarTimezone, rrule: row.rrule,
+    }),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     // Surface attendees + organizer in the synthesized VEVENT so that
@@ -380,7 +385,12 @@ function rowToIcal(row: schema.Event): IcalEvent {
 // lines so the organizer's phone reflects "alice accepted" the moment alice
 // clicks the link in the invite email — caller is responsible for batch-
 // loading the map to avoid N+1.
-function rowToVCalendar(row: schema.Event, calName: string, partstatByEmail?: Map<string, string>): string {
+function rowToVCalendar(
+  row: schema.Event,
+  cal: { name: string; timezone: string | null },
+  partstatByEmail?: Map<string, string>,
+): string {
+  const calName = cal.name;
   const CRLF = "\r\n";
   let vevent: string;
   if (row.rawIcs && row.rawIcs.includes("BEGIN:VEVENT")) {
@@ -393,7 +403,7 @@ function rowToVCalendar(row: schema.Event, calName: string, partstatByEmail?: Ma
   } else {
     // Synthesized — wrapSingleEvent already builds the full VCALENDAR.
     // Apply PARTSTAT overlay then return.
-    const ics = wrapSingleEvent(rowToIcal(row), calName);
+    const ics = wrapSingleEvent(rowToIcal(row, cal.timezone), calName);
     return partstatByEmail && partstatByEmail.size > 0 ? overlayPartstat(ics, partstatByEmail) : ics;
   }
   if (partstatByEmail && partstatByEmail.size > 0) {
@@ -643,7 +653,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
             etag: etagOf(e.updatedAt),
             contentType: "text/calendar; charset=utf-8; component=VEVENT",
             lastModified: e.updatedAt,
-            calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)),
+            calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)),
           });
         } catch (err) {
           // Skip one un-serializable event instead of breaking the whole
@@ -712,7 +722,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
         entry = responseEntry(eventHref(user.id, cal.id, e.uid), {
           etag: etagOf(e.updatedAt),
           ...(includeData
-            ? { calendarData: rowToVCalendar(e, cal.name, statusMap.get(e.id)) }
+            ? { calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)) }
             : {}),
         });
       } catch (err) {
@@ -774,7 +784,7 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   const statusMap = await loadAttendeeStatuses([event.id]);
   let ics: string;
   try {
-    ics = rowToVCalendar(event, cal.name, statusMap.get(event.id));
+    ics = rowToVCalendar(event, cal, statusMap.get(event.id));
   } catch (err) {
     req.log.warn({ caldav: "get", calId: cal.id, eventId: event.id, uid: event.uid, err: String(err) }, "caldav_event_serialize_failed");
     return reply.code(500).type("text/plain").send("Event could not be serialized");

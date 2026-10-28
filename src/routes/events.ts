@@ -10,6 +10,7 @@ import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
+import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -358,6 +359,9 @@ export async function eventRoutes(app: FastifyInstance) {
     // See fetchEventMastersInWindow for the (subtle) recurring-vs-non-recurring
     // predicate; expandEvent() below trims/materializes each row.
     const rows = await fetchEventMastersInWindow(allowed, fromDate, toDate);
+    // 重复事件按事件自己的时区展开（没有就用日历的），见 event_zone.ts。
+    // 日历时区就在上面那两个查询里，不用再查一次库。
+    const calTz = new Map(visible.map((c) => [c.id, c.timezone]));
 
     // Expand RRULE master rows into per-occurrence entries. Non-recurring
     // events come through unchanged. Each occurrence carries the same id
@@ -371,6 +375,13 @@ export async function eventRoutes(app: FastifyInstance) {
           endsAt: row.endsAt,
           rrule: row.rrule ?? null,
           exdates: (row.exdates as string[] | null) ?? null,
+          allDay: row.allDay,
+          timeZone: expansionTimeZone({
+            allDay: row.allDay,
+            extra: row.extra,
+            calendarTimezone: calTz.get(row.calendarId),
+            rawStartIsUtc: rawIcsStartIsUtc(row.rawIcs),
+          }),
         },
         fromDate,
         toDate,

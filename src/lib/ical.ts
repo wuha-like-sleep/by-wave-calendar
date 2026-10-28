@@ -6,12 +6,13 @@
 import { getBrandName } from "./email_templates.js";
 import { normalizeAlarms } from "./reminder_triggers.js";
 import { attendeeDetails, type AttendeeLike } from "./attendees.js";
+import { formatWallClockStamp, isValidTimeZone } from "./zoned_time.js";
 
 // PRODID identifies the generating product. Derive it from the site brand so a
 // self-hosted / white-labelled deploy stamps ITS OWN name into every .ics it
 // emits, not "ByWave-Calendar". RFC 5545 allows UTF-8 here; we only strip the
 // few chars that would break the property line, and fall back to a default.
-export function prodIdLine(part: "CalDAV" | "Invite"): string {
+export function prodIdLine(part: "CalDAV" | "Invite" | "Feed"): string {
   const name = getBrandName().replace(/[;,\\\r\n]/g, " ").trim() || "ByWave-Calendar";
   return `PRODID:-//${name}//${part}//EN`;
 }
@@ -84,23 +85,11 @@ function formatDate(d: Date): string {
 
 // Render a UTC Date as wall-clock YYYYMMDDTHHMMSS in the target IANA zone.
 // Used to emit DTSTART;TZID=Asia/Shanghai:20260601T180000 (no trailing Z).
-// Falls back to UTC if the zone is unknown — better than throwing.
+// 换算本身在 zoned_time.ts —— 服务端展开重复事件用的是同一个函数，两边对同一个
+// 时刻读出同一个墙上时间。调用方先用 isValidTimeZone 判过：认不出来的时区不该
+// 带着 TZID 写出去。
 function formatWallClockInZone(d: Date, tzid: string): string {
-  try {
-    const fmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: tzid,
-      year: "numeric", month: "2-digit", day: "2-digit",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-      hour12: false,
-    });
-    const parts = fmt.formatToParts(d);
-    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
-    // Intl renders midnight as "24" in some locales; normalize to "00".
-    let hh = get("hour"); if (hh === "24") hh = "00";
-    return `${get("year")}${get("month")}${get("day")}T${hh}${get("minute")}${get("second")}`;
-  } catch {
-    return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
-  }
+  return formatWallClockStamp(d, tzid);
 }
 
 function escapeText(s: string): string {
@@ -164,6 +153,9 @@ function formatAllDayEnd(startsAt: Date, endsAt: Date): string {
 }
 
 export function serializeEvent(event: IcalEvent): string {
+  // 认不出来的时区名不带 TZID 写出去：以前会写成「TZID=认不出的名字:按 UTC 读出来的
+  // 墙上时间」，手机不认识这个 TZID 就当成本机时间，整个事件挪了一个时差。
+  const zone = !event.allDay && isValidTimeZone(event.timezone) ? event.timezone : null;
   const lines: string[] = [
     "BEGIN:VEVENT",
     `UID:${event.uid}`,
@@ -172,17 +164,21 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.allDay) {
     lines.push(`DTSTART;VALUE=DATE:${formatDate(event.startsAt)}`);
     lines.push(`DTEND;VALUE=DATE:${formatAllDayEnd(event.startsAt, event.endsAt)}`);
-  } else if (event.timezone) {
+  } else if (zone) {
     // Emit wall-clock in the event's zone with TZID parameter. iOS /
     // macOS / Google / Outlook all render this as "this is 6pm Shanghai
     // time" — phone shifts the display when the user travels, instead
     // of statically showing the UTC equivalent. We don't emit a full
     // VTIMEZONE block — modern clients use the IANA database directly
     // and tolerate a missing VTIMEZONE per RFC 7986 / common practice.
-    const wall = formatWallClockInZone(event.startsAt, event.timezone);
-    const wallEnd = formatWallClockInZone(event.endsAt, event.timezone);
-    lines.push(`DTSTART;TZID=${event.timezone}:${wall}`);
-    lines.push(`DTEND;TZID=${event.timezone}:${wallEnd}`);
+    //
+    // 重复事件尤其要带：RRULE 的 BYDAY / BYMONTHDAY 是按 DTSTART 所在时区的日历算的。
+    // 写成 UTC 的话，墨尔本周一 9:30（= UTC 周日 22:30）的「每周一」在手机上落到周二，
+    // 夏令时一切换整体挪一小时 —— 和服务端（按 event_zone.ts 的时区展开）对不上。
+    const wall = formatWallClockInZone(event.startsAt, zone);
+    const wallEnd = formatWallClockInZone(event.endsAt, zone);
+    lines.push(`DTSTART;TZID=${zone}:${wall}`);
+    lines.push(`DTEND;TZID=${zone}:${wallEnd}`);
   } else {
     lines.push(`DTSTART:${formatDateTime(event.startsAt)}`);
     lines.push(`DTEND:${formatDateTime(event.endsAt)}`);
@@ -207,13 +203,17 @@ export function serializeEvent(event: IcalEvent): string {
   // EXDATE: one line per excluded instance (some clients merge them into
   // a comma-joined list, but per-line is universally accepted and easier
   // to debug). Match the all-day form when the master is all-day so the
-  // exclusion semantics line up — otherwise emit datetime+Z.
+  // exclusion semantics line up. DTSTART 带了 TZID 的，EXDATE 写成同一时区的墙上
+  // 时间（RFC 5545 §3.8.5.1：EXDATE 的值类型要和 DTSTART 一致），客户端拿它和自己
+  // 展开出来的那一次逐个比；否则 datetime+Z。
   if (event.exdates && event.exdates.length > 0) {
     for (const iso of event.exdates) {
       const d = new Date(iso);
       if (isNaN(d.getTime())) continue;
       if (event.allDay) {
         lines.push(`EXDATE;VALUE=DATE:${formatDate(d)}`);
+      } else if (zone) {
+        lines.push(`EXDATE;TZID=${zone}:${formatWallClockInZone(d, zone)}`);
       } else {
         lines.push(`EXDATE:${formatDateTime(d)}`);
       }
@@ -252,6 +252,38 @@ export function serializeCalendar(events: IcalEvent[], calendarName: string): st
     "CALSCALE:GREGORIAN",
     `X-WR-CALNAME:${escapeText(calendarName)}`,
     inner,
+    "END:VCALENDAR",
+  ].join(CRLF) + CRLF;
+}
+
+/**
+ * 订阅链接 / 「导出 .ics」用的整份日历（METHOD:PUBLISH）。
+ *
+ * 和 CalDAV 用同一个 serializeEvent，所以三处导出对同一个事件写出同一套 DTSTART / RRULE /
+ * EXDATE：以前这里走 ical-generator，时间写成不带时区的浮动时间（靠 X-WR-TIMEZONE，
+ * 不少客户端不认）、EXDATE 一行都不输出 —— 网页上「删掉这一次」的那次在订阅的人那里照样出现。
+ *
+ * 调用方传进来的 IcalEvent 不该带 attendees / organizer / alarms：订阅链接是公开的，
+ * 拿到链接的人不该看到参与者的邮箱。
+ */
+export function serializePublishedCalendar(
+  cal: { name: string; description?: string | null; timezone?: string | null; url?: string | null },
+  events: IcalEvent[],
+): string {
+  const head = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    prodIdLine("Feed"),
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    `X-WR-CALNAME:${escapeText(cal.name)}`,
+  ];
+  if (cal.description) head.push(`X-WR-CALDESC:${escapeText(cal.description)}`);
+  if (isValidTimeZone(cal.timezone)) head.push(`X-WR-TIMEZONE:${cal.timezone}`);
+  if (cal.url) head.push(`URL:${cal.url}`);
+  return [
+    ...head.map(foldLine),
+    ...events.map(serializeEvent),
     "END:VCALENDAR",
   ].join(CRLF) + CRLF;
 }

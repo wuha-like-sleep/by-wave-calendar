@@ -400,6 +400,20 @@
       "when": 1789977600000,
       "tag": "0056_allday_dtend_resync",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1789981200000,
+      "tag": "0057_data_migrations_marker",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1789984800000,
+      "tag": "0058_recurring_local_time_resync",
+      "breakpoints": true
     }
   ]
 }

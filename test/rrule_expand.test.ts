@@ -7,7 +7,7 @@ const D = (iso: string) => new Date(iso);
 describe("expandEvent — non-recurring", () => {
   it("returns the master once when it overlaps the window", () => {
     const out = expandEvent(
-      { id: "e1", startsAt: D("2026-06-01T10:00:00Z"), endsAt: D("2026-06-01T11:00:00Z"), rrule: null },
+      { id: "e1", allDay: false, timeZone: "UTC", startsAt: D("2026-06-01T10:00:00Z"), endsAt: D("2026-06-01T11:00:00Z"), rrule: null },
       D("2026-06-01T00:00:00Z"),
       D("2026-06-02T00:00:00Z"),
     );
@@ -18,7 +18,7 @@ describe("expandEvent — non-recurring", () => {
 
   it("returns empty when the event is entirely outside the window", () => {
     const out = expandEvent(
-      { id: "e1", startsAt: D("2026-06-01T10:00:00Z"), endsAt: D("2026-06-01T11:00:00Z"), rrule: null },
+      { id: "e1", allDay: false, timeZone: "UTC", startsAt: D("2026-06-01T10:00:00Z"), endsAt: D("2026-06-01T11:00:00Z"), rrule: null },
       D("2026-07-01T00:00:00Z"),
       D("2026-07-02T00:00:00Z"),
     );
@@ -28,7 +28,7 @@ describe("expandEvent — non-recurring", () => {
   it("falls back to master for a malformed RRULE rather than crashing", () => {
     const out = expandEvent(
       {
-        id: "e1",
+        id: "e1", allDay: false, timeZone: "UTC",
         startsAt: D("2026-06-01T10:00:00Z"),
         endsAt: D("2026-06-01T11:00:00Z"),
         rrule: "this is not a valid RRULE",
@@ -46,7 +46,7 @@ describe("expandEvent — recurring", () => {
     // Monday 2026-06-01 10:00–11:00, weekly on Monday for 4 weeks.
     const out = expandEvent(
       {
-        id: "e2",
+        id: "e2", allDay: false, timeZone: "UTC",
         startsAt: D("2026-06-01T10:00:00Z"),
         endsAt: D("2026-06-01T11:00:00Z"),
         rrule: "FREQ=WEEKLY;COUNT=4",
@@ -64,7 +64,7 @@ describe("expandEvent — recurring", () => {
   it("skips occurrences listed in exdates", () => {
     const out = expandEvent(
       {
-        id: "e3",
+        id: "e3", allDay: false, timeZone: "UTC",
         startsAt: D("2026-06-01T10:00:00Z"),
         endsAt: D("2026-06-01T11:00:00Z"),
         rrule: "FREQ=WEEKLY;COUNT=4",
@@ -83,7 +83,7 @@ describe("expandEvent — recurring", () => {
   it("respects UNTIL bounds inside the RRULE", () => {
     const out = expandEvent(
       {
-        id: "e4",
+        id: "e4", allDay: false, timeZone: "UTC",
         startsAt: D("2026-06-01T10:00:00Z"),
         endsAt: D("2026-06-01T11:00:00Z"),
         rrule: "FREQ=WEEKLY;UNTIL=20260615T100000Z",
@@ -98,7 +98,7 @@ describe("expandEvent — recurring", () => {
   it("includes recurring events that started before the window if any occurrence overlaps", () => {
     const out = expandEvent(
       {
-        id: "e5",
+        id: "e5", allDay: false, timeZone: "UTC",
         startsAt: D("2026-01-01T10:00:00Z"),
         endsAt: D("2026-01-01T11:00:00Z"),
         rrule: "FREQ=WEEKLY",
@@ -118,7 +118,7 @@ describe("expandEvent — bounded expansion (DoS guard)", () => {
     // 3 years of a daily event = ~1095 occurrences; the iterator must halt
     // at MAX_OCCURRENCES_PER_EVENT (366) instead of materializing them all.
     const out = expandEvent(
-      { id: "e1", startsAt: D("2026-01-01T09:00:00Z"), endsAt: D("2026-01-01T10:00:00Z"), rrule: "FREQ=DAILY" },
+      { id: "e1", allDay: false, timeZone: "UTC", startsAt: D("2026-01-01T09:00:00Z"), endsAt: D("2026-01-01T10:00:00Z"), rrule: "FREQ=DAILY" },
       D("2026-01-01T00:00:00Z"),
       D("2029-01-01T00:00:00Z"),
     );
@@ -130,7 +130,7 @@ describe("expandEvent — bounded expansion (DoS guard)", () => {
     // this would materialize all of them first. Must return fast + bounded.
     const t0 = Date.now();
     const out = expandEvent(
-      { id: "e1", startsAt: D("2026-01-01T00:00:00Z"), endsAt: D("2026-01-01T00:30:00Z"), rrule: "FREQ=HOURLY" },
+      { id: "e1", allDay: false, timeZone: "UTC", startsAt: D("2026-01-01T00:00:00Z"), endsAt: D("2026-01-01T00:30:00Z"), rrule: "FREQ=HOURLY" },
       D("2026-01-01T00:00:00Z"),
       D("2026-02-01T00:00:00Z"),
     );

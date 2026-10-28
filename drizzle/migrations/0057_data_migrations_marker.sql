@@ -1,0 +1,12 @@
+-- 程序里跑的数据迁移的记账（src/lib/data_migrations.ts）。
+--
+-- 有些迁移 SQL 做不了：1.7.4 要把重复事件里按旧算法记下的「删掉这一次」对到新算法上，
+-- 得展开 RRULE、换算时区。这类迁移在 scripts/migrate.ts 和开机（auto_migrate.ts）里由
+-- 程序执行，跑完把名字写进这一列，下次就跳过。
+--
+-- 默认空串 = 「一条都没跑过」。默认值必须和 src/db/schema.ts、以及 src/lib/auto_migrate.ts
+-- 里的兜底补丁一字不差。
+--
+-- 放在 site_settings 而不是单独一张表：恢复一份升级前导出的备份时，这一列随那份备份
+-- 回到空串，程序会对恢复回来的老数据再跑一遍 —— 老数据正需要它。
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS data_migrations_done text NOT NULL DEFAULT '';

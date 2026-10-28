@@ -252,6 +252,11 @@ export const siteSettings = pgTable("site_settings", {
   //     两个 bump 源互相不会遮住对方。
   // 默认空串 = 「还没 bump 过」,是一个合法取值,不是缺失。
   caldavSyncEpoch: text("caldav_sync_epoch").notNull().default(""),
+  // 已经跑完的数据迁移（SQL 做不了、要在程序里算的那种，见 src/lib/data_migrations.ts），
+  // 名字用空格隔开。空串 = 一条都没跑过。
+  // 放在 site_settings 而不是单独一张表：恢复一份升级前导出的备份时，这一列跟着
+  // 回到空串，开机会对恢复回来的老数据再跑一遍 —— 老数据正需要它。
+  dataMigrationsDone: text("data_migrations_done").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,6 +1,8 @@
-import { and, eq, gte, lte, isNull } from "drizzle-orm";
+import { and, eq, gte, lte, isNotNull, isNull, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { newEventUid, newInvitationToken } from "./ids.js";
+import { expandEvent } from "./rrule_expand.js";
+import { expansionTimeZone, rawIcsStartIsUtc } from "./event_zone.js";
 
 export type WeeklyAvailability = Record<string, [string, string][] | null>;
 export type Slot = { startsAt: Date; endsAt: Date };
@@ -75,21 +77,65 @@ export async function availableSlots(link: schema.BookingLink, fromUtc: Date, da
   // Subtract existing events in the owner's calendar that overlap (including
   // a buffer cushion before and after each candidate).
   const calId = link.calendarId;
-  const conflicts = await db
+  const windowFrom = candidates[0]!.startsAt;
+  const windowTo = candidates[candidates.length - 1]!.endsAt;
+  const conflicts: { startsAt: Date; endsAt: Date }[] = await db
     .select({ startsAt: schema.events.startsAt, endsAt: schema.events.endsAt })
     .from(schema.events)
     .where(and(
       eq(schema.events.calendarId, calId),
-      gte(schema.events.endsAt, candidates[0]!.startsAt),
-      lte(schema.events.startsAt, candidates[candidates.length - 1]!.endsAt),
+      gte(schema.events.endsAt, windowFrom),
+      lte(schema.events.startsAt, windowTo),
       isNull(schema.events.deletedAt),
+      // 重复事件交给下面展开（主事件那一次也在展开结果里，而且展开会扣掉删掉的那几次）。
+      or(isNull(schema.events.rrule), eq(schema.events.rrule, "")),
     ));
+  // 重复事件：以前只认主事件自己那一次（每周例会只挡住了第一周）。
+  // 把窗口里的每一次都展开出来，按日历上画出来的那一批时刻（同一个时区口径）算忙。
+  conflicts.push(...await recurringBusy(calId, windowFrom, windowTo));
 
   return candidates.filter((slot) => {
     const startWithBuffer = new Date(slot.startsAt.getTime() - bufferBeforeMin * 60_000);
     const endWithBuffer = new Date(slot.endsAt.getTime() + bufferAfterMin * 60_000);
     return !conflicts.some((c) => c.endsAt > startWithBuffer && c.startsAt < endWithBuffer);
   });
+}
+
+async function recurringBusy(calendarId: string, from: Date, to: Date): Promise<Slot[]> {
+  const [cal] = await db
+    .select({ timezone: schema.calendars.timezone })
+    .from(schema.calendars)
+    .where(eq(schema.calendars.id, calendarId))
+    .limit(1);
+  const masters = await db
+    .select({
+      id: schema.events.id, startsAt: schema.events.startsAt, endsAt: schema.events.endsAt,
+      allDay: schema.events.allDay, rrule: schema.events.rrule, exdates: schema.events.exdates,
+      extra: schema.events.extra, rawIcs: schema.events.rawIcs,
+    })
+    .from(schema.events)
+    .where(and(
+      eq(schema.events.calendarId, calendarId),
+      isNotNull(schema.events.rrule),
+      lte(schema.events.startsAt, to),
+      isNull(schema.events.deletedAt),
+    ));
+  const out: Slot[] = [];
+  for (const m of masters) {
+    if (!m.rrule) continue;   // 空串：不是重复事件，上面那条查询已经算过它
+    for (const occ of expandEvent({
+      id: m.id, startsAt: m.startsAt, endsAt: m.endsAt, rrule: m.rrule,
+      exdates: Array.isArray(m.exdates) ? (m.exdates as string[]) : null,
+      allDay: m.allDay,
+      timeZone: expansionTimeZone({
+        allDay: m.allDay, extra: m.extra, calendarTimezone: cal?.timezone,
+        rawStartIsUtc: rawIcsStartIsUtc(m.rawIcs),
+      }),
+    }, from, to)) {
+      out.push({ startsAt: occ.startsAt, endsAt: occ.endsAt });
+    }
+  }
+  return out;
 }
 
 export async function findLinkBySlug(userId: string, slug: string): Promise<schema.BookingLink | null> {

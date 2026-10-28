@@ -27,6 +27,7 @@ import { sql } from "drizzle-orm";
 import { env } from "../env.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { runDataMigrations } from "./data_migrations.js";
 
 export async function runPendingMigrations(): Promise<void> {
   // Use a separate single-connection client for migrations — the main
@@ -89,6 +90,15 @@ export async function runPendingMigrations(): Promise<void> {
   const elapsed = Date.now() - t0;
   if (elapsed > 50) {
     console.log(`[auto-migrate] ${patched}/${DEFENSIVE_SCHEMA_PATCHES.length} defensive schema patches applied in ${elapsed}ms`);
+  }
+
+  // 程序里跑的数据迁移（src/lib/data_migrations.ts）。跑过的有记账，正常开机只是
+  // 一次 SELECT。失败不挡开机：记账没写，下次开机再试；这期间受影响的只是
+  // 老数据里那几条「删掉这一次」可能重新显示出来，比整站起不来轻得多。
+  try {
+    await runDataMigrations(db);
+  } catch (err) {
+    console.error("[auto-migrate] data migrations failed — will retry on next boot:", err);
   }
   await client.end({ timeout: 5 });
 }
@@ -164,5 +174,11 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     // 迁移器一旦恢复记账,0053 里那两段回填会把能确定的改对,剩下的留 NULL。
     why: "users.password_set（缺了登录和后台用户页都 500）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set boolean`,
+  },
+  {
+    // 0057。空串 = 「一条数据迁移都没跑过」，和迁移里的默认值一字不差。
+    // 补出来之后紧接着的 runDataMigrations 会照常把该跑的跑掉、写上记账。
+    why: "site_settings.data_migrations_done（缺了每一个页面都 500）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS data_migrations_done text NOT NULL DEFAULT ''`,
   },
 ];

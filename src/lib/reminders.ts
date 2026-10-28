@@ -1,8 +1,9 @@
-import { and, gte, inArray, isNull, lte, or, isNotNull } from "drizzle-orm";
+import { and, gte, inArray, isNull, lte, or, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { sendMail } from "./mailer.js";
 import { env } from "../env.js";
 import { expandEvent } from "./rrule_expand.js";
+import { expansionTimeZone, RAW_START_IS_UTC_PATTERN } from "./event_zone.js";
 import { pushToUser } from "./push.js";
 import { getSettings } from "./site_settings.js";
 import { normalizeAlarms, parseTrigger, resolveTriggerAt } from "./reminder_triggers.js";
@@ -100,6 +101,12 @@ type CandidateEventRow = {
   rrule: string | null;
   exdates: unknown;
   allDay: boolean;
+  /**
+   * 手机通过 CalDAV 写上来的原文里 DTSTART 是 UTC 写法（见 event_zone.ts 第 3 条）。
+   * 在 SQL 里算成一个布尔：每分钟都要扫一遍全部重复事件，不能把整份原文搬回来。
+   * 可选：测试里的假 store 不写就是 false。
+   */
+  rawStartIsUtc?: boolean | null;
 };
 
 type CalendarRow = { id: string; ownerId: string; timezone: string | null; name: string };
@@ -181,6 +188,9 @@ const dbStore: ReminderStore = {
         endsAt: schema.events.endsAt, location: schema.events.location, extra: schema.events.extra,
         calendarId: schema.events.calendarId, rrule: schema.events.rrule,
         exdates: schema.events.exdates, allDay: schema.events.allDay,
+        // 和 rawIcsStartIsUtc() 同一个正则源、同一个「得有 VEVENT」的前提。
+        rawStartIsUtc: sql<boolean>`(strpos(coalesce(${schema.events.rawIcs}, ''), 'BEGIN:VEVENT') > 0
+          AND ${schema.events.rawIcs} ~* ${RAW_START_IS_UTC_PATTERN})`,
       })
       .from(schema.events)
       .where(and(
@@ -346,6 +356,8 @@ export async function dispatchDueReminders(
     const extraTz = typeof extra?.timezone === "string" && extra.timezone.trim() ? extra.timezone.trim() : null;
     const tz = extraTz ?? calTz;
 
+    // 每一次的开始时刻要和日历上画出来的同一批（同一个展开口径，见 event_zone.ts），
+    // 否则「每周一 9:30」的提醒会按周二 9:30 或夏令时后的 10:30 去响。
     const occurrences = expandEvent(
       {
         id: ev.id,
@@ -353,6 +365,10 @@ export async function dispatchDueReminders(
         endsAt: ev.endsAt,
         rrule: ev.rrule ?? null,
         exdates: (ev.exdates as string[] | null) ?? null,
+        allDay: ev.allDay,
+        timeZone: expansionTimeZone({
+          allDay: ev.allDay, extra: ev.extra, calendarTimezone: calTz, rawStartIsUtc: !!ev.rawStartIsUtc,
+        }),
       },
       windowFrom,
       windowTo,

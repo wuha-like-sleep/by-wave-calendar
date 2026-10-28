@@ -1,5 +1,6 @@
 import { getTableName, ne, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
+import { runDataMigrations } from "./data_migrations.js";
 
 // Tables in dependency order: parents before children. INSERT walks this list
 // top-down so FKs always resolve. DELETE walks it in reverse so we never try
@@ -277,6 +278,14 @@ export async function importData(bundle: BackupBundle, opts: ImportOptions = {})
   // 在事务**外面**抛：事务里那一段只读不写、已经正常结束，这里抛出去的是
   // 原样的错误对象，调用方可以放心用 instanceof 认它。
   if (blocked) throw new RestoreNeedsConfirmationError(blocked);
+  // 恢复回来的可能是升级前导出的老数据（比如重复事件里按旧算法记下的「删掉这一次」）。
+  // 那份备份里的 site_settings 没有这一版的数据迁移记账，所以这里会把它们跑一遍；
+  // 新版导出的备份带着记账，什么都不做。失败不让恢复本身算失败：下次开机还会再试。
+  try {
+    await runDataMigrations(db);
+  } catch (err) {
+    console.error("[backup] data migrations after restore failed — will retry on next boot:", err);
+  }
   return { ok: true, perTable, totalInserted, missingTables, emptiedTables };
 }
 
