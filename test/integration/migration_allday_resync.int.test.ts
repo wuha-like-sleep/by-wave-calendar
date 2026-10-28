@@ -166,7 +166,7 @@ describe("0056 哪些事件被 bump", () => {
     const sql = readFileSync(MIGRATION, "utf8");
     const stamps = [...sql.matchAll(/TIMESTAMPTZ '([^']+)'/g)].map((m) => m[1]!);
     expect(stamps.length, "应该恰好两处（SET 一处、WHERE 一处）").toBe(2);
-    expect(new Set(stamps).size, "两处必须是同一个值，否则第二遍跑就不是 no-op").toBe(1);
+    expect(new Set(stamps).size, "两处必须是同一个值，否则就算两次之间没人改过，第二遍也会把这批事件再改一遍").toBe(1);
     const iso = stamps[0]!.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00");
     expect(new Date(iso).toISOString()).toBe(STAMP);
     const epochs = [...sql.matchAll(/caldav_sync_epoch(?: IS DISTINCT FROM| =) '([^']+)'/g)].map((m) => m[1]!);

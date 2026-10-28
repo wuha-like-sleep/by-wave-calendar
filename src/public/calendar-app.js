@@ -100,6 +100,52 @@
   };
 })();
 
+// ---- 导入弹窗：怎样才算「真的导入了」----
+// 同样不碰 DOM，node 里可以直接打（test/import_dialog_result.test.ts）。
+//
+// 以前弹窗只看「请求有没有出错」：粘贴那条 redirect:"manual" 拿到 opaqueredirect 就算成功，
+// 上传那条跟着 302 跳到日历页拿到 200 也算成功 —— 服务端放在 ?error= 里的报错一个都没读到。
+// 文件过大、不是 .ics、粘贴超长，用户看到的都是「导入完成」，而实际上一条都没导进去。
+//
+// 现在弹窗带 Accept: application/json，服务端回 { ok, message }（见 src/web/index.ts 的
+// wantsJson / importFailed / importDone）。**只有服务端明说 ok: true 才算成功**；
+// 跳转、HTML 页面、令牌失效的 403、别的形状，一律按失败处理 —— 宁可让用户再点一次，
+// 也不能说「导入完成」而什么都没有。
+(function () {
+  "use strict";
+
+  /** 一个能直接显示给用户的错：message 已经是完整的一句话，不用再套「导入失败：」。 */
+  function userFacingError(message) {
+    const e = new Error(message);
+    e.userFacing = true;
+    return e;
+  }
+
+  /**
+   * 把导入路由的响应读成 { message, partial } 或抛一个 userFacing 的错。
+   * resp：fetch 的 Response（或形状相同的对象）；T：取文案的函数。
+   */
+  async function readImportResponse(resp, T) {
+    let data = null;
+    try { data = await resp.json(); } catch (_e) { data = null; }
+    if (data && typeof data === "object" && data.ok === true) {
+      return { message: typeof data.message === "string" ? data.message : "", partial: data.partial === true };
+    }
+    if (data && typeof data === "object" && data.ok === false && typeof data.message === "string" && data.message) {
+      throw userFacingError(data.message);
+    }
+    // 不是导入结果：令牌失效（403）、会话过期被带去登录页、日历不属于自己被带回首页（都是跳转后的 200 HTML）。
+    // 这几种都是「刷新一下页面再来」能解决的。
+    const s = Number(resp && resp.status) || 0;
+    if (s === 403 || (resp && resp.type === "opaqueredirect") || (s >= 200 && s < 400)) {
+      throw userFacingError(T("app.js.import.reloadAndRetry"));
+    }
+    throw userFacingError(T("app.js.import.failed", { error: "HTTP " + s }));
+  }
+
+  globalThis.bwcImportResult = { readImportResponse };
+})();
+
 (function () {
   "use strict";
   // 没有 DOM 就只是被 import 进来取上面那组纯函数（测试），不启动应用。
@@ -1895,8 +1941,14 @@
   });
 
   // ---------- Import calendar ----------
+  // 「导入到新日历」时，这一次打开弹窗里已经建好的那个日历。
+  // 导入失败时弹窗会留着让用户改了再点（以前失败也说「导入完成」并刷新，不存在「再点一次」）——
+  // 再点不能再建一个新日历，不然每失败一次就多一个空日历。重新打开弹窗时清掉。
+  let importCreatedCalendarId = null;
+
   function openImportCalendar() {
     const form = $("#form-import");
+    importCreatedCalendarId = null;
     form.reset();
     buildColorPicker(form.querySelector('[data-color-picker="form-import"]'), "newColor", "#6366f1");
     // Reset source pane to file
@@ -1936,12 +1988,45 @@
       submitBtn.disabled = true;
       submitBtn.textContent = T("app.js.import.importing");
       try {
-        // Step 1: resolve target calendarId
+        // Step 1: 先把要发的内容备好、在本地能查的先查掉 —— 文件没选、URL 没填就别先建一个新日历。
+        // **_csrf 排在 file 前面**：服务端拿到文件那一刻只解析过它前面的字段（verifyMultipartCsrf）。
+        let path;
+        let body;
+        if (source === "file") {
+          const fileInput = importForm.querySelector('[data-source-pane="file"] input[type="file"]');
+          if (!fileInput.files || !fileInput.files[0]) throw new Error(T("app.js.import.selectFile"));
+          body = new FormData();
+          body.append("_csrf", ctx.csrfToken);
+          body.append("file", fileInput.files[0]);
+          path = "import/file";
+        } else if (source === "url-once") {
+          const url = importForm.querySelector('[data-source-pane="url-once"] input[name="url"]').value.trim();
+          if (!url) throw new Error(T("app.js.import.enterUrl"));
+          body = formBody({ url });
+          path = "import/url-once";
+        } else if (source === "sub") {
+          const url = importForm.querySelector('[data-source-pane="sub"] input[name="url"]').value.trim();
+          const label = importForm.querySelector('[data-source-pane="sub"] input[name="label"]').value.trim();
+          const refreshMinutes = importForm.querySelector('[data-source-pane="sub"] select[name="refreshMinutes"]').value;
+          if (!url) throw new Error(T("app.js.import.enterUrl"));
+          body = formBody({ url, label, refreshMinutes });
+          path = "subscriptions";
+        } else {
+          const text = importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]').value;
+          if (!text || text.length < 20) throw new Error(T("app.js.import.pasteIcs"));
+          body = formBody({ text });
+          path = "import/text";
+        }
+
+        // Step 2: resolve target calendarId
         let calendarId;
         if (destination === "existing") {
           const sel = importForm.querySelector('[data-dest-pane="existing"]');
           calendarId = sel.value;
           if (!calendarId) throw new Error(T("app.js.import.selectExisting"));
+        } else if (importCreatedCalendarId) {
+          // 上一次失败时已经建好了，接着往它里面导。
+          calendarId = importCreatedCalendarId;
         } else {
           const name = importForm.querySelector('input[name="newName"]').value.trim() || T("app.js.import.defaultName");
           const color = importForm.querySelector('input[name="newColor"]').value || "#6366f1";
@@ -1956,55 +2041,46 @@
           if (!created.ok) throw new Error(T("app.js.import.createFailed"));
           const calRow = await created.json();
           calendarId = calRow.id;
+          importCreatedCalendarId = calendarId;
         }
 
-        // Step 2: send the import to that calendar
-        if (source === "file") {
-          const fileInput = importForm.querySelector('[data-source-pane="file"] input[type="file"]');
-          if (!fileInput.files || !fileInput.files[0]) throw new Error(T("app.js.import.selectFile"));
-          const fd = new FormData();
-          fd.append("file", fileInput.files[0]);
-          const resp = await fetch(`/app/calendars/${calendarId}/import/file`, { method: "POST", credentials: "same-origin", body: fd });
-          if (!resp.ok && resp.status !== 302) throw new Error(T("app.js.import.uploadFailed"));
-        } else if (source === "url-once") {
-          const url = importForm.querySelector('[data-source-pane="url-once"] input[name="url"]').value.trim();
-          if (!url) throw new Error(T("app.js.import.enterUrl"));
-          await postForm(`/app/calendars/${calendarId}/import/url-once`, { url });
-        } else if (source === "sub") {
-          const url = importForm.querySelector('[data-source-pane="sub"] input[name="url"]').value.trim();
-          const label = importForm.querySelector('[data-source-pane="sub"] input[name="label"]').value.trim();
-          const refreshMinutes = importForm.querySelector('[data-source-pane="sub"] select[name="refreshMinutes"]').value;
-          if (!url) throw new Error(T("app.js.import.enterUrl"));
-          await postForm(`/app/calendars/${calendarId}/subscriptions`, { url, label, refreshMinutes });
-        } else if (source === "paste") {
-          const text = importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]').value;
-          if (!text || text.length < 20) throw new Error(T("app.js.import.pasteIcs"));
-          await postForm(`/app/calendars/${calendarId}/import/text`, { text });
+        // Step 3: send the import to that calendar —— 只有服务端回 ok: true 才往下走。
+        const result = await postImport(`/app/calendars/${calendarId}/${path}`, body);
+        if (result.partial) {
+          // 订阅存下了、第一次拉取失败：照实说，但也要刷新（不能留在弹窗里让人再建一条）。
+          window.bwc && window.bwc.toast(result.message, "error", { durationMs: 6000 });
+          setTimeout(() => window.location.reload(), 2500);
+          return;
         }
-        window.bwc && window.bwc.toast(T("app.js.import.done"), "success");
-        setTimeout(() => window.location.reload(), 500);
+        window.bwc && window.bwc.toast(result.message || T("app.js.import.done"), "success");
+        setTimeout(() => window.location.reload(), 1200);
       } catch (err) {
         console.error(err);
-        window.bwc && window.bwc.toast(T("app.js.import.failed", { error: (err && err.message) || err }), "error");
+        const msg = err && err.userFacing ? err.message : T("app.js.import.failed", { error: (err && err.message) || err });
+        window.bwc && window.bwc.toast(msg, "error", { durationMs: 6000 });
         submitBtn.disabled = false;
         submitBtn.textContent = T("app.js.import.submit");
       }
     });
   }
 
-  async function postForm(url, data) {
+  function formBody(data) {
     const fd = new URLSearchParams();
     fd.set("_csrf", ctx.csrfToken);
     Object.entries(data).forEach(([k, v]) => fd.set(k, v));
+    return fd;
+  }
+
+  // 导入弹窗的四种来源都走这里。Accept: application/json 让服务端回 { ok, message } 而不是 302
+  // （src/web/index.ts 的 wantsJson）；结果交给 readImportResponse 判 —— 只有 ok: true 才算成功。
+  async function postImport(url, body) {
     const resp = await fetch(url, {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: fd.toString(),
-      redirect: "manual",
+      headers: { Accept: "application/json" },
+      body,
     });
-    if (resp.type === "opaqueredirect" || resp.status === 302 || resp.ok) return;
-    throw new Error(`HTTP ${resp.status}`);
+    return globalThis.bwcImportResult.readImportResponse(resp, T);
   }
 
   // ---------- Calendar context menu ----------

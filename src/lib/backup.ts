@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { getTableName, ne, sql, type SQL } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 
 // Tables in dependency order: parents before children. INSERT walks this list
@@ -59,7 +59,9 @@ export const EXPORT_TABLES = [
 ] as const;
 
 /** 明确「不进备份」的表。跟着 users 的 cascade 一起消失是对的 ——
- *  它们要么几分钟就过期，要么恢复后会自然重新积累。
+ *  网页的登录会话（勾了「保持登录」最长 30 天：恢复后所有人在网页上重新登录一次），
+ *  一小时内就过期的一次性码（验证码、重置密码链接、配对码、授权码），
+ *  以及恢复后会自然重新积累的投递日志。备份页上那句说明照这个写，别写成「几分钟就过期」。
  *  **加进这个名单等于承诺「这张表丢了用户不会发现」，想清楚再加。**
  *  有一条断言盯着「凡是带 user_id 的表，要么在 EXPORT_TABLES 里，
  *  要么在这里」，见 test/backup_covers_user_data.test.ts。 */
@@ -151,6 +153,63 @@ function isAbsentFromBundle(bundle: BackupBundle, name: string): boolean {
   return !Array.isArray(bundle.tables[name]);
 }
 
+/** 恢复被拦下时写的那条审计记录的 action（src/web/admin.ts 用的就是这个常量）。 */
+export const RESTORE_BLOCKED_AUDIT_ACTION = "backup.restore_blocked";
+
+/**
+ * 数「这张表在库里有没有数据」时**不算**的行：恢复流程自己写进去的。
+ *
+ * admin_audit_log：被拦那一下会写一条 backup.restore_blocked。旧备份里没有这张表、
+ * 而库里这张表本来是空的话，第一次被拦时它不在清单上（0 行）；站长勾选确认、
+ * 重新提交 —— 这时它多了上一轮拦截自己写的那一行，于是变成「备份里缺、库里有数据、
+ * 没确认过」，再被拦一轮。站长确认的是他看到的那份清单，那一行不是他的数据。
+ *
+ * 不算的只是「这几行够不够格让恢复停下来」。确认清空之后，这张表照样整张清空
+ * （包括这几条拦截记录），恢复完成那条 backup.restore 审计会在清空之后再写进去。
+ */
+const NOT_COUNTED_AS_DATA: Partial<Record<(typeof EXPORT_TABLES)[number]["name"], SQL>> = {
+  admin_audit_log: ne(schema.adminAuditLog.action, RESTORE_BLOCKED_AUDIT_ACTION),
+};
+
+/**
+ * 锁住「文件里没有」的那几张表，再数它们在库里有几行。
+ *
+ * ── 为什么要锁 ────────────────────────────────────────────────────────
+ * 「在同一个事务里数」本身挡不住「数的时候是空的、删的时候已经有了」：Postgres 默认
+ * READ COMMITTED，事务里每条语句各拿各的快照，数完 0 行之后，别的连接照样能往这张表里
+ * 插一行并提交（比如恰好有人在 App 里登录，devices 多一行），下面那条 DELETE 会把它一起
+ * 删掉 —— 它没出现在拦截页上，站长也没确认过。
+ *
+ * SHARE ROW EXCLUSIVE 和 INSERT / UPDATE / DELETE 要的 ROW EXCLUSIVE 互斥，和 SELECT 不冲突：
+ * 数之前还没提交的写，要等它提交了才拿得到锁，所以数到的一定包含它；拿到锁之后的写排队，
+ * 等这个事务结束 —— 被拦就是马上结束、什么都没改；不拦就是恢复完成。期间别人照常能读。
+ * 只锁缺的那几张：文件里有的表，不管库里有什么都会按文件整张替换，数不数都一样。
+ *
+ * 换成 SERIALIZABLE 也能发现冲突，但发现的方式是「提交时报序列化失败」—— 站长看到的是一次
+ * 莫名其妙的恢复失败，还得重来；锁是让并发的那一笔写等一下，两边都不失败。
+ *
+ * 导出只为了让测试在事务里调它、再去 pg_locks 里看锁到底拿没拿到（test/integration/backup_restore_lock.int.test.ts）。
+ */
+export async function lockAndCountAbsentTables(
+  tx: Pick<typeof db, "execute" | "select">,
+  bundle: BackupBundle,
+): Promise<TableAtRisk[]> {
+  const absent = EXPORT_TABLES.filter((t) => isAbsentFromBundle(bundle, t.name));
+  if (absent.length === 0) return [];
+  // 表名来自代码里的常量，不来自文件；sql.identifier 照样加引号。
+  await tx.execute(sql`LOCK TABLE ${sql.join(absent.map((t) => sql.identifier(getTableName(t.table))), sql`, `)} IN SHARE ROW EXCLUSIVE MODE`);
+  const atRisk: TableAtRisk[] = [];
+  for (const t of absent) {
+    const notData = NOT_COUNTED_AS_DATA[t.name];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const q = tx.select({ n: sql<number>`count(*)::int` }).from(t.table as any);
+    const [row] = await (notData ? q.where(notData) : q);
+    const n = Number(row?.n ?? 0);
+    if (n > 0) atRisk.push({ table: t.name, rows: n });
+  }
+  return atRisk;
+}
+
 // Restore mode is destructive: TRUNCATE every restorable table (in reverse
 // dependency order), then INSERT the bundle's rows in dependency order.
 // Wrapped in a single transaction so a failure mid-restore rolls back.
@@ -170,16 +229,10 @@ export async function importData(bundle: BackupBundle, opts: ImportOptions = {})
   let totalInserted = 0;
   const confirmed = new Set(opts.confirmEmptying ?? []);
   const blocked = await db.transaction(async (tx) => {
-    // **先数，再删。** 文件里没有、库里有数据的表，清空之后插不回来 ——
-    // 在同一个事务里数，免得「数的时候是空的、删的时候已经有了」。
-    const atRisk: TableAtRisk[] = [];
-    for (const t of EXPORT_TABLES) {
-      if (!isAbsentFromBundle(bundle, t.name)) continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(t.table as any);
-      const n = Number(row?.n ?? 0);
-      if (n > 0) atRisk.push({ table: t.name, rows: n });
-    }
+    // **先锁、再数、再删。** 文件里没有、库里有数据的表，清空之后插不回来。
+    // 光「在同一个事务里数」不够 —— 默认的 READ COMMITTED 下，数完之后别人还能插进来；
+    // 所以数之前先把这几张表的写挡住，一直挡到这个事务结束。见 lockAndCountAbsentTables。
+    const atRisk = await lockAndCountAbsentTables(tx, bundle);
     // 有任何一张没被确认过：一行都不删，原样退出（事务里什么都没写）。
     if (atRisk.some((r) => !confirmed.has(r.table))) return atRisk;
     emptiedTables = atRisk;

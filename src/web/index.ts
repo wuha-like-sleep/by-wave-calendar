@@ -11,7 +11,7 @@ import {
   loadSession,
   loadUserFromRequest,
 } from "../lib/session.js";
-import { csrfTokenFor, verifyCsrf } from "../lib/csrf.js";
+import { csrfTokenFor, verifyCsrf, verifyMultipartCsrf } from "../lib/csrf.js";
 import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
@@ -177,6 +177,38 @@ function redirectWith(reply: FastifyReply, path: string, flash?: Flash) {
   // Use & when the path already carries a query string (e.g. /register?invite=…).
   const sep = path.includes("?") ? "&" : "?";
   return reply.redirect(`${path}${sep}${qs}`);
+}
+
+// ---------- 导入日历的结果怎么回 ----------
+//
+// 导入的四条路由（上传 .ics、粘贴文本、从 URL 导入一次、新建订阅）各有两个调用方：
+//   · 日历详情页（calendar.ejs）的原生表单 —— 照旧 302 回详情页，结果放在 ?error= / ?success=；
+//   · 日历主页的「导入日历」弹窗（calendar-app.js）用 fetch 提交，带 Accept: application/json ——
+//     回 JSON：成功 200 { ok: true, message, inserted, updated, skipped }，
+//     失败 4xx / 5xx { ok: false, message }，message 是按用户语言翻好的那句话。
+//
+// 以前弹窗也拿 302：粘贴那条 redirect:"manual" 只看见一个 opaqueredirect，上传那条跟着跳过去
+// 拿到详情页的 200 —— 两边都读不到 ?error=。于是文件过大、不是 .ics、粘贴超长，用户看到的
+// 一律是「导入完成」，页面一刷新，什么都没导进去。
+//
+// 判据只认 Accept 里明写的 application/json：浏览器原生提交表单时 Accept 是 text/html,…，
+// 不会带它，所以详情页那张表单的行为一点不变。
+function wantsJson(req: FastifyRequest): boolean {
+  return /\bapplication\/json\b/i.test(String(req.headers.accept ?? ""));
+}
+
+type ImportCounts = { inserted: number; updated: number; skipped?: number };
+
+function importFailed(req: FastifyRequest, reply: FastifyReply, calId: string, status: 400 | 413 | 422 | 502, message: string) {
+  if (wantsJson(req)) return reply.code(status).send({ ok: false, message });
+  return redirectWith(reply, `/app/calendars/${calId}`, { error: message });
+}
+
+/** partial：事情做了一半、不能让用户原样再点一次（订阅已经存下了、只是第一次拉取失败）。
+ *  弹窗按「有结果、但要提醒」处理：照样刷新页面，不留在弹窗里等用户重试出第二条订阅。 */
+function importDone(req: FastifyRequest, reply: FastifyReply, calId: string, message: string, counts: ImportCounts | null, opts: { partial?: boolean } = {}) {
+  if (wantsJson(req)) return reply.code(200).send({ ok: true, message, ...(counts ?? {}), ...(opts.partial ? { partial: true } : {}) });
+  return redirectWith(reply, `/app/calendars/${calId}`, opts.partial ? { error: message } : { success: message });
 }
 
 // Emit a <time> element carrying the UTC instant; the client-side local-time.js
@@ -1194,35 +1226,41 @@ export async function webRoutes(app: FastifyInstance) {
       file = await req.file({ limits: { fileSize: MAX_ICS_IMPORT_BYTES } });
     } catch (err) {
       if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
+        return importFailed(req, reply, calId.data, 413, tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }));
       }
       throw err;
     }
     if (!file) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pickFile") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.import.pickFile"));
     }
+    // **读文件、写库之前校验令牌。** 以前这条只认 cookie：本站和同一个上级域名下的
+    // 几十个站点在浏览器眼里是「同站」，SameSite=Lax 的 cookie 会跟着带过来，其中任何
+    // 一个页面都能替正在登录的人往他的日历里塞一份 .ics —— 几千条事件、带链接的提醒，
+    // 会同步到他所有的手机上。令牌在文件框**前面**的字段里（日历页的表单和导入弹窗
+    // 拼的 FormData 都这样排），见 lib/csrf.ts 的 verifyMultipartCsrf。
+    if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
     let buf: Buffer;
     try {
       buf = await file.toBuffer();
     } catch (err) {
       // 真正触顶的是 toBuffer，不是上面那次 req.file()。
       if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
+        return importFailed(req, reply, calId.data, 413, tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }));
       }
       throw err;
     }
     const text = buf.toString("utf8");
     if (!text.toUpperCase().includes("BEGIN:VCALENDAR")) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.notIcs") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.import.notIcs"));
     }
     try {
       const result = await importIcsText(calId.data, text, { sourceTag: `file:${file.filename ?? "upload"}` });
-      return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
-      });
+      return importDone(req, reply, calId.data,
+        tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
+        { inserted: result.inserted, updated: result.updated, skipped: result.skipped });
     } catch (err) {
       req.log.warn({ err }, "ics_file_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
+      return importFailed(req, reply, calId.data, 422, tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }));
     }
   });
 
@@ -1247,23 +1285,21 @@ export async function webRoutes(app: FastifyInstance) {
         const locale = (req as unknown as { locale?: string }).locale;
         let max = String(MAX_ICS_PASTE_CHARS);
         try { max = new Intl.NumberFormat(locale).format(MAX_ICS_PASTE_CHARS); } catch { /* 认不出的语言就用原样数字 */ }
-        return redirectWith(reply, `/app/calendars/${calId.data}`, {
-          error: tr(req, "flash.import.pasteTooLong", { max, mb: MAX_ICS_IMPORT_MB }),
-        });
+        return importFailed(req, reply, calId.data, 413, tr(req, "flash.import.pasteTooLong", { max, mb: MAX_ICS_IMPORT_MB }));
       }
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteText") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.import.pasteText"));
     }
     if (!body.data.text.toUpperCase().includes("BEGIN:VCALENDAR")) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteNotIcs") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.import.pasteNotIcs"));
     }
     try {
       const result = await importIcsText(calId.data, body.data.text, { sourceTag: "paste" });
-      return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
-      });
+      return importDone(req, reply, calId.data,
+        tr(req, "flash.import.success", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
+        { inserted: result.inserted, updated: result.updated, skipped: result.skipped });
     } catch (err) {
       req.log.warn({ err }, "ics_text_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
+      return importFailed(req, reply, calId.data, 422, tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }));
     }
   });
 
@@ -1283,17 +1319,17 @@ export async function webRoutes(app: FastifyInstance) {
 
     const body = z.object({ url: z.string().min(1).max(2000) }).safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.urlInvalid") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.import.urlInvalid"));
     }
     try {
       const text = await fetchIcsUrl(body.data.url);
       const result = await importIcsText(calId.data, text, { sourceTag: `url-once` });
-      return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        success: tr(req, "flash.import.urlSuccess", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
-      });
+      return importDone(req, reply, calId.data,
+        tr(req, "flash.import.urlSuccess", { inserted: result.inserted, updated: result.updated, skipped: result.skipped }),
+        { inserted: result.inserted, updated: result.updated, skipped: result.skipped });
     } catch (err) {
       req.log.warn({ err }, "ics_url_import_failed");
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fetchFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
+      return importFailed(req, reply, calId.data, 502, tr(req, "flash.import.fetchFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }));
     }
   });
 
@@ -1318,7 +1354,7 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.subscription.urlInvalid") });
+      return importFailed(req, reply, calId.data, 400, tr(req, "flash.subscription.urlInvalid"));
     }
 
     const [sub] = await db
@@ -1331,18 +1367,19 @@ export async function webRoutes(app: FastifyInstance) {
       })
       .returning({ id: schema.calendarSubscriptions.id });
     if (!sub) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.subscription.saveFailed") });
+      return importFailed(req, reply, calId.data, 422, tr(req, "flash.subscription.saveFailed"));
     }
 
     const refresh = await refreshSubscription(sub.id);
     if (!refresh.ok) {
-      return redirectWith(reply, `/app/calendars/${calId.data}`, {
-        error: tr(req, "flash.subscription.savedFetchFailed", { error: refresh.error }),
-      });
+      // 订阅已经存下了，只是第一次拉取失败（之后按周期重试）。不能按「失败」回给弹窗 ——
+      // 弹窗会留着等用户再点一次，那就是第二条一模一样的订阅。
+      return importDone(req, reply, calId.data,
+        tr(req, "flash.subscription.savedFetchFailed", { error: refresh.error }), null, { partial: true });
     }
-    return redirectWith(reply, `/app/calendars/${calId.data}`, {
-      success: tr(req, "flash.subscription.created", { inserted: refresh.result.inserted, updated: refresh.result.updated }),
-    });
+    return importDone(req, reply, calId.data,
+      tr(req, "flash.subscription.created", { inserted: refresh.result.inserted, updated: refresh.result.updated }),
+      { inserted: refresh.result.inserted, updated: refresh.result.updated });
   });
 
   // Rate-limited: manual refresh triggers an immediate outbound fetch of the

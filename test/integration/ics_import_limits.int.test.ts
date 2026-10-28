@@ -69,9 +69,11 @@ async function paste(s: { cookie: string; csrf: string }, calId: string, text: s
   });
 }
 
-async function upload(s: { cookie: string }, calId: string, content: Buffer) {
+async function upload(s: { cookie: string; csrf: string }, calId: string, content: Buffer) {
   const b = "----bwc" + Math.random().toString(36).slice(2);
+  // _csrf 排在文件前面，和日历页的表单一样（这条路现在校验令牌，见 web_ics_import.int.test.ts）。
   const head = Buffer.from(
+    `--${b}\r\nContent-Disposition: form-data; name="_csrf"\r\n\r\n${s.csrf}\r\n` +
     `--${b}\r\nContent-Disposition: form-data; name="file"; filename="cal.ics"\r\nContent-Type: text/calendar\r\n\r\n`,
   );
   return app.inject({

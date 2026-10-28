@@ -36,7 +36,7 @@ import { createProvider, deleteProvider, getProviderById, listAllProviders, upda
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
 import {
   exportData, importData, BACKUP_VERSION, EXPORT_TABLES, BACKUP_EXCLUDED_TABLES,
-  RestoreNeedsConfirmationError, type BackupBundle, type TableAtRisk,
+  RestoreNeedsConfirmationError, RESTORE_BLOCKED_AUDIT_ACTION, type BackupBundle, type TableAtRisk,
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
@@ -1949,7 +1949,9 @@ export async function adminRoutes(app: FastifyInstance) {
     } catch (err) {
       if (err instanceof RestoreNeedsConfirmationError) {
         // **库里什么都没动。** 把会被清空的表和行数摆出来，让站长决定。
-        await audit(req, u.id, "backup.restore_blocked", {
+        // 这一行进的是 admin_audit_log —— 旧备份里多半也没有这张表。importData 数
+        // 「有没有数据」时不算这种记录，不然站长确认后第二次提交会因为这一行再被拦一轮。
+        await audit(req, u.id, RESTORE_BLOCKED_AUDIT_ACTION, {
           details: { exportedAt: bundle.exportedAt, sizeBytes: buf.length, atRisk: err.atRisk },
         });
         return reply.view("admin/backup", backupPage(req, u, {
@@ -3449,10 +3451,11 @@ export async function adminRoutes(app: FastifyInstance) {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
     // multipart 的 req.body 是 undefined(解析器只 done() 不塞 body),
-    // 所以 _csrf 字段读不到 —— 客户端改用 x-csrf-token 头,这里照常验。
-    // (隔壁那条上传路干脆不验 CSRF,注释里的理由是错的:cookie 照常发,
-    //  而 CORS 从不拦跨站的 multipart 表单 POST。真正挡住的是 sameSite=lax。)
-    if (!verifyCsrf(req, reply)) return;
+    // 所以 _csrf 字段读不到 —— 页面 JS 把令牌放在 x-csrf-token 头里,这里在读任何
+    // 一段上传之前就验。用 verifyMultipartCsrf(不传字段 = 只认头)而不是 verifyCsrf:
+    // 两者对这条路效果一样,但上传路由统一走它,门禁(test/admin_post_csrf.test.ts)
+    // 才认得出「上传却用了读不到表单字段的那个」。
+    if (!verifyMultipartCsrf(req, reply, undefined)) return;
 
     const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
     if (!p.success) return reply.code(400).send({ ok: false, error: "bad_platform" });
