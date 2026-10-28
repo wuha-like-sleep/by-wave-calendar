@@ -58,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -535,39 +536,72 @@ fun MainScreen(
     // back up to the same ProfileStore callbacks the toolbar used to
     // wire directly.
     if (showSettings) {
+        SettingsOverlay(profile = p, banners = signedOutBanners) {
+            SettingsScreen(
+                profile = p,
+                profiles = profiles,
+                calendars = ui.calendars,
+                onClose = { showSettings = false },
+                onSignOut = {
+                    showSettings = false
+                    ProfileStore.clear()
+                },
+                onSwitchProfile = { id -> ProfileStore.setActive(id) },
+                onRemoveProfile = { id -> ProfileStore.remove(id) },
+                onAddAccount = {
+                    showSettings = false
+                    onAddAccount()
+                },
+                onCheckUpdate = {
+                    val url = p.serverUrl
+                    scope.launch { UpdateChecker.forceCheck(url) }
+                    // Don't close Settings — the dialog will float on top
+                    // when the manifest comes back. If "up to date," the
+                    // showUpdateDialog branch shows a slim confirmation.
+                    showUpdateDialog = true
+                },
+                // A calendar create / rename / recolor / delete in Settings
+                // mutates server state; re-run the events fetch so the
+                // updated calendar list (embedded in EventsResponse.calendars)
+                // flows back into both the Settings list and the calendar
+                // views behind the overlay.
+                onCalendarsChanged = { state.load() },
+            )
+        }
+    }
+}
+
+/**
+ * 设置页这一整层：上面是被登出提示条，下面是设置页本体。
+ *
+ * 1. 整层铺一个 Surface。Material3 的 Surface 会接住落在它范围里的所有鼠标事件；
+ *    以前外面套的是 Column，提示条又画在 SettingsScreen 自己的 Surface 之外 ——
+ *    提示条上的文字和留白不接点击，点下去穿透到压在下面的主界面顶栏，正好是
+ *    「今天」「新建」、视图切换那一排按钮，鼠标停在上面还会冒出它们的悬浮提示。
+ *
+ * 2. 设置页按账号整页重建。设置里的设备列表、预约链接、分享链接都是进页面拉一次、
+ *    之后只在手动刷新时重拉；账号在设置页开着的时候换了（另一个账号被登出自动切走，
+ *    或者在这里点了切换），页面上留的还是上一个账号的列表，开着的子对话框点下去却
+ *    作用在新账号上。认的是 deviceId + serverUrl（和 MainScreen 里 ApiClient 的
+ *    key 一致），不是整个 Profile：换票会换掉 refreshToken，按整个对象认的话，
+ *    每次后台换票都会把用户在设置里正填着的表单清空。
+ */
+@Composable
+internal fun SettingsOverlay(
+    profile: cn.bywave.calendar.desktop.data.model.Profile,
+    banners: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            signedOutBanners()
+            banners()
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                SettingsScreen(
-                    profile = p,
-                    profiles = profiles,
-                    calendars = ui.calendars,
-                    onClose = { showSettings = false },
-                    onSignOut = {
-                        showSettings = false
-                        ProfileStore.clear()
-                    },
-                    onSwitchProfile = { id -> ProfileStore.setActive(id) },
-                    onRemoveProfile = { id -> ProfileStore.remove(id) },
-                    onAddAccount = {
-                        showSettings = false
-                        onAddAccount()
-                    },
-                    onCheckUpdate = {
-                        val url = p.serverUrl
-                        scope.launch { UpdateChecker.forceCheck(url) }
-                        // Don't close Settings — the dialog will float on top
-                        // when the manifest comes back. If "up to date," the
-                        // showUpdateDialog branch shows a slim confirmation.
-                        showUpdateDialog = true
-                    },
-                    // A calendar create / rename / recolor / delete in Settings
-                    // mutates server state; re-run the events fetch so the
-                    // updated calendar list (embedded in EventsResponse.calendars)
-                    // flows back into both the Settings list and the calendar
-                    // views behind the overlay.
-                    onCalendarsChanged = { state.load() },
-                )
+                key(profile.deviceId, profile.serverUrl) {
+                    content()
+                }
             }
         }
     }
