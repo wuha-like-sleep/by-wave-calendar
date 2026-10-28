@@ -401,8 +401,9 @@ private class AuthInterceptor(
             // 新建/编辑/删除全部失败，而**杀进程重开、重启手机都自愈不了**
             // （启动页只看本地有没有账号记录），唯一出路藏在设置里的退出登录。
             //
-            // 清掉 refresh token，启动页就会自然回到配对页；signedOutReason
-            // 让配对页能说清是为什么。
+            // 清掉 refresh token。本机还登着别的账号：切到最近用过的那个，日历页挂一条
+            // 提示说清是哪个账号被登出、为什么；一个都不剩：回配对页，signedOutReason
+            // 让配对页能说清是为什么。见 ProfileStore.markSignedOut。
             store.markSignedOut(profileId, R.string.setup_signed_out_reason)
             return firstResp.newBuilder()
                 .body("""{"ok":false,"error":{"code":"device_revoked","message":"设备已被移除"}}"""

@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">Annulation impossible</string>
     <string name="cal_err_signout_failed">Déconnexion impossible</string>
     <string name="cal_err_not_signed_in">Connectez-vous d’abord</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">Le compte %1$s a été déconnecté</string>
+    <string name="cal_signed_out_reason">Le mot de passe a changé ou cet appareil a été retiré.</string>
+    <string name="cal_signed_out_now_showing">Vous voyez maintenant le calendrier de %1$s.</string>
+    <string name="cal_signed_out_sign_in_again">Se reconnecter</string>
 </resources>

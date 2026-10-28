@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">元に戻せませんでした</string>
     <string name="cal_err_signout_failed">サインアウトできませんでした</string>
     <string name="cal_err_not_signed_in">先にサインインしてください</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">%1$s はサインアウトされました</string>
+    <string name="cal_signed_out_reason">パスワードが変更されたか、この端末が解除されました。</string>
+    <string name="cal_signed_out_now_showing">現在は %1$s のカレンダーを表示しています。</string>
+    <string name="cal_signed_out_sign_in_again">もう一度サインイン</string>
 </resources>

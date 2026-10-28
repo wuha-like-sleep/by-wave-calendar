@@ -93,6 +93,8 @@ fun CalendarScreen(
     val profilesList by profiles.profiles.collectAsState()
     val activeId by profiles.activeId.collectAsState()
     val active = profilesList.firstOrNull { it.id == activeId }
+    // 被服务端登出、而本机还登着别的账号时的说明（一次显示一条）。见 SignedOutBanner。
+    val signedOutNotices by profiles.signedOutNotices.collectAsState()
 
     val state by vm.state.collectAsState()
     // Subtle haptic on primary (FAB create) + destructive (delete confirm)
@@ -219,6 +221,17 @@ fun CalendarScreen(
                 vm.setAnchor(day)
             },
             eventsForDay = { vm.eventsForDay(it) },
+            topNotice = {
+                val notice = signedOutNotices.firstOrNull()
+                if (notice != null) {
+                    SignedOutBanner(
+                        notice = notice,
+                        currentEmail = active?.email,
+                        onSignInAgain = onAddAccount,
+                        onDismiss = { profiles.dismissSignedOutNotice(notice) },
+                    )
+                }
+            },
         )
     }
 
@@ -346,12 +359,16 @@ private fun CalendarBody(
     onEventLongPress: (EventDTO) -> Unit,
     onDayClick: (java.time.LocalDate) -> Unit,
     eventsForDay: (java.time.LocalDate) -> List<EventDTO>,
+    /** 顶在最上面的提示（账号被服务端登出之类），没有就不占地方。 */
+    topNotice: @Composable () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding),
     ) {
+        topNotice()
+
         // View mode tabs
         SingleChoiceSegmentedButtonRow(
             modifier = Modifier

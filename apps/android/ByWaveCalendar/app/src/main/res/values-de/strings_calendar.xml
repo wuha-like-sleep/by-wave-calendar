@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">Rückgängig fehlgeschlagen</string>
     <string name="cal_err_signout_failed">Abmelden fehlgeschlagen</string>
     <string name="cal_err_not_signed_in">Bitte zuerst anmelden</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">%1$s wurde abgemeldet</string>
+    <string name="cal_signed_out_reason">Das Passwort wurde geändert oder dieses Gerät wurde entfernt.</string>
+    <string name="cal_signed_out_now_showing">Angezeigt wird jetzt der Kalender von %1$s.</string>
+    <string name="cal_signed_out_sign_in_again">Erneut anmelden</string>
 </resources>

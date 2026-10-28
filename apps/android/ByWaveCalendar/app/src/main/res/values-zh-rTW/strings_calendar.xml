@@ -15,4 +15,10 @@
     <string name="cal_err_undo_failed">復原失敗，請重試</string>
     <string name="cal_err_signout_failed">登出失敗，請重試</string>
     <string name="cal_err_not_signed_in">請先登入</string>
+
+    <!-- Account signed out by the server (banner on the calendar) -->
+    <string name="cal_signed_out_title">%1$s 已被登出</string>
+    <string name="cal_signed_out_reason">原因：密碼已變更，或這台裝置已被移除。</string>
+    <string name="cal_signed_out_now_showing">現在顯示的是 %1$s 的行事曆。</string>
+    <string name="cal_signed_out_sign_in_again">重新登入</string>
 </resources>

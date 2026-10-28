@@ -20,4 +20,10 @@
     <string name="cal_err_undo_failed">撤销失败，请重试</string>
     <string name="cal_err_signout_failed">退出登录失败，请重试</string>
     <string name="cal_err_not_signed_in">请先登录</string>
+
+    <!-- 被服务端登出的账号（本机还登着别的账号时，挂在日历页顶上） -->
+    <string name="cal_signed_out_title">%1$s 已被登出</string>
+    <string name="cal_signed_out_reason">原因：密码已更改，或这台设备已被移除。</string>
+    <string name="cal_signed_out_now_showing">现在显示的是 %1$s 的日历。</string>
+    <string name="cal_signed_out_sign_in_again">重新登录</string>
 </resources>
