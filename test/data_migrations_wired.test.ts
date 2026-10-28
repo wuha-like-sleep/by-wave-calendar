@@ -13,7 +13,18 @@ import { readFileSync } from "node:fs";
 //   · src/lib/backup.ts 的恢复（恢复回来的可能是升级前的老数据）
 // 每条都要排在「表结构就绪」之后：记账列是 0057 加的，排在 SQL 迁移前面就读不到那一列。
 
-const read = (p: string) => readFileSync(new URL(p, import.meta.url).pathname, "utf8");
+// 先去掉注释再找：被注释掉的调用不能让门禁通过（以前出过「注释里的字样骗过门禁」）。
+// 只认 // 行注释和 /* */ 块注释；字符串里恰好有 "//" 的地方（URL）这几个文件里没有调用要找。
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+const read = (p: string) => stripComments(readFileSync(new URL(p, import.meta.url).pathname, "utf8"));
+
+describe("门禁自己：被注释掉的调用不算", () => {
+  it("// 和 /* */ 里的 await runDataMigrations(db 都找不到", () => {
+    expect(stripComments("  // await runDataMigrations(db, x)\n").indexOf("await runDataMigrations(db")).toBe(-1);
+    expect(stripComments("/* await runDataMigrations(db) */").indexOf("await runDataMigrations(db")).toBe(-1);
+    expect(stripComments("  await runDataMigrations(db); // ok").indexOf("await runDataMigrations(db")).toBeGreaterThan(-1);
+  });
+});
 
 describe("数据迁移挂在三条路上", () => {
   it("scripts/migrate.ts：SQL 迁移之后调用 runDataMigrations", () => {

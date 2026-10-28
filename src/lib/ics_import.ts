@@ -3,6 +3,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
 import { safeFetch, SsrfBlockedError } from "./ssrf_guard.js";
+import { isValidTimeZone } from "./zoned_time.js";
 import { env } from "../env.js";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -86,13 +87,29 @@ export function mergeImportExtra(
   existingExtra: unknown,
   sourceTag: string | null,
   alarms: IcalEvent["alarms"],
+  timezone: string | null = null,
 ): Record<string, unknown> | null {
   const base = existingExtra && typeof existingExtra === "object" && !Array.isArray(existingExtra)
     ? { ...(existingExtra as Record<string, unknown>) }
     : {};
   if (sourceTag) base.source = sourceTag;
   if (Array.isArray(alarms) && alarms.length) base.alarms = alarms;
+  if (timezone) base.timezone = timezone;
   return Object.keys(base).length ? base : null;
+}
+
+/**
+ * 导入 / 订阅进来的定时重复事件要记下按哪个时区展开（event_zone.ts 第 3 条）。
+ * 不记的话会退到日历的时区 —— 每个账号的默认日历都是 Asia/Shanghai，欧美来的订阅源里
+ * 「每周一」晚上的课会按上海时间算、错一天。
+ *   · 源文件 DTSTART 带合法的 TZID：就用它（和 CalDAV PUT 同一个口径）。
+ *   · 写成 UTC（…Z）、浮动时间、TZID 不认识：UTC。这三种 parseICalDateValue 都是按 UTC
+ *     读进来的，按 UTC 展开才和读进来的那个时刻是一回事（也就是 1.7.4 之前的展开方式）。
+ * 不重复的、全天的不记：单个时刻写成 UTC 是精确的，不需要。
+ */
+export function importTimeZone(ev: Pick<IcalEvent, "allDay" | "rrule" | "timezone">): string | null {
+  if (ev.allDay || !ev.rrule) return null;
+  return isValidTimeZone(ev.timezone) ? ev.timezone : "UTC";
 }
 
 /**
@@ -158,7 +175,7 @@ async function upsertEvents(
       .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
       .limit(1);
 
-    const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null);
+    const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null, importTimeZone(ev));
 
     if (existing) {
       // Leave soft-deleted rows alone: don't resurrect something the user

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { expansionTimeZone, exportTimeZone, rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../src/lib/event_zone.js";
 import { serializeEvent, type IcalEvent } from "../src/lib/ical.js";
+import { importTimeZone, mergeImportExtra } from "../src/lib/ics_import.js";
 
 // 「按哪个时区展开 / 导出」只有一份口径（event_zone.ts）。展开（服务端）和导出（手机）
 // 用的必须是同一个时区，否则两边算出来的日子对不上。
@@ -35,7 +36,7 @@ describe("expansionTimeZone 的顺序", () => {
     expect(expansionTimeZone({ allDay: false, extra: { timezone: "" }, calendarTimezone: "" })).toBe("UTC");
   });
 
-  it("手机写上来的原文 DTSTART 是 UTC 写法：按 UTC（手机就是这么展开的），但 extra.timezone 仍然优先", () => {
+  it("手机写上来的原文 DTSTART 是 UTC 写法：按 UTC（手机就是这么展开的），连 extra.timezone 也压过", () => {
     expect(rawIcsStartIsUtc(RAW_UTC)).toBe(true);
     expect(rawIcsStartIsUtc(RAW_TZID)).toBe(false);
     expect(rawIcsStartIsUtc("DTSTART:20260927T233000Z")).toBe(false);   // 不是 VEVENT 原文
@@ -44,8 +45,44 @@ describe("expansionTimeZone 的顺序", () => {
     expect(rawIcsStartIsUtc("BEGIN:VEVENT\r\nDESCRIPTION:see DTSTART:20260927T233000Z\r\nDTSTART;TZID=Asia/Shanghai:20260928T073000\r\nEND:VEVENT")).toBe(false);
     expect(expansionTimeZone({ allDay: false, extra: null, calendarTimezone: "Australia/Melbourne", rawStartIsUtc: true }))
       .toBe("UTC");
+    // 网页建的事件（有 extra.timezone）被手机用 UTC 写法 PUT 回来：CalDAV PUT 只在带 TZID 时才
+    // 覆盖 extra.timezone，原文才是手机手上那一份，两边必须按同一个时区排。
     expect(expansionTimeZone({ allDay: false, extra: { timezone: "Asia/Tokyo" }, calendarTimezone: "Australia/Melbourne", rawStartIsUtc: true }))
-      .toBe("Asia/Tokyo");
+      .toBe("UTC");
+    expect(exportTimeZone({ allDay: false, extra: { timezone: "Asia/Tokyo" }, calendarTimezone: null, rrule: "FREQ=WEEKLY", rawStartIsUtc: true }))
+      .toBeNull();
+    expect(timeZoneToPinOnCopy({
+      allDay: false, extra: { timezone: "Asia/Tokyo" }, calendarTimezone: null, rrule: "FREQ=WEEKLY", rawStartIsUtc: true,
+    })).toBe("UTC");
+  });
+
+  it("Intl 认、手机不认的写法不算时区名：+08:00、CST、EST 一律回落", () => {
+    for (const tz of ["+08:00", "CST", "EST", "GMT+8"]) {
+      expect(expansionTimeZone({ allDay: false, extra: { timezone: tz }, calendarTimezone: tz }), tz).toBe("UTC");
+    }
+    expect(expansionTimeZone({ allDay: false, extra: { timezone: "Etc/GMT-8" }, calendarTimezone: null })).toBe("Etc/GMT-8");
+    expect(expansionTimeZone({ allDay: false, extra: { timezone: "America/Argentina/Buenos_Aires" }, calendarTimezone: null }))
+      .toBe("America/Argentina/Buenos_Aires");
+  });
+
+  it("extra.timezone 是 UTC 的导出写成 …Z，不写 TZID=UTC", () => {
+    expect(exportTimeZone({ allDay: false, extra: { timezone: "UTC" }, calendarTimezone: "Asia/Shanghai", rrule: "FREQ=WEEKLY" })).toBeNull();
+  });
+});
+
+describe("importTimeZone：导入 / 订阅进来的重复事件记下按哪个时区排", () => {
+  it("源文件 DTSTART 带 TZID：用它；UTC 写法、浮动时间、认不出的 TZID：UTC（和读进来的时刻同一个口径）", () => {
+    expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: "America/New_York" })).toBe("America/New_York");
+    expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: null })).toBe("UTC");
+    expect(importTimeZone({ allDay: false, rrule: "FREQ=WEEKLY;BYDAY=MO", timezone: "China Standard Time" })).toBe("UTC");
+  });
+  it("不重复、全天：不记", () => {
+    expect(importTimeZone({ allDay: false, rrule: null, timezone: "America/New_York" })).toBeNull();
+    expect(importTimeZone({ allDay: true, rrule: "FREQ=YEARLY", timezone: null })).toBeNull();
+  });
+  it("写进 extra 时不抹掉用户自己加的提醒和别的字段", () => {
+    expect(mergeImportExtra({ alarms: [{ trigger: "-PT30M" }], categories: ["x"] }, "sub:s1", null, "America/New_York"))
+      .toEqual({ alarms: [{ trigger: "-PT30M" }], categories: ["x"], source: "sub:s1", timezone: "America/New_York" });
   });
 });
 

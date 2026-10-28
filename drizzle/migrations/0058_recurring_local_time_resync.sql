@@ -46,6 +46,11 @@
 -- 用 `<>` 不用 `<`：升级发生在这个时刻之后的任意一天，中间被编辑过的事件 updated_at
 -- 已经比它大，可手机上那份照样可能是改之前抓的，不能漏。
 --
+-- 这个时刻**必须早于任何一次升级**（取的是打包前，墨尔本 10-29 零点）。写成未来的时刻，
+-- 日历的 max(updated_at) 会被钉在那个时刻上：到点之前网页、App、手机的每一次修改都只把
+-- updated_at 写成 now()，max 不变、活行数不变，ctag 就不变，苹果日历和 DAVx⁵ 不来拉，
+-- 改动一直到不了手机上。test/integration/migration_recurring_local_time.int.test.ts 拦着。
+--
 -- 和程序里那条数据迁移的先后
 -- ------------------------
 -- 迁移器先跑完所有 SQL（包括这一条），再跑 data_migrations.ts。被那边改写了 exdates 的行，
@@ -63,13 +68,13 @@
 
 -- 语句一：bump 这批事件的 updated_at → 单条 etag 变。
 UPDATE events
-   SET updated_at = TIMESTAMPTZ '2026-10-29 10:00:00+00'
+   SET updated_at = TIMESTAMPTZ '2026-10-28 13:00:00+00'
  WHERE NOT all_day
    AND rrule IS NOT NULL
    AND rrule <> ''
    AND deleted_at IS NULL
    AND (raw_ics IS NULL OR strpos(raw_ics, 'BEGIN:VEVENT') = 0)
-   AND updated_at <> TIMESTAMPTZ '2026-10-29 10:00:00+00';--> statement-breakpoint
+   AND updated_at <> TIMESTAMPTZ '2026-10-28 13:00:00+00';--> statement-breakpoint
 
 -- 语句二：bump 同步纪元 → 每个日历的 ctag 变，客户端来列。
 -- 全新安装时 site_settings 那一行还不存在，匹配不到行，也不需要。

@@ -3,12 +3,12 @@
 //   一、0058（纯 SQL）：让手机把「网页 / App 建的定时重复事件」重新下载一遍 ——
 //       导出从 DTSTART:…Z 改成了 DTSTART;TZID=日历时区，已经同步到手机上的那份不会自己变。
 //   二、数据迁移（src/lib/data_migrations.ts，程序里算）：以前「删掉这一次」记下的是旧算法
-//       （按 UTC 展开）算出来的时刻，对到新算法里同序号的那一次。
+//       （按 UTC 展开）算出来的时刻。那个时刻新排法里还有就不动，没有了就对到离它最近的那一次。
 //
 // 断言读的是用户看得到的东西：GET /api/v1/events 里少的是哪一天、CalDAV 拿到的 EXDATE / etag / ctag。
 // 每条都要能红：
 //   · 0058 改窄 / 改宽范围、删掉纪元那句 → 对应的「bump / 不动 / ctag 变」红
-//   · 数据迁移不对齐序号、不认记账、不刷新 updated_at、恢复备份后不跑 → 对应的那条红
+//   · 数据迁移不对齐、不认记账、不刷新 updated_at、恢复备份后不跑 → 对应的那条红
 import { vi, beforeAll, beforeEach, afterEach, describe, it, expect } from "vitest";
 
 vi.mock("../../src/db/client.js", async () => {
@@ -30,11 +30,11 @@ const { hashPassword } = await import("../../src/lib/password.js");
 const { invalidateCalDavAuthCache } = await import("../../src/lib/caldav_auth.js");
 const { reloadSettings, updateSettings } = await import("../../src/lib/site_settings.js");
 const { runDataMigrations, EXDATE_LOCAL_TIME_MIGRATION } = await import("../../src/lib/data_migrations.js");
-const { listSeriesStartsLegacyUtc } = await import("../../src/lib/rrule_expand.js");
+const { seriesStartsBetween } = await import("../../src/lib/rrule_expand.js");
 const { exportData, importData } = await import("../../src/lib/backup.js");
 
 const MIGRATION = "drizzle/migrations/0058_recurring_local_time_resync.sql";
-const STAMP = "2026-10-29T10:00:00.000Z";
+const STAMP = "2026-10-28T13:00:00.000Z";
 const EPOCH = "2026-10-29-recurring-local-time";
 const PASSWORD = "recurring-resync-test-pw-123456";
 const MEL = "Australia/Melbourne";
@@ -92,8 +92,10 @@ async function rowOf(id: string) {
   return r!;
 }
 
+/** 旧算法（按 UTC 展开）的第 k 次（从 0 数）。 */
 function legacyNth(startsAt: Date, rrule: string, k: number): string {
-  return listSeriesStartsLegacyUtc({ startsAt, rrule }, { minCount: k + 1, cap: 1000 })!.starts[k]!.toISOString();
+  const all = seriesStartsBetween({ startsAt, rrule, allDay: false, timeZone: "UTC" }, startsAt, new Date(startsAt.getTime() + 400 * 86400_000))!;
+  return all[k]!.toISOString();
 }
 
 function melDay(iso: string): string {
@@ -169,6 +171,8 @@ describe("0058 哪些事件被 bump", () => {
     expect(stamps.length).toBe(2);
     expect(new Set(stamps).size).toBe(1);
     expect(new Date(stamps[0]!.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00")).toISOString()).toBe(STAMP);
+    // 写成未来的时刻会把日历的 max(updated_at) 钉住：到点之前所有修改 ctag 都不变、手机不来拉。
+    expect(new Date(STAMP).getTime()).toBeLessThan(Date.now());
     const epochs = [...sql.matchAll(/caldav_sync_epoch(?: IS DISTINCT FROM| =) '([^']+)'/g)].map((m) => m[1]!);
     expect(new Set(epochs)).toEqual(new Set([EPOCH]));
   });
@@ -279,7 +283,7 @@ describe("数据迁移把旧算法记下的 exdate 对到新算法的同一次",
     const oldEx = legacyNth(startsAt, rrule, 2);
     const rows = [
       await seed(mel.id, { uid: "already", exdates: ["2026-10-11T22:30:00.000Z"] }),
-      // 两种算法都算得出、序号不同（旧第 1 次 = 新第 2 次）：按「新算法算得出就不动」
+      // 每个工作日：以前画在周二的那次，新排法里周二本来就有一次 —— 删的就是当时看到的周二，不动
       await seed(mel.id, { uid: "both", rrule: "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR", exdates: ["2026-09-28T23:30:00.000Z"] }),
       await seed(mel.id, {
         uid: "allday", allDay: true, exdates: ["2026-10-12T00:00:00.000Z"],
@@ -328,5 +332,152 @@ describe("数据迁移把旧算法记下的 exdate 对到新算法的同一次",
     await importData(bundle as never);
     expect((await rowOf(ev.id)).exdates, "恢复回来的老数据没被迁移：被删的那次又冒出来了").toEqual(["2026-10-11T22:30:00.000Z"]);
     expect((await doneMarker()).split(" ")).toContain(EXDATE_LOCAL_TIME_MIGRATION);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 三、迁移的口径：删掉的是当时看到的那一次（复核挖出来的三种情况）
+// ---------------------------------------------------------------------------
+
+describe("数据迁移：UTC 以西、每个工作日、拆分过的系列", () => {
+  const NY = "America/New_York";
+  const nyDay = (iso: string | Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: NY, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+
+  it("纽约周一晚上 8 点：以前删的「周日 10-18」→ 那一周的周一 10-19（不是早一周的 10-12）", async () => {
+    const cal = await calendarIn(NY);
+    const startsAt = new Date("2026-10-06T00:00:00.000Z");   // 纽约 10-05 周一 20:00 EDT
+    const rrule = "FREQ=WEEKLY;BYDAY=MO;COUNT=6";
+    const oldSun = legacyNth(startsAt, rrule, 1);
+    expect(nyDay(oldSun)).toBe("2026-10-18");
+    const ev = await seed(cal.id, { uid: "ny", startsAt, endsAt: new Date(startsAt.getTime() + 3600_000), rrule, exdates: [oldSun] });
+    await runDataMigrations(db, { log: quiet });
+    expect((await rowOf(ev.id)).exdates).toEqual(["2026-10-20T00:00:00.000Z"]);
+    const res = await api.inject({
+      method: "GET",
+      url: `/api/v1/events?from=${encodeURIComponent("2026-10-01T00:00:00Z")}&to=${encodeURIComponent("2026-12-01T00:00:00Z")}`,
+      headers: { cookie },
+    });
+    const days = (res.json() as { events: { id: string; startsAt: string }[] }).events.filter((e) => e.id === ev.id).map((e) => nyDay(e.startsAt));
+    expect(days).toEqual(["2026-10-05", "2026-10-12", "2026-10-26", "2026-11-02", "2026-11-09"]);
+  });
+
+  it("每个工作日：画在周二的那次删的就是周二（不动），画在周六的对到周五", async () => {
+    const cal = await calendarIn(MEL);
+    const tue = "2026-09-28T23:30:00.000Z";   // 墨尔本 09-29 周二 09:30
+    const sat = "2026-10-02T23:30:00.000Z";   // 墨尔本 10-03 周六 09:30
+    const ev = await seed(cal.id, { uid: "standup", rrule: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", exdates: [tue, sat] });
+    await runDataMigrations(db, { log: quiet });
+    expect((await rowOf(ev.id)).exdates).toEqual([tue, "2026-10-01T23:30:00.000Z"]);
+  });
+
+  it("升级前在夏令时之后点过「这次及以后」：旧系列的 UNTIL 跟着挪，拆分那天不再出两次", async () => {
+    const cal = await calendarIn(MEL);
+    const startsAt = new Date("2026-09-20T23:30:00.000Z");   // 墨尔本 09-21 周一 09:30 AEST
+    const old = await seed(cal.id, { uid: "old-master", startsAt, endsAt: new Date(startsAt.getTime() + 3600_000), rrule: "FREQ=WEEKLY;UNTIL=20261018T232959Z" });
+    await runDataMigrations(db, { log: quiet });
+    const row = await rowOf(old.id);
+    expect(row.rrule).toBe("FREQ=WEEKLY;UNTIL=20261018T222959Z");
+    expect(row.updatedAt.getTime()).toBeGreaterThan(old.updatedAt.getTime());
+    expect(await visibleDays(old.id)).toEqual(["2026-09-21", "2026-09-28", "2026-10-05", "2026-10-12"]);
+  });
+
+  it("迁移读完之后这一行被别人改了：不拿读进来的旧列表盖掉", async () => {
+    const cal = await calendarIn(MEL);
+    const startsAt = new Date("2026-09-27T23:30:00.000Z");
+    const rrule = "FREQ=WEEKLY;BYDAY=MO;COUNT=12";
+    const ev = await seed(cal.id, { uid: "race", exdates: [legacyNth(startsAt, rrule, 2)] });
+    const { migrateLegacyExdates } = await import("../../src/lib/data_migrations.js");
+    // 在第一次 UPDATE 之前插一脚：模拟老进程这时候又记了一条「删掉这一次」
+    const fresh = "2026-11-08T22:30:00.000Z";
+    let injected = false;
+    const proxy = new Proxy(db, {
+      get(target, prop, recv) {
+        if (prop === "update" && !injected) {
+          return (...args: unknown[]) => {
+            injected = true;
+            return {
+              set: (v: unknown) => ({
+                where: (w: unknown) => ({
+                  returning: async (r: unknown) => {
+                    await db.update(schema.events).set({ exdates: [legacyNth(startsAt, rrule, 2), fresh] }).where(eq(schema.events.id, ev.id));
+                    return (target.update as (...a: unknown[]) => { set: (v: unknown) => { where: (w: unknown) => { returning: (r: unknown) => Promise<unknown> } } })(...args)
+                      .set(v).where(w).returning(r);
+                  },
+                }),
+              }),
+            };
+          };
+        }
+        return Reflect.get(target, prop, recv);
+      },
+    });
+    const report = await migrateLegacyExdates(proxy as typeof db);
+    expect(report.raced).toBe(1);
+    expect((await rowOf(ev.id)).exdates).toEqual(["2026-10-11T22:30:00.000Z", fresh]);
+  });
+});
+
+describe("改日历时区：没有自己时区的老事件跟着换，删过的不回来，手机重新下载", () => {
+  it("上海 → 墨尔本：10-19 那次以前删了，改完还是删的；updated_at 刷新", async () => {
+    const { calendarRoutes } = await import("../../src/routes/calendars.js");
+    const calApi = await buildRoutedApp(calendarRoutes, { prefix: "/api/v1" });
+    try {
+      const cal = await calendarIn("Asia/Shanghai");
+      // 墨尔本周一 09:30 AEST 建的、没填时区：按上海 07:30 排，夏令时后是墨尔本 10:30
+      const ev = await seed(cal.id, { uid: "sh", rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=12", exdates: ["2026-10-18T23:30:00.000Z"] });
+      const kept = await seed(cal.id, { uid: "own-tz", extra: { timezone: "Asia/Tokyo" }, exdates: ["2026-10-19T00:30:00.000Z"] });
+      const res = await calApi.inject({
+        method: "PATCH", url: `/api/v1/calendars/${cal.id}`, headers: { cookie, "content-type": "application/json" },
+        payload: JSON.stringify({ timezone: MEL }),
+      });
+      expect(res.statusCode).toBe(200);
+      const row = await rowOf(ev.id);
+      expect(row.exdates).toEqual(["2026-10-18T22:30:00.000Z"]);
+      expect(row.updatedAt.getTime(), "updated_at 没刷新：手机还拿着旧时区那份").toBeGreaterThan(ev.updatedAt.getTime());
+      expect(await visibleDays(ev.id)).not.toContain("2026-10-19");
+      const other = await rowOf(kept.id);
+      expect(other.exdates, "有自己时区的事件不受日历时区影响").toEqual(kept.exdates);
+      expect(other.updatedAt.toISOString()).toBe(kept.updatedAt.toISOString());
+    } finally {
+      await calApi.close();
+    }
+  });
+});
+
+describe("编辑事件时展开时区变了（第一次编辑、客户端填上了设备时区）", () => {
+  it("删过的那次跟着对过去，不会因为改了个标题就冒出来", async () => {
+    const cal = await calendarIn("Asia/Shanghai");
+    const ev = await seed(cal.id, { uid: "edit", rrule: "FREQ=WEEKLY;BYDAY=MO;COUNT=12", exdates: ["2026-10-18T23:30:00.000Z"] });
+    const res = await api.inject({
+      method: "PATCH", url: `/api/v1/events/${ev.id}`, headers: { cookie, "content-type": "application/json" },
+      payload: JSON.stringify({ summary: "改个标题", extra: { timezone: MEL } }),
+    });
+    expect(res.statusCode).toBe(200);
+    expect((await rowOf(ev.id)).exdates).toEqual(["2026-10-18T22:30:00.000Z"]);
+    expect(await visibleDays(ev.id)).not.toContain("2026-10-19");
+  });
+});
+
+describe("导入 / 订阅进来的重复事件记下源时区", () => {
+  it("纽约的「每周一晚 8 点」订阅进上海日历：按纽约排，不错到周二", async () => {
+    const { importIcsText } = await import("../../src/lib/ics_import.js");
+    const cal = await calendarIn("Asia/Shanghai");
+    const ics = [
+      "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//t//t//EN", "BEGIN:VEVENT", "UID:ny-class-0001",
+      "SUMMARY:Night class", "DTSTART;TZID=America/New_York:20261005T200000", "DTEND;TZID=America/New_York:20261005T210000",
+      "RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4", "END:VEVENT", "END:VCALENDAR", "",
+    ].join("\r\n");
+    await importIcsText(cal.id, ics, { sourceTag: "sub:s1" });
+    const [row] = await db.select().from(schema.events).where(eq(schema.events.uid, "ny-class-0001"));
+    expect((row!.extra as { timezone?: string }).timezone).toBe("America/New_York");
+    const res = await api.inject({
+      method: "GET",
+      url: `/api/v1/events?from=${encodeURIComponent("2026-10-01T00:00:00Z")}&to=${encodeURIComponent("2026-11-30T00:00:00Z")}`,
+      headers: { cookie },
+    });
+    const wd = (res.json() as { events: { id: string; startsAt: string }[] }).events.filter((e) => e.id === row!.id)
+      .map((e) => new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short" }).format(new Date(e.startsAt)));
+    expect(wd).toEqual(["Mon", "Mon", "Mon", "Mon"]);
   });
 });

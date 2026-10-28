@@ -85,20 +85,36 @@ function zoneFor(event: Pick<EventForExpansion, "allDay" | "timeZone">): string 
   return tz;
 }
 
+type WallRule = {
+  rule: RRuleType;
+  wallStart: Date;
+  /** 第一次的真实时刻（抹掉毫秒，和 UTC 那条路一样） */
+  realStart: Date;
+  /** UNTIL 的真实时刻；没有 UNTIL 是 +Infinity */
+  untilMs: number;
+};
+
 /**
  * 同一条规则换到墙上时间里：DTSTART、UNTIL 都换成该时区的墙上读数。
- * UNTIL 在库里是一个真实时刻（…Z），换成墙上读数之后和浮动的 DTSTART 比，
- * 比的还是「这一次的真实时刻在不在 UNTIL 之前」。
+ * DTSTART 抹掉毫秒：UTC 那条路（parseRuleUtc）也是抹掉的，手机写回来的 EXDATE 只到秒，
+ * 留着毫秒的话每一次都带 .123，手机上删掉的那次在这边删不掉。
+ * UNTIL 在库里是一个真实时刻（…Z）。墙上读数的先后和真实时刻的先后在夏令时拨回的那一小时里
+ * 对不上，所以墙上的 UNTIL 放宽几个小时让 rrule 多给几次，再按真实时刻筛（untilMs）。
  * 拿不到单条 RRule（比如字符串里塞了好几条规则）返回 null，调用方退回 UTC 展开。
  */
-function toWallClockRule(utcRule: RRuleType, startsAt: Date, tz: string): { rule: RRuleType; wallStart: Date } | null {
+function toWallClockRule(utcRule: RRuleType, startsAt: Date, tz: string): WallRule | null {
   if (!(utcRule instanceof RRule)) return null;
   const orig = (utcRule as unknown as { origOptions: Partial<RRuleOptions> }).origOptions;
   if (!orig) return null;
-  const wallStart = toWallClock(startsAt, tz);
+  const realStart = new Date(Math.floor(startsAt.getTime() / 1000) * 1000);
+  const wallStart = toWallClock(realStart, tz);
   const options: Partial<RRuleOptions> = { ...orig, dtstart: wallStart, tzid: null };
-  if (orig.until) options.until = toWallClock(orig.until, tz);
-  return { rule: new RRule(options), wallStart };
+  let untilMs = Infinity;
+  if (orig.until) {
+    untilMs = orig.until.getTime();
+    options.until = new Date(toWallClock(orig.until, tz).getTime() + WALL_WINDOW_SLACK_MS);
+  }
+  return { rule: new RRule(options), wallStart, realStart, untilMs };
 }
 
 // Given an event with optional RRULE and a [from, to] window, return all
@@ -138,7 +154,7 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
   const tz = zoneFor(event);
   const wall = tz ? toWallClockRule(utcRule, event.startsAt, tz) : null;
   const starts = wall && tz
-    ? zonedStartsBetween(wall.rule, wall.wallStart, event.startsAt, tz, expandFrom, to)
+    ? zonedStartsBetween(wall, tz, expandFrom, to)
     // Pass an iterator that HALTS at the cap. Plain `.between(...).slice(N)`
     // would first MATERIALIZE every in-window occurrence — a pathological
     // RRULE (e.g. FREQ=SECONDLY over a month) is millions of Date objects and
@@ -181,102 +197,64 @@ export function exdateMillis(exdates: readonly string[] | null | undefined): Set
 // 偏移和两端的偏移最多差一个夏令时的跨度（一般 1 小时，历史上的「双夏令时」2 小时）。
 const WALL_WINDOW_SLACK_MS = 3 * 60 * 60 * 1000;
 
+/** 窗口外（两头的余量里）最多回调这么多次就放弃。FREQ=SECONDLY 的余量是几万次，正常规则几次。 */
+const OUT_OF_WINDOW_CALL_LIMIT = 50_000;
+
 /**
  * 在墙上时间里展开、换回真实时刻、只留 [from, to] 里的。
- * 上限照旧：窗口内收满 MAX_OCCURRENCES_PER_EVENT 条就停；为了不让两头那点余量
- * 绕过上限（FREQ=SECONDLY 之类），回调总次数也封顶。
+ * 上限照旧：窗口内收满 MAX_OCCURRENCES_PER_EVENT 条就停。两头余量里的回调单独计数、
+ * 不占这个额度 —— 占的话，密集规则（FREQ=SECONDLY）光余量就把额度用光，返回 0 次，
+ * 事件整个从日历和提醒里消失；UTC 那条路是 366 次。
  */
-function zonedStartsBetween(
-  rule: RRuleType, wallStart: Date, realStart: Date, tz: string, from: Date, to: Date,
-): Date[] {
+function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date): Date[] {
   const offFrom = toWallClock(from, tz).getTime() - from.getTime();
   const offTo = toWallClock(to, tz).getTime() - to.getTime();
   const wallFrom = new Date(from.getTime() + Math.min(offFrom, offTo) - WALL_WINDOW_SLACK_MS);
   const wallTo = new Date(to.getTime() + Math.max(offFrom, offTo) + WALL_WINDOW_SLACK_MS);
   const out: Date[] = [];
   const seen = new Set<number>();
-  let calls = 0;
-  const callLimit = MAX_OCCURRENCES_PER_EVENT * 2;
-  rule.between(wallFrom, wallTo, true, (d: Date) => {
-    calls++;
-    const real = wallToReal(d, wallStart, realStart, tz);
+  let outside = 0;
+  wall.rule.between(wallFrom, wallTo, true, (d: Date) => {
+    const real = wallToReal(d, wall, tz);
     const ms = real.getTime();
     // 夏令时跳过的那段会被顺延，可能和下一次撞在同一个时刻上：只留一个。
-    if (ms >= from.getTime() && ms <= to.getTime() && !seen.has(ms)) {
-      seen.add(ms);
-      out.push(real);
+    if (ms >= from.getTime() && ms <= to.getTime() && ms <= wall.untilMs) {
+      if (!seen.has(ms)) {
+        seen.add(ms);
+        out.push(real);
+      }
+    } else {
+      outside++;
     }
-    return out.length < MAX_OCCURRENCES_PER_EVENT && calls < callLimit;
+    return out.length < MAX_OCCURRENCES_PER_EVENT && outside < OUT_OF_WINDOW_CALL_LIMIT;
   });
   return out.sort((a, b) => a.getTime() - b.getTime());
 }
 
 /** 浮动的一次 → 真实时刻。第一次就是主事件本身，直接用库里那个时刻（落在拨回重叠段的第二遍时不被改成第一遍）。 */
-function wallToReal(d: Date, wallStart: Date, realStart: Date, tz: string): Date {
-  if (d.getTime() === wallStart.getTime()) return new Date(realStart.getTime());
+function wallToReal(d: Date, wall: WallRule, tz: string): Date {
+  if (d.getTime() === wall.wallStart.getTime()) return new Date(wall.realStart.getTime());
   return fromWallClock(d, tz);
 }
 
 // ---------------------------------------------------------------------------
-// 从第一次开始按顺序列出全部开始时刻（不扣 exdates）。给数据迁移用：
-// 「第几次」只有从头数才有意义。旧算法（DTSTART 写成 UTC）也留在这里，
-// 迁移要拿它算出「以前删掉的到底是哪一次」。
+// 不扣 exdates、只看规则本身：[from, to] 里有哪几次。给「换了展开时区，以前删掉的那几次
+// 要对到新的日子上」用（exdate_remap.ts）。和 expandEvent 是同一条路，口径只有一份。
 // ---------------------------------------------------------------------------
 
-export type SeriesListing = {
-  starts: Date[];
-  /** true = 到上限就停了，列表不完整（调用方不该拿它做按序号的对应） */
-  truncated: boolean;
-};
-
-type ListOpts = {
-  /** 列到这个时刻为止（含） */
-  until?: Date;
-  /** 至少列出这么多次（含）就可以停 */
-  minCount?: number;
-  /** 硬上限 */
-  cap: number;
-};
-
-function listFrom(rule: RRuleType, map: (d: Date) => Date, opts: ListOpts): SeriesListing {
-  const starts: Date[] = [];
-  let truncated = false;
-  const untilMs = opts.until ? opts.until.getTime() : -Infinity;
-  const minCount = opts.minCount ?? 0;
-  rule.all((d: Date) => {
-    const real = map(d);
-    // 两个条件都满足了才停：过了 until，而且已经凑够 minCount 次。
-    if (real.getTime() > untilMs && starts.length >= minCount) return false;
-    if (starts.length >= opts.cap) { truncated = true; return false; }
-    starts.push(real);
-    return true;
-  });
-  return { starts, truncated };
-}
-
-/** 旧算法：DTSTART 写成 UTC 交给 rrule。解析不了返回 null。 */
-export function listSeriesStartsLegacyUtc(
-  event: Pick<EventForExpansion, "startsAt" | "rrule">, opts: ListOpts,
-): SeriesListing | null {
-  if (!event.rrule) return null;
-  let rule: RRuleType;
-  try { rule = parseRuleUtc(event.startsAt, event.rrule); } catch { return null; }
-  return listFrom(rule, (d) => d, opts);
-}
-
-/** 新算法（和 expandEvent 同一套）。解析不了返回 null。 */
-export function listSeriesStarts(
-  event: Pick<EventForExpansion, "startsAt" | "rrule" | "allDay" | "timeZone">, opts: ListOpts,
-): SeriesListing | null {
+/** 解析不了返回 null。全天 / UTC 走原来那条路。 */
+export function seriesStartsBetween(
+  event: Pick<EventForExpansion, "startsAt" | "rrule" | "allDay" | "timeZone">, from: Date, to: Date,
+): Date[] | null {
   if (!event.rrule) return null;
   let utcRule: RRuleType;
   try { utcRule = parseRuleUtc(event.startsAt, event.rrule); } catch { return null; }
   const tz = zoneFor(event);
   const wall = tz ? toWallClockRule(utcRule, event.startsAt, tz) : null;
-  if (!wall || !tz) return listFrom(utcRule, (d) => d, opts);
-  const listed = listFrom(wall.rule, (d) => wallToReal(d, wall.wallStart, event.startsAt, tz), opts);
-  // 和 expandEvent 一样：顺延撞在同一时刻的只留一个。
-  const seen = new Set<number>();
-  const starts = listed.starts.filter((d) => (seen.has(d.getTime()) ? false : (seen.add(d.getTime()), true)));
-  return { starts, truncated: listed.truncated };
+  try {
+    if (wall && tz) return zonedStartsBetween(wall, tz, from, to);
+    return utcRule.between(from, to, true, (_d: Date, i: number) => i < MAX_OCCURRENCES_PER_EVENT);
+  } catch {
+    return null;
+  }
 }

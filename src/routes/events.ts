@@ -11,6 +11,7 @@ import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
+import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -749,6 +750,19 @@ export async function eventRoutes(app: FastifyInstance) {
         return reply.code(403).send({ error: "target_calendar_not_owned" });
       }
     }
+    // 没带 extra 就整列不动（undefined = 不写这一列）。带了才读改写 —— 合并需要
+    // 库里那份作底，多一次无谓的覆盖就多一个和并发请求互相盖掉的窗口。
+    const nextExtra = body.extra !== undefined
+      ? (mergedExtraForWrite(target.extra, body.extra) as object | null)
+      : undefined;
+    const zoneShift = await remapForEventEdit(target, {
+      calendarId: body.calendarId ?? target.calendarId,
+      startsAt: body.startsAt ? new Date(body.startsAt) : target.startsAt,
+      allDay: body.allDay ?? target.allDay,
+      rrule: body.rrule ?? target.rrule,
+      extra: nextExtra !== undefined ? nextExtra : target.extra,
+      rruleSentByClient: body.rrule != null,
+    });
     const [row] = await db
       .update(schema.events)
       .set({
@@ -759,12 +773,9 @@ export async function eventRoutes(app: FastifyInstance) {
         startsAt: body.startsAt ? new Date(body.startsAt) : undefined,
         endsAt: body.endsAt ? new Date(body.endsAt) : undefined,
         allDay: body.allDay ?? undefined,
-        rrule: body.rrule ?? undefined,
-        // 没带 extra 就整列不动（undefined = 不写这一列）。带了才读改写 —— 合并需要
-        // 库里那份作底，多一次无谓的覆盖就多一个和并发请求互相盖掉的窗口。
-        extra: body.extra !== undefined
-          ? (mergedExtraForWrite(target.extra, body.extra) as object | null)
-          : undefined,
+        rrule: zoneShift.rrule ?? body.rrule ?? undefined,
+        exdates: zoneShift.exdates ?? undefined,
+        extra: nextExtra,
         // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
         // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时
         // 那份原文的缓存，编辑之后它的 summary / 时间 / VALARM 和库里全对不上；留着
@@ -1046,6 +1057,37 @@ async function loadReadableEvent(eventId: string, userId: string) {
     ))
     .limit(1);
   return rows[0]?.event ?? null;
+}
+
+/**
+ * 编辑一个重复事件，展开用的时区跟着变了（换了日历、第一次编辑时客户端填上了设备时区、
+ * 手机写的 UTC 原文被这次编辑清掉了）：以前删掉的那几次、「这次及以后」留下的 UNTIL
+ * 要对到新的日子上，否则删过的那次会重新冒出来。口径见 exdate_remap.ts。
+ * 规则是客户端这次自己发来的，就不替它挪 UNTIL（那是用户刚设的结束时间）。
+ */
+async function remapForEventEdit(
+  target: typeof schema.events.$inferSelect,
+  next: { calendarId: string; startsAt: Date; allDay: boolean; rrule: string | null; extra: unknown; rruleSentByClient: boolean },
+): Promise<{ exdates?: string[]; rrule?: string }> {
+  if (target.allDay || next.allDay || !next.rrule) return {};
+  const hasExdates = Array.isArray(target.exdates) && target.exdates.length > 0;
+  const hasUntil = !next.rruleSentByClient && /UNTIL=/i.test(next.rrule);
+  if (!hasExdates && !hasUntil) return {};
+  const ids = [...new Set([target.calendarId, next.calendarId])];
+  const cals = await db.select({ id: schema.calendars.id, timezone: schema.calendars.timezone })
+    .from(schema.calendars).where(inArray(schema.calendars.id, ids));
+  const tzOf = (id: string) => cals.find((c) => c.id === id)?.timezone ?? null;
+  const fromZone = expansionTimeZone({
+    allDay: false, extra: target.extra, calendarTimezone: tzOf(target.calendarId),
+    rawStartIsUtc: rawIcsStartIsUtc(target.rawIcs),
+  });
+  // 编辑之后原文一律清掉（见下面 rawIcs: null），所以 rawStartIsUtc 恒为 false。
+  const toZone = expansionTimeZone({ allDay: false, extra: next.extra, calendarTimezone: tzOf(next.calendarId) });
+  const plan = remapSeriesForZoneChange({
+    startsAt: next.startsAt, rrule: next.rrule, allDay: false,
+    exdates: hasExdates ? target.exdates : null, fromZone, toZone,
+  });
+  return { exdates: plan.exdates, rrule: next.rruleSentByClient ? undefined : plan.rrule };
 }
 
 async function loadOwnedEvent(eventId: string, userId: string) {
