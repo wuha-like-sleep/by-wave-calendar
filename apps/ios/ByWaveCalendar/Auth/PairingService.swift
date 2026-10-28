@@ -123,13 +123,8 @@ enum PairingService {
                 throw PairingError.network(NSError(domain: "no-http-response", code: 0))
             }
             if http.statusCode != 200 {
-                // Parse the server's standard error envelope:
-                //   { error: "code_slug", message: "可选中文文案" }
-                // Both fields are optional; we pass them through to
-                // PairingError.server which decides on a friendly text.
-                let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-                let code = body["error"] as? String
-                let msg = body["message"] as? String
+                // 错误码和人话都交给 PairingError.server 去挑合适的文案。
+                let (code, msg) = APIError.serverError(data)
                 throw PairingError.server(status: http.statusCode, errorCode: code, message: msg)
             }
             // Both shapes: {accessToken, ...} or {data: {accessToken, ...}}

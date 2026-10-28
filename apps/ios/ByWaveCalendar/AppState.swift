@@ -287,7 +287,8 @@ final class AppState: ObservableObject {
         // 不看的话，「A 被吊销 → 自动切到 B」之后 A 这边会再补一句
         // isSignedIn = false，B 明明登录着却被扔到登录页。
         guard activeProfileId == activeId else { return }
-        isSignedIn = signedIn
+        // 兜底：凭据已经被收掉（不管是哪条路收的），就不能算登录着。
+        isSignedIn = signedIn && Keychain.read(.refreshToken(profileId: activeId)) != nil
         isBootstrapping = false
         // Fire-and-forget theme fetch for the active profile.
         Task { await self.refreshThemeFromServer() }
@@ -603,7 +604,13 @@ final class AppState: ObservableObject {
         if status == 401 {
             // 请求在路上时这个账号刚好重新登录过、换了新的 refresh token：
             // 401 说的是被换掉的旧令牌，不是这个账号被登出了。不能拿它去删新令牌。
-            guard Keychain.read(.refreshToken(profileId: id)) == refresh else {
+            let current = Keychain.read(.refreshToken(profileId: id))
+            // 令牌已经没了：并发的另一次刷新先拿到 401、已经按「被登出」收拾过了
+            // （冷启动时 bootstrap 和推送注册各刷一次，就会这样撞上）。
+            // 这里同样是被登出，不能报成 refreshFailed —— bootstrap 会把那当成
+            // 「网络不好」而保持登录，用户就停在一个空日历加「请先登录」的空壳里。
+            guard let current else { throw APIError.deviceRevoked }
+            guard current == refresh else {
                 if activeProfileId == id, accessToken != nil { return }
                 throw APIError.refreshFailed(status: status)
             }

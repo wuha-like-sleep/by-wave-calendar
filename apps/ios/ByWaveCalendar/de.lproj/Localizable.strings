@@ -396,3 +396,4 @@
 "%@ 已被登出" = "%@ wurde abgemeldet";
 "密码已更改或此设备已被移除。现在使用的是 %@。" = "Das Passwort wurde geändert oder dieses Gerät wurde entfernt. Du verwendest jetzt %@.";
 "Apple 登录正在进行，请稍候" = "Die Anmeldung mit Apple läuft bereits. Bitte warte kurz.";
+"登录已失效，请重新登录" = "Deine Sitzung ist abgelaufen. Melde dich erneut an";

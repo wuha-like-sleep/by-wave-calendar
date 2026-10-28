@@ -21,13 +21,33 @@ enum APIError: Error, LocalizedError {
     /// 继续显示离线缓存。
     case deviceRevoked
 
-    /// 从服务端的错误响应里取出错误码。认两种形状：
-    /// `{"ok":false,"error":{"code":"…"}}`（/api/v1 的信封）和 `{"error":"…"}`。
+    /// 从服务端的错误响应里取出错误码。认两种形状，见 `serverError(_:)`。
     static func serverErrorCode(_ body: String?) -> String? {
-        guard let data = body?.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        if let e = obj["error"] as? [String: Any] { return e["code"] as? String }
-        return obj["error"] as? String
+        guard let data = body?.data(using: .utf8) else { return nil }
+        return serverError(data).code
+    }
+
+    /// 从服务端的错误响应里取出错误码和人话。认两种形状：
+    /// `{"ok":false,"error":{"code":"…","message":"…"}}`（/api/v1 的信封，App 走的都是这个）
+    /// 和 `{"error":"…","message":"…"}`（老的 /api）。
+    ///
+    /// 以前登录、配对、Apple 登录几处都只认第二种，而 App 请求的全是 /api/v1，
+    /// 于是错误码一个也读不到：输错密码显示「登录失败 (HTTP 401)」，账号被锁、
+    /// 管理员关了 App 同步、配对码过期，全都退成一个状态码。
+    /// 信封在服务端没写 message 时会拿错误码顶上，那种 message 不是人话，这里丢掉。
+    static func serverError(_ data: Data) -> (code: String?, message: String?) {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return (nil, nil) }
+        let code: String?
+        var message: String?
+        if let e = obj["error"] as? [String: Any] {
+            code = e["code"] as? String
+            message = e["message"] as? String
+        } else {
+            code = obj["error"] as? String
+            message = obj["message"] as? String
+        }
+        if let m = message, m.isEmpty || m == code { message = nil }
+        return (code, message)
     }
 
     var errorDescription: String? {

@@ -396,3 +396,4 @@
 "%@ 已被登出" = "%@ was signed out";
 "密码已更改或此设备已被移除。现在使用的是 %@。" = "Its password was changed or this device was removed. You’re now using %@.";
 "Apple 登录正在进行，请稍候" = "Sign in with Apple is already in progress. Please wait.";
+"登录已失效，请重新登录" = "Your session has expired. Please sign in again.";

@@ -179,10 +179,7 @@ final class AppleSignIn: NSObject {
                 throw AppleSignInError.network(URLError(.badServerResponse))
             }
             if http.statusCode != 200 {
-                // Standard server error envelope: { error: "slug", message?: "中文" }.
-                let envelope = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-                let code = envelope["error"] as? String
-                let msg = envelope["message"] as? String
+                let (code, msg) = APIError.serverError(data)
                 throw AppleSignInError.server(status: http.statusCode, errorCode: code, message: msg)
             }
             // Accept both {accessToken,...} and {data:{accessToken,...}} —

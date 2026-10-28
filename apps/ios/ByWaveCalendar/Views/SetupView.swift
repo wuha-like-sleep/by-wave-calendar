@@ -53,6 +53,8 @@ struct SetupView: View {
     /// Set when password login succeeded but server requires a TOTP
     /// 6-digit code. Drives the MFA code entry sheet.
     @State private var pendingMfa: PendingMfa?
+    private enum PasswordField: Hashable { case email, password }
+    @FocusState private var passwordFormFocus: PasswordField?
 
     // UserDefaults key for "last server URL" — used to prefill the
     // field on a return visit (sign-out → sign-in same server).
@@ -260,15 +262,27 @@ struct SetupView: View {
     // MARK: - Password
     private var passwordForm: some View {
         VStack(spacing: 12) {
+            // 邮箱按「下一项」跳到密码，密码按「前往」直接登录：
+            // 矮屏（iPhone Duo 外屏只有 678pt）键盘一弹，登录按钮就被盖住了，
+            // 以前按回车只会收起键盘，还得再点一下登录。
             TextField("邮箱", text: $email)
                 .textContentType(.username)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .keyboardType(.emailAddress)
+                .submitLabel(.next)
+                .focused($passwordFormFocus, equals: .email)
+                .onSubmit { passwordFormFocus = .password }
                 .padding(.horizontal, 12).padding(.vertical, 11)
                 .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
             SecureField("密码", text: $password)
                 .textContentType(.password)
+                .submitLabel(.go)
+                .focused($passwordFormFocus, equals: .password)
+                .onSubmit {
+                    guard canSubmitPassword else { return }
+                    Task { await loginWithPassword() }
+                }
                 .padding(.horizontal, 12).padding(.vertical, 11)
                 .background(Theme.fieldBackground, in: RoundedRectangle(cornerRadius: 10))
             Button {
@@ -277,9 +291,8 @@ struct SetupView: View {
                 primaryButtonLabel(text: isWorking ? "登录中…" : "登录")
             }
             .disabled(!canSubmitPassword)
-            Text("如果你开启了二次验证（MFA），请改用「扫码」")
-                .font(.caption2).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
+            // 以前这里写着「开启了二次验证请改用扫码」。密码登录早就能直接弹验证码框了，
+            // 这句话只会把开了两步验证的人赶去扫码，删掉。
         }
     }
 
@@ -510,15 +523,14 @@ struct SetupView: View {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if http.statusCode != 200 {
-                let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-                let err = body["error"] as? String
-                let msg = body["message"] as? String
+                let (err, msg) = APIError.serverError(data)
                 if err == "invalid_credentials" {
                     errorMessage = "邮箱或密码错误".loc
                 } else if err == "account_disabled" {
                     errorMessage = "账号已停用，请联系管理员".loc
                 } else if err == "account_locked" {
-                    errorMessage = msg ?? "登录失败次数过多，请稍后再试。".loc
+                    // 用本地文案，不用服务端的 message：那句是中文，其它语言的用户看不懂。
+                    errorMessage = "登录失败次数过多，请稍后再试。".loc
                 } else if err == "apps_disabled" {
                     errorMessage = "管理员未启用 APP 同步功能".loc
                 } else {
@@ -746,13 +758,14 @@ struct MfaCodeEntrySheet: View {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse else { throw URLError(.badServerResponse) }
             if http.statusCode != 200 {
-                let body = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-                let err = body["error"] as? String
-                let msg = body["message"] as? String
+                let (err, msg) = APIError.serverError(data)
                 if err == "invalid_code" {
                     errorMessage = "验证码错误".loc
-                } else if err == "mfa_token_expired" {
-                    errorMessage = msg ?? "验证码会话已过期，请重新登录".loc
+                } else if err == "account_locked" {
+                    // 验证码连错到上限，账号被锁，这一轮登录已经作废。
+                    errorMessage = "登录失败次数过多，请稍后再试。".loc
+                } else if err == "mfa_token_expired" || err == "mfa_state_invalid" {
+                    errorMessage = "验证码会话已过期，请重新登录".loc
                 } else {
                     errorMessage = msg ?? "登录失败 (HTTP %lld)".locFormat(http.statusCode)
                 }

@@ -396,3 +396,4 @@
 "%@ 已被登出" = "Se cerró la sesión de %@";
 "密码已更改或此设备已被移除。现在使用的是 %@。" = "Se cambió la contraseña o se quitó este dispositivo. Ahora estás usando %@.";
 "Apple 登录正在进行，请稍候" = "Ya hay un inicio de sesión con Apple en curso. Espera un momento.";
+"登录已失效，请重新登录" = "Tu sesión ha caducado. Vuelve a iniciar sesión";
