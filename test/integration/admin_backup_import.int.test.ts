@@ -38,6 +38,7 @@ process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 const SESSION_SECRET = process.env.SESSION_SECRET;
 
 const { adminRoutes } = await import("../../src/web/admin.js");
+const { exportData, EXPORT_TABLES, BACKUP_EXCLUDED_TABLES } = await import("../../src/lib/backup.js");
 
 let app: FastifyInstance;
 
@@ -92,13 +93,16 @@ function bigBackup(atLeastBytes: number): Buffer {
   return buf;
 }
 
-function multipartBody(filename: string, content: Buffer, csrf: string | null) {
+function multipartBody(filename: string, content: Buffer, csrf: string | null, fields: Record<string, string> = {}) {
   const b = "----bwc" + Math.random().toString(36).slice(2);
   // _csrf 排在文件**前面**，和真实表单一样 —— 排在后面的字段，服务端拿到文件那一刻还没解析到。
   const csrfPart = csrf === null ? "" :
     `--${b}\r\nContent-Disposition: form-data; name="_csrf"\r\n\r\n${csrf}\r\n`;
+  // 其余普通字段（拦截页上的确认框）同样排在文件前面，和模板一致。
+  const fieldParts = Object.entries(fields)
+    .map(([k, v]) => `--${b}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`).join("");
   const head = Buffer.from(
-    csrfPart +
+    csrfPart + fieldParts +
     `--${b}\r\nContent-Disposition: form-data; name="backup"; filename="${filename}"\r\n` +
     `Content-Type: application/json\r\n\r\n`,
   );
@@ -106,8 +110,8 @@ function multipartBody(filename: string, content: Buffer, csrf: string | null) {
            contentType: `multipart/form-data; boundary=${b}` };
 }
 
-async function importBackup(s: { cookie: string; csrf: string | null }, content: Buffer) {
-  const { payload, contentType } = multipartBody("backup.json", content, s.csrf);
+async function importBackup(s: { cookie: string; csrf: string | null }, content: Buffer, fields: Record<string, string> = {}) {
+  const { payload, contentType } = multipartBody("backup.json", content, s.csrf, fields);
   return app.inject({
     method: "POST", url: "/admin/backup/import",
     headers: { cookie: s.cookie, "content-type": contentType },
@@ -190,3 +194,165 @@ describe("导入备份不能被同站的别的页面代发", () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 旧备份缺表：恢复前先拦下，站长逐张确认了才清空 —— 从 HTTP 打进去。
+//
+// 以前是先整库清空、恢复完再在页面上补一句「这些表现在是空的」。1.7.3 之前导出的
+// 备份缺预约、预约链接、App 设备、SSO 绑定、推送订阅、OAuth 接入……站长拿它回滚
+// 一次误操作，这些就永久没了，那句提示挽回不了任何东西。
+// ---------------------------------------------------------------------------
+
+describe("旧备份缺表：先拦下，站长确认了才清空", () => {
+  async function seedInUse() {
+    const admin = await makeUser("a@example.com", { isAdmin: true });
+    const [cal] = await db.insert(schema.calendars)
+      .values({ ownerId: admin.id, name: "Cal", color: "#000000", timezone: "UTC" }).returning();
+    const [ev] = await db.insert(schema.events).values({
+      calendarId: cal!.id, uid: "e1@example.com", summary: "季度复盘",
+      startsAt: new Date("2026-07-14T01:00:00Z"), endsAt: new Date("2026-07-14T02:00:00Z"),
+    }).returning();
+    const [link] = await db.insert(schema.bookingLinks).values({
+      userId: admin.id, calendarId: cal!.id, slug: "chat", title: "聊一聊", weeklyAvailability: {},
+    }).returning();
+    await db.insert(schema.bookings).values({
+      linkId: link!.id, eventId: ev!.id, guestEmail: "g@example.com", guestName: "访客",
+      startsAt: ev!.startsAt, endsAt: ev!.endsAt, cancelToken: "tok-cancel-1",
+    });
+    await db.insert(schema.devices).values({
+      userId: admin.id, label: "我的 iPhone", kind: "ios",
+      refreshTokenHash: "hash-1", refreshTokenPrefix: "bwd_abc12345_", lastSeenAt: new Date(),
+    });
+    return admin;
+  }
+
+  async function counts() {
+    const n = async (t: never) => (await db.select().from(t)).length;
+    return {
+      users: await n(schema.users as never),
+      events: await n(schema.events as never),
+      bookingLinks: await n(schema.bookingLinks as never),
+      bookings: await n(schema.bookings as never),
+      devices: await n(schema.devices as never),
+    };
+  }
+
+  /** 模拟 1.7.3 之前导出的文件：预约和设备两张表整张都没有。 */
+  async function oldBackup(): Promise<Buffer> {
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    delete bundle.tables.bookings;
+    delete bundle.tables.devices;
+    return Buffer.from(JSON.stringify(bundle));
+  }
+
+  function blockedTables(html: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const m of html.matchAll(/data-blocked-table="([^"]+)"[\s\S]*?data-blocked-rows="(\d+)"/g)) {
+      out[m[1]!] = Number(m[2]);
+    }
+    return out;
+  }
+
+  function confirmForm(html: string): string {
+    const m = /<form[^>]*id="backup-restore-confirm-form"[^>]*>([\s\S]*?)<\/form>/.exec(html);
+    expect(m, "拦截页上没有确认表单 —— 站长没有办法继续").not.toBeNull();
+    return m![1]!;
+  }
+
+  it("**缺表、库里有数据、没确认 → 拦下，库里一行不少**", async () => {
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    const file = await oldBackup();
+    // 导出之后再多出一个用户：真恢复了的话这一行会被换掉。
+    await makeUser("added-after-export@example.com");
+    const before = await counts();
+    expect(before.bookings, "种数据失败，下面验不出东西").toBe(1);
+
+    const res = await importBackup(s, file);
+    expect(res.statusCode, `回的是 ${res.statusCode}：${String(res.headers.location ?? "")}`).toBe(200);
+    expect(await counts(), "拦下来之前库已经被清空了 —— 预约和 App 登录永久丢失").toEqual(before);
+    expect(blockedTables(res.body), "页面上没列出会被清空的表和行数").toEqual({ devices: 1, bookings: 1 });
+  });
+
+  it("拦截页的确认框排在文件框前面，值盖住了全部被拦的表", async () => {
+    const admin = await seedInUse();
+    const res = await importBackup(await loginAs(admin.id), await oldBackup());
+    const form = confirmForm(res.body);
+    const confirmAt = form.search(/name="confirmEmptyTables"/);
+    const fileAt = form.search(/type="file"/);
+    expect(confirmAt, "确认框不见了").toBeGreaterThanOrEqual(0);
+    expect(
+      confirmAt < fileAt,
+      "确认框排在文件框后面 —— multipart 按顺序解析，服务端拿到文件那一刻还读不到它，" +
+        "站长勾了也白勾，永远恢复不了",
+    ).toBe(true);
+    expect(form.search(/name="_csrf"/), "确认表单没带防伪造令牌").toBeGreaterThanOrEqual(0);
+    const value = /name="confirmEmptyTables"[^>]*value="([^"]*)"/.exec(form)?.[1] ?? "";
+    expect(value.split(",").sort()).toEqual(["bookings", "devices"]);
+  });
+
+  it("**确认后照常恢复**：缺的两张被清空，其余原样回来，结果里点名", async () => {
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    const file = await oldBackup();
+    const before = await counts();
+
+    // 走真实流程：先被拦，再拿页面上的确认值提交。
+    const blocked = await importBackup(s, file);
+    const value = /name="confirmEmptyTables"[^>]*value="([^"]*)"/.exec(confirmForm(blocked.body))?.[1] ?? "";
+    const res = await importBackup(s, file, { confirmEmptyTables: value });
+
+    expect([302, 303], `确认之后回的是 ${res.statusCode}`).toContain(res.statusCode);
+    const where = decodeURIComponent(String(res.headers.location));
+    expect(where, "确认之后没恢复成功").toContain("success=");
+    expect(where, "结果里没点名清空了哪几张").toMatch(/bookings \(1\)/);
+    expect(where).toMatch(/devices \(1\)/);
+    const after = await counts();
+    expect(after.bookings, "确认清空的表没被清空").toBe(0);
+    expect(after.devices).toBe(0);
+    expect(after.users, "其余的表没按文件恢复").toBe(before.users);
+    expect(after.events).toBe(before.events);
+    expect(after.bookingLinks).toBe(before.bookingLinks);
+  });
+
+  it("只确认了一部分 → 照样拦，什么都不动", async () => {
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    const before = await counts();
+    const res = await importBackup(s, await oldBackup(), { confirmEmptyTables: "devices" });
+    expect(res.statusCode).toBe(200);
+    expect(await counts(), "只确认了 devices，bookings 也跟着被清空了").toEqual(before);
+    expect(Object.keys(blockedTables(res.body)).sort()).toEqual(["bookings", "devices"]);
+  });
+
+  it("缺的表库里本来就没数据 → 不拦，直接恢复", async () => {
+    // 少了这条，「凡是缺表就拦」的实现也能让上面几条绿。
+    const admin = await seedInUse();
+    const s = await loginAs(admin.id);
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    delete bundle.tables.push_subscriptions;   // 种数据时没建过推送订阅
+    const res = await importBackup(s, Buffer.from(JSON.stringify(bundle)));
+    expect([302, 303], `回的是 ${res.statusCode}，没东西可丢也被拦了`).toContain(res.statusCode);
+    expect(decodeURIComponent(String(res.headers.location))).toContain("success=");
+  });
+});
+
+describe("备份页上的表清单", () => {
+  it("**就是代码里那两张清单** —— 不是语言包里写死的旧 15 张", async () => {
+    const admin = await makeUser("a@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const res = await app.inject({ method: "GET", url: "/admin/backup", headers: { cookie: s.cookie } });
+    expect(res.statusCode).toBe(200);
+    const list = (id: string) => {
+      const m = new RegExp(`<li id="${id}">[\\s\\S]*?<span class="font-mono[^"]*">([^<]*)</span>`).exec(res.body);
+      expect(m, `页面上没有 #${id}`).not.toBeNull();
+      return m![1]!.split(" · ").map((x) => x.trim()).filter(Boolean).sort();
+    };
+    expect(
+      list("backup-included-tables"),
+      "页面上「包含的表」和 EXPORT_TABLES 对不上 —— 站长照着它判断预约在不在备份里，会得到错的答案",
+    ).toEqual(EXPORT_TABLES.map((t) => t.name).sort());
+    expect(list("backup-excluded-tables")).toEqual([...BACKUP_EXCLUDED_TABLES].sort());
+  });
+});
+

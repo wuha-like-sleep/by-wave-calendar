@@ -34,7 +34,10 @@ import { normalizeBimiSvg, bimiDnsRecord } from "../lib/bimi.js";
 import { addRemote, applyUpdate, applyUpdateStream, applyUploadedUpdate, checkForUpdates, listRemotes, MAX_UPLOAD_BYTES, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
 import { createProvider, deleteProvider, getProviderById, listAllProviders, updateProvider } from "../lib/sso_providers.js";
 import { createApiToken, listAllApiTokens, revokeApiTokenAdmin, rotateApiToken } from "../lib/api_token.js";
-import { exportData, importData, BACKUP_VERSION, type BackupBundle } from "../lib/backup.js";
+import {
+  exportData, importData, BACKUP_VERSION, EXPORT_TABLES, BACKUP_EXCLUDED_TABLES,
+  RestoreNeedsConfirmationError, type BackupBundle, type TableAtRisk,
+} from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
@@ -553,6 +556,17 @@ function normalizeUserIds(raw: unknown, cap = 500): string[] {
  * 流式解析(落临时文件 + 逐表读),而不是把这个数字调大。
  */
 export const MAX_BACKUP_IMPORT_BYTES = 64 * 1024 * 1024;
+
+/** 拦截页上那个确认框的字段名。**模板里它必须排在文件框前面** —— multipart
+ *  按顺序解析，排在文件后面的字段，服务端拿到文件那一刻还没读到。 */
+export const BACKUP_CONFIRM_FIELD = "confirmEmptyTables";
+
+/** multipart 里取一个普通字段的字符串值（只看文件框之前的那些）。 */
+function multipartField(fields: Record<string, unknown> | undefined, name: string): string | null {
+  const f = fields?.[name] as { value?: unknown } | { value?: unknown }[] | undefined;
+  const v = Array.isArray(f) ? f[0]?.value : f?.value;
+  return typeof v === "string" ? v : null;
+}
 
 export async function adminRoutes(app: FastifyInstance) {
   // Overview / settings dashboard
@@ -1818,15 +1832,27 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // ---------- Backup / restore ----------
+  //
+  // 页面上「包含 / 不包含哪些表」直接从代码里的两张清单渲染。以前写在语言包里，
+  // 清单加了十几张表、八门语言的那句话还停在最早的 15 张 —— 站长照着页面判断
+  // 「我的预约在不在备份里」，得到的是错的答案。
+  const backupPage = (req: FastifyRequest, u: schema.User, extra: {
+    flash?: { error?: string; success?: string };
+    restoreBlocked?: { tables: TableAtRisk[]; confirmValue: string } | null;
+  } = {}) => ({
+    title: "数据备份 · 管理后台",
+    user: u, csrfToken: csrfTokenFor(req), flash: extra.flash ?? flashFromQuery(req),
+    activeNav: "/admin/backup",
+    bundleVersion: BACKUP_VERSION,
+    includedTables: EXPORT_TABLES.map((t) => t.name),
+    excludedTables: [...BACKUP_EXCLUDED_TABLES],
+    restoreBlocked: extra.restoreBlocked ?? null,
+  });
+
   app.get("/admin/backup", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
-    return reply.view("admin/backup", {
-      title: "数据备份 · 管理后台",
-      user: u, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
-      activeNav: "/admin/backup",
-      bundleVersion: BACKUP_VERSION,
-    });
+    return reply.view("admin/backup", backupPage(req, u));
   });
 
   app.get("/admin/backup/export", async (req, reply) => {
@@ -1891,8 +1917,12 @@ export async function adminRoutes(app: FastifyInstance) {
     } catch (err) {
       return reply.redirect("/admin/backup?error=" + encodeURIComponent("JSON 解析失败：" + (err instanceof Error ? err.message : "")));
     }
+    // 拦截页上勾过的确认框：值是「确认可以清空的表名」，逗号分隔。
+    // 只认文件框之前的字段（模板里它排在文件框前面）。
+    const confirmEmptying = (multipartField(file.fields as Record<string, unknown>, BACKUP_CONFIRM_FIELD) ?? "")
+      .split(",").map((x) => x.trim()).filter(Boolean);
     try {
-      const result = await importData(bundle);
+      const result = await importData(bundle, { confirmEmptying });
       const summary = result.perTable
         .filter((r) => r.inserted > 0 || r.error)
         .map((r) => `${r.table}: ${r.inserted}${r.error ? ` (✗ ${r.error.slice(0, 50)})` : ""}`)
@@ -1901,22 +1931,35 @@ export async function adminRoutes(app: FastifyInstance) {
         details: {
           totalInserted: result.totalInserted, exportedAt: bundle.exportedAt,
           sizeBytes: buf.length, missingTables: result.missingTables,
+          emptiedTables: result.emptiedTables,
         },
       });
-      // 文件里整张表都没有的，恢复后会是空的 —— 这必须摆在最前面说，
-      // 不能埋在一句「恢复完成」里。旧版本导出的备份就会是这种情况。
-      if (result.missingTables.length > 0) {
-        return reply.redirect("/admin/backup?error=" + encodeURIComponent(
-          `恢复完成，但这份备份文件里没有下面这些表，它们现在是空的：` +
-          `${result.missingTables.join("、")}。` +
-          `这通常是旧版本导出的备份 —— 这些数据已经不在库里了，` +
-          `如果还有更新的备份请改用那一份。建议立即重启服务。`
-        ));
+      // 站长在拦截页上确认过要清空的那几张，结果里要再点一次名 ——
+      // 恢复完成的那句话不能把「这几张现在是空的」吞掉。
+      if (result.emptiedTables.length > 0) {
+        return reply.redirect("/admin/backup?success=" + encodeURIComponent(tr(req, "adminBackup.restoredWithEmptied", {
+          total: result.totalInserted,
+          // 表名不翻译，格式也不跟语言走：八门语言里都是「表名 (行数)」。
+          tables: result.emptiedTables.map((r) => `${r.table} (${r.rows})`).join(", "),
+        })));
       }
       return reply.redirect("/admin/backup?success=" + encodeURIComponent(
         `恢复完成 —— 共 ${result.totalInserted} 行（${summary}）。建议立即重启服务。`
       ));
     } catch (err) {
+      if (err instanceof RestoreNeedsConfirmationError) {
+        // **库里什么都没动。** 把会被清空的表和行数摆出来，让站长决定。
+        await audit(req, u.id, "backup.restore_blocked", {
+          details: { exportedAt: bundle.exportedAt, sizeBytes: buf.length, atRisk: err.atRisk },
+        });
+        return reply.view("admin/backup", backupPage(req, u, {
+          flash: { error: tr(req, "adminBackup.blocked.flash", { count: err.atRisk.length }) },
+          restoreBlocked: {
+            tables: err.atRisk,
+            confirmValue: err.atRisk.map((r) => r.table).join(","),
+          },
+        }));
+      }
       const msg = err instanceof Error ? err.message : String(err);
       await audit(req, u.id, "backup.restore_failed", { details: { error: msg.slice(0, 500) } });
       return reply.redirect("/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));

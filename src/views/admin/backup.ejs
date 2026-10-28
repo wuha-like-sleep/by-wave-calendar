@@ -3,11 +3,55 @@
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminBackup.heading") %></h1>
 <p class="text-sm text-slate-500 mb-6"><%= t("adminBackup.lead") %></p>
 
+<% if (typeof restoreBlocked !== 'undefined' && restoreBlocked) { %>
+<%# 上传的备份里缺表、而库里那几张有数据：恢复已拦下，库里什么都没动。
+    结论放最前面：哪几张表、各有几行、怎么继续。 %>
+<section id="restore-blocked" class="rounded-2xl border-2 border-red-300 bg-red-50 p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-red-900 mb-1"><%= t("adminBackup.blocked.heading") %></h2>
+  <p class="text-sm text-red-800 mb-4"><%= t("adminBackup.blocked.lead") %></p>
+  <div class="overflow-x-auto mb-4">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-xs text-red-700">
+          <th class="py-1 pr-6 font-medium"><%= t("adminBackup.blocked.colTable") %></th>
+          <th class="py-1 font-medium text-right"><%= t("adminBackup.blocked.colRows") %></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% restoreBlocked.tables.forEach(function (r) { %>
+          <tr class="border-t border-red-200">
+            <td class="py-1.5 pr-6 font-mono text-red-900" data-blocked-table="<%= r.table %>"><%= r.table %></td>
+            <td class="py-1.5 text-right tabular-nums text-red-900" data-blocked-rows="<%= r.rows %>"><%= r.rows %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <p class="text-sm text-red-800 mb-4"><%= t("adminBackup.blocked.advice") %></p>
+  <%# 确认框必须排在文件框前面：multipart 按顺序解析，排在后面的字段服务端读不到。 %>
+  <form method="post" action="/admin/backup/import" enctype="multipart/form-data" class="space-y-3"
+        id="backup-restore-confirm-form">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="flex items-start gap-2 text-sm text-red-900">
+      <input type="checkbox" name="confirmEmptyTables" value="<%= restoreBlocked.confirmValue %>" required
+             class="mt-0.5 h-4 w-4 rounded border-red-300 accent-red-600" />
+      <span><%= t("adminBackup.blocked.confirmCheckbox") %></span>
+    </label>
+    <p class="text-xs text-red-800"><%= t("adminBackup.blocked.reselect") %></p>
+    <input type="file" name="file" accept=".json,application/json" required
+           class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
+    <button type="submit" class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+      <%= t("adminBackup.blocked.button") %>
+    </button>
+  </form>
+</section>
+<% } %>
+
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
 
   <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
     <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminBackup.export.heading") %></h2>
-    <p class="text-sm text-slate-500 mb-4"><%= t("adminBackup.export.lead") %></p>
+    <p class="text-sm text-slate-500 mb-4"><%= t("adminBackup.export.lead", { count: includedTables.length }) %></p>
     <a href="/admin/backup/export" class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
       <%= t("adminBackup.export.button") %>
@@ -59,9 +103,14 @@
 }</pre>
     <p><%- t("adminBackup.structure.verifyNote") %></p>
   </div>
+  <%# 两张表名清单直接取自 src/lib/backup.ts 的 EXPORT_TABLES / BACKUP_EXCLUDED_TABLES。
+      表名本身不翻译：站长拿它对照的是数据库。 %>
   <ul class="text-xs text-slate-500 list-disc pl-5 space-y-1">
-    <li><%- t("adminBackup.structure.included") %></li>
-    <li><%- t("adminBackup.structure.excluded") %></li>
+    <li id="backup-included-tables"><strong><%= t("adminBackup.structure.includedLabel", { count: includedTables.length }) %></strong>
+      <span class="font-mono break-words"><%= includedTables.join(" · ") %></span></li>
+    <li id="backup-excluded-tables"><strong><%= t("adminBackup.structure.excludedLabel", { count: excludedTables.length }) %></strong>
+      <span class="font-mono break-words"><%= excludedTables.join(" · ") %></span>
+      <span class="block"><%= t("adminBackup.structure.excludedNote") %></span></li>
     <li><%- t("adminBackup.structure.transactional") %></li>
   </ul>
 </section>

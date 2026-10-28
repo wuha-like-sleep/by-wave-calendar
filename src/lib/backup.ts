@@ -107,15 +107,57 @@ export type ImportResult = {
   /** 文件里**整张表都没有**的那些（不是「有但是空的」）。
    *
    *  用旧版本导出的备份恢复到新版本时会出现：那会儿还没把这几张表写进
-   *  备份，而恢复的第一步是清空 —— 于是它们被清掉又没插回来。
-   *  必须报给站长看，否则他得到的只有一句「恢复完成」。 */
+   *  备份，而恢复的第一步是清空 —— 于是它们被清掉又没插回来。 */
   missingTables: string[];
+  /** missingTables 里**恢复前库里有数据**、站长确认过可以清空、这次真的被清空了的。
+   *  空数组 = 这次恢复没有丢任何东西。 */
+  emptiedTables: TableAtRisk[];
 };
+
+/** 恢复会把它清空、而这份备份又插不回来的表，以及它此刻在库里有几行。 */
+export type TableAtRisk = { table: string; rows: number };
+
+/**
+ * 「这份备份恢复下去会丢数据，站长还没点头」。
+ *
+ * ── 为什么要先拦，而不是恢复完再提示 ──────────────────────────────────
+ *
+ * 恢复是整库替换：先清空 EXPORT_TABLES 里的每一张，再按文件插回去。
+ * 文件里**整张表都没有**的那几张（1.7.3 之前导出的备份缺预约、预约链接、
+ * App 设备登录、SSO 绑定、推送订阅、OAuth 接入……），清空之后就再也插不回来。
+ * 以前的做法是恢复完了在页面上补一句「这些表现在是空的」—— 那时数据已经没了，
+ * 这句话只能告诉站长他丢了什么，挽回不了任何东西。
+ *
+ * 现在：只要有一张「文件里没有、库里有数据」的表没被站长**逐张确认**过，
+ * 就一行都不删，抛这个错，由调用方把清单摆给站长看。
+ * 确认是按表名绑定的：确认过 A，库里后来又多出一张有数据的 B，照样拦。
+ */
+export class RestoreNeedsConfirmationError extends Error {
+  readonly atRisk: TableAtRisk[];
+  constructor(atRisk: TableAtRisk[]) {
+    super(`恢复会清空 ${atRisk.length} 张备份里没有、库里有数据的表：${atRisk.map((r) => r.table).join("、")}`);
+    this.name = "RestoreNeedsConfirmationError";
+    this.atRisk = atRisk;
+  }
+}
+
+export type ImportOptions = {
+  /** 站长在拦截页上确认过「可以清空」的表名。不传 = 一张都没确认。 */
+  confirmEmptying?: readonly string[];
+};
+
+/** 文件里「整张表都没有」：缺键，或者那个键不是数组（坏文件按缺失算，宁可多拦）。 */
+function isAbsentFromBundle(bundle: BackupBundle, name: string): boolean {
+  return !Array.isArray(bundle.tables[name]);
+}
 
 // Restore mode is destructive: TRUNCATE every restorable table (in reverse
 // dependency order), then INSERT the bundle's rows in dependency order.
 // Wrapped in a single transaction so a failure mid-restore rolls back.
-export async function importData(bundle: BackupBundle): Promise<ImportResult> {
+//
+// 文件里缺表、而库里那张表有数据时，**先拦下**（RestoreNeedsConfirmationError），
+// 一行都不删；站长逐张确认过（opts.confirmEmptying）才照常恢复。
+export async function importData(bundle: BackupBundle, opts: ImportOptions = {}): Promise<ImportResult> {
   if (bundle.productId !== "by-wave-calendar") throw new Error("不是 ByWave Calendar 的备份文件");
   if (typeof bundle.bundleVersion !== "number" || bundle.bundleVersion > BACKUP_VERSION) {
     throw new Error(`不支持的备份版本：${bundle.bundleVersion}（本系统支持 ≤ ${BACKUP_VERSION}）`);
@@ -124,8 +166,24 @@ export async function importData(bundle: BackupBundle): Promise<ImportResult> {
 
   const perTable: ImportResult["perTable"] = [];
   const missingTables: string[] = [];
+  let emptiedTables: TableAtRisk[] = [];
   let totalInserted = 0;
-  await db.transaction(async (tx) => {
+  const confirmed = new Set(opts.confirmEmptying ?? []);
+  const blocked = await db.transaction(async (tx) => {
+    // **先数，再删。** 文件里没有、库里有数据的表，清空之后插不回来 ——
+    // 在同一个事务里数，免得「数的时候是空的、删的时候已经有了」。
+    const atRisk: TableAtRisk[] = [];
+    for (const t of EXPORT_TABLES) {
+      if (!isAbsentFromBundle(bundle, t.name)) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(t.table as any);
+      const n = Number(row?.n ?? 0);
+      if (n > 0) atRisk.push({ table: t.name, rows: n });
+    }
+    // 有任何一张没被确认过：一行都不删，原样退出（事务里什么都没写）。
+    if (atRisk.some((r) => !confirmed.has(r.table))) return atRisk;
+    emptiedTables = atRisk;
+
     // Wipe in reverse dependency order so children are gone before parents.
     for (let i = EXPORT_TABLES.length - 1; i >= 0; i--) {
       const t = EXPORT_TABLES[i]!;
@@ -136,7 +194,7 @@ export async function importData(bundle: BackupBundle): Promise<ImportResult> {
     for (const t of EXPORT_TABLES) {
       // 「文件里没有这张表」和「有但是空的」要分开：前者意味着这份备份是
       // 旧版本导出的，这张表会被清空且永远插不回来 —— 得告诉站长。
-      if (!(t.name in bundle.tables)) missingTables.push(t.name);
+      if (isAbsentFromBundle(bundle, t.name)) missingTables.push(t.name);
       const rows = Array.isArray(bundle.tables[t.name]) ? bundle.tables[t.name]! : [];
       const log: { table: string; inserted: number; skipped: number; error?: string } = {
         table: t.name, inserted: 0, skipped: 0,
@@ -160,9 +218,12 @@ export async function importData(bundle: BackupBundle): Promise<ImportResult> {
     }
     // Reset all sequences? Not strictly needed: all PKs are uuid defaultRandom
     // or text. The one numeric PK (site_settings.id) is pinned to 1.
-    void sql;
+    return null;
   });
-  return { ok: true, perTable, totalInserted, missingTables };
+  // 在事务**外面**抛：事务里那一段只读不写、已经正常结束，这里抛出去的是
+  // 原样的错误对象，调用方可以放心用 instanceof 认它。
+  if (blocked) throw new RestoreNeedsConfirmationError(blocked);
+  return { ok: true, perTable, totalInserted, missingTables, emptiedTables };
 }
 
 function reviveDates(row: Record<string, unknown>): Record<string, unknown> {

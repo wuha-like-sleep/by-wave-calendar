@@ -32,7 +32,7 @@ process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= "postgres://integration-test/unused";
 process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 
-const { exportData, importData } = await import("../../src/lib/backup.js");
+const { exportData, importData, RestoreNeedsConfirmationError } = await import("../../src/lib/backup.js");
 
 beforeAll(async () => { await ensureSchema(); });
 
@@ -161,16 +161,17 @@ describe("备份能原样恢复", () => {
     expect(rows[0]!.deletedAt, "恢复之后它不该跑回日历里，应该还在回收站").toBeTruthy();
   });
 
-  it("旧版本导出的备份：缺哪些表要明说，不能只回一句「恢复完成」", async () => {
+  it("旧版本导出的备份：确认清空之后，缺哪些表、清空了什么都要明说", async () => {
     await seed();
     const bundle = JSON.parse(JSON.stringify(await exportData()));
     // 模拟旧版本的文件：整张表都没有（不是「有但是空的」）。
     delete bundle.tables.bookings;
     delete bundle.tables.devices;
-    const r = await importData(bundle);
+    const r = await importData(bundle, { confirmEmptying: ["bookings", "devices"] });
     expect(r.missingTables, "缺表没被报出来，站长得到的只有「恢复完成」").toEqual(
       expect.arrayContaining(["bookings", "devices"]),
     );
+    expect(r.emptiedTables.map((x) => x.table).sort(), "清空了哪些有数据的表没报出来").toEqual(["bookings", "devices"]);
   });
 
   it("表都在、只是空的，不算缺表", async () => {
@@ -182,3 +183,66 @@ describe("备份能原样恢复", () => {
     expect(r.missingTables).not.toContain("bookings");
   });
 });
+
+describe("旧备份缺表：没确认就一行都不删", () => {
+  // 以前是先清空、恢复完再提示「这些表现在是空的」—— 那时数据已经没了。
+  // 1.7.3 之前导出的备份缺预约、预约链接、App 设备、SSO 绑定、推送订阅、OAuth……
+  // 拿它恢复，这些全没，页面上那句提示挽回不了任何东西。
+
+  async function oldBundle() {
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    delete bundle.tables.bookings;
+    delete bundle.tables.devices;
+    return bundle;
+  }
+
+  it("**没确认 → 抛 RestoreNeedsConfirmationError，库里一行不少**", async () => {
+    await seed();
+    const before = await counts();
+    const bundle = await oldBundle();
+    // 恢复前先往库里多塞一个用户：真恢复了的话这一行会被换掉。
+    await makeUser("added-after-export@example.com");
+    const beforeWithExtra = await counts();
+    expect(beforeWithExtra.users, "种数据失败").toBe(before.users + 1);
+
+    let caught: unknown = null;
+    try { await importData(bundle); } catch (e) { caught = e; }
+    expect(caught, "缺表的旧备份没被拦下，直接恢复了").toBeInstanceOf(RestoreNeedsConfirmationError);
+    const atRisk = (caught as InstanceType<typeof RestoreNeedsConfirmationError>).atRisk;
+    expect(atRisk.map((x) => x.table).sort()).toEqual(["bookings", "devices"]);
+    expect(atRisk.every((x) => x.rows === 1), `行数报错了：${JSON.stringify(atRisk)}`).toBe(true);
+
+    expect(await counts(), "拦下来了，可库已经被动过 —— 清空那一步在检查之前跑了").toEqual(beforeWithExtra);
+  });
+
+  it("只确认了一部分 → 照样拦，什么都不动", async () => {
+    await seed();
+    const before = await counts();
+    await expect(importData(await oldBundle(), { confirmEmptying: ["devices"] }))
+      .rejects.toBeInstanceOf(RestoreNeedsConfirmationError);
+    expect(await counts()).toEqual(before);
+  });
+
+  it("缺的表库里本来就没数据 → 不拦，直接恢复（没东西可丢）", async () => {
+    // 少了这条，「凡是缺表就拦」的实现也能让上面两条绿 —— 而那会把每一份
+    // 旧备份都卡住，哪怕它什么都不会丢。
+    await seed();
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    delete bundle.tables.webhooks;          // seed 里没建过 webhook
+    delete bundle.tables.oauth_clients;     // 也没建过 OAuth 应用
+    const r = await importData(bundle);
+    expect(r.ok).toBe(true);
+    expect(r.missingTables).toEqual(expect.arrayContaining(["webhooks", "oauth_clients"]));
+    expect(r.emptiedTables).toEqual([]);
+  });
+
+  it("那张表的值不是数组（坏文件）也按缺失算，照样拦", async () => {
+    await seed();
+    const before = await counts();
+    const bundle = JSON.parse(JSON.stringify(await exportData()));
+    bundle.tables.devices = null;
+    await expect(importData(bundle)).rejects.toBeInstanceOf(RestoreNeedsConfirmationError);
+    expect(await counts()).toEqual(before);
+  });
+});
+
