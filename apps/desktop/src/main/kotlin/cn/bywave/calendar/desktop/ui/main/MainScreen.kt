@@ -258,6 +258,26 @@ fun MainScreen(
 
     val ui by state.ui.collectAsState()
     val signedOutNotices by ProfileStore.signedOutNotices.collectAsState()
+    // 主界面和设置页共用：设置页是盖在主界面上的不透明整屏，提示条只画在主界面上的话，
+    // 用户在设置页里时账号被切走（设备列表、分享链接这些请求拿到 401 就会触发），
+    // 页面内容直接换成另一个账号的、没有任何说明 —— 这时点「退出登录」「移除设备」
+    // 作用在的是另一个账号上。
+    val signedOutBanners: @Composable () -> Unit = {
+        for (notice in signedOutNotices) {
+            SignedOutNoticeBanner(
+                notice = notice,
+                currentEmail = p.email.ifBlank { p.displayName ?: p.userId },
+                onSignInAgain = {
+                    // 登录页的服务器地址预填成被登出的那个账号的服务器。
+                    // 提示不在这里收：重新登回那个账号时 ProfileStore.save 会收掉；
+                    // 进了登录页又点「取消」回来，提示还得在。
+                    ProfileStore.rememberServerUrl(notice.serverUrl)
+                    onAddAccount()
+                },
+                onDismiss = { ProfileStore.dismissSignedOutNotice(notice.profileId) },
+            )
+        }
+    }
     // Observe locale so the anchor label (date formatters + agenda range)
     // and the inline "up to date" dialog re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -296,19 +316,7 @@ fun MainScreen(
             // 另一个账号被服务端登出了、本机切到了这个账号。放在最上面、用醒目的
             // 颜色、要用户自己点掉 —— 以前是静默切走,用户以为自己还在原来那个
             // 账号里,看着的却是另一个账号的日历。
-            for (notice in signedOutNotices) {
-                SignedOutNoticeBanner(
-                    notice = notice,
-                    currentEmail = p.email.ifBlank { p.displayName ?: p.userId },
-                    onSignInAgain = {
-                        // 登录页的服务器地址预填成被登出的那个账号的服务器。
-                        ProfileStore.rememberServerUrl(notice.serverUrl)
-                        ProfileStore.dismissSignedOutNotice(notice.profileId)
-                        onAddAccount()
-                    },
-                    onDismiss = { ProfileStore.dismissSignedOutNotice(notice.profileId) },
-                )
-            }
+            signedOutBanners()
 
             // Staged-update banner (re-added in v0.8; a minimal banner was
             // removed in v0.7.3). Non-blocking: a new version has already
@@ -527,36 +535,41 @@ fun MainScreen(
     // back up to the same ProfileStore callbacks the toolbar used to
     // wire directly.
     if (showSettings) {
-        SettingsScreen(
-            profile = p,
-            profiles = profiles,
-            calendars = ui.calendars,
-            onClose = { showSettings = false },
-            onSignOut = {
-                showSettings = false
-                ProfileStore.clear()
-            },
-            onSwitchProfile = { id -> ProfileStore.setActive(id) },
-            onRemoveProfile = { id -> ProfileStore.remove(id) },
-            onAddAccount = {
-                showSettings = false
-                onAddAccount()
-            },
-            onCheckUpdate = {
-                val url = p.serverUrl
-                scope.launch { UpdateChecker.forceCheck(url) }
-                // Don't close Settings — the dialog will float on top
-                // when the manifest comes back. If "up to date," the
-                // showUpdateDialog branch shows a slim confirmation.
-                showUpdateDialog = true
-            },
-            // A calendar create / rename / recolor / delete in Settings
-            // mutates server state; re-run the events fetch so the
-            // updated calendar list (embedded in EventsResponse.calendars)
-            // flows back into both the Settings list and the calendar
-            // views behind the overlay.
-            onCalendarsChanged = { state.load() },
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            signedOutBanners()
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                SettingsScreen(
+                    profile = p,
+                    profiles = profiles,
+                    calendars = ui.calendars,
+                    onClose = { showSettings = false },
+                    onSignOut = {
+                        showSettings = false
+                        ProfileStore.clear()
+                    },
+                    onSwitchProfile = { id -> ProfileStore.setActive(id) },
+                    onRemoveProfile = { id -> ProfileStore.remove(id) },
+                    onAddAccount = {
+                        showSettings = false
+                        onAddAccount()
+                    },
+                    onCheckUpdate = {
+                        val url = p.serverUrl
+                        scope.launch { UpdateChecker.forceCheck(url) }
+                        // Don't close Settings — the dialog will float on top
+                        // when the manifest comes back. If "up to date," the
+                        // showUpdateDialog branch shows a slim confirmation.
+                        showUpdateDialog = true
+                    },
+                    // A calendar create / rename / recolor / delete in Settings
+                    // mutates server state; re-run the events fetch so the
+                    // updated calendar list (embedded in EventsResponse.calendars)
+                    // flows back into both the Settings list and the calendar
+                    // views behind the overlay.
+                    onCalendarsChanged = { state.load() },
+                )
+            }
+        }
     }
 }
 

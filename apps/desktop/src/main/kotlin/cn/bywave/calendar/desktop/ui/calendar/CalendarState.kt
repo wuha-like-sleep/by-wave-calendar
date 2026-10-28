@@ -88,7 +88,9 @@ internal fun isFormSheet(sheet: ActiveSheet?): Boolean =
 
 /** 弹窗外的操作失败了，给主界面提示条的那句话：「没能删除『X』。」+ 服务端给的理由（有的话）。 */
 internal fun actionFailureText(titleKey: String, name: String, e: Throwable): String {
-    val title = cn.bywave.calendar.desktop.i18n.I18n.t(titleKey, mapOf("name" to name))
+    // 没有标题的事件别写成「没能删除「」」，用提醒那边同一个兜底叫法。
+    val shown = name.ifBlank { cn.bywave.calendar.desktop.i18n.I18n.t("reminder.untitled") }
+    val title = cn.bywave.calendar.desktop.i18n.I18n.t(titleKey, mapOf("name" to shown))
     val reason = userFacingDetail(e) ?: return title
     return cn.bywave.calendar.desktop.i18n.I18n.t(
         "action.failedWithReason",
@@ -309,7 +311,8 @@ class CalendarState(
             else -> newClientUid()
         }
         scope.launch {
-            _ui.value = _ui.value.copy(saving = true, formError = null)
+            // 新的一次操作开始，上一次的失败提示就过时了（见 dismissActionError 的说明）。
+            _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
                 client.createEvent(body, clientUid = clientUid)
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
@@ -337,7 +340,11 @@ class CalendarState(
         }
     }
 
-    /** 用户点了提示条上的 ×。 */
+    /** 用户点了提示条上的 ×。
+     *
+     *  另外，新建、保存、拖动、删除、撤销每一次开始时都会先收掉旧的失败提示：提示条只说
+     *  最近一次操作。以前它只在点 × 时才收，删除失败后再删一次成功了，事件已经不见、
+     *  底部弹着「已删除 / 撤销」，顶上的红条还写着「没能删除」，说法和实际正好相反。 */
     fun dismissActionError() {
         _ui.value = _ui.value.copy(actionError = null)
     }
@@ -391,6 +398,7 @@ class CalendarState(
             _ui.value = _ui.value.copy(events = replaceEvent(_ui.value.events, dragged.original, dragged.moved))
         }
         scope.launch {
+            _ui.value = _ui.value.copy(actionError = null)
             // 拖动不是弹窗里的保存：不碰 saving / formError，免得用户这时打开的
             // 编辑弹窗被莫名其妙地置灰或清掉提示。
             if (dragged == null) _ui.value = _ui.value.copy(saving = true, formError = null)
@@ -485,7 +493,7 @@ class CalendarState(
 
     private fun sendDelete(id: String, scope: String?, recurrenceId: String?, summary: String? = null) {
         this.scope.launch {
-            _ui.value = _ui.value.copy(saving = true, formError = null)
+            _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
                 client.deleteEvent(id, scope, recurrenceId)
                 // Whole-event (series) deletes are plain soft-deletes the
@@ -518,6 +526,7 @@ class CalendarState(
     fun undoLastDelete() {
         val undo = _ui.value.undoDelete ?: return
         this.scope.launch {
+            _ui.value = _ui.value.copy(actionError = null)
             try {
                 client.restoreEvent(undo.eventId)
                 _ui.value = _ui.value.copy(undoDelete = null)

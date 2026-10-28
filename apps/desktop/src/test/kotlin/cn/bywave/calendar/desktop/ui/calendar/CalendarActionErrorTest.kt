@@ -189,4 +189,48 @@ class CalendarActionErrorTest {
             assertNotNull(st.ui.value.actionError, "弹窗已经关了，失败只能在主界面上说")
         }
     }
+
+    @Test
+    fun `删除失败后再删一次成功了，失败提示要收掉`(): Unit = runBlocking {
+        var deletes = 0
+        serverFor { hit ->
+            if (hit.method == "DELETE") {
+                deletes++
+                if (deletes == 1) Reply(500, """{"error":"internal_error"}""") else Reply(200, ok("""{"deleted":true}"""))
+            } else null
+        }.use { s ->
+            val client = ApiClient(s.url)
+            val st = CalendarState(client, this)
+            st.load()
+            awaitIdle()
+
+            st.delete(event)
+            awaitIdle()
+            assertNotNull(st.ui.value.actionError, "第一次失败要提示")
+
+            st.delete(event)
+            awaitIdle()
+            client.close()
+
+            assertNull(st.ui.value.actionError, "第二次成功了，「没能删除」那句就和实际相反了")
+            assertNotNull(st.ui.value.undoDelete, "成功的那次照常给撤销")
+        }
+    }
+
+    @Test
+    fun `没有标题的事件失败时不写成空引号`(): Unit = runBlocking {
+        val untitled = event.copy(summary = "")
+        serverFor { hit ->
+            if (hit.method == "DELETE") Reply(500, """{"error":"internal_error"}""") else null
+        }.use { s ->
+            val client = ApiClient(s.url)
+            val st = CalendarState(client, this)
+            st.delete(untitled)
+            awaitIdle()
+            client.close()
+
+            val msg = assertNotNull(st.ui.value.actionError)
+            assertTrue("「」" !in msg && "\"\"" !in msg, "没有标题时要有个叫法：$msg")
+        }
+    }
 }
