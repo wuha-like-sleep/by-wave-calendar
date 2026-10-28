@@ -38,6 +38,9 @@ import { buildIcsFeed } from "../services/ics.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
+// .ics 导入的大小上限放在 lib 里：单元测试要拿它和八门语言的文案对账，
+// 而 import 这个文件会把整个 web 层连同数据库一起拉进来。
+import { MAX_ICS_IMPORT_BYTES, MAX_ICS_IMPORT_MB, MAX_ICS_PASTE_CHARS, MAX_ICS_PASTE_BODY_BYTES } from "../lib/ics_limits.js";
 import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES, setThemeCookies } from "../lib/user_theme.js";
 import {
   RETURN_TO_COOKIE,
@@ -230,14 +233,6 @@ async function ownsCalendar(calendarId: string, userId: string) {
     .limit(1);
   return rows.length > 0;
 }
-
-/** 上传 .ics 文件的上限。以前这里写 5MB，而实际生效的是全局那 2MB。 */
-export const MAX_ICS_IMPORT_BYTES = 8 * 1024 * 1024;
-
-/** 粘贴 .ics 文本的上限（字符数）。
- *  它受 Fastify 的 bodyLimit（2MB）封顶，而 urlencoded 转义还会再吃掉一部分，
- *  所以这个值必须明显小于 bodyLimit —— 写 5MB 的话那一段永远到不了 zod。 */
-export const MAX_ICS_PASTE_CHARS = 1_000_000;
 
 export async function webRoutes(app: FastifyInstance) {
   // -------- Public pages --------
@@ -1199,7 +1194,7 @@ export async function webRoutes(app: FastifyInstance) {
       file = await req.file({ limits: { fileSize: MAX_ICS_IMPORT_BYTES } });
     } catch (err) {
       if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
       }
       throw err;
     }
@@ -1212,7 +1207,7 @@ export async function webRoutes(app: FastifyInstance) {
     } catch (err) {
       // 真正触顶的是 toBuffer，不是上面那次 req.file()。
       if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
-        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge") });
+        return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
       }
       throw err;
     }
@@ -1231,7 +1226,9 @@ export async function webRoutes(app: FastifyInstance) {
     }
   });
 
-  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/text", async (req, reply) => {
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/text", {
+    bodyLimit: MAX_ICS_PASTE_BODY_BYTES,
+  }, async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
@@ -1239,12 +1236,21 @@ export async function webRoutes(app: FastifyInstance) {
     if (!calId.success) return reply.redirect("/app");
     if (!(await ownsCalendar(calId.data, user.id))) return reply.redirect("/app");
 
-    // 这里的上限只能写成**实际生效的那个**。Fastify 的 bodyLimit 在解析
-    // 请求体时就先拦一道（2MB），zod 写 5MB 的话，2MB 到 5MB 之间的粘贴
-    // 内容根本到不了这行 —— 用户收到的是一个通用 413，而不是「内容太长」。
-    // 而 urlencoded 编码还会让实际能装的原文再打折（换行、冒号都会被转义）。
+    // 这里的上限只能写成**实际生效的那个**。这条路的 bodyLimit 已经按最坏的
+    // 转义放宽（见 MAX_ICS_PASTE_BODY_BYTES），所以不超过 MAX_ICS_PASTE_CHARS
+    // 的内容一定能走到这一行。超了要明说「太长、改用上传」，不能回
+    // 「请粘贴 .ics 文本内容」—— 用户明明贴了一大段，会以为是没贴进去。
     const body = z.object({ text: z.string().min(20).max(MAX_ICS_PASTE_CHARS) }).safeParse(req.body);
     if (!body.success) {
+      const raw = (req.body as { text?: unknown } | undefined)?.text;
+      if (typeof raw === "string" && raw.length > MAX_ICS_PASTE_CHARS) {
+        const locale = (req as unknown as { locale?: string }).locale;
+        let max = String(MAX_ICS_PASTE_CHARS);
+        try { max = new Intl.NumberFormat(locale).format(MAX_ICS_PASTE_CHARS); } catch { /* 认不出的语言就用原样数字 */ }
+        return redirectWith(reply, `/app/calendars/${calId.data}`, {
+          error: tr(req, "flash.import.pasteTooLong", { max, mb: MAX_ICS_IMPORT_MB }),
+        });
+      }
       return redirectWith(reply, `/app/calendars/${calId.data}`, { error: tr(req, "flash.import.pasteText") });
     }
     if (!body.data.text.toUpperCase().includes("BEGIN:VCALENDAR")) {
