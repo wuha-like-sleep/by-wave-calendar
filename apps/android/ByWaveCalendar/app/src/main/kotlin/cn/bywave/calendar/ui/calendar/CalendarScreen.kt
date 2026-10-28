@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
+import cn.bywave.calendar.data.auth.SignedOutNotice
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.event.EventActionsSheet
 import cn.bywave.calendar.ui.event.EventDetailSheet
@@ -86,6 +87,8 @@ fun CalendarScreen(
     onDuplicateEvent: (EventDTO) -> Unit,
     onOpenAttendees: (EventDTO) -> Unit,
     onAddAccount: () -> Unit,
+    /** 「某账号已被登出」提示条上的「重新登录」：登录页要预填这个账号，不是一张空白页。 */
+    onSignInAgain: (SignedOutNotice) -> Unit,
     onOpenSearch: () -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
@@ -227,7 +230,7 @@ fun CalendarScreen(
                     SignedOutBanner(
                         notice = notice,
                         currentEmail = active?.email,
-                        onSignInAgain = onAddAccount,
+                        onSignInAgain = { onSignInAgain(notice) },
                         onDismiss = { profiles.dismissSignedOutNotice(notice) },
                     )
                 }

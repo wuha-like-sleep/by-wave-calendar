@@ -129,6 +129,16 @@ class ProfileStore(context: Context) {
 
     fun clearSignedOutReason() { _signedOutReason.value = null }
 
+    /** 下一次打开登录页时要预填的服务器和邮箱，见 SignInPrefill.kt。只在内存里：
+     *  它从点按钮到登录页建出来只活一瞬间。 */
+    private val signInPrefill = SignInPrefillSlot()
+
+    /** 打开登录页之前调：传被登出的那个账号就预填它，传 null 就是一张空白登录页。 */
+    fun prefillNextSignIn(prefill: SignInPrefill?) = signInPrefill.put(prefill)
+
+    /** 登录页的 ViewModel 建出来时取一次。 */
+    fun takeSignInPrefill(): SignInPrefill? = signInPrefill.take()
+
     /** 用户在日历页关掉了一条「已被登出」提示。 */
     fun dismissSignedOutNotice(notice: SignedOutNotice) {
         _signedOutNotices.update { it - notice }

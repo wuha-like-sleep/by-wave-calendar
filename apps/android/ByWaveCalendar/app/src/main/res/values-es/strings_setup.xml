@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">Correo o contraseña incorrectos</string>
     <string name="setupvm_err_account_locked">Demasiados intentos fallidos. Inténtalo de nuevo más tarde.</string>
     <string name="setupvm_err_account_disabled">Cuenta desactivada: contacta con el administrador</string>
-    <string name="setupvm_err_apps_disabled">El administrador no ha habilitado la sincronización de la app.\nVe al panel web → Administrar → API y apps → activa «Inicio de sesión de la app» y vuelve a intentarlo.</string>
+    <string name="setupvm_err_apps_disabled">El administrador no ha habilitado la sincronización de la app.\nEn la web, ve a «Administración» → «API» → «Sincronización de apps nativas», marca «Permitir sincronización de apps nativas», pulsa «Guardar» y vuelve a intentarlo.</string>
     <string name="setupvm_err_mfa_expired">La sesión de verificación ha caducado. Vuelve a iniciar sesión</string>
     <string name="setupvm_err_pair_code_expired">Este código de inicio de sesión ha caducado o ya se usó. Genera uno nuevo en la web.</string>
     <string name="setupvm_err_http">Error al iniciar sesión (HTTP %1$d)</string>
+    <string name="setupvm_err_bad_format">El formato del correo o de la contraseña no es válido</string>
+    <string name="setupvm_err_rate_limited">Demasiados intentos. Inténtalo de nuevo más tarde.</string>
+    <string name="setupvm_err_server">Error del servidor. Inténtalo de nuevo más tarde.</string>
 </resources>

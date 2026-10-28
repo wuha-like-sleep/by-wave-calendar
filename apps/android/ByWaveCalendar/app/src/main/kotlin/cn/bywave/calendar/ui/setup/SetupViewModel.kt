@@ -13,6 +13,7 @@ import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.auth.Profile
+import cn.bywave.calendar.data.auth.SignInPrefill
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
 import cn.bywave.calendar.data.model.MfaVerifyRequest
@@ -38,11 +39,23 @@ data class SetupUiState(
 ) {
     val canSubmit: Boolean
         get() = ServerUrl.looksValid(server) && email.isNotBlank() && password.isNotBlank()
+
+    /** 真正发给服务端、存进账号列表的邮箱。服务端先校验邮箱格式、后去空格，
+     *  输入法联想常在末尾补一个空格，原样发出去必回 400。 */
+    val signInEmail: String
+        get() = email.trim()
+
+    companion object {
+        /** 登录页打开时的样子：从「已被登出」提示条进来的，预填那个账号的服务器和邮箱。 */
+        fun initial(prefill: SignInPrefill?): SetupUiState =
+            if (prefill == null) SetupUiState()
+            else SetupUiState(server = prefill.serverUrl, email = prefill.email)
+    }
 }
 
 class SetupViewModel : ViewModel() {
     private val profiles = BywaveApp.instance.profiles
-    private val _state = MutableStateFlow(SetupUiState())
+    private val _state = MutableStateFlow(SetupUiState.initial(profiles.takeSignInPrefill()))
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
     private val jsonLenient = Json { ignoreUnknownKeys = true }
 
@@ -51,7 +64,7 @@ class SetupViewModel : ViewModel() {
     private fun str(resId: Int): String = BywaveApp.instance.getString(resId)
 
     /** 登录类请求失败时给用户看的那句话，见 LoginErrors.kt。 */
-    private fun describe(e: Throwable, fallback: Int): String = when (val t = loginErrorText(e)) {
+    private fun describe(e: Throwable, step: LoginStep, fallback: Int): String = when (val t = loginErrorText(e, step)) {
         is LoginErrorText.Res -> str(t.id)
         is LoginErrorText.Server -> t.message
         is LoginErrorText.Status -> BywaveApp.instance.getString(R.string.setupvm_err_http, t.status)
@@ -107,7 +120,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = describe(e, R.string.setupvm_qr_login_failed),
+                        errorMessage = describe(e, LoginStep.Pair, R.string.setupvm_qr_login_failed),
                     )
                 }
             }
@@ -117,6 +130,8 @@ class SetupViewModel : ViewModel() {
     fun signIn() {
         val s = _state.value
         if (!s.canSubmit) return
+        // 发出去的、存进账号列表的都是去掉首尾空格的那一份（见 SetupUiState.signInEmail）。
+        val email = s.signInEmail
         _state.update { it.copy(busy = true, errorMessage = null) }
 
         viewModelScope.launch {
@@ -126,7 +141,7 @@ class SetupViewModel : ViewModel() {
                 val api = ApiClient.forSetup(server)
                 val resp = api.login(
                     LoginRequest(
-                        email = s.email,
+                        email = email,
                         password = s.password,
                         label = androidDeviceLabel(),
                         kind = "android",
@@ -140,7 +155,7 @@ class SetupViewModel : ViewModel() {
                     return@launch
                 }
 
-                completeLogin(server, s.email, resp) ?: run {
+                completeLogin(server, email, resp) ?: run {
                     _state.update { it.copy(busy = false, errorMessage = str(R.string.setupvm_missing_token)) }
                     return@launch
                 }
@@ -149,7 +164,7 @@ class SetupViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         busy = false,
-                        errorMessage = describe(e, R.string.setupvm_login_failed),
+                        errorMessage = describe(e, LoginStep.Password, R.string.setupvm_login_failed),
                     )
                 }
             }
@@ -169,14 +184,14 @@ class SetupViewModel : ViewModel() {
                 val server = ServerUrl.normalize(_state.value.server)
                 val api = ApiClient.forSetup(server)
                 val resp = api.verifyMfa(MfaVerifyRequest(mfaToken = token, code = code))
-                completeLogin(server, _state.value.email, resp) ?: run {
+                completeLogin(server, _state.value.signInEmail, resp) ?: run {
                     _state.update { it.copy(busy = false, errorMessage = str(R.string.setupvm_mfa_missing_token)) }
                     return@launch
                 }
                 _state.update { it.copy(busy = false, signedIn = true, mfaToken = null) }
             } catch (e: Exception) {
                 _state.update {
-                    it.copy(busy = false, errorMessage = describe(e, R.string.setupvm_mfa_code_error))
+                    it.copy(busy = false, errorMessage = describe(e, LoginStep.Mfa, R.string.setupvm_mfa_code_error))
                 }
             }
         }

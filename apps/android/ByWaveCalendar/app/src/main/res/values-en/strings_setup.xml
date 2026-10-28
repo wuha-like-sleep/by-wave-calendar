@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">Wrong email or password</string>
     <string name="setupvm_err_account_locked">Too many failed attempts. Please try again later.</string>
     <string name="setupvm_err_account_disabled">Account disabled — please contact your admin</string>
-    <string name="setupvm_err_apps_disabled">The admin hasn’t enabled app sync.\nGo to the web admin → Manage → API &amp; APPs → turn on “App sign-in”, then retry.</string>
+    <string name="setupvm_err_apps_disabled">The admin hasn’t enabled app sync.\nOn the web, go to Admin → API → Native app sync, check “Allow native app sync”, click Save, then retry.</string>
     <string name="setupvm_err_mfa_expired">The verification session has expired. Please sign in again.</string>
     <string name="setupvm_err_pair_code_expired">This sign-in code has expired or was already used. Generate a new one on the web.</string>
     <string name="setupvm_err_http">Sign-in failed (HTTP %1$d)</string>
+    <string name="setupvm_err_bad_format">The email or password isn’t in a valid format</string>
+    <string name="setupvm_err_rate_limited">Too many attempts. Please try again later.</string>
+    <string name="setupvm_err_server">Server error. Please try again later.</string>
 </resources>

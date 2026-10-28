@@ -64,8 +64,11 @@
     <string name="setupvm_err_invalid_credentials">メールアドレスまたはパスワードが違います</string>
     <string name="setupvm_err_account_locked">サインインの失敗が多すぎます。しばらくしてから再試行してください。</string>
     <string name="setupvm_err_account_disabled">アカウントが無効です。管理者にお問い合わせください</string>
-    <string name="setupvm_err_apps_disabled">管理者がアプリ同期を有効にしていません。\nウェブ管理画面 → 管理 → API &amp; APPs →「アプリのサインイン」をオンにしてから再試行してください。</string>
+    <string name="setupvm_err_apps_disabled">管理者がアプリ同期を有効にしていません。\nウェブの「管理」→「API」→「ネイティブアプリ同期」で「ネイティブアプリ同期を許可」にチェックを入れて「保存」してから、再試行してください。</string>
     <string name="setupvm_err_mfa_expired">確認セッションの有効期限が切れました。もう一度サインインしてください</string>
     <string name="setupvm_err_pair_code_expired">このサインインコードは期限切れか、すでに使用されています。ウェブで新しく作成してください。</string>
     <string name="setupvm_err_http">サインインに失敗しました（HTTP %1$d）</string>
+    <string name="setupvm_err_bad_format">メールアドレスまたはパスワードの形式が正しくありません</string>
+    <string name="setupvm_err_rate_limited">試行回数が多すぎます。しばらくしてから再試行してください。</string>
+    <string name="setupvm_err_server">サーバーでエラーが発生しました。しばらくしてから再試行してください。</string>
 </resources>
