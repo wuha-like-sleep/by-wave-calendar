@@ -980,6 +980,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "app.js.recurring.allSaveDesc": "Cambia toda la serie",
   "app.js.reminder.customValue": "Personalizado: {trigger}",
   "app.js.form.customValue": "Personalizado: {value}",
+  "app.js.repeat.keep": "Personalizada (sin cambios)",
   "app.js.reminder.extraKept": "Hay {n} recordatorio(s) más; se conservan al guardar. Elegir «Ninguno» también los borra.",
   "app.js.attendees.count": "{count} invitados: {names}",
   "app.js.attendees.none": "Aún no hay invitados",

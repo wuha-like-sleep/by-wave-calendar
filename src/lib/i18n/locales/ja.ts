@@ -980,6 +980,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "app.js.recurring.allSaveDesc": "繰り返しシリーズ全体を変更",
   "app.js.reminder.customValue": "カスタム：{trigger}",
   "app.js.form.customValue": "カスタム：{value}",
+  "app.js.repeat.keep": "カスタム（変更しない）",
   "app.js.reminder.extraKept": "ほかに {n} 件のリマインダーがあります。保存しても残ります（「なし」を選ぶとまとめて削除されます）。",
   "app.js.attendees.count": "{count} 名:{names}",
   "app.js.attendees.none": "まだ誰も招待していません",

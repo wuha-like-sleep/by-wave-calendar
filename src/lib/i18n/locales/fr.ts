@@ -980,6 +980,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "app.js.recurring.allSaveDesc": "Modifie toute la série",
   "app.js.reminder.customValue": "Personnalisé : {trigger}",
   "app.js.form.customValue": "Personnalisé : {value}",
+  "app.js.repeat.keep": "Personnalisée (inchangée)",
   "app.js.reminder.extraKept": "{n} autre(s) rappel(s) ; conservés à l'enregistrement. Choisir « Aucun » les supprime aussi.",
   "app.js.attendees.count": "{count} invités : {names}",
   "app.js.attendees.none": "Personne n'est encore invité",

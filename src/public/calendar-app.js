@@ -1070,6 +1070,21 @@
     paintSelect(categorySelect, built.options, built.value);
   }
 
+  // 重复下拉也是同一个洞，而且错了丢的是整个系列：下拉只有六个预设，手机写上来的
+  // BYDAY=MO、「这次及以后」拆出来带 UNTIL 的、COUNT、隔周……以前一律显示成「不重复」，
+  // 保存时发出 rrule:""（编辑时空串 = 清空，见 submit），只改个标题整个系列就不再重复；
+  // 选「这次及以后」，拆出来的后半段变成单次。认不出就临时插一项「自定义（保持原样）」
+  // 选中，保存时把原规则原样带回去；用户自己选了别的预设才是真的改。
+  const repeatSelect = $('#form-event [name="rrule"]');
+  const REPEAT_OPTIONS = repeatSelect
+    ? Array.from(repeatSelect.options).map((o) => ({ value: o.value, label: o.textContent, group: "both" }))
+    : [];
+  function setRepeatValue(value) {
+    if (!repeatSelect) return;
+    const built = FORM.withCustomOption(REPEAT_OPTIONS, value, T("app.js.repeat.keep"));
+    paintSelect(repeatSelect, built.options, built.value);
+  }
+
   // 把一组 { value, label } 画进某个 <select>，并选中 picked。
   // picked 一定在 options 里（withCustomOption 保证），所以 selectedIndex 不会变 -1 ——
   // 变 -1 意味着这个字段从 FormData 里消失，保存出去就是「清空这个键」。
@@ -1363,13 +1378,8 @@
     if (pwInput) pwInput.value = payload.meetingPassword || "";
     // Category + passcode are both set now → compute the field's visibility.
     syncMeetingPasswordField();
-    // Recurrence (RRULE) — preserve the stored rule if it's one of our presets.
-    const rruleSelect = form.querySelector('[name="rrule"]');
-    if (rruleSelect) {
-      const r = (payload.rrule || "").trim();
-      const opt = Array.from(rruleSelect.options).find((o) => o.value === r);
-      rruleSelect.value = opt ? r : "";
-    }
+    // Recurrence (RRULE)：认不出的规则原样保留，见 setRepeatValue。
+    setRepeatValue(payload.rrule);
     // 提醒：第一条进下拉，其余寄存在 [name="extraAlarms"] 里等 submit 拼回去。
     // 下拉里没有的 trigger 会被临时插成一个选项（见 renderReminderOptions），
     // 不再静默显示成「无」——那等于用户存一次就把别的客户端设的提醒删了。

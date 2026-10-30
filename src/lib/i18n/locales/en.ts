@@ -987,6 +987,7 @@ export const en = {
   "app.js.recurring.allSaveDesc": "Change the entire series",
   "app.js.reminder.customValue": "Custom: {trigger}",
   "app.js.form.customValue": "Custom: {value}",
+  "app.js.repeat.keep": "Custom (unchanged)",
   "app.js.reminder.extraKept": "+{n} more reminder(s), kept when you save. Choosing “None” clears them too.",
   "app.js.attendees.count": "{count} invited: {names}",
   "app.js.attendees.none": "No one invited yet",

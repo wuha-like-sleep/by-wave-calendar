@@ -966,6 +966,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "app.js.recurring.allSaveDesc": "修改整個重複系列",
   "app.js.reminder.customValue": "自訂：{trigger}",
   "app.js.form.customValue": "自訂：{value}",
+  "app.js.repeat.keep": "自訂（維持原樣）",
   "app.js.reminder.extraKept": "另有 {n} 則提醒，儲存時會保留；選「不提醒」會一併清除。",
   "app.js.attendees.count": "{count} 位：{names}",
   "app.js.attendees.none": "尚未邀請任何人",

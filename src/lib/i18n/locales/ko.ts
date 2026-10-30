@@ -980,6 +980,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "app.js.recurring.allSaveDesc": "반복 시리즈 전체 수정",
   "app.js.reminder.customValue": "사용자 지정: {trigger}",
   "app.js.form.customValue": "사용자 지정: {value}",
+  "app.js.repeat.keep": "사용자 지정(변경 안 함)",
   "app.js.reminder.extraKept": "다른 알림 {n}개가 있습니다. 저장해도 유지되며 ‘없음’을 선택하면 함께 삭제됩니다.",
   "app.js.attendees.count": "{count}명: {names}",
   "app.js.attendees.none": "아직 아무도 초대하지 않았습니다",

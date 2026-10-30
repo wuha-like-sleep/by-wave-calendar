@@ -270,6 +270,40 @@ describe("withCustomOption — 手机 / API 设的分类", () => {
 // ---------------------------------------------------------------------------
 // 接线检查：纯逻辑再对，没接上去也是白的
 // ---------------------------------------------------------------------------
+describe("withCustomOption — 下拉认不出的重复规则", () => {
+  // 和 calendar-app.ejs 里的六个预设一致
+  const REPEAT: Opt[] = [
+    { value: "", label: "不重复", group: "both" },
+    { value: "FREQ=DAILY", label: "每天", group: "both" },
+    { value: "FREQ=WEEKLY", label: "每周", group: "both" },
+    { value: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", label: "工作日", group: "both" },
+    { value: "FREQ=MONTHLY", label: "每月", group: "both" },
+    { value: "FREQ=YEARLY", label: "每年", group: "both" },
+  ];
+
+  // 以前这些全显示成「不重复」，保存发出 rrule:""，整个系列就不再重复了。
+  for (const rule of [
+    "FREQ=WEEKLY;UNTIL=20261018T222959Z",          // 「这次及以后」拆出来的前半段
+    "FREQ=WEEKLY;BYDAY=MO",                         // 手机通过 CalDAV 写上来的
+    "FREQ=DAILY;COUNT=10",
+    "FREQ=WEEKLY;INTERVAL=2;BYDAY=TU",
+  ]) {
+    it(`${rule}：原样选中，保存出去还是它`, () => {
+      const r = FORM.withCustomOption(REPEAT, rule, "自定义（保持原样）");
+      expect(r.value).toBe(rule);
+      const picked = r.options.find((o) => o.value === r.value)!;
+      expect(picked.label).toBe("自定义（保持原样）");
+      expect(r.options.slice(0, REPEAT.length)).toEqual(REPEAT);
+    });
+  }
+
+  it("预设里有的照常选预设，不多插一项；没有规则的是「不重复」", () => {
+    expect(FORM.withCustomOption(REPEAT, "FREQ=WEEKLY", "x")).toEqual({ options: REPEAT, value: "FREQ=WEEKLY" });
+    expect(FORM.withCustomOption(REPEAT, null, "x")).toEqual({ options: REPEAT, value: "" });
+    expect(FORM.withCustomOption(REPEAT, "  ", "x")).toEqual({ options: REPEAT, value: "" });
+  });
+});
+
 describe("calendar-app.js 的表单确实走这套规则", () => {
   it("勾/去勾「全天」时会换档位", () => {
     const listener = /allDayCheckbox\.addEventListener\("change",[\s\S]*?\n  \}\);/.exec(APP_JS);
@@ -308,6 +342,17 @@ describe("calendar-app.js 的表单确实走这套规则", () => {
     expect(fn![0]).toMatch(/FORM\.withCustomOption\(/);
   });
 
+  it("重复下拉也走「认不出就临时插一项」，不是直接赋值（直接赋值认不出的会变成「不重复」）", () => {
+    expect(APP_JS).toMatch(/setRepeatValue\(payload\.rrule\)/);
+    expect(APP_JS).not.toMatch(/rruleSelect\.value\s*=/);
+    const fn = /function setRepeatValue\([\s\S]*?\n  \}/.exec(APP_JS);
+    expect(fn, "找不到 setRepeatValue").toBeTruthy();
+    expect(fn![0]).toMatch(/FORM\.withCustomOption\(/);
+    expect(fn![0]).toMatch(/app\.js\.repeat\.keep/);
+    // 保存时就是拿下拉的值：选中的是原规则，带回去的就是原规则
+    expect(APP_JS).toMatch(/rrule: \(data\.rrule \|\| ""\)\.trim\(\)/);
+  });
+
   it("服务端拒绝时界面要说原因并重画，不能让用户以为改动还在", () => {
     expect(APP_JS).toMatch(/ev\.kind === "sync-rejected"/);
     expect(APP_JS).toMatch(/app\.js\.sync\.rejected/);
@@ -334,6 +379,7 @@ describe("新增文案的八语覆盖", () => {
     ["app.js.form.customValue", ["{value}"]],
     ["app.js.toast.saveFailedReason", ["{reason}"]],
     ["app.js.sync.rejected", ["{reason}"]],
+    ["app.js.repeat.keep", []],
   ];
 
   for (const [key, placeholders] of KEYS) {
