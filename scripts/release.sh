@@ -70,6 +70,17 @@ cp apps/desktop/releases/latest.json "$STAGE/apps/desktop/releases/latest.json"
 find "$STAGE" -name ".DS_Store" -delete
 find "$STAGE" -name "._*" -delete
 
+# iCloud 冲突副本（「_built 2」「calendar-app 6.js」）：~/Desktop 在 iCloud 下，会自己冒出来。
+# 不拦的话整份旧 JS 跟着进包、挂在 /static/ 下对外可读（1.7.5 第一次打包就带了 22 个）。
+# 不替人删：是副本还是真文件要人看一眼，所以列出来、直接失败。
+ICLOUD_DUPES=$(find "$STAGE" \( -name '* [0-9]' -o -name '* [0-9].*' \) | sed "s#^$STAGE/##")
+if [ -n "$ICLOUD_DUPES" ]; then
+  echo "[release] ✗ 包里有 iCloud 冲突副本，清掉再打："
+  echo "$ICLOUD_DUPES" | sed 's/^/[release]   /' | head -20
+  rm -rf "$STAGE"
+  exit 1
+fi
+
 # 包不带 node_modules（让服务器跑 npm ci --omit=dev 自己装生产依赖）
 echo "[release] taring..."
 # COPYFILE_DISABLE=1 阻止 macOS 的 tar 夹带 AppleDouble（._*）元数据 —— ~/Desktop
