@@ -1692,7 +1692,12 @@
       } else if (window.bwcStore) {
         // Route through bwcStore when available — optimistic local update +
         // outbox queue means the modal can close instantly even on flaky network.
-        await window.bwcStore.put(id ? { ...body, id } : body, body.calendarId);
+        // 「所有事件」要告诉服务端点开的是哪一次：表单里的时间是那一次的，不是系列开始的时间
+        // （服务端按差值平移主事件，见 routes/events.ts 的 timesForSeriesEdit）。
+        const seriesRef = recurringScope === "series" && form.dataset.recurrenceId
+          ? { scope: "series", recurrenceId: form.dataset.recurrenceId }
+          : {};
+        await window.bwcStore.put(id ? { ...body, ...seriesRef, id } : body, body.calendarId);
         closeModal("#modal-event");
         await loadEvents();
         const offline = !window.bwcStore.isOnline();
@@ -2331,6 +2336,18 @@
         return;
       }
 
+      if (isRecurring) {
+        // 拖动「所有事件」：同样按差值平移，每一次都变了，重新拉一遍。
+        const occurrenceStart = event.start && event.start.toDate ? event.start.toDate() : new Date(event.start);
+        const resp = await fetch(`/api/events/${event.id}`, fetchOpts({
+          method: "PATCH",
+          body: JSON.stringify({ ...body, scope: "series", recurrenceId: occurrenceStart.toISOString() }),
+        }));
+        if (!resp.ok) throw new Error();
+        await loadEvents();
+        return;
+      }
+
       const resp = await fetch(`/api/events/${event.id}`, fetchOpts({ method: "PATCH", body: JSON.stringify(body) }));
       if (!resp.ok) throw new Error();
       cal.updateEvent(event.id, event.calendarId, changes);
@@ -2541,6 +2558,9 @@
       //   1. 把服务端的原话弹出来（是哪个字段不对，用户照着能改）
       //   2. 立刻重画日历，让那条只存在于本地的「改好了」当场消失
       // 队列里排在它后面的编辑不受影响，会照常继续发。
+      // 保存发出去的同时 loadEvents 已经在拉了，那次结果可能早于这次保存。服务端接受之后再拉一遍，
+      // 不然重复事件别的那几次要等下一轮轮询（最多 30 秒）才对得上。
+      if (ev.kind === "outbox-synced") loadEvents().catch(() => {});
       if (ev.kind === "sync-rejected") {
         const reason = (ev.payload && ev.payload.reason) || "";
         if (window.bwc) {

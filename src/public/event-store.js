@@ -104,6 +104,73 @@
   }
 
   globalThis.bwcOutboxCore = { isServerRejection, describeServerError, drainOutbox };
+
+  // ---- 本地镜像的纯逻辑（不碰 IndexedDB，测试直接打这里）----
+  //
+  // 重复事件的每一次共用主事件的 id（服务端就是这么返回的）。镜像以前直接按 id 存，同一个
+  // 系列后写的盖掉先写的，只剩窗口里最后一次：网页月视图里「每周一例会」一个月只显示一次，
+  // 周视图里「每天」只剩一天。所以重复事件每一次各占一行，键是「id@开始时刻」，主事件 id 记在
+  // _masterId，读出去时换回来。
+  //
+  // 以前也从不清理：另一台设备删掉的事件，服务端不再返回了，镜像里那行还在，网页上一直显示。
+  // 现在一次成功的拉取就是这个窗口的真相：窗口里不在返回结果里的行都删掉。三种行要留着：
+  //   · _dirty：本地还没同步出去的改动 / 删除；
+  //   · 这次拉取发出之后才写入的（_syncedAt 更晚）：拉取可能早于那次保存，结果里当然没有它；
+  //   · 不在这次查询范围（窗口之外、别的日历）的。
+  function rowKeyOf(e) {
+    return e.rrule ? e.id + "@" + e.startsAt : e.id;
+  }
+
+  function toLocalRow(e, now) {
+    const row = { ...e, id: rowKeyOf(e), _syncedAt: now };
+    if (e.rrule) row._masterId = e.id;
+    return row;
+  }
+
+  function overlaps(r, fromMs, toMs) {
+    return +new Date(r.endsAt) >= fromMs && +new Date(r.startsAt) <= toMs;
+  }
+
+  // 返回 { puts, deletes }：puts 是要写入的行，deletes 是要删的键。
+  function planWindowMerge(rows, events, win) {
+    const dirtyIds = new Set(rows.filter((r) => r._dirty).map((r) => r.id));
+    const puts = [];
+    const fresh = new Set();
+    for (const e of events) {
+      if (dirtyIds.has(e.id)) continue;   // 本地有没同步的改动：不覆盖，下一轮再对齐
+      const row = toLocalRow(e, win.now);
+      fresh.add(row.id);
+      puts.push(row);
+    }
+    const onlyCalendars = win.calendarIds ? new Set(win.calendarIds) : null;
+    const deletes = [];
+    for (const r of rows) {
+      if (r._dirty || fresh.has(r.id)) continue;
+      if (onlyCalendars && !onlyCalendars.has(r.calendarId)) continue;
+      if ((r._syncedAt || 0) >= win.fetchStartedAt) continue;
+      if (!overlaps(r, win.fromMs, win.toMs)) continue;
+      // 系列有本地改动时，它那些旧的每一次先留着（读的时候会被藏起来），等改动同步了一起换。
+      if (r._masterId && dirtyIds.has(r._masterId)) continue;
+      deletes.push(r.id);
+    }
+    return { puts, deletes };
+  }
+
+  // 窗口里该显示的行。系列有本地改动 / 删除时，旧的每一次都不显示，只显示改动那一行。
+  function visibleRows(rows, fromMs, toMs) {
+    const hidden = new Set(rows.filter((r) => r._dirty).map((r) => r.id));
+    const out = [];
+    for (const r of rows) {
+      if (r._tombstone) continue;
+      if (r._masterId && hidden.has(r._masterId)) continue;
+      if (!overlaps(r, fromMs, toMs)) continue;
+      const { _dirty, _tombstone, _syncedAt, _masterId, ...rest } = r;
+      out.push(_masterId ? { ...rest, id: _masterId } : rest);
+    }
+    return out;
+  }
+
+  globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, planWindowMerge, visibleRows };
 })();
 
 (function () {
@@ -113,6 +180,7 @@
   if (window.bwcStore) return;  // already loaded
 
   const core = globalThis.bwcOutboxCore;
+  const mirror = globalThis.bwcMirrorCore;
 
   const DB_NAME = "bywave-events";
   const DB_VERSION = 1;
@@ -180,7 +248,7 @@
   // Wraps fetch with: 6s timeout (don't hang the UI forever),
   // CSRF token header injection on writes, automatic JSON parsing,
   // and treats network errors as "offline" so we can flip the flag.
-  async function http(method, url, body) {
+  async function http(method, url, body, extraHeaders) {
     const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
@@ -188,7 +256,7 @@
       const resp = await fetch(url, {
         method,
         credentials: "same-origin",
-        headers: body ? { "Content-Type": "application/json", "X-CSRF-Token": csrf } : { "X-CSRF-Token": csrf },
+        headers: { ...(body ? { "Content-Type": "application/json" } : {}), "X-CSRF-Token": csrf, ...extraHeaders },
         body: body ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
@@ -196,7 +264,7 @@
       const text = await resp.text();
       let data = null;
       if (text) { try { data = JSON.parse(text); } catch { data = text; } }
-      return { ok: resp.ok, status: resp.status, data };
+      return { ok: resp.ok, status: resp.status, data, etag: resp.headers.get("ETag") };
     } catch (e) {
       // Network error / timeout / aborted — treat as offline.
       setReachable(false);
@@ -228,16 +296,30 @@
   // On network failure, return whatever's in the local mirror that
   // overlaps the window. Caller doesn't need to know whether it came
   // from network or cache.
+  // 上一次成功拉取的窗口和令牌，只在内存里：本地写过就作废，镜像可能已经和那个令牌对不上。
+  let lastFetch = null;
+
   async function getAll({ from, to, calendarIds }) {
     const fromMs = +new Date(from);
     const toMs = +new Date(to);
     let serverData = null;
     try {
       const url = `/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${calendarIds ? "&calendarIds=" + encodeURIComponent(calendarIds) : ""}`;
-      const r = await http("GET", url);
-      if (r.ok) {
+      // 页面每 30 秒拉一次当前窗口。和上次同一个窗口就带上令牌，数据没变服务端回 304，
+      // 不用重算、不用传、不用再写一遍镜像。
+      const prev = lastFetch && lastFetch.url === url ? lastFetch : null;
+      const fetchStartedAt = Date.now();
+      const r = await http("GET", url, undefined, prev ? { "If-None-Match": prev.etag } : undefined);
+      if (r.status === 304 && prev) {
+        serverData = { calendars: prev.calendars };
+        await setMeta("lastSyncedAt", new Date().toISOString());
+      } else if (r.ok) {
         serverData = r.data;
-        await mergeIntoLocal(serverData.events || []);
+        await mergeIntoLocal(serverData.events || [], {
+          fromMs, toMs, fetchStartedAt, now: Date.now(),
+          calendarIds: calendarIds ? calendarIds.split(",") : null,
+        });
+        lastFetch = r.etag ? { url, etag: r.etag, calendars: serverData.calendars } : null;
         await setMeta("lastSyncedAt", new Date().toISOString());
       }
     } catch { /* offline */ }
@@ -256,45 +338,24 @@
     };
   }
 
-  // Merge server events into local mirror. Deletes tombstones for
-  // events that fell out of the server's response — only within the
-  // requested window though, otherwise we'd nuke events outside.
-  async function mergeIntoLocal(events) {
-    await tx(STORE_EVENTS, "readwrite", (s) => {
-      for (const e of events) {
-        // Optimistic local copies have a _dirty flag — don't clobber
-        // them on merge, the next sync will reconcile.
-        const req = s.get(e.id);
-        req.onsuccess = () => {
-          const existing = req.result;
-          if (existing && existing._dirty) return;
-          s.put({ ...e, _syncedAt: Date.now() });
-        };
-      }
-    });
-  }
-
-  async function readLocalRange(fromMs, toMs) {
-    return tx(STORE_EVENTS, "readonly", (s) => new Promise((resolve) => {
-      const out = [];
-      const req = s.openCursor();
-      req.onsuccess = () => {
-        const c = req.result;
-        if (!c) return resolve(out);
-        const e = c.value;
-        if (e._tombstone) { c.continue(); return; }
-        const start = +new Date(e.startsAt);
-        const end = +new Date(e.endsAt);
-        // Overlap test: [start, end] ∩ [fromMs, toMs] is non-empty.
-        if (end >= fromMs && start <= toMs) out.push(stripInternal(e));
-        c.continue();
+  // 这次拉取的结果写进镜像，规则见文件上面 planWindowMerge 那段。
+  async function mergeIntoLocal(events, win) {
+    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+      const all = s.getAll();
+      all.onsuccess = () => {
+        const plan = mirror.planWindowMerge(all.result || [], events, win);
+        for (const key of plan.deletes) s.delete(key);
+        for (const row of plan.puts) s.put(row);
+        resolve();
       };
     }));
   }
 
-  function stripInternal(e) {
-    const { _dirty, _tombstone, _syncedAt, ...rest } = e;
-    return rest;
+  async function readLocalRange(fromMs, toMs) {
+    return tx(STORE_EVENTS, "readonly", (s) => new Promise((resolve) => {
+      const all = s.getAll();
+      all.onsuccess = () => resolve(mirror.visibleRows(all.result || [], fromMs, toMs));
+    }));
   }
 
   // ---- writes (optimistic) ----
@@ -307,6 +368,7 @@
     const localCopy = { ...event, id: tempId, calendarId: calendarId || event.calendarId, _dirty: true };
 
     await tx(STORE_EVENTS, "readwrite", (s) => s.put(localCopy));
+    lastFetch = null;
     const payload = { ...event, calendarId: calendarId || event.calendarId };
     // Idempotency key for creates. The outbox replays at-least-once: if a
     // create POST commits on the server but its response is lost, the item
@@ -331,10 +393,12 @@
     await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
       const r = s.get(eventId);
       r.onsuccess = () => {
-        if (r.result) s.put({ ...r.result, _tombstone: true, _dirty: true });
+        // 重复事件在镜像里只有「id@开始时刻」那些行，id 这个键上没有行，墓碑也要立起来。
+        s.put({ ...(r.result || { id: eventId }), _tombstone: true, _dirty: true });
         resolve();
       };
     }));
+    lastFetch = null;
     await enqueue({ op: "delete", eventId, payload: null });
     emit("event-changed", { id: eventId, kind: "deleted" });
     syncOutbox();
@@ -402,6 +466,7 @@
   //   - "delete": 去掉 tombstone（本地撤销删除；服务端那份还在，无害）
   // 用户手动丢弃（discardItem）和服务端拒绝（syncOutbox 的 reject 路径）共用这一份。
   async function rollbackLocal(item) {
+    lastFetch = null;
     if (item.op === "create" && String(item.eventId).startsWith("local-")) {
       await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
       return;
@@ -412,7 +477,9 @@
         if (r.result) {
           if (item.op === "delete") delete r.result._tombstone;
           delete r.result._dirty;
-          s.put(r.result);
+          // 重复事件的墓碑只有一个 id，撤销之后没有内容可留，旧的每一次会重新显示出来。
+          if (r.result.startsAt) s.put(r.result);
+          else s.delete(item.eventId);
         }
         resolve();
       };
@@ -439,13 +506,14 @@
     syncing = true;
     try {
       const items = await listOutbox();
-      await core.drainOutbox(items, {
+      const stats = await core.drainOutbox(items, {
         send: sendOne,
         applied: applyAccepted,
         remove: (item) => tx(STORE_OUTBOX, "readwrite", (s) => s.delete(item.id)),
         fail: bumpAttempts,
         reject: rejectOne,
       });
+      if (stats.sent > 0) emit("outbox-synced", { sent: stats.sent });
     } finally {
       syncing = false;
       emit("outbox-changed", { count: await pendingCount() });
@@ -474,24 +542,26 @@
 
   // 服务端接受之后把本地镜像对齐。
   async function applyAccepted(item, res) {
-    if (item.op === "create" && !res.skipped) {
-      // 服务端给了真正的 id，把本地那份 local- 的换掉。
-      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
-        const g = s.get(item.eventId);
-        g.onsuccess = () => {
-          if (g.result) s.delete(item.eventId);
-          s.put({ ...res.data, _syncedAt: Date.now() });
-          resolve();
-        };
-      }));
-      return;
-    }
-    if (item.op === "update" && !res.skipped) {
-      await tx(STORE_EVENTS, "readwrite", (s) => s.put({ ...res.data, _syncedAt: Date.now() }));
+    lastFetch = null;
+    if ((item.op === "create" || item.op === "update") && !res.skipped) {
+      // 换掉本地那份乐观副本（create 的键是 local-，update 的键是事件 id）。服务端回的是主事件：
+      // 重复事件按「id@开始时刻」存；别的那几次由紧接着的 loadEvents 拉回来。
+      await tx(STORE_EVENTS, "readwrite", (s) => {
+        s.delete(item.eventId);
+        s.put(mirror.toLocalRow(res.data, Date.now()));
+      });
       return;
     }
     if (item.op === "delete") {
-      await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
+      // 这个系列的每一次都要一起走，不然墓碑一撤它们又显示出来。
+      await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+        const all = s.getAll();
+        all.onsuccess = () => {
+          s.delete(item.eventId);
+          for (const r of all.result || []) if (r._masterId === item.eventId) s.delete(r.id);
+          resolve();
+        };
+      }));
     }
   }
 
@@ -549,6 +619,7 @@
     getMeta, setMeta,
     // Debug hook — clear everything (used by /reset-pwa).
     _wipe: async () => {
+      lastFetch = null;
       const db = await openDB();
       await new Promise((resolve) => {
         const t = db.transaction([STORE_EVENTS, STORE_OUTBOX, STORE_META], "readwrite");

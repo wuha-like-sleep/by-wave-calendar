@@ -9,9 +9,10 @@ import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
-import { expandEvent } from "../lib/rrule_expand.js";
+import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
+import { etagMatches, eventsWindowEtag } from "../lib/calendar_ctag.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -180,9 +181,12 @@ function mergedExtraForWrite(current: unknown, patch: unknown): Record<string, u
  * 失败、日历打不开**。这些包在用户手上，改不了；在这一行被下一次写入收口之前，
  * 读侧得自己兜住。
  */
-function forClient<T extends { extra: unknown }>(row: T): T {
+function forClient<T extends { extra: unknown; rawIcs?: unknown }>(row: T): Omit<T, "rawIcs"> {
+  // rawIcs 是手机写上来的 VEVENT 原文，只给 CalDAV 回放用，哪个客户端都不读它。发出去的话，
+  // 重复事件每一次都带一份：月视图的响应一半以上是它，而且原文里还有参与者邮箱之类的东西。
+  const { rawIcs: _rawIcs, ...rest } = row;
   const extra = normalizeExtraForClients(row.extra);
-  return extra === row.extra ? row : { ...row, extra };
+  return (extra === row.extra ? rest : { ...rest, extra }) as Omit<T, "rawIcs">;
 }
 
 /**
@@ -356,6 +360,13 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     if (allowed.length === 0) return reply.send({ calendars: visible, events: [] });
 
+    // 网页每 30 秒轮询当前窗口，绝大多数时候没变。先比令牌，没变就回 304，不取行、不展开规则。
+    // no-store：只有客户端自己带令牌才走这条路（网页的镜像带），别让浏览器或手机端的 HTTP 库
+    // 把日程存进磁盘缓存。
+    const tag = await eventsWindowEtag(allowed, visible, q.data.from, q.data.to);
+    reply.header("ETag", tag).header("Cache-Control", "no-store");
+    if (etagMatches(req.headers["if-none-match"], tag)) return reply.code(304).send();
+
     // Pull the master rows that can contribute an occurrence to the window.
     // See fetchEventMastersInWindow for the (subtle) recurring-vs-non-recurring
     // predicate; expandEvent() below trims/materializes each row.
@@ -367,7 +378,7 @@ export async function eventRoutes(app: FastifyInstance) {
     // Expand RRULE master rows into per-occurrence entries. Non-recurring
     // events come through unchanged. Each occurrence carries the same id
     // as its master so the client can route edits/deletes consistently.
-    const expanded: Array<typeof rows[number] & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
+    const expanded: Array<Omit<typeof rows[number], "rawIcs"> & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
     for (const row of rows) {
       const occurrences = expandEvent(
         {
@@ -387,8 +398,10 @@ export async function eventRoutes(app: FastifyInstance) {
         fromDate,
         toDate,
       );
+      if (occurrences.length === 0) continue;
+      const shared = forClient(row);
       for (const occ of occurrences) {
-        expanded.push({ ...forClient(row), startsAt: occ.startsAt, endsAt: occ.endsAt, isOccurrence: occ.isOccurrence });
+        expanded.push({ ...shared, startsAt: occ.startsAt, endsAt: occ.endsAt, isOccurrence: occ.isOccurrence });
       }
     }
 
@@ -755,15 +768,22 @@ export async function eventRoutes(app: FastifyInstance) {
     const nextExtra = body.extra !== undefined
       ? (mergedExtraForWrite(target.extra, body.extra) as object | null)
       : undefined;
-    const zoneShift = await remapForEventEdit(target, {
-      calendarId: body.calendarId ?? target.calendarId,
-      startsAt: body.startsAt ? new Date(body.startsAt) : target.startsAt,
-      allDay: body.allDay ?? target.allDay,
-      rrule: body.rrule ?? target.rrule,
-      extra: nextExtra !== undefined ? nextExtra : target.extra,
-      // App 保存时会把没改的规则原样带回来，那不算「用户刚设了结束时间」。
-      rruleSentByClient: body.rrule != null && body.rrule !== target.rrule,
-    });
+    const seriesTimes = await timesForSeriesEdit(target, body, recurrenceIso);
+    const nextStartsAt = seriesTimes?.startsAt ?? (body.startsAt ? new Date(body.startsAt) : undefined);
+    const nextEndsAt = seriesTimes?.endsAt ?? (body.endsAt ? new Date(body.endsAt) : undefined);
+    const shiftedExdates = seriesTimes?.shiftMs ? shiftExdates(target.exdates, seriesTimes.shiftMs) : undefined;
+    const zoneShift = await remapForEventEdit(
+      shiftedExdates ? { ...target, exdates: shiftedExdates } : target,
+      {
+        calendarId: body.calendarId ?? target.calendarId,
+        startsAt: nextStartsAt ?? target.startsAt,
+        allDay: body.allDay ?? target.allDay,
+        rrule: body.rrule ?? target.rrule,
+        extra: nextExtra !== undefined ? nextExtra : target.extra,
+        // App 保存时会把没改的规则原样带回来，那不算「用户刚设了结束时间」。
+        rruleSentByClient: body.rrule != null && body.rrule !== target.rrule,
+      },
+    );
     const [row] = await db
       .update(schema.events)
       .set({
@@ -771,11 +791,11 @@ export async function eventRoutes(app: FastifyInstance) {
         summary: body.summary ?? undefined,
         description: body.description ?? undefined,
         location: body.location ?? undefined,
-        startsAt: body.startsAt ? new Date(body.startsAt) : undefined,
-        endsAt: body.endsAt ? new Date(body.endsAt) : undefined,
+        startsAt: nextStartsAt,
+        endsAt: nextEndsAt,
         allDay: body.allDay ?? undefined,
         rrule: zoneShift.rrule ?? body.rrule ?? undefined,
-        exdates: zoneShift.exdates ?? undefined,
+        exdates: zoneShift.exdates ?? shiftedExdates ?? undefined,
         extra: nextExtra,
         // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
         // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时
@@ -1058,6 +1078,51 @@ async function loadReadableEvent(eventId: string, userId: string) {
     ))
     .limit(1);
   return rows[0]?.event ?? null;
+}
+
+/**
+ * 「所有事件」保存时，主事件的开始时间该是什么。
+ *
+ * 各端的编辑框显示的都是**点开的那一次**，保存时把那一次的时刻当 startsAt 发上来。直接写进
+ * 主事件的话，系列就变成从那一次才开始：从 11 月 16 日点进去只改个标题，之前的几次全没了。
+ *   · 带了 recurrenceId（是哪一次）：改动量 = 新时刻 − 那一次，主事件平移同样的量。
+ *   · 没带，但发来的时刻正好是系列里已有的一次（已发布的 App 就是这样）：时间没改，主事件不动。
+ *   · 其余（改的就是主事件、换了规则、全天和定时互换）：照发来的存。
+ * 返回 null = 照发来的存。shiftMs = 主事件平移的量，以前删掉的那几次要跟着平移。
+ */
+async function timesForSeriesEdit(
+  target: typeof schema.events.$inferSelect,
+  body: { startsAt?: string; endsAt?: string; rrule?: string; allDay?: boolean },
+  recurrenceIso: string | undefined,
+): Promise<{ startsAt: Date; endsAt: Date; shiftMs: number } | null> {
+  if (!target.rrule || !body.startsAt) return null;
+  if (body.rrule != null && body.rrule !== target.rrule) return null;
+  if (body.allDay != null && body.allDay !== target.allDay) return null;
+  const sent = new Date(body.startsAt).getTime();
+  const master = target.startsAt.getTime();
+  const durationMs = body.endsAt ? new Date(body.endsAt).getTime() - sent : target.endsAt.getTime() - master;
+  const times = (start: number) => ({ startsAt: new Date(start), endsAt: new Date(start + durationMs), shiftMs: start - master });
+
+  if (recurrenceIso) return times(master + (sent - new Date(recurrenceIso).getTime()));
+  if (sent === master) return null;
+  const [cal] = await db.select({ timezone: schema.calendars.timezone })
+    .from(schema.calendars).where(eq(schema.calendars.id, target.calendarId)).limit(1);
+  const at = new Date(sent);
+  const hit = seriesStartsBetween({
+    startsAt: target.startsAt, rrule: target.rrule, allDay: target.allDay,
+    timeZone: expansionTimeZone({
+      allDay: target.allDay, extra: target.extra, calendarTimezone: cal?.timezone, rawStartIsUtc: rawIcsStartIsUtc(target.rawIcs),
+    }),
+  }, at, at);
+  return hit?.some((d) => d.getTime() === sent) ? times(master) : null;
+}
+
+function shiftExdates(exdates: unknown, shiftMs: number): string[] | undefined {
+  if (!Array.isArray(exdates)) return undefined;
+  return exdates.map((x) => {
+    const t = +new Date(x as string);
+    return Number.isNaN(t) ? (x as string) : new Date(t + shiftMs).toISOString();
+  });
 }
 
 /**

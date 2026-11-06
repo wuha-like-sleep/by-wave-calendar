@@ -385,9 +385,11 @@ class CalendarState(
         val pending = _ui.value.pendingScopeEdit ?: return
         _ui.value = _ui.value.copy(pendingScopeEdit = null)
         if (scope == null) return
+        // series 也要带：编辑框显示的是点开的那一次，服务端按差值平移主事件。不带的话改时间时
+        // 系列会变成从那一次才开始，前面几次全没了。
         val body = pending.body.copy(
             scope = scope,
-            recurrenceId = if (scope == "series") null else pending.sourceStartsAt,
+            recurrenceId = pending.sourceStartsAt,
         )
         sendUpdate(pending.sourceId, body, pending.dragged)
     }

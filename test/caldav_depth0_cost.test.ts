@@ -54,7 +54,8 @@ describe("CalDAV 例行轮询的开销", () => {
   it("ctag 仍然走聚合查询，没有改成从加载出来的行里现算", () => {
     // 如果哪天有人把 ctag 改成「从 events 数组里算 max」，上面那条会被迫失效
     // （加载又得提到前面去），而这条会先红，把人拦在那一步。
-    const ctagFn = SRC.slice(SRC.indexOf("async function calendarCtags("));
+    const LIB = readFileSync(path.resolve("src/lib/calendar_ctag.ts"), "utf8");
+    const ctagFn = LIB.slice(LIB.indexOf("async function calendarCtags("));
     const head = ctagFn.slice(0, ctagFn.indexOf("\n}"));
     expect(
       /max\(/.test(head) && /count\(/.test(head),

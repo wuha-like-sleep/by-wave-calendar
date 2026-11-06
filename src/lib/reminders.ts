@@ -90,6 +90,8 @@ const SCAN_LOOKAHEAD_MS = 30 * MS_DAY;
 // 由 reminders_sent 的唯一索引挡住。
 const DUE_WINDOW_MS = 60_000;
 
+const YIELD_EVERY_EVENTS = 100;
+
 type CandidateEventRow = {
   id: string;
   summary: string;
@@ -199,6 +201,11 @@ const dbStore: ReminderStore = {
           isNotNull(schema.events.rrule),
         ),
         isNull(schema.events.deletedAt),
+        // 没设提醒的不取。全站的重复事件每分钟都要过一遍，而绝大多数没有提醒：以前全取回来再在
+        // 代码里跳过，上面那个原文正则也对每一行都跑一次。两个条件都不会抛错，先后无所谓
+        // （别用 jsonb_array_length：Postgres 不保证 AND 的顺序，碰到非数组会报错）。
+        sql`jsonb_typeof(${schema.events.extra}->'alarms') = 'array'`,
+        sql`${schema.events.extra}->'alarms' <> '[]'::jsonb`,
       ));
   },
 
@@ -335,7 +342,13 @@ export async function dispatchDueReminders(
   // 第一趟：把本轮所有到点的候选收集起来，一条都还不发。
   const candidates: Candidate[] = [];
   const seenCandidate = new Set<string>();
+  let sinceYield = 0;
   for (const ev of upcoming) {
+    // 这一趟全是同步计算。Node 只有一个线程，算的时候别的请求都在等，所以隔一阵让一下。
+    if (++sinceYield >= YIELD_EVERY_EVENTS) {
+      sinceYield = 0;
+      await new Promise((resolve) => setImmediate(resolve));
+    }
     const extra = (ev.extra ?? null) as { alarms?: unknown; timezone?: unknown } | null;
     const rawAlarms = Array.isArray(extra?.alarms) ? extra.alarms : [];
     if (rawAlarms.length === 0) continue;
