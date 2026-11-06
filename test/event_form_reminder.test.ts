@@ -353,6 +353,37 @@ describe("calendar-app.js 的表单确实走这套规则", () => {
     expect(APP_JS).toMatch(/rrule: \(data\.rrule \|\| ""\)\.trim\(\)/);
   });
 
+  it("已有事件的时间不在 5 分钟档位上也存得了（全天事件结束在 23:59，校验不过就点了没反应）", () => {
+    const fn = /function syncTimeStep\([\s\S]*?\n  \}/.exec(APP_JS);
+    expect(fn, "找不到 syncTimeStep").toBeTruthy();
+    expect(fn![0]).toMatch(/el\.step = offGrid \? "60" : "300"/);
+    // 要排在两个时间框赋值之后：表单每次打开都重新判断
+    const open = APP_JS.indexOf('form.querySelector(\'[name="endsAt"]\').value = toLocalDateTimeValue(payload.endsAt');
+    expect(open).toBeGreaterThan(-1);
+    expect(APP_JS.indexOf("syncTimeStep(form);", open) - open, "没紧跟在赋值后面").toBeLessThan(200);
+  });
+
+  it("全天事件的 recurrenceId 是那一天的 UTC 午夜，不是本地午夜（差一个时区偏移，「只删这一次」就对不上）", () => {
+    const fn = /function occurrenceRefIso\([\s\S]*?\n  \}/.exec(APP_JS);
+    expect(fn, "找不到 occurrenceRefIso").toBeTruthy();
+    expect(fn![0]).toMatch(/isAllDay \? toLocalDateValue\(d\) \+ "T00:00:00\.000Z"/);
+    expect(APP_JS).toMatch(/recIso = occurrenceRefIso\(r, !!payload\.allDay\)/);
+    // 三处都走它：点开、拖动某一次 / 以后、拖动所有
+    expect(APP_JS.match(/occurrenceRefIso\(event\.start, !!event\.isAllday\)/g)).toHaveLength(2);
+    expect(APP_JS, "别再用本地午夜 toISOString 当 recurrenceId").not.toMatch(/recurrenceId: occurrenceStart\.toISOString\(\)/);
+  });
+
+  it("全天事件拖动发的也是 UTC 午夜，不是本地午夜", () => {
+    expect(APP_JS).toMatch(/event\.isAllday \? toLocalDateValue\(new Date\(changes\.start\)\) \+ "T00:00:00\.000Z"/);
+    expect(APP_JS).toMatch(/event\.isAllday \? toLocalDateValue\(new Date\(changes\.end\)\) \+ "T23:59:59\.999Z"/);
+  });
+
+  it("「所有事件」带上打开时主事件的开始时刻，重发不会平移两遍", () => {
+    expect(APP_JS).toMatch(/masterStartsAt: fresh\.startsAt/);
+    expect(APP_JS).toMatch(/form\.dataset\.seriesBase = payload\.masterStartsAt/);
+    expect(APP_JS).toMatch(/seriesBase: form\.dataset\.seriesBase/);
+  });
+
   it("服务端拒绝时界面要说原因并重画，不能让用户以为改动还在", () => {
     expect(APP_JS).toMatch(/ev\.kind === "sync-rejected"/);
     expect(APP_JS).toMatch(/app\.js\.sync\.rejected/);

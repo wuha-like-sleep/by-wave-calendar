@@ -81,7 +81,7 @@ describe("从后面某一次点进去，选「所有事件」", () => {
     expect((await startsOf(ev.id)).map((s) => s.slice(0, 10))).toEqual(ALL_SIX);
   });
 
-  it("已发布的 App 只改标题（不带 recurrenceId，发的是那一次的时刻）：同样不动", async () => {
+  it("老版桌面端只改标题（不带 recurrenceId，发的是那一次的时刻）：同样不动", async () => {
     const ev = await seed();
     const res = await patch(ev.id, { summary: "新标题", startsAt: LATER, endsAt: LATER_END });
     expect(res.statusCode).toBe(200);
@@ -105,6 +105,111 @@ describe("从后面某一次点进去，选「所有事件」", () => {
     const days = (await startsOf(ev.id)).map((s) => s.slice(0, 10));
     expect(days).toHaveLength(5);
     expect(days).not.toContain("2026-11-01");
+  });
+});
+
+describe("重发不能平移两遍（网页发送队列超时会重发）", () => {
+  it("同一个请求发两次：09:30 → 10:30，不是 11:30；删过的那次也只挪一遍", async () => {
+    const ev = await seed({ exdates: ["2026-11-01T22:30:00.000Z"] });
+    const body = {
+      startsAt: "2026-11-15T23:30:00.000Z", endsAt: "2026-11-16T00:30:00.000Z",
+      scope: "series", recurrenceId: LATER, seriesBase: FIRST,
+    };
+    expect((await patch(ev.id, { ...body, summary: "第一次" })).statusCode).toBe(200);
+    expect((await patch(ev.id, { ...body, summary: "重发" })).statusCode).toBe(200);
+    const row = await rowOf(ev.id);
+    expect(row.startsAt.toISOString()).toBe("2026-10-25T23:30:00.000Z");
+    expect(row.exdates).toEqual(["2026-11-01T23:30:00.000Z"]);
+    expect(row.summary, "别的字段照写").toBe("重发");
+  });
+});
+
+describe("全天重复事件（存的是 UTC 午夜）", () => {
+  const ALL_DAY = { startsAt: new Date("2026-10-26T00:00:00.000Z"), endsAt: new Date("2026-10-26T23:59:59.999Z"), allDay: true, rrule: "FREQ=WEEKLY", extra: {} };
+
+  it("网页只改标题，存几遍都不漂（recurrenceId 是那一天的 UTC 午夜）", async () => {
+    const ev = await seed(ALL_DAY);
+    for (let i = 0; i < 3; i++) {
+      await patch(ev.id, { summary: `第 ${i} 次`, allDay: true, startsAt: "2026-11-16T00:00:00.000Z", endsAt: "2026-11-16T23:59:59.999Z", scope: "series", recurrenceId: "2026-11-16T00:00:00.000Z" });
+    }
+    expect((await rowOf(ev.id)).startsAt.toISOString()).toBe("2026-10-26T00:00:00.000Z");
+  });
+
+  for (const [zone, localMidnight] of [["上海", "2026-11-15T16:00:00.000Z"], ["墨尔本", "2026-11-15T13:00:00.000Z"], ["纽约", "2026-11-16T05:00:00.000Z"]] as const) {
+    it(`老页面发来本地午夜（${zone}）：差值里混的时区偏移不算数，存几遍都不漂`, async () => {
+      const ev = await seed(ALL_DAY);
+      for (let i = 0; i < 3; i++) {
+        await patch(ev.id, { summary: "改", allDay: true, startsAt: "2026-11-16T00:00:00.000Z", endsAt: "2026-11-16T23:59:59.999Z", scope: "series", recurrenceId: localMidnight });
+      }
+      const row = await rowOf(ev.id);
+      expect(row.startsAt.toISOString()).toBe("2026-10-26T00:00:00.000Z");
+      expect(row.endsAt.toISOString()).toBe("2026-10-26T23:59:59.999Z");
+    });
+  }
+
+  it("往后挪两天：整天平移（跨夏令时差值是 47 小时也算 2 天）", async () => {
+    const ev = await seed(ALL_DAY);
+    await patch(ev.id, { allDay: true, startsAt: "2026-11-18T00:00:00.000Z", endsAt: "2026-11-18T23:59:59.999Z", scope: "series", recurrenceId: "2026-11-16T01:00:00.000Z" });
+    expect((await rowOf(ev.id)).startsAt.toISOString()).toBe("2026-10-28T00:00:00.000Z");
+  });
+});
+
+describe("拉伸（只发结束时刻）", () => {
+  it("每一次的时长跟着改，不会变成几周长", async () => {
+    const ev = await seed();
+    await patch(ev.id, { endsAt: "2026-11-16T00:30:00.000Z", scope: "series", recurrenceId: LATER });
+    const row = await rowOf(ev.id);
+    expect(row.startsAt.toISOString()).toBe(FIRST);
+    expect(row.endsAt.getTime() - row.startsAt.getTime()).toBe(2 * 3600_000);
+  });
+});
+
+describe("跨夏令时、跨天、带结束日期", () => {
+  it("把 09-28 09:00 拖到 10-05 09:00（中间进了夏令时）：时间不变，整体往后一周", async () => {
+    const start = "2026-09-27T23:00:00.000Z";   // 墨尔本 09-28 周一 09:00 AEST
+    const ev = await seed({ startsAt: new Date(start), endsAt: new Date("2026-09-28T00:00:00.000Z"), rrule: "FREQ=WEEKLY" });
+    await patch(ev.id, { startsAt: "2026-10-04T22:00:00.000Z", endsAt: "2026-10-04T23:00:00.000Z", scope: "series", recurrenceId: start });
+    expect((await rowOf(ev.id)).startsAt.toISOString(), "主事件应是 10-05 09:00 AEDT").toBe("2026-10-04T22:00:00.000Z");
+  });
+
+  it("把周一拖到周二：规则跟着变成每周二，第一次和删过的那次都跟着挪", async () => {
+    const ev = await seed({ exdates: ["2026-11-01T22:30:00.000Z"] });
+    await patch(ev.id, { startsAt: "2026-11-16T22:30:00.000Z", endsAt: "2026-11-16T23:30:00.000Z", scope: "series", recurrenceId: LATER });
+    const row = await rowOf(ev.id);
+    expect(row.rrule).toBe("FREQ=WEEKLY;BYDAY=TU");
+    expect(row.startsAt.toISOString()).toBe("2026-10-26T22:30:00.000Z");
+    expect(row.exdates).toEqual(["2026-11-02T22:30:00.000Z"]);
+    const wd = (await startsOf(ev.id)).map((s) => new Intl.DateTimeFormat("en-US", { timeZone: MEL, weekday: "short" }).format(new Date(s)));
+    expect(new Set(wd)).toEqual(new Set(["Tue"]));
+    expect(wd).toHaveLength(5);   // 10-27、11-10、11-17、11-24、12-01 中去掉删过的 11-03，窗口到 12-06
+  });
+
+  it("「每月第一个周一」跨天拖：日子挪不了，删过的那次也不动", async () => {
+    const ex = "2026-11-01T22:30:00.000Z";
+    const ev = await seed({ rrule: "FREQ=MONTHLY;BYDAY=1MO", startsAt: new Date("2026-10-04T22:30:00.000Z"), endsAt: new Date("2026-10-04T23:30:00.000Z"), exdates: [ex] });
+    await patch(ev.id, { startsAt: "2026-12-08T22:30:00.000Z", endsAt: "2026-12-08T23:30:00.000Z", scope: "series", recurrenceId: "2026-12-06T22:30:00.000Z" });
+    const row = await rowOf(ev.id);
+    expect(row.rrule).toBe("FREQ=MONTHLY;BYDAY=1MO");
+    expect(row.exdates).toEqual([ex]);
+  });
+
+  it("带 UNTIL 的系列往后挪 1 小时：最后一次还在", async () => {
+    const rrule = "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261129T223000Z";
+    const ev = await seed({ rrule });
+    const before = await startsOf(ev.id);
+    await patch(ev.id, { startsAt: "2026-11-15T23:30:00.000Z", endsAt: "2026-11-16T00:30:00.000Z", scope: "series", recurrenceId: LATER });
+    const after = await startsOf(ev.id);
+    expect(after).toHaveLength(before.length);
+    expect((await rowOf(ev.id)).rrule).toBe("FREQ=WEEKLY;BYDAY=MO;UNTIL=20261129T233000Z");
+  });
+
+  it("桌面端把规则重建了（UNTIL 改成当天末尾、INTERVAL=1）：不算换规则，库里那条不变", async () => {
+    const rrule = "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261129T223000Z";
+    const ev = await seed({ rrule });
+    await patch(ev.id, { summary: "只改标题", startsAt: LATER, endsAt: LATER_END, rrule: "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO;UNTIL=20261129T235959Z" });
+    const row = await rowOf(ev.id);
+    expect(row.startsAt.toISOString()).toBe(FIRST);
+    expect(row.rrule).toBe(rrule);
   });
 });
 

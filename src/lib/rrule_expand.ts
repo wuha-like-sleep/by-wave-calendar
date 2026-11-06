@@ -153,7 +153,8 @@ export function __setFastForwardForTest(on: boolean): void { fastForwardEnabled 
 // pm2 也不重启）。日期上不可能的条件（2 月 30 日）不会死循环，但要一路数到 9999 年，「每天」
 // 每次 3 秒多。rrule 字符串是用户写的（API 收任意字符串）、也是订阅源写的，这不能靠「没人这么写」。
 // 这些规则排不出任何一次，或者是实际不会有人用的写法，一律只显示主事件（和规则写坏了同样处理）。
-const MAX_STEPS_BEFORE_WINDOW = 200_000;
+const MAX_STEPS_BEFORE_WINDOW = 50_000;
+const WEEK_MS = 7 * 86_400_000;
 const MONTH_MAX_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 const numbers = (v: unknown): number[] =>
@@ -190,15 +191,36 @@ function neverFinishes(o: Partial<RRuleOptions>): boolean {
 
   const setpos = numbers(o.bysetpos);
   if (setpos.length) {
-    if (o.freq! >= RRule.DAILY) return true;
-    if (o.freq === RRule.WEEKLY) {
-      const perWeek = Math.max(countOf(o.byweekday), 1) * Math.max(hours.length, 1) * Math.max(minutes.length, 1) * Math.max(seconds.length, 1);
-      if (setpos.every((p) => p === 0 || Math.abs(p) > perWeek)) return true;
-    }
+    if (o.freq! > RRule.DAILY) return true;
+    const perDay = Math.max(hours.length, 1) * Math.max(minutes.length, 1) * Math.max(seconds.length, 1);
+    if (o.freq === RRule.DAILY && setpos.every((p) => p === 0 || Math.abs(p) > perDay)) return true;
+    if (o.freq === RRule.WEEKLY && setpos.every((p) => p === 0 || Math.abs(p) > Math.max(countOf(o.byweekday), 1) * perDay)) return true;
+  }
+
+  // 「每月第 6 个周一」：没有这一天。数到 9999 年每次约 1 秒。
+  if (o.freq === RRule.MONTHLY && countOf(o.byweekday)) {
+    const ordinals = (Array.isArray(o.byweekday) ? o.byweekday : [o.byweekday]).map((d) => (d as { n?: number } | null)?.n);
+    if (ordinals.every((n) => typeof n === "number" && Math.abs(n) > 5)) return true;
+  }
+
+  // 间隔是 7 天的整数倍，星期几就永远不变：「每 168 小时，只在周二」而第一次在周一。
+  const period = FAST_FORWARD_PERIOD_MS[o.freq!];
+  if (period && o.freq !== RRule.WEEKLY && (period * interval) % WEEK_MS === 0 && countOf(o.byweekday)) {
+    const startDay = (o.dtstart!.getUTCDay() + 6) % 7;   // rrule 的 weekday：周一 = 0
+    const days = (Array.isArray(o.byweekday) ? o.byweekday : [o.byweekday]).map((d) => (typeof d === "number" ? d : (d as { weekday?: number } | null)?.weekday));
+    if (!days.includes(startDay)) return true;
   }
 
   // 小时级以下的 for (;;)：指定的时分秒碰不上就出不来。
   const start = o.dtstart!;
+  // 日期条件没对上时，rrule 库一次跳到当天末尾，内层加小时 / 分钟的步长就不再是 1，碰不到目标
+  // 时分，同样死循环（「每分钟，只在周一 9 点」而第一次在周二 10 点）。这几种组合算不清，不算。
+  const dateFilter = countOf(o.bymonth) || countOf(o.bymonthday) || countOf(o.byweekday);
+  if (dateFilter) {
+    if (o.freq === RRule.HOURLY && countOf(o.byhour) && interval > 1) return true;
+    if (o.freq === RRule.MINUTELY && countOf(o.byhour)) return true;
+    if (o.freq === RRule.SECONDLY && (countOf(o.byhour) || countOf(o.byminute))) return true;
+  }
   if (o.freq === RRule.HOURLY) {
     if (countOf(o.byhour) && !canReach(hours, 24, start.getUTCHours(), interval)) return true;
   } else if (o.freq === RRule.MINUTELY) {

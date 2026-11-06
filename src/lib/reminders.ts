@@ -90,7 +90,8 @@ const SCAN_LOOKAHEAD_MS = 30 * MS_DAY;
 // 由 reminders_sent 的唯一索引挡住。
 const DUE_WINDOW_MS = 60_000;
 
-const YIELD_EVERY_EVENTS = 100;
+/** 连续算这么久就让一下。按时间不按条数：有的规则一条就要算很久。 */
+const YIELD_AFTER_MS = 20;
 
 type CandidateEventRow = {
   id: string;
@@ -342,12 +343,12 @@ export async function dispatchDueReminders(
   // 第一趟：把本轮所有到点的候选收集起来，一条都还不发。
   const candidates: Candidate[] = [];
   const seenCandidate = new Set<string>();
-  let sinceYield = 0;
+  let lastYield = performance.now();
   for (const ev of upcoming) {
     // 这一趟全是同步计算。Node 只有一个线程，算的时候别的请求都在等，所以隔一阵让一下。
-    if (++sinceYield >= YIELD_EVERY_EVENTS) {
-      sinceYield = 0;
+    if (performance.now() - lastYield >= YIELD_AFTER_MS) {
       await new Promise((resolve) => setImmediate(resolve));
+      lastYield = performance.now();
     }
     const extra = (ev.extra ?? null) as { alarms?: unknown; timezone?: unknown } | null;
     const rawAlarms = Array.isArray(extra?.alarms) ? extra.alarms : [];

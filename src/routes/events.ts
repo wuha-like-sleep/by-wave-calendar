@@ -9,7 +9,8 @@ import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
-import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
+import { expandEvent } from "../lib/rrule_expand.js";
+import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { etagMatches, eventsWindowEtag } from "../lib/calendar_ctag.js";
@@ -768,20 +769,20 @@ export async function eventRoutes(app: FastifyInstance) {
     const nextExtra = body.extra !== undefined
       ? (mergedExtraForWrite(target.extra, body.extra) as object | null)
       : undefined;
-    const seriesTimes = await timesForSeriesEdit(target, body, recurrenceIso);
-    const nextStartsAt = seriesTimes?.startsAt ?? (body.startsAt ? new Date(body.startsAt) : undefined);
-    const nextEndsAt = seriesTimes?.endsAt ?? (body.endsAt ? new Date(body.endsAt) : undefined);
-    const shiftedExdates = seriesTimes?.shiftMs ? shiftExdates(target.exdates, seriesTimes.shiftMs) : undefined;
+    const seriesBase = z.string().datetime({ offset: true }).safeParse(rawBody.seriesBase);
+    const plan = await seriesEditPlan(target, body, recurrenceIso, seriesBase.success ? seriesBase.data : undefined);
+    const nextStartsAt = plan?.startsAt ?? (body.startsAt ? new Date(body.startsAt) : undefined);
+    const nextEndsAt = plan?.endsAt ?? (body.endsAt ? new Date(body.endsAt) : undefined);
     const zoneShift = await remapForEventEdit(
-      shiftedExdates ? { ...target, exdates: shiftedExdates } : target,
+      plan?.exdates ? { ...target, exdates: plan.exdates } : target,
       {
         calendarId: body.calendarId ?? target.calendarId,
         startsAt: nextStartsAt ?? target.startsAt,
         allDay: body.allDay ?? target.allDay,
-        rrule: body.rrule ?? target.rrule,
+        rrule: plan?.rrule ?? body.rrule ?? target.rrule,
         extra: nextExtra !== undefined ? nextExtra : target.extra,
-        // App 保存时会把没改的规则原样带回来，那不算「用户刚设了结束时间」。
-        rruleSentByClient: body.rrule != null && body.rrule !== target.rrule,
+        // plan 算出的规则是「没变 / 跟着平移」；只有客户端真的换了规则才算用户刚设的。
+        rruleSentByClient: !plan?.rrule && body.rrule != null && body.rrule !== target.rrule,
       },
     );
     const [row] = await db
@@ -794,8 +795,8 @@ export async function eventRoutes(app: FastifyInstance) {
         startsAt: nextStartsAt,
         endsAt: nextEndsAt,
         allDay: body.allDay ?? undefined,
-        rrule: zoneShift.rrule ?? body.rrule ?? undefined,
-        exdates: zoneShift.exdates ?? shiftedExdates ?? undefined,
+        rrule: zoneShift.rrule ?? plan?.rrule ?? body.rrule ?? undefined,
+        exdates: zoneShift.exdates ?? plan?.exdates ?? undefined,
         extra: nextExtra,
         // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
         // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时
@@ -1080,48 +1081,24 @@ async function loadReadableEvent(eventId: string, userId: string) {
   return rows[0]?.event ?? null;
 }
 
-/**
- * 「所有事件」保存时，主事件的开始时间该是什么。
- *
- * 各端的编辑框显示的都是**点开的那一次**，保存时把那一次的时刻当 startsAt 发上来。直接写进
- * 主事件的话，系列就变成从那一次才开始：从 11 月 16 日点进去只改个标题，之前的几次全没了。
- *   · 带了 recurrenceId（是哪一次）：改动量 = 新时刻 − 那一次，主事件平移同样的量。
- *   · 没带，但发来的时刻正好是系列里已有的一次（已发布的 App 就是这样）：时间没改，主事件不动。
- *   · 其余（改的就是主事件、换了规则、全天和定时互换）：照发来的存。
- * 返回 null = 照发来的存。shiftMs = 主事件平移的量，以前删掉的那几次要跟着平移。
- */
-async function timesForSeriesEdit(
+/** 「所有事件」保存：算出主事件要改成什么样，规则见 series_edit.ts。 */
+async function seriesEditPlan(
   target: typeof schema.events.$inferSelect,
   body: { startsAt?: string; endsAt?: string; rrule?: string; allDay?: boolean },
-  recurrenceIso: string | undefined,
-): Promise<{ startsAt: Date; endsAt: Date; shiftMs: number } | null> {
-  if (!target.rrule || !body.startsAt) return null;
-  if (body.rrule != null && body.rrule !== target.rrule) return null;
-  if (body.allDay != null && body.allDay !== target.allDay) return null;
-  const sent = new Date(body.startsAt).getTime();
-  const master = target.startsAt.getTime();
-  const durationMs = body.endsAt ? new Date(body.endsAt).getTime() - sent : target.endsAt.getTime() - master;
-  const times = (start: number) => ({ startsAt: new Date(start), endsAt: new Date(start + durationMs), shiftMs: start - master });
-
-  if (recurrenceIso) return times(master + (sent - new Date(recurrenceIso).getTime()));
-  if (sent === master) return null;
+  recurrenceId: string | undefined,
+  seriesBase: string | undefined,
+): Promise<SeriesEditPlan | null> {
+  if (!target.rrule) return null;
   const [cal] = await db.select({ timezone: schema.calendars.timezone })
     .from(schema.calendars).where(eq(schema.calendars.id, target.calendarId)).limit(1);
-  const at = new Date(sent);
-  const hit = seriesStartsBetween({
-    startsAt: target.startsAt, rrule: target.rrule, allDay: target.allDay,
-    timeZone: expansionTimeZone({
+  return planSeriesEdit({
+    master: target,
+    zone: expansionTimeZone({
       allDay: target.allDay, extra: target.extra, calendarTimezone: cal?.timezone, rawStartIsUtc: rawIcsStartIsUtc(target.rawIcs),
     }),
-  }, at, at);
-  return hit?.some((d) => d.getTime() === sent) ? times(master) : null;
-}
-
-function shiftExdates(exdates: unknown, shiftMs: number): string[] | undefined {
-  if (!Array.isArray(exdates)) return undefined;
-  return exdates.map((x) => {
-    const t = +new Date(x as string);
-    return Number.isNaN(t) ? (x as string) : new Date(t + shiftMs).toISOString();
+    sent: body,
+    recurrenceId,
+    seriesBase,
   });
 }
 

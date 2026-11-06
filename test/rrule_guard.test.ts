@@ -36,6 +36,20 @@ const HAZARDS: Array<{ start: string; rule: string; tz: string | null; why: stri
   { start: EVEN_HOUR, rule: "FREQ=WEEKLY;BYWEEKNO=1;BYMONTH=6", tz: null, why: "第 1 周不在 6 月" },
   { start: EVEN_HOUR, rule: "FREQ=DAILY;BYSETPOS=3", tz: null, why: "一天只有一个候选" },
   { start: EVEN_HOUR, rule: "FREQ=WEEKLY;BYDAY=MO;BYSETPOS=3", tz: null, why: "一周只有一个候选" },
+  // 日期条件没对上时 rrule 库一次跳到当天末尾，内层步长不再是 1，同样死循环（复核挖出来的，每条都卡死过）
+  { start: "2026-09-08T10:00:00.000Z", rule: "FREQ=MINUTELY;BYHOUR=9;BYDAY=MO", tz: null, why: "周二开始，每分钟，只在周一 9 点" },
+  { start: "2026-09-08T10:00:00.000Z", rule: "FREQ=MINUTELY;BYHOUR=10;BYDAY=MO", tz: null, why: "同上，10 点" },
+  { start: "2026-09-08T10:00:00.000Z", rule: "FREQ=MINUTELY;INTERVAL=30;BYHOUR=9;BYMONTH=1", tz: null, why: "只在 1 月 9 点" },
+  { start: "2026-09-08T10:00:08.000Z", rule: "FREQ=SECONDLY;INTERVAL=8;BYHOUR=25,13;BYDAY=MO", tz: null, why: "秒级 + 日期条件 + 小时" },
+  { start: "2026-09-08T10:00:08.000Z", rule: "FREQ=SECONDLY;INTERVAL=48;BYMINUTE=45,5;BYDAY=FR;BYMONTHDAY=31", tz: null, why: "秒级 + 日期条件 + 分钟" },
+  // 不死循环，但每次展开要卡几秒
+  { start: "2026-09-07T16:00:00.000Z", rule: "FREQ=HOURLY;INTERVAL=168;BYDAY=TU", tz: null, why: "周一开始，每 168 小时，星期几永远不变" },
+  { start: "2026-09-07T16:00:00.000Z", rule: "FREQ=MINUTELY;INTERVAL=10080;BYDAY=TU", tz: null, why: "同上，分钟" },
+  { start: "2026-09-07T16:00:00.000Z", rule: "FREQ=SECONDLY;INTERVAL=604800;BYDAY=TU", tz: null, why: "同上，秒" },
+  { start: "2026-09-07T16:00:00.000Z", rule: "FREQ=DAILY;INTERVAL=7;BYDAY=TU", tz: null, why: "周一开始，每 7 天，只在周二" },
+  { start: "2026-09-07T16:07:00.000Z", rule: "FREQ=HOURLY;INTERVAL=7;BYHOUR=10,2,9;BYMINUTE=7,45;BYDAY=SU", tz: null, why: "小时级 + 间隔 + 日期条件" },
+  { start: "2020-01-01T00:00:00.000Z", rule: "FREQ=SECONDLY;COUNT=199999", tz: null, why: "COUNT 不能跳，从头数十几万次" },
+  { start: "2026-09-07T16:00:00.000Z", rule: "FREQ=MONTHLY;BYDAY=6MO", tz: null, why: "没有第 6 个周一" },
   // 判断要看实际展开用的时钟：UTC 16:00（偶数点，按 UTC 碰得上）= 墨尔本 03:00（奇数点，碰不上）
   { start: "2026-10-26T16:00:00.000Z", rule: "FREQ=HOURLY;INTERVAL=2;BYHOUR=2", tz: MEL, why: "墨尔本 3 点开始，奇数点，到不了 2 点" },
 ];
@@ -114,6 +128,9 @@ describe("正常规则一条都不能误拦", () => {
     "FREQ=HOURLY", "FREQ=HOURLY;INTERVAL=4", "FREQ=HOURLY;INTERVAL=2;BYHOUR=2,4", "FREQ=HOURLY;BYHOUR=9,10,11",
     "FREQ=MINUTELY;INTERVAL=30", "FREQ=MINUTELY;INTERVAL=30;BYHOUR=9,10,11", "FREQ=MINUTELY;INTERVAL=15;BYMINUTE=0,30",
     "FREQ=SECONDLY;INTERVAL=30",
+    "FREQ=DAILY;BYSETPOS=1", "FREQ=DAILY;BYHOUR=9,17;BYSETPOS=1", "FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1",
+    "FREQ=WEEKLY;BYDAY=MO;WKST=SU", "FREQ=MONTHLY;BYMONTHDAY=31;BYMONTH=1,3,5", "FREQ=YEARLY;BYDAY=2SU;BYMONTH=5",
+    "FREQ=HOURLY;BYDAY=MO", "FREQ=HOURLY;BYHOUR=9,10;BYDAY=MO,TU", "FREQ=MINUTELY;INTERVAL=30;BYDAY=MO",
     "FREQ=WEEKLY;COUNT=20", "FREQ=DAILY;COUNT=500", "FREQ=WEEKLY;UNTIL=20290101T000000Z",
   ]) {
     it(rule, () => {

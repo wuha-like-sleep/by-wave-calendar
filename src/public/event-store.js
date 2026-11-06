@@ -138,7 +138,8 @@
     const fresh = new Set();
     for (const e of events) {
       if (dirtyIds.has(e.id)) continue;   // 本地有没同步的改动：不覆盖，下一轮再对齐
-      const row = toLocalRow(e, win.now);
+      // 记发出拉取的时刻，不记到达的时刻：响应晚到的那次不能冒充比后发的拉取还新。
+      const row = toLocalRow(e, win.fetchStartedAt);
       fresh.add(row.id);
       puts.push(row);
     }
@@ -298,6 +299,11 @@
   // from network or cache.
   // 上一次成功拉取的窗口和令牌，只在内存里：本地写过就作废，镜像可能已经和那个令牌对不上。
   let lastFetch = null;
+  let localWrites = 0;
+  let lastAppliedFetchAt = 0;
+  let fetchesSinceFull = 0;
+  const FULL_FETCH_EVERY = 10;
+  function invalidateFetch() { lastFetch = null; localWrites += 1; }
 
   async function getAll({ from, to, calendarIds }) {
     const fromMs = +new Date(from);
@@ -306,21 +312,30 @@
     try {
       const url = `/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${calendarIds ? "&calendarIds=" + encodeURIComponent(calendarIds) : ""}`;
       // 页面每 30 秒拉一次当前窗口。和上次同一个窗口就带上令牌，数据没变服务端回 304，
-      // 不用重算、不用传、不用再写一遍镜像。
-      const prev = lastFetch && lastFetch.url === url ? lastFetch : null;
+      // 不用重算、不用传、不用再写一遍镜像。隔几轮不带令牌拉一次全量：浏览器清掉了 IndexedDB、
+      // 或者别的标签页动过镜像时，304 会让页面一直停在不对的内容上。
+      fetchesSinceFull += 1;
+      const prev = lastFetch && lastFetch.url === url && fetchesSinceFull < FULL_FETCH_EVERY ? lastFetch : null;
+      if (!prev) fetchesSinceFull = 0;
       const fetchStartedAt = Date.now();
+      const writesAtStart = localWrites;
       const r = await http("GET", url, undefined, prev ? { "If-None-Match": prev.etag } : undefined);
       if (r.status === 304 && prev) {
         serverData = { calendars: prev.calendars };
         await setMeta("lastSyncedAt", new Date().toISOString());
       } else if (r.ok) {
         serverData = r.data;
-        await mergeIntoLocal(serverData.events || [], {
-          fromMs, toMs, fetchStartedAt, now: Date.now(),
-          calendarIds: calendarIds ? calendarIds.split(",") : null,
-        });
-        lastFetch = r.etag ? { url, etag: r.etag, calendars: serverData.calendars } : null;
-        await setMeta("lastSyncedAt", new Date().toISOString());
+        // 比已经写进镜像的那次还早发出的响应（网络乱序）：内容更旧，不写。
+        if (fetchStartedAt >= lastAppliedFetchAt) {
+          lastAppliedFetchAt = fetchStartedAt;
+          await mergeIntoLocal(serverData.events || [], {
+            fromMs, toMs, fetchStartedAt,
+            calendarIds: calendarIds ? calendarIds.split(",") : null,
+          });
+          // 拉取途中本地写过：这个令牌可能和镜像对不上，下次老实拉全量。
+          lastFetch = r.etag && localWrites === writesAtStart ? { url, etag: r.etag, calendars: serverData.calendars } : null;
+          await setMeta("lastSyncedAt", new Date().toISOString());
+        }
       }
     } catch { /* offline */ }
 
@@ -368,15 +383,15 @@
     const localCopy = { ...event, id: tempId, calendarId: calendarId || event.calendarId, _dirty: true };
 
     await tx(STORE_EVENTS, "readwrite", (s) => s.put(localCopy));
-    lastFetch = null;
+    invalidateFetch();
     const payload = { ...event, calendarId: calendarId || event.calendarId };
     // Idempotency key for creates. The outbox replays at-least-once: if a
     // create POST commits on the server but its response is lost, the item
     // stays queued and is retried — previously minting a DUPLICATE event
     // each time. We send the stable tempId as `clientUid`; it's persisted
     // in the outbox payload, so every replay carries the same key and the
-    // server collapses retries onto the first row. (Updates are already
-    // idempotent by event id, so they don't need this.)
+    // server collapses retries onto the first row. Updates are keyed by event
+    // id; 「所有事件」的平移不是幂等的，靠 payload 里的 seriesBase 防重发。
     if (isCreate) payload.clientUid = tempId;
     await enqueue({
       op: isCreate ? "create" : "update",
@@ -398,7 +413,7 @@
         resolve();
       };
     }));
-    lastFetch = null;
+    invalidateFetch();
     await enqueue({ op: "delete", eventId, payload: null });
     emit("event-changed", { id: eventId, kind: "deleted" });
     syncOutbox();
@@ -466,7 +481,7 @@
   //   - "delete": 去掉 tombstone（本地撤销删除；服务端那份还在，无害）
   // 用户手动丢弃（discardItem）和服务端拒绝（syncOutbox 的 reject 路径）共用这一份。
   async function rollbackLocal(item) {
-    lastFetch = null;
+    invalidateFetch();
     if (item.op === "create" && String(item.eventId).startsWith("local-")) {
       await tx(STORE_EVENTS, "readwrite", (s) => s.delete(item.eventId));
       return;
@@ -477,8 +492,9 @@
         if (r.result) {
           if (item.op === "delete") delete r.result._tombstone;
           delete r.result._dirty;
-          // 重复事件的墓碑只有一个 id，撤销之后没有内容可留，旧的每一次会重新显示出来。
-          if (r.result.startsAt) s.put(r.result);
+          // 重复事件的乐观副本 / 墓碑占的是 id 这个键，留着会和那些「id@开始时刻」的行一起显示。
+          // 删掉，旧的每一次会重新显示出来。
+          if (r.result.startsAt && !r.result.rrule) s.put(r.result);
           else s.delete(item.eventId);
         }
         resolve();
@@ -542,7 +558,7 @@
 
   // 服务端接受之后把本地镜像对齐。
   async function applyAccepted(item, res) {
-    lastFetch = null;
+    invalidateFetch();
     if ((item.op === "create" || item.op === "update") && !res.skipped) {
       // 换掉本地那份乐观副本（create 的键是 local-，update 的键是事件 id）。服务端回的是主事件：
       // 重复事件按「id@开始时刻」存；别的那几次由紧接着的 loadEvents 拉回来。
@@ -619,7 +635,7 @@
     getMeta, setMeta,
     // Debug hook — clear everything (used by /reset-pwa).
     _wipe: async () => {
-      lastFetch = null;
+      invalidateFetch();
       const db = await openDB();
       await new Promise((resolve) => {
         const t = db.transaction([STORE_EVENTS, STORE_OUTBOX, STORE_META], "readwrite");

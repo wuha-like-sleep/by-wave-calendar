@@ -91,6 +91,14 @@ describe("一次成功的拉取就是这个窗口的真相", () => {
     expect(M.planWindowMerge([justSaved], [], WIN).deletes).toEqual([]);
   });
 
+  it("响应晚到的旧拉取不能赖着不走：后发的拉取里没有的行照删（记的是发出时刻，不是到达时刻）", () => {
+    // F1 发出早、响应晚到；F2 发出晚、那时事件已经被删了
+    const f1 = { ...WIN, fetchStartedAt: NOW - 1000, now: NOW + 500 };
+    const db0 = apply([], M.planWindowMerge([], ["02", "09"].map((d) => occ("e1", d)), f1));
+    const f2 = { ...WIN, fetchStartedAt: NOW, now: NOW + 600 };
+    expect(read(apply(db0, M.planWindowMerge(db0, [], f2)))).toEqual([]);
+  });
+
   it("老版本留下的行（按 id 存的最后一次）被换掉，不会多显示一次", () => {
     const legacy = { ...occ("e1", "23"), _syncedAt: 1 };
     const db = apply([legacy], M.planWindowMerge([legacy], ["02", "09", "16", "23"].map((d) => occ("e1", d)), WIN));

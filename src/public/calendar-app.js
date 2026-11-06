@@ -1314,6 +1314,27 @@
     wrap.classList.toggle("hidden", cat.value !== "meeting" && !hasValue);
   }
 
+  // 时间框是 5 分钟一档（step=300），但已有事件不一定落在档位上：全天事件结束在 23:59，手机建的
+  // 可能是 09:07。值对不上档位，表单校验就不过，保存点了没反应 —— 全天事件那两个时间框还是隐藏的，
+  // 浏览器连提示都显示不出来。不在档位上的放宽到 1 分钟；两个框一起放宽，改开始时间时结束时间
+  // 跟着平移，不会被挪到档位外面。
+  function syncTimeStep(form) {
+    const inputs = [form.querySelector('[name="startsAt"]'), form.querySelector('[name="endsAt"]')];
+    const offGrid = inputs.some((el) => {
+      const minutes = Number(String(el.value).slice(14, 16));
+      return minutes % 5 !== 0;
+    });
+    for (const el of inputs) el.step = offGrid ? "60" : "300";
+  }
+
+  // 这一次的标识（RECURRENCE-ID）。全天事件存的是「那一天的 UTC 午夜」，而 Toast UI 给的是本地
+  // 午夜：直接 toISOString 差一个时区偏移，「只删这一次」对不上，那一次还在，页面却提示成功。
+  function occurrenceRefIso(start, isAllDay) {
+    const d = start instanceof Date ? start : (start && typeof start.toDate === "function" ? start.toDate() : new Date(start));
+    if (!d || isNaN(d.getTime())) return "";
+    return isAllDay ? toLocalDateValue(d) + "T00:00:00.000Z" : d.toISOString();
+  }
+
   function openEventModal(payload) {
     const form = $("#form-event");
     form.reset();
@@ -1328,11 +1349,11 @@
     if (payload.recurrenceId) {
       try {
         const r = payload.recurrenceId;
-        const d = r instanceof Date ? r : (r && typeof r.toDate === "function" ? r.toDate() : new Date(r));
-        if (d && !isNaN(d.getTime())) recIso = d.toISOString();
+        recIso = occurrenceRefIso(r, !!payload.allDay);
       } catch (_e) { /* ignore — recurrenceId is optional */ }
     }
     form.dataset.recurrenceId = recIso;
+    form.dataset.seriesBase = payload.masterStartsAt || "";
     form.dataset.hasRrule = (payload.rrule && String(payload.rrule).trim()) ? "1" : "";
     if (payload.calendarId) form.querySelector('[name="calendarId"]').value = payload.calendarId;
     if (payload.summary) form.querySelector('[name="summary"]').value = payload.summary;
@@ -1340,6 +1361,7 @@
     if (payload.description) form.querySelector('[name="description"]').value = payload.description;
     form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(payload.startsAt || new Date());
     form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(payload.endsAt || new Date(Date.now() + 3600_000));
+    syncTimeStep(form);
     form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(payload.startsAt || new Date());
     form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(payload.endsAt || new Date());
     // Remember the just-set start values so the change-listener can
@@ -1552,6 +1574,7 @@
       // the master; info.event.start is the occurrence.
       startsAt: info.event.start || fresh.startsAt,
       endsAt: info.event.end || fresh.endsAt,
+      masterStartsAt: fresh.startsAt,
       allDay: fresh.allDay,
       rrule: fresh.rrule || "",
       // The occurrence's start doubles as the RECURRENCE-ID. The server
@@ -1694,8 +1717,9 @@
         // outbox queue means the modal can close instantly even on flaky network.
         // 「所有事件」要告诉服务端点开的是哪一次：表单里的时间是那一次的，不是系列开始的时间
         // （服务端按差值平移主事件，见 routes/events.ts 的 timesForSeriesEdit）。
+        // seriesBase 防重发：发送队列超时会重发，平移不能做两遍。
         const seriesRef = recurringScope === "series" && form.dataset.recurrenceId
-          ? { scope: "series", recurrenceId: form.dataset.recurrenceId }
+          ? { scope: "series", recurrenceId: form.dataset.recurrenceId, seriesBase: form.dataset.seriesBase || undefined }
           : {};
         await window.bwcStore.put(id ? { ...body, ...seriesRef, id } : body, body.calendarId);
         closeModal("#modal-event");
@@ -2291,8 +2315,14 @@
       // control without making the grid itself visually busier.
       if (changes.start && !event.isAllday) changes.start = roundTo5Min(changes.start);
       if (changes.end && !event.isAllday) changes.end = roundTo5Min(changes.end);
-      const startsAt = changes.start ? new Date(changes.start).toISOString() : undefined;
-      const endsAt = changes.end ? new Date(changes.end).toISOString() : undefined;
+      // 全天事件存的是 UTC 午夜（表单提交也是这么写的），Toast UI 给的是本地午夜：
+      // 直接 toISOString 的话，东半球拖一下刷新后落到前一天。
+      const startsAt = !changes.start ? undefined
+        : event.isAllday ? toLocalDateValue(new Date(changes.start)) + "T00:00:00.000Z"
+        : new Date(changes.start).toISOString();
+      const endsAt = !changes.end ? undefined
+        : event.isAllday ? toLocalDateValue(new Date(changes.end)) + "T23:59:59.999Z"
+        : new Date(changes.end).toISOString();
       const body = {};
       if (startsAt) body.startsAt = startsAt;
       if (endsAt) body.endsAt = endsAt;
@@ -2316,10 +2346,7 @@
         // `changes` only after we call updateEvent (which we don't, in
         // the scoped path — we reload instead). That makes it the
         // RECURRENCE-ID the server needs to identify which instance.
-        const occurrenceStart = event.start && event.start.toDate
-          ? event.start.toDate()
-          : new Date(event.start);
-        const recurrenceId = occurrenceStart.toISOString();
+        const recurrenceId = occurrenceRefIso(event.start, !!event.isAllday);
         const resp = await fetch(`/api/events/${event.id}`, fetchOpts({
           method: "PATCH",
           body: JSON.stringify({ ...body, scope: recurringScope, recurrenceId }),
@@ -2338,10 +2365,9 @@
 
       if (isRecurring) {
         // 拖动「所有事件」：同样按差值平移，每一次都变了，重新拉一遍。
-        const occurrenceStart = event.start && event.start.toDate ? event.start.toDate() : new Date(event.start);
         const resp = await fetch(`/api/events/${event.id}`, fetchOpts({
           method: "PATCH",
-          body: JSON.stringify({ ...body, scope: "series", recurrenceId: occurrenceStart.toISOString() }),
+          body: JSON.stringify({ ...body, scope: "series", recurrenceId: occurrenceRefIso(event.start, !!event.isAllday) }),
         }));
         if (!resp.ok) throw new Error();
         await loadEvents();
