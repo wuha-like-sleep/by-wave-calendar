@@ -65,7 +65,8 @@ describe("数不完的规则不交给 rrule 库", () => {
     it(`${h.rule} — ${h.why}`, () => {
       const got = lines[i];
       expect(got, "没算到这一条").toBeTruthy();
-      expect(got!.ms, "拦住了就不该花时间").toBeLessThan(200);
+      // 没拦住的话最少要 3 秒（数到 9999 年），机器再忙也分得开。
+      expect(got!.ms, "拦住了就不该花时间").toBeLessThan(1500);
       // 只显示主事件：主事件不在这个窗口里，所以是 0 条。
       expect(got!.n).toBe(0);
     });

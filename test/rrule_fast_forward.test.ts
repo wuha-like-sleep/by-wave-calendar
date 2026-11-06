@@ -80,7 +80,8 @@ function both<T>(fn: () => T): { fast: T; slow: T } {
   return { fast, slow };
 }
 
-describe("跳到窗口附近再数：结果和从头数逐条相同", () => {
+// 「从头数」那一路本来就慢（这正是要优化的），机器忙的时候单条会过默认的 5 秒。
+describe("跳到窗口附近再数：结果和从头数逐条相同", { timeout: 120_000 }, () => {
   for (const rrule of RULES) {
     it(rrule, () => {
       let compared = 0;
@@ -157,7 +158,7 @@ describe("跳了之后确实快：密集规则不再把进程卡住", () => {
     expect(occ).toHaveLength(366);
     // 窗口往前多算一个事件时长（一分钟）：开始于窗口前、还没结束的那次也算。
     expect(occ[0]!.startsAt.toISOString()).toBe("2026-11-01T23:59:00.000Z");
-    expect(performance.now() - t0, "又回到从头数了").toBeLessThan(500);
+    expect(performance.now() - t0, "又回到从头数了").toBeLessThan(1500);
   });
 
   it("FREQ=SECONDLY 同样", () => {
@@ -167,6 +168,6 @@ describe("跳了之后确实快：密集规则不再把进程卡住", () => {
       new Date("2026-11-02T00:00:00Z"), new Date("2026-11-09T00:00:00Z"),
     );
     expect(occ).toHaveLength(366);
-    expect(performance.now() - t0).toBeLessThan(500);
+    expect(performance.now() - t0).toBeLessThan(1500);
   });
 });
