@@ -205,12 +205,21 @@ function neverFinishes(o: Partial<RRuleOptions>): boolean {
     if (ordinals.every((n) => typeof n === "number" && Math.abs(n) > 5)) return true;
   }
 
-  // 间隔是 7 天的整数倍，星期几就永远不变：「每 168 小时，只在周二」而第一次在周一。
+  // 按固定间隔走，落点的星期几可能只有那么几个：「每 168 小时，只在周二」而第一次在周一，或者
+  // 「每 28 小时，只在周日」。碰不上就是一路数到 9999 年，每次卡几秒。步长和一周的最大公约数
+  // 不超过一天时每个星期几都碰得到，超过时落点最多 7 个，枚举一遍。
   const period = FAST_FORWARD_PERIOD_MS[o.freq!];
-  if (period && o.freq !== RRule.WEEKLY && (period * interval) % WEEK_MS === 0 && countOf(o.byweekday)) {
-    const startDay = (o.dtstart!.getUTCDay() + 6) % 7;   // rrule 的 weekday：周一 = 0
-    const days = (Array.isArray(o.byweekday) ? o.byweekday : [o.byweekday]).map((d) => (typeof d === "number" ? d : (d as { weekday?: number } | null)?.weekday));
-    if (!days.includes(startDay)) return true;
+  if (period && o.freq !== RRule.WEEKLY && countOf(o.byweekday)) {
+    const g = gcd(period * interval, WEEK_MS);
+    if (g > 86_400_000) {
+      const days = (Array.isArray(o.byweekday) ? o.byweekday : [o.byweekday]).map((d) => (typeof d === "number" ? d : (d as { weekday?: number } | null)?.weekday));
+      let reachable = false;
+      for (let k = 0; k * g < WEEK_MS && !reachable; k++) {
+        const landing = new Date(o.dtstart!.getTime() + k * g);
+        reachable = days.includes((landing.getUTCDay() + 6) % 7);   // rrule 的 weekday：周一 = 0
+      }
+      if (!reachable) return true;
+    }
   }
 
   // 小时级以下的 for (;;)：指定的时分秒碰不上就出不来。

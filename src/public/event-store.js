@@ -300,7 +300,8 @@
   // 上一次成功拉取的窗口和令牌，只在内存里：本地写过就作废，镜像可能已经和那个令牌对不上。
   let lastFetch = null;
   let localWrites = 0;
-  let lastAppliedFetchAt = 0;
+  let lastFetchSeq = 0;
+  let lastAppliedFetchSeq = 0;
   let fetchesSinceFull = 0;
   const FULL_FETCH_EVERY = 10;
   function invalidateFetch() { lastFetch = null; localWrites += 1; }
@@ -318,6 +319,7 @@
       const prev = lastFetch && lastFetch.url === url && fetchesSinceFull < FULL_FETCH_EVERY ? lastFetch : null;
       if (!prev) fetchesSinceFull = 0;
       const fetchStartedAt = Date.now();
+      const fetchSeq = ++lastFetchSeq;
       const writesAtStart = localWrites;
       const r = await http("GET", url, undefined, prev ? { "If-None-Match": prev.etag } : undefined);
       if (r.status === 304 && prev) {
@@ -325,9 +327,10 @@
         await setMeta("lastSyncedAt", new Date().toISOString());
       } else if (r.ok) {
         serverData = r.data;
-        // 比已经写进镜像的那次还早发出的响应（网络乱序）：内容更旧，不写。
-        if (fetchStartedAt >= lastAppliedFetchAt) {
-          lastAppliedFetchAt = fetchStartedAt;
+        // 比已经写进镜像的那次还早发出的响应（网络乱序）：内容更旧，不写。比序号不比时刻：
+        // 系统时钟往回跳的话，比时刻会把之后的结果全丢掉。
+        if (fetchSeq > lastAppliedFetchSeq) {
+          lastAppliedFetchSeq = fetchSeq;
           await mergeIntoLocal(serverData.events || [], {
             fromMs, toMs, fetchStartedAt,
             calendarIds: calendarIds ? calendarIds.split(",") : null,

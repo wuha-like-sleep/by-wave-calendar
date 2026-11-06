@@ -12,6 +12,12 @@
 // 平移按**墙上时间**算：把 9 月 28 日 09:00 拖到 10 月 5 日 09:00（中间进了夏令时），真实时刻差
 // 6 天 23 小时，但用户要的是「时间不变、往后一周」。全天事件存的是 UTC 午夜，按整天算。
 //
+// 规则里写死的东西挪不了，也不能假装挪了：
+//   · 日子写死（每月第一个周一、每月 15 号、指定月份、隔周多天……）：日子不动，只平移钟点。
+//     DTSTART 往后挪一天，日子还是规则那些日子，排在它前面的那次却没了。
+//   · 钟点写死（BYHOUR / BYMINUTE / BYSECOND）：开始时间不动。
+// 最坏的结果是「拖到别的日子，系列没跟过去」，不会丢任何一次。
+//
 // 纯函数，只依赖 rrule_expand / zoned_time。
 
 import { seriesStartsBetween } from "./rrule_expand.js";
@@ -43,31 +49,53 @@ export function sameRule(a: string, b: string): boolean {
 
 const WEEKDAYS = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
-/** 整条规则往后挪 dayShift 天 / UNTIL 平移。规则带这些日期条件时返回 null 表示日子没法跟着挪。 */
-function shiftRule(rule: string, dayShift: number, shift: (t: number) => number): string | null {
-  const parts = rule.split(";");
-  let movable = true;
-  const out = parts.map((raw) => {
-    const p = raw.trim();
-    const [key, value] = [p.slice(0, p.indexOf("=")).toUpperCase(), p.slice(p.indexOf("=") + 1)];
+/** 规则的键 → 值。 */
+function ruleParts(rule: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const raw of rule.split(";")) {
+    const at = raw.indexOf("=");
+    if (at > 0) out.set(raw.slice(0, at).trim().toUpperCase(), raw.slice(at + 1).trim().toUpperCase());
+  }
+  return out;
+}
+
+/** 日子写死在规则里，挪 DTSTART 也换不了日子。 */
+function daysLockedByRule(p: Map<string, string>): boolean {
+  if (["BYMONTHDAY", "BYYEARDAY", "BYWEEKNO", "BYEASTER", "BYMONTH", "BYSETPOS"].some((k) => p.has(k))) return true;
+  const byday = p.get("BYDAY");
+  if (byday == null) return false;
+  if (p.get("FREQ") !== "WEEKLY") return true;
+  const days = byday.split(",").map((d) => d.trim());
+  if (days.some((d) => !WEEKDAYS.includes(d))) return true;   // 「第一个周一」往后一天不是「第一个周二」
+  // 隔周多天：转过 WKST 的那几天会落到另一组周，算不清就不动。
+  const interval = Number(p.get("INTERVAL") ?? 1);
+  return interval > 1 && days.length > 1;
+}
+
+const timeLockedByRule = (p: Map<string, string>) => ["BYHOUR", "BYMINUTE", "BYSECOND"].some((k) => p.has(k));
+
+/** 规则跟着平移：BYDAY 转 dayShift 天，UNTIL 平移同样的量。 */
+function shiftRule(rule: string, dayShift: number, shift: (t: number) => number, floatingDelta: number): string {
+  return rule.split(";").map((raw) => {
+    const at = raw.indexOf("=");
+    if (at <= 0) return raw;
+    const key = raw.slice(0, at).trim().toUpperCase();
+    const value = raw.slice(at + 1).trim();
     if (key === "UNTIL") {
-      const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/i.exec(value);
+      const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(value);
       if (!m) return raw;
-      const t = shift(Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!));
-      return "UNTIL=" + new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      const t = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +(m[4] ?? 0), +(m[5] ?? 0), +(m[6] ?? 0));
+      const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "");
+      if (m[4] == null) return "UNTIL=" + stamp(t + dayShift * DAY_MS).slice(0, 8);   // 只有日期（全天系列）
+      if (!m[7]) return "UNTIL=" + stamp(t + floatingDelta);                          // 浮动写法，本身就是墙上时间
+      return "UNTIL=" + stamp(shift(t)) + "Z";
     }
-    if (dayShift === 0) return raw;
-    if (key === "BYDAY") {
-      const days = value.split(",");
-      // 「每月第一个周一」这种挪不了：往后一天不是「第一个周二」。
-      if (days.some((d) => !WEEKDAYS.includes(d.trim().toUpperCase()))) { movable = false; return raw; }
-      const rotated = days.map((d) => WEEKDAYS[(WEEKDAYS.indexOf(d.trim().toUpperCase()) + ((dayShift % 7) + 7)) % 7]);
+    if (key === "BYDAY" && dayShift !== 0) {
+      const rotated = value.split(",").map((d) => WEEKDAYS[(WEEKDAYS.indexOf(d.trim().toUpperCase()) + ((dayShift % 7) + 7)) % 7]);
       return "BYDAY=" + rotated.join(",");
     }
-    if (key === "BYMONTHDAY" || key === "BYYEARDAY" || key === "BYWEEKNO" || key === "BYEASTER") movable = false;
     return raw;
-  });
-  return movable ? out.join(";") : null;
+  }).join(";");
 }
 
 /** null = 照发来的存。 */
@@ -105,29 +133,41 @@ export function planSeriesEdit(input: SeriesEditInput): SeriesEditPlan | null {
     return hit?.some((d) => d.getTime() === sentStart) ? keepStart() : null;
   }
 
-  let shift: (t: number) => number;
+  const parts = ruleParts(rule);
+  const daysLocked = daysLockedByRule(parts);
   let dayShift: number;
+  let wallDelta = 0;
+  let shift: (t: number) => number;
   if (master.allDay) {
-    // 全天事件存的是 UTC 午夜。老页面发来的 recurrenceId 是本地午夜，差值里混着时区偏移，
-    // 不取整的话主事件每存一次漂一个偏移；跨夏令时差值是 47 小时，也要算成 2 天。
-    dayShift = Math.round((sentStart - ref) / DAY_MS);
-    if (dayShift === 0) return keepStart();
-    shift = (t) => t + dayShift * DAY_MS;
+    // 全天事件存的是 UTC 午夜。真的挪动至少差一天（跨夏令时 23 或 25 小时）；老页面发来的
+    // recurrenceId 是本地午夜，差值只有一个时区偏移（最多 14 小时），不算挪动。
+    const delta = sentStart - ref;
+    dayShift = Math.abs(delta) < 15 * 3_600_000 ? 0 : Math.round(delta / DAY_MS);
+    if (dayShift === 0 || daysLocked) return keepStart();
+    const days = dayShift;
+    shift = (t) => t + days * DAY_MS;
   } else {
+    if (timeLockedByRule(parts)) return keepStart();
     const wallFrom = toWallClock(new Date(ref), zone).getTime();
     const wallTo = toWallClock(new Date(sentStart), zone).getTime();
-    const wallDelta = wallTo - wallFrom;
-    if (wallDelta === 0) return keepStart();
     dayShift = Math.floor(wallTo / DAY_MS) - Math.floor(wallFrom / DAY_MS);
-    shift = (t) => fromWallClock(toWallClock(new Date(t), zone).getTime() + wallDelta, zone).getTime();
+    wallDelta = wallTo - wallFrom;
+    if (daysLocked) {
+      wallDelta -= dayShift * DAY_MS;
+      dayShift = 0;
+    }
+    if (wallDelta === 0) return keepStart();
+    const delta = wallDelta;
+    shift = (t) => fromWallClock(toWallClock(new Date(t), zone).getTime() + delta, zone).getTime();
   }
 
   const newStart = shift(masterStart);
-  const plan: SeriesEditPlan = { startsAt: new Date(newStart), endsAt: new Date(newStart + duration) };
-  const shiftedRule = shiftRule(rule, dayShift, shift);
-  // 规则的日子挪不了（每月第一个周一）：改了 DTSTART 也还是那些日子，以前删掉的那几次不能动。
-  plan.rrule = shiftedRule ?? rule;
-  if (Array.isArray(master.exdates) && (shiftedRule != null || dayShift === 0)) {
+  const plan: SeriesEditPlan = {
+    startsAt: new Date(newStart),
+    endsAt: new Date(newStart + duration),
+    rrule: shiftRule(rule, dayShift, shift, wallDelta),
+  };
+  if (Array.isArray(master.exdates)) {
     plan.exdates = master.exdates.map((x) => {
       const t = +new Date(x as string);
       return Number.isNaN(t) ? (x as string) : new Date(shift(t)).toISOString();

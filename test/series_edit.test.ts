@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { planSeriesEdit, sameRule, type SeriesEditInput } from "../src/lib/series_edit.js";
+import { expandEvent } from "../src/lib/rrule_expand.js";
 
 // 「所有事件」保存的规则（series_edit.ts）。走 HTTP 的场景在
 // test/integration/series_edit_keeps_start.int.test.ts，这里盯算法的边角。
@@ -71,6 +72,105 @@ describe("跨天时规则跟着转", () => {
       expect(p.rrule).toBe(rrule);
       expect(p.exdates).toBeUndefined();
     }
+  });
+});
+
+describe("规则里写死的东西挪不了：不丢任何一次（复核挖出来的，都从展开结果验）", () => {
+  const WIN: [Date, Date] = [new Date("2026-10-01T00:00:00Z"), new Date("2027-03-01T00:00:00Z")];
+  const startsOf = (m: SeriesEditInput["master"], p: ReturnType<typeof planSeriesEdit>) => {
+    const startsAt = p?.startsAt ?? m.startsAt;
+    const endsAt = p?.endsAt ?? m.endsAt;
+    return expandEvent(
+      { id: "e", startsAt, endsAt, rrule: p?.rrule ?? m.rrule, exdates: (p?.exdates ?? m.exdates) as string[] | null, allDay: m.allDay, timeZone: m.allDay ? null : MEL },
+      WIN[0], WIN[1],
+    ).map((o) => o.startsAt.toISOString());
+  };
+
+  it("每月 15 号拖到 16 号：日子写死，第一次还在，其余不变", () => {
+    const m = master({ rrule: "FREQ=MONTHLY;BYMONTHDAY=15", startsAt: new Date("2026-11-14T22:30:00.000Z"), endsAt: new Date("2026-11-14T23:30:00.000Z") });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-12-15T22:30:00.000Z" }, recurrenceId: "2026-12-14T22:30:00.000Z" });
+    expect(startsOf(m, p)).toEqual(startsOf(m, null));
+  });
+
+  it("全天的每月 15 号同样", () => {
+    const m = master({ allDay: true, rrule: "FREQ=MONTHLY;BYMONTHDAY=15", startsAt: new Date("2026-11-15T00:00:00.000Z"), endsAt: new Date("2026-11-15T23:59:59.999Z") });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-12-16T00:00:00.000Z" }, recurrenceId: "2026-12-15T00:00:00.000Z" });
+    expect(startsOf(m, p)).toEqual(startsOf(m, null));
+  });
+
+  it("每月第一个周一 09:30，拖到周三 10:30：日子不动，钟点平移，删过的那次还是删的", () => {
+    const m = master({ rrule: "FREQ=MONTHLY;BYDAY=1MO", startsAt: new Date("2026-11-01T22:30:00.000Z"), endsAt: new Date("2026-11-01T23:30:00.000Z"), exdates: ["2027-01-03T22:30:00.000Z"] });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-12-08T23:30:00.000Z", endsAt: "2026-12-09T00:30:00.000Z" }, recurrenceId: "2026-12-06T22:30:00.000Z" })!;
+    expect(p.rrule).toBe("FREQ=MONTHLY;BYDAY=1MO");
+    expect(p.exdates).toEqual(["2027-01-03T23:30:00.000Z"]);
+    const before = startsOf(m, null);
+    const after = startsOf(m, p);
+    expect(after, "第一次、次数都不变，只是晚一小时").toEqual(before.map((s) => new Date(+new Date(s) + 3600_000).toISOString()));
+  });
+
+  it("每天 BYHOUR=9：钟点写死，改到 10 点不动（改了第一次会丢、删过的会回来）", () => {
+    const m = master({ rrule: "FREQ=DAILY;BYHOUR=9;BYMINUTE=0", startsAt: new Date("2026-10-25T22:00:00.000Z"), endsAt: new Date("2026-10-25T23:00:00.000Z"), exdates: ["2026-10-27T22:00:00.000Z"] });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-15T23:00:00.000Z" }, recurrenceId: "2026-11-15T22:00:00.000Z" })!;
+    expect(iso(p.startsAt)).toBe("2026-10-25T22:00:00.000Z");
+    expect(p.exdates).toBeUndefined();
+    expect(startsOf(m, p)).toEqual(startsOf(m, null));
+  });
+
+  it("隔周多天：转过 WKST 周次会错，日子不动", () => {
+    const m = master({ rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR;WKST=MO" });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-21T22:30:00.000Z" }, recurrenceId: LATER });
+    expect(startsOf(m, p)).toEqual(startsOf(m, null));
+  });
+
+  it("隔周单天：跟着转，周期不变", () => {
+    const m = master({ rrule: "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO" });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-16T22:30:00.000Z" }, recurrenceId: LATER })!;
+    expect(p.rrule).toBe("FREQ=WEEKLY;INTERVAL=2;BYDAY=TU");
+    const before = startsOf(m, null), after = startsOf(m, p);
+    // 最后一次往后一天可能出了统计窗口，比前面这些就够了
+    expect(after.slice(0, 8)).toEqual(before.slice(0, 8).map((s) => new Date(+new Date(s) + 86_400_000).toISOString()));
+  });
+
+  it("指定月份、BYSETPOS 也算日子写死", () => {
+    for (const rrule of ["FREQ=WEEKLY;BYDAY=MO;BYMONTH=11,12", "FREQ=WEEKLY;BYDAY=MO,TU;BYSETPOS=-1"]) {
+      const m = master({ rrule });
+      const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-16T22:30:00.000Z" }, recurrenceId: LATER });
+      expect(startsOf(m, p), rrule).toEqual(startsOf(m, null));
+    }
+  });
+});
+
+describe("UNTIL 的几种写法都跟着挪，最后一次不丢", () => {
+  const WIN: [Date, Date] = [new Date("2026-10-01T00:00:00Z"), new Date("2027-03-01T00:00:00Z")];
+
+  it("只有日期（全天系列的 RFC 写法）", () => {
+    const m = master({ allDay: true, rrule: "FREQ=WEEKLY;UNTIL=20261123", startsAt: new Date("2026-11-02T00:00:00.000Z"), endsAt: new Date("2026-11-02T23:59:59.999Z") });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-10T00:00:00.000Z" }, recurrenceId: "2026-11-09T00:00:00.000Z" })!;
+    expect(p.rrule).toBe("FREQ=WEEKLY;UNTIL=20261124");
+    const n = expandEvent({ id: "e", startsAt: p.startsAt!, endsAt: p.endsAt!, rrule: p.rrule!, allDay: true, timeZone: null }, WIN[0], WIN[1]);
+    expect(n).toHaveLength(4);
+  });
+
+  it("浮动写法（不带 Z）", () => {
+    const m = master({ rrule: "FREQ=WEEKLY;UNTIL=20261130T093000" });
+    const p = planSeriesEdit({ master: m, zone: MEL, sent: { startsAt: "2026-11-15T23:30:00.000Z" }, recurrenceId: LATER })!;
+    expect(p.rrule).toBe("FREQ=WEEKLY;UNTIL=20261130T103000");
+  });
+});
+
+describe("全天事件：老页面发来本地午夜，差值只是时区偏移", () => {
+  for (const [zone, ref] of [["新西兰夏令时 +13", "2026-11-15T11:00:00.000Z"], ["基里巴斯 +14", "2026-11-15T10:00:00.000Z"], ["夏威夷 -10", "2026-11-16T10:00:00.000Z"]] as const) {
+    it(`${zone}：不算挪动`, () => {
+      const m = master({ allDay: true, rrule: "FREQ=WEEKLY", startsAt: new Date("2026-10-26T00:00:00.000Z"), endsAt: new Date("2026-10-26T23:59:59.999Z") });
+      const p = planSeriesEdit({ master: m, zone: "UTC", sent: { startsAt: "2026-11-16T00:00:00.000Z", endsAt: "2026-11-16T23:59:59.999Z" }, recurrenceId: ref })!;
+      expect(iso(p.startsAt)).toBe("2026-10-26T00:00:00.000Z");
+    });
+  }
+
+  it("跨夏令时拖两天，差值 47 小时：算 2 天", () => {
+    const m = master({ allDay: true, rrule: "FREQ=WEEKLY", startsAt: new Date("2026-10-26T00:00:00.000Z"), endsAt: new Date("2026-10-26T23:59:59.999Z") });
+    const p = planSeriesEdit({ master: m, zone: "UTC", sent: { startsAt: "2026-11-18T00:00:00.000Z" }, recurrenceId: "2026-11-16T01:00:00.000Z" })!;
+    expect(iso(p.startsAt)).toBe("2026-10-28T00:00:00.000Z");
   });
 });
 
