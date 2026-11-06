@@ -30,6 +30,7 @@ const HAZARDS: Array<{ start: string; rule: string; tz: string | null; why: stri
   { start: EVEN_HOUR, rule: "FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30", tz: null, why: "2 月 30 日" },
   { start: EVEN_HOUR, rule: "FREQ=HOURLY;BYMONTH=2;BYMONTHDAY=30", tz: null, why: "2 月 30 日，小时级" },
   { start: EVEN_HOUR, rule: "FREQ=WEEKLY;BYMONTH=4;BYMONTHDAY=31", tz: null, why: "4 月 31 日" },
+  { start: "2015-06-15T12:00:00.000Z", rule: "FREQ=WEEKLY;BYDAY=TH,SA;BYMONTHDAY=-27;BYSETPOS=2", tz: null, why: "每周规则带 BYMONTHDAY，RFC 不允许（随机测试挖出来的，每次 2 秒）" },
   { start: EVEN_HOUR, rule: "FREQ=DAILY;BYMONTH=13", tz: null, why: "13 月" },
   { start: EVEN_HOUR, rule: "FREQ=DAILY;BYMONTHDAY=32", tz: null, why: "32 号" },
   { start: EVEN_HOUR, rule: "FREQ=DAILY;BYYEARDAY=1;BYMONTH=6", tz: null, why: "一年第 1 天不在 6 月" },

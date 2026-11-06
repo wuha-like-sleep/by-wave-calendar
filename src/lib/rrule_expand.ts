@@ -184,6 +184,8 @@ function neverFinishes(o: Partial<RRuleOptions>): boolean {
   }
   // RFC 5545：这几个只对 YEARLY 有意义，和别的条件一交就可能永远对不上。
   if (o.freq !== RRule.YEARLY && (countOf(o.byyearday) || countOf(o.byweekno) || o.byeaster != null)) return true;
+  // RFC 5545 同样不允许每周规则带 BYMONTHDAY，正常客户端写不出来，要数到 9999 年时每次约 2 秒。
+  if (o.freq === RRule.WEEKLY && countOf(o.bymonthday)) return true;
 
   const hours = numbers(o.byhour);
   const minutes = numbers(o.byminute);
