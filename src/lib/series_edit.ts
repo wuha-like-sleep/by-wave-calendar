@@ -74,6 +74,11 @@ function shiftRule(rule: string, dayShift: number, shift: (t: number) => number)
 export function planSeriesEdit(input: SeriesEditInput): SeriesEditPlan | null {
   const { master, zone, sent } = input;
   if (!master.rrule) return null;
+  // 这次改动已经生效过了（重发）：别的字段照写，时间和规则不再动。要排在比较规则前面：第一次把
+  // 「每周一」转成了「每周二」的话，重发带的还是旧规则，会被当成换了规则，把一切写回去。
+  if (input.seriesBase && new Date(input.seriesBase).getTime() !== master.startsAt.getTime()) {
+    return { startsAt: master.startsAt, endsAt: master.endsAt, rrule: master.rrule };
+  }
   if (sent.rrule != null && !sameRule(sent.rrule, master.rrule)) return null;
   if (sent.allDay != null && sent.allDay !== master.allDay) return null;
   const rule = master.rrule;   // 规则没真的变：留库里那份，不用客户端重建的
@@ -98,11 +103,6 @@ export function planSeriesEdit(input: SeriesEditInput): SeriesEditPlan | null {
     const at = new Date(sentStart);
     const hit = seriesStartsBetween({ startsAt: master.startsAt, rrule: rule, allDay: master.allDay, timeZone: zone }, at, at);
     return hit?.some((d) => d.getTime() === sentStart) ? keepStart() : null;
-  }
-
-  // 这次改动已经生效过了（重发）：别的字段照写，时间不再动。
-  if (input.seriesBase && new Date(input.seriesBase).getTime() !== masterStart) {
-    return { startsAt: master.startsAt, endsAt: master.endsAt, rrule: rule };
   }
 
   let shift: (t: number) => number;
