@@ -117,6 +117,125 @@ function toWallClockRule(utcRule: RRuleType, startsAt: Date, tz: string): WallRu
   return { rule: new RRule(options), wallStart, realStart, untilMs };
 }
 
+// ── 跳到窗口附近再开始数 ──────────────────────────────────────────────
+//
+// rrule 库从 DTSTART 一次一次往后数，数到窗口才开始给结果。2020 年开始的「每天」看一个月的
+// 窗口要数两千多次（3.6ms），一屏几十个这样的事件就是一百多毫秒，而网页每 30 秒、提醒每分钟
+// 都要算一遍；FREQ=MINUTELY 看一周要数三百多万次（4.8 秒），期间整个进程不响应别的请求，
+// 而任何登录用户都能建这种事件。
+//
+// 把 DTSTART 往后挪「整数个周期」，结果集在窗口里完全不变：间隔的相位、没写 BYDAY 时取的
+// 星期几、没写 BYHOUR 时取的时分秒都不变（挪的是整数个周期，浮动时间里也没有夏令时）。
+// 只有这几种不能挪：
+//   · 带 COUNT：「总共 10 次」要从第一次数起，挪了就多算。COUNT 本身也限住了要数多少次。
+//   · MONTHLY / YEARLY：月份长度不一，31 号开始的「每月」不能简单加周期。它们一年才数 12 次，不需要。
+//   · MINUTELY 带 BYHOUR、SECONDLY 带 BYHOUR / BYMINUTE：rrule 库跳过不匹配的小时时不推进
+//     分钟的相位，结果取决于从头数的路径（「每 45 分钟，只在 9、10 点」跳了就少一次）。
+//     这几种从头数也只数匹配的那几个小时，慢不到上面那个程度。
+// 挪到窗口前至少一个完整周期，所以被跳过的全都早于窗口（WEEKLY 的第一个周期会被新 DTSTART
+// 截掉一部分，那部分也在窗口之前）。test/rrule_fast_forward.test.ts 拿没挪的结果逐条对照。
+const FAST_FORWARD_PERIOD_MS: Partial<Record<number, number>> = {
+  [RRule.WEEKLY]: 7 * 86_400_000,
+  [RRule.DAILY]: 86_400_000,
+  [RRule.HOURLY]: 3_600_000,
+  [RRule.MINUTELY]: 60_000,
+  [RRule.SECONDLY]: 1_000,
+};
+
+let fastForwardEnabled = true;
+/** 只给对照测试用：关掉跳跃，拿到「老老实实从头数」的结果。 */
+export function __setFastForwardForTest(on: boolean): void { fastForwardEnabled = on; }
+
+// ── 数不完的规则不交给 rrule 库 ──────────────────────────────────────────
+//
+// rrule 库的小时 / 分钟 / 秒级循环是 `for (;;)`，直到碰上匹配的才出来。「每 2 小时，只在 1 点」
+// 而第一次在偶数点：永远碰不上，**死循环**，整个进程卡死，而且不会自己恢复（进程还活着，
+// pm2 也不重启）。日期上不可能的条件（2 月 30 日）不会死循环，但要一路数到 9999 年，「每天」
+// 每次 3 秒多。rrule 字符串是用户写的（API 收任意字符串）、也是订阅源写的，这不能靠「没人这么写」。
+// 这些规则排不出任何一次，或者是实际不会有人用的写法，一律只显示主事件（和规则写坏了同样处理）。
+const MAX_STEPS_BEFORE_WINDOW = 200_000;
+const MONTH_MAX_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+const numbers = (v: unknown): number[] =>
+  (Array.isArray(v) ? v : v == null ? [] : [v]).filter((x): x is number => typeof x === "number");
+const countOf = (v: unknown): number => (Array.isArray(v) ? v.length : v == null ? 0 : 1);
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+/** 从 start 开始每次加 interval（模 modulo），碰得到 values 里的某一个吗。 */
+function canReach(values: number[], modulo: number, start: number, interval: number): boolean {
+  const g = gcd(interval, modulo);
+  return values.some((v) => v >= 0 && v < modulo && ((v - start) % g + g) % g === 0);
+}
+const anyInRange = (values: number[], modulo: number) => values.some((v) => v >= 0 && v < modulo);
+
+/** 这条规则交给 rrule 库会不会数不完。 */
+function neverFinishes(o: Partial<RRuleOptions>): boolean {
+  const interval = o.interval ?? 1;
+  if (!(interval >= 1)) return true;   // 负的间隔往回数，年份永远到不了上限
+
+  // 日期上不可能的条件
+  const months = numbers(o.bymonth).filter((m) => m >= 1 && m <= 12);
+  if (countOf(o.bymonth) > 0 && months.length === 0) return true;
+  const monthDays = numbers(o.bymonthday);
+  if (countOf(o.bymonthday) > 0) {
+    const fits = (m: number) => monthDays.some((d) => d !== 0 && Math.abs(d) <= MONTH_MAX_DAYS[m - 1]!);
+    if (!(months.length ? months : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).some(fits)) return true;
+  }
+  // RFC 5545：这几个只对 YEARLY 有意义，和别的条件一交就可能永远对不上。
+  if (o.freq !== RRule.YEARLY && (countOf(o.byyearday) || countOf(o.byweekno) || o.byeaster != null)) return true;
+
+  const hours = numbers(o.byhour);
+  const minutes = numbers(o.byminute);
+  const seconds = numbers(o.bysecond);
+
+  const setpos = numbers(o.bysetpos);
+  if (setpos.length) {
+    if (o.freq! >= RRule.DAILY) return true;
+    if (o.freq === RRule.WEEKLY) {
+      const perWeek = Math.max(countOf(o.byweekday), 1) * Math.max(hours.length, 1) * Math.max(minutes.length, 1) * Math.max(seconds.length, 1);
+      if (setpos.every((p) => p === 0 || Math.abs(p) > perWeek)) return true;
+    }
+  }
+
+  // 小时级以下的 for (;;)：指定的时分秒碰不上就出不来。
+  const start = o.dtstart!;
+  if (o.freq === RRule.HOURLY) {
+    if (countOf(o.byhour) && !canReach(hours, 24, start.getUTCHours(), interval)) return true;
+  } else if (o.freq === RRule.MINUTELY) {
+    if (countOf(o.byminute) && !canReach(minutes, 60, start.getUTCMinutes(), interval)) return true;
+    // 间隔超过一小时时，进位是一次跳好几个小时，碰不碰得上取决于路径，算不清就不算。
+    if (countOf(o.byhour) && (interval >= 60 || !anyInRange(hours, 24))) return true;
+  } else if (o.freq === RRule.SECONDLY) {
+    if (countOf(o.bysecond) && !canReach(seconds, 60, start.getUTCSeconds(), interval)) return true;
+    if ((countOf(o.byhour) || countOf(o.byminute)) && interval >= 60) return true;
+    if (countOf(o.byhour) && !anyInRange(hours, 24)) return true;
+    if (countOf(o.byminute) && !anyInRange(minutes, 60)) return true;
+  }
+  return false;
+}
+
+/**
+ * 真正交给 rrule 库的规则：数不完的返回 null，能跳的跳到 windowFrom 之前至少一个周期。
+ * 不能跳（COUNT、结果取决于路径）的只能从头数，要数太多次也不数。
+ */
+function prepareRule(rule: RRuleType, windowFrom: Date): RRuleType | null {
+  // 一个字符串里塞了好几条规则 / RDATE（只有直接调接口才写得出来），逐条判断不划算。
+  if (!(rule instanceof RRule)) return null;
+  const orig = (rule as unknown as { origOptions: Partial<RRuleOptions> }).origOptions;
+  if (!orig?.dtstart || orig.freq == null || neverFinishes(orig)) return null;
+  const period = FAST_FORWARD_PERIOD_MS[orig.freq];
+  if (!period) return rule;   // MONTHLY / YEARLY：一年才数 12 次
+  const step = period * (orig.interval ?? 1);
+  const behind = Math.floor((windowFrom.getTime() - orig.dtstart.getTime()) / step);
+  const pathDependent = (orig.freq === RRule.MINUTELY && countOf(orig.byhour) > 0)
+    || (orig.freq === RRule.SECONDLY && (countOf(orig.byhour) > 0 || countOf(orig.byminute) > 0));
+  if (orig.count != null || pathDependent) {
+    return Math.min(orig.count ?? Infinity, behind) > MAX_STEPS_BEFORE_WINDOW ? null : rule;
+  }
+  if (!fastForwardEnabled || behind - 1 < 1) return rule;
+  return new RRule({ ...orig, dtstart: new Date(orig.dtstart.getTime() + (behind - 1) * step) });
+}
+
 // Given an event with optional RRULE and a [from, to] window, return all
 // occurrence start/end pairs that overlap the window. For non-recurring
 // events this is just the single (startsAt, endsAt) pair (filtered to the
@@ -155,14 +274,12 @@ export function expandEvent(event: EventForExpansion, from: Date, to: Date): Exp
   const wall = tz ? toWallClockRule(utcRule, event.startsAt, tz) : null;
   const starts = wall && tz
     ? zonedStartsBetween(wall, tz, expandFrom, to)
-    // Pass an iterator that HALTS at the cap. Plain `.between(...).slice(N)`
-    // would first MATERIALIZE every in-window occurrence — a pathological
-    // RRULE (e.g. FREQ=SECONDLY over a month) is millions of Date objects and
-    // a CPU/memory spike before the slice ever runs. The API accepts arbitrary
-    // rrule strings, and the reminders cron re-expands every event every
-    // minute over a 30-day window, so this is a real DoS surface. The iterator
-    // returns false once we've collected the cap, stopping generation early.
-    : utcRule.between(expandFrom, to, true, (_d: Date, i: number) => i < MAX_OCCURRENCES_PER_EVENT);
+    : utcStartsBetween(utcRule, expandFrom, to);
+  if (!starts) {
+    // 这条规则数不完（见 neverFinishes）：和规则写坏了一样，只显示主事件。
+    if (event.endsAt < from || event.startsAt > to) return [];
+    return [{ id: event.id, startsAt: event.startsAt, endsAt: event.endsAt, isOccurrence: false }];
+  }
 
   // Build a Set of exdate timestamps (ms) for fast lookup. The
   // exdates array on the event is stored as ISO strings; we normalize
@@ -197,6 +314,18 @@ export function exdateMillis(exdates: readonly string[] | null | undefined): Set
 // 偏移和两端的偏移最多差一个夏令时的跨度（一般 1 小时，历史上的「双夏令时」2 小时）。
 const WALL_WINDOW_SLACK_MS = 3 * 60 * 60 * 1000;
 
+// Pass an iterator that HALTS at the cap. Plain `.between(...).slice(N)`
+// would first MATERIALIZE every in-window occurrence — a pathological
+// RRULE (e.g. FREQ=SECONDLY over a month) is millions of Date objects and
+// a CPU/memory spike before the slice ever runs. The API accepts arbitrary
+// rrule strings, and the reminders cron re-expands every event every
+// minute over a 30-day window, so this is a real DoS surface. The iterator
+// returns false once we've collected the cap, stopping generation early.
+function utcStartsBetween(rule: RRuleType, from: Date, to: Date, cap = MAX_OCCURRENCES_PER_EVENT): Date[] | null {
+  const prepared = prepareRule(rule, from);
+  return prepared && prepared.between(from, to, true, (_d: Date, i: number) => i < cap);
+}
+
 /** 窗口外（两头的余量里）最多回调这么多次就放弃。FREQ=SECONDLY 的余量是几万次，正常规则几次。 */
 const OUT_OF_WINDOW_CALL_LIMIT = 50_000;
 
@@ -206,7 +335,7 @@ const OUT_OF_WINDOW_CALL_LIMIT = 50_000;
  * 不占这个额度 —— 占的话，密集规则（FREQ=SECONDLY）光余量就把额度用光，返回 0 次，
  * 事件整个从日历和提醒里消失；UTC 那条路是 366 次。
  */
-function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date, cap = MAX_OCCURRENCES_PER_EVENT): Date[] {
+function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date, cap = MAX_OCCURRENCES_PER_EVENT): Date[] | null {
   const offFrom = toWallClock(from, tz).getTime() - from.getTime();
   const offTo = toWallClock(to, tz).getTime() - to.getTime();
   const wallFrom = new Date(from.getTime() + Math.min(offFrom, offTo) - WALL_WINDOW_SLACK_MS);
@@ -214,7 +343,9 @@ function zonedStartsBetween(wall: WallRule, tz: string, from: Date, to: Date, ca
   const out: Date[] = [];
   const seen = new Set<number>();
   let outside = 0;
-  wall.rule.between(wallFrom, wallTo, true, (d: Date) => {
+  const prepared = prepareRule(wall.rule, wallFrom);
+  if (!prepared) return null;
+  prepared.between(wallFrom, wallTo, true, (d: Date) => {
     const real = wallToReal(d, wall, tz);
     const ms = real.getTime();
     // 夏令时跳过的那段会被顺延，可能和下一次撞在同一个时刻上：只留一个。
@@ -257,7 +388,7 @@ export function seriesStartsBetween(
   const wall = tz ? toWallClockRule(utcRule, event.startsAt, tz) : null;
   try {
     if (wall && tz) return zonedStartsBetween(wall, tz, from, to, cap);
-    return utcRule.between(from, to, true, (_d: Date, i: number) => i < cap);
+    return utcStartsBetween(utcRule, from, to, cap);
   } catch {
     return null;
   }
