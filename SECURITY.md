@@ -16,7 +16,7 @@ within a few days. Responsible disclosure is appreciated — we'll credit you
 
 This is a self-hosted product — each deployment is its own trust boundary.
 The codebase ships with defense-in-depth defaults so an out-of-the-box
-install is reasonably hardened. Audited 2026-05.
+install has explicit controls. This document describes those controls; it is not a guarantee that all vulnerabilities have been found.
 
 ### Web / server
 
@@ -27,6 +27,8 @@ install is reasonably hardened. Audited 2026-05.
 | CORS | locked to `PUBLIC_BASE_URL` in production (not `*`) |
 | Sessions | signed, `httpOnly` + `secure` (prod) + `sameSite=lax` cookies; server-side session table |
 | CSRF | token-based, verified on all state-changing form posts; native-app auth endpoints explicitly exempted by an allow-list |
+| SSO / OIDC | signed, expiring state; account linking bound to the initiating session; ID Token signature, issuer, audience, expiry and nonce validation; matching UserInfo subject |
+| Outbound subscriptions | URL checks plus DNS validation at socket connection; redirect targets rechecked; streamed size limit |
 | Rate limiting | global per-IP + tighter per-route limits on login / pairing / token issuance |
 | Password storage | bcrypt; SSO / passwordless accounts store an unguessable bcrypt stub so no compare path can succeed |
 | MFA | TOTP + backup codes; Passkey (WebAuthn) counts as both factors |
@@ -74,12 +76,18 @@ auto-link existing accounts.
   `onclick`/`onsubmit` handlers in EJS templates still need this. Tracked for
   a future refactor to event-delegation; the nonce-gated `script-src` already
   blocks injected `<script>` tags.
-- **drizzle-orm advisory GHSA-gpj5-g38j-94v9** (SQLi via unescaped
-  identifiers, fixed in 0.45.2) — the codebase builds **no** SQL identifiers
-  from user input (verified by audit), so exposure is nil. The 0.36→0.45
-  upgrade is a breaking change deferred until it can be validated separately.
 - **Desktop token file is not OS-keychain-encrypted** — a deliberate choice:
   on desktop the user's home dir + `0600` perms are the isolation boundary;
   prompting for a master password every launch or storing a key beside the
   data would be UX hell or security theater respectively. Mobile uses the
   platform secure store because the FS isn't user-isolated there.
+
+## Dependency checks
+
+Run `npm run audit:prod` for current production dependency advisories. The lockfile
+is committed; deployments must use `npm ci`. Overrides keep the calendar
+sanitizer on the patched direct DOMPurify version and the APNs dependency on
+node-forge 1.4.3 while its upstream package pins 1.4.2. The legacy Drizzle Kit
+loader also uses the patched direct esbuild version. Review these overrides
+when upgrading their parents; rerun the audit and schema-export smoke check
+before removing them. Use `npm audit` to include development dependencies.

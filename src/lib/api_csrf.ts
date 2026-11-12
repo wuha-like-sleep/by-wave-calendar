@@ -79,9 +79,11 @@ export function registerApiCsrf(app: FastifyInstance): void {
     // Strip query string for the exempt match.
     const path = req.url.split("?")[0] || "";
     if (API_CSRF_EXEMPT_PATHS.has(path)) return;
-    // Bearer token: header-only, browsers can't auto-attach. Skip.
+    // Logout always mutates the cookie session, even if a Bearer header is
+    // also present. It cannot inherit the exemption for token-authenticated APIs.
     const auth = String(req.headers.authorization || "");
-    if (auth.toLowerCase().startsWith("bearer ")) return;
+    const cookieLogout = path === "/api/auth/logout" || path === "/api/v1/auth/logout";
+    if (auth.toLowerCase().startsWith("bearer ") && !cookieLogout) return;
     // Session-cookie path: must carry CSRF. verifyCsrf sends the 403 itself.
     const { verifyCsrf } = await import("./csrf.js");
     verifyCsrf(req, reply);

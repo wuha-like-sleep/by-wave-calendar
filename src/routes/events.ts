@@ -81,7 +81,7 @@ export const extraSchema = z.object({
     // 存量行回传时会撞上限 —— 同样是「存得进去、却再也存不回去」。
     trigger: z.string().max(200).refine(
       (v) => v === "" || parseTrigger(v) !== null,
-      (v) => ({ message: `无法识别的提醒触发时间 ${JSON.stringify(v)}` }),
+      { error: (issue) => `无法识别的提醒触发时间 ${JSON.stringify(issue.input)}` },
     ),
     action: laxAlarmText(20),
     description: laxAlarmText(500),

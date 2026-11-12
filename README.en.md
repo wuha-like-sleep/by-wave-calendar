@@ -14,8 +14,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/package-json/v/wuha-like-sleep/by-wave-calendar?label=server&color=2563eb)](package.json)
 [![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-download)
-[![Node](https://img.shields.io/badge/Node-≥20-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node-≥22.12.0-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/wuha-like-sleep/by-wave-calendar/pulls)
@@ -233,7 +233,7 @@ by-wave-calendar/
 ├── deploy/
 │   ├── bt-panel/         aaPanel deploy: install.sh / nginx sample / ecosystem.config.cjs / README
 │   └── android-release.md
-├── docs/design/          Design docs (e.g. passkey architecture)
+├── docs/                 Development, deployment, design and release docs
 ├── scripts/              Build / migrate / release / i18n-check scripts
 ├── drizzle/              Database migrations
 └── test/                 vitest tests
@@ -260,13 +260,16 @@ by-wave-calendar/
 
 ## 🤝 Contributing
 
+[Development, deployment and release docs](docs/README.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+
+Follow the manual migration workflow; do not run `db:generate` with the incomplete snapshot chain. [drizzle/README.md](drizzle/README.md)
+
 PRs welcome. Local development:
 
 ```bash
-npm install
+npm ci
 npm run dev          # build assets + tsx watch
-npm run typecheck    # tsc --noEmit
-npm run db:generate  # generate SQL migrations after a schema change
+npm run check        # types, unit/integration tests, translations
 npm run db:migrate   # apply migrations to the database
 npm run i18n:check   # check translation coverage per language
 npm run test         # vitest

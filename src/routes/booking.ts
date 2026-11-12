@@ -26,6 +26,7 @@ const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式应为 H
 // WeeklyAvailability = Record<dayOfWeek, [start,end][] | null>. Keys are
 // "0".."6" (0=Sunday). null/absent means "not available that day".
 const weeklyAvailabilitySchema = z.record(
+  z.string(),
   z.union([z.array(z.tuple([hhmm, hhmm])), z.null()]),
 );
 

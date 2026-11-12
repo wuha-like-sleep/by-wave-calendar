@@ -34,7 +34,7 @@
               </div>
               <span class="text-xs text-slate-400">展开编辑 ▾</span>
             </summary>
-            <form method="post" action="/admin/idp/providers/<%= p.id %>" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <form id="sso-provider-edit-<%= p.id %>" method="post" action="/admin/idp/providers/<%= p.id %>" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
@@ -66,15 +66,16 @@
                        class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
                 <span class="text-slate-700">启用（关闭后登录页不显示该按钮）</span>
               </label>
-              <div class="sm:col-span-2 flex justify-between items-center pt-2 border-t border-slate-100">
-                <form method="post" action="/admin/idp/providers/<%= p.id %>/delete"
-                      data-confirm="确定删除 <%= p.label %>？删除后该按钮立即消失。" data-confirm-danger="1" data-confirm-ok="删除">
-                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除提供方</button>
-                </form>
-                <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存修改</button>
-              </div>
             </form>
+            <%# Keep delete outside the edit form: nested forms merge CSRF fields and submit to the wrong action. %>
+            <div class="mt-3 flex justify-between items-center pt-2 border-t border-slate-100">
+              <form method="post" action="/admin/idp/providers/<%= p.id %>/delete"
+                    data-confirm="确定删除 <%= p.label %>？删除后该按钮立即消失。" data-confirm-danger="1" data-confirm-ok="删除">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除提供方</button>
+              </form>
+              <button type="submit" form="sso-provider-edit-<%= p.id %>" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存修改</button>
+            </div>
           </details>
         </li>
       <% }) %>

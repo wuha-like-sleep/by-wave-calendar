@@ -2501,7 +2501,7 @@ export async function webRoutes(app: FastifyInstance) {
       // The slug regex carries a "slug_format" sentinel instead of prose so
       // the human-readable text can be localized here; any other zod issue
       // falls through with its own message.
-      const issue = body.error.errors[0];
+      const issue = body.error.issues[0];
       const detail = issue?.message === "slug_format" ? tr(req, "flash.bookingLink.slugFormat") : (issue?.message ?? "");
       return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.paramInvalid", { error: detail }) });
     }

@@ -18,9 +18,8 @@ mkdir -p "$STAGE"
 echo "[release] installing deps (full, for build)..."
 npm ci
 
-echo "[release] typecheck + unit tests (block release on failure)..."
-npm run typecheck
-npm test
+echo "[release] typecheck + unit/integration tests + translations (block release on failure)..."
+npm run check
 
 echo "[release] building..."
 # Verify the minified bundle actually got rewritten — older versions of

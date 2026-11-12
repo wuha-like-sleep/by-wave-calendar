@@ -17,17 +17,10 @@
 //   4. Re-validate on every redirect hop (we follow redirects manually) —
 //      an upstream 302 to http://127.0.0.1/ is otherwise a trivial bypass.
 //
-// KNOWN LIMITATION (documented, not silently ignored): we validate the
-// hostname's DNS records, then let undici re-resolve when it connects.
-// A determined attacker who controls authoritative DNS with a sub-second
-// TTL *could* return a public IP to our lookup() and an internal IP to
-// undici's connect (classic DNS-rebinding). Fully closing that needs a
-// custom undici dispatcher that pins the validated IP at the socket layer
-// while preserving TLS SNI/servername — non-trivial and easy to get wrong
-// (naively rewriting the URL host to the IP breaks HTTPS cert validation,
-// which would regress every https:// ICS feed). We deliberately keep the
-// simpler, TLS-correct check here; the rebinding window is a separate,
-// lower-severity follow-up flagged for review.
+// The connection resolver also validates the exact addresses returned to the
+// socket. DNS changes between the preliminary check and connection therefore
+// cannot redirect a request into the private network. The URL host stays intact
+// for HTTP Host and TLS SNI/certificate validation.
 //
 // Self-hosters who genuinely need to pull an ICS feed from an internal
 // host can set ICS_ALLOW_PRIVATE_NETWORK=true to opt out of the IP-range
@@ -35,7 +28,8 @@
 // unless the operator deliberately relaxes it.
 
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
+import { Agent } from "undici";
 
 export class SsrfBlockedError extends Error {
   constructor(message: string) {
@@ -80,7 +74,7 @@ export function isBlockedAddress(ip: string): boolean {
   }
 
   // IPv6
-  const lower = ip.toLowerCase();
+  const lower = new URL(`http://[${ip}]/`).hostname.slice(1, -1).toLowerCase();
   // IPv4-mapped / -compatible (::ffff:a.b.c.d, ::a.b.c.d) — extract the v4 tail and re-check.
   const v4Tail = lower.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
   if (v4Tail) return isBlockedAddress(v4Tail[1]!);
@@ -115,8 +109,7 @@ export async function validateOutboundUrl(rawUrl: string, allowPrivate = false):
     throw new SsrfBlockedError("URL 不允许包含用户名/密码");
   }
 
-  const host = url.hostname;
-  // Bracketed IPv6 hostnames come back without brackets from URL.hostname.
+  const host = url.hostname.replace(/^\[|\]$/g, "");
   const literalKind = isIP(host);
   if (literalKind !== 0) {
     if (!allowPrivate && isBlockedAddress(host)) {
@@ -145,12 +138,35 @@ export async function validateOutboundUrl(rawUrl: string, allowPrivate = false):
   return url;
 }
 
+/** Return only vetted addresses to the socket, with no subsequent DNS lookup. */
+export function createPublicAddressLookup(resolve = lookup): LookupFunction {
+  return (hostname, options, callback) => {
+    void resolve(hostname, { all: true }).then((records) => {
+      if (!records.length || records.some((r) => isBlockedAddress(r.address))) {
+        callback(new SsrfBlockedError("连接地址指向内网 / 保留地址，已拒绝"), "", 4);
+        return;
+      }
+      const family = options.family;
+      const requestedFamily = family === "IPv4" ? 4 : family === "IPv6" ? 6 : family;
+      const usable = requestedFamily ? records.filter((r) => r.family === requestedFamily) : records;
+      if (!usable.length) {
+        callback(new SsrfBlockedError("目标主机没有可用地址"), "", 4);
+      } else if (options.all) {
+        callback(null, usable);
+      } else {
+        callback(null, usable[0]!.address, usable[0]!.family);
+      }
+    }, (error: NodeJS.ErrnoException) => callback(error, "", 4));
+  };
+}
+
+const publicAddressAgent = new Agent({ connect: { lookup: createPublicAddressLookup() } });
+
 /**
  * SSRF-safe fetch for user-supplied URLs. Follows redirects manually,
  * re-validating each hop (the upstream can 302 you to an internal host).
- * We do NOT rewrite the URL host to the validated IP — doing so would
- * break TLS certificate validation for https:// feeds. See the file-level
- * "KNOWN LIMITATION" note on the residual DNS-rebinding window.
+ * The connection resolver validates the final address while preserving the
+ * original hostname for TLS verification.
  *
  * Mirrors the parts of the WHATWG fetch options we actually use.
  */
@@ -178,19 +194,23 @@ export async function safeFetch(
       body: opts.body,
       redirect: "manual", // follow manually so we can re-validate each hop
       signal: opts.signal,
+      // Node's bundled fetch types may target an older undici version; both
+      // implementations accept the same Dispatcher protocol at runtime.
+      ...(!allowPrivate ? { dispatcher: publicAddressAgent as unknown as import("undici-types").Dispatcher } : {}),
     });
 
     // 3xx with a Location → re-validate the target and continue.
     if (resp.status >= 300 && resp.status < 400) {
       const loc = resp.headers.get("location");
       if (!loc) return resp; // no Location; treat as a (weird) terminal response
+      // Redirect bodies are untrusted too: do not buffer an unlimited body
+      // before applying the caller's response-size limit to the final hop.
+      try { await resp.body?.cancel(); } catch { /* already closed or aborted */ }
       if (hop === maxRedirects) {
         throw new SsrfBlockedError("重定向次数过多");
       }
       // Resolve relative redirects against the current URL.
       current = new URL(loc, url).toString();
-      // Drain the redirect body so the socket can be reused/closed cleanly.
-      try { await resp.arrayBuffer(); } catch { /* ignore */ }
       continue;
     }
 

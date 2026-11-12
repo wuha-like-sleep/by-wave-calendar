@@ -69,14 +69,13 @@ log "工作目录: $APP_DIR"
 step "1/8 工具链检查"
 
 command -v node >/dev/null || {
-  warn "未找到 node。请在宝塔软件商店装 Node.js (>=20)。"
-  hint "宝塔 → 软件商店 → 搜 Node.js → 安装 → 设置全局 v20.x"
+  warn "未找到 node。请在宝塔软件商店装 Node.js (>=22.12.0)。"
+  hint "宝塔 → 软件商店 → 搜 Node.js → 安装 → 设置全局 v22.x"
   exit 1
 }
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-if [ "$NODE_MAJOR" -lt 20 ]; then
-  warn "Node 版本太老 (当前: $(node -v))，需要 >= 20。"
-  hint "宝塔 → 软件商店 → Node.js → 设置 → 切换全局版本 → v20.x"
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1)'; then
+  warn "Node 版本太老 (当前: $(node -v))，需要 >= 22.12.0。"
+  hint "宝塔 → 软件商店 → Node.js → 设置 → 切换全局版本 → v22.x"
   exit 1
 fi
 ok "Node $(node -v)"

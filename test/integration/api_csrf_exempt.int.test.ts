@@ -34,7 +34,8 @@ vi.mock("../../src/lib/mailer.js", () => ({
 import type { FastifyInstance } from "fastify";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
-import { ensureSchema, resetDb } from "./harness.js";
+import { ensureSchema, resetDb, makeUser, loginAs, db, schema } from "./harness.js";
+import { createHmac } from "node:crypto";
 
 process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= "postgres://integration-test/unused";
@@ -42,6 +43,7 @@ process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 
 const { authRoutes } = await import("../../src/routes/auth.js");
 const { eventRoutes } = await import("../../src/routes/events.js");
+const { calendarRoutes } = await import("../../src/routes/calendars.js");
 const { registerApiCsrf } = await import("../../src/lib/api_csrf.js");
 
 beforeAll(async () => { await ensureSchema(); });
@@ -56,7 +58,7 @@ beforeEach(async () => {
   await app.register(cookie, { secret: "integration-test-cookie-secret-32-chars-min" });
   registerApiCsrf(app);
   for (const prefix of ["/api", "/api/v1"]) {
-    await app.register(async (s) => { await authRoutes(s); await eventRoutes(s); }, { prefix });
+    await app.register(async (s) => { await authRoutes(s); await eventRoutes(s); await calendarRoutes(s); }, { prefix });
   }
   await app.ready();
 });
@@ -83,6 +85,33 @@ const ANONYMOUS_BOOTSTRAP = [
 ];
 
 describe("CSRF 闸门不能挡住匿名登录", () => {
+  it.each(["Bearer junk", "Bearer ", "bEaReR malformed-token"])("invalid %s cannot fall back to cookie authentication", async (authorization) => {
+    const user = await makeUser("cookie-owner@example.com");
+    const session = await loginAs(app, user.id);
+    const res = await app.inject({
+      method: "POST", url: "/api/v1/calendars",
+      headers: { cookie: session, authorization },
+      payload: { name: "Must not be created" },
+    });
+    expect(res.statusCode, res.body).toBe(401);
+    expect(res.json()).toEqual({ error: "invalid_token" });
+    expect(await db.select().from(schema.calendars)).toHaveLength(0);
+  });
+
+  it.each(["/api/auth/logout", "/api/v1/auth/logout"])("%s cannot skip cookie CSRF with a Bearer header", async (url) => {
+    const user = await makeUser("logout@example.com");
+    const session = await loginAs(app, user.id);
+    const headers = { cookie: session, authorization: "Bearer junk" };
+    const rejected = await app.inject({ method: "POST", url, headers });
+    expect(rejected.statusCode).toBe(403);
+    expect(await db.select().from(schema.sessions)).toHaveLength(1);
+    const [stored] = await db.select().from(schema.sessions);
+    const csrf = createHmac("sha256", process.env.SESSION_SECRET!).update(stored!.id).digest("hex");
+    const accepted = await app.inject({ method: "POST", url, headers: { ...headers, "x-csrf-token": csrf } });
+    expect(accepted.statusCode).toBe(200);
+    expect(await db.select().from(schema.sessions)).toHaveLength(0);
+  });
+
   it("闸门确实装上了：一条要会话的写接口仍然被 403（presence）", async () => {
     // 少了这条，下面所有「没被 CSRF 拦」的断言在「钩子根本没装」时也全绿 ——
     // 那正是这个 bug 能活到线上的原因。

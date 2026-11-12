@@ -804,7 +804,7 @@ export async function adminRoutes(app: FastifyInstance) {
       sortOrder: z.coerce.number().int().default(0),
     }).safeParse(req.body);
     if (!body.success) {
-      return reply.redirect("/admin/idp?error=" + encodeURIComponent("参数无效：" + body.error.errors[0]?.message));
+      return reply.redirect("/admin/idp?error=" + encodeURIComponent("参数无效：" + body.error.issues[0]?.message));
     }
     try {
       await createProvider(body.data);
