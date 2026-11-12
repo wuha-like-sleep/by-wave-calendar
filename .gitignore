@@ -47,3 +47,11 @@ src/public/uploads/
 *\ [0-9].ts
 *\ [0-9].json
 *\ [0-9].ejs
+
+# Apple signing credentials stay outside source control.
+*.p8
+*.p12
+*.pfx
+
+# Local Python release tooling.
+__pycache__/
