@@ -119,6 +119,17 @@ object I18n {
     // -------- Dictionaries --------
 
     private val en: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "System calendars",
+        "sync.intro" to "Your schedule, in the apps you already use.",
+        "sync.apple" to "Connect the native Calendar app with a CalDAV account. Events and recurring schedules sync in both directions, even when ByWave is closed.",
+        "sync.outlook" to "Connect a Microsoft 365 or Outlook.com calendar. Both new and classic Outlook are supported; your administrator must first configure a Microsoft application.",
+        "sync.open" to "Set up and manage sync",
+        "sync.openDetail" to "Open the secure setup page to connect accounts, select calendars and review sync status or conflicts.",
+        "sync.scope" to "Outlook syncs individual occurrences from the past 90 days to the next 365 days. Local PST calendars, reminders, attachments and meeting invitations are not copied.",
+        "setup.stepServer" to "Server",
+        "setup.stepAuthorize" to "Authorize",
+        "setup.stepReady" to "Ready",
+
         // App-level
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "Deleted \"{name}\"",
@@ -599,6 +610,17 @@ object I18n {
     )
 
     private val zhCN: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "系统日历",
+        "sync.intro" to "在熟悉的应用里，继续安排每一天。",
+        "sync.apple" to "通过 CalDAV 账户连接 macOS 系统“日历”。日程与重复安排双向同步，关闭 ByWave 客户端后也能继续。",
+        "sync.outlook" to "连接 Microsoft 365 或 Outlook.com 日历，两版 Outlook 均支持。管理员需先配置 Microsoft 应用。",
+        "sync.open" to "设置与管理同步",
+        "sync.openDetail" to "打开安全设置页，连接账户、选择日历，查看同步状态并处理冲突。",
+        "sync.scope" to "Outlook 同步过去 90 天至未来 365 天的各次日程。本地 PST 日历、提醒、附件和会议邀请不会跨平台复制。",
+        "setup.stepServer" to "服务器",
+        "setup.stepAuthorize" to "授权",
+        "setup.stepReady" to "完成",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "已删除「{name}」",
         "undo.action" to "撤销",
@@ -1062,6 +1084,17 @@ object I18n {
     )
 
     private val zhTW: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "系統行事曆",
+        "sync.intro" to "在熟悉的應用程式裡，繼續安排每一天。",
+        "sync.apple" to "透過 CalDAV 帳號連接 macOS 系統「行事曆」。行程與重複安排雙向同步，關閉 ByWave 後也能繼續。",
+        "sync.outlook" to "連接 Microsoft 365 或 Outlook.com 行事曆，兩版 Outlook 均支援。管理員需先設定 Microsoft 應用程式。",
+        "sync.open" to "設定與管理同步",
+        "sync.openDetail" to "開啟安全設定頁，連接帳號、選擇行事曆，查看同步狀態並處理衝突。",
+        "sync.scope" to "Outlook 同步過去 90 天至未來 365 天的各次行程。本機 PST 行事曆、提醒、附件和會議邀請不會跨平台複製。",
+        "setup.stepServer" to "伺服器",
+        "setup.stepAuthorize" to "授權",
+        "setup.stepReady" to "完成",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "已刪除「{name}」",
         "undo.action" to "復原",
@@ -1529,6 +1562,17 @@ object I18n {
     )
 
     private val ja: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "システムカレンダー",
+        "sync.intro" to "使い慣れたアプリで、毎日の予定を。",
+        "sync.apple" to "CalDAV アカウントで macOS のカレンダーに接続します。繰り返し予定も双方向に同期され、ByWave を閉じても継続します。",
+        "sync.outlook" to "Microsoft 365 または Outlook.com のカレンダーに接続します。新旧両方の Outlook に対応。管理者による Microsoft アプリの設定が必要です。",
+        "sync.open" to "同期の設定と管理",
+        "sync.openDetail" to "安全な設定ページでアカウントの接続、カレンダーの選択、同期状況の確認、競合の解決ができます。",
+        "sync.scope" to "Outlook は過去 90 日から今後 365 日の各予定を同期します。ローカル PST、通知、添付ファイル、会議招待はコピーされません。",
+        "setup.stepServer" to "サーバー",
+        "setup.stepAuthorize" to "認証",
+        "setup.stepReady" to "完了",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "「{name}」を削除しました",
         "undo.action" to "元に戻す",
@@ -1996,6 +2040,17 @@ object I18n {
     )
 
     private val ko: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "시스템 캘린더",
+        "sync.intro" to "익숙한 앱에서 일정을 관리하세요.",
+        "sync.apple" to "CalDAV 계정으로 macOS 캘린더에 연결합니다. 반복 일정을 포함해 양방향으로 동기화하며 ByWave를 닫아도 계속됩니다.",
+        "sync.outlook" to "Microsoft 365 또는 Outlook.com 캘린더에 연결합니다. 새 Outlook과 클래식 Outlook을 지원하며 관리자의 Microsoft 앱 설정이 필요합니다.",
+        "sync.open" to "동기화 설정 및 관리",
+        "sync.openDetail" to "보안 설정 페이지에서 계정을 연결하고 캘린더를 선택하며 동기화 상태와 충돌을 확인하세요.",
+        "sync.scope" to "Outlook은 지난 90일부터 앞으로 365일까지 개별 일정을 동기화합니다. 로컬 PST, 알림, 첨부 파일, 회의 초대는 복사되지 않습니다.",
+        "setup.stepServer" to "서버",
+        "setup.stepAuthorize" to "인증",
+        "setup.stepReady" to "완료",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "\"{name}\" 삭제됨",
         "undo.action" to "실행 취소",
@@ -2463,6 +2518,17 @@ object I18n {
     )
 
     private val es: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "Calendarios del sistema",
+        "sync.intro" to "Tus planes, en las aplicaciones que ya usas.",
+        "sync.apple" to "Conecta Calendario de macOS mediante CalDAV. Los eventos y sus repeticiones se sincronizan en ambos sentidos, incluso con ByWave cerrado.",
+        "sync.outlook" to "Conecta un calendario de Microsoft 365 u Outlook.com. Compatible con Outlook nuevo y clásico; el administrador debe configurar una aplicación de Microsoft.",
+        "sync.open" to "Configurar y gestionar",
+        "sync.openDetail" to "Abre la página segura para conectar cuentas, elegir calendarios y revisar el estado o los conflictos.",
+        "sync.scope" to "Outlook sincroniza ocurrencias individuales desde hace 90 días hasta los próximos 365. No se copian calendarios PST locales, recordatorios, adjuntos ni invitaciones.",
+        "setup.stepServer" to "Servidor",
+        "setup.stepAuthorize" to "Autorizar",
+        "setup.stepReady" to "Listo",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "Se eliminó \"{name}\"",
         "undo.action" to "Deshacer",
@@ -2930,6 +2996,17 @@ object I18n {
     )
 
     private val fr: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "Calendriers système",
+        "sync.intro" to "Vos rendez-vous dans vos applications habituelles.",
+        "sync.apple" to "Connectez Calendrier sur macOS via CalDAV. Les événements et récurrences sont synchronisés dans les deux sens, même lorsque ByWave est fermé.",
+        "sync.outlook" to "Connectez un calendrier Microsoft 365 ou Outlook.com. Les versions nouvelle et classique sont prises en charge. L’administrateur doit configurer une application Microsoft.",
+        "sync.open" to "Configurer et gérer",
+        "sync.openDetail" to "Ouvrez la page sécurisée pour connecter les comptes, choisir les calendriers et consulter l’état ou les conflits.",
+        "sync.scope" to "Outlook synchronise les occurrences des 90 derniers jours aux 365 prochains jours. Les calendriers PST locaux, rappels, pièces jointes et invitations ne sont pas copiés.",
+        "setup.stepServer" to "Serveur",
+        "setup.stepAuthorize" to "Autoriser",
+        "setup.stepReady" to "Prêt",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "« {name} » supprimé",
         "undo.action" to "Annuler",
@@ -3397,6 +3474,17 @@ object I18n {
     )
 
     private val de: Map<String, String> = mapOf(
+        "settings.tabSystemCalendar" to "Systemkalender",
+        "sync.intro" to "Ihre Termine in den vertrauten Apps.",
+        "sync.apple" to "Verbinden Sie den macOS-Kalender über CalDAV. Termine und Wiederholungen werden in beide Richtungen synchronisiert, auch wenn ByWave geschlossen ist.",
+        "sync.outlook" to "Verbinden Sie einen Microsoft-365- oder Outlook.com-Kalender. Neues und klassisches Outlook werden unterstützt. Der Administrator muss eine Microsoft-Anwendung einrichten.",
+        "sync.open" to "Einrichten und verwalten",
+        "sync.openDetail" to "Öffnen Sie die sichere Einrichtung, um Konten zu verbinden, Kalender auszuwählen und Status oder Konflikte zu prüfen.",
+        "sync.scope" to "Outlook synchronisiert einzelne Termine der letzten 90 und nächsten 365 Tage. Lokale PST-Kalender, Erinnerungen, Anhänge und Einladungen werden nicht kopiert.",
+        "setup.stepServer" to "Server",
+        "setup.stepAuthorize" to "Freigabe",
+        "setup.stepReady" to "Fertig",
+
         "app.name" to "ByWave Calendar",
         "undo.deleted" to "\"{name}\" gelöscht",
         "undo.action" to "Rückgängig",

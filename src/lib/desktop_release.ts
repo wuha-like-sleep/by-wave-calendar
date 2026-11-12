@@ -21,7 +21,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-export type DesktopPlatform = "mac" | "win" | "linux";
+export type DesktopPlatform = "mac" | "macIntel" | "win" | "linux";
 
 export interface DesktopReleaseAsset {
   /** Filename used in the local /downloads/desktop/<filename> URL when
@@ -66,7 +66,7 @@ export function parseDesktopManifest(raw: unknown, fallbackReleasedAt: string): 
   if (typeof r.versionName !== "string" || !r.versionName) return null;
   if (!r.assets || typeof r.assets !== "object") return null;
   const assets: DesktopRelease["assets"] = {};
-  for (const platform of ["mac", "win", "linux"] as const) {
+  for (const platform of ["mac", "macIntel", "win", "linux"] as const) {
     const a = r.assets[platform] as Partial<DesktopReleaseAsset> | undefined;
     if (!a) continue;
     const filename = String(a.filename || "");

@@ -120,6 +120,7 @@ import java.net.URI
 private enum class SettingsTab(val labelKey: String, val icon: ImageVector) {
     Account("settings.tabAccount", Icons.Default.AccountCircle),
     Calendars("settings.tabCalendars", Icons.Default.CalendarMonth),
+    SystemCalendar("settings.tabSystemCalendar", Icons.Default.CalendarMonth),
     Booking("settings.tabBooking", Icons.Default.Link),
     Security("settings.tabSecurity", Icons.Default.Security),
     Appearance("settings.tabAppearance", Icons.Default.Brush),
@@ -163,8 +164,8 @@ fun SettingsScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp)
-                    .padding(horizontal = 16.dp),
+                    .height(72.dp)
+                    .padding(horizontal = 24.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
@@ -248,6 +249,7 @@ fun SettingsScreen(
                                 calendars = calendars,
                                 profile = profile,
                             )
+                            SettingsTab.SystemCalendar -> SystemCalendarSection(profile)
                             SettingsTab.Security -> SecuritySection(profile = profile)
                             SettingsTab.Appearance -> AppearanceSection(profile = profile)
                             SettingsTab.About -> AboutSection(
@@ -1715,6 +1717,32 @@ private fun BookingDeleteDialog(
 // -------- Security --------
 
 @Composable
+private fun SystemCalendarSection(profile: Profile) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    SectionTitle(t("settings.tabSystemCalendar"))
+    Text(t("sync.intro"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(24.dp))
+    SectionCard {
+        Text("macOS Calendar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(t("sync.apple"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Spacer(Modifier.height(16.dp))
+    SectionCard {
+        Text("Outlook · Windows", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(8.dp))
+        Text(t("sync.outlook"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Spacer(Modifier.height(24.dp))
+    SectionCard {
+        OpenInWebRow(profile, "/app/settings/calendar-sync", t("sync.open"), t("sync.openDetail"))
+    }
+    Spacer(Modifier.height(16.dp))
+    Text(t("sync.scope"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+}
+
+@Composable
 private fun SecuritySection(profile: Profile) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -2410,7 +2438,8 @@ private fun SectionCard(danger: Boolean = false, content: @Composable () -> Unit
         color = if (danger)
             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.15f)
         else
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         // v0.7.6: bumped padding horizontal 18→20, vertical 14→18 so

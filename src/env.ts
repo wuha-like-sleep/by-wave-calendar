@@ -42,6 +42,7 @@ const schema = z.object({
   // multiple users on the same calendar via heavy CalDAV / API traffic.
   DB_POOL_MAX: z.coerce.number().int().positive().default(20),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must be at least 32 chars"),
+  MICROSOFT_CALENDAR_CLIENT_ID: z.union([z.literal(""), z.string().uuid()]).optional(),
   REGISTRATION_OPEN: boolFlag.default(true),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(10),

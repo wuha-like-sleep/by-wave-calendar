@@ -1,3 +1,5 @@
+import { calendarSyncRoutes } from "./web/calendar_sync.js";
+import { startCalendarSyncScheduler } from "./lib/calendar_sync/service.js";
 import path from "node:path";
 import type { Server as HttpsServer } from "node:https";
 import Fastify, { type FastifyError } from "fastify";
@@ -944,6 +946,7 @@ await app.register(mfaRoutes);
 await app.register(adminRoutes);
 await app.register(ssoRoutes);
 await app.register(caldavRoutes);
+await app.register(calendarSyncRoutes);
 
 // ---- 404 ----
 app.setNotFoundHandler(async (req, reply) => {
@@ -1005,6 +1008,9 @@ app.log.info(
   const { runPendingMigrations } = await import("./lib/auto_migrate.js");
   await runPendingMigrations();
 }
+
+const stopCalendarSync = startCalendarSyncScheduler(message => app.log.warn(message));
+app.addHook("onClose", async () => { stopCalendarSync(); });
 
 // Surface critical APP-related toggles at startup. If apps_enabled is
 // off, the iOS / Android APP will see 403 on every auth call — this

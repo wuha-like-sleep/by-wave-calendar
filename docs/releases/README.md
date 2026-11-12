@@ -1,5 +1,6 @@
 # 历史发布说明
 
+- [1.8.0](release-notes-1.8.0.md)
 - [1.7.6](release-notes-1.7.6.md)
 - [1.7.5](release-notes-1.7.5.md)
 - [1.7.4](release-notes-1.7.4.md)

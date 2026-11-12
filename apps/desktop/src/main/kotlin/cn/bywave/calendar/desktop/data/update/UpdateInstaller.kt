@@ -344,129 +344,61 @@ object UpdateInstaller {
         ).firstOrNull { File(it).isDirectory }
     }
 
-    /** Write the swap script to /tmp + chmod +x. Returns the script file
-     *  so the caller can spawn it.
-     *
-     *  [relaunch]: when true (the「立即重启」path) the script ends with
-     *  `open "$currentAppPath"` to relaunch the freshly-swapped app. When
-     *  false (apply-on-quit) we OMIT that line — the user quit, so leave
-     *  the app closed; their next launch picks up the new version.
-     *
-     *  [openFinderOnError]: when true, an in-script abort (signature
-     *  verify fail / copy fail) does `open "$mountPoint"` so the user can
-     *  install manually. When false (quit-triggered swap) we don't pop a
-     *  Finder window over a user who just quit — we only log the failure.
-     *  Either way the old app was already removed by then, so a failed
-     *  copy leaves them to reinstall, but at least without a surprise
-     *  Finder popup after quit. */
-    private fun writeSwapScript(
+    internal fun shellLiteral(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
+
+    /** Stage beside the installed app, validate, then swap with rollback.
+     * Untrusted or unsigned packages stay available for manual installation. */
+    internal fun writeSwapScript(
         mountPoint: String,
         newAppPath: String,
         currentAppPath: String,
         relaunch: Boolean,
     ): File {
-        // On an in-script abort: open the DMG in Finder for manual
-        // install (interactive path), or just log it (quit path).
-        val onErrorOpen =
-            if (relaunch) """open "$mountPoint""""
-            else """echo "[$(date)] not opening Finder (quit-triggered swap)" >> "${'$'}LOG""""
-        // Relaunch only when applying interactively. On quit we leave the
-        // app closed so the user's next launch runs the new version.
-        val relaunchBlock =
-            if (relaunch) {
-                """
-                    |# Relaunch the new .app
-                    |echo "[$(date)] launching new .app" >> "${'$'}LOG"
-                    |open "$currentAppPath"
-                    |""".trimMargin()
-            } else {
-                """
-                    |# Quit-triggered swap: NOT relaunching (user quit the app).
-                    |echo "[$(date)] swap done, leaving app closed (quit path)" >> "${'$'}LOG"
-                    |""".trimMargin()
-            }
-        // Heavy commenting in the script so /tmp/bywave-update.log
-        // shows what step failed if the user reports an issue.
         val script = """
             |#!/bin/bash
-            |set +e
-            |LOG=/tmp/bywave-update.log
-            |echo "[$(date)] update start" >> "${'$'}LOG"
-            |echo "  mount: $mountPoint" >> "${'$'}LOG"
-            |echo "  from:  $newAppPath" >> "${'$'}LOG"
-            |echo "  to:    $currentAppPath" >> "${'$'}LOG"
-            |
-            |# Wait for the parent JVM to fully release file descriptors
-            |# on the existing .app. 2s is conservative — JDK shutdown
-            |# hooks generally take well under a second.
-            |sleep 2
-            |
-            |# SECURITY: verify the new .app's code signature BEFORE we
-            |# overwrite the running app + strip its quarantine attr. The
-            |# in-app updater already verified the DMG's sha256 against the
-            |# (HTTPS-fetched) manifest, but that only proves "this is the
-            |# bytes the manifest pointed at" — if the manifest source were
-            |# ever compromised, sha256 would still self-match. codesign
-            |# --verify independently confirms the .app carries an intact
-            |# Apple Developer ID signature. We strip com.apple.quarantine
-            |# below (so Gatekeeper won't re-check on launch), so this is the
-            |# last line of defense. If it fails, abort the swap and open the
-            |# DMG for manual install rather than installing an unverified app.
-            |echo "[$(date)] verifying code signature of new .app" >> "${'$'}LOG"
-            |if ! codesign --verify --deep --strict "$newAppPath" >> "${'$'}LOG" 2>&1; then
-            |  echo "[$(date)] SIGNATURE VERIFY FAILED — refusing to install" >> "${'$'}LOG"
-            |  $onErrorOpen
+            |PATH=/usr/bin:/bin:/usr/sbin:/sbin
+            |MOUNT=${shellLiteral(mountPoint)}
+            |SOURCE=${shellLiteral(newAppPath)}
+            |CURRENT=${shellLiteral(currentAppPath)}
+            |RELAUNCH=${if (relaunch) "1" else "0"}
+            |LOG=${'$'}(mktemp -t bywave-update) || exit 1
+            |fail() {
+            |  echo "Update stopped; keeping the installed application." >> "${'$'}LOG"
+            |  if [ "${'$'}RELAUNCH" = 1 ]; then open "${'$'}MOUNT"; fi
             |  exit 1
+            |}
+            |# Wait for this application's JVM, never kill unrelated instances.
+            |for attempt in {1..30}; do
+            |  kill -0 ${ProcessHandle.current().pid()} 2>/dev/null || break
+            |  sleep 1
+            |done
+            |kill -0 ${ProcessHandle.current().pid()} 2>/dev/null && fail
+            |# A valid ad-hoc signature alone is not Developer ID trust.
+            |codesign --verify --deep --strict "${'$'}SOURCE" >> "${'$'}LOG" 2>&1 || fail
+            |spctl --assess --type execute "${'$'}SOURCE" >> "${'$'}LOG" 2>&1 || fail
+            |BUNDLE=${'$'}(/usr/libexec/PlistBuddy -c Print:CFBundleIdentifier "${'$'}SOURCE/Contents/Info.plist" 2>/dev/null)
+            |[ "${'$'}BUNDLE" = cn.bywave.calendar.desktop ] || fail
+            |OLD_TEAM=${'$'}(codesign -dv "${'$'}CURRENT" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            |NEW_TEAM=${'$'}(codesign -dv "${'$'}SOURCE" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            |[ -n "${'$'}NEW_TEAM" ] && [ "${'$'}NEW_TEAM" != not\ set ] || fail
+            |if [ -n "${'$'}OLD_TEAM" ] && [ "${'$'}OLD_TEAM" != not\ set ]; then
+            |  [ "${'$'}OLD_TEAM" = "${'$'}NEW_TEAM" ] || fail
             |fi
-            |
-            |# Belt-and-suspenders: kill any straggler ByWave process.
-            |pkill -f "ByWaveCalendar" >> "${'$'}LOG" 2>&1
-            |sleep 1
-            |
-            |# Swap the .app
-            |echo "[$(date)] removing old .app" >> "${'$'}LOG"
-            |rm -rf "$currentAppPath"
-            |
-            |echo "[$(date)] copying new .app from DMG (ditto)" >> "${'$'}LOG"
-            |# ditto, not `cp -R`: it's Apple's recommended tool for copying
-            |# signed .app bundles. cp -R can mangle extended attributes /
-            |# ACLs / resource forks in edge cases, which silently corrupts
-            |# the code signature; ditto preserves them faithfully so the
-            |# copy stays byte-for-byte Gatekeeper-valid.
-            |ditto "$newAppPath" "$currentAppPath"
-            |COPY_EXIT=${'$'}?
-            |
-            |if [ ${'$'}COPY_EXIT -ne 0 ]; then
-            |  echo "[$(date)] copy failed (exit ${'$'}COPY_EXIT) — leaving DMG mounted for manual install" >> "${'$'}LOG"
-            |  $onErrorOpen
-            |  exit 1
+            |STAGE=${'$'}(mktemp -d "${'$'}(dirname "${'$'}CURRENT")/.bywave-update.XXXXXX") || fail
+            |trap 'rm -rf "${'$'}STAGE/new.app"; rmdir "${'$'}STAGE" 2>/dev/null || true' EXIT
+            |ditto "${'$'}SOURCE" "${'$'}STAGE/new.app" >> "${'$'}LOG" 2>&1 || fail
+            |codesign --verify --deep --strict "${'$'}STAGE/new.app" >> "${'$'}LOG" 2>&1 || fail
+            |spctl --assess --type execute "${'$'}STAGE/new.app" >> "${'$'}LOG" 2>&1 || fail
+            |mv "${'$'}CURRENT" "${'$'}STAGE/previous.app" || fail
+            |if ! mv "${'$'}STAGE/new.app" "${'$'}CURRENT"; then
+            |  mv "${'$'}STAGE/previous.app" "${'$'}CURRENT"
+            |  fail
             |fi
-            |
-            |# Strip macOS quarantine attr so Gatekeeper doesn't re-prompt
-            |# on first launch. The .app is already Developer-ID-signed +
-            |# notarized + stapled, but downloaded files get the attr
-            |# regardless.
-            |xattr -dr com.apple.quarantine "$currentAppPath" >/dev/null 2>&1 || true
-            |
-            |# Re-verify the COPIED app before relaunching. We verified the
-            |# source on the DMG above, but a copy can still go wrong (disk
-            |# full, interrupted ditto). Since we already removed the old
-            |# app, the worst case is no app at all — so if the copy doesn't
-            |# verify, don't launch a broken/unsigned binary; open the DMG so
-            |# the user can finish the install by hand.
-            |if ! codesign --verify --deep --strict "$currentAppPath" >> "${'$'}LOG" 2>&1; then
-            |  echo "[$(date)] COPIED APP FAILED VERIFY — leaving for manual install" >> "${'$'}LOG"
-            |  $onErrorOpen
-            |  exit 1
-            |fi
-            |
-            |# Eject the DMG. Quiet — failure here doesn't matter (user
-            |# can manually eject later from Finder).
-            |hdiutil detach "$mountPoint" -quiet >/dev/null 2>&1 || true
-            |
-            |$relaunchBlock
-            |
-            |echo "[$(date)] update done" >> "${'$'}LOG"
+            |# Preserve quarantine; macOS remains responsible for launch approval.
+            |rm -rf "${'$'}STAGE/previous.app"
+            |hdiutil detach "${'$'}MOUNT" -quiet >/dev/null 2>&1 || true
+            |if [ "${'$'}RELAUNCH" = 1 ]; then open "${'$'}CURRENT"; fi
+            |echo "Update completed." >> "${'$'}LOG"
         """.trimMargin()
         val file = File.createTempFile("bywave-update-", ".sh")
         file.writeText(script)
