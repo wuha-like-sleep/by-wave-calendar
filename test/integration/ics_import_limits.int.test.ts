@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 导入日历（.ics）的大小上限 —— 从 HTTP 打进去，看真正生效的是哪个数。
 //
 // 这条路踩过两次「代码里写着一个上限、实际生效的是另一个」：
@@ -83,7 +84,12 @@ async function upload(s: { cookie: string; csrf: string }, calId: string, conten
   });
 }
 
-const where = (res: { headers: Record<string, unknown> }) => decodeURIComponent(String(res.headers.location ?? ""));
+const where = (res: Parameters<typeof redirectFlash>[0]) => {
+  const feedback = redirectFlash(res);
+  expect(String(res.headers.location)).not.toMatch(/[?&](success|error)=/);
+  expect(feedback.error ?? feedback.success).toBeTruthy();
+  return feedback.error ?? feedback.success ?? "";
+};
 
 describe("粘贴 .ics 文本", () => {
   it("**中文多的内容，没到字符上限就不能撞上请求体上限**（以前是英文 413）", async () => {

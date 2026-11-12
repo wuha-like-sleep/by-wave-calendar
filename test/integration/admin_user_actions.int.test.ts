@@ -8,6 +8,7 @@
 // 「已经发了」，然后让他干等。所以这里专门有一条「发信失败」的用例。
 
 import { vi, beforeAll, beforeEach, describe, it, expect } from "vitest";
+import { redirectFlash } from "./flash_helpers.js";
 
 vi.mock("../../src/db/client.js", async () => {
   const h = await import("./harness.js");
@@ -88,8 +89,12 @@ function post(url: string, payload: Record<string, string> = {}, c: Sess = admin
 function forgedPost(url: string, payload: Record<string, string> = {}, c: Sess = adminCookie) {
   return app.inject({ method: "POST", url, headers: { cookie: c.cookie }, payload });
 }
-const flash = (res: { headers: Record<string, unknown> }) =>
-  decodeURIComponent(String(res.headers.location ?? ""));
+const flash = (res: Parameters<typeof redirectFlash>[0]) => {
+  const feedback = redirectFlash(res);
+  expect(String(res.headers.location)).not.toMatch(/[?&](success|error)=/);
+  expect(feedback.error ?? feedback.success).toBeTruthy();
+  return feedback.error ?? feedback.success ?? "";
+};
 async function row(id: string) {
   const [r] = await db.select().from(schema.users).where(eq(schema.users.id, id));
   return r;
@@ -311,7 +316,7 @@ describe("真的删号", () => {
     for (const path of ["unlock", "disable-mfa", "send-password-reset", "resend-verification"]) {
       const res = await post(`/admin/users/${victim.id}/${path}`, {}, c);
       expect([302, 303, 403], `${path} 放行了非管理员`).toContain(res.statusCode);
-      expect(String(res.headers.location ?? "")).not.toContain("success");
+      expect(redirectFlash(res).success).toBeUndefined();
     }
     const del = await post(`/admin/users/${victim.id}/delete`, { confirmEmail: "victim@example.com" }, c);
     expect([302, 303, 403]).toContain(del.statusCode);

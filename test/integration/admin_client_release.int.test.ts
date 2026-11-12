@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 后台「客户端更新」—— 全部从 HTTP 打进去。
 //
 // 这一档最要紧的一条断言不是「文件写进去了」，而是**保存完之后去打公开接口**
@@ -147,7 +148,8 @@ describe("后台能覆盖客户端更新清单", () => {
       payload: formBody({ manifest: GOOD, _csrf: s.csrf }),
     });
     expect([302, 303]).toContain(res.statusCode);
-    expect(String(res.headers.location), "跳回去时带的是错误而不是成功").toContain("success=");
+    expect(redirectFlash(res).success, "跳回去时带的是错误而不是成功").toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
 
     const live = await liveVersion();
     expect(
@@ -167,7 +169,8 @@ describe("后台能覆盖客户端更新清单", () => {
       headers: { cookie: s.cookie, "content-type": FORM_CT },
       payload: formBody({ manifest: "{ 这不是 json", _csrf: s.csrf }),
     });
-    expect(String(res.headers.location)).toContain("error=");
+    expect(redirectFlash(res).error).toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
     await expect(readFile(OVERRIDE, "utf8")).rejects.toThrow();
     expect((await liveVersion()).code, "坏 JSON 把原来生效的那份弄没了").toBe(before.code);
   });
@@ -182,7 +185,8 @@ describe("后台能覆盖客户端更新清单", () => {
       headers: { cookie: s.cookie, "content-type": FORM_CT },
       payload: formBody({ manifest: JSON.stringify({ versionName: "1.0.0", downloadUrl: "https://x/y.apk" }), _csrf: s.csrf }),
     });
-    expect(String(res.headers.location), "缺 versionCode 却被当成保存成功了").toContain("error=");
+    expect(redirectFlash(res).error, "缺 versionCode 却被当成保存成功了").toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
     await expect(readFile(OVERRIDE, "utf8")).rejects.toThrow();
   });
 
@@ -199,7 +203,8 @@ describe("后台能覆盖客户端更新清单", () => {
       headers: { cookie: s.cookie, "content-type": FORM_CT },
       payload: formBody({ manifest: bad, _csrf: s.csrf }),
     });
-    expect(String(res.headers.location)).toContain("error=");
+    expect(redirectFlash(res).error).toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
     await expect(readFile(OVERRIDE, "utf8")).rejects.toThrow();
   });
 
@@ -230,7 +235,8 @@ describe("后台能覆盖客户端更新清单", () => {
       headers: { cookie: s.cookie, "content-type": FORM_CT },
       payload: formBody({ _csrf: s.csrf }),
     });
-    expect(String(res.headers.location)).toContain("success=");
+    expect(redirectFlash(res).success).toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
     const after = await liveVersion();
     expect(after.code, "清了覆盖，接口还在报那份被覆盖的版本").not.toBe(99);
   });

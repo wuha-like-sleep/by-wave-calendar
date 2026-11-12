@@ -1,3 +1,4 @@
+import { readFlash, redirectWithFlash } from "../lib/flash.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { eq } from "drizzle-orm";
@@ -28,14 +29,6 @@ import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 import { returnToOrApp } from "../lib/return_to.js";
 
-function flashFromQuery(req: any) {
-  const q = (req.query ?? {}) as Record<string, unknown>;
-  return {
-    error: typeof q.error === "string" ? q.error : undefined,
-    success: typeof q.success === "string" ? q.success : undefined,
-  };
-}
-
 /** Request-scoped translate for route handlers — flash messages, page
  *  titles, error-view copy. Locale comes from `req.locale`, stashed by the
  *  view-locals hook in src/server.ts. See tForRequest in src/lib/i18n.ts. */
@@ -53,7 +46,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       title: tr(req, "page.mfa"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       // Mid-login, single purpose: bare chrome so the half-authenticated
       // session can't reach the nav or the ⌘K palette before MFA is satisfied.
       bareLayout: true,
@@ -69,17 +62,17 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (s.mfaSatisfied || !s.user.mfaEnabled) return reply.redirect("/app");
 
     const body = z.object({ code: z.string().min(6).max(20) }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/login/mfa?error=" + encodeURIComponent(tr(req, "flash.mfa.codeFormat")));
+    if (!body.success) return redirectWithFlash(reply, "/login/mfa?error=" + encodeURIComponent(tr(req, "flash.mfa.codeFormat")));
 
     const code = body.data.code.trim();
     const secret = s.user.mfaTotpSecret;
-    if (!secret) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.mfa.configError")));
+    if (!secret) return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.mfa.configError")));
 
     // 账号已经被锁（不管是密码错的还是验证码错的）：这个半登录作废，回登录页。
     // 否则锁着的账号在这一页照样能继续猜验证码。
     if (isLocked(s.user)) {
       await destroySession(req, reply);
-      return reply.redirect("/login?error=" + encodeURIComponent(
+      return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(
         tr(req, "flash.login.lockedMinutes", { minutes: lockedRemainingMinutes(s.user) })));
     }
 
@@ -109,12 +102,9 @@ export async function mfaRoutes(app: FastifyInstance) {
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       setThemeCookies(reply, s.user.themePalette, s.user.themeDensity);
-      // Backup-code login: still honor return_to but tack on the
-      // success message via query string so the user sees「已使用备用码」
-      // banner on their original page.
+      // Honor return_to and show the backup-code notice on the destination.
       const target = consumeMfaReturnTo();
-      const sep = target.includes("?") ? "&" : "?";
-      return reply.redirect(target + sep + "success=" + encodeURIComponent(tr(req, "flash.mfa.backupUsed")));
+      return redirectWithFlash(reply, target, { success: tr(req, "flash.mfa.backupUsed") });
     }
 
     req.log.warn({ userId: s.user.id, ip: req.ip }, "mfa_failed");
@@ -126,17 +116,17 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (fresh && isLocked(fresh)) {
       // 刚被锁上：这个半登录作废，要猜就得重新输密码 —— 而密码那一关也锁着。
       await destroySession(req, reply);
-      return reply.redirect("/login?error=" + encodeURIComponent(
+      return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(
         tr(req, "flash.login.lockedMinutes", { minutes: lockedRemainingMinutes(fresh) })));
     }
-    return reply.redirect("/login/mfa?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
+    return redirectWithFlash(reply, "/login/mfa?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
   });
 
   // ---- MFA setup (authed) ----
   app.get("/app/settings/mfa/setup", async (req, reply) => {
     const s = await loadSession(req);
     if (!s || (s.user.mfaEnabled && !s.mfaSatisfied)) return reply.redirect("/login");
-    if (s.user.mfaEnabled) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.alreadyEnabled")));
+    if (s.user.mfaEnabled) return redirectWithFlash(reply, "/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.alreadyEnabled")));
 
     const secret = newTotpSecret();
     const qr = await totpQrDataUrl(s.user.email, secret);
@@ -145,7 +135,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       title: tr(req, "page.mfaSetup"),
       user: s.user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       secret,
       qr,
     });
@@ -160,10 +150,10 @@ export async function mfaRoutes(app: FastifyInstance) {
     const body = z
       .object({ secret: z.string().min(16).max(64), code: z.string().min(6).max(8) })
       .safeParse(req.body);
-    if (!body.success) return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.enterCode")));
+    if (!body.success) return redirectWithFlash(reply, "/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.enterCode")));
 
     if (!verifyTotpCode(body.data.secret, body.data.code)) {
-      return reply.redirect("/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.wrongCodeRescan")));
+      return redirectWithFlash(reply, "/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "flash.mfa.wrongCodeRescan")));
     }
 
     const { plain, stored } = generateBackupCodes();
@@ -196,12 +186,12 @@ export async function mfaRoutes(app: FastifyInstance) {
     if (!s.user.mfaEnabled) return reply.redirect("/app/settings");
 
     const body = z.object({ code: z.string().min(6).max(20) }).safeParse(req.body);
-    if (!body.success) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.confirmCurrentCode")));
+    if (!body.success) return redirectWithFlash(reply, "/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.confirmCurrentCode")));
 
     const secret = s.user.mfaTotpSecret;
-    if (!secret) return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.stateError")));
+    if (!secret) return redirectWithFlash(reply, "/app/settings?error=" + encodeURIComponent(tr(req, "flash.mfa.stateError")));
     if (!verifyTotpCode(secret, body.data.code)) {
-      return reply.redirect("/app/settings?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
+      return redirectWithFlash(reply, "/app/settings?error=" + encodeURIComponent(tr(req, "flash.code.wrong")));
     }
     await db
       .update(schema.users)
@@ -209,7 +199,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, s.user.id));
     void sendMail(securityChangeMail(s.user.email, { kind: "mfa_disabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
-    return reply.redirect("/app/settings?success=" + encodeURIComponent(tr(req, "flash.mfa.disabled")));
+    return redirectWithFlash(reply, "/app/settings?success=" + encodeURIComponent(tr(req, "flash.mfa.disabled")));
   });
 
   app.post("/app/settings/mfa/regenerate-codes", async (req, reply) => {

@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 三条上传路由的 CSRF：更新包、站点 Logo、BIMI Logo —— 从 HTTP 打进去。
 //
 // 这三条原来都不校验令牌（「multipart 读不到，靠 SameSite 兜底」），而本站和同一个
@@ -90,7 +91,12 @@ function multipartReq(url: string, parts: Part[]) {
   });
 }
 const csrfPart = (): Part => ({ name: "_csrf", value: sess.csrf });
-const where = (res: { headers: Record<string, unknown> }) => decodeURIComponent(String(res.headers.location ?? ""));
+const where = (res: Parameters<typeof redirectFlash>[0]) => {
+  const feedback = redirectFlash(res);
+  expect(String(res.headers.location)).not.toMatch(/[?&](success|error)=/);
+  expect(feedback.error ?? feedback.success).toBeTruthy();
+  return feedback.error ?? feedback.success ?? "";
+};
 
 describe("站点 Logo", () => {
   const file = (): Part => ({ name: "logo", filename: "a.txt", type: "text/plain", body: Buffer.from("not an image") });

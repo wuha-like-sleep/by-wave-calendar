@@ -351,7 +351,8 @@ describe("老 SSO 用户：三种组合", () => {
     await openSite();
     const u = await seedOldSsoUser({ slug: null });
     const r = await ssoLogin(app, sso, SLUG, { sub: "stranger-sub", email: VICTIM });
-    expect(r.location.startsWith("/login?error=")).toBe(true);
+    expect(r.location).toBe("/login");
+    expect(r.flash.error).toBeTruthy();
     expect(r.sessionCookie, "被拒了还发了会话").toBeNull();
     // 也不许偷偷把 subject 绑上去(绑上了下次就无条件进得去了)。
     expect(await countRows("user_identities", u.id)).toBe(0);
@@ -363,7 +364,7 @@ describe("老 SSO 用户：三种组合", () => {
     await openSite();
     await seedOldSsoUser({ slug: null });
     const r = await ssoLogin(app, sso, SLUG, { sub: "stranger-sub", email: VICTIM });
-    const msg = r.location.replace("/login?error=", "");
+    const msg = r.flash.error ?? "";
     expect(msg).not.toContain("flash.sso.");
     expect(msg.length).toBeGreaterThan(10);
   });

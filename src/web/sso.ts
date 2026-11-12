@@ -1,3 +1,4 @@
+import { redirectWithFlash } from "../lib/flash.js";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
@@ -320,7 +321,7 @@ export async function ssoRoutes(app: FastifyInstance) {
       return reply.redirect(url);
     } catch (err) {
       req.log.warn({ err, slug }, "sso_login_start_failed");
-      return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.configError", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
+      return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.configError", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
     }
   };
   app.get<{ Params: { slug: string }; Querystring: { link?: string } }>("/auth/sso/:slug/login", handleProviderLogin);
@@ -332,39 +333,39 @@ export async function ssoRoutes(app: FastifyInstance) {
   ) => {
       reply.clearCookie(STATE_COOKIE, { path: "/" });
       if (req.query.error) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerError", { error: String(req.query.error_description || req.query.error) })));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerError", { error: String(req.query.error_description || req.query.error) })));
       }
 
       const cookie = req.cookies[STATE_COOKIE];
-      if (!cookie) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
+      if (!cookie) return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
       const unsigned = req.unsignCookie(cookie);
       if (!unsigned.valid || !unsigned.value) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
       }
       let parsed: z.infer<typeof ssoStateSchema>;
       try {
         parsed = ssoStateSchema.parse(JSON.parse(Buffer.from(unsigned.value, "base64url").toString("utf8")));
       } catch {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
       }
       if (Date.now() >= parsed.expiresAt) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
       }
 
       const prov = await getProviderBySlug(parsed.slug);
       if (!prov || !prov.enabled) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerDisabled")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerDisabled")));
       }
       if (!req.query.state || req.query.state !== parsed.state) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateMismatch")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateMismatch")));
       }
       if (!req.query.code) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noCode")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.noCode")));
       }
       // Binding must finish in the same authenticated session that started it.
       // A login/logout or account switch in another tab cancels the intent.
       if (parsed.linkSessionId && (await loadFullSession(req))?.sessionId !== parsed.linkSessionId) {
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
       }
 
       try {
@@ -378,10 +379,10 @@ export async function ssoRoutes(app: FastifyInstance) {
         const email = (info.email ?? "").toLowerCase().trim();
         const subject = (info.sub ?? "").trim();
         if (!email) {
-          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noEmail")));
+          return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.noEmail")));
         }
         if (!subject) {
-          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noSub")));
+          return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.noSub")));
         }
 
         // ---- Link mode: bind this SSO identity to the CURRENT account. ----
@@ -391,11 +392,11 @@ export async function ssoRoutes(app: FastifyInstance) {
         if (parsed.linkSessionId) {
           const session = await loadFullSession(req);
           if (!session || session.sessionId !== parsed.linkSessionId) {
-            return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
+            return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
           }
           const linked = await linkIdentity({ userId: session.user.id, provider: parsed.slug, subject, email });
           if (!linked.ok) {
-            return reply.redirect("/app/settings/security?error=" + encodeURIComponent(tr(req, "flash.sso.alreadyLinkedElsewhere")));
+            return redirectWithFlash(reply, "/app/settings/security?error=" + encodeURIComponent(tr(req, "flash.sso.alreadyLinkedElsewhere")));
           }
           if (session.user.ssoProviderSlug !== parsed.slug) {
             await db.update(schema.users).set({ ssoProviderSlug: parsed.slug, updatedAt: new Date() }).where(eq(schema.users.id, session.user.id));
@@ -403,7 +404,7 @@ export async function ssoRoutes(app: FastifyInstance) {
           // created=false ⇒ this identity was already the user's own — re-binding
           // yourself is a no-op; say so instead of a misleading "已绑定".
           const msg = linked.created ? tr(req, "flash.sso.linked") : tr(req, "flash.sso.alreadyYours");
-          return reply.redirect("/app/settings/security?success=" + encodeURIComponent(msg));
+          return redirectWithFlash(reply, "/app/settings/security?success=" + encodeURIComponent(msg));
         }
 
         // ---- Normal login: 见 resolveSsoLogin 的注释 ----
@@ -417,14 +418,14 @@ export async function ssoRoutes(app: FastifyInstance) {
           ctx: { ip: req.ip, userAgent: String(req.headers["user-agent"] ?? "") || null },
         });
         if (!outcome.ok) {
-          return reply.redirect("/login?error=" + encodeURIComponent(ssoDenialMessage(req, outcome.denial)));
+          return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(ssoDenialMessage(req, outcome.denial)));
         }
         let user: schema.User = outcome.user;
 
         // Disabled-account gate: stop BEFORE writing any login event / alert,
         // otherwise a disabled user can keep triggering "you just signed in".
         if (!userIsActive(user)) {
-          return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.accountDisabled")));
+          return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.accountDisabled")));
         }
         // Keep the email-verified flag + last-used provider fresh. 判定见 ssoLoginPatch。
         {
@@ -447,7 +448,7 @@ export async function ssoRoutes(app: FastifyInstance) {
         return reply.redirect(redirect);
       } catch (err) {
         req.log.warn({ err, slug: parsed.slug }, "sso_callback_failed");
-        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.loginFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
+        return redirectWithFlash(reply, "/login?error=" + encodeURIComponent(tr(req, "flash.sso.loginFailed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") })));
       }
   };
   app.get<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>(

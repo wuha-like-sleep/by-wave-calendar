@@ -1,3 +1,4 @@
+import { redirectFlash, flashCookie } from "./flash_helpers.js";
 // Submit the rendered HTML through the real routes. Hand-written request bodies
 // miss browser repairs of nested forms (including duplicate CSRF fields).
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,7 +35,7 @@ beforeAll(async () => {
   await app.register(cookie, { secret: "integration-test-cookie-secret-32-chars-min" });
   await app.register(formbody);
   await app.register(view, {
-    engine: { ejs }, root: path.resolve("src/views"), propertyName: "view",
+    engine: { ejs }, root: path.resolve("src/views"), propertyName: "view", layout: "layout.ejs",
     defaultContext: { t: (key: string) => key },
   });
   await app.register(adminRoutes);
@@ -119,8 +120,15 @@ describe("SSO settings rendered forms", () => {
     const body = payload(page, form);
     const res = await submit(form, body);
     expect(res.statusCode, res.body).toBe(302);
-    expect(res.headers.location).toMatch(/^\/admin\/idp\?success=/);
+    expect(res.headers.location).toBe("/admin/idp");
+    expect(redirectFlash(res).success).toBeTruthy();
     expect(body.getAll("_csrf")).toHaveLength(1);
+    const redirected = await app.inject({ url: "/admin/idp", headers: { cookie: sessionCookie + "; " + flashCookie(res) } });
+    expect(redirected.statusCode).toBe(200);
+    expect(redirected.body).toContain("已更新「Updated SSO」");
+    expect(redirected.cookies.find((c) => c.name === "bwc_flash")?.value).toBe("");
+    const refreshed = await app.inject({ url: "/admin/idp", headers: { cookie: sessionCookie } });
+    expect(refreshed.body).not.toContain("已更新「Updated SSO」");
     expect(await getProvider(provider.id)).toMatchObject({
       label: "Updated SSO", issuerUrl: "https://updated.example.com", clientId: "updated-client",
       sortOrder: 7, enabled: !provider.enabled, clientSecret: provider.clientSecret,
@@ -135,6 +143,33 @@ describe("SSO settings rendered forms", () => {
     const res = await submit(form, payload(page, form));
     expect(res.statusCode, res.body).toBe(302);
     expect((await getProvider(providers[0]!.id))?.clientSecret).toBe("replacement-secret");
+  });
+
+  it("keeps validation failures visible on the clean destination URL", async () => {
+    const page = await loadPage();
+    const form = buttonForm(page, "保存修改");
+    const body = payload(page, form);
+    body.set("clientId", "");
+    const res = await submit(form, body);
+    expect(res.headers.location).toBe("/admin/idp");
+    expect(redirectFlash(res).error).toBe("参数无效");
+    const next = await app.inject({ url: "/admin/idp", headers: { cookie: sessionCookie + "; " + flashCookie(res) } });
+    expect(next.body).toContain("参数无效");
+    expect((await getProvider(providers[0]!.id))?.clientId).toBe(providers[0]!.clientId);
+  });
+
+  it("escapes provider labels in the one-time message", async () => {
+    const page = await loadPage();
+    const form = buttonForm(page, "保存修改");
+    const label = '<img src=x onerror="alert(1)">';
+    input(form, "label").value = label;
+    const res = await submit(form, payload(page, form));
+    expect(res.headers.location).toBe("/admin/idp");
+    const next = await app.inject({ url: "/admin/idp", headers: { cookie: sessionCookie + "; " + flashCookie(res) } });
+    const dom = new JSDOM(next.body);
+    pages.push(dom);
+    expect(dom.window.document.querySelector("[onerror]")).toBeNull();
+    expect(dom.window.document.body.textContent).toContain(`已更新「${label}」`);
   });
 
   it.each([0, 1])("deletes only provider %i through its separate confirmation form", async (index) => {
@@ -155,7 +190,8 @@ describe("SSO settings rendered forms", () => {
     expect([...body.keys()]).toEqual(["_csrf"]);
     const res = await submit(form, body);
     expect(res.statusCode, res.body).toBe(302);
-    expect(res.headers.location).toMatch(/^\/admin\/idp\?success=/);
+    expect(res.headers.location).toBe("/admin/idp");
+    expect(redirectFlash(res).success).toBeTruthy();
     expect(await getProvider(provider.id)).toBeUndefined();
     expect(await getProvider(other.id)).toEqual(other);
   });
@@ -174,7 +210,8 @@ describe("SSO settings rendered forms", () => {
     expect(form.checkValidity()).toBe(true);
     const res = await submit(form, body);
     expect(res.statusCode, res.body).toBe(302);
-    expect(res.headers.location).toMatch(/^\/admin\/idp\?success=/);
+    expect(res.headers.location).toBe("/admin/idp");
+    expect(redirectFlash(res).success).toBeTruthy();
     const rows = await db.select().from(schema.ssoProviders);
     expect(rows).toHaveLength(count + 1);
     expect(rows.find((p) => p.slug === "new-provider")).toMatchObject({

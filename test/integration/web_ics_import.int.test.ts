@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 网页上导入日历的两件事 —— 从 HTTP 打进去：
 //
 // 一、上传 .ics 要校验防伪造令牌。
@@ -151,7 +152,8 @@ describe("上传 .ics 不能被同站的别的页面代发", () => {
     const res = await upload(s, calId, Buffer.from(ics("ok-1@example.com", "ok-2@example.com")),
       { before: [{ name: "_csrf", value: s.csrf }], headers: FORM_ACCEPT });
     expect(res.statusCode, `带着正确令牌的正常上传被拒了：${res.body.slice(0, 200)}`).toBe(302);
-    expect(where(res), "没走到导入成功那一步").toContain("success=");
+    expect(where(res)).toBe(`/app/calendars/${calId}`);
+    expect(redirectFlash(res).success, "没走到导入成功那一步").toBeTruthy();
     expect(await eventCount(calId), "正常上传没有导进去").toBe(2);
   });
 
@@ -260,27 +262,29 @@ describe("导入弹窗（Accept: application/json）：失败就是失败", () =
   });
 });
 
-describe("日历详情页的原生表单（不带 Accept: application/json）：行为不变", () => {
-  it("上传超限 → 照旧 302 回详情页、?error= 里是那句话", async () => {
+describe("日历详情页的原生表单（不带 Accept: application/json）：干净跳转并保留反馈", () => {
+  it("上传超限 → 302 回详情页，临时提示保留错误说明", async () => {
     const { s, calId } = await setup();
     const res = await upload(s, calId, Buffer.alloc(MAX_ICS_IMPORT_BYTES + 1024, "x"),
       { before: [{ name: "_csrf", value: s.csrf }], headers: FORM_ACCEPT });
     expect(res.statusCode).toBe(302);
-    expect(where(res)).toContain(`/app/calendars/${calId}?error=`);
-    expect(where(res)).toMatch(/过大/);
+    expect(where(res)).toBe(`/app/calendars/${calId}`);
+    expect(redirectFlash(res).error).toMatch(/过大/);
   });
 
-  it("粘贴成功 → 照旧 302 + ?success=", async () => {
+  it("粘贴成功 → 干净的 302 跳转和成功提示", async () => {
     const { s, calId } = await setup();
     const res = await paste(s, calId, ics("form@x"), FORM_ACCEPT);
     expect(res.statusCode).toBe(302);
-    expect(where(res)).toContain(`/app/calendars/${calId}?success=`);
+    expect(where(res)).toBe(`/app/calendars/${calId}`);
+    expect(redirectFlash(res).success).toBeTruthy();
   });
 
   it("没写 Accept 也按原生表单处理", async () => {
     const { s, calId } = await setup();
     const res = await paste(s, calId, "不是日历不是日历不是日历不是日历不是日历不是日历");
     expect(res.statusCode).toBe(302);
-    expect(where(res)).toContain("?error=");
+    expect(where(res)).toBe(`/app/calendars/${calId}`);
+    expect(redirectFlash(res).error).toBeTruthy();
   });
 });

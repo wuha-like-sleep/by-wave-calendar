@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 后台「让所有设备重新同步日历」——**全部从 HTTP 打进去**。
 //
 // 为什么不直调 bumpCaldavSyncEpoch:那个函数本来就是对的(上一轮已经有断言)。
@@ -153,7 +154,8 @@ describe("POST /admin/caldav/resync", () => {
     const res = await post({ _csrf: adminAuth.csrf, confirm: "yes" }, { cookie: adminAuth.cookie });
 
     expect(res.statusCode, `按下去没跳回后台页,正文:${res.body.slice(0, 300)}`).toBe(302);
-    expect(res.headers.location).toMatch(/^\/admin\/caldav\?success=/);
+    expect(res.headers.location).toBe("/admin/caldav");
+    expect(redirectFlash(res).success).toBeTruthy();
     const after = await epochInDb();
     expect(after, "按完库里那一列没变 —— 提示说「已发出」,而设备永远不会回来").not.toBe(before);
     expect(after).not.toBe("");
@@ -227,7 +229,8 @@ describe("POST /admin/caldav/resync", () => {
     const before = await epochInDb();
     const res = await post({ _csrf: adminAuth.csrf }, { cookie: adminAuth.cookie });
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toMatch(/^\/admin\/caldav\?error=/);
+    expect(res.headers.location).toBe("/admin/caldav");
+    expect(redirectFlash(res).error).toBeTruthy();
     expect(await epochInDb(), "绕过确认页也执行了 —— 「一点就执行」").toBe(before);
   });
 });
