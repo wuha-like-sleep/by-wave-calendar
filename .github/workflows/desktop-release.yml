@@ -7,6 +7,8 @@ on:
     branches: [main]
     paths:
       - "apps/desktop/**"
+      - "!apps/desktop/releases/**"
+      - "!apps/desktop/*.md"
       - ".github/workflows/desktop-release.yml"
   workflow_dispatch:
     inputs:
