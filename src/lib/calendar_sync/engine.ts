@@ -83,13 +83,18 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
       throw new SyncUnavailableError("calendar_changed_retry");
     }
   }
+  // Index linked identities once; large calendars must not scan every link
+  // again for every event on every background pass.
+  const leftIds = new Set(state.links.map(x => x.leftId));
+  const rightIds = new Set(state.links.map(x => x.rightId));
   // Never import a linked event a second time, including unresolved conflicts.
   for (const [side, items] of [["left", l], ["right", r]] as const) {
     for (const item of items.values()) {
       if (mutations >= budget) break;
-      if (state.links.some(x => side === "left" ? x.leftId === item.id : x.rightId === item.id)) continue;
+      if ((side === "left" ? leftIds : rightIds).has(item.id)) continue;
       state.pending = { side, sourceId: item.id, origin: side === "left" ? stableTransactionId(pairId, item.id) : localOrigin(pairId, item.id), content: item.content };
       await persist(); await finishPending();
+      const link = state.links.at(-1)!; leftIds.add(link.leftId); rightIds.add(link.rightId);
     }
   }
   if (state.links.length > 20000) throw new SyncUnavailableError("calendar_too_large");

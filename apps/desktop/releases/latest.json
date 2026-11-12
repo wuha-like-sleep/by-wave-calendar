@@ -1,8 +1,37 @@
 {
   "versionCode": 26,
   "versionName": "1.2.0",
-  "releasedAt": "2026-11-13T00:00:00Z",
+  "releasedAt": "2026-11-12T15:22:07Z",
   "notes": "Windows / macOS 系统日历双向同步接入；全新安装引导、工具栏和设置界面；区分 Intel 与 Apple 芯片更新包。Outlook 需站长配置 Microsoft 应用 ID。此版本未配置发行签名和 Apple 公证。",
   "mandatory": false,
-  "assets": {}
+  "assets": {
+    "mac": {
+      "filename": "ByWaveCalendar-1.2.0-arm64.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg",
+      "sha256": "f41de0e93c4ab098b50312f652eb29a56077e31c43c7eecbc4621b6eb004b320",
+      "sizeBytes": 114103080
+    },
+    "macIntel": {
+      "filename": "ByWaveCalendar-1.2.0-x64.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.dmg",
+      "sha256": "b3c793aebfab371afa3a19a02122b4c9a49c139d06cd776c2d8e40cf0b38775f",
+      "sizeBytes": 107111303
+    },
+    "win": {
+      "filename": "ByWaveCalendar-1.2.0-x64.msi",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.msi",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.msi",
+      "sha256": "d83cf1ff879d912e96f731a750bf35c350085ac9e9c0605f64464178a6445905",
+      "sizeBytes": 104444479
+    },
+    "linux": {
+      "filename": "bywave-calendar_1.2.0_amd64.deb",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/bywave-calendar_1.2.0_amd64.deb",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/bywave-calendar_1.2.0_amd64.deb",
+      "sha256": "cf1c74ab3e29f1a047c1c725a4061cfe1fd5319ac3fba6d4c239994074ce5703",
+      "sizeBytes": 96042378
+    }
+  }
 }
