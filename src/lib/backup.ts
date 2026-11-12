@@ -45,6 +45,8 @@ export const EXPORT_TABLES = [
   { name: "app_passwords",        table: schema.appPasswords },
   { name: "api_tokens",           table: schema.apiTokens },
   { name: "calendars",            table: schema.calendars },
+  { name: "calendar_sync_accounts", table: schema.calendarSyncAccounts },
+  { name: "calendar_sync_pairs", table: schema.calendarSyncPairs },
   // booking_links 挂在 users + calendars 上，排在两者之后；
   // bookings 还挂着 events，所以排在 events 之后。
   { name: "booking_links",        table: schema.bookingLinks },
@@ -71,6 +73,7 @@ export const BACKUP_EXCLUDED_TABLES = new Set([
   "password_resets",
   "email_verifications",
   "login_challenges",
+  "calendar_sync_logins",       // Short-lived Microsoft device authorization codes
   "device_pairings",            // 5 分钟一次性配对码
   "oauth_authorization_codes",  // 10 分钟一次性授权码，换完令牌当场删
   "webhook_deliveries",         // 投递日志，会自己重新积累；而且它挂在 webhooks 下面
@@ -257,7 +260,14 @@ export async function importData(bundle: BackupBundle, opts: ImportOptions = {})
       if (rows.length === 0) { perTable.push(log); continue; }
       try {
         // Bulk insert; revive Date columns from ISO strings (drizzle expects Date).
-        const restored = rows.map((r) => reviveDates(r as Record<string, unknown>));
+        const restored = rows.map((r) => {
+          const row = reviveDates(r as Record<string, unknown>);
+          // A restored database must not roll back live external calendars.
+          // Preserve mappings, but require an explicit resume after review.
+          if (t.name === "calendar_sync_pairs") row.enabled = false;
+          if (t.name === "calendar_sync_accounts") { row.lease = null; row.leaseUntil = null; }
+          return row;
+        });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await tx.insert(t.table as any).values(restored as any);
         log.inserted = rows.length;

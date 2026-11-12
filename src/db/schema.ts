@@ -845,3 +845,31 @@ export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
 export type SignupInvite = typeof signupInvites.$inferSelect;
 export type NewSignupInvite = typeof signupInvites.$inferInsert;
+
+// Outlook credentials stay server-side; only an encrypted refresh token persists.
+export const calendarSyncAccounts = pgTable("calendar_sync_accounts", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(), label: text("label").notNull(),
+  clientId: text("client_id").notNull(), refreshToken: text("refresh_token").notNull(),
+  lease: uuid("lease"), leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+export const calendarSyncPairs = pgTable("calendar_sync_pairs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => calendarSyncAccounts.userId, { onDelete: "cascade" }),
+  calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),
+  remoteId: text("remote_id").notNull(), remoteName: text("remote_name").notNull(),
+  enabled: boolean("enabled").notNull().default(true), state: jsonb("state").notNull(),
+  conflicts: jsonb("conflicts").notNull().default([]), error: text("error"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull().defaultNow(),
+}, t => ({ calendarUnique: uniqueIndex("calendar_sync_calendar_unique").on(t.calendarId),
+  remoteUnique: uniqueIndex("calendar_sync_remote_unique").on(t.userId, t.remoteId) }));
+export const calendarSyncLogins = pgTable("calendar_sync_logins", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  sessionHash: text("session_hash").notNull(), clientId: text("client_id").notNull(),
+  deviceCode: text("device_code").notNull(), userCode: text("user_code").notNull(),
+  verificationUri: text("verification_uri").notNull(), interval: integer("interval").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  nextPollAt: timestamp("next_poll_at", { withTimezone: true }).notNull(),
+});

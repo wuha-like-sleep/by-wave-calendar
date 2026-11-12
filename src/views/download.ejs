@@ -160,7 +160,7 @@
       <% if (desktopMacUrl) { %>
         <a href="<%= desktopMacUrl %>"
            class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.desktop.mac") %><% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %>
+          <%= t("download.desktop.mac") %> (Apple Silicon)<% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %>
         </a>
       <% } else if (desktopWinUrl) { %>
         <a href="<%= desktopWinUrl %>"
@@ -193,11 +193,15 @@
         </p>
       <% } %>
 
-      <!-- Three-platform chip row — primary highlighted, others grey/disabled -->
+      <% if (desktopMacIntelUrl) { %>
+        <a href="<%= desktopMacIntelUrl %>" class="block text-center text-sm py-2 rounded-lg border border-slate-200 hover:bg-slate-50">macOS · Intel</a>
+        <% if (desktopMacIntelAltUrl) { %><a href="<%= desktopMacIntelAltUrl %>" class="block text-center text-xs underline"><%= t("download.mirror.prefix") %> macOS · Intel</a><% } %>
+      <% } %>
+      <!-- Platform downloads -->
       <div class="grid grid-cols-3 gap-1.5 pt-1">
         <a href="<%= desktopMacUrl || '#' %>" <% if (!desktopMacUrl) { %>aria-disabled="true"<% } %>
            class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopMacUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
-          macOS
+          macOS · Apple Silicon
         </a>
         <a href="<%= desktopWinUrl || '#' %>" <% if (!desktopWinUrl) { %>aria-disabled="true"<% } %>
            class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopWinUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">

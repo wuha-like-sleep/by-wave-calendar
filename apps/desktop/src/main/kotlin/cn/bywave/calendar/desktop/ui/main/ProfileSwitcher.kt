@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.Profile
@@ -87,12 +88,16 @@ fun ProfileSwitcher(
                     .padding(4.dp),
             ) {
                 Text(
-                    active.email,
+                    active.displayName?.takeIf { it.isNotBlank() } ?: active.email,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    active.serverUrl,
+                    active.serverUrl.removePrefix("https://").removePrefix("http://").trimEnd('/'),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline,
                 )

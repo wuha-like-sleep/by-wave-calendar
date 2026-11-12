@@ -206,10 +206,16 @@ object UpdateChecker {
         }
     }
 
-    private fun detectPlatform(): String? {
-        val os = System.getProperty("os.name").orEmpty().lowercase()
+    internal fun detectPlatform(osName: String = System.getProperty("os.name").orEmpty(),
+                                architecture: String = System.getProperty("os.arch").orEmpty()): String? {
+        val os = osName.lowercase()
+        val arch = architecture.lowercase()
         return when {
-            os.contains("mac") || os.contains("darwin") -> "mac"
+            os.contains("mac") || os.contains("darwin") -> when (arch) {
+                "aarch64", "arm64" -> "mac"
+                "x86_64", "amd64", "x64" -> "macIntel"
+                else -> null
+            }
             os.contains("win") -> "win"
             os.contains("nux") || os.contains("nix") || os.contains("aix") -> "linux"
             else -> null

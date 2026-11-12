@@ -414,6 +414,13 @@
       "when": 1789984800000,
       "tag": "0058_recurring_local_time_resync",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1794528000000,
+      "tag": "0059_system_calendar_sync",
+      "breakpoints": true
     }
   ]
 }

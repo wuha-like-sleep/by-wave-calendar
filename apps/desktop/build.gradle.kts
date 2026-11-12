@@ -1,20 +1,8 @@
-// Compose Multiplatform Desktop build script. One Gradle invocation
-// produces a signed/notarized DMG for macOS or an MSI installer for
-// Windows, depending on which host you build on (JetBrains' plugin
-// requires native tooling — DMG only builds on Mac, MSI only on Win).
-//
-// Common commands:
-//   ./gradlew packageDmg            # macOS .dmg in build/compose/binaries/
-//   ./gradlew packageMsi            # Windows .msi in same dir
-//   ./gradlew packageDistributionForCurrentOS  # whatever your host can do
-//   ./gradlew runDistributable     # smoke-test the packaged app locally
-//   ./gradlew run                   # quick iteration (no packaging)
-//
-// macOS signing: set the env vars before running packageDmg
-//   APPLE_DEVELOPER_ID_APPLICATION  # cert name in Keychain
-//   APPLE_NOTARY_KEYCHAIN_PROFILE   # `notarytool store-credentials` profile
-// macOS notarization happens automatically when the cert is present.
+// Kotlin / Compose Desktop. Build branded installers with packageBrandedDmg
+// (macOS), packageBrandedMsi (Windows), or packageDeb (Linux).
+// Signing and notarization require separately configured release credentials.
 
+import java.io.File
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -50,10 +38,10 @@ group = "cn.bywave.calendar.desktop"
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 25). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 26). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.1.2"
+version = "1.2.0"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
@@ -151,14 +139,8 @@ compose.desktop {
             // open-source (LICENSE is in the repo + the in-app About page),
             // so a DMG SLA buys us nothing and breaks seamless auto-update.
 
-            // App icon for the OS-native installer. Each platform needs
-            // a different file format; missing files just fall back to
-            // a generic icon (not fatal).
-            // - macOS wants .icns (use `iconutil -c icns icon.iconset/`)
-            // - Windows wants .ico
-            // - Linux wants .png
-            // For v0.1 stub: skip icons until we have proper assets.
             macOS {
+                iconFile.set(project.file("packaging/icon.icns"))
                 bundleID = "cn.bywave.calendar.desktop"
                 // Signing — only kicks in if env vars are set. Without
                 // them the build still succeeds, just unsigned (Mac
@@ -175,14 +157,13 @@ compose.desktop {
                 // Hardened runtime + entitlements (required for notarization).
                 infoPlist {
                     extraKeysRawXml = """
-                        <key>NSCameraUsageDescription</key>
-                        <string>扫描二维码登录需要使用相机</string>
                         <key>LSApplicationCategoryType</key>
-                        <string>public.app-category.utilities</string>
+                        <string>public.app-category.productivity</string>
                     """.trimIndent()
                 }
             }
             windows {
+                iconFile.set(project.file("packaging/icon.ico"))
                 // MSI installer — pulls user into Start menu + Programs.
                 // upgradeUuid is REQUIRED for Win to recognize updates;
                 // never change it across releases.
@@ -192,6 +173,7 @@ compose.desktop {
                 dirChooser = true
             }
             linux {
+                iconFile.set(project.file("packaging/icon.png"))
                 packageName = "bywave-calendar"
                 debMaintainer = "info@by-wave.com"
                 menuGroup = "Utility"
@@ -200,3 +182,36 @@ compose.desktop {
         }
     }
 }
+
+// Compose 1.7 replaces its internal jpackage resource directory after task
+// preparation. Package the already-built application image with the standard
+// jpackage CLI so native installer artwork is picked up deterministically.
+fun brandedInstaller(taskName: String, format: String, host: String) = tasks.register<Exec>(taskName) {
+    onlyIf { System.getProperty("os.name").lowercase().contains(host) }
+    dependsOn("createDistributable")
+    val imageDir = layout.buildDirectory.dir("compose/binaries/main/app")
+    val destination = layout.buildDirectory.dir("compose/binaries/main/$format")
+    inputs.dir(imageDir)
+    inputs.dir(layout.projectDirectory.dir("packaging"))
+    inputs.property("version", project.version.toString())
+    outputs.dir(destination)
+    doFirst {
+        val dest = destination.get().asFile.apply { mkdirs() }
+        val filename = "ByWaveCalendar-${project.version}.$format"
+        dest.resolve(filename).delete()
+        val javaRoot = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
+        val command = mutableListOf(
+            File(javaRoot, "bin/jpackage" + if (format == "msi") ".exe" else "").absolutePath,
+            "--type", format, "--name", "ByWaveCalendar", "--app-version", project.version.toString(),
+            "--vendor", "ByWave", "--description", "ByWave Calendar - self-hosted calendar desktop client",
+            "--app-image", imageDir.get().file(if (format == "dmg") "ByWaveCalendar.app" else "ByWaveCalendar").asFile.absolutePath,
+            "--dest", dest.absolutePath, "--resource-dir", project.file("packaging").absolutePath,
+        )
+        if (format == "dmg") command += listOf("--mac-package-identifier", "cn.bywave.calendar.desktop")
+        else command += listOf("--win-dir-chooser", "--win-shortcut", "--win-menu", "--win-menu-group", "ByWave Calendar",
+            "--win-upgrade-uuid", "8E2D7C3A-6F4B-4A11-A19D-E2A5C4F9B3E0")
+        commandLine(command)
+    }
+}
+brandedInstaller("packageBrandedDmg", "dmg", "mac")
+brandedInstaller("packageBrandedMsi", "msi", "windows")

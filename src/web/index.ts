@@ -340,6 +340,7 @@ export async function webRoutes(app: FastifyInstance) {
     const fmtSize = (n?: number) => n && n > 0 ? `${(n / 1024 / 1024).toFixed(1)} MB` : "";
     const { resolveAssetUrls } = await import("../lib/desktop_release.js");
     const [desktopMacUrl, desktopMacAltUrl] = await resolveAssetUrls(origin, desktop?.assets.mac);
+    const [desktopMacIntelUrl, desktopMacIntelAltUrl] = await resolveAssetUrls(origin, desktop?.assets.macIntel);
     const [desktopWinUrl, desktopWinAltUrl] = await resolveAssetUrls(origin, desktop?.assets.win);
     const [desktopLinuxUrl, desktopLinuxAltUrl] = await resolveAssetUrls(origin, desktop?.assets.linux);
     return reply.view("download", {
@@ -381,7 +382,7 @@ export async function webRoutes(app: FastifyInstance) {
       // per-OS variants.
       desktopVersion: desktop?.versionName || "v0.2",
       desktopNotes: desktop?.notes || "",
-      desktopMacUrl,
+      desktopMacUrl, desktopMacIntelUrl, desktopMacIntelAltUrl,
       desktopMacSize: fmtSize(desktop?.assets.mac?.sizeBytes),
       desktopWinUrl,
       desktopWinSize: fmtSize(desktop?.assets.win?.sizeBytes),

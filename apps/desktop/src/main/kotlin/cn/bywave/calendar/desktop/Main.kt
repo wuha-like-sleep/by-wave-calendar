@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -34,14 +35,23 @@ import cn.bywave.calendar.desktop.util.DebugLog
 
 // Brand palette mirrors Android Theme.kt — Mac+Win windows feel like
 // the same product as mobile clients.
-private val BrandPurple = Color(0xFF6640E9)
-private val BrandPurpleDark = Color(0xFFB39DFF)
+private val BrandPurple = Color(0xFF4F46E5)
+private val BrandPurpleDark = Color(0xFFBBB5FF)
 
 private val LightColors = lightColorScheme(
     primary = BrandPurple,
     secondary = BrandPurple,
     tertiary = BrandPurple,
-    surface = Color(0xFFFAFAFA),
+    background = Color(0xFFF6F7FB),
+    onBackground = Color(0xFF202539),
+    surface = Color.White,
+    onSurface = Color(0xFF202539),
+    surfaceVariant = Color(0xFFE9ECF5),
+    onSurfaceVariant = Color(0xFF596175),
+    outline = Color(0xFF747C90),
+    outlineVariant = Color(0xFFCDD2E0),
+    primaryContainer = Color(0xFFEEECFF),
+    onPrimaryContainer = Color(0xFF373085),
 )
 // 暗色配色:1.0.15 只改了 surface 一个颜色就启用,其余中性色留给
 // Material 默认值 —— 卡片(surfaceVariant 低透明度铺底)、网格线
@@ -54,9 +64,9 @@ private val DarkColors = darkColorScheme(
     onPrimary = Color(0xFF2A1A5E),        // 深紫压在浅紫上(今日圆点)
     secondary = BrandPurpleDark,
     tertiary = BrandPurpleDark,
-    background = Color(0xFF121216),
+    background = Color(0xFF11131C),
     onBackground = Color(0xFFEDEDF2),
-    surface = Color(0xFF17171C),          // 比 background 略亮 → 卡片能浮起来
+    surface = Color(0xFF191C28),          // 比 background 略亮 → 卡片能浮起来
     onSurface = Color(0xFFEDEDF2),        // 对 surface ≈ 14:1
     // 下面两个值是按「乘完 alpha 之后的实际对比度」反推的,不是拍脑袋:
     // 卡片用 surfaceVariant×0.35、网格线用 outlineVariant×0.5 铺底,
@@ -162,6 +172,7 @@ fun main() = application {
         visible = visible,
         state = state,
         title = "ByWave Calendar",
+        icon = painterResource("brand-icon.png"),
         // Translate global key events to ShortcutBus emissions. We
         // return false (don't consume) so text fields still receive
         // the keystroke when relevant — e.g. typing "T" in the title
@@ -214,7 +225,7 @@ fun main() = application {
                     },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(
                         androidx.compose.ui.input.key.Key.N,
-                        meta = true,
+                        meta = isMac, ctrl = !isMac,
                     ),
                 )
                 Item(
@@ -222,7 +233,7 @@ fun main() = application {
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.OpenSettings) },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(
                         androidx.compose.ui.input.key.Key.Comma,
-                        meta = true,
+                        meta = isMac, ctrl = !isMac,
                     ),
                 )
                 Item(
@@ -230,13 +241,13 @@ fun main() = application {
                     onClick = { ShortcutBus.flow.tryEmit(ShortcutAction.CheckUpdate) },
                     shortcut = androidx.compose.ui.input.key.KeyShortcut(
                         androidx.compose.ui.input.key.Key.U,
-                        meta = true,
+                        meta = isMac, ctrl = !isMac,
                     ),
                 )
                 Separator()
                 Item(tr("menu.quit"), onClick = ::exitApplication, shortcut = androidx.compose.ui.input.key.KeyShortcut(
                     androidx.compose.ui.input.key.Key.Q,
-                    meta = true,
+                    meta = isMac, ctrl = !isMac,
                 ))
             }
         }

@@ -19,6 +19,8 @@
 
 package cn.bywave.calendar.desktop.ui.auth
 
+import cn.bywave.calendar.desktop.ui.theme.BrandMark
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -221,13 +223,29 @@ fun SetupScreen(
     val signedOutKey by ProfileStore.signedOutReasonKey.collectAsState()
 
     Box(
-        modifier = Modifier.fillMaxSize().verticalScroll(outerScroll).padding(48.dp),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(outerScroll).padding(40.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            shadowElevation = 2.dp,
         ) {
+        Column(
+            modifier = Modifier.widthIn(max = 560.dp).padding(40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+        ) {
+            BrandMark(64.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                listOf("setup.stepServer", "setup.stepAuthorize", "setup.stepReady").forEachIndexed { index, key ->
+                    val activeStep = when (phase) { Phase.ServerUrl -> 0; Phase.GeneratingCode, Phase.ShowingQr -> 1; Phase.Approved -> 2 }
+                    Text("${index + 1}  ${cn.bywave.calendar.desktop.i18n.I18n.t(key)}", style = MaterialTheme.typography.labelMedium,
+                        color = if (activeStep == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (activeStep == index) FontWeight.SemiBold else FontWeight.Normal)
+                }
+            }
             signedOutKey?.let { key ->
                 SignedOutBanner(
                     message = remember(locale, key) { cn.bywave.calendar.desktop.i18n.I18n.t(key) },
@@ -288,6 +306,7 @@ fun SetupScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -322,7 +341,7 @@ private fun ServerUrlPanel(
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     Column(
-        modifier = Modifier.width(420.dp),
+        modifier = Modifier.widthIn(max = 440.dp).fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -363,6 +382,7 @@ private fun ServerUrlPanel(
         Button(
             onClick = onContinue,
             modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
             enabled = serverUrl.isNotBlank(),
         ) { Text(t("setup.generateQr"), style = MaterialTheme.typography.titleSmall) }
     }

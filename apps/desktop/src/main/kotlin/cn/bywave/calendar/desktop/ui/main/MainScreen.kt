@@ -43,6 +43,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ButtonDefaults
+import cn.bywave.calendar.desktop.ui.theme.BrandMark
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Button
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -64,6 +66,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -673,11 +676,14 @@ private fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(76.dp)
+            .background(MaterialTheme.colorScheme.surface)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!compact) {
+            BrandMark(32.dp)
+            Spacer(Modifier.width(10.dp))
             Text(
                 t("app.name"),
                 style = MaterialTheme.typography.titleMedium,
@@ -707,36 +713,37 @@ private fun TopBar(
         // 德语的月份名 + 年份最长,是这里的压力测试用例。
         Text(
             anchorLabel,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(12.dp))
 
-        // Day / Week / Month segmented switcher
-        SingleChoiceSegmentedButtonRow {
-            val options = ViewMode.entries
-            options.forEachIndexed { idx, m ->
-                SegmentedButton(
-                    selected = mode == m,
-                    onClick = { onModeChange(m) },
-                    shape = SegmentedButtonDefaults.itemShape(index = idx, count = options.size),
-                ) { Text(t(viewModeKey(m))) }
+        Row(
+            modifier = Modifier.clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            ViewMode.entries.forEach { option ->
+                androidx.compose.material3.TextButton(
+                    onClick = { onModeChange(option) },
+                    shape = RoundedCornerShape(9.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (mode == option) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        contentColor = if (mode == option) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                ) { Text(t(viewModeKey(option)), fontWeight = if (mode == option) FontWeight.SemiBold else FontWeight.Normal) }
             }
         }
+        Spacer(Modifier.width(12.dp))
 
-        Spacer(Modifier.width(16.dp))
-
-        if (loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(Dimens.spinnerSmall),
-                strokeWidth = Dimens.spinnerStroke,
-            )
-            Spacer(Modifier.width(8.dp))
-        }
         WithTooltip(t("topbar.new"), "N") {
-            Button(onClick = onNew) {
+            Button(onClick = onNew, shape = RoundedCornerShape(12.dp), modifier = Modifier.height(40.dp)) {
                 Icon(
                     Icons.Default.Add,
                     // 紧凑模式下文字没了,图标就得自己承担说明职责 ——
@@ -758,8 +765,9 @@ private fun TopBar(
             }
         }
         WithTooltip(t("topbar.refresh"), "R") {
-            IconButton(onClick = onRefresh) {
-                Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
+            IconButton(onClick = onRefresh, enabled = !loading) {
+                if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
             }
         }
         // Settings (Cmd+,) — primary entry to the Settings page. Logout
@@ -814,7 +822,7 @@ private fun Sidebar(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+            .background(MaterialTheme.colorScheme.surface)
             .verticalScroll(rememberScrollState())
             .padding(12.dp),
     ) {
@@ -848,7 +856,7 @@ private fun Sidebar(
                 modifier = Modifier.padding(horizontal = 10.dp),
             ) {
                 for (cal in calendars) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(12.dp)

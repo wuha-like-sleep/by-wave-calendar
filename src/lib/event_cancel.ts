@@ -18,6 +18,12 @@ export async function cancelEvent(eventId: string, deletedBy: { id: string; emai
     .set({ deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(schema.events.id, eventId));
 
+  return notifyEventCancellation(event, deletedBy);
+}
+
+/** Called after a conditional deletion has committed. */
+export async function notifyEventCancellation(event: schema.Event, deletedBy: { id: string; email: string; displayName: string | null }): Promise<{ ok: boolean; cancelledNotices: number }> {
+  const eventId = event.id;
   // Collect every distinct attendee email we ever invited to this event.
   const tokens = await db
     .select()
