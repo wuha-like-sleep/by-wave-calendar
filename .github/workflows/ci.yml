@@ -1,14 +1,10 @@
-# 每次 push / PR 跑一遍类型检查 + 单元测试 + i18n 完整性。
-#
-# 为什么需要:此前仓库只有 desktop-release.yml(打 tag 才跑),日常
-# 提交没有任何自动检查 —— 类型错误、测试红、某个语言漏 key 都得等到
-# 本地 `npm run release` 打包时才发现(release.sh 会因此中止),很容易
-# 在「要发版了」的时候才炸。
-#
-# 只跑不需要数据库的检查:typecheck / vitest / i18n:check。集成测试要
-# PostgreSQL,留给本地和 release 流程。
+# 与本地 npm run check 保持一致：类型、单元测试、PGlite 集成测试和翻译。
+# 集成测试使用进程内数据库，不需要额外的 PostgreSQL 服务。
 
 name: CI
+
+permissions:
+  contents: read
 
 on:
   push:
@@ -31,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
 
       - name: Install

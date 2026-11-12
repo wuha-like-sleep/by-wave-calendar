@@ -28,9 +28,9 @@ c_cyan "  仓库: $REPO_URL ($BRANCH)"
 
 # 1. 工具链
 command -v git >/dev/null || c_red "需要 git。CentOS: yum install -y git"
-command -v node >/dev/null || c_red "需要 Node.js >= 20。宝塔 → 软件商店 → Node.js"
-NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
-[ "$NODE_MAJOR" -ge 20 ] || c_red "Node 版本太老（当前 $(node -v)），需要 >= 20"
+command -v node >/dev/null || c_red "需要 Node.js >= 22.12.0。宝塔 → 软件商店 → Node.js"
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1)' \
+  || c_red "Node 版本太老（当前 $(node -v)），需要 >= 22.12.0"
 
 # 2. 目标目录
 if [ -z "${TARGET:-}" ]; then

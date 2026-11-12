@@ -6,7 +6,7 @@
 
 ## 本地跑起来
 
-需要 **Node ≥ 20** 和 **PostgreSQL 16**。
+需要 **Node ≥ 22.12.0** 和 **PostgreSQL 16**。
 
 ```bash
 git clone https://github.com/wuha-like-sleep/by-wave-calendar.git
@@ -21,21 +21,25 @@ npm run dev                   # http://127.0.0.1:3000
 
 ## 提交之前
 
-这三条在 CI 里会跑,本地先过一遍能省一轮来回:
+统一检查入口与 CI 保持一致，包含源码和测试类型、单元测试、集成测试及八种语言的完整性：
 
 ```bash
-npx tsc -p tsconfig.json --noEmit   # 类型检查
-npx vitest run                      # 单元测试
-npm run i18n:check                  # 语言包完整性
+npm run check
+npm run build        # 验证生产构建
+npm run audit:prod   # 查询生产依赖的已知漏洞（需要联网）
 ```
 
-`npm run release` 打包时也会强制跑这些,任何一条红都不会出包。
+`npm run release` 打包前强制执行 `npm run check`，再构建生产资源。集成测试使用进程内 PGlite，不需要额外数据库；导入配置仍需要 `.env` 中的必填值。
+
+单独运行：`npm run typecheck`、`npm test`、`npm run test:int`、`npm run i18n:check`。测试类型检查保留了六个历史欠账文件的独立清单，新增测试须通过正常类型检查。
+
+数据库迁移请先读 [drizzle/README.md](drizzle/README.md)，当前快照链不完整，不能直接运行 `db:generate`。文档入口见 [docs/README.md](docs/README.md)。
 
 ## 改动约定
 
-**改用户可见文案 → 必须补 8 种语言。** 词典在 `src/lib/i18n/locales/*.ts`(zh-CN 是源语言)。模板里用 `t("key")`,客户端 JS 用注入的 `window.BWC_T`。**不要在模板或 JS 里硬编码中文** —— 切到英文后会露出来。
+**改用户可见文案 → 必须补 8 种语言。** 词典在 `src/lib/i18n/locales/*.ts`(en 是源语言)。模板里用 `t("key")`,客户端 JS 用注入的 `window.BWC_T`。**不要在模板或 JS 里硬编码中文** —— 切到英文后会露出来。
 
-**自然语言解析词库**同时存在两份:服务端 `src/lib/nl_parse.ts`(所有客户端共用)和 `src/public/calendar-app.js` 里的一份副本(网页端实时预览用)。**改一处必须同步另一处**,否则预览和实际创建结果会不一致。
+**自然语言解析只有一份源码**：`src/lib/nl_parse.ts`。网页实时预览通过 `npm run build:nl` 从它生成 `src/public/lib/nl-parse.js`；`dev` 和 `build` 会自动运行此步骤，不要手改生成文件。
 
 **原生端版本号**各有两处,必须同步:
 
@@ -63,7 +67,7 @@ Thanks for taking the time. This repo holds the **server, web app, iOS, Android 
 
 ## Running locally
 
-Requires **Node ≥ 20** and **PostgreSQL 16**.
+Requires **Node ≥ 22.12.0** and **PostgreSQL 16**.
 
 ```bash
 npm ci
@@ -74,18 +78,22 @@ npm run dev             # http://127.0.0.1:3000
 
 ## Before you push
 
-CI runs these; running them locally saves a round trip:
+Run the shared checks, then verify the production build and dependency audit:
 
 ```bash
-npx tsc -p tsconfig.json --noEmit
-npx vitest run
-npm run i18n:check
+npm run check
+npm run build
+npm run audit:prod   # requires registry access
 ```
+
+`check` includes source/test types, unit tests, PGlite integration tests and translation completeness. Integration tests need no external database; required environment values must still be configured. The release script runs `check` before building. Six historical test files remain in an explicit typecheck backlog; new tests must pass the normal test typecheck.
+
+Read [the migration guide](drizzle/README.md) before changing the schema: the snapshot chain is incomplete, so do not run `db:generate`. See [the documentation index](docs/README.md) for other entry points.
 
 ## House rules
 
-- **Any user-facing string must land in all 8 locales** (`src/lib/i18n/locales/*.ts`, zh-CN is the source). Never hardcode text in templates or client JS — it shows up the moment someone switches language.
-- The **natural-language parser exists twice** — `src/lib/nl_parse.ts` (server, shared by every client) and a copy inside `src/public/calendar-app.js` (live preview on web). Change one, change the other.
+- **Any user-facing string must land in all 8 locales** (`src/lib/i18n/locales/*.ts`, en is the source). Never hardcode text in templates or client JS — it shows up the moment someone switches language.
+- The **natural-language parser has one source**, `src/lib/nl_parse.ts`. `npm run build:nl` generates the browser preview bundle; `dev` and `build` already run it. Do not edit generated bundles.
 - **Native version numbers live in two places per platform** and must stay in sync with the matching `releases/latest.json`, or the in-app updater will report "already up to date" forever.
 - Write commit messages that explain **why**, not just what.
 

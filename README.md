@@ -14,8 +14,8 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/package-json/v/wuha-like-sleep/by-wave-calendar?label=server&color=2563eb)](package.json)
 [![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-下载客户端)
-[![Node](https://img.shields.io/badge/Node-≥20-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/Node-≥22.12.0-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/wuha-like-sleep/by-wave-calendar/pulls)
@@ -233,7 +233,7 @@ by-wave-calendar/
 ├── deploy/
 │   ├── bt-panel/         宝塔部署：install.sh / nginx 示例 / ecosystem.config.cjs / README
 │   └── android-release.md
-├── docs/design/          设计文档（如 passkey 架构）
+├── docs/                 开发、部署、设计与发布文档
 ├── scripts/              构建 / 迁移 / 发布 / i18n 检查脚本
 ├── drizzle/              数据库迁移
 └── test/                 vitest 测试
@@ -260,13 +260,16 @@ by-wave-calendar/
 
 ## 🤝 贡献
 
+[开发、部署和发布文档](docs/README.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+
+数据库迁移须按手写迁移流程操作，不能直接运行 `db:generate`。 [drizzle/README.md](drizzle/README.md)
+
 PRs welcome。本地开发：
 
 ```bash
-npm install
+npm ci
 npm run dev          # 构建资产 + tsx watch
-npm run typecheck    # tsc --noEmit
-npm run db:generate  # 改 schema 后生成 SQL 迁移
+npm run check        # 类型、单元/集成测试、翻译完整性
 npm run db:migrate   # 应用迁移到数据库
 npm run i18n:check   # 检查各语言翻译覆盖率
 npm run test         # vitest

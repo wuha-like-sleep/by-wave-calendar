@@ -21,6 +21,7 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import Fastify, { type FastifyInstance } from "fastify";
+import { generateKeyPair, exportJWK, SignJWT } from "jose";
 
 import { db, schema } from "./security_harness.js";
 
@@ -87,13 +88,15 @@ export type SsoIdp = {
    * 不是布尔化之后的结果 —— 「字段干脆不发」和「发了个 false」是两种不同的
    * IdP 行为,而这一档要分别测它们。
    */
-  authorize(claims: { sub: string; email: string; email_verified?: unknown; name?: string }): string;
+  authorize(claims: { sub: string; email: string; email_verified?: unknown; name?: string }, nonce: string): string;
   close(): Promise<void>;
 };
 
 /** 起一台本地 HTTP 服务器冒充 Keycloak:发现文档 + /token + /userinfo。 */
 export async function startSsoIdp(clientId = "bywave-web"): Promise<SsoIdp> {
   const pending = new Map<string, Record<string, unknown>>();
+  const keys = await generateKeyPair("RS256", { extractable: true });
+  const jwk = { ...await exportJWK(keys.publicKey), kid: "sso-test", alg: "RS256", use: "sig" };
   let issuer = "";
   let seq = 0;
 
@@ -117,14 +120,18 @@ export async function startSsoIdp(clientId = "bywave-web"): Promise<SsoIdp> {
       // —— 被测的是**我们这边**拿到 claim 之后怎么认账号,不是 OIDC 协议本身。
       let body = "";
       req.on("data", (c) => { body += c; });
-      req.on("end", () => {
+      req.on("end", async () => {
         const code = new URLSearchParams(body).get("code") ?? "";
         if (!pending.has(code)) {
           res.writeHead(400, { "content-type": "application/json" });
           return res.end(JSON.stringify({ error: "invalid_grant" }));
         }
         // 访问令牌就用授权码本身,/userinfo 靠它找回 claim。
-        json({ access_token: code, token_type: "Bearer", expires_in: 300 });
+        const claims = pending.get(code)!;
+        const idToken = await new SignJWT({ sub: String(claims.sub), nonce: claims.nonce })
+          .setProtectedHeader({ alg: "RS256", kid: "sso-test" })
+          .setIssuer(issuer).setAudience(clientId).setIssuedAt().setExpirationTime("5m").sign(keys.privateKey);
+        json({ access_token: code, id_token: idToken, token_type: "Bearer", expires_in: 300 });
       });
       return;
     }
@@ -137,7 +144,7 @@ export async function startSsoIdp(clientId = "bywave-web"): Promise<SsoIdp> {
       }
       return json(claims);
     }
-    if (url.startsWith("/jwks")) return json({ keys: [] });
+    if (url.startsWith("/jwks")) return json({ keys: [jwk] });
     res.writeHead(404).end("no");
   });
 
@@ -147,9 +154,9 @@ export async function startSsoIdp(clientId = "bywave-web"): Promise<SsoIdp> {
   return {
     issuer,
     clientId,
-    authorize(claims) {
+    authorize(claims, nonce) {
       const code = `code-${++seq}-${Math.random().toString(36).slice(2, 8)}`;
-      const payload: Record<string, unknown> = { sub: claims.sub, email: claims.email };
+      const payload: Record<string, unknown> = { sub: claims.sub, email: claims.email, nonce };
       // 「字段干脆不发」必须是真的不发,不能发一个 undefined —— JSON 里那是
       // 两件事,而 idpEmailVerified 判的就是「字段在不在」。
       if ("email_verified" in claims && claims.email_verified !== undefined) {
@@ -218,9 +225,11 @@ export async function ssoLogin(
     throw new Error(`SSO 登录入口没有下发 state cookie:${start.statusCode} ${String(start.headers.location ?? start.body).slice(0, 200)}`);
   }
   const value = decodeURIComponent(stateCookie.split(";")[0]!.split("=").slice(1).join("="));
-  const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as { state: string };
+  const unsigned = app.unsignCookie(value);
+  if (!unsigned.valid || !unsigned.value) throw new Error("SSO state cookie signature is invalid");
+  const parsed = JSON.parse(Buffer.from(unsigned.value, "base64url").toString("utf8")) as { state: string; nonce: string };
 
-  const code = idp.authorize(claims);
+  const code = idp.authorize(claims, parsed.nonce);
   const cb = await app.inject({
     method: "GET",
     url: `/auth/idp/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(parsed.state)}`,

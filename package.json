@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "dev": "BWC_SKIP_MINIFY=1 npm run build:assets && tsx watch src/server.ts",
@@ -30,6 +30,8 @@
     "typecheck": "npm run typecheck:src && npm run typecheck:test && npm run typecheck:test:backlog",
     "test": "vitest run",
     "test:int": "vitest run --config vitest.integration.config.ts",
+    "check": "npm run typecheck && npm test && npm run test:int && npm run i18n:check",
+    "audit:prod": "npm audit --omit=dev",
     "build:nl": "node scripts/build-nl-bundle.mjs"
   },
   "dependencies": {
@@ -64,25 +66,39 @@
     "qrcode": "^1.5.4",
     "rrule": "^2.8.1",
     "sharp": "^0.35.4",
+    "undici": "^7.30.2",
     "web-push": "^3.6.7",
-    "zod": "^3.23.8"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/ejs": "^3.1.5",
+    "@types/jsdom": "^20.0.1",
     "@types/node": "^22.10.1",
     "@types/nodemailer": "^8.0.0",
     "@types/qrcode": "^1.5.6",
     "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.5.0",
-    "drizzle-kit": "^0.28.1",
+    "drizzle-kit": "^0.31.11",
     "esbuild": "^0.28.1",
+    "jsdom": "^20.0.3",
     "postcss": "^8.5.26",
     "tailwindcss": "^3.4.19",
     "terser": "^5.47.1",
     "tsx": "^4.19.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "@esbuild-kit/core-utils": {
+      "esbuild": "$esbuild"
+    },
+    "@parse/node-apn": {
+      "node-forge": "1.4.3"
+    },
+    "isomorphic-dompurify": {
+      "dompurify": "$dompurify"
+    }
   }
 }

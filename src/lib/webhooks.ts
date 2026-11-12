@@ -15,7 +15,7 @@
 // matches GitHub / Stripe so receivers can use existing libraries.
 
 import { createHmac } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { safeFetch } from "./ssrf_guard.js";
 import { env } from "../env.js";
@@ -26,6 +26,29 @@ export type WebhookEventName =
 
 const TIMEOUT_MS = 5_000;
 const MAX_BODY_LOG = 1024;
+
+async function readResponsePreview(response: Response): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  // At most four UTF-8 bytes per character. Keep a bounded prefix even if
+  // the receiver streams forever; log truncation must happen before buffering.
+  const maxBytes = MAX_BODY_LOG * 4;
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value.subarray(0, maxBytes - total));
+      chunks.push(chunk);
+      total += chunk.length;
+    }
+    if (total === maxBytes) await reader.cancel();
+    return Buffer.concat(chunks, total).toString("utf8").slice(0, MAX_BODY_LOG);
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 async function sendOnce(url: string, body: string, signature: string | null): Promise<{ statusCode: number | null; responseBody: string; ok: boolean; errorMessage: string | null }> {
   const ctrl = new AbortController();
@@ -49,7 +72,7 @@ async function sendOnce(url: string, body: string, signature: string | null): Pr
       signal: ctrl.signal,
       allowPrivate: env.ICS_ALLOW_PRIVATE_NETWORK,
     });
-    const text = (await resp.text()).slice(0, MAX_BODY_LOG);
+    const text = await readResponsePreview(resp);
     return { statusCode: resp.status, responseBody: text, ok: resp.ok, errorMessage: null };
   } catch (err) {
     return {
@@ -203,32 +226,15 @@ export async function pruneWebhookDeliveries(): Promise<void> {
   try {
     const rows = await db.select({ id: schema.webhooks.id }).from(schema.webhooks);
     if (rows.length === 0) return;
-    // We use a single DELETE per webhook keyed by row offset; pg can't
-    // do that natively without a subquery, so build a "keep these IDs"
-    // list and delete everything else.
     for (const r of rows) {
-      const keep = await db
-        .select({ id: schema.webhookDeliveries.id })
+      // Select stale IDs in the DELETE statement's snapshot. Fetching a keep
+      // list first can accidentally delete deliveries inserted between reads.
+      const stale = db.select({ id: schema.webhookDeliveries.id })
         .from(schema.webhookDeliveries)
         .where(eq(schema.webhookDeliveries.webhookId, r.id))
-        .orderBy(schema.webhookDeliveries.createdAt)
-        .limit(1000);
-      if (keep.length < 1000) continue;
-      const keepIds = keep.map((k) => k.id);
-      // Drizzle doesn't have a `notIn` helper at the time of this writing;
-      // emulate by deleting deliveries older than the oldest "kept" row.
-      const oldestKept = keep[0];
-      if (oldestKept) {
-        // Just delete the IDs we explicitly know are stale.
-        const toDelete = await db
-          .select({ id: schema.webhookDeliveries.id })
-          .from(schema.webhookDeliveries)
-          .where(eq(schema.webhookDeliveries.webhookId, r.id));
-        const deleteIds = toDelete.filter((d) => !keepIds.includes(d.id)).map((d) => d.id);
-        if (deleteIds.length > 0) {
-          await db.delete(schema.webhookDeliveries).where(inArray(schema.webhookDeliveries.id, deleteIds));
-        }
-      }
+        .orderBy(desc(schema.webhookDeliveries.createdAt), desc(schema.webhookDeliveries.id))
+        .offset(1000);
+      await db.delete(schema.webhookDeliveries).where(inArray(schema.webhookDeliveries.id, stale));
     }
   } catch {
     // pruning is opportunistic

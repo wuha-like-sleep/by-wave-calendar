@@ -51,9 +51,11 @@ export async function fetchIcsUrl(url: string): Promise<string> {
       headers: { "User-Agent": "ByWave-Calendar/1.0 (ICS importer)" },
       allowPrivate: env.ICS_ALLOW_PRIVATE_NETWORK,
     });
-    if (!resp.ok) throw new Error(`远程返回 HTTP ${resp.status}`);
-    const buf = Buffer.from(await resp.arrayBuffer());
-    if (buf.byteLength > MAX_BYTES) throw new Error(`文件过大（>${MAX_BYTES / 1024 / 1024} MB）`);
+    if (!resp.ok) {
+      await resp.body?.cancel();
+      throw new Error(`远程返回 HTTP ${resp.status}`);
+    }
+    const buf = await readLimitedIcsBody(resp);
     body = buf.toString("utf8");
   } catch (err) {
     // Surface the SSRF rejection as a clean, user-readable message rather
@@ -67,6 +69,35 @@ export async function fetchIcsUrl(url: string): Promise<string> {
     throw new Error("返回内容不是 iCalendar 格式（缺少 BEGIN:VCALENDAR）");
   }
   return body;
+}
+
+/** Enforce the limit while reading, before an oversized response fills memory. */
+export async function readLimitedIcsBody(resp: Response): Promise<Buffer> {
+  const tooLarge = () => new Error(`文件过大（>${MAX_BYTES / 1024 / 1024} MB）`);
+  const declared = Number(resp.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BYTES) {
+    await resp.body?.cancel();
+    throw tooLarge();
+  }
+  if (!resp.body) return Buffer.alloc(0);
+  const reader = resp.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BYTES) {
+        await reader.cancel();
+        throw tooLarge();
+      }
+      chunks.push(Buffer.from(value));
+    }
+    return Buffer.concat(chunks, total);
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 /**
@@ -312,7 +343,7 @@ const FIVE_MIN = 5 * 60 * 1000;
 export function startSubscriptionScheduler(logger: { info: (m: string) => void; warn: (m: unknown) => void }): void {
   if (schedulerStarted) return;
   schedulerStarted = true;
-  const tick = async () => {
+  const tick = makeSubscriptionTick(logger, async () => {
     try {
       const rows = await db
         .select({ id: schema.calendarSubscriptions.id })
@@ -326,8 +357,26 @@ export function startSubscriptionScheduler(logger: { info: (m: string) => void; 
     } catch (err) {
       logger.warn({ err });
     }
-  };
+  });
   setTimeout(() => { void tick(); }, 30_000);
   setInterval(() => { void tick(); }, FIVE_MIN);
   logger.info("subscription scheduler started (5-min tick)");
+}
+
+/** A slow refresh must finish before the next interval starts another batch. */
+export function makeSubscriptionTick(
+  logger: { warn: (m: unknown) => void },
+  refresh: () => Promise<void>,
+): () => Promise<void> {
+  let inFlight = false;
+  return async () => {
+    if (inFlight) {
+      logger.warn({ msg: "subscription refresh still running; skipping this tick" });
+      return;
+    }
+    inFlight = true;
+    try { await refresh(); }
+    catch (err) { logger.warn({ err }); }
+    finally { inFlight = false; }
+  };
 }

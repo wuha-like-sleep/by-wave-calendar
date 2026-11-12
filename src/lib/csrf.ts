@@ -24,7 +24,7 @@ export function verifyCsrf(req: FastifyRequest, reply: FastifyReply): boolean {
   const body = (req.body ?? {}) as Record<string, unknown>;
   const formToken = typeof body[TOKEN_FIELD] === "string" ? (body[TOKEN_FIELD] as string) : null;
   const provided = (typeof headerToken === "string" ? headerToken : null) ?? formToken;
-  if (!provided || provided.length !== expected.length) {
+  if (!provided || Buffer.byteLength(provided) !== Buffer.byteLength(expected)) {
     reply.code(403).send({ error: "csrf_invalid" });
     return false;
   }
@@ -65,7 +65,7 @@ export function verifyMultipartCsrf(
   const fieldValue = Array.isArray(field) ? field[0]?.value : field?.value;
   const provided = (typeof headerToken === "string" ? headerToken : null)
     ?? (typeof fieldValue === "string" ? fieldValue : null);
-  if (!provided || provided.length !== expected.length
+  if (!provided || Buffer.byteLength(provided) !== Buffer.byteLength(expected)
       || !timingSafeEqual(Buffer.from(provided), Buffer.from(expected))) {
     reply.code(403).send({ error: "csrf_invalid" });
     return false;

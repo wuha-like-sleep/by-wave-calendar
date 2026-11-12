@@ -554,6 +554,10 @@ export async function requireUserOrSend(
       reply.code(401).send({ error: "invalid_token" });
       return null;
     }
+    // The API CSRF hook exempts Bearer requests. An unrecognised credential
+    // must fail here, never inherit the browser's ambient cookie authority.
+    reply.code(401).send({ error: "invalid_token" });
+    return null;
   }
 
   // 2) Session cookie (normal browser flow).

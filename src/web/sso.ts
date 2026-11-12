@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { createSession, loadFullSession } from "../lib/session.js";
@@ -8,7 +9,7 @@ import { findUserIdByIdentity, linkIdentity } from "../lib/identities.js";
 import {
   buildAuthorizeUrl,
   exchangeCode,
-  fetchUserinfo,
+  fetchVerifiedUserinfo,
   generatePkce,
   randomState,
 } from "../lib/sso.js";
@@ -29,6 +30,15 @@ import { tForRequest } from "../lib/i18n.js";
 import { returnToOrApp } from "../lib/return_to.js";
 
 const STATE_COOKIE = "bwc_sso_state";
+const STATE_TTL_SECONDS = 10 * 60;
+const ssoStateSchema = z.object({
+  slug: z.string().min(1).max(31),
+  state: z.string().min(1).max(128),
+  nonce: z.string().min(1).max(128),
+  verifier: z.string().min(43).max(128),
+  expiresAt: z.number().int().positive(),
+  linkSessionId: z.string().min(1).nullable(),
+});
 
 // Redirect URI used in the OIDC dance. We deliberately use /auth/idp/...
 // instead of /auth/sso/... because 宝塔 / 阿里云 / 等 WAF 默认规则把
@@ -282,18 +292,23 @@ export async function ssoRoutes(app: FastifyInstance) {
     // Link mode: a logged-in user is BINDING this SSO identity to their current
     // account (rather than logging in/switching). Only honored when a session
     // actually exists; the callback re-checks the session as the authority.
-    const linkMode = req.query.link === "1" && Boolean(await loadFullSession(req));
+    const linkSession = req.query.link === "1" ? await loadFullSession(req) : null;
     try {
       const state = randomState();
       const nonce = randomState();
       const { verifier, challenge } = generatePkce();
-      const cookieValue = Buffer.from(JSON.stringify({ slug, state, nonce, verifier, link: linkMode })).toString("base64url");
+      const cookieValue = Buffer.from(JSON.stringify({
+        slug, state, nonce, verifier,
+        expiresAt: Date.now() + STATE_TTL_SECONDS * 1000,
+        linkSessionId: linkSession?.sessionId ?? null,
+      })).toString("base64url");
       reply.setCookie(STATE_COOKIE, cookieValue, {
         httpOnly: true,
         sameSite: "lax",
         secure: env.NODE_ENV === "production",
         path: "/",
-        maxAge: 10 * 60,
+        maxAge: STATE_TTL_SECONDS,
+        signed: true,
       });
       const url = await buildAuthorizeUrl({
         providerSlug: slug,
@@ -315,19 +330,25 @@ export async function ssoRoutes(app: FastifyInstance) {
     req: FastifyRequest<{ Querystring: { code?: string; state?: string; error?: string; error_description?: string } }>,
     reply: FastifyReply,
   ) => {
+      reply.clearCookie(STATE_COOKIE, { path: "/" });
       if (req.query.error) {
         return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.providerError", { error: String(req.query.error_description || req.query.error) })));
       }
 
       const cookie = req.cookies[STATE_COOKIE];
       if (!cookie) return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
-      reply.clearCookie(STATE_COOKIE, { path: "/" });
-
-      let parsed: { slug: string; state: string; nonce: string; verifier: string; link?: boolean };
+      const unsigned = req.unsignCookie(cookie);
+      if (!unsigned.valid || !unsigned.value) {
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
+      }
+      let parsed: z.infer<typeof ssoStateSchema>;
       try {
-        parsed = JSON.parse(Buffer.from(cookie, "base64url").toString("utf8"));
+        parsed = ssoStateSchema.parse(JSON.parse(Buffer.from(unsigned.value, "base64url").toString("utf8")));
       } catch {
         return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.stateCorrupt")));
+      }
+      if (Date.now() >= parsed.expiresAt) {
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.sessionExpired")));
       }
 
       const prov = await getProviderBySlug(parsed.slug);
@@ -340,6 +361,11 @@ export async function ssoRoutes(app: FastifyInstance) {
       if (!req.query.code) {
         return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.noCode")));
       }
+      // Binding must finish in the same authenticated session that started it.
+      // A login/logout or account switch in another tab cancels the intent.
+      if (parsed.linkSessionId && (await loadFullSession(req))?.sessionId !== parsed.linkSessionId) {
+        return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
+      }
 
       try {
         const tokens = await exchangeCode({
@@ -348,7 +374,7 @@ export async function ssoRoutes(app: FastifyInstance) {
           redirectUri: redirectUri(),
           codeVerifier: parsed.verifier,
         });
-        const info = await fetchUserinfo(parsed.slug, tokens.access_token);
+        const info = await fetchVerifiedUserinfo(parsed.slug, tokens, parsed.nonce);
         const email = (info.email ?? "").toLowerCase().trim();
         const subject = (info.sub ?? "").trim();
         if (!email) {
@@ -362,9 +388,9 @@ export async function ssoRoutes(app: FastifyInstance) {
         // The session cookie survives the OIDC round-trip, so re-read it here
         // as the authority (the state cookie only flags intent). We do NOT
         // switch/create accounts in this branch.
-        if (parsed.link) {
+        if (parsed.linkSessionId) {
           const session = await loadFullSession(req);
-          if (!session) {
+          if (!session || session.sessionId !== parsed.linkSessionId) {
             return reply.redirect("/login?error=" + encodeURIComponent(tr(req, "flash.sso.linkNeedsSignIn")));
           }
           const linked = await linkIdentity({ userId: session.user.id, provider: parsed.slug, subject, email });
