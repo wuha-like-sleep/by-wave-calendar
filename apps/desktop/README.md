@@ -43,17 +43,51 @@ Windows 可使用 `gradlew.bat` 执行相同任务。
 `build/compose/binaries/main/`。版本来自 `build.gradle.kts` 的 `version`，
 不要单独写死 `packageVersion`，也不要更改 Windows 的 `upgradeUuid`。
 
-macOS 本地签名配置见 `build.gradle.kts`，使用这些环境变量：
+### Mac 本地签名与公证
 
-- `APPLE_DEVELOPER_ID_APPLICATION`：钥匙串中的 Developer ID Application 身份。
-- `APPLE_NOTARY_APPLE_ID`、`APPLE_NOTARY_PASSWORD`、`APPLE_NOTARY_TEAM_ID`：公证凭据。
+正式发行使用 [本地发布脚本](../../scripts/release-macos.py)。需要完整 JDK 21、Xcode 命令行工具、
+钥匙串中的 Developer ID Application 证书与私钥，以及已验证的 notarytool 钥匙串配置。
+凭据只保留在本机，不导出私钥，不上传到仓库或 GitHub Secrets。
+发布脚本的离线检查：`python3 -m unittest discover -s scripts -p test_release_macos.py`。
 
-私钥、证书密码和公证凭据不得提交。发布前须验证产物签名与公证结果；
-仅构建成功不代表安装器已签名。
+```bash
+# 在仓库根目录执行；从输出中选取对应团队的 Developer ID Application 指纹。
+security find-identity -v -p codesigning
+
+# 首次配置：在本机交互输入 Apple ID、团队 ID 和应用专用密码。
+# 也可用已有 App Store Connect API 密钥配置；不要把密码或私钥写进命令历史。
+xcrun notarytool store-credentials bywave-calendar
+
+python3 scripts/release-macos.py build \
+  --identity YOUR_CERTIFICATE_SHA1 --team-id YOUR_TEAM_ID \
+  --java-home /absolute/path/to/jdk-21/Contents/Home
+
+# 上一步会打印 /private/tmp 中的独立 staging 目录。
+python3 scripts/release-macos.py notarize \
+  --stage /private/tmp/bywave-macos-ARCH-XXXX \
+  --keychain-profile bywave-calendar --output /absolute/path/to/releases
+```
+
+JDK 架构决定安装包架构：Apple Silicon 使用 arm64 JDK，Intel 使用 x64 JDK。
+Apple Silicon 可安装 Rosetta 后用 x64 JDK 本地构建 Intel 版本；两个架构分别运行测试。
+临时构建放在 `/private/tmp`，避免 iCloud / File Provider 给应用写入签名不允许的元数据。
+
+脚本使用证书指纹精确选择身份，支持钥匙串中多个同名续期证书。它签名应用、JVM、
+原生图形库及 JAR 内嵌原生库，启用 hardened runtime 和安全时间戳，保留库验证。
+JVM 仅获得 JIT 所需的可执行内存权限，不开启调试权限。
+先公证并装订应用，再生成品牌 DMG、签名、公证并装订 DMG。
+JDK 21 的 `jpackage` 会在封装时把输入应用改成临时签名，因此发布脚本保留它生成的
+安装窗口布局，再原样放回已公证的应用，并在提交 DMG 前验证内部应用的签名与票据。
+最终检查 Gatekeeper、内嵌应用、公证日志、架构和 SHA-256 后，才导出安装包。
+`build` 成功仅代表已签名；只有 `notarize` 输出 `Verified, notarized installer` 才可发布。
+
+提交 ID 保存在 staging 目录，网络中断后重跑同一条 `notarize` 命令可继续等待，
+不会重复提交已有任务。Apple 返回拒绝或警告时停止发布，先检查目录中的公证日志。
+签名后不要修改应用内容；需要重建时重新执行 `build`，不要复用旧公证任务。
 
 ## 分发与更新清单
 
-[桌面发布工作流](../../.github/workflows/desktop-release.yml)包含各平台打包任务。
+所有平台均在本地打包，GitHub 仅托管源码和已验证的发行附件，不运行云端打包。
 发布前同步以下版本字段：
 
 | 文件 | 字段 |
@@ -70,11 +104,11 @@ macOS 本地签名配置见 `build.gradle.kts`，使用这些环境变量：
 `mac` 对应 Apple Silicon，`macIntel` 对应 Intel；`win` 和 `linux` 对应 x64。
 缺少某平台产物时不要填写其他平台的安装器；更新后分别验证下载和升级流程。
 安装图标与背景由 `node scripts/build-desktop-branding.mjs` 在仓库根目录生成，源图案来自项目现有 SVG。
-发布工作流仅允许手动触发，普通提交、PR 和标签均不自动打包。
-手动构建须先确认可用额度，按需选择 Windows、Apple Silicon、Intel 或 Linux；仅需要完整发行时选择 all。
-填写版本标签时只创建草稿发行版，校验实际安装包 SHA-256 后再更新清单和发布。
-日常修改先运行本地测试和本地打包，复用已通过验证且客户端源码相同的 CI 安装包。
-已发布附件不可覆盖，否则会使已部署清单中的校验值失效。
+GitHub 桌面打包工作流已移除，云端 CI 也已停用；检查在本地执行。
+Windows 在 Windows 本机运行 `gradlew.bat test packageBrandedMsi`，Linux 本地运行 `./gradlew test packageDeb`。
+发布前核对实际安装包 SHA-256、大小、架构、签名状态与更新清单。
+已发布附件不可覆盖，否则会使已部署清单中的校验值失效；补签安装包使用新文件名。
+相同版本的补签包不会触发已安装同版本客户端的版本升级提示，可从下载页重新安装。
 
 ## 源码入口
 

@@ -100,9 +100,7 @@ tasks.withType<Test>().configureEach {
 }
 
 kotlin {
-    // JDK 21 — what Android Studio ships bundled, so locally we never
-    // need to install a separate JDK. Compose Desktop 1.7 supports
-    // JDK 17/21; we pick 21 to match the Android dev environment.
+    // Use a full JDK 21. A bundled IDE runtime may omit jpackage.
     jvmToolchain(21)
 }
 
@@ -142,19 +140,10 @@ compose.desktop {
             macOS {
                 iconFile.set(project.file("packaging/icon.icns"))
                 bundleID = "cn.bywave.calendar.desktop"
-                // Signing — only kicks in if env vars are set. Without
-                // them the build still succeeds, just unsigned (Mac
-                // users will see "unidentified developer" warning).
-                signing {
-                    sign.set(System.getenv("APPLE_DEVELOPER_ID_APPLICATION") != null)
-                    identity.set(System.getenv("APPLE_DEVELOPER_ID_APPLICATION") ?: "")
-                }
-                notarization {
-                    appleID.set(System.getenv("APPLE_NOTARY_APPLE_ID") ?: "")
-                    password.set(System.getenv("APPLE_NOTARY_PASSWORD") ?: "")
-                    teamID.set(System.getenv("APPLE_NOTARY_TEAM_ID") ?: "")
-                }
-                // Hardened runtime + entitlements (required for notarization).
+                // Release signing and notarization run locally through
+                // scripts/release-macos.py, using an exact certificate fingerprint.
+                // Compose 1.7 cannot disambiguate renewed certificates sharing a name.
+                signing { sign.set(false) }
                 infoPlist {
                     extraKeysRawXml = """
                         <key>LSApplicationCategoryType</key>
@@ -187,6 +176,9 @@ compose.desktop {
 // preparation. Package the already-built application image with the standard
 // jpackage CLI so native installer artwork is picked up deterministically.
 fun brandedInstaller(taskName: String, format: String, host: String) = tasks.register<Exec>(taskName) {
+    description = if (format == "dmg")
+        "Build a development DMG; use scripts/release-macos.py for signed, notarized releases"
+    else "Build the branded local $format installer"
     onlyIf { System.getProperty("os.name").lowercase().contains(host) }
     dependsOn("createDistributable")
     val imageDir = layout.buildDirectory.dir("compose/binaries/main/app")

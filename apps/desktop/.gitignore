@@ -8,10 +8,7 @@ build/
 *.iml
 local.properties
 
-# Gradle wrapper IS committed so CI runners (which check out a clean
-# tree) can invoke ./gradlew without bootstrapping. The .jar is ~60KB
-# binary but the trade-off is worth it: workflow runs that need
-# packageDmg / packageMsi need a runnable wrapper from minute zero.
+# Keep the Gradle wrapper committed for reproducible local builds.
 
 # macOS noise
 .DS_Store

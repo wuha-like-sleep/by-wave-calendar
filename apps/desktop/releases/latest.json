@@ -2,22 +2,22 @@
   "versionCode": 26,
   "versionName": "1.2.0",
   "releasedAt": "2026-11-12T15:22:07Z",
-  "notes": "Windows / macOS 系统日历双向同步接入；全新安装引导、工具栏和设置界面；区分 Intel 与 Apple 芯片更新包。Outlook 需站长配置 Microsoft 应用 ID。此版本未配置发行签名和 Apple 公证。",
+  "notes": "Windows / macOS 系统日历双向同步接入；全新安装引导、工具栏和设置界面。Mac Apple Silicon / Intel 补签包均已通过 Developer ID 签名和 Apple 公证，已安装 1.2.0 的用户可手动下载安装。Outlook 需站长配置 Microsoft 应用 ID。",
   "mandatory": false,
   "assets": {
     "mac": {
-      "filename": "ByWaveCalendar-1.2.0-arm64.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg",
-      "sha256": "f41de0e93c4ab098b50312f652eb29a56077e31c43c7eecbc4621b6eb004b320",
-      "sizeBytes": 114103080
+      "filename": "ByWaveCalendar-1.2.0-arm64-signed.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64-signed.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64-signed.dmg",
+      "sha256": "d0811e98daf8f362a64db59a02dec50fb85de8a08911337320c25b1b3aee8284",
+      "sizeBytes": 114041567
     },
     "macIntel": {
-      "filename": "ByWaveCalendar-1.2.0-x64.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.dmg",
-      "sha256": "b3c793aebfab371afa3a19a02122b4c9a49c139d06cd776c2d8e40cf0b38775f",
-      "sizeBytes": 107111303
+      "filename": "ByWaveCalendar-1.2.0-x64-signed.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64-signed.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64-signed.dmg",
+      "sha256": "214014b687923f0ef4155b8be0192a4ee0925854187420f704c0523c2de4a4cc",
+      "sizeBytes": 107031047
     },
     "win": {
       "filename": "ByWaveCalendar-1.2.0-x64.msi",

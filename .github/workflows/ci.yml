@@ -6,16 +6,9 @@ name: CI
 permissions:
   contents: read
 
+# Disabled in repository settings. Kept for reference only; routine checks run locally.
+# Do not re-enable without the repository owner's explicit request.
 on:
-  push:
-    branches: [main]
-    # 客户端源码和文档不影响服务端检查,跳过以省时间
-    paths-ignore:
-      - "apps/**"
-      - "docs/**"
-      - "**/*.md"
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
