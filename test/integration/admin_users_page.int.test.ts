@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 后台用户管理页 —— 从 HTTP 打进去。
 //
 // ── 这一页原来的三个问题 ──────────────────────────────────────────────
@@ -334,7 +335,8 @@ describe("单个用户的详情页", () => {
     for (const bad of ["not-a-uuid", "00000000-0000-0000-0000-000000000000"]) {
       const res = await app.inject({ method: "GET", url: `/admin/users/${bad}`, headers: { cookie: cookieHeader } });
       expect([302, 303], `${bad} 回的是 ${res.statusCode}`).toContain(res.statusCode);
-      expect(decodeURIComponent(String(res.headers.location))).toMatch(/找不到/);
+      expect(res.headers.location).toBe("/admin/users");
+      expect(redirectFlash(res).error).toMatch(/找不到/);
     }
   });
 

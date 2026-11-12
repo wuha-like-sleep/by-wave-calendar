@@ -1,3 +1,5 @@
+import { redirectFlash } from "./flash_helpers.js";
+import type { Flash } from "../../src/lib/flash.js";
 // 「认领已有账号」这一档专用的工装。
 //
 // 为什么又另起一份:security_harness.ts 的假 IdP 只发**发现文档 + JWKS**,够
@@ -197,9 +199,10 @@ export async function seedSsoProvider(idp: SsoIdp, slug = "keycloak"): Promise<v
 // ---------------------------------------------------------------------------
 
 export type SsoLoginResult = {
+  flash: Flash;
   /** 回调的响应状态(成功是 302)。 */
   status: number;
-  /** 回调把人送去哪儿。成功 → /app;失败 → /login?error=…(已解码)。 */
+  /** 回调把人送去哪儿。成功 → /app;失败 → /login；提示通过临时 Cookie 读取。 */
   location: string;
   /** 回调有没有真的发下来一个会话 cookie。 */
   sessionCookie: string | null;
@@ -241,6 +244,7 @@ export async function ssoLogin(
   })();
   return {
     status: cb.statusCode,
+    flash: redirectFlash(cb),
     location: decodeURIComponent(String(cb.headers.location ?? "")),
     sessionCookie: setCookies.find((c) => c.startsWith("bwc_sid=") && !c.includes("Max-Age=0")) ?? null,
   };

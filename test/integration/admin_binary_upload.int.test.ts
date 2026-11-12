@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 后台上传安装包 —— 从 HTTP 打进去，断言落在「传完之后外面看到什么」上。
 //
 // ── 这一档要守的两件事 ────────────────────────────────────────────────
@@ -278,7 +279,8 @@ describe("上传安装包", () => {
       headers: { cookie: s.cookie, "content-type": "application/x-www-form-urlencoded" },
       payload: new URLSearchParams({ _csrf: s.csrf }).toString(),
     });
-    expect(String(res.headers.location)).toContain("success=");
+    expect(redirectFlash(res).success).toBeTruthy();
+    expect(String(res.headers.location)).not.toContain("?");
     expect(await dirNames()).not.toContain(DMG);
     expect(await macUrl(), "删掉了还在发本站地址 —— 用户会撞 404").toBe(GITHUB_URL);
   });

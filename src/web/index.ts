@@ -1,3 +1,4 @@
+import { readFlash, redirectWithFlash as redirectWith, type Flash } from "../lib/flash.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
@@ -158,32 +159,10 @@ function bounceToLogin(req: FastifyRequest, reply: FastifyReply, flash?: Flash):
   return null;
 }
 
-
-type Flash = { error?: string; success?: string };
-
-function flashFromQuery(req: FastifyRequest): Flash {
-  const q = (req.query ?? {}) as Record<string, unknown>;
-  return {
-    error: typeof q.error === "string" ? q.error : undefined,
-    success: typeof q.success === "string" ? q.success : undefined,
-  };
-}
-
-function redirectWith(reply: FastifyReply, path: string, flash?: Flash) {
-  const params = new URLSearchParams();
-  if (flash?.error) params.set("error", flash.error);
-  if (flash?.success) params.set("success", flash.success);
-  const qs = params.toString();
-  if (!qs) return reply.redirect(path);
-  // Use & when the path already carries a query string (e.g. /register?invite=…).
-  const sep = path.includes("?") ? "&" : "?";
-  return reply.redirect(`${path}${sep}${qs}`);
-}
-
 // ---------- 导入日历的结果怎么回 ----------
 //
 // 导入的四条路由（上传 .ics、粘贴文本、从 URL 导入一次、新建订阅）各有两个调用方：
-//   · 日历详情页（calendar.ejs）的原生表单 —— 照旧 302 回详情页，结果放在 ?error= / ?success=；
+//   · 日历详情页（calendar.ejs）的原生表单 —— 照旧 302 回详情页，结果通过临时 Cookie 显示在页面里；
 //   · 日历主页的「导入日历」弹窗（calendar-app.js）用 fetch 提交，带 Accept: application/json ——
 //     回 JSON：成功 200 { ok: true, message, inserted, updated, skipped }，
 //     失败 4xx / 5xx { ok: false, message }，message 是按用户语言翻好的那句话。
@@ -276,7 +255,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.home"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
     });
   });
 
@@ -285,7 +264,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.about"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
     });
   });
 
@@ -307,7 +286,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: makeT(locale)(titleKey),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       siteName: settings.siteName || "ByWave Calendar",
       updatedDate: LEGAL_UPDATED,
     });
@@ -367,7 +346,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.download"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       siteName: settings.siteName || "ByWave Calendar",
       // iOS — App Store proper is now live as of 2026-05-26 (app id
       // 6772655143). TestFlight public beta also stays open as the
@@ -486,7 +465,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "login.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       form: {},
       qrLoginEnabled: settings.appsEnabled && settings.qrLoginEnabled,
       registrationMode: settings.registrationMode,
@@ -594,7 +573,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.securityCheck"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       bareLayout: true, // single-purpose: enter the device verification code, nothing else
     });
   });
@@ -642,7 +621,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.forgotPassword"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       form: {},
     });
   });
@@ -690,7 +669,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "resetPassword.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       token,
       // Single-purpose page: render bare chrome (no nav / footer / palette) so
       // the only thing reachable from a reset link is setting a new password —
@@ -775,7 +754,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "register.title"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       form: { email: inviteForValidation?.ok ? (inviteForValidation.invite.email ?? "") : "" },
       captcha: getClientRender(await getCaptchaConfig()),
       inviteToken,
@@ -886,7 +865,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.verifyEmail"),
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       email,
       mailerEnabled: await isMailerEnabled(),
       bareLayout: true, // single-purpose: enter the email verification code, nothing else
@@ -1069,7 +1048,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: makeT(locale)("nav.calendar"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       calendars,
       timezones: listTimezones(locale),
       jsStrings: clientStrings(locale),
@@ -1101,7 +1080,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "dashboard.title"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       calendars: rows,
     });
   });
@@ -1159,7 +1138,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: calendar.name,
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       calendar,
       events: eventRows.map((e) => ({
         ...e,
@@ -1518,7 +1497,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.attendees", { summary: event.summary }),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       event: {
         ...event,
         startsAtLocal: localTime(event.startsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
@@ -1825,12 +1804,12 @@ export async function webRoutes(app: FastifyInstance) {
   // RSVP — independent of "did you add to your own calendar"
   app.post<{ Params: { token: string } }>("/event-invite/:token/respond", async (req, reply) => {
     const body = z.object({ status: z.enum(["accepted", "declined", "tentative"]) }).safeParse(req.body);
-    if (!body.success) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=bad-status`);
+    if (!body.success) return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}?error=bad-status`);
     const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
-    if (!tok || tok.expiresAt < new Date()) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=expired`);
+    if (!tok || tok.expiresAt < new Date()) return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}?error=expired`);
     // Block RSVP when event is cancelled — the response would be meaningless.
     const [ev] = await db.select({ deletedAt: schema.events.deletedAt }).from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
-    if (ev?.deletedAt) return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?error=event-cancelled`);
+    if (ev?.deletedAt) return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}?error=event-cancelled`);
     await db
       .update(schema.eventInviteTokens)
       .set({ responseStatus: body.data.status, respondedAt: new Date() })
@@ -1845,7 +1824,7 @@ export async function webRoutes(app: FastifyInstance) {
     const msg = body.data.status === "accepted" ? tr(req, "flash.rsvp.accepted")
               : body.data.status === "declined" ? tr(req, "flash.rsvp.declined")
               :                                   tr(req, "flash.rsvp.tentative");
-    return reply.redirect(`/event-invite/${encodeURIComponent(req.params.token)}?success=${encodeURIComponent(msg)}`);
+    return redirectWith(reply, `/event-invite/${encodeURIComponent(req.params.token)}?success=${encodeURIComponent(msg)}`);
   });
 
   app.get<{ Params: { token: string } }>("/event-invite/:token", async (req, reply) => {
@@ -1882,7 +1861,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.addToCalendar"),
       user: currentUser,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       token: tok.token,
       recipientEmail: tok.recipientEmail,
       responseStatus: tok.responseStatus,
@@ -1988,7 +1967,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.acceptCalendarInvite"),
       user: currentUser,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       invitation: { token: inv.token, email: inv.email, role: inv.role, message: inv.message },
       calendar: cal,
       inviterName: inviter ? (inviter.displayName || inviter.email) : tr(req, "common.unknown"),
@@ -2074,9 +2053,9 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webauthnCredentials.createdAt));
 
     const apps = await listAppPasswords(user.id);
-    const q = (req.query ?? {}) as Record<string, unknown>;
-    const newPlain = typeof q.newAppPassword === "string" ? q.newAppPassword : null;
-    const newLabel = typeof q.newAppLabel === "string" ? q.newAppLabel : null;
+    const feedback = readFlash(req, reply);
+    const newPlain = feedback.newAppPassword ?? null;
+    const newLabel = feedback.newAppLabel ?? null;
 
     const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     const caldavBaseUrl = `${baseUrl}/caldav/`;
@@ -2092,7 +2071,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "nav.settings"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       createdAtLocal: localTime(user.createdAt),
       userPalette: user.themePalette,
       userDensity: user.themeDensity,
@@ -2147,7 +2126,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "search.heading"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       initialQuery: q,
     });
   });
@@ -2254,7 +2233,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.loginHistory"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       recentLogins: recentLogins.map((e) => ({
         ...e,
         createdAtLocal: localTime(e.createdAt),
@@ -2273,12 +2252,11 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/app/settings/devices", { error: tr(req, "flash.device.labelRequired") });
     }
     const issued = await createAppPassword(user.id, body.data.label);
-    const params = new URLSearchParams({
+    return redirectWith(reply, "/app/settings/devices#app-passwords", {
       success: tr(req, "flash.device.appPasswordCreated"),
       newAppPassword: issued.plain,
       newAppLabel: body.data.label,
     });
-    return reply.redirect(`/app/settings/devices?${params.toString()}#app-passwords`);
   });
 
   app.post<{ Params: { id: string } }>("/app/settings/app-passwords/:id/revoke", async (req, reply) => {
@@ -2470,7 +2448,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: tr(req, "page.bookingLinks"),
       user,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       links: links.map((l) => ({ ...l, publicUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${l.slug}` })),
       calendars: cals,
       defaultAvailability: DEFAULT_AVAILABILITY,
@@ -2602,7 +2580,7 @@ export async function webRoutes(app: FastifyInstance) {
       title: link.title,
       user: null,
       csrfToken: csrfTokenFor(req),
-      flash: flashFromQuery(req),
+      flash: readFlash(req, reply),
       link,
       owner,
       slotsByDate: Array.from(byDate.entries()).map(([date, slots]) => ({ date, slots })),
@@ -2656,7 +2634,7 @@ export async function webRoutes(app: FastifyInstance) {
           html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">📅 新预约</h1><p style="font-size:14px;color:#475569;margin:0 0 14px;"><strong>${body.data.guestName.replace(/[<>&]/g, "")}</strong> &lt;${body.data.guestEmail.replace(/[<>&]/g, "")}&gt; 通过<strong>${link.title}</strong>预约了你的时间</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;white-space:pre-wrap;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}</div></div>`,
         }).catch(() => undefined);
       }
-      return reply.redirect(`/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent(tr(req, "flash.booking.success"))}`);
+      return redirectWith(reply, `/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent(tr(req, "flash.booking.success"))}`);
     } catch (err) {
       // BookingError 带的是原因码，翻译在这里做 —— 以前这里贴的是 err.message，
       // 而那是一句硬编码中文，德语 / 日语访客看到的就是中文。
@@ -2672,7 +2650,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!b) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.cancelLinkInvalid.heading"), message: tr(req, "errorPage.cancelLinkInvalid.message") });
     return reply.view("booking/cancel", {
       title: tr(req, "page.cancelBooking"),
-      user: null, csrfToken: csrfTokenFor(req), flash: flashFromQuery(req),
+      user: null, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       booking: b,
     });
   });

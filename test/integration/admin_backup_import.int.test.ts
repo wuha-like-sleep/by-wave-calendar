@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 // 后台「导入备份」到底能收多大的文件 —— 从 HTTP 打进去。
 //
 // ── 这条的形状 ────────────────────────────────────────────────────────
@@ -144,7 +145,7 @@ describe("导入备份", () => {
     // 第一版就是只写了 not.toBe(413) + 是跳转 —— 而把 limits 去掉之后，
     // 请求会走进「文件过大」那条 catch，同样回 302，断言照样绿。
     // A/B 当场抓到了这个洞：变异之后 4 条全过。
-    const where = decodeURIComponent(String(res.headers.location));
+    const where = redirectFlash(res).error ?? redirectFlash(res).success;
     expect(
       where,
       "3MB 的备份被当成「过大」拒了 —— 路由没有自己的 limits，继承了全局的 2MB，" +
@@ -159,7 +160,7 @@ describe("导入备份", () => {
     const res = await importBackup(s, bigBackup(MAX_BACKUP_IMPORT_BYTES + 512 * 1024));
     expect([302, 303], `超限时回的是 ${res.statusCode}，不是跳回后台`).toContain(res.statusCode);
     expect(
-      decodeURIComponent(String(res.headers.location)),
+      redirectFlash(res).error,
       "超限时没有给出能看懂的中文提示",
     ).toMatch(/过大|上限/);
   });
@@ -169,7 +170,7 @@ describe("导入备份", () => {
     const s = await loginAs(u.id);
     const res = await importBackup(s, bigBackup(1000));
     expect([302, 303, 403]).toContain(res.statusCode);
-    expect(String(res.headers.location ?? "")).not.toContain("/admin/backup?success");
+    expect(redirectFlash(res).success).toBeUndefined();
   });
 });
 
@@ -303,8 +304,9 @@ describe("旧备份缺表：先拦下，站长确认了才清空", () => {
     const res = await importBackup(s, file, { confirmEmptyTables: value });
 
     expect([302, 303], `确认之后回的是 ${res.statusCode}`).toContain(res.statusCode);
-    const where = decodeURIComponent(String(res.headers.location));
-    expect(where, "确认之后没恢复成功").toContain("success=");
+    expect(res.headers.location).toBe("/admin/backup");
+    const where = redirectFlash(res).success;
+    expect(where, "确认之后没恢复成功").toBeTruthy();
     expect(where, "结果里没点名清空了哪几张").toMatch(/bookings \(1\)/);
     expect(where).toMatch(/devices \(1\)/);
     const after = await counts();
@@ -355,7 +357,8 @@ describe("旧备份缺表：先拦下，站长确认了才清空", () => {
       `站长按清单确认之后又被拦了一轮：${JSON.stringify(blockedTables(res.body))} —— ` +
         "多出来的 admin_audit_log 那一行是上一轮拦截自己写的",
     ).toContain(res.statusCode);
-    expect(decodeURIComponent(String(res.headers.location))).toContain("success=");
+    expect(redirectFlash(res).success).toBeTruthy();
+    expect(res.headers.location).toBe("/admin/backup");
     expect((await counts()).bookings).toBe(0);
   });
 
@@ -382,7 +385,8 @@ describe("旧备份缺表：先拦下，站长确认了才清空", () => {
     delete bundle.tables.push_subscriptions;   // 种数据时没建过推送订阅
     const res = await importBackup(s, Buffer.from(JSON.stringify(bundle)));
     expect([302, 303], `回的是 ${res.statusCode}，没东西可丢也被拦了`).toContain(res.statusCode);
-    expect(decodeURIComponent(String(res.headers.location))).toContain("success=");
+    expect(redirectFlash(res).success).toBeTruthy();
+    expect(res.headers.location).toBe("/admin/backup");
   });
 });
 

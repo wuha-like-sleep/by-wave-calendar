@@ -1,3 +1,4 @@
+import { redirectFlash } from "./flash_helpers.js";
 import { afterAll, beforeAll, beforeEach, afterEach, expect, it, vi } from "vitest";
 
 vi.mock("../../src/db/client.js", async () => {
@@ -69,7 +70,8 @@ it("signs SSO state and allows the original session to link its identity", async
   expect(app.unsignCookie(value).valid).toBe(true);
   const res = await callback(value, state.state);
   expect(res.statusCode).toBe(302);
-  expect(res.headers.location).toMatch(/^\/app\/settings\/security\?success=/);
+  expect(res.headers.location).toBe("/app/settings/security");
+    expect(redirectFlash(res).success).toBeTruthy();
   expect(await db.select().from(schema.userIdentities)).toMatchObject([{ userId, provider: "test", subject: "idp-subject" }]);
 });
 
@@ -78,7 +80,8 @@ it("rejects an unsigned cookie that changes login into account linking", async (
   const forged = Buffer.from(JSON.stringify({ ...state, link: true })).toString("base64url");
   const res = await callback(forged, state.state);
   expect(res.statusCode).toBe(302);
-  expect(res.headers.location).toMatch(/^\/login\?error=/);
+  expect(res.headers.location).toBe("/login");
+    expect(redirectFlash(res).error).toBeTruthy();
   expect(exchangeCode).not.toHaveBeenCalled();
   expect(await db.select().from(schema.userIdentities)).toHaveLength(0);
 });
@@ -87,7 +90,8 @@ it("rejects linking after the browser changes to another account", async () => {
   const { value, state } = await start(true);
   const other = await makeUser("other@example.com");
   const res = await callback(value, state.state, await loginAs(app, other.id));
-  expect(res.headers.location).toMatch(/^\/login\?error=/);
+  expect(res.headers.location).toBe("/login");
+    expect(redirectFlash(res).error).toBeTruthy();
   expect(exchangeCode).not.toHaveBeenCalled();
   expect(await db.select().from(schema.userIdentities)).toHaveLength(0);
 });
@@ -96,7 +100,8 @@ it("enforces the state lifetime on the server", async () => {
   const { value, state } = await start();
   vi.spyOn(Date, "now").mockReturnValue(Date.now() + 11 * 60_000);
   const res = await callback(value, state.state);
-  expect(res.headers.location).toMatch(/^\/login\?error=/);
+  expect(res.headers.location).toBe("/login");
+    expect(redirectFlash(res).error).toBeTruthy();
   expect(exchangeCode).not.toHaveBeenCalled();
 });
 
@@ -105,7 +110,8 @@ it.each([null, [], {}, { slug: "test", state: "x" }])("rejects malformed state %
   for (const cookieValue of [value, app.signCookie(value)]) {
     const res = await callback(cookieValue, "x");
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toMatch(/^\/login\?error=/);
+    expect(res.headers.location).toBe("/login");
+    expect(redirectFlash(res).error).toBeTruthy();
   }
   expect(exchangeCode).not.toHaveBeenCalled();
 });
