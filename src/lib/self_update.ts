@@ -157,55 +157,32 @@ export async function addRemote(name: string, url?: string): Promise<{ ok: boole
   }
 }
 
-export async function checkForUpdates(remoteOverride?: string): Promise<UpdateStatus> {
+// Explicitly update the tracking ref. A single-branch clone or an edited
+// remote.fetch setting may otherwise update FETCH_HEAD while leaving the
+// reference used by the admin page and installer stale.
+function fetchUpdateArgs(remote: string, branch: string): string[] {
+  return ["fetch", "--", remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`];
+}
+
+export async function checkForUpdates(remoteOverride?: string, cwd = CWD): Promise<UpdateStatus> {
   const remote = remoteOverride || pickRemote();
   const branch = pickBranch();
-  await run("git", ["fetch", remote, branch]).catch((err) => {
-    throw new Error(`git fetch 失败：${err.message}`);
+  const git = async (args: string[]) => (await exec("git", args, { cwd, timeout: STEP_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 })).stdout.trim();
+  await git(fetchUpdateArgs(remote, branch));
+  const head = await git(["rev-parse", "HEAD"]);
+  const headSubject = await git(["log", "-1", "--pretty=%s", head]);
+  const remoteSha = await git(["rev-parse", "--verify", `refs/remotes/${remote}/${branch}^{commit}`]);
+  // Errors are not proof that the installation is up to date. Let the route
+  // report them instead of returning behind=0 after a failed comparison.
+  const log = remoteSha === head ? "" : await git(["log", "--pretty=%h%x01%s%x01%cI", `${head}..${remoteSha}`]);
+  const newCommits = log.split("\n").filter(Boolean).map(line => {
+    const [sha, subject, date] = line.split("\x01");
+    return { sha: sha || "", subject: subject || "", date: date || "" };
   });
-
-  const head = (await run("git", ["rev-parse", "HEAD"])).stdout.trim();
-  const headSubject = (await run("git", ["log", "-1", "--pretty=%s", "HEAD"])).stdout.trim();
-  let remoteSha: string | null = null;
-  try {
-    remoteSha = (await run("git", ["rev-parse", `${remote}/${branch}`])).stdout.trim();
-  } catch {
-    remoteSha = null;
-  }
-
-  let behind = 0;
-  let newCommits: { sha: string; subject: string; date: string }[] = [];
-  if (remoteSha && remoteSha !== head) {
-    try {
-      const log = (await run("git", [
-        "log",
-        "--pretty=%h%x01%s%x01%cI",
-        `HEAD..${remote}/${branch}`,
-      ])).stdout;
-      newCommits = log
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [sha, subject, date] = line.split("\x01");
-          return { sha: sha || "", subject: subject || "", date: date || "" };
-        });
-      behind = newCommits.length;
-    } catch {
-      behind = 0;
-    }
-  }
-
-  // Quick "is the working tree dirty?" probe
-  const status = (await run("git", ["status", "--porcelain"])).stdout.trim();
-
+  const status = await git(["status", "--porcelain"]);
   return {
-    remote,
-    branch,
-    currentSha: head.slice(0, 12),
-    currentSubject: headSubject,
-    remoteSha: remoteSha ? remoteSha.slice(0, 12) : null,
-    behind,
-    newCommits,
+    remote, branch, currentSha: head.slice(0, 12), currentSubject: headSubject,
+    remoteSha: remoteSha.slice(0, 12), behind: newCommits.length, newCommits,
     hasLocalChanges: status.length > 0,
   };
 }
@@ -217,7 +194,7 @@ export type UpdateProgressEvent =
   | { type: "final"; ok: boolean };
 
 const STEPS = (npm: { cmd: string; prefixArgs: string[] }, remote: string, branch: string): { name: string; cmd: string; args: string[] }[] => [
-  { name: "git fetch", cmd: "git", args: ["fetch", remote, branch] },
+  { name: "git fetch", cmd: "git", args: fetchUpdateArgs(remote, branch) },
   { name: "git reset --hard", cmd: "git", args: ["reset", "--hard", `${remote}/${branch}`] },
   { name: "npm ci", cmd: npm.cmd, args: [...npm.prefixArgs, "ci", "--include=dev"] },
   { name: "npm run build", cmd: npm.cmd, args: [...npm.prefixArgs, "run", "build"] },
