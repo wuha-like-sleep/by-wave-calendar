@@ -1,45 +1,6 @@
-// Sparkle-style in-place updater. Given a downloaded DMG, mounts it,
-// writes a small shell script to /tmp that swaps the running .app for
-// the new one (after this JVM exits), then exits. No drag-to-Applications,
-// no Finder dance — the user clicks「下载并安装」 and the new version
-// is running in ~5 seconds.
-//
-// v0.8 adds a Chrome / VS Code style "download-in-background, apply on
-// quit" path on top of the click-to-install path:
-//   - stage(dmg)   stashes a downloaded DMG + arms a JVM shutdown hook.
-//                  When the user quits the app the hook spawns the same
-//                  detached swap script — but with relaunch=false, so the
-//                  app stays closed (quit + reopen = updated).
-//   - install(dmg) is the unchanged "apply now": swap + relaunch + exit.
-//                  The banner's「立即重启」button calls this. It clears the
-//                  staged file first so the shutdown hook can't double-apply.
-// Both paths funnel through spawnSwapScript() so the mount/verify/swap
-// logic lives in exactly one place.
-//
-// Why a shell script instead of doing the swap from inside the JVM:
-// macOS won't let us `rm -rf` our own .app while the JVM is running
-// from inside it (the binaries are open, sandbox + Mandatory Access
-// Control complaints). So we hand off to a detached `/bin/bash` process,
-// then exitProcess(0) — the script wakes up 2 seconds later, by which
-// point the JVM is gone, the .app is unreferenced, and the swap is
-// safe.
-//
-// Fallback chain (any step failing → show DMG in Finder for manual
-// install, which is exactly the v0.7.6 behaviour):
-//   - hdiutil attach fails             → open(DMG) in Finder
-//   - DMG has no ByWaveCalendar.app    → reveal mount in Finder
-//   - Can't locate current /Applications/ByWaveCalendar.app → reveal mount
-//   - Parent dir isn't writable        → reveal mount
-//
-// Platform support: macOS only (this file). Windows / Linux paths in
-// UpdateDownloader fall back to Desktop.open() — the MSI installer
-// handles its own upgrade via msiexec; .deb on Linux is a system
-// install via dpkg.
-//
-// Log: /tmp/bywave-update.log captures the swap script's output so
-// post-mortems are possible if something goes wrong. The script
-// re-launches the new .app via `open`, so the user sees a flicker
-// and then the updated app appears.
+// Desktop installer handoff. macOS swaps the application bundle after exit;
+// Windows waits for this JVM before running MSI upgrade and optional relaunch.
+// Linux delegates to the system package handler. A staged update applies on quit.
 
 package cn.bywave.calendar.desktop.data.update
 
@@ -57,7 +18,7 @@ object UpdateInstaller {
     private val _state = MutableStateFlow<InstallState>(InstallState.Idle)
     val state: StateFlow<InstallState> = _state.asStateFlow()
 
-    /** A downloaded DMG that's ready to apply on quit (or via「立即重启」).
+    /** A verified installer that's ready to apply on quit (or via「立即重启」).
      *  Set by [stage]; cleared by [install] before it exits so the
      *  shutdown hook can't double-apply. The UI observes this to show
      *  the「退出后自动更新」banner. */
@@ -83,14 +44,10 @@ object UpdateInstaller {
         data class Failed(val message: String) : InstallState()
     }
 
-    /** Install a downloaded DMG NOW. macOS does the in-place swap +
-     *  relaunch; other platforms open the file with the system default
-     *  handler (so the MSI installer pops up on Windows, etc.).
-     *
-     *  On macOS success this call does NOT return — exitProcess(0). The
-     *  swap script takes over and relaunches the new .app. This is the
-     *  「立即重启」path; it clears any staged DMG first so the
-     *  apply-on-quit shutdown hook can't run a second swap. */
+    /** Apply now, clearing the staged update to prevent duplicate shutdown work.
+     * macOS and Windows exit only after the installation helper is ready.
+     * Call on a worker thread: preparation performs file and process I/O. */
+    @Synchronized
     fun install(dmgFile: File) {
         // Clear staging BEFORE we (potentially) exit: the shutdown hook
         // reads _staged.value, so leaving it set would have the hook
@@ -98,10 +55,9 @@ object UpdateInstaller {
         _staged.value = null
 
         val os = System.getProperty("os.name").orEmpty().lowercase()
-        // Windows:真·自动更新 —— 派生一个 .cmd,等本进程退出后跑
-        // msiexec 静默升级再把 APP 拉起来(此前只是 Desktop.open() 把
-        // 安装向导丢给用户手点,所以「自动更新」在 Windows 上等于没有)。
+        // Wait for the Unicode-safe helper to verify the MSI before exiting.
         if (os.contains("win")) {
+            _state.value = InstallState.Mounting
             if (spawnWindowsUpdateScript(dmgFile, relaunch = true)) {
                 _state.value = InstallState.Swapping
                 Thread.sleep(300)
@@ -128,18 +84,10 @@ object UpdateInstaller {
         exitProcess(0)
     }
 
-    /** Stage a downloaded DMG to apply when the user quits the app. No
-     *  swap happens now — we just stash the file and arm a JVM shutdown
-     *  hook. The UI shows a「退出后自动更新」banner while a file is staged.
-     *
-     *  On non-macOS we keep the existing behaviour: there's no in-place
-     *  swap, so just open the installer with the system handler (no
-     *  staging). */
+    /** Stage a verified installer for apply-on-quit on macOS and Windows.
+     * Linux opens its package handler immediately. */
     fun stage(dmgFile: File) {
         val os = System.getProperty("os.name").orEmpty().lowercase()
-        // Windows 现在和 macOS 一样支持「退出后自动更新」:只存文件 + 装
-        // 钩子,不再在后台下载完成的瞬间冷不丁弹出安装向导(那是 1.0.15
-        // 之前 Windows 用户看到的行为,既突兀又容易被当成病毒)。
         if (os.contains("mac") || os.contains("darwin") || os.contains("win")) {
             _staged.value = dmgFile
             registerShutdownHook()
@@ -155,8 +103,8 @@ object UpdateInstaller {
      *  coroutines / Compose. We spawn the swap script detached with
      *  relaunch=false (the user is quitting; don't pop the app back open)
      *  and openFinderOnError=false (no Finder popup during a quit). The
-     *  script's own `sleep 2` ensures the swap lands after this JVM is
-     *  fully gone. */
+     *  Windows helper waits for this process; macOS uses its swap delay. */
+    @Synchronized
     private fun registerShutdownHook() {
         if (hookRegistered) return
         hookRegistered = true
@@ -170,54 +118,51 @@ object UpdateInstaller {
         })
     }
 
-    /** Windows 原地升级。写一个 .cmd 到 %TEMP% 并 detach 派生:
-     *    1) 等 2 秒,让本 JVM 完全退出 —— MSI 升级要删/换正在运行的
-     *       exe 和 jar,进程没走干净会被 Windows 文件锁挡住;
-     *    2) `msiexec /i … /passive /norestart` 执行升级。MSI 里
-     *       upgradeUuid 固定,Windows 据此识别为「大版本升级」而不是
-     *       并排装第二份。/passive 只显示进度条不需要点下一步;若安装
-     *       范围是 per-machine 会弹一次 UAC(这是系统强制,躲不掉);
-     *    3) 升级完把 APP 拉起来(relaunch=true 时);
-     *    4) 脚本删掉自己。
-     *  日志写到 %TEMP%\bywave-update.log,出问题能事后查。
-     *  返回 true = 脚本已派生(调用方随后退出进程);false = 派生失败,
-     *  已回落到 Desktop.open() 让用户手动装,APP 继续运行。 */
+    /** Start a Unicode-safe helper and wait for its readiness before exiting.
+     * Windows Installer owns the upgrade; the helper waits for this exact JVM,
+     * validates the staged MSI again and handles reboot/cancellation results.
+     */
     private fun spawnWindowsUpdateScript(msiFile: File, relaunch: Boolean): Boolean {
+        var helper: Process? = null
+        var ready: File? = null
         return try {
-            // 当前 exe 路径:jpackage 生成的启动器(…\ByWaveCalendar.exe)。
-            // 取不到就不重启 —— 宁可让用户自己点开,也不要拉起个错的东西。
+            require(msiFile.isFile && msiFile.extension.equals("msi", ignoreCase = true))
             val exe = ProcessHandle.current().info().command().orElse(null)
-            val tmp = File(System.getProperty("java.io.tmpdir"))
-            val log = File(tmp, "bywave-update.log").absolutePath
-            val script = File(tmp, "bywave-update-${System.nanoTime()}.cmd")
-            val relaunchLine = if (relaunch && exe != null) "start \"\" \"$exe\"" else "rem no relaunch"
-            script.writeText(
-                buildString {
-                    appendLine("@echo off")
-                    appendLine("echo [%DATE% %TIME%] bywave update start >> \"$log\"")
-                    // 等 JVM 退出,释放文件锁。
-                    appendLine("timeout /t 2 /nobreak >nul")
-                    appendLine("msiexec /i \"${msiFile.absolutePath}\" /passive /norestart /L*v \"$log\"")
-                    appendLine("if errorlevel 1 (")
-                    appendLine("  echo [%DATE% %TIME%] msiexec failed errorlevel=%errorlevel% >> \"$log\"")
-                    // 静默升级失败(用户取消 UAC 等)→ 打开安装包让他手动装。
-                    appendLine("  start \"\" \"${msiFile.absolutePath}\"")
-                    appendLine(") else (")
-                    appendLine("  echo [%DATE% %TIME%] bywave update ok >> \"$log\"")
-                    appendLine("  $relaunchLine")
-                    appendLine(")")
-                    appendLine("del \"%~f0\"")
-                },
-                Charsets.US_ASCII,   // .cmd 用 ANSI 读;路径里的非 ASCII 由引号包住的绝对路径承载
-            )
-            ProcessBuilder("cmd", "/c", "start", "/min", "", script.absolutePath)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(ProcessBuilder.Redirect.DISCARD)
+            val systemRoot = System.getenv("SystemRoot") ?: error("Windows system directory unavailable")
+            val powershell = File(systemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe")
+            require(powershell.isFile) { "PowerShell unavailable" }
+            val directory = java.nio.file.Files.createTempDirectory("bywave-update-").toFile()
+            ready = File(directory, "ready")
+            val log = File(directory, "update.log")
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            msiFile.inputStream().use { input ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    digest.update(buffer, 0, count)
+                }
+            }
+            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            val encoded = WindowsUpdateScript.encoded(WindowsUpdateScript.build(
+                msiFile.absolutePath, exe, ProcessHandle.current().pid(), hash,
+                log.absolutePath, ready.absolutePath, relaunch,
+            ))
+            require(encoded.length < 28_000) { "Installer path exceeds command length limit" }
+            helper = ProcessBuilder(powershell.absolutePath, "-NoLogo", "-NoProfile", "-NonInteractive",
+                "-WindowStyle", "Hidden", "-EncodedCommand", encoded)
+                .redirectErrorStream(true)
+                .redirectOutput(File(directory, "helper.log"))
                 .start()
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+            while (!ready.isFile && helper.isAlive && System.nanoTime() < deadline) Thread.sleep(50)
+            check(ready.isFile) { "Windows update helper did not become ready" }
             true
         } catch (e: Exception) {
+            helper?.destroy()
+            ready?.delete()
             DebugLog.d("ByWave Updater") { "windows spawn failed: ${e.message}" }
-            runCatching { Desktop.getDesktop().open(msiFile) }
+            if (relaunch) runCatching { Desktop.getDesktop().open(msiFile) }
             _state.value = InstallState.FallbackOpenedInFinder(
                 cn.bywave.calendar.desktop.i18n.I18n.t("update.installer.nonMac"),
             )
