@@ -77,7 +77,9 @@ fun UpdateDialog(onDismiss: () -> Unit) {
     LaunchedEffect(download) {
         val d = download
         if (d is DownloadState.Done && install is UpdateInstaller.InstallState.Idle) {
-            UpdateInstaller.install(d.file)
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                UpdateInstaller.install(d.file)
+            }
         }
     }
 
@@ -237,7 +239,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         // v0.7.7: download() — no implicit Finder open.
                         // The LaunchedEffect(download) collector above
                         // chains to UpdateInstaller.install() on Done.
-                        UpdateDownloader.download(asset!!.url, asset.sha256.ifBlank { null })
+                        UpdateDownloader.download(asset!!.url, asset.sha256, asset.sizeBytes)
                     }
                 }) {
                     Text(when {

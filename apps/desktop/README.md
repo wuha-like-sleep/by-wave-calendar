@@ -85,6 +85,25 @@ JDK 21 的 `jpackage` 会在封装时把输入应用改成临时签名，因此�
 不会重复提交已有任务。Apple 返回拒绝或警告时停止发布，先检查目录中的公证日志。
 签名后不要修改应用内容；需要重建时重新执行 `build`，不要复用旧公证任务。
 
+### Windows 本地测试安装包
+
+需要 Windows、完整 x64 JDK 21、WiX 3 和 Python 3.11 或更新版本。Windows ARM64
+可通过系统的 x64 模拟运行这些工具，生成的安装器仍是 x64。无需修改 PowerShell 执行策略。
+在仓库根目录执行：
+
+```powershell
+python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home "C:\Tools\wix3" --output "C:\Builds\bywave-test" --unsigned-test-package
+```
+
+脚本将源码复制到本机临时目录，运行桌面测试、品牌安装器打包和原生架构检查，输出带有
+`local-test` 标记的 MSI、SHA-256 和校验记录。Windows 专属测试会实际运行 PowerShell，
+覆盖中文和特殊字符路径、安装成功、需要重启、用户取消及失败分支。
+构建失败时保留临时目录便于查看日志；输出目录已有不同内容的同名安装包时拒绝覆盖。
+
+此入口只用于没有代码签名证书时的本地测试，安装器会显示未知发布者。
+它不修改版本或更新清单，也不发布和替换发行附件。同版本测试包须先卸载旧测试包再安装；
+正式升级必须递增版本，并配置 Windows 代码签名后另行验证。
+
 ## 分发与更新清单
 
 所有平台均在本地打包，GitHub 仅托管源码和已验证的发行附件，不运行云端打包。

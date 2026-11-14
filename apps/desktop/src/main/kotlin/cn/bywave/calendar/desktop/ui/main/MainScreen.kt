@@ -187,7 +187,7 @@ fun MainScreen(
         if ((dl is DownloadState.Idle || dl is DownloadState.Failed) &&
             UpdateInstaller.staged.value == null
         ) {
-            scope.launch { UpdateDownloader.download(asset.url, asset.sha256.ifBlank { null }) }
+            scope.launch { UpdateDownloader.download(asset.url, asset.sha256, asset.sizeBytes) }
         }
     }
     // When the background download finishes, stage the file so it applies
@@ -331,7 +331,11 @@ fun MainScreen(
             if (stagedFile != null && !bannerDismissed) {
                 StagedUpdateBanner(
                     versionName = updateInfo?.versionName,
-                    onRestartNow = { UpdateInstaller.staged.value?.let { UpdateInstaller.install(it) } },
+                    onRestartNow = {
+                        UpdateInstaller.staged.value?.let { file ->
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) { UpdateInstaller.install(file) }
+                        }
+                    },
                     onDismiss = { bannerDismissed = true },
                 )
             }
