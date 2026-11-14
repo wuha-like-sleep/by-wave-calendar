@@ -182,7 +182,7 @@ fun main() {
             visible = visible,
             state = state,
             title = "ByWave Calendar",
-            icon = painterResource(if (isMac) "brand-icon-macos.png" else "brand-icon.png"),
+            icon = painterResource("brand-icon.png"),
             // Translate global key events to ShortcutBus emissions. We
             // return false (don't consume) so text fields still receive
             // the keystroke when relevant — e.g. typing "T" in the title

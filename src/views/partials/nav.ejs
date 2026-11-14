@@ -5,7 +5,7 @@
         <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
           <img src="<%= siteLogoUrl %>" alt="logo" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
         <% } else { %>
-          <span class="inline-block h-9 w-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm"></span>
+          <img src="/static/brand/logo-small.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" alt="" width="36" height="36" class="h-9 w-9" />
         <% } %>
         <span class="hidden sm:inline text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
         <span class="sm:hidden text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>

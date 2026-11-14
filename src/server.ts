@@ -679,15 +679,15 @@ app.get("/manifest.webmanifest", { config: { rateLimit: false } }, async (_req, 
     categories: ["productivity", "utilities"],
     prefer_related_applications: false,
     icons: [
-      { src: settings.logoUrl || "/static/favicon.svg", sizes: "any", type: settings.logoUrl ? "image/png" : "image/svg+xml", purpose: "any" },
-      { src: "/static/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-      { src: "/static/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/static/icons/icon-192-maskable.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-      { src: "/static/icons/icon-512-maskable.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: settings.logoUrl || `/static/brand/logo.svg?v=${ASSET_VERSION}`, sizes: "any", type: settings.logoUrl ? "image/png" : "image/svg+xml", purpose: "any" },
+      { src: `/static/icons/icon-192.png?v=${ASSET_VERSION}`, sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: `/static/icons/icon-512.png?v=${ASSET_VERSION}`, sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: `/static/icons/icon-192-maskable.png?v=${ASSET_VERSION}`, sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: `/static/icons/icon-512-maskable.png?v=${ASSET_VERSION}`, sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
-      { name: "我的日历", url: "/app", icons: [{ src: "/static/favicon.svg", sizes: "any" }] },
-      { name: "新建事件", url: "/app#new-event", icons: [{ src: "/static/favicon.svg", sizes: "any" }] },
+      { name: "我的日历", url: "/app", icons: [{ src: `/static/favicon.svg?v=${ASSET_VERSION}`, sizes: "any" }] },
+      { name: "新建事件", url: "/app#new-event", icons: [{ src: `/static/favicon.svg?v=${ASSET_VERSION}`, sizes: "any" }] },
     ],
   };
   reply.header("Content-Type", "application/manifest+json");

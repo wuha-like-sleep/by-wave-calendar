@@ -73,6 +73,12 @@ ByWaveCalendar/
 - **推送**:APNs 能力在 v1.3.3 有意移除(服务器还没发 APNs),`PushService` 留桩;
   重新启用的完整清单在 `ByWaveCalendar.entitlements` 注释里。
 
+## 应用图标
+
+在仓库根目录执行 `npm run build:branding`，从 `src/public/brand/logo.svg` 生成
+不带透明通道的 1024×1024 App Store 图标。与桌面、网页及 Android 共用源文件，
+无需再运行独立的 Swift 绘图脚本。
+
 ## 发布
 
 见 [RELEASE_iOS.md](RELEASE_iOS.md)(版本号位置、archive 命令、App Store Connect 步骤)。

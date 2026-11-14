@@ -1,13 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#4338ca"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="7" fill="url(#g)"/>
-  <rect x="8" y="11" width="16" height="14" rx="2" fill="#fff"/>
-  <rect x="8" y="11" width="16" height="4" fill="#312e81"/>
-  <circle cx="12" cy="9" r="1.5" fill="#fff"/>
-  <circle cx="20" cy="9" r="1.5" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs><linearGradient id="tile" x2=".8" y2="1"><stop stop-color="#8578F6"/><stop offset="1" stop-color="#4933C4"/></linearGradient></defs>
+  <g id="brand-tile">
+  <rect x="3" y="3" width="26" height="26" rx="6" fill="url(#tile)"/>
+  </g>
+  <g id="brand-mark">
+  <rect x="8" y="9" width="16" height="16" rx="3" fill="#FAF9FF"/>
+  <path d="M9 13H23" stroke="#E3DEF7" stroke-width="1"/>
+  <path d="M12 7.5V10.5M20 7.5V10.5" stroke="#FFF" stroke-width="1.5" stroke-linecap="round"/>
+  <path d="M11 19C12.3 17 13.7 17 15 19S17.7 21 19 19L21.5 16.5" fill="none" stroke="#6953D7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
