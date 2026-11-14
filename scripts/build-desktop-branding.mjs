@@ -17,9 +17,14 @@ entries.forEach((data, i) => {
   header.writeUInt16LE(1, at + 4); header.writeUInt16LE(32, at + 6); header.writeUInt32LE(data.length, at + 8); header.writeUInt32LE(offset, at + 12); offset += data.length;
 });
 await writeFile(out + '/icon.ico', Buffer.concat([header, ...entries]));
+const macSvg = await readFile(out + '/macos-icon.svg');
+const macSmallSvg = await readFile(out + '/macos-icon-small.svg');
+const macPng = size => sharp(size <= 64 ? macSmallSvg : macSvg).resize(size, size).png().toBuffer();
+await writeFile('apps/desktop/src/main/resources/brand-icon-macos.png', await macPng(128));
 const chunks = [];
-for (const [tag, size] of [['ic07',128],['ic08',256],['ic09',512],['ic10',1024]]) {
-  const data = await png(size), h = Buffer.alloc(8); h.write(tag); h.writeUInt32BE(data.length + 8, 4); chunks.push(h, data);
+// Include Finder list sizes and their Retina representations, not just Dock sizes.
+for (const [tag, size] of [['icp4',16],['icp5',32],['ic07',128],['ic08',256],['ic09',512],['ic10',1024],['ic11',32],['ic12',64],['ic13',256],['ic14',512]]) {
+  const data = await macPng(size), h = Buffer.alloc(8); h.write(tag); h.writeUInt32BE(data.length + 8, 4); chunks.push(h, data);
 }
 const icns = Buffer.alloc(8); icns.write('icns'); icns.writeUInt32BE(8 + chunks.reduce((sum,c) => sum + c.length, 0), 4);
 await writeFile(out + '/icon.icns', Buffer.concat([icns, ...chunks]));

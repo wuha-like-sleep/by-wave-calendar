@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="160" y1="110" x2="850" y2="910" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B80FF"/>
+      <stop offset=".44" stop-color="#6556EA"/>
+      <stop offset="1" stop-color="#3926AF"/>
+    </linearGradient>
+    <radialGradient id="light" cx=".27" cy=".02" r="1">
+      <stop stop-color="#D3CDFF" stop-opacity=".32"/>
+      <stop offset=".7" stop-color="#B0A4FF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="paper" x1="350" y1="300" x2="650" y2="810" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F1EEFF"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="346" y1="540" x2="678" y2="620" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8474F7"/>
+      <stop offset="1" stop-color="#4E39CD"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="230" x2="0" y2="340" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DCD6FF"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#21145E" flood-opacity=".19"/>
+    </filter>
+    <filter id="paperShadow" x="-25%" y="-20%" width="150%" height="155%">
+      <feDropShadow dx="0" dy="22" stdDeviation="18" flood-color="#27147A" flood-opacity=".3"/>
+    </filter>
+    <path id="shape" d="M294 96H730C856 96 928 168 928 294V730C928 856 856 928 730 928H294C168 928 96 856 96 730V294C96 168 168 96 294 96Z"/>
+  </defs>
+  <use href="#shape" fill="url(#tile)" filter="url(#tileShadow)"/>
+  <use href="#shape" fill="url(#light)"/>
+  <use href="#shape" fill="none" stroke="#FFFFFF" stroke-opacity=".24" stroke-width="2"/>
+  <g filter="url(#paperShadow)">
+    <rect x="254" y="282" width="516" height="524" rx="86" fill="#C7BEFA"/>
+    <rect x="254" y="272" width="516" height="524" rx="86" fill="url(#paper)"/>
+  </g>
+  <path d="M289 398H735" fill="none" stroke="#E6E1FA" stroke-width="7"/>
+  <rect x="365" y="230" width="42" height="110" rx="21" fill="#3C27A7" fill-opacity=".13" transform="translate(0 5)"/>
+  <rect x="617" y="230" width="42" height="110" rx="21" fill="#3C27A7" fill-opacity=".13" transform="translate(0 5)"/>
+  <rect x="365" y="230" width="42" height="110" rx="21" fill="url(#ring)"/>
+  <rect x="617" y="230" width="42" height="110" rx="21" fill="url(#ring)"/>
+  <path d="M346 590C386 526 428 526 470 590S554 654 596 590L678 508" fill="none" stroke="url(#wave)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="348" y="700" width="60" height="14" rx="7" fill="#DAD3F4"/>
+  <rect x="438" y="700" width="60" height="14" rx="7" fill="#DAD3F4"/>
+  <rect x="528" y="700" width="60" height="14" rx="7" fill="#DAD3F4"/>
+  <circle cx="653" cy="707" r="14" fill="#7563DF"/>
+</svg>
