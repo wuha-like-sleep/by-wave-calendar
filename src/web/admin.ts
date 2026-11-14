@@ -40,6 +40,7 @@ import {
   RestoreNeedsConfirmationError, RESTORE_BLOCKED_AUDIT_ACTION, type BackupBundle, type TableAtRisk,
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
+import { getMicrosoftCalendarConfig, microsoftClientIdSchema, setMicrosoftCalendarClientId } from "../lib/calendar_sync/config.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
 import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
@@ -1959,6 +1960,34 @@ export async function adminRoutes(app: FastifyInstance) {
       await audit(req, u.id, "backup.restore_failed", { details: { error: msg.slice(0, 500) } });
       return redirectWithFlash(reply, "/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));
     }
+  });
+
+  app.get("/admin/calendar-sync", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    return reply.view("admin/calendar-sync", {
+      title: tr(req, "adminCalendar.title"), activeNav: "/admin/calendar-sync",
+      user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
+      config: await getMicrosoftCalendarConfig(),
+    });
+  });
+  app.post("/admin/calendar-sync", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.discriminatedUnion("action", [
+      z.object({ action: z.literal("save"), clientId: microsoftClientIdSchema }),
+      z.object({ action: z.literal("environment") }),
+    ]).safeParse(req.body);
+    if (!body.success) return redirectWithFlash(reply, "/admin/calendar-sync", { error: tr(req, "adminCalendar.invalid") });
+    const value = body.data.action === "environment" ? null : body.data.clientId;
+    await setMicrosoftCalendarClientId(value);
+    await audit(req, u.id, "calendar_sync.config.update", {
+      targetType: "site_settings", details: { source: value === null ? "environment" : value ? "admin" : "disabled", clientId: value },
+    });
+    return redirectWithFlash(reply, "/admin/calendar-sync", { success: tr(req, "adminCalendar.saved") });
   });
 
   // ---------- CalDAV:让所有设备重新同步 ----------

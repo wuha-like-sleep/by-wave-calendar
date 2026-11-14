@@ -421,6 +421,13 @@
       "when": 1794528000000,
       "tag": "0059_system_calendar_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1794614400000,
+      "tag": "0060_microsoft_calendar_config",
+      "breakpoints": true
     }
   ]
 }

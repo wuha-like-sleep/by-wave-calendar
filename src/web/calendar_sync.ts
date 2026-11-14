@@ -15,6 +15,8 @@ import { MicrosoftClient, MicrosoftError, pollMicrosoftLogin, startMicrosoftLogi
 import { openToken, sealToken } from "../lib/calendar_sync/secrets.js";
 import { microsoftFor, syncError, withSyncAccount } from "../lib/calendar_sync/service.js";
 
+import { getMicrosoftCalendarConfig } from "../lib/calendar_sync/config.js";
+
 const ROOT = "/app/settings/calendar-sync";
 export async function calendarSyncRoutes(app: FastifyInstance) {
   const sessions = new WeakMap<FastifyRequest, LoadedSession>();
@@ -44,8 +46,11 @@ export async function calendarSyncRoutes(app: FastifyInstance) {
     let appleAvailable = true;
     try { appleCalendarProfile(env.PUBLIC_BASE_URL, user); } catch { appleAvailable = false; }
     return reply.view("app/calendar-sync", { title: tForRequest(req)("calendarSync.title"), user, flash: readFlash(req, reply), csrfToken: csrfTokenFor(req),
-      account, calendars, pairs, login, remote, remoteError, appleAvailable, configured: Boolean(env.MICROSOFT_CALENDAR_CLIENT_ID) });
+      account, calendars, pairs, login, remote, remoteError, appleAvailable, configured: (await getMicrosoftCalendarConfig()).configured });
   });
+  app.get("/app/settings/calendar-sync/status", async () => ({
+    microsoftConfigured: (await getMicrosoftCalendarConfig()).configured,
+  }));
   app.get("/app/settings/calendar-sync/apple.mobileconfig", async (req, reply) => {
     let profile: string;
     try { profile = appleCalendarProfile(env.PUBLIC_BASE_URL, sessions.get(req)!.user); }
@@ -59,7 +64,7 @@ export async function calendarSyncRoutes(app: FastifyInstance) {
   });
   app.post("/app/settings/calendar-sync/microsoft/start", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
-    const clientId = env.MICROSOFT_CALENDAR_CLIENT_ID;
+    const { clientId } = await getMicrosoftCalendarConfig();
     if (!clientId) throw new SyncUnavailableError("microsoft_not_configured");
     const { user, sessionId } = sessions.get(req)!;
     const result = await startMicrosoftLogin(clientId);

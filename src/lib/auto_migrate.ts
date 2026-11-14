@@ -123,6 +123,10 @@ export async function runPendingMigrations(): Promise<void> {
  */
 export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: string }> = [
   {
+    why: "site_settings.microsoft_calendar_client_id",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS microsoft_calendar_client_id text`,
+  },
+  {
     // v1.3.10。这一条就是这套安全网存在的原因，见文件顶上那段。
     why: "booking_links.notify_email（缺了 /app/booking-links 全 500）",
     statement: `ALTER TABLE booking_links ADD COLUMN IF NOT EXISTS notify_email boolean NOT NULL DEFAULT true`,
