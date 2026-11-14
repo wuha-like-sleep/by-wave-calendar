@@ -126,6 +126,8 @@ export const siteSettings = pgTable("site_settings", {
   signupDailyQuota: integer("signup_daily_quota").notNull().default(0),
   icpNumber: text("icp_number"),
   icpUrl: text("icp_url").default("https://beian.miit.gov.cn/"),
+  // NULL inherits env; empty string disables new Microsoft connections.
+  microsoftCalendarClientId: text("microsoft_calendar_client_id"),
   ssoKeycloakEnabled: boolean("sso_keycloak_enabled").notNull().default(false),
   ssoKeycloakIssuerUrl: text("sso_keycloak_issuer_url"),
   ssoKeycloakClientId: text("sso_keycloak_client_id"),
