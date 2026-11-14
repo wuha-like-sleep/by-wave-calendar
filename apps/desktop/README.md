@@ -122,7 +122,11 @@ python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home
 服务端 `/download` 页面和 `/api/app/desktop/latest` 读取此清单。
 `mac` 对应 Apple Silicon，`macIntel` 对应 Intel；`win` 和 `linux` 对应 x64。
 缺少某平台产物时不要填写其他平台的安装器；更新后分别验证下载和升级流程。
-安装图标与背景由 `node scripts/build-desktop-branding.mjs` 在仓库根目录生成，源图案来自项目现有 SVG。
+全平台图标由仓库根目录的 `npm run build:branding` 统一生成。
+共用源文件为 `src/public/brand/logo.svg`，小尺寸使用 `logo-small.svg`；
+构建脚本生成含 16–1024 像素及 Retina 表示的 ICNS、Windows ICO、Linux PNG，
+并同步窗口、安装卷、Windows 安装器以及网站和手机端的默认图标。
+手机端只更新图标资源，界面与发布版本保持原状；各平台裁切规则见 [图标说明](../../src/public/brand/README.md)。
 GitHub 桌面打包工作流已移除，云端 CI 也已停用；检查在本地执行。
 Windows 在 Windows 本机运行 `gradlew.bat test packageBrandedMsi`，Linux 本地运行 `./gradlew test packageDeb`。
 发布前核对实际安装包 SHA-256、大小、架构、签名状态与更新清单。

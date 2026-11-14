@@ -167,7 +167,8 @@
           <img src="<%= settings.logoUrl %>" alt="" class="h-5 w-5 rounded object-cover border border-slate-200" />
           <span class="text-emerald-700">自定义</span>
         <% } else { %>
-          <span>默认渐变</span>
+          <img src="/static/brand/logo-small.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" alt="" width="20" height="20" class="h-5 w-5" />
+          <span>默认标识</span>
         <% } %>
       </div>
     </a>

@@ -32,7 +32,8 @@
     "test:int": "vitest run --config vitest.integration.config.ts",
     "check": "npm run typecheck && npm test && npm run test:int && npm run i18n:check",
     "audit:prod": "npm audit --omit=dev",
-    "build:nl": "node scripts/build-nl-bundle.mjs"
+    "build:nl": "node scripts/build-nl-bundle.mjs",
+    "build:branding": "node scripts/gen-icons.mjs && node scripts/build-desktop-branding.mjs"
   },
   "dependencies": {
     "@fastify/compress": "^8.3.1",
