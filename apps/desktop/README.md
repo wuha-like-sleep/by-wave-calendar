@@ -95,7 +95,7 @@ JDK 21 的 `jpackage` 会在封装时把输入应用改成临时签名，因此�
 python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home "C:\Tools\wix3" --output "C:\Builds\bywave-test" --unsigned-test-package
 ```
 
-脚本将源码复制到本机临时目录，运行桌面测试、品牌安装器打包和原生架构检查，输出带有
+脚本将源码复制到本机临时目录，运行桌面测试、品牌安装器打包、原生架构检查和 MSI 内嵌品牌图片校验，输出带有
 `local-test` 标记的 MSI、SHA-256 和校验记录。Windows 专属测试会实际运行 PowerShell，
 覆盖中文和特殊字符路径、安装成功、需要重启、用户取消及失败分支。
 构建失败时保留临时目录便于查看日志；输出目录已有不同内容的同名安装包时拒绝覆盖。

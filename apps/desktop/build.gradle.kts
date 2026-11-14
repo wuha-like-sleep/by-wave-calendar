@@ -3,6 +3,7 @@
 // Signing and notarization require separately configured release credentials.
 
 import java.io.File
+import java.util.zip.ZipFile
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -192,12 +193,36 @@ fun brandedInstaller(taskName: String, format: String, host: String) = tasks.reg
         val filename = "ByWaveCalendar-${project.version}.$format"
         dest.resolve(filename).delete()
         val javaRoot = System.getenv("JAVA_HOME") ?: System.getProperty("java.home")
+        var installerResources = project.file("packaging")
+        if (format == "msi") {
+            // jpackage ignores loose Win*.bmp files. Inject WiX linker variables
+            // into this JDK's own template, retaining its upgrade/install logic.
+            val sourceResources = installerResources
+            installerResources = layout.buildDirectory.dir("compose/windows-installer-resources").get().asFile
+            installerResources.deleteRecursively()
+            sourceResources.copyRecursively(installerResources, overwrite = true)
+            fun xmlAttribute(value: String) = value.replace("&", "&amp;").replace("\"", "&quot;")
+                .replace("<", "&lt;").replace(">", "&gt;")
+            val banner = xmlAttribute(installerResources.resolve("WinBanner.bmp").absolutePath)
+            val dialog = xmlAttribute(installerResources.resolve("WinDialog.bmp").absolutePath)
+            val template = ZipFile(File(javaRoot, "jmods/jdk.jpackage.jmod")).use { archive ->
+                val entry = checkNotNull(archive.getEntry("classes/jdk/jpackage/internal/resources/main.wxs"))
+                archive.getInputStream(entry).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            }
+            val marker = "<UIRef Id=\"JpUI\"/>"
+            check(template.split(marker).size == 2) { "Unsupported JDK MSI template; verify installer branding" }
+            val branding = """
+                <WixVariable Id="WixUIBannerBmp" Value="$banner" />
+                <WixVariable Id="WixUIDialogBmp" Value="$dialog" />
+            """.trimIndent()
+            installerResources.resolve("main.wxs").writeText(template.replace(marker, "$branding\n$marker"))
+        }
         val command = mutableListOf(
             File(javaRoot, "bin/jpackage" + if (format == "msi") ".exe" else "").absolutePath,
-            "--type", format, "--name", "ByWaveCalendar", "--app-version", project.version.toString(),
+            "--verbose", "--type", format, "--name", "ByWaveCalendar", "--app-version", project.version.toString(),
             "--vendor", "ByWave", "--description", "ByWave Calendar - self-hosted calendar desktop client",
             "--app-image", imageDir.get().file(if (format == "dmg") "ByWaveCalendar.app" else "ByWaveCalendar").asFile.absolutePath,
-            "--dest", dest.absolutePath, "--resource-dir", project.file("packaging").absolutePath,
+            "--dest", dest.absolutePath, "--resource-dir", installerResources.absolutePath,
         )
         if (format == "dmg") command += listOf("--mac-package-identifier", "cn.bywave.calendar.desktop")
         else command += listOf("--win-dir-chooser", "--win-shortcut", "--win-menu", "--win-menu-group", "ByWave Calendar",

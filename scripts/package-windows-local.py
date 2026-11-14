@@ -46,7 +46,7 @@ def build(args):
     if not args.unsigned_test_package:
         raise ValueError("This workflow creates unsigned local test packages only; pass --unsigned-test-package")
     java, wix = Path(args.java_home).resolve(), Path(args.wix_home).resolve()
-    for tool in [java / "bin/java.exe", java / "bin/jpackage.exe", wix / "candle.exe", wix / "light.exe"]:
+    for tool in [java / "bin/java.exe", java / "bin/jpackage.exe", wix / "candle.exe", wix / "light.exe", wix / "dark.exe"]:
         if not tool.is_file():
             raise ValueError(f"Required tool missing: {tool}")
     if pe_machine(java / "bin/java.exe") != 0x8664:
@@ -80,6 +80,16 @@ def build(args):
     msi = project / f"build/compose/binaries/main/msi/ByWaveCalendar-{version}.msi"
     if msi.stat().st_size < 1_000_000:
         raise ValueError("Installer is unexpectedly small")
+    # Verify the MSI itself: merely placing bitmaps in --resource-dir does not
+    # make jpackage/WiX embed them. Keep an extraction log for packaging failures.
+    extracted = stage / "msi-resources"
+    with (stage / "msi-resources.log").open("wb") as log:
+        subprocess.run([str(wix / "dark.exe"), "-nologo", "-x", str(extracted), str(msi),
+                        "-o", str(stage / "installer.wxs")], check=True, stdout=log, stderr=subprocess.STDOUT)
+    for resource, source_name in [("WixUI_Bmp_Banner", "WinBanner.bmp"), ("WixUI_Bmp_Dialog", "WinDialog.bmp")]:
+        matches = list(extracted.rglob(resource))
+        if len(matches) != 1 or digest(matches[0]) != digest(project / "packaging" / source_name):
+            raise ValueError(f"MSI is missing the expected branded image: {resource}")
     out = Path(args.output).resolve()
     out.mkdir(parents=True, exist_ok=True)
     name = f"ByWaveCalendar-{version}-local-test-x64.msi"
@@ -91,7 +101,7 @@ def build(args):
     shutil.copyfile(msi, temporary)
     temporary.replace(destination)
     (out / f"{name}.sha256").write_text(f"{sha256}  {name}\n", encoding="ascii")
-    report = {"mode": "unsigned-local-test", "version": version, "architecture": "x64",
+    report = {"mode": "unsigned-local-test", "brandingVerified": True, "version": version, "architecture": "x64",
               "sourceRevision": args.source_revision, "filename": name, "sha256": sha256,
               "sizeBytes": destination.stat().st_size, "signatureStatus": signature_status(destination),
               "applicationImage": str(app), "testResults": str(project / "build/test-results/test")}
