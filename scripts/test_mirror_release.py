@@ -24,6 +24,25 @@ class MirrorSafetyTest(unittest.TestCase):
         for value in ['', 'token\nurl=https://example.test', 'token"', 'token\\']:
             with self.subTest(value=value), self.assertRaises(ValueError): m.token_config(value)
 
+    def test_api_errors_show_provider_reason_without_tokens_or_log_injection(self):
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {"GH_TOKEN": "private-gh", "GITEE_RELEASE_TOKEN": "private/gitee+"}):
+            response = Path(folder) / 'response.json'
+            response.write_text(json.dumps({"message": "upload rejected\n::error::private-gh\x1b", "errors": {"file": ["storage limit private%2Fgitee%2B private/gitee+"]}, "access_token": "must-not-print"}))
+            detail = m.api_error_detail(response)
+            self.assertIn('storage limit', detail)
+            for forbidden in ('private-gh', 'private/gitee+', 'private%2Fgitee%2B', 'must-not-print', '\n', '\x1b'):
+                self.assertNotIn(forbidden, detail)
+            self.assertIn('[redacted]', detail)
+
+    def test_api_error_details_are_bounded_and_ignore_non_json_bodies(self):
+        with tempfile.TemporaryDirectory() as folder:
+            response = Path(folder) / 'response.json'
+            for raw in ('<html>proxy error</html>', json.dumps(['unexpected']), 'x' * 8193):
+                response.write_text(raw)
+                self.assertEqual(m.api_error_detail(response), '')
+            response.write_text(json.dumps({"message": "x" * 1000}))
+            self.assertEqual(len(json.loads(m.api_error_detail(response))), 512)
+
     def test_checksums_require_every_asset_once(self):
         names = {'app.apk', 'latest.json', 'SHA256SUMS.txt'}
         valid = 'a' * 64 + '  app.apk\n' + 'b' * 64 + '  latest.json\n'

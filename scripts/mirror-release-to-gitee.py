@@ -13,7 +13,7 @@ import re
 import subprocess
 import tempfile
 import time
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, quote_plus, urlsplit
 
 GITHUB_REPO = "wuha-like-sleep/by-wave-calendar"
 GITEE_REPO = "zhaorunsen/by-wave-calendar"
@@ -45,6 +45,39 @@ def token_config(token):
     return 'header = "Authorization: Bearer ' + token + '"\n'
 
 
+def api_error_detail(response):
+    """Show bounded provider diagnostics without echoing arbitrary bodies or tokens."""
+    try:
+        with response.open("rb") as stream:
+            raw = stream.read(8193)
+        if len(raw) > 8192:
+            return ""
+        payload = json.loads(raw)
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    allowed = {"message", "error", "error_description", "errors", "detail", "file", "base", "code"}
+    def messages(value, depth=0):
+        if depth > 3:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [text for item in value[:4] for text in messages(item, depth + 1)]
+        if isinstance(value, dict):
+            return [text for key, item in value.items() if key in allowed for text in messages(item, depth + 1)]
+        return []
+    detail = "; ".join(messages(payload))
+    for key in ("GH_TOKEN", "GITEE_RELEASE_TOKEN"):
+        secret = os.environ.get(key, "")
+        if secret:
+            for form in {secret, quote(secret, safe=""), quote_plus(secret)}:
+                detail = detail.replace(form, "[redacted]")
+    # JSON escaping prevents multiline/ANSI/workflow-command log injection.
+    return json.dumps(detail[:512], ensure_ascii=True) if detail else ""
+
+
 def api(service, method, path, data=None, file=None):
     host, repo, key = ("api.github.com", GITHUB_REPO, "GH_TOKEN") if service == "github" else ("gitee.com/api/v5", GITEE_REPO, "GITEE_RELEASE_TOKEN")
     with tempfile.TemporaryDirectory(prefix="bywave-api-") as temp:
@@ -61,8 +94,9 @@ def api(service, method, path, data=None, file=None):
         result = subprocess.run(args, input=token_config(os.environ.get(key, "")), text=True,
                                 stdout=subprocess.PIPE, stderr=None if file else subprocess.PIPE)
         if result.returncode or not result.stdout.isdigit() or not 200 <= int(result.stdout) < 300:
-            # Never echo credentials or an untrusted response body into runner logs.
-            raise RuntimeError(f"{service} {method} failed (curl {result.returncode}, HTTP {result.stdout[:3]})")
+            detail = api_error_detail(response)
+            raise RuntimeError(f"{service} {method} failed (curl {result.returncode}, HTTP {result.stdout[:3]})"
+                               + (f"; provider detail={detail}" if detail else ""))
         return json.loads(response.read_text(encoding="utf-8"))
 
 
