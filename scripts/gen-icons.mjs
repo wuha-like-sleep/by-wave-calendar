@@ -29,6 +29,7 @@ for (const [density, size] of [['mdpi',48],['hdpi',72],['xhdpi',96],['xxhdpi',14
     .png().toFile(`${android}/mipmap-${density}/ic_launcher_round.png`);
 }
 await mkdir(`${android}/drawable-nodpi`, { recursive: true });
+await writeFile(`${android}/drawable-nodpi/app_brand.png`, await brandPng(256));
 for (const variant of ['foreground', 'background', 'monochrome']) {
   await writeFile(`${android}/drawable-nodpi/ic_launcher_${variant}.png`, await brandPng(432, variant));
 }

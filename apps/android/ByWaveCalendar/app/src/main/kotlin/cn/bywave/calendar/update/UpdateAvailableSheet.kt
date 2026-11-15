@@ -136,7 +136,7 @@ private fun ReleaseSheetContent(release: AndroidReleaseDto, mandatory: Boolean, 
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
         ) {
-            Image(painterResource(R.mipmap.ic_launcher), contentDescription = null, modifier = Modifier.size(68.dp))
+            Image(painterResource(R.drawable.app_brand), contentDescription = null, modifier = Modifier.size(68.dp))
             Spacer(Modifier.height(12.dp))
             Text(
                 text = stringResource(

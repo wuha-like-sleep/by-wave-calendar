@@ -126,7 +126,7 @@ private fun SetupContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(24.dp))
-        Image(painterResource(R.mipmap.ic_launcher), contentDescription = null, modifier = Modifier.size(80.dp))
+        Image(painterResource(R.drawable.app_brand), contentDescription = null, modifier = Modifier.size(80.dp))
         Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.setup_title),
