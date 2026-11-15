@@ -2,6 +2,7 @@
 """Mirror already published, checksum-verified installers; never compile code."""
 import argparse
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import tarfile
 import hashlib
 import ipaddress
@@ -48,7 +49,7 @@ def api(service, method, path, data=None, file=None):
     host, repo, key = ("api.github.com", GITHUB_REPO, "GH_TOKEN") if service == "github" else ("gitee.com/api/v5", GITEE_REPO, "GITEE_RELEASE_TOKEN")
     with tempfile.TemporaryDirectory(prefix="bywave-api-") as temp:
         response = Path(temp) / "response.json"
-        args = ["curl", "--silent", "--show-error", "--connect-timeout", "20", "--max-time", "3600" if file else "90", "--config", "-", "--request", method, "--output", str(response), "--write-out", "%{http_code}", f"https://{host}/repos/{repo}{path}"]
+        args = ["curl", "--progress-bar" if file else "--silent", "--show-error", "--connect-timeout", "20", "--max-time", "10800" if file else "90", "--config", "-", "--request", method, "--output", str(response), "--write-out", "%{http_code}", f"https://{host}/repos/{repo}{path}"]
         if service == "gitee":
             args += gitee_connection_options()
         if data is not None:
@@ -57,7 +58,8 @@ def api(service, method, path, data=None, file=None):
             args += ["--header", "Content-Type: application/json", "--data-binary", "@" + str(body)]
         if file:
             args += ["--form", "file=@" + str(file)]
-        result = subprocess.run(args, input=token_config(os.environ.get(key, "")), text=True, capture_output=True)
+        result = subprocess.run(args, input=token_config(os.environ.get(key, "")), text=True,
+                                stdout=subprocess.PIPE, stderr=None if file else subprocess.PIPE)
         if result.returncode or not result.stdout.isdigit() or not 200 <= int(result.stdout) < 300:
             # Never echo credentials or an untrusted response body into runner logs.
             raise RuntimeError(f"{service} {method} failed (curl {result.returncode}, HTTP {result.stdout[:3]})")
@@ -203,7 +205,7 @@ def mirror(tag, check_only=False):
                 # sending another POST. Never overwrite another release.
                 time.sleep(10 * (attempt + 1))
         release_path = "/releases/" + str(int(match["id"]))
-        for name in sorted(mirror_names):
+        def transfer_one(name):
             items = get("gitee", release_path + "/attach_files")
             matches = [a for a in items if a["name"] == name]
             if len(matches) > 1:
@@ -217,8 +219,13 @@ def mirror(tag, check_only=False):
                 matches = [a for a in items if a["name"] == name]
             if len(matches) != 1 or matches[0]["size"] != assets[name]["size"]:
                 raise ValueError("Gitee attachment size mismatch or incomplete upload")
-            download(matches[0]["browser_download_url"], folder / "verify.bin", assets[name]["size"], checksums[name])
+            download(matches[0]["browser_download_url"], folder / ("verify-" + name), assets[name]["size"], checksums[name])
             print(f"Verified Gitee attachment: {name}", flush=True)
+        # Distinct attachments can transfer independently. The workflow's tag
+        # concurrency lock prevents two runs from uploading the same filename.
+        # Wait for every transfer; any failure prevents stable publication.
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            list(pool.map(transfer_one, sorted(mirror_names)))
         api("gitee", "PATCH", release_path, {"tag_name": tag, "name": release["name"], "body": release["body"], "prerelease": False})
         print(f"Published Gitee release: {tag}", flush=True)
 

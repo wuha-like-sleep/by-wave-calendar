@@ -21,7 +21,7 @@ jobs:
     # repositories and non-main branches instead of using paid compute.
     if: github.repository == 'wuha-like-sleep/by-wave-calendar' && github.event.repository.private == false && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 360
     steps:
       - name: Read release transfer script
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
