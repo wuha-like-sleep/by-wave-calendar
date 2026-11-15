@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.Instant
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -117,7 +118,7 @@ internal fun replaceEvent(list: List<EventDTO>, from: EventDTO, to: EventDTO): L
 /** Keep a read-only detail in step with successful refreshes. An editor is a
  * draft and must stay untouched. Recurring occurrences share an id, so matching
  * their start instant is required before replacing the currently open detail. */
-internal fun refreshedDetail(sheet: ActiveSheet?, previousEvents: List<EventDTO>, events: List<EventDTO>): ActiveSheet? {
+internal fun refreshedDetail(sheet: ActiveSheet?, previousEvents: List<EventDTO>, events: List<EventDTO>, allowMissingAsDeletion: Boolean = true): ActiveSheet? {
     val detail = sheet as? ActiveSheet.Detail ?: return sheet
     val previous = detail.event
     val recurring = previous.rrule != null || previous.isOccurrence == true
@@ -127,7 +128,7 @@ internal fun refreshedDetail(sheet: ActiveSheet?, previousEvents: List<EventDTO>
     val current = events.firstOrNull {
         it.id == previous.id && (!recurring || parseInstant(it.startsAt) == parseInstant(previous.startsAt))
     }
-    return current?.let { ActiveSheet.Detail(it) }
+    return current?.let { ActiveSheet.Detail(it) } ?: sheet.takeUnless { allowMissingAsDeletion }
 }
 
 /** Same shape for delete — we park the source while the scope picker
@@ -170,12 +171,31 @@ data class CalendarUiState(
 class CalendarState(
     private val client: ApiClient,
     private val scope: CoroutineScope,
+    initialDisplayZone: ZoneId = ZoneId.systemDefault(),
 ) {
-    private val _ui = MutableStateFlow(CalendarUiState())
+    private val _ui = MutableStateFlow(CalendarUiState(anchor = LocalDate.now(initialDisplayZone)))
     val ui: StateFlow<CalendarUiState> = _ui.asStateFlow()
 
     private var loadJob: Job? = null
+    private var loadedWindow: Pair<Instant, Instant>? = null
+    private var displayZone = initialDisplayZone
+    private var zoneRefreshPending = false
     private val deletionsInFlight = mutableSetOf<ConfirmedEventDeletion>()
+
+    /** Re-query civil-day boundaries in the new zone without replacing an open
+     * editor. A mutation finishes before this refresh so its old snapshot cannot
+     * bring a deleted event back. MainScreen retries when saving becomes false. */
+    fun followDisplayTimeZone(zone: ZoneId, now: Instant = Instant.now()) {
+        if (zone != displayZone) {
+            val anchor = anchorAfterTimeZoneChange(_ui.value.anchor, displayZone, zone, now)
+            displayZone = zone
+            zoneRefreshPending = true
+            loadJob?.cancel()
+            _ui.value = _ui.value.copy(anchor = anchor)
+            ReminderFeed.requestRefresh()
+        }
+        if (zoneRefreshPending && !_ui.value.saving) load(useCache = false, silent = true)
+    }
 
     /** Refetch the active window. Stale-while-revalidate: if a fresh
      *  cache entry exists for the current (deviceId, window), we paint
@@ -193,10 +213,12 @@ class CalendarState(
     }
 
     fun load(useCache: Boolean = true, silent: Boolean = false) {
+        zoneRefreshPending = false
         loadJob?.cancel()
         loadJob = scope.launch {
             val s = _ui.value
-            val (from, to) = windowFor(s.mode, s.anchor)
+            val queryWindow = windowFor(s.mode, s.anchor, displayZone)
+            val (from, to) = queryWindow
             val fromIso = ISO_INSTANT.format(from)
             val toIso = ISO_INSTANT.format(to)
 
@@ -210,6 +232,7 @@ class CalendarState(
             val deviceId = client.profileId
             val cached = if (useCache) deviceId?.let { EventCache.read(it, fromIso, toIso) } else null
             if (cached != null) {
+                loadedWindow = queryWindow
                 _ui.value = _ui.value.copy(
                     events = cached.events,
                     calendars = cached.calendars,
@@ -232,10 +255,14 @@ class CalendarState(
                 _ui.value = _ui.value.copy(
                     events = resp.events,
                     calendars = resp.calendars,
-                    activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events),
+                    // Absence only means deletion within the same query window.
+                    // A timezone switch can move a still-open event to another day.
+                    activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events,
+                        allowMissingAsDeletion = loadedWindow == queryWindow),
                     loading = false,
                     error = null,
                 )
+                loadedWindow = queryWindow
                 if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp)
             } catch (e: CancellationException) {
                 // Re-throw so the coroutine machinery sees it correctly.
@@ -269,7 +296,7 @@ class CalendarState(
     }
 
     fun today() {
-        val today = LocalDate.now()
+        val today = LocalDate.now(displayZone)
         if (_ui.value.anchor != today) {
             _ui.value = _ui.value.copy(anchor = today)
             load()
@@ -649,3 +676,8 @@ class CalendarState(
         }
     }
 }
+
+/** Follow today across the date line, while leaving a deliberately browsed date
+ * alone. This changes navigation only; event instants and all-day dates stay put. */
+internal fun anchorAfterTimeZoneChange(anchor: LocalDate, before: ZoneId, after: ZoneId, now: Instant): LocalDate =
+    if (anchor == now.atZone(before).toLocalDate()) now.atZone(after).toLocalDate() else anchor

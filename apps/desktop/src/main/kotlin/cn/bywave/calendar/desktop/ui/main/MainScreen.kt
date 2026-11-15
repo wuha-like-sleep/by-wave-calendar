@@ -282,6 +282,10 @@ fun MainScreen(
     }
 
     val ui by state.ui.collectAsState()
+    val deviceZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    LaunchedEffect(state, deviceZone, ui.saving) {
+        state.followDisplayTimeZone(deviceZone)
+    }
     val signedOutNotices by ProfileStore.signedOutNotices.collectAsState()
     // 主界面和设置页共用：设置页是盖在主界面上的不透明整屏，提示条只画在主界面上的话，
     // 用户在设置页里时账号被切走（设备列表、分享链接这些请求拿到 401 就会触发），
@@ -306,7 +310,7 @@ fun MainScreen(
     // Observe locale so the anchor label (date formatters + agenda range)
     // and the inline "up to date" dialog re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
-    val anchorLabel = remember(locale, ui.mode, ui.anchor) { anchorLabelFor(ui.mode, ui.anchor) }
+    val anchorLabel = remember(locale, ui.mode, ui.anchor, deviceZone) { anchorLabelFor(ui.mode, ui.anchor) }
 
     // 整屏宽度决定顶栏和侧栏的形态。窗口最小宽度是 960dp(见 Main.kt),
     // 在那个宽度上顶栏原样排会溢出——Row 溢出是静默裁剪,被切掉的正好是
@@ -378,7 +382,6 @@ fun MainScreen(
                     onCalendarToggle = { id -> hiddenCalendars = if (id in hiddenCalendars) hiddenCalendars - id else hiddenCalendars + id },
                 )
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(start = 8.dp, top = 14.dp, end = 18.dp, bottom = 18.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
-                    val deviceZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
                     androidx.compose.runtime.key(deviceZone.id) {
                     Crossfade(targetState = ui.mode, animationSpec = tween(160), label = "calendar-view") { visibleMode ->
                     when (visibleMode) {
@@ -914,6 +917,8 @@ private fun Sidebar(
 
 @Composable
 private fun MiniCalendar(anchor: java.time.LocalDate, onSelect: (java.time.LocalDate) -> Unit) {
+    val zone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    val today = java.time.LocalDate.now(zone)
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     var month by remember(anchor.month, anchor.year) { mutableStateOf(java.time.YearMonth.from(anchor)) }
     val t = cn.bywave.calendar.desktop.i18n.I18n
@@ -934,8 +939,8 @@ private fun MiniCalendar(anchor: java.time.LocalDate, onSelect: (java.time.Local
                     val selected = day == anchor
                     val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, tween(120), label = "selected-date")
                     Box(Modifier.weight(1f).aspectRatio(1f).padding(1.dp).clip(CircleShape).background(bg).clickable(role = androidx.compose.ui.semantics.Role.Button) { onSelect(day) }, contentAlignment = Alignment.Center) {
-                        Text(day.dayOfMonth.toString(), fontSize = 11.sp, fontWeight = if (day == java.time.LocalDate.now() || selected) FontWeight.Bold else FontWeight.Normal,
-                            color = when { selected -> MaterialTheme.colorScheme.onPrimary; day == java.time.LocalDate.now() -> MaterialTheme.colorScheme.primary; day.month != month.month -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f); else -> MaterialTheme.colorScheme.onSurface })
+                        Text(day.dayOfMonth.toString(), fontSize = 11.sp, fontWeight = if (day == today || selected) FontWeight.Bold else FontWeight.Normal,
+                            color = when { selected -> MaterialTheme.colorScheme.onPrimary; day == today -> MaterialTheme.colorScheme.primary; day.month != month.month -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f); else -> MaterialTheme.colorScheme.onSurface })
                     }
                 }
             }

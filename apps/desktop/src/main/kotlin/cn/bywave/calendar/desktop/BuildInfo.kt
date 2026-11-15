@@ -12,6 +12,6 @@
 package cn.bywave.calendar.desktop
 
 object BuildInfo {
-    const val VERSION_NAME = "1.3.2"
-    const val VERSION_CODE = 29
+    const val VERSION_NAME = "1.3.3"
+    const val VERSION_CODE = 30
 }

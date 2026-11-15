@@ -80,6 +80,7 @@ import cn.bywave.calendar.event.eventFormIso
 import cn.bywave.calendar.event.eventPickerDate
 import cn.bywave.calendar.event.eventPickerMillis
 import cn.bywave.calendar.event.eventStringField
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -115,6 +116,9 @@ internal data class FormState(
     val sourceExtra: cn.bywave.calendar.desktop.data.model.EventExtraDTO? = null,
     val originalStart: EventFormInstant? = null,
     val originalEnd: EventFormInstant? = null,
+    val displayZone: ZoneId = ZoneId.systemDefault(),
+    // Display changes must not redefine a newly drafted recurrence's zone.
+    val creationZone: ZoneId = displayZone,
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank()
@@ -147,8 +151,10 @@ fun EventEditDialog(
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
-    var form by remember(mode) { mutableStateOf(initialState(mode, calendars)) }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    var form by remember(mode) { mutableStateOf(initialState(mode, calendars, displayZone)) }
     LaunchedEffect(calendars) { form = form.withCalendars(calendars) }
+    LaunchedEffect(displayZone) { form = form.withDisplayZone(displayZone) }
 
     // 提交入口抽出来,给「点保存」和「在标题里敲回车」共用。桌面端填完
     // 标题按回车就想存下,以前回车在单行输入框里什么都不做,用户要伸手
@@ -190,6 +196,7 @@ fun EventEditDialog(
                             qScope.launch {
                                 parsing = true
                                 quickError = null
+                                val parseZone = form.displayZone
                                 val r = onQuickParse(quickText)
                                 parsing = false
                                 r.onSuccess { parsed ->
@@ -200,10 +207,12 @@ fun EventEditDialog(
                                     if (start == null || end == null) {
                                         quickError = cn.bywave.calendar.desktop.i18n.I18n.t("event.edit.quickadd.failed")
                                     } else {
+                                        val first = EventPickerDraft(start, parseZone, form.allDay).withDisplayZone(form.displayZone)
+                                        val last = EventPickerDraft(end, parseZone, form.allDay).withDisplayZone(form.displayZone)
                                         form = form.copy(
                                             summary = if (parsed.summary.isNotBlank()) parsed.summary else form.summary,
-                                            start = start,
-                                            end = end,
+                                            start = first.value, end = last.value,
+                                            originalStart = first.original, originalEnd = last.original,
                                         )
                                     }
                                 }.onFailure { e ->
@@ -294,9 +303,11 @@ fun EventEditDialog(
                                 allDay = true,
                                 start = form.start.toLocalDate().atStartOfDay(),
                                 end = maxOf(form.start.toLocalDate(), form.end.toLocalDate()).atTime(23, 59),
+                                originalStart = null, originalEnd = null,
                             ) else form.copy(
                                 allDay = false,
                                 end = form.start.plusHours(1),
+                                originalStart = null, originalEnd = null,
                             )
                         },
                     )
@@ -306,20 +317,24 @@ fun EventEditDialog(
                     label = t("event.edit.start"),
                     value = form.start,
                     allDay = form.allDay,
-                    onChange = { newStart ->
-                        val durationMin = java.time.Duration.between(form.start, form.end).toMinutes().coerceAtLeast(15L)
-                        form = form.copy(start = newStart, end = newStart.plusMinutes(durationMin))
-                    },
+                    displayZone = form.displayZone,
+                    original = form.originalStart,
+                    onChange = { newStart, selected -> form = form.withStart(newStart, selected) },
                 )
                 DateTimePickerRow(
                     label = t("event.edit.end"),
                     value = form.end,
                     allDay = form.allDay,
-                    onChange = { newEnd ->
-                        val clamped = if (!newEnd.isAfter(form.start)) form.start.plusMinutes(15) else newEnd
-                        form = form.copy(end = clamped)
-                    },
+                    displayZone = form.displayZone,
+                    original = form.originalEnd,
+                    onChange = { newEnd, selected -> form = form.withEnd(newEnd, selected) },
                 )
+
+                if (!form.allDay) {
+                    Text(t("event.detail.displayTimezone") + ": " + form.displayZone.id,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
 
                 OutlinedTextField(
                     value = form.location,
@@ -449,70 +464,105 @@ private fun DateTimePickerRow(
     label: String,
     value: LocalDateTime,
     allDay: Boolean,
-    onChange: (LocalDateTime) -> Unit,
+    displayZone: ZoneId,
+    original: EventFormInstant?,
+    onChange: (LocalDateTime, EventFormInstant?) -> Unit,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
-    var showDate by remember { mutableStateOf(false) }
-    var showTime by remember { mutableStateOf(false) }
+    var dateDraft by remember { mutableStateOf<EventPickerDraft?>(null) }
+    var timeDraft by remember { mutableStateOf<EventPickerDraft?>(null) }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.widthIn(min = 56.dp, max = 104.dp), style = MaterialTheme.typography.labelMedium,
              color = MaterialTheme.colorScheme.outline)
         Spacer(Modifier.width(8.dp))
-        OutlinedButton(onClick = { showDate = true }, modifier = Modifier.weight(1f)) {
+        OutlinedButton(onClick = { dateDraft = EventPickerDraft(value, displayZone, allDay, original) }, modifier = Modifier.weight(1f)) {
             Text(DATE_FMT.format(value))
         }
         if (!allDay) {
             Spacer(Modifier.width(8.dp))
-            OutlinedButton(onClick = { showTime = true }, modifier = Modifier.width(110.dp)) {
+            OutlinedButton(onClick = { timeDraft = EventPickerDraft(value, displayZone, false, original) }, modifier = Modifier.width(110.dp)) {
                 Text(TIME_FMT.format(value))
             }
         }
     }
 
-    if (showDate) {
-        val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = eventPickerMillis(value.toLocalDate()),
-        )
+    dateDraft?.let { draft ->
+        val dpState = rememberDatePickerState(initialSelectedDateMillis = eventPickerMillis(draft.value.toLocalDate()))
+        LaunchedEffect(displayZone) {
+            val current = dateDraft ?: return@LaunchedEffect
+            if (current.zone == displayZone) return@LaunchedEffect
+            val selected = dpState.selectedDateMillis
+            // An incomplete text date has no instant to convert. Keep its
+            // input and old zone until confirmation instead of erasing it.
+            if (selected == null && !current.allDay) return@LaunchedEffect
+            val pending = selected?.let { current.withDate(eventPickerDate(it)) } ?: current
+            val rebased = pending.withDisplayZone(displayZone)
+            dateDraft = rebased
+            if (selected != null) {
+                dpState.selectedDateMillis = eventPickerMillis(rebased.value.toLocalDate())
+                dpState.displayedMonthMillis = eventPickerMillis(rebased.value.toLocalDate().withDayOfMonth(1))
+            }
+        }
         DatePickerDialog(
-            onDismissRequest = { showDate = false },
+            onDismissRequest = { dateDraft = null },
             confirmButton = {
                 TextButton(onClick = {
                     val millis = dpState.selectedDateMillis
-                    if (millis != null) {
-                        val newDate = eventPickerDate(millis)
-                        onChange(LocalDateTime.of(newDate, value.toLocalTime()))
+                    val current = dateDraft
+                    if (millis != null && current != null) {
+                        // Also convert here: a click can arrive before the
+                        // effect handling a new system zone has run.
+                        val selected = current.withDate(eventPickerDate(millis)).withDisplayZone(displayZone)
+                        onChange(selected.value, selected.original)
                     }
-                    showDate = false
+                    dateDraft = null
                 }) { Text(t("event.edit.confirm")) }
             },
             dismissButton = {
-                TextButton(onClick = { showDate = false }) { Text(t("event.edit.cancel")) }
+                TextButton(onClick = { dateDraft = null }) { Text(t("event.edit.cancel")) }
             },
         ) {
-            DatePicker(state = dpState)
+            Column {
+                if (!allDay) Text(t("event.detail.displayTimezone") + ": " + draft.zone.id,
+                    modifier = Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall)
+                DatePicker(state = dpState)
+            }
         }
     }
 
-    if (showTime) {
-        val tpState = rememberTimePickerState(
-            initialHour = value.hour,
-            initialMinute = value.minute,
-            is24Hour = true,
-        )
+    timeDraft?.let { draft ->
+        val tpState = rememberTimePickerState(initialHour = draft.value.hour, initialMinute = draft.value.minute, is24Hour = true)
+        LaunchedEffect(displayZone) {
+            val current = timeDraft ?: return@LaunchedEffect
+            if (current.zone == displayZone) return@LaunchedEffect
+            val rebased = current.withTime(tpState.hour, tpState.minute).withDisplayZone(displayZone)
+            timeDraft = rebased
+            tpState.hour = rebased.value.hour
+            tpState.minute = rebased.value.minute
+        }
         AlertDialog(
-            onDismissRequest = { showTime = false },
+            onDismissRequest = { timeDraft = null },
             title = { Text(t("event.edit.pickTime")) },
-            text = { TimePicker(state = tpState) },
+            text = {
+                Column {
+                    Text(t("event.detail.displayTimezone") + ": " + draft.zone.id,
+                        style = MaterialTheme.typography.bodySmall)
+                    TimePicker(state = tpState)
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    onChange(LocalDateTime.of(value.toLocalDate(), LocalTime.of(tpState.hour, tpState.minute)))
-                    showTime = false
+                    timeDraft?.let { current ->
+                        val selected = current.withTime(tpState.hour, tpState.minute).withDisplayZone(displayZone)
+                        onChange(selected.value, selected.original)
+                    }
+                    timeDraft = null
                 }) { Text(t("event.edit.confirm")) }
             },
             dismissButton = {
-                TextButton(onClick = { showTime = false }) { Text(t("event.edit.cancel")) }
+                TextButton(onClick = { timeDraft = null }) { Text(t("event.edit.cancel")) }
             },
         )
     }
@@ -571,10 +621,19 @@ private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 internal fun FormState.withCalendars(calendars: List<CalendarMeta>): FormState =
     if (calendarId.isBlank() && calendars.isNotEmpty()) copy(calendarId = calendars.first().id) else this
 
-internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): FormState {
+internal fun initialState(
+    mode: EventEditMode,
+    calendars: List<CalendarMeta>,
+    displayZone: ZoneId = ZoneId.systemDefault(),
+    now: Instant = Instant.now(),
+): FormState {
+    fun initialInstant(value: LocalDateTime): Instant = java.time.ZonedDateTime.ofLocal(
+        value, displayZone, now.atZone(displayZone).offset).toInstant()
+    fun original(value: Instant) = EventFormInstant(value.toString(), value.atZone(displayZone).toLocalDateTime())
     return when (mode) {
         is EventEditMode.Create -> {
-            val start = mode.seedStart ?: nextHalfHour()
+            val first = initialInstant(mode.seedStart ?: nextHalfHour(displayZone, now))
+            val last = first.plusSeconds(3600)
             FormState(
                 isEdit = false,
                 sourceId = null,
@@ -586,8 +645,10 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
                 description = "",
                 url = "",
                 meetingPassword = "",
-                start = start,
-                end = start.plusHours(1),
+                start = first.atZone(displayZone).toLocalDateTime(),
+                end = last.atZone(displayZone).toLocalDateTime(),
+                originalStart = original(first), originalEnd = original(last),
+                displayZone = displayZone,
                 allDay = false,
                 rrule = RruleState.fromRrule(null),
                 attendees = emptyList(),
@@ -595,9 +656,8 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
         }
         is EventEditMode.Edit -> {
             val s = mode.source
-            val zone = ZoneId.systemDefault()
-            val sourceStart = eventFormDateTime(s.startsAt, s.allDay, zone)
-            val sourceEnd = eventFormDateTime(s.endsAt, s.allDay, zone)
+            val sourceStart = eventFormDateTime(s.startsAt, s.allDay, displayZone)
+            val sourceEnd = eventFormDateTime(s.endsAt, s.allDay, displayZone)
             FormState(
                 isEdit = true,
                 sourceId = s.id,
@@ -609,8 +669,9 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
                 description = s.description.orEmpty(),
                 url = s.extra?.url.orEmpty(),
                 meetingPassword = s.extra?.meetingPassword.orEmpty(),
-                start = sourceStart ?: nextHalfHour(),
-                end = sourceEnd ?: nextHalfHour().plusHours(1),
+                start = sourceStart ?: nextHalfHour(displayZone, now),
+                end = sourceEnd ?: nextHalfHour(displayZone, now).plusHours(1),
+                displayZone = displayZone,
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(s.rrule),
                 attendees = s.extra?.attendees.orEmpty(),
@@ -621,7 +682,11 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
         }
         is EventEditMode.Duplicate -> {
             val s = mode.source
-            val (newStart, newEnd) = duplicateEventRange(s.startsAt, s.endsAt, s.allDay, nextHalfHour())
+            val (civilStart, civilEnd) = duplicateEventRange(s.startsAt, s.endsAt, s.allDay, nextHalfHour(displayZone, now))
+            val first = initialInstant(civilStart)
+            val duration = runCatching { java.time.Duration.between(Instant.parse(s.startsAt), Instant.parse(s.endsAt)) }
+                .getOrDefault(java.time.Duration.ofHours(1)).coerceAtLeast(java.time.Duration.ofMinutes(15))
+            val last = first.plus(duration)
             FormState(
                 isEdit = false,                       // POST, not PATCH
                 sourceId = null,
@@ -633,8 +698,11 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
                 description = s.description.orEmpty(),
                 url = s.extra?.url.orEmpty(),
                 meetingPassword = s.extra?.meetingPassword.orEmpty(),
-                start = newStart,
-                end = newEnd,
+                start = if (s.allDay) civilStart else first.atZone(displayZone).toLocalDateTime(),
+                end = if (s.allDay) civilEnd else last.atZone(displayZone).toLocalDateTime(),
+                originalStart = if (s.allDay) null else original(first),
+                originalEnd = if (s.allDay) null else original(last),
+                displayZone = displayZone,
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(null),   // intentionally clear
                 attendees = s.extra?.attendees.orEmpty(),
@@ -645,9 +713,11 @@ internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): F
 }
 
 internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInput?> {
-    val zone = ZoneId.systemDefault()
-    val startIso = eventFormIso(form.start, form.allDay, isStart = true, zone, form.originalStart)
-    val endIso = eventFormIso(form.end, form.allDay, isStart = false, zone, form.originalEnd)
+    val zone = form.displayZone
+    val startIso = if (form.allDay) eventFormIso(form.start, true, isStart = true, zone)
+        else draftInstant(form.start, zone, form.originalStart).toString()
+    val endIso = if (form.allDay) eventFormIso(form.end, true, isStart = false, zone)
+        else draftInstant(form.end, zone, form.originalEnd).toString()
 
     val urlTrim = form.url.trim()
     val pwTrim = form.meetingPassword.trim()
@@ -659,7 +729,7 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
         val merged = EventExtra(
             // Timed events: keep the event's own zone; fall back to the
             // desktop zone only when the event never had one (create).
-            timezone = src?.timezone ?: if (!form.isEdit && !form.allDay) zone.id else null,
+            timezone = src?.timezone ?: if (!form.isEdit && !form.allDay) form.creationZone.id else null,
             attendees = attendees,
             category = if (form.isEdit) null else src?.category,
             url = eventStringField(urlTrim, clearWhenEmpty = form.isEdit && src != null),
@@ -703,8 +773,8 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
 
 /** Round current time up to the next :00 or :30. Sane default for
  *  "new event" so users don't have to set a time first. */
-internal fun nextHalfHour(): LocalDateTime {
-    val now = LocalDateTime.now()
+internal fun nextHalfHour(zone: ZoneId = ZoneId.systemDefault(), instant: Instant = Instant.now()): LocalDateTime {
+    val now = instant.atZone(zone).toLocalDateTime()
     return if (now.minute < 30) now.withMinute(30).withSecond(0).withNano(0)
            else now.plusHours(1).withMinute(0).withSecond(0).withNano(0)
 }

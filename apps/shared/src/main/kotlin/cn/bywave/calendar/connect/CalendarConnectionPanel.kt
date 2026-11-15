@@ -33,9 +33,10 @@ fun CalendarConnectionPanel(
     installProfile: suspend (String) -> Unit,
     errorMessage: (Throwable) -> String,
     active: Boolean = true,
+    displayTimeZone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
 ) {
     key(api) {
-        CalendarConnectionContent(api, locale, apple, deviceLabel, openUrl, copy, installProfile, errorMessage, active)
+        CalendarConnectionContent(api, locale, apple, deviceLabel, openUrl, copy, installProfile, errorMessage, active, displayTimeZone)
     }
 }
 
@@ -51,6 +52,7 @@ private fun CalendarConnectionContent(
     installProfile: suspend (String) -> Unit,
     errorMessage: (Throwable) -> String,
     active: Boolean,
+    displayTimeZone: java.time.ZoneId,
 ) {
     val t: (String) -> String = { CalendarCopy.text(locale, it) }
     val scope = rememberCoroutineScope()
@@ -166,7 +168,7 @@ private fun CalendarConnectionContent(
             state.pairs.forEach { pair ->
                 key(pair.id) { ConnectionCard {
                     Text((state.calendars.find { it.id == pair.calendarId }?.name ?: "ByWave") + "  ↔  " + pair.remoteName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(if (!pair.enabled) t("paused") else pair.lastSyncedAt?.let { t("lastSync") + " · " + formatSyncTime(it) } ?: t("pending"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (!pair.enabled) t("paused") else pair.lastSyncedAt?.let { t("lastSync") + " · " + formatSyncTime(it, displayTimeZone, locale) } ?: t("pending"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     pair.error?.let { Text(t("error." + if (it in setOf("invalid_grant", "microsoft_reconnect", "calendar_changed_retry")) it else "unavailable"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(enabled = !busy, onClick = { command(CalendarCommand(if (pair.enabled) "pause" else "resume", id = pair.id)) }) { Text(t(if (pair.enabled) "pause" else "resume")) }
@@ -178,7 +180,7 @@ private fun CalendarConnectionContent(
                             Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             Text(item?.content?.summary ?: t("deleted"), fontWeight = FontWeight.Medium)
                             item?.content?.let {
-                                Text(formatSyncTime(it.startsAt) + " — " + formatSyncTime(it.endsAt), style = MaterialTheme.typography.bodySmall)
+                                Text(formatSyncTime(it.startsAt, displayTimeZone, locale) + " — " + formatSyncTime(it.endsAt, displayTimeZone, locale), style = MaterialTheme.typography.bodySmall)
                                 if (it.location.isNotEmpty()) Text(it.location, style = MaterialTheme.typography.bodySmall)
                                 if (it.description.isNotEmpty()) Text(it.description, style = MaterialTheme.typography.bodySmall)
                             }
@@ -217,7 +219,7 @@ private fun CalendarConnectionContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(password.label, style = MaterialTheme.typography.bodyMedium)
-                            Text(if (password.paused) t("paused") else password.lastUsedAt?.let { t("lastSync") + " · " + formatSyncTime(it) } ?: t("pending"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (password.paused) t("paused") else password.lastUsedAt?.let { t("lastSync") + " · " + formatSyncTime(it, displayTimeZone, locale) } ?: t("pending"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         TextButton(enabled = !busy, onClick = { confirmation = CalendarCommand("revoke-password", id = password.id) }) { Text(t("revoke")) }
                     }
@@ -272,6 +274,11 @@ private fun CalendarPicker(label: String, selected: String, items: List<SyncCale
     }
 }
 
-private fun formatSyncTime(value: String): String = runCatching {
-    java.time.Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT))
-}.getOrDefault(value)
+@Composable
+internal fun formatSyncTime(value: String, displayTimeZone: java.time.ZoneId, locale: String): String {
+    val formatter = remember(displayTimeZone, locale) {
+        java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.SHORT)
+            .withLocale(java.util.Locale.forLanguageTag(locale)).withZone(displayTimeZone)
+    }
+    return runCatching { formatter.format(java.time.Instant.parse(value)) }.getOrDefault(value)
+}

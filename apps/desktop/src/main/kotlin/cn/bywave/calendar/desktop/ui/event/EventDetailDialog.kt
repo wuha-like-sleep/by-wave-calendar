@@ -106,7 +106,7 @@ fun EventDetailDialog(
                     MetaRow(label = t("event.detail.location"), value = it)
                 }
                 if (!event.allDay) {
-                    MetaRow(label = t("event.detail.displayTimezone"), value = deviceZone.id + "\n" + t("event.detail.timezoneRestart"))
+                    MetaRow(label = t("event.detail.displayTimezone"), value = deviceZone.id + "\n" + t("event.detail.timezoneFollowSystem"))
                     event.extra?.timezone?.takeIf { it.isNotBlank() && it != deviceZone.id }?.let {
                         MetaRow(label = t("event.detail.sourceTimezone"), value = it)
                     }
@@ -196,7 +196,7 @@ private fun uiLocale(): java.util.Locale =
     java.util.Locale.forLanguageTag(cn.bywave.calendar.desktop.i18n.I18n.current.value.code)
 
 private fun dateFmt() =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE", uiLocale()).withZone(ZoneId.systemDefault())
+    DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE", uiLocale())
 private val DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
 

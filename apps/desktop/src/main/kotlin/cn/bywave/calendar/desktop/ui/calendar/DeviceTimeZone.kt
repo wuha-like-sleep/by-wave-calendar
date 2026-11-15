@@ -2,17 +2,17 @@ package cn.bywave.calendar.desktop.ui.calendar
 
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalWindowInfo
+import cn.bywave.calendar.desktop.data.time.DesktopTimeZone
 import java.time.ZoneId
 
-/** Use the JVM display zone, including an explicit -Duser.timezone override.
- * OS timezone changes require a desktop app restart: TimeZone caches the
- * detected ID, so repeated systemDefault() reads are not OS notifications. */
+/** Every window observes the same OS-backed clock; focus also requests an
+ * immediate check after returning from system settings or waking the computer. */
 @Composable
 internal fun rememberDisplayTimeZone(): ZoneId {
-    var zone by remember { mutableStateOf(ZoneId.systemDefault()) }
+    val zone by DesktopTimeZone.zone.collectAsState()
     val focused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(focused) {
-        zone = ZoneId.systemDefault()
+        if (focused) DesktopTimeZone.refresh()
     }
     return zone
 }

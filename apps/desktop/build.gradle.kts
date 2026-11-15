@@ -39,10 +39,10 @@ group = "cn.bywave.calendar.desktop"
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 29). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 30). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.3.2"
+version = "1.3.3"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
@@ -65,6 +65,10 @@ dependencies {
     // Coroutines — same as Android.
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.9.0")
+
+    // Read the live OS time zone without spawning a process on every poll.
+    // release-macos.py signs the native libraries inside this JAR as well.
+    implementation("net.java.dev.jna:jna:5.19.1")
 
     // JSON serialization — same as Android.
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
@@ -110,7 +114,7 @@ compose.desktop {
         mainClass = "cn.bywave.calendar.desktop.MainKt"
 
         nativeDistributions {
-            modules("jdk.localedata")
+            modules("jdk.localedata", "java.management")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "ByWaveCalendar"
             // 不设 packageVersion —— Compose 的回落链是

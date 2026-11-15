@@ -902,9 +902,10 @@ private fun CalendarEditDialog(
     // Default new-calendar timezone to the system zone so the field is
     // never empty on create (the server otherwise infers one, but
     // showing the user's tz up front is clearer).
-    var timezone by remember {
-        mutableStateOf(existing?.timezone ?: java.time.ZoneId.systemDefault().id)
-    }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    // The device zone is an initial suggestion, not an instruction to replace
+    // the selected calendar zone or an in-progress draft when the OS changes.
+    var timezone by rememberCalendarTimezoneDraft(existing?.timezone, displayZone)
     var description by remember { mutableStateOf(existing?.description.orEmpty()) }
 
     var saving by remember { mutableStateOf(false) }
@@ -1707,6 +1708,7 @@ private fun BookingDeleteDialog(
 @Composable
 private fun SystemCalendarSection(profile: Profile) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
     val client = remember(profile.deviceId, profile.serverUrl) { ApiClient(profile) }
     val api = remember(client) { client.calendarConnectionApi() }
     androidx.compose.runtime.DisposableEffect(client) { onDispose { client.close() } }
@@ -1725,6 +1727,7 @@ private fun SystemCalendarSection(profile: Profile) {
             }
         },
         active = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused,
+        displayTimeZone = displayZone,
         errorMessage = { e ->
             if (e is cn.bywave.calendar.desktop.data.api.ApiException && e.status == 404)
                 cn.bywave.calendar.connect.CalendarCopy.text(locale.code, "serverUpdate")
@@ -1929,6 +1932,7 @@ private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
 private fun DevicesSection(profile: Profile) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
 
     var devices by remember { mutableStateOf<List<cn.bywave.calendar.desktop.data.model.DeviceDTO>?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -2014,7 +2018,7 @@ private fun DevicesSection(profile: Profile) {
                                 append(
                                     cn.bywave.calendar.desktop.i18n.I18n.t(
                                         "settings.devices.lastSeen",
-                                        mapOf("when" to formatTimestamp(seen)),
+                                        mapOf("when" to formatTimestamp(seen, displayZone)),
                                     ),
                                 )
                             }
@@ -2136,16 +2140,21 @@ private fun RevokeDeviceDialog(
     )
 }
 
+/** Only opening a new dialog adopts the current device zone. */
+@Composable
+internal fun rememberCalendarTimezoneDraft(existingTimeZone: String?, initialDisplayZone: java.time.ZoneId): androidx.compose.runtime.MutableState<String> =
+    remember { mutableStateOf(existingTimeZone ?: initialDisplayZone.id) }
+
 /** Best-effort pretty-print of an ISO8601 server timestamp into the
  *  user's local zone. Falls back to the raw string if parsing fails (the
  *  server could change format) — better than crashing the row. */
-private fun formatTimestamp(iso: String): String {
+@Composable
+internal fun formatTimestamp(iso: String, displayZone: java.time.ZoneId): String {
+    val formatter = remember(displayZone) {
+        java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(displayZone)
+    }
     return runCatching {
-        val instant = java.time.Instant.parse(iso)
-        val local = instant.atZone(java.time.ZoneId.systemDefault())
-        java.time.format.DateTimeFormatter
-            .ofPattern("yyyy-MM-dd HH:mm")
-            .format(local)
+        formatter.format(java.time.Instant.parse(iso))
     }.getOrDefault(iso)
 }
 

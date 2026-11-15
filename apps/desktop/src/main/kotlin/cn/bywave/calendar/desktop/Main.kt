@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,6 +84,7 @@ private val DarkColors = darkColorScheme(
 )
 
 fun main() {
+    cn.bywave.calendar.desktop.data.time.DesktopTimeZone.start()
     cn.bywave.calendar.desktop.data.AppearancePrefs.init()
     if (System.getProperty("os.name").orEmpty().lowercase().contains("mac")) {
         // OpenJDK reads this before initializing Cocoa. Native window controls
@@ -95,6 +97,9 @@ fun main() {
         })
     }
     application {
+        DisposableEffect(Unit) {
+            onDispose { cn.bywave.calendar.desktop.data.time.DesktopTimeZone.stop() }
+        }
         // Initialize i18n before the first @Composable mounts so the initial
         // tree renders in the user's chosen language (no flash of English).
         cn.bywave.calendar.desktop.i18n.I18n.init()
@@ -197,6 +202,12 @@ fun main() {
                 false
             },
         ) {
+            val focused = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused
+            LaunchedEffect(visible, state.isMinimized, focused) {
+                if (visible && !state.isMinimized && focused) {
+                    cn.bywave.calendar.desktop.data.time.DesktopTimeZone.refresh()
+                }
+            }
             // 最小窗口尺寸。Compose 的 WindowState 只管「打开时多大」,不管
             // 「能被拖到多小」—— 没有这一行的时候用户可以把窗口拖到一两百
             // 像素宽,顶栏的设置/刷新/搜索图标会被直接切掉(Row 溢出是静默

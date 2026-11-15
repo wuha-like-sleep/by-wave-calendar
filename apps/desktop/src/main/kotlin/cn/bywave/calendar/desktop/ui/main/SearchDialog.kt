@@ -73,18 +73,19 @@ import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import cn.bywave.calendar.desktop.ui.theme.rowShape
 import cn.bywave.calendar.desktop.util.userFacingError
-import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /** Local time formatter for a result row — shows the event's start in the
  *  user's local zone (the server returns ISO8601 with offset). Falls back
  *  to the raw string if parsing fails (defensive, never crash a row). */
-private val RESULT_TIME_FMT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
-
-private fun resultTimeLabel(iso: String): String =
-    runCatching { RESULT_TIME_FMT.format(Instant.parse(iso)) }.getOrDefault(iso)
+@Composable
+internal fun resultTimeLabel(iso: String, displayZone: ZoneId): String {
+    val formatter = remember(displayZone) {
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(displayZone)
+    }
+    return cn.bywave.calendar.desktop.ui.calendar.parseInstant(iso)?.let(formatter::format) ?: iso
+}
 
 /**
  * Search dialog.
@@ -103,6 +104,7 @@ fun SearchDialog(
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
 
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<SearchResultDTO>>(emptyList()) }
@@ -124,7 +126,7 @@ fun SearchDialog(
         // 屏幕上一个字都不多，用户只会以为鼠标没点着，反复点。现在解析走公用的
         // parseInstant（多认一种不带时区的写法），真解析不了就把话说出来。
         val day = cn.bywave.calendar.desktop.ui.calendar.parseInstant(r.startsAt)
-            ?.atZone(ZoneId.systemDefault())?.toLocalDate()
+            ?.atZone(displayZone)?.toLocalDate()
         if (day != null) {
             onJumpToDate(day)
         } else {
@@ -258,7 +260,7 @@ fun SearchDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
                             results.forEach { r ->
-                                SearchResultRow(result = r, onClick = { jumpTo(r) })
+                                SearchResultRow(result = r, displayZone = displayZone, onClick = { jumpTo(r) })
                             }
                         }
                     }
@@ -276,7 +278,7 @@ fun SearchDialog(
  *  event's day. Layout echoes the calendar views' EventRow so search feels
  *  like part of the same app. */
 @Composable
-private fun SearchResultRow(result: SearchResultDTO, onClick: () -> Unit) {
+private fun SearchResultRow(result: SearchResultDTO, displayZone: ZoneId, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
@@ -305,7 +307,7 @@ private fun SearchResultRow(result: SearchResultDTO, onClick: () -> Unit) {
                 maxLines = 2,
             )
             Text(
-                resultTimeLabel(result.startsAt),
+                resultTimeLabel(result.startsAt, displayZone),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
