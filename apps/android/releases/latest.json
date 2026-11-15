@@ -1,13 +1,13 @@
 {
-  "versionCode": 22,
-  "versionName": "0.12.1",
-  "filename": "bywave-calendar-0.12.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk",
-  "sha256": "b997e5d97f812f1a7f2aac78ebc800cbf7dda267f530300cb168ee324a0a25b0",
-  "sizeBytes": 24937264,
-  "releasedAt": "2026-10-28T13:19:44Z",
-  "notes": "v0.12.1 — 多账号和登录这两处说清楚了\n\n· 登录了多个账号时，如果其中一个在别处改了密码或这台设备被移除，App 会切到另一个账号，并在日历顶部写清是哪个账号、为什么\n· 被登出的账号，它排好的提醒和同步进系统日历的日程会一起清掉\n· 登录出错时说清楚原因：密码错、账号被锁或停用、管理员没开 App 同步、验证码错、尝试太频繁、服务器出错、连不上服务器，不再只显示「HTTP 401」\n· 被登出后点「重新登录」，会自动填好那个账号的服务器地址和邮箱；邮箱前后多打了空格也能登录\n· 登录后按返回键不会再退到一个一模一样的日历页\n· 修好了在 App 里改密码；网络抖一下不会再把账号从这台手机上登出",
+  "versionCode": 23,
+  "versionName": "0.13.0",
+  "filename": "bywave-calendar-0.13.0.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.0/bywave-calendar-0.13.0.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.0/bywave-calendar-0.13.0.apk",
+  "sha256": "b24ab18905bed29e5875bd3d404d041e4396f5dd22ac96901ca87fdc9304013a",
+  "sizeBytes": 25125952,
+  "releasedAt": "2026-11-15T03:41:06Z",
+  "notes": "Android 0.13.0（版本代码 23）\n\n- 登录页突出网页登录入口，改善授权等待、取消和返回 App 的流程；授权码采用一次性校验与 PKCE，待授权信息加密保存。\n- 在 App 内管理 Outlook 双向同步，并选择、暂停或移除手机本机日历镜像。本机镜像是 ByWave 到系统日历的单向副本；Outlook 连接支持双向同步。\n- 加快前台日程刷新，改善删除后的显示延迟；完整同步优化需要服务端 1.9.0。\n- 更新页面统一品牌图标，改善下载进度、取消、重试和安装反馈。\n- 安装前验证 HTTPS、文件大小、SHA-256、包名、版本和应用签名；使用与原版一致的发布证书，可覆盖升级。\n\nAPK 在本机编译、签名和校验，安装仍需要 Android 系统确认。\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
