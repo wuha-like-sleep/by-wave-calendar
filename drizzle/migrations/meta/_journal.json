@@ -428,6 +428,13 @@
       "when": 1794614400000,
       "tag": "0060_microsoft_calendar_config",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1794700800000,
+      "tag": "0061_native_calendar_access",
+      "breakpoints": true
     }
   ]
 }

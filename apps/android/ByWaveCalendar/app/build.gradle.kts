@@ -23,8 +23,8 @@ android {
         // string we show in About. We keep these in sync with iOS:
         //   MARKETING_VERSION 1.3.3   ↔   versionName "1.3.3"
         //   CURRENT_PROJECT_VERSION 1 ↔   versionCode 1  (Android starts fresh)
-        versionCode = 22
-        versionName = "0.12.1"
+        versionCode = 23
+        versionName = "0.13.0"
         // The setup screen URL scheme — server's QR-pair flow sends an
         // intent back to the APP via this scheme. iOS counterpart uses
         // `bywave://` too, so the server only needs one redirect target.
@@ -78,6 +78,7 @@ android {
         }
         getByName("debug") {
             applicationIdSuffix = ".debug"
+            manifestPlaceholders["appAuthRedirectScheme"] = "bywave-staging"
             isMinifyEnabled = false
         }
     }
@@ -110,7 +111,7 @@ android {
             // We use `kotlin/` instead of the default `java/` source root.
             // Android Studio handles both, but spelling it out keeps
             // `gradle compileKotlin` honest if someone drops Java code in.
-            java.srcDirs("src/main/kotlin")
+            java.srcDirs("src/main/kotlin", "../../../shared/src/main/kotlin")
         }
         named("test") {
             java.srcDirs("src/test/kotlin")

@@ -16,7 +16,7 @@ const pg = new PGlite();
 
 type ColShape = { table_name: string; column_name: string; data_type: string; is_nullable: string; column_default: string | null };
 
-const TABLES = ["site_settings", "users", "booking_links"];
+const TABLES = ["site_settings", "users", "booking_links", "app_passwords", "calendar_sync_pairs"];
 
 /**
  * 从 idx 46 起新增的列必须被安全网收着。
@@ -100,7 +100,7 @@ describe("开机安全网", () => {
 
   it(`idx ${COVERED_FROM_MIGRATION} 之后新增的列，一个不落地收在安全网里`, () => {
     const covered = new Set(patchedColumns());
-    const pat = /ALTER\s+TABLE\s+"?(site_settings|users|booking_links)"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_]+)"?/gi;
+    const pat = /ALTER\s+TABLE\s+"?(site_settings|users|booking_links|app_passwords|calendar_sync_pairs)"?\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"?([a-z_]+)"?/gi;
     const missing: string[] = [];
     for (const f of readdirSync("drizzle/migrations").filter((x) => x.endsWith(".sql")).sort()) {
       const idx = Number(f.slice(0, 4));

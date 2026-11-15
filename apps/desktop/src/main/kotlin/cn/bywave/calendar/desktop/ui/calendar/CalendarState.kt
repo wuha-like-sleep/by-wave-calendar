@@ -166,7 +166,13 @@ class CalendarState(
      *  `useCache = false`：刚改完数据（新建 / 改时间 / 删除 / 撤销）之后的那次
      *  刷新不先画缓存 —— 缓存还是改之前的样子，先画它的话刚拖好的事件会先跳回
      *  原位、等网络回来再跳过去，刚删掉的事件也会先冒出来一下。 */
-    fun load(useCache: Boolean = true) {
+    fun refreshIfIdle() {
+        val current = _ui.value
+        if (loadJob?.isActive == true || current.saving || current.activeSheet != null || current.pendingScopeDelete != null || current.pendingScopeEdit != null) return
+        load(useCache = false, silent = true)
+    }
+
+    fun load(useCache: Boolean = true, silent: Boolean = false) {
         loadJob?.cancel()
         loadJob = scope.launch {
             val s = _ui.value
@@ -190,7 +196,7 @@ class CalendarState(
                     loading = true,   // still revalidating
                     error = null,
                 )
-            } else {
+            } else if (!silent) {
                 _ui.value = _ui.value.copy(loading = true, error = null)
             }
 
@@ -206,6 +212,7 @@ class CalendarState(
                     events = resp.events,
                     calendars = resp.calendars,
                     loading = false,
+                    error = null,
                 )
                 if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp)
             } catch (e: CancellationException) {

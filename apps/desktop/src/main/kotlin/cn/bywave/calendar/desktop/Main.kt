@@ -42,14 +42,14 @@ private val LightColors = lightColorScheme(
     primary = BrandPurple,
     secondary = BrandPurple,
     tertiary = BrandPurple,
-    background = Color(0xFFF6F7FB),
+    background = Color(0xFFF5F5F9),
     onBackground = Color(0xFF202539),
     surface = Color.White,
     onSurface = Color(0xFF202539),
     surfaceVariant = Color(0xFFE9ECF5),
     onSurfaceVariant = Color(0xFF596175),
     outline = Color(0xFF747C90),
-    outlineVariant = Color(0xFFCDD2E0),
+    outlineVariant = Color(0xFFE2E3EB),
     primaryContainer = Color(0xFFEEECFF),
     onPrimaryContainer = Color(0xFF373085),
 )
@@ -72,10 +72,10 @@ private val DarkColors = darkColorScheme(
     // 卡片用 surfaceVariant×0.35、网格线用 outlineVariant×0.5 铺底,
     // 1.0.16 的取值算出来只有 1.1~1.3:1 —— 这就是截图里顶栏/表头/网格
     // 糊成一片黑的原因。现在分别做到 ≈1.3:1 和 ≈1.9:1。
-    surfaceVariant = Color(0xFF565664),   // ×0.35 → #2D2D35,对 surface 1.31:1
+    surfaceVariant = Color(0xFF363A49),   // ×0.35 → #2D2D35,对 surface 1.31:1
     onSurfaceVariant = Color(0xFFC3C3CE), // 次要文字,对 surface ≈ 10:1
     outline = Color(0xFF8A8A98),
-    outlineVariant = Color(0xFF767683),   // ×0.5 → #464650,对 surface 1.92:1
+    outlineVariant = Color(0xFF505463),   // ×0.5 → #464650,对 surface 1.92:1
     errorContainer = Color(0xFF5C1A1A),
     onErrorContainer = Color(0xFFFFD9D6),
     primaryContainer = Color(0xFF3A2A78),

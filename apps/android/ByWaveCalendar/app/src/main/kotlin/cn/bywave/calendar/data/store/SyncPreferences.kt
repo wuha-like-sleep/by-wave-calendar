@@ -29,6 +29,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -60,6 +61,12 @@ class SyncPreferences(private val context: Context) {
 
     suspend fun setMirrorToSystem(enabled: Boolean) {
         context.syncDataStore.edit { it[SyncPrefsKeys.MIRROR_TO_SYSTEM] = enabled }
+    }
+
+    suspend fun selectedCalendars(profileId: String): Set<String>? = context.syncDataStore.data.first()[stringSetPreferencesKey("mirror_calendars_" + profileId)]
+
+    suspend fun selectCalendars(profileId: String, ids: Set<String>) {
+        context.syncDataStore.edit { it[stringSetPreferencesKey("mirror_calendars_" + profileId)] = ids }
     }
 
     suspend fun setRemindersEnabled(enabled: Boolean) {

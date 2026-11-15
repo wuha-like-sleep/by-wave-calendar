@@ -9,7 +9,7 @@ export interface SyncSide {
 /** Persist after every mutation. Creates are journalled BEFORE the remote call;
  * both adapters recover them by a stable origin after a timeout or restart. */
 export async function synchronize(pairId: string, state: SyncState, left: SyncSide, right: SyncSide,
-  checkpoint: (state: SyncState) => Promise<void>, heartbeat: () => Promise<void>, budget = 100): Promise<Conflict[]> {
+  checkpoint: (state: SyncState) => Promise<void>, heartbeat: () => Promise<void>, budget = 100, onDeferred: () => void = () => {}): Promise<Conflict[]> {
   await heartbeat();
   const l = await left.snapshot([...state.links.map(x => x.leftId), ...(state.pending?.side === "left" ? [state.pending.sourceId] : [])]);
   await heartbeat();
@@ -39,7 +39,11 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
     mutations++;
   };
   if (state.pending) await finishPending(true);
-  for (const link of [...state.links]) {
+  // Propagate confirmed deletions before bulk imports/edits. Conflicting edits
+  // still require explicit resolution, regardless of ordering.
+  const links = [...state.links].sort((a, b) =>
+    Number(!l.has(b.leftId) || !r.has(b.rightId)) - Number(!l.has(a.leftId) || !r.has(a.rightId)));
+  for (const link of links) {
     const a = l.get(link.leftId), b = r.get(link.rightId);
     let action = decide(link, a, b);
     const key = link.leftId;
@@ -50,7 +54,7 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
     if (action === "conflict") { conflicts.push({ key, left: a ?? null, right: b ?? null }); continue; }
     if (action === "equal") { link.base = a!.content; delete state.resolutions[key]; continue; }
     if (action === "forget") { state.links = state.links.filter(x => x !== link); delete state.resolutions[key]; continue; }
-    if (mutations >= budget) continue;
+    if (mutations >= budget) { onDeferred(); continue; }
     await heartbeat();
     const source = action === "to-right" ? a : b;
     const target = action === "to-right" ? b : a;
@@ -90,8 +94,8 @@ export async function synchronize(pairId: string, state: SyncState, left: SyncSi
   // Never import a linked event a second time, including unresolved conflicts.
   for (const [side, items] of [["left", l], ["right", r]] as const) {
     for (const item of items.values()) {
-      if (mutations >= budget) break;
       if ((side === "left" ? leftIds : rightIds).has(item.id)) continue;
+      if (mutations >= budget) { onDeferred(); break; }
       state.pending = { side, sourceId: item.id, origin: side === "left" ? stableTransactionId(pairId, item.id) : localOrigin(pairId, item.id), content: item.content };
       await persist(); await finishPending();
       const link = state.links.at(-1)!; leftIds.add(link.leftId); rightIds.add(link.rightId);

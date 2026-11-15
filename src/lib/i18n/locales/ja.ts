@@ -5,6 +5,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const ja: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "アプリにログイン",
+  "nativeLogin.intro": "ByWave Calendar で開始したログインであることを確認してください。",
+  "nativeLogin.continue": "アプリにログインする",
+  "nativeLogin.switch": "別のアカウントを使う",
+  "nativeLogin.cancel": "キャンセルしてアプリに戻る",
+  "nativeLogin.upgrade": "ログイン要求が無効か、アプリの更新が必要です。更新して再試行してください。QR コードやペアリングコードでもログインできます。",
+
   "adminCalendar.title": "システムカレンダー設定",
   "adminCalendar.intro": "プラットフォームのカレンダー接続を設定します。保存するとすぐに反映され、サーバーファイルの編集や再起動は不要です。",
   "adminCalendar.outlook": "新しい Outlook と従来の Outlook の Microsoft 365 / Outlook.com クラウドカレンダーに対応。",
@@ -57,7 +64,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "専用の Outlook カレンダーを推奨します。両側の予定をコピーし、以後の編集と削除も双方向に同期します。",
   "calendarSync.choose": "カレンダーを選択",
   "calendarSync.start": "双方向同期を開始",
-  "calendarSync.scope": "Outlook は過去 90 日から今後 365 日までを同期し、連携済みの予定は追跡を続けます。件名、説明、場所、日時、終日設定が対象です。繰り返し予定は個別に同期し、1 件の編集はシリーズ全体に影響しません。通知、添付、参加者、会議招待はコピーされません。通常は毎分、大量の予定は分割して同期します。",
+  "calendarSync.scope": "Outlook は過去 90 日から今後 365 日までを同期し、連携済みの予定は追跡を続けます。件名、説明、場所、日時、終日設定が対象です。繰り返し予定は個別に同期し、1 件の編集はシリーズ全体に影響しません。通知、添付、参加者、会議招待はコピーされません。通常は約 30 秒ごとに、大量の予定は分割して同期します。",
   "calendarSync.queued": "同期を予約しました。しばらくしてから更新してください。",
   "calendarSync.saved": "保存しました。次の同期で反映されます。",
   "calendarSync.statusTitle": "同期状況",

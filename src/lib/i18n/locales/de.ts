@@ -5,6 +5,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const de: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "In der App anmelden",
+  "nativeLogin.intro": "Fahren Sie nur fort, wenn Sie diese Anmeldung in ByWave Calendar gestartet haben.",
+  "nativeLogin.continue": "Weiter zur App",
+  "nativeLogin.switch": "Anderes Konto verwenden",
+  "nativeLogin.cancel": "Abbrechen und zur App zurück",
+  "nativeLogin.upgrade": "Die Anfrage ist ungültig oder die App muss aktualisiert werden. Aktualisieren Sie die App und versuchen Sie es erneut. QR- und Kopplungscodes funktionieren weiterhin.",
+
   "adminCalendar.title": "Systemkalender konfigurieren",
   "adminCalendar.intro": "Kalenderverbindungen für Ihre Plattform einrichten. Änderungen gelten sofort, ohne Serverdateien zu bearbeiten oder den Dienst neu zu starten.",
   "adminCalendar.outlook": "Unterstützt Microsoft 365-/Outlook.com-Cloudkalender im neuen und klassischen Outlook.",
@@ -57,7 +64,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "Ein eigener Outlook-Kalender wird empfohlen. Termine beider Kalender werden kopiert. Danach werden Änderungen und Löschungen in beide Richtungen synchronisiert.",
   "calendarSync.choose": "Kalender auswählen",
   "calendarSync.start": "Beidseitige Synchronisierung starten",
-  "calendarSync.scope": "Outlook synchronisiert die letzten 90 und nächsten 365 Tage und verfolgt verknüpfte Termine weiter. Titel, Beschreibung, Ort, Zeit und Ganztagsstatus werden übertragen. Wiederholungen werden einzeln synchronisiert: Eine Änderung betrifft nicht die ganze Serie. Erinnerungen, Anhänge, Teilnehmer und Einladungen werden nicht kopiert. Die Synchronisierung erfolgt normalerweise jede Minute, bei großen Kalendern in mehreren Schritten.",
+  "calendarSync.scope": "Outlook synchronisiert die letzten 90 und nächsten 365 Tage und verfolgt verknüpfte Termine weiter. Titel, Beschreibung, Ort, Zeit und Ganztagsstatus werden übertragen. Wiederholungen werden einzeln synchronisiert: Eine Änderung betrifft nicht die ganze Serie. Erinnerungen, Anhänge, Teilnehmer und Einladungen werden nicht kopiert. Die Synchronisierung erfolgt normalerweise alle 30 Sekunden, bei großen Kalendern in mehreren Schritten.",
   "calendarSync.queued": "Synchronisierung vorgemerkt. Aktualisieren Sie in Kürze.",
   "calendarSync.saved": "Gespeichert. Die nächste Synchronisierung übernimmt die Änderung.",
   "calendarSync.statusTitle": "Synchronisierungsstatus",

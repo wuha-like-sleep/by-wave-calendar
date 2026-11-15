@@ -38,7 +38,10 @@ struct SetupView: View {
     // so it's always safe to call after a successful pairing.
     @Environment(\.dismiss) private var dismiss
     @State private var serverURLInput: String = ""
-    @State private var method: LoginMethod = .scan
+    @State private var method: LoginMethod = .password
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var browserPhase: String?
+    @State private var browserTask: Task<Void, Never>?
 
     // Password method
     @State private var email: String = ""
@@ -72,6 +75,7 @@ struct SetupView: View {
                     // pointless and confusing.
                     if method.needsServerURL {
                         serverURLField
+                        browserLoginButton
                     }
                     // Body per method
                     Group {
@@ -90,7 +94,6 @@ struct SetupView: View {
                     // doesn't see an "open browser" button that 404s
                     // because the field is empty).
                     if method.needsServerURL {
-                        browserLoginButton
                         // Native "Sign in with Apple". Like the browser
                         // button it needs a server URL (so it doesn't 404
                         // against an empty host), hence the same gate. The
@@ -116,6 +119,9 @@ struct SetupView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .background(bgGradient)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: method)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: browserPhase)
+            .onDisappear { browserTask?.cancel() }
             .sheet(isPresented: $showingScanner) {
                 ScannerView { result in
                     showingScanner = false
@@ -130,7 +136,8 @@ struct SetupView: View {
                         serverURL: item.serverURL,
                         mfaToken: item.mfaToken,
                         onComplete: { resp in
-                            // Lenient parse — server emits Date.toISOString() with
+                            guard !Task.isCancelled else { return }
+            // Lenient parse — server emits Date.toISOString() with
             // fractional seconds which the default ISO8601DateFormatter
             // rejects. See AppState.parseIsoLenient comment for the
             // session-cripping bug that caused.
@@ -200,14 +207,9 @@ struct SetupView: View {
     // MARK: - Hero
     private var hero: some View {
         VStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 18)
-                .fill(Theme.brandGradient)
+            Image("BrandIcon").resizable().scaledToFit()
                 .frame(width: 72, height: 72)
-                .overlay {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .shadow(color: Theme.brandShadow, radius: 12, y: 6)
             Text("ByWave Calendar")
                 .font(.title2.bold())
@@ -377,25 +379,24 @@ struct SetupView: View {
 
     // MARK: - Browser login (covers Passkey / MFA / SSO)
     private var browserLoginButton: some View {
-        VStack(spacing: 8) {
-            HStack {
-                VStack { Divider() }
-                Text("或").font(.caption2).foregroundStyle(.tertiary).padding(.horizontal, 8)
-                VStack { Divider() }
-            }
-            .padding(.vertical, 4)
+        VStack(spacing: 12) {
             Button {
-                Task { await loginViaBrowser() }
+                browserTask = Task { await loginViaBrowser() }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "safari").font(.body.weight(.medium))
-                    Text("用浏览器登录").font(.body.weight(.medium))
+                HStack(spacing: 10) {
+                    if browserPhase != nil { ProgressView().tint(.white) }
+                    else { Image(systemName: "safari").font(.body.weight(.medium)) }
+                    Text((browserPhase ?? "用浏览器登录").loc).font(.body.weight(.semibold))
                 }
-                .frame(maxWidth: .infinity).padding(.vertical, 12)
-                .background(Theme.chip, in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .background(Theme.brandGradientHorizontal, in: RoundedRectangle(cornerRadius: 16))
+                .foregroundStyle(.white)
             }
             .disabled(isWorking || serverURLInput.trimmingCharacters(in: .whitespaces).isEmpty)
+            if browserPhase != nil {
+                Text("appLogin.help".loc).font(.footnote).foregroundStyle(.secondary)
+                Button("取消".loc) { browserTask?.cancel() }.font(.callout)
+            }
         }
     }
 
@@ -578,14 +579,18 @@ struct SetupView: View {
 
     private func loginViaBrowser() async {
         guard beginWork() else { return }
-        defer { isWorking = false }
+        browserPhase = "appLogin.browser"
+        defer { isWorking = false; browserPhase = nil }
         guard let url = await normalizedServerURL() else {
             errorMessage = "服务器地址无效".loc; return
         }
         do {
-            let code = try await WebAuthLogin.start(serverURL: url)
-            await doClaim(serverURL: url, code: code)
+            let result = try await WebAuthLogin.start(serverURL: url)
+            guard !Task.isCancelled else { return }
+            browserPhase = "appLogin.returning"
+            await doClaim(serverURL: url, code: result.code, codeVerifier: result.verifier)
         } catch let e as WebAuthError {
+            guard !Task.isCancelled else { return }
             if case .userCancelled = e { return }  // silent
             errorMessage = e.localizedDescription
         } catch {
@@ -613,6 +618,7 @@ struct SetupView: View {
                 pendingMfa = PendingMfa(serverURL: url, mfaToken: mfaToken)
                 return
             }
+            guard !Task.isCancelled else { return }
             // Lenient parse — server emits Date.toISOString() with
             // fractional seconds which the default ISO8601DateFormatter
             // rejects. See AppState.parseIsoLenient.
@@ -661,14 +667,16 @@ struct SetupView: View {
 
     /// 用配对码换令牌。调用方（扫码 / 配对码 / 浏览器登录）已经用 beginWork() 立起了
     /// isWorking、也负责放下它，这里不再碰。
-    private func doClaim(serverURL: URL, code: String) async {
+    private func doClaim(serverURL: URL, code: String, codeVerifier: String? = nil) async {
         do {
             let resp = try await PairingService.claim(
                 serverURL: serverURL,
                 code: code,
                 label: PairingService.suggestedLabel(),
                 appVersion: PairingService.appVersion,
+                codeVerifier: codeVerifier,
             )
+            guard !Task.isCancelled else { return }
             // Lenient parse — server emits Date.toISOString() with
             // fractional seconds which the default ISO8601DateFormatter
             // rejects. See AppState.parseIsoLenient comment for the
@@ -687,9 +695,9 @@ struct SetupView: View {
             // Close when shown as a sheet (ProfileSwitcher "添加账号"); no-op at root.
             dismiss()
         } catch let e as PairingError {
-            errorMessage = e.localizedDescription
+            if !Task.isCancelled { errorMessage = e.localizedDescription }
         } catch {
-            errorMessage = error.localizedDescription
+            if !Task.isCancelled { errorMessage = error.localizedDescription }
         }
     }
 }

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-// 守桌面端的版本号：四处必须一致，而且安装器的版本号**不许写死**。
+// 安装器与应用版本必须一致；显式待发布版本可领先已发布清单，不能伪造已发布下载。
 //
 // ── 为什么需要这条 ────────────────────────────────────────────────────
 //
@@ -31,6 +31,7 @@ const BUILDINFO = path.resolve(
   "apps/desktop/src/main/kotlin/cn/bywave/calendar/desktop/BuildInfo.kt",
 );
 const MANIFEST = path.resolve("apps/desktop/releases/latest.json");
+const PENDING = path.resolve("apps/desktop/releases/pending.json");
 
 /** 剥掉整行注释再判 —— 不剥的话，上面解释这个坑的注释自己会触发门禁。
  *  本仓库为这件事红过一次：一条天天误报的门禁和没有门禁是一样的。 */
@@ -50,6 +51,13 @@ const buildInfo = codeOnly(readFileSync(BUILDINFO, "utf8"));
 const manifest = JSON.parse(readFileSync(MANIFEST, "utf8")) as {
   versionCode: number; versionName: string;
 };
+
+// Local validation packages must not replace live update URLs. A deliberate
+// pending release keeps the strict build-version check until publication.
+const pending = existsSync(PENDING) ? JSON.parse(readFileSync(PENDING, "utf8")) as {
+  versionCode: number; versionName: string; status: string;
+} : null;
+const releaseVersion = pending ?? manifest;
 
 const gradleVersion = /^version\s*=\s*"([^"]+)"/m.exec(gradle)?.[1];
 const nameInBuildInfo = /VERSION_NAME\s*=\s*"([^"]+)"/.exec(buildInfo)?.[1];
@@ -82,18 +90,20 @@ describe("桌面端版本号", () => {
     expect(nameInBuildInfo, "两处版本号不一致 —— 装出来的包和程序里显示的会对不上").toBe(gradleVersion);
   });
 
-  it("更新清单的 versionCode 和 BuildInfo.VERSION_CODE 一致", () => {
-    // 更新器比的就是 versionCode。两处脱节的后果是「检查更新」误报
-    // 「已是最新版本」——1.0.13 之前就是这么坏的。
-    expect(
-      manifest.versionCode,
-      "清单里的 versionCode 和 BuildInfo 对不上 —— 更新器比的就是这个值，" +
-        "脱节会让所有人的「检查更新」误报「已是最新版本」",
-    ).toBe(codeInBuildInfo);
+  it("发布目标的 versionCode 和 BuildInfo.VERSION_CODE 一致", () => {
+    expect(releaseVersion.versionCode, "发布目标与应用更新比较值不一致").toBe(codeInBuildInfo);
   });
 
-  it("更新清单的 versionName 和 BuildInfo.VERSION_NAME 一致", () => {
-    expect(manifest.versionName).toBe(nameInBuildInfo);
+  it("发布目标的 versionName 和 BuildInfo.VERSION_NAME 一致", () => {
+    expect(releaseVersion.versionName).toBe(nameInBuildInfo);
+  });
+
+  it("待发布版本必须明确标记且高于已发布版本", () => {
+    if (!pending) return; // Without a pending marker, the two checks above require exact parity.
+    expect(pending.status).toBe("local-validation");
+    expect(pending.versionCode).toBeGreaterThan(manifest.versionCode);
+    expect(pending.versionName).toMatch(/^[1-9]\d*\.\d+\.\d+$/);
+    expect(pending.versionName.localeCompare(manifest.versionName, "en", { numeric: true })).toBeGreaterThan(0);
   });
 
   it("版本号形状满足三个平台的交集（第一段 > 0 的三段式）", () => {

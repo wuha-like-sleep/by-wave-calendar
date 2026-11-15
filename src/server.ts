@@ -16,6 +16,7 @@ import compress from "@fastify/compress";
 import ejs from "ejs";
 import { env, trustProxyOption, describeTrustProxy, createProxyShapeWatcher } from "./env.js";
 import { authRoutes } from "./routes/auth.js";
+import { nativeCalendarSyncRoutes } from "./routes/calendar_sync.js";
 import { calendarRoutes } from "./routes/calendars.js";
 import { registerApiCsrf } from "./lib/api_csrf.js";
 import { isNoindexPath, robotsTxt } from "./lib/crawler_policy.js";
@@ -741,6 +742,7 @@ app.get("/api/version", { config: { rateLimit: false } }, async (_req, reply) =>
 for (const prefix of ["/api", "/api/v1"]) {
   await app.register(authRoutes, { prefix });
   await app.register(calendarRoutes, { prefix });
+  await app.register(nativeCalendarSyncRoutes, { prefix });
   await app.register(eventRoutes, { prefix });
   await app.register(searchRoutes, { prefix });
   await app.register(deviceRoutes, { prefix });

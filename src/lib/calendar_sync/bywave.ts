@@ -1,3 +1,4 @@
+import { pushEventChanged } from "../apns.js";
 import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../../db/client.js";
@@ -82,7 +83,7 @@ export class ByWaveCalendar implements SyncSide {
   async save(content: SyncContent, current?: SyncItem, origin?: string): Promise<SyncItem> {
     content = contentSchema.parse(content);
     const cal = await this.calendar();
-    return db.transaction(async tx => {
+    const saved = await db.transaction(async tx => {
       const fields = { summary: content.summary, description: content.description, location: content.location,
         startsAt: new Date(content.startsAt), endsAt: new Date(content.endsAt), allDay: content.allDay,
         rawIcs: null, updatedAt: new Date() };
@@ -111,6 +112,8 @@ export class ByWaveCalendar implements SyncSide {
       const [updated] = await tx.update(schema.events).set(fields).where(eq(schema.events.id, row.id)).returning();
       return this.item(updated!, cal.timezone);
     });
+    void pushEventChanged(this.userId, saved.id.split("@")[0]!, "event.updated").catch(() => undefined);
+    return saved;
   }
   async remove(current: SyncItem): Promise<void> {
     const cal = await this.calendar();
@@ -129,6 +132,7 @@ export class ByWaveCalendar implements SyncSide {
       await tx.update(schema.events).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(schema.events.id, row.id));
       return row;
     });
+    if (!deleted) void pushEventChanged(this.userId, current.id.split("@")[0]!, "event.updated").catch(() => undefined);
     if (deleted) {
       const [user] = await db.select().from(schema.users).where(eq(schema.users.id, this.userId));
       if (user) await notifyEventCancellation(deleted, user);

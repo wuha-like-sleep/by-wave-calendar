@@ -11,6 +11,8 @@ import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import cn.bywave.calendar.sync.Reminders
 import cn.bywave.calendar.sync.SystemCalendarMirror
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,10 +65,13 @@ class EventRepository(
      * cache. Errors bubble so the ViewModel can surface a banner
      * without blocking the existing cached UI.
      */
-    suspend fun fetchAndCache(fromIso: String, toIso: String) {
+    private val fetchMutex = Mutex()
+
+    suspend fun fetchAndCache(fromIso: String, toIso: String): Unit = fetchMutex.withLock {
         val profile = profiles.active() ?: error("not signed in")
         val client = ApiClient.forProfile(profile, profiles)
         val resp = client.api.events(from = fromIso, to = toIso)
+        if (profiles.active()?.id != profile.id) return@withLock
         db.eventDao().replaceForProfile(
             profile.id,
             resp.events.map { EventEntity.from(it, profile.id, json) },
@@ -81,7 +86,7 @@ class EventRepository(
         // them unconditionally is safe (no-ops when off / unpermitted).
         val current = prefs.current()
         if (current.mirrorToSystemCalendar) {
-            runCatching { mirror.mirror(profile, resp.calendars, resp.events) }
+            runCatching { mirror.mirror(profile, resp.calendars, resp.events, prefs.selectedCalendars(profile.id)) }
         }
         if (current.remindersEnabled) {
             runCatching { reminders.reschedule(profile, resp.events, current.reminderLeadMinutes) }
@@ -105,7 +110,7 @@ class EventRepository(
      * 取消提醒必须能重建出当初的 PendingIntent，所以要先从 Room 把事件
      * 读出来再操作。两个动作各自 runCatching：镜像失败不该让提醒也不生效。
      */
-    suspend fun applySyncPreferences() {
+    suspend fun applySyncPreferences(throwOnCalendarError: Boolean = false) {
         val profile = profiles.active() ?: return
         val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
             .getOrElse { return }
@@ -120,9 +125,11 @@ class EventRepository(
         if (current.mirrorToSystemCalendar) {
             val calendars = runCatching { db.calendarDao().listForProfile(profile.id).map { it.toDto() } }
                 .getOrElse { emptyList() }
-            runCatching { mirror.mirror(profile, calendars, events) }
+            val result = runCatching { mirror.mirror(profile, calendars, events, prefs.selectedCalendars(profile.id)) }
+            if (throwOnCalendarError) result.getOrThrow()
         } else {
-            runCatching { mirror.unmirror(profile) }
+            val result = runCatching { mirror.unmirror(profile) }
+            if (throwOnCalendarError) result.getOrThrow()
         }
     }
 

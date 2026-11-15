@@ -278,6 +278,7 @@ data class PairPayload(
 @Serializable
 data class PairClaimRequest(
     val code: String,
+    val codeVerifier: String? = null,
     val label: String,
     val kind: String = "android",
     val appVersion: String,

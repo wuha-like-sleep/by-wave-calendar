@@ -18,14 +18,14 @@ function randomToken(len: number): string {
 
 export type IssuedAppPassword = { id: string; plain: string; prefix: string };
 
-export async function createAppPassword(userId: string, label: string): Promise<IssuedAppPassword> {
+export async function createAppPassword(userId: string, label: string, calendarIds: string[] | null = null): Promise<IssuedAppPassword> {
   const prefix = randomToken(PREFIX_LEN);
   const secret = randomToken(SECRET_LEN);
   const plain = `${prefix}-${secret}`;
   const tokenHash = await hashPassword(plain);
   const [row] = await db
     .insert(schema.appPasswords)
-    .values({ userId, label: label.trim() || "未命名设备", prefix, tokenHash, scope: "caldav" })
+    .values({ userId, label: label.trim() || "未命名设备", prefix, tokenHash, scope: "caldav", calendarIds })
     .returning({ id: schema.appPasswords.id });
   if (!row) throw new Error("insert_failed");
   return { id: row.id, plain, prefix };
@@ -36,6 +36,8 @@ export async function listAppPasswords(userId: string) {
     .select({
       id: schema.appPasswords.id,
       label: schema.appPasswords.label,
+      calendarIds: schema.appPasswords.calendarIds,
+      paused: schema.appPasswords.paused,
       prefix: schema.appPasswords.prefix,
       lastUsedAt: schema.appPasswords.lastUsedAt,
       createdAt: schema.appPasswords.createdAt,
@@ -53,8 +55,12 @@ export async function revokeAppPassword(userId: string, id: string): Promise<voi
 }
 
 export async function verifyAppPassword(userId: string, presented: string): Promise<boolean> {
+  return (await verifyAppPasswordRecord(userId, presented)) !== null;
+}
+
+export async function verifyAppPasswordRecord(userId: string, presented: string): Promise<{ id: string } | null> {
   const dash = presented.indexOf("-");
-  if (dash !== PREFIX_LEN) return false;
+  if (dash !== PREFIX_LEN) return null;
   const prefix = presented.slice(0, PREFIX_LEN);
   const rows = await db
     .select()
@@ -66,13 +72,13 @@ export async function verifyAppPassword(userId: string, presented: string): Prom
     ))
     .limit(1);
   const row = rows[0];
-  if (!row) return false;
-  if (!(await verifyPassword(presented, row.tokenHash))) return false;
+  if (!row) return null;
+  if (!(await verifyPassword(presented, row.tokenHash))) return null;
   await db
     .update(schema.appPasswords)
     .set({ lastUsedAt: new Date() })
     .where(eq(schema.appPasswords.id, row.id));
-  return true;
+  return { id: row.id };
 }
 
 export function looksLikeAppPassword(s: string): boolean {

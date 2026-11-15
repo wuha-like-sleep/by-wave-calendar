@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import cn.bywave.calendar.i18n.LocaleHelper
 
 class BywaveApp : Application() {
+    val webLogin by lazy { cn.bywave.calendar.ui.setup.WebLoginStore(this) }
+
     val profiles: ProfileStore by lazy { ProfileStore(this) }
     val repository: EventRepository by lazy { EventRepository(this, profiles) }
 

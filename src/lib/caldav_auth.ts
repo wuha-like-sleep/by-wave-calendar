@@ -1,9 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { verifyPassword } from "./password.js";
-import { looksLikeAppPassword, verifyAppPassword } from "./app_password.js";
+import { looksLikeAppPassword, verifyAppPasswordRecord } from "./app_password.js";
 import { userIsActive } from "./user_state.js";
 import {
   acquireBcryptSlot, releaseBcryptSlot,
@@ -38,7 +38,7 @@ const MAX_PASSWORD_BYTES = 256;
 const AUTH_CACHE_TTL_MS = 60_000;
 const AUTH_CACHE_MAX = 1000;  // ~10 users × a few sessions; LRU below
 
-type AuthCacheEntry = { userId: string; expiresAt: number };
+type AuthCacheEntry = { userId: string; expiresAt: number; appPasswordId?: string };
 const authCache = new Map<string, AuthCacheEntry>();
 let cacheHits = 0;
 let cacheMisses = 0;
@@ -48,7 +48,7 @@ let cacheMisses = 0;
 // the *promise* of the verify result so subsequent callers share the
 // outcome instead of paying bcrypt N times.
 type VerifyResult =
-  | { ok: true; userId: string }
+  | { ok: true; userId: string; appPasswordId?: string }
   | { ok: false; message: string; errParam?: string };
 const inFlight = new Map<string, Promise<VerifyResult>>();
 let coalesced = 0;
@@ -125,6 +125,7 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
       authCache.delete(ckey);
       return send401(reply, u ? "Account disabled" : "Unauthorized", u ? "account_disabled" : undefined);
     }
+    if (!await applyCalendarAccess(req, reply, u.id, cached.appPasswordId)) return null;
     return u;
   }
   cacheMisses++;
@@ -210,6 +211,7 @@ export async function basicAuth(req: FastifyRequest, reply: FastifyReply): Promi
   // log (if enabled in admin diagnostics) can show before/after impact.
   (req as { caldavAuthCacheMiss?: boolean }).caldavAuthCacheMiss = true;
 
+  if (!await applyCalendarAccess(req, reply, user.id, verified.appPasswordId)) return null;
   return user;
 }
 
@@ -229,8 +231,11 @@ async function verifyAndCache(email: string, password: string, ckey: string): Pr
 
   let verified = false;
   let usedAppPassword = false;
+  let appPasswordId: string | undefined;
   if (looksLikeAppPassword(password)) {
-    verified = await verifyAppPassword(user.id, password);
+    const record = await verifyAppPasswordRecord(user.id, password);
+    verified = record !== null;
+    appPasswordId = record?.id;
     if (verified) usedAppPassword = true;
   }
   // MFA on means the only valid CalDAV credential is an app password —
@@ -252,7 +257,25 @@ async function verifyAndCache(email: string, password: string, ckey: string): Pr
     const oldestKey = authCache.keys().next().value;
     if (oldestKey) authCache.delete(oldestKey);
   }
-  authCache.set(ckey, { userId: user.id, expiresAt: Date.now() + AUTH_CACHE_TTL_MS });
+  authCache.set(ckey, { userId: user.id, expiresAt: Date.now() + AUTH_CACHE_TTL_MS, appPasswordId });
 
-  return { ok: true, userId: user.id };
+  return { ok: true, userId: user.id, appPasswordId };
+}
+
+// Read access settings on every request, including cache hits and other workers.
+// Pausing returns a transient error so clients keep their existing local events.
+const calendarAccess = new WeakMap<FastifyRequest, string[] | null>();
+export function calDavCalendarAllowed(req: FastifyRequest, calendarId: string): boolean {
+  const ids = calendarAccess.get(req);
+  return ids == null || ids.includes(calendarId);
+}
+async function applyCalendarAccess(req: FastifyRequest, reply: FastifyReply, userId: string, id?: string): Promise<boolean> {
+  if (!id) { calendarAccess.set(req, null); return true; }
+  const [row] = await db.select({ ids: schema.appPasswords.calendarIds, paused: schema.appPasswords.paused }).from(schema.appPasswords)
+    .where(and(eq(schema.appPasswords.id, id), eq(schema.appPasswords.userId, userId), isNull(schema.appPasswords.revokedAt)));
+  if (!row) { send401(reply, "Unauthorized"); return false; }
+  if (row.paused) { void reply.code(503).header("Retry-After", "300").send("Calendar sync paused"); return false; }
+  const ids = row.ids === null ? null : Array.isArray(row.ids) && row.ids.every(x => typeof x === "string") ? row.ids : [];
+  calendarAccess.set(req, ids);
+  return true;
 }

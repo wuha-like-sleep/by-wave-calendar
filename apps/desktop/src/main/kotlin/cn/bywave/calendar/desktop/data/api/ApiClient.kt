@@ -611,6 +611,12 @@ class ApiClient(
         }
     }
 
+    fun calendarConnectionApi() = object : cn.bywave.calendar.connect.CalendarConnectionApi {
+        override suspend fun load(remote: Boolean) = getAuthed("/api/v1/calendar-sync?remote=" + if (remote) "1" else "0", cn.bywave.calendar.connect.CalendarConnection.serializer())
+        override suspend fun command(command: cn.bywave.calendar.connect.CalendarCommand) = withBodyAuthed(HttpMethod.POST, "/api/v1/calendar-sync/action", command, cn.bywave.calendar.connect.CalendarCommand.serializer(), cn.bywave.calendar.connect.CalendarCommandResult.serializer())
+        override suspend fun appleProfile() = getAuthed("/api/v1/calendar-sync/apple-profile", cn.bywave.calendar.connect.AppleProfile.serializer())
+    }
+
     // ---- Internals ----
 
     private enum class HttpMethod { POST, PATCH }

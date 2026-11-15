@@ -1,0 +1,18 @@
+package cn.bywave.calendar.update
+
+import org.junit.Assert.*
+import org.junit.Test
+
+class ReleaseDownloadPolicyTest {
+    private val release = AndroidReleaseDto(30, "1.0", "https://calendar.example/update.apk", "a".repeat(64), 128_000)
+    @Test fun acceptsBoundedHttpsDownloadWithDigest() { assertTrue(validReleaseDownload(release)) }
+    @Test fun rejectsMissingOrMalformedIntegrityAndSize() {
+        for (hash in listOf("", "a".repeat(63), "g".repeat(64))) assertFalse(validReleaseDownload(release.copy(sha256 = hash)))
+        for (size in listOf(0L, -1L, 512L * 1024 * 1024 + 1)) assertFalse(validReleaseDownload(release.copy(sizeBytes = size)))
+    }
+    @Test fun rejectsInsecureAndCredentialBearingUrls() {
+        for (url in listOf("http://calendar.example/app.apk", "file:///tmp/app.apk", "https://user:password@calendar.example/app.apk", "https://calendar.example/app.apk#file", "not a URL")) {
+            assertFalse(url, validReleaseDownload(release.copy(url = url)))
+        }
+    }
+}

@@ -16,6 +16,21 @@ spec.loader.exec_module(release)
 
 
 class ReleaseSafetyTests(unittest.TestCase):
+    def test_api_key_auth_requires_complete_credentials_and_does_not_read_key(self):
+        with tempfile.TemporaryDirectory() as folder:
+            key = Path(folder) / "AuthKey.p8"
+            key.touch()
+            args = SimpleNamespace(keychain_profile=None, api_key=str(key), key_id="ABCDEFGHIJ", issuer=None)
+            with self.assertRaisesRegex(ValueError, "issuer UUID"):
+                release.notary_auth(args)
+            args.issuer = "1774de11-9b18-4e2c-a91f-2c401355710d"
+            with patch.object(Path, "read_text", side_effect=AssertionError("Do not load private keys into release state")):
+                auth = release.notary_auth(args)
+            self.assertEqual(auth[0:2], ["--key", str(key.resolve())])
+            args.keychain_profile = "profile"
+            with self.assertRaisesRegex(ValueError, "either"):
+                release.notary_auth(args)
+
     def test_invalid_packaged_signature_fails_preflight_and_detaches_image(self):
         calls = []
         with patch.object(release, "run", side_effect=lambda *a, **k: calls.append(a)), \

@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { db, schema } from "../../db/client.js";
 import { synchronize } from "./engine.js";
 import { ByWaveCalendar } from "./bywave.js";
 import { MicrosoftClient, MicrosoftError, refreshMicrosoftLogin } from "./microsoft.js";
 import { openToken, sealToken } from "./secrets.js";
 import { stateSchema, SyncUnavailableError } from "./model.js";
+
+import { onCalendarSyncRequested } from "./queue.js";
 
 type Account = typeof schema.calendarSyncAccounts.$inferSelect;
 export async function withSyncAccount<T>(userId: string, work: (account: Account, heartbeat: () => Promise<void>) => Promise<T>): Promise<T> {
@@ -70,11 +72,16 @@ export async function syncAccount(userId: string): Promise<void> {
           save: (content: Parameters<MicrosoftClient["save"]>[1], current?: Parameters<MicrosoftClient["save"]>[2], origin?: string) => microsoft.save(pair.remoteId, content, current, origin),
           remove: (item: Parameters<MicrosoftClient["remove"]>[1]) => microsoft.remove(pair.remoteId, item),
         };
+        let hasMore = false;
         const conflicts = await synchronize(pair.id, state, left, right, async value => {
           await pairHeartbeat();
           await db.update(schema.calendarSyncPairs).set({ state: value }).where(and(eq(schema.calendarSyncPairs.id, pair.id), eq(schema.calendarSyncPairs.userId, userId)));
-        }, pairHeartbeat);
-        await db.update(schema.calendarSyncPairs).set({ conflicts, error: null, lastSyncedAt: new Date(), nextRunAt: new Date(Date.now() + 60_000) }).where(eq(schema.calendarSyncPairs.id, pair.id));
+        }, pairHeartbeat, 100, () => { hasMore = true; });
+        // A write during this pass must survive completion of its older snapshot.
+        const nextRun = new Date(Date.now() + (hasMore ? 2_000 : 30_000)).toISOString();
+        await db.update(schema.calendarSyncPairs).set({ conflicts, error: null, lastSyncedAt: new Date(),
+          nextRunAt: sql`case when ${schema.calendarSyncPairs.requestVersion} = ${pair.requestVersion} then ${nextRun}::timestamptz else ${schema.calendarSyncPairs.nextRunAt} end`,
+        }).where(eq(schema.calendarSyncPairs.id, pair.id));
       } catch (e) {
         if (syncError(e) === "sync_lease_lost" || syncError(e) === "account_disabled") throw e;
         await db.update(schema.calendarSyncPairs).set({ error: syncError(e), nextRunAt: new Date(Date.now() + (e instanceof MicrosoftError ? e.retryAfter : 60) * 1000) }).where(eq(schema.calendarSyncPairs.id, pair.id));
@@ -83,22 +90,39 @@ export async function syncAccount(userId: string): Promise<void> {
   });
 }
 export function startCalendarSyncScheduler(warn: (message: string) => void): () => void {
-  let running = false;
+  let running = false, stopped = false, wakeTimer: ReturnType<typeof setTimeout> | undefined;
+  let cleanupAt = 0;
   const tick = async () => {
-    if (running) return;
+    if (running || stopped) return;
     running = true;
     try {
       const due = await db.select({ userId: schema.calendarSyncPairs.userId }).from(schema.calendarSyncPairs)
         .where(and(eq(schema.calendarSyncPairs.enabled, true), lte(schema.calendarSyncPairs.nextRunAt, new Date())))
         .orderBy(asc(schema.calendarSyncPairs.nextRunAt)).limit(50);
-      for (const id of new Set(due.map(x => x.userId))) {
-        try { await syncAccount(id); } catch (e) { if (syncError(e) !== "sync_busy") warn("[calendar-sync] " + syncError(e)); }
+      const users = [...new Set(due.map(x => x.userId))];
+      // A slow account must not hold every other user's calendar behind it.
+      await Promise.all(Array.from({ length: Math.min(3, users.length) }, async () => {
+        while (!stopped && users.length) {
+          const id = users.shift()!;
+          try { await syncAccount(id); } catch (e) { if (syncError(e) !== "sync_busy") warn("[calendar-sync] " + syncError(e)); }
+        }
+      }));
+      if (Date.now() >= cleanupAt) {
+        await db.delete(schema.calendarSyncLogins).where(lte(schema.calendarSyncLogins.expiresAt, new Date()));
+        cleanupAt = Date.now() + 60_000;
       }
-      await db.delete(schema.calendarSyncLogins).where(lte(schema.calendarSyncLogins.expiresAt, new Date()));
     } catch { warn("[calendar-sync] scheduler_unavailable"); }
     finally { running = false; }
   };
-  const timer = setInterval(() => { void tick(); }, 60_000);
+  const unsubscribe = onCalendarSyncRequested(() => {
+    if (wakeTimer || stopped) return;
+    wakeTimer = setTimeout(() => { wakeTimer = undefined; void tick(); }, 250);
+    wakeTimer.unref();
+  });
+  // This polls the durable queue, not Microsoft. Quiet pairs run every 30s;
+  // failed pairs retain their backoff. Other workers' writes are picked up too.
+  const timer = setInterval(() => { void tick(); }, 5_000);
   timer.unref();
-  return () => clearInterval(timer);
+  void tick();
+  return () => { stopped = true; clearInterval(timer); clearTimeout(wakeTimer); unsubscribe(); };
 }

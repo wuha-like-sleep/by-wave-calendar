@@ -36,6 +36,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.runtime.key
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -61,12 +65,21 @@ fun UpdateAvailableSheet(
     mandatory: Boolean,
     onDismiss: () -> Unit,
 ) {
+    key(release.versionCode, release.sha256, release.url) {
+        ReleaseSheetContent(release, mandatory, onDismiss)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReleaseSheetContent(release: AndroidReleaseDto, mandatory: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(
         // For mandatory updates: don't let the user scroll past the
         // sheet into the dismissed state. They can still kill the APP.
-        skipPartiallyExpanded = mandatory,
+        skipPartiallyExpanded = true,
+        confirmValueChange = { !mandatory || it != androidx.compose.material3.SheetValue.Hidden },
     )
 
     // Progress / status of the download. Kept in a local Flow so
@@ -82,6 +95,7 @@ fun UpdateAvailableSheet(
         }
     }
 
+    var installing by remember { mutableStateOf(false) }
     var unknownSourcesError by remember { mutableStateOf<String?>(null) }
     val unknownSourcesLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -91,24 +105,20 @@ fun UpdateAvailableSheet(
         // settings prompt — at least it's no worse than where we
         // started.
         val done = status as? DownloadProgress.Done
-        if (done != null) {
-            when (val r = ApkInstaller.install(context, done.file)) {
+        if (done != null && !installing) {
+            installing = true
+            scope.launch { try { when (val r = ApkInstaller.install(context, done.file, release)) {
                 is InstallResult.Failed -> unknownSourcesError = r.message
                 is InstallResult.NeedsUnknownSources ->
                     unknownSourcesError = context.getString(R.string.update_unknown_sources)
                 InstallResult.Launched -> { /* system takes over */ }
-            }
+            } } finally { installing = false } }
         }
     }
 
     ModalBottomSheet(
         onDismissRequest = {
-            // Voluntary updates: swipe-dismiss is fine.
-            // Mandatory: ignore the dismiss request, force a re-show
-            // (Material 3 doesn't actually have a "can't dismiss" flag
-            // for ModalBottomSheet; we work around by no-op'ing the
-            // dismiss request — UpdateChecker.state stays Available so
-            // the sheet recomposes immediately).
+            // Mandatory updates also reject the Hidden sheet state above.
             if (!mandatory) {
                 UpdateChecker.onUserDismissed()
                 onDismiss()
@@ -121,10 +131,13 @@ fun UpdateAvailableSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .animateContentSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
         ) {
+            Image(painterResource(R.mipmap.ic_launcher), contentDescription = null, modifier = Modifier.size(68.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 text = stringResource(
                     if (mandatory) R.string.update_title_mandatory else R.string.update_title_available,
@@ -274,7 +287,10 @@ fun UpdateAvailableSheet(
                     }
                     Button(
                         onClick = {
-                            when (val r = ApkInstaller.install(context, s.file)) {
+                            if (installing) return@Button
+                            installing = true
+                            unknownSourcesError = null
+                            scope.launch { try { when (val r = ApkInstaller.install(context, s.file, release)) {
                                 is InstallResult.Launched -> { /* system installer takes over */ }
                                 is InstallResult.NeedsUnknownSources -> {
                                     // Launch settings so user can grant.
@@ -283,10 +299,14 @@ fun UpdateAvailableSheet(
                                 is InstallResult.Failed -> {
                                     unknownSourcesError = r.message
                                 }
-                            }
+                            } } finally { installing = false } }
                         },
+                        enabled = !installing,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.update_install_now)) }
+                    ) {
+                        if (installing) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        else Text(stringResource(R.string.update_install_now))
+                    }
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.update_install_hint),

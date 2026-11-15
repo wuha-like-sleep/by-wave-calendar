@@ -469,6 +469,8 @@ export const appPasswords = pgTable("app_passwords", {
   prefix: text("prefix").notNull(),
   tokenHash: text("token_hash").notNull(),
   scope: text("scope").notNull().default("caldav"),
+  calendarIds: jsonb("calendar_ids").$type<string[] | null>(),
+  paused: boolean("paused").notNull().default(false),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -865,6 +867,7 @@ export const calendarSyncPairs = pgTable("calendar_sync_pairs", {
   conflicts: jsonb("conflicts").notNull().default([]), error: text("error"),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
   nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull().defaultNow(),
+  requestVersion: integer("request_version").notNull().default(0),
 }, t => ({ calendarUnique: uniqueIndex("calendar_sync_calendar_unique").on(t.calendarId),
   remoteUnique: uniqueIndex("calendar_sync_remote_unique").on(t.userId, t.remoteId) }));
 export const calendarSyncLogins = pgTable("calendar_sync_logins", {

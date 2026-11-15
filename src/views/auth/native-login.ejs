@@ -1,0 +1,20 @@
+<section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+  <div>
+    <h1 class="text-xl font-semibold"><%= t('nativeLogin.title') %></h1>
+    <p class="mt-2 text-sm text-slate-600"><%= t('nativeLogin.intro') %></p>
+  </div>
+  <div class="rounded-xl bg-slate-50 p-4 break-words">
+    <% if (user.displayName) { %><p class="font-medium"><%= user.displayName %></p><% } %>
+    <p class="text-sm text-slate-600"><%= user.email %></p>
+  </div>
+  <form method="post" action="/app/auth/native/complete" class="space-y-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <input type="hidden" name="accountId" value="<%= user.id %>" />
+    <% for (const [key, value] of Object.entries(request)) { %>
+      <input type="hidden" name="<%= key %>" value="<%= value %>" />
+    <% } %>
+    <button type="submit" class="w-full rounded-xl bg-brand-600 px-4 py-3 font-medium text-white hover:bg-brand-700"><%= t('nativeLogin.continue') %></button>
+    <button type="submit" formaction="/app/auth/native/switch-account" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm hover:bg-slate-50"><%= t('nativeLogin.switch') %></button>
+  </form>
+  <a href="<%= cancelUrl %>" class="block text-center text-sm text-slate-500"><%= t('nativeLogin.cancel') %></a>
+</section>

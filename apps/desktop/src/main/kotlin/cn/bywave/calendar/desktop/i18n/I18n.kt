@@ -295,7 +295,7 @@ object I18n {
 
         // Settings — Security
         "settings.security.title" to "Security",
-        "settings.security.desc" to "Sensitive actions (change password / Passkey / MFA / delete account) open on the web — the desktop hands you a one-time token so you don't have to re-enter your password.",
+        "settings.security.desc" to "Manage your password, passkeys and two-step verification. Actions marked ↗ continue in your signed-in browser.",
         "settings.security.changePassword" to "Change password",
         "settings.security.changePassword.sub" to "Requires current password",
         "settings.security.passkey" to "Passkey",
@@ -778,7 +778,7 @@ object I18n {
         "search.close" to "关闭",
 
         "settings.security.title" to "安全",
-        "settings.security.desc" to "敏感操作（改密码 / Passkey / MFA / 删除账号）走网页 —— 桌面 APP 通过一次性令牌把你直接送进已登录的网页。",
+        "settings.security.desc" to "管理密码、通行密钥和两步验证。标有 ↗ 的操作会在已登录的浏览器中继续。",
         "settings.security.changePassword" to "修改密码",
         "settings.security.changePassword.sub" to "需要当前密码",
         "settings.security.passkey" to "Passkey 管理",
@@ -1164,7 +1164,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "在網頁管理行事曆",
 
         "settings.security.title" to "安全性",
-        "settings.security.desc" to "敏感操作（變更密碼 / Passkey / MFA / 刪除帳號）走網頁 —— 桌面 APP 透過一次性權杖將你直接送進已登入的網頁。",
+        "settings.security.desc" to "管理密碼、通行密鑰和兩步驗證。標有 ↗ 的操作會在已登入的瀏覽器中繼續。",
         "settings.security.changePassword" to "變更密碼",
         "settings.security.changePassword.sub" to "需要目前的密碼",
         "settings.security.passkey" to "Passkey 管理",
@@ -1642,7 +1642,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "ウェブでカレンダーを管理",
 
         "settings.security.title" to "セキュリティ",
-        "settings.security.desc" to "機密性の高い操作（パスワード変更 / Passkey / MFA / アカウント削除）はウェブで行います。デスクトップはワンタイムトークンを渡すので、パスワードを再入力する必要はありません。",
+        "settings.security.desc" to "パスワード、パスキー、2 段階認証を管理します。↗ が付いた操作はログイン済みのブラウザで続行します。",
         "settings.security.changePassword" to "パスワードを変更",
         "settings.security.changePassword.sub" to "現在のパスワードが必要です",
         "settings.security.passkey" to "Passkey",
@@ -2120,7 +2120,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "웹에서 캘린더 관리",
 
         "settings.security.title" to "보안",
-        "settings.security.desc" to "민감한 작업(비밀번호 변경 / Passkey / MFA / 계정 삭제)은 웹에서 열립니다. 데스크톱이 일회용 토큰을 전달하므로 비밀번호를 다시 입력할 필요가 없습니다.",
+        "settings.security.desc" to "비밀번호, 패스키 및 2단계 인증을 관리합니다. ↗ 표시가 있는 작업은 로그인된 브라우저에서 계속됩니다.",
         "settings.security.changePassword" to "비밀번호 변경",
         "settings.security.changePassword.sub" to "현재 비밀번호 필요",
         "settings.security.passkey" to "Passkey",
@@ -2598,7 +2598,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "Gestionar calendarios en la web",
 
         "settings.security.title" to "Seguridad",
-        "settings.security.desc" to "Las acciones sensibles (cambiar contraseña / Passkey / MFA / eliminar cuenta) se abren en la web: el escritorio te entrega un token de un solo uso para que no tengas que volver a escribir tu contraseña.",
+        "settings.security.desc" to "Gestiona tu contraseña, llaves de acceso y verificación en dos pasos. Las acciones con ↗ continúan en el navegador con tu sesión iniciada.",
         "settings.security.changePassword" to "Cambiar contraseña",
         "settings.security.changePassword.sub" to "Requiere la contraseña actual",
         "settings.security.passkey" to "Passkey",
@@ -3076,7 +3076,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "Gérer les calendriers sur le web",
 
         "settings.security.title" to "Sécurité",
-        "settings.security.desc" to "Les actions sensibles (changer le mot de passe / Passkey / MFA / supprimer le compte) s'ouvrent sur le web : le bureau vous remet un jeton à usage unique pour que vous n'ayez pas à ressaisir votre mot de passe.",
+        "settings.security.desc" to "Gérez votre mot de passe, vos clés d’accès et la validation en deux étapes. Les actions marquées ↗ continuent dans votre navigateur connecté.",
         "settings.security.changePassword" to "Changer le mot de passe",
         "settings.security.changePassword.sub" to "Nécessite le mot de passe actuel",
         "settings.security.passkey" to "Passkey",
@@ -3554,7 +3554,7 @@ object I18n {
         "settings.calendars.openOnWeb" to "Kalender im Web verwalten",
 
         "settings.security.title" to "Sicherheit",
-        "settings.security.desc" to "Sensible Aktionen (Passwort ändern / Passkey / MFA / Konto löschen) werden im Web geöffnet — der Desktop übergibt dir ein Einmal-Token, damit du dein Passwort nicht erneut eingeben musst.",
+        "settings.security.desc" to "Verwalte Passwort, Passkeys und Zwei-Schritt-Verifizierung. Mit ↗ markierte Aktionen werden im angemeldeten Browser fortgesetzt.",
         "settings.security.changePassword" to "Passwort ändern",
         "settings.security.changePassword.sub" to "Erfordert das aktuelle Passwort",
         "settings.security.passkey" to "Passkey",

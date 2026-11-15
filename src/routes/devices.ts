@@ -317,7 +317,8 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post("/devices/pair-claim", { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } }, async (req, reply) => {
     if (!(await ensureAppsEnabled(reply, req))) return;
     const body = z.object({
-      code: z.string().min(4).max(20),
+      code: z.string().min(4).max(64),
+      codeVerifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/).optional(),
       label: z.string().min(1).max(60),
       kind: z.enum(["ios", "android", "desktop", "other"]).default("other"),
       appVersion: z.string().max(40).optional(),
@@ -330,7 +331,8 @@ export async function deviceRoutes(app: FastifyInstance) {
 
     const ua = String(req.headers["user-agent"] ?? "").slice(0, 500);
     const result = await claimPairing({
-      code: body.data.code.trim().toUpperCase(),
+      code: body.data.codeVerifier ? body.data.code : body.data.code.trim().toUpperCase(),
+      codeVerifier: body.data.codeVerifier,
       label: body.data.label,
       kind: body.data.kind,
       appVersion: body.data.appVersion ?? null,
@@ -338,6 +340,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       ip: req.ip,
       userAgent: ua,
     });
+    reply.header("Cache-Control", "no-store");
     if (!result) return reply.code(401).send({ error: "invalid_or_expired_code" });
 
     return reply.send({

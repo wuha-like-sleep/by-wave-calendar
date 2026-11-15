@@ -21,7 +21,10 @@
 		1F000100000000000000000C /* EventEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000C /* EventEditView.swift */; };
 		1F000100000000000000000D /* RecurringScopePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000D /* RecurringScopePicker.swift */; };
 		1F000100000000000000000E /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000E /* SettingsView.swift */; };
+		1F0001000000000000000041 /* CalendarConnectionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000041 /* CalendarConnectionsView.swift */; };
+		1F0001000000000000000042 /* AppUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000042 /* AppUpdateView.swift */; };
 		1F000100000000000000000F /* WebAuthLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000F /* WebAuthLogin.swift */; };
+		1F0001000000000000000043 /* WebLoginProof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000043 /* WebLoginProof.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
 		1F0001000000000000000012 /* EventRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000012 /* EventRowView.swift */; };
@@ -69,7 +72,10 @@
 		1B000100000000000000000C /* EventEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventEditView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000D /* RecurringScopePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringScopePicker.swift; sourceTree = "<group>"; };
 		1B000100000000000000000E /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000041 /* CalendarConnectionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarConnectionsView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000042 /* AppUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateView.swift; sourceTree = "<group>"; };
 		1B000100000000000000000F /* WebAuthLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthLogin.swift; sourceTree = "<group>"; };
+		1B0001000000000000000043 /* WebLoginProof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebLoginProof.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
 		1B0001000000000000000012 /* EventRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRowView.swift; sourceTree = "<group>"; };
@@ -166,6 +172,7 @@
 				1B0001000000000000000005 /* Keychain.swift */,
 				1B0001000000000000000006 /* PairingService.swift */,
 				1B000100000000000000000F /* WebAuthLogin.swift */,
+				1B0001000000000000000043 /* WebLoginProof.swift */,
 				1B000100000000000000002D /* AppleSignIn.swift */,
 			);
 			path = Auth;
@@ -183,6 +190,8 @@
 				1B000100000000000000000C /* EventEditView.swift */,
 				1B000100000000000000000D /* RecurringScopePicker.swift */,
 				1B000100000000000000000E /* SettingsView.swift */,
+				1B0001000000000000000041 /* CalendarConnectionsView.swift */,
+				1B0001000000000000000042 /* AppUpdateView.swift */,
 				1B0001000000000000000040 /* BookingLinksView.swift */,
 				1B0001000000000000000012 /* EventRowView.swift */,
 				1B0001000000000000000013 /* DayView.swift */,
@@ -322,8 +331,11 @@
 				1F000100000000000000000C /* EventEditView.swift in Sources */,
 				1F000100000000000000000D /* RecurringScopePicker.swift in Sources */,
 				1F000100000000000000000E /* SettingsView.swift in Sources */,
+				1F0001000000000000000041 /* CalendarConnectionsView.swift in Sources */,
+				1F0001000000000000000042 /* AppUpdateView.swift in Sources */,
 				1F0001000000000000000040 /* BookingLinksView.swift in Sources */,
 				1F000100000000000000000F /* WebAuthLogin.swift in Sources */,
+				1F0001000000000000000043 /* WebLoginProof.swift in Sources */,
 				1F000100000000000000002D /* AppleSignIn.swift in Sources */,
 				1F0001000000000000000010 /* EventKitMirror.swift in Sources */,
 				1F0001000000000000000011 /* EventCache.swift in Sources */,
@@ -504,7 +516,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -522,7 +534,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.7.3;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;
@@ -540,7 +552,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 25;
+				CURRENT_PROJECT_VERSION = 26;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -558,7 +570,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 1.7.3;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bywave.calendar;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = YES;

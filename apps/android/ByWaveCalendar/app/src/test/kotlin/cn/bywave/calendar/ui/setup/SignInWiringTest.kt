@@ -161,8 +161,8 @@ class SignInWiringTest {
 
     @Test
     fun `往登录页跳的每一处都先定好预填`() {
-        // 现在一共三处：添加账号（清空）、重新登录（放那个账号）、一个账号都不剩时清栈（清空）。
-        // 前两处的先后在上面那条测试里查，这里查第三处，并且数着总数：以后多出一处往登录页跳的
+        // 四处：添加账号、重新登录、登出清栈，以及浏览器授权返回。
+        // 前两处的先后在上面那条测试里查，这里查后两处，并且数着总数：以后多出一处往登录页跳的
         // 地方，这里先红 —— 新的那处也得先 prefillNextSignIn(...)，再把它加进来。
         val navs = Regex("""\.navigate\(\s*(AuthRouting\.SETUP|"setup")""").findAll(mainActivity).count()
         val effect = Regex("""LaunchedEffect\(\s*loggedIn\s*\)\s*\{""").find(mainActivity)
@@ -170,11 +170,18 @@ class SignInWiringTest {
         val reset = mainActivity.substring(effect!!.range.last, matching(mainActivity, effect.range.last, '{', '}') + 1)
         val clear = Regex("""prefillNextSignIn\(\s*null\s*\)""").find(reset)
         val go = reset.indexOf("nav.navigate(AuthRouting.SETUP")
+        val callbackEffect = Regex("""LaunchedEffect\(\s*webCallback\s*\)\s*\{""").find(mainActivity)
+        assertTrue("没找到浏览器授权返回处理", callbackEffect != null)
+        val callback = mainActivity.substring(callbackEffect!!.range.last, matching(mainActivity, callbackEffect.range.last, '{', '}') + 1)
+        val callbackClear = Regex("""prefillNextSignIn\(\s*null\s*\)""").find(callback)
+        val callbackGo = callback.indexOf("nav.navigate(AuthRouting.SETUP")
         allOf(
-            "往登录页跳的地方不再是 3 处（现在 $navs 处）：新的那处要先 prefillNextSignIn(...)，再更新这条测试" to
-                (navs == 3),
+            "往登录页跳的地方不再是 4 处（现在 $navs 处）：新的那处要先 prefillNextSignIn(...)，再更新这条测试" to
+                (navs == 4),
             "清栈回登录页之前没清预填：格子里没人取的那一份会被填在这张本该空白的登录页上" to (clear != null),
             "清栈回登录页要先清预填再跳" to (clear != null && go >= 0 && clear.range.first < go),
+            "浏览器授权返回必须先清除其他账号的预填，再恢复加密保存的待授权服务器" to
+                (callbackClear != null && callbackGo >= 0 && callbackClear.range.first < callbackGo),
         )
     }
 }

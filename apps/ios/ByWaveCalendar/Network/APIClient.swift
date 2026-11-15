@@ -96,9 +96,11 @@ enum APIError: Error, LocalizedError {
 @MainActor
 final class APIClient {
     let state: AppState
+    private let profileID: String?
 
     init(state: AppState) {
         self.state = state
+        self.profileID = state.activeProfileId
     }
 
     // Build a final URL from the server origin + caller path. Caller
@@ -147,8 +149,10 @@ final class APIClient {
     // Same plumbing as request<T> but doesn't expect a JSON body back.
     // Splits out the void path so callers don't need to spell `_ : Void = …`.
     private func requestVoid(method: String, path: String, body: Data?, isRetry: Bool = false) async throws {
+        guard state.activeProfileId == profileID else { throw CancellationError() }
         guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
         let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
         guard let url = Self.makeURL(server: serverURL, path: path) else {
             throw APIError.network(NSError(domain: "bad-url", code: 0))
         }
@@ -163,6 +167,7 @@ final class APIClient {
         let (_, resp): (Data, URLResponse)
         do { (_, resp) = try await URLSession.shared.data(for: req) }
         catch { throw APIError.network(error) }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
         guard let http = resp as? HTTPURLResponse else {
             throw APIError.network(NSError(domain: "no-http-response", code: 0))
         }
@@ -178,8 +183,10 @@ final class APIClient {
     }
 
     private func request<T: Decodable>(method: String, path: String, body: Data?, isRetry: Bool = false) async throws -> T {
+        guard state.activeProfileId == profileID else { throw CancellationError() }
         guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
         let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
         guard let url = Self.makeURL(server: serverURL, path: path) else {
             throw APIError.network(NSError(domain: "bad-url", code: 0))
         }
@@ -202,6 +209,7 @@ final class APIClient {
         } catch {
             throw APIError.network(error)
         }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
         guard let http = resp as? HTTPURLResponse else {
             throw APIError.network(NSError(domain: "no-http-response", code: 0))
         }

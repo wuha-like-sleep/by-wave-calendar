@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { synchronize, type SyncSide } from "../src/lib/calendar_sync/engine.js";
 import { contentSchema, decide, emptyState, stableTransactionId, type SyncContent, type SyncItem, type SyncState } from "../src/lib/calendar_sync/model.js";
-import { MicrosoftClient, graphUrl, microsoftItem } from "../src/lib/calendar_sync/microsoft.js";
+import { MicrosoftClient, MicrosoftError, graphUrl, microsoftItem } from "../src/lib/calendar_sync/microsoft.js";
 import { parseDesktopManifest } from "../src/lib/desktop_release.js";
 import { appleCalendarProfile } from "../src/lib/calendar_sync/apple_profile.js";
 const content: SyncContent = { summary: "Plan", description: "", location: "", startsAt: "2026-11-13T09:00:00.000Z", endsAt: "2026-11-13T10:00:00.000Z", allDay: false };
@@ -40,6 +40,35 @@ describe("three-way synchronization", () => {
   it.each(["left", "right"] as const)("propagates an unchanged counterpart's %s deletion", async direction => {
     const a = side(direction === "left" ? [] : [item("a")]), b = side(direction === "right" ? [] : [item("b")]), state = linked();
     await run(state, a, b); expect(a.rows.size + b.rows.size).toBe(0); expect(state.links).toHaveLength(0);
+  });
+  it.each(["left", "right"] as const)("prioritizes %s deletions over older pending edits and schedules remaining work", async direction => {
+    const a = side([item("edit-a", "Edited"), ...(direction === "right" ? [item("delete-a")] : [])]);
+    const b = side([item("edit-b"), ...(direction === "left" ? [item("delete-b")] : [])]);
+    const state = emptyState(); state.links = [
+      { leftId: "edit-a", rightId: "edit-b", base: content },
+      { leftId: "delete-a", rightId: "delete-b", base: content },
+    ];
+    const deferred = vi.fn();
+    await synchronize("pair", state, a, b, async () => {}, async () => {}, 1, deferred);
+    expect(a.rows.has("delete-a") || b.rows.has("delete-b")).toBe(false);
+    expect(b.rows.get("edit-b")!.content.summary).toBe("Plan");
+    expect(deferred).toHaveBeenCalled();
+    deferred.mockClear();
+    await synchronize("pair", state, a, b, async () => {}, async () => {}, 1, deferred);
+    expect(b.rows.get("edit-b")!.content.summary).toBe("Edited");
+    expect(deferred).not.toHaveBeenCalled();
+  });
+  it("drains bulk deletions in bounded batches without resurrecting them", async () => {
+    const a = side(), b = side(Array.from({ length: 205 }, (_, n) => item("b" + n)));
+    const state = emptyState(); state.links = Array.from({ length: 205 }, (_, n) => ({ leftId: "a" + n, rightId: "b" + n, base: content }));
+    const deferred = vi.fn();
+    for (const remaining of [105, 5, 0]) {
+      deferred.mockClear();
+      await synchronize("pair", state, a, b, async () => {}, async () => {}, 100, deferred);
+      expect(b.rows.size).toBe(remaining);
+      expect(deferred.mock.calls.length > 0).toBe(remaining > 0);
+    }
+    expect(a.save).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
   });
   it("preserves simultaneous edits and edit versus delete", async () => {
     const a = side([item("a", "Left edit")]), b = side([item("b", "Right edit")]);
@@ -110,6 +139,36 @@ describe("Graph transport and dates", () => {
   it("requires calendar access before interpreting missing events", async () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 403 }));
     await expect(new MicrosoftClient("secret", fetcher).snapshot("c", content.startsAt, content.endsAt, ["e"])).rejects.toThrow(); expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("confirms bulk remote deletions concurrently with a bounded request count", async () => {
+    const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("calendarView") ? { value: [] } : { canEdit: true }));
+    const client = new MicrosoftClient("secret", fetcher);
+    let active = 0, peak = 0;
+    const get = vi.spyOn(client, "get").mockImplementation(async (_calendar, id) => {
+      active++; peak = Math.max(peak, active);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      active--;
+      return id === "moved" ? item(id) : null;
+    });
+    const result = await client.snapshot("c", content.startsAt, content.endsAt, ["a", "b", "c", "d", "e", "f", "moved", "a"]);
+    expect(peak).toBe(3); expect(active).toBe(0); expect(get).toHaveBeenCalledTimes(7);
+    expect([...result.keys()]).toEqual(["moved"]);
+    expect(fetcher).toHaveBeenCalledTimes(3); // Calendar access before and after the snapshot.
+  });
+  it("drains in-flight probes and rejects a partial snapshot on throttling", async () => {
+    const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("calendarView") ? { value: [] } : { canEdit: true }));
+    const client = new MicrosoftClient("secret", fetcher);
+    let release!: () => void, active = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const get = vi.spyOn(client, "get").mockImplementation(async (_calendar, id) => {
+      if (id === "throttled") throw new MicrosoftError(429, "microsoft_unavailable", 120);
+      active++; await gate; active--; return null;
+    });
+    const result = client.snapshot("c", content.startsAt, content.endsAt, ["throttled", "b", "c", "d", "e"]);
+    const assertion = expect(result).rejects.toMatchObject({ status: 429, retryAfter: 120 });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    release(); await assertion;
+    expect(active).toBe(0); expect(get).toHaveBeenCalledTimes(3); expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it("normalizes timestamps and preserves all-day civil dates", () => {
     expect(microsoftItem(event).content.startsAt).toBe(content.startsAt);

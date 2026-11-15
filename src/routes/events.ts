@@ -8,6 +8,7 @@ import { newEventUid, newInvitationToken } from "../lib/ids.js";
 import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
+import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { expandEvent } from "../lib/rrule_expand.js";
 import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
@@ -612,6 +613,7 @@ export async function eventRoutes(app: FastifyInstance) {
       void dispatchWebhook("event.created", eventToWebhookPayload(row)).catch(() => undefined);
       // Silent push to the calendar owner's iOS devices so the APP
       // refreshes within seconds. No-op when APNs isn't configured.
+      await requestCalendarSync(row.calendarId).catch(() => undefined);
       void pushEventChanged(user.id, row.id, "event.created").catch(() => undefined);
     }
     return reply.code(201).send(row ? forClient(row) : row);
@@ -711,6 +713,7 @@ export async function eventRoutes(app: FastifyInstance) {
       await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, id));
       if (detached) {
         void dispatchWebhook("event.updated", eventToWebhookPayload(detached)).catch(() => undefined);
+        await requestCalendarSync(detached.calendarId).catch(() => undefined);
         void pushEventChanged(user.id, detached.id, "event.updated").catch(() => undefined);
       }
       return reply.send(detached ? forClient(detached) : detached);
@@ -750,6 +753,7 @@ export async function eventRoutes(app: FastifyInstance) {
       }).returning();
       if (newMaster) {
         void dispatchWebhook("event.updated", eventToWebhookPayload(newMaster)).catch(() => undefined);
+        await requestCalendarSync(newMaster.calendarId).catch(() => undefined);
         void pushEventChanged(user.id, newMaster.id, "event.updated").catch(() => undefined);
       }
       return reply.send(newMaster ? forClient(newMaster) : newMaster);
@@ -822,6 +826,7 @@ export async function eventRoutes(app: FastifyInstance) {
         await inviteAttendees(req.log, user, row, added);
       }
       void dispatchWebhook("event.updated", eventToWebhookPayload(row)).catch(() => undefined);
+      await requestCalendarSync(row.calendarId).catch(() => undefined);
       void pushEventChanged(user.id, row.id, "event.updated").catch(() => undefined);
     }
     return reply.send(row ? forClient(row) : row);
@@ -848,6 +853,9 @@ export async function eventRoutes(app: FastifyInstance) {
     const scope = q.scope === "instance" || q.scope === "future" ? q.scope : "series";
     const recurrenceIso = q.recurrenceId;
     const isRecurring = !!target.rrule;
+    if (isRecurring && scope !== "series" && (!recurrenceIso || !isoDate.safeParse(recurrenceIso).success)) {
+      return reply.code(400).send({ error: "invalid_recurrence_id" });
+    }
 
     if (isRecurring && scope === "instance" && recurrenceIso) {
       // Add to exdates and keep master alive.
@@ -855,6 +863,8 @@ export async function eventRoutes(app: FastifyInstance) {
       const existingExdates: string[] = Array.isArray(target.exdates) ? target.exdates as string[] : [];
       const newExdates = [...existingExdates, recurrenceDate.toISOString()];
       await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, parsed.data.id));
+      await requestCalendarSync(target.calendarId).catch(() => undefined);
+      void pushEventChanged(user.id, target.id, "event.updated").catch(() => undefined);
       return reply.code(204).send();
     }
     if (isRecurring && scope === "future" && recurrenceIso) {
@@ -865,6 +875,8 @@ export async function eventRoutes(app: FastifyInstance) {
       await db.update(schema.events).set({
         rrule: cleanedRrule + ";UNTIL=" + untilUtc, updatedAt: new Date(),
       }).where(eq(schema.events.id, parsed.data.id));
+      await requestCalendarSync(target.calendarId).catch(() => undefined);
+      void pushEventChanged(user.id, target.id, "event.updated").catch(() => undefined);
       return reply.code(204).send();
     }
 
@@ -873,7 +885,6 @@ export async function eventRoutes(app: FastifyInstance) {
     // /event-invite/:token can render a "已取消" notice.
     await cancelEvent(parsed.data.id, { id: user.id, email: user.email, displayName: user.displayName });
     void dispatchWebhook("event.deleted", eventToWebhookPayload(target)).catch(() => undefined);
-    void pushEventChanged(user.id, target.id, "event.deleted").catch(() => undefined);
     return reply.code(204).send();
   });
 
@@ -1040,6 +1051,7 @@ export async function eventRoutes(app: FastifyInstance) {
       .returning();
     if (restored) {
       void dispatchWebhook("event.updated", eventToWebhookPayload(restored)).catch(() => undefined);
+      await requestCalendarSync(restored.calendarId).catch(() => undefined);
       void pushEventChanged(user.id, restored.id, "event.restored").catch(() => undefined);
     }
     return reply.send(restored ? forClient(restored) : restored);

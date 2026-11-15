@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">브라우저로 로그인</string>
+    <string name="web_login_pending">브라우저에서 로그인을 완료한 후 여기로 돌아오세요.</string>
+    <string name="web_login_cancel">로그인 취소</string>
+    <string name="web_login_https">HTTPS 서버 주소가 필요합니다.</string>
+    <string name="web_login_open_failed">브라우저를 열 수 없습니다. 다시 시도하세요.</string>
+    <string name="web_login_expired">로그인이 만료되었습니다. 다시 시작하세요.</string>
+    <string name="web_login_invalid">로그인 응답이 잘못되었습니다. 앱과 서버를 업데이트한 후 다시 시도하세요.</string>
+    <string name="web_login_failed">로그인에 실패했습니다. 다시 시도하세요.</string>
+</resources>

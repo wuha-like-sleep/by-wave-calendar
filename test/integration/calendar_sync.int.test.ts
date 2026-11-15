@@ -193,6 +193,43 @@ describe("Microsoft authorization and worker", () => {
       expect((await db.select().from(schema.events))[0]!.deletedAt).toBeNull(); expect((await db.select().from(schema.calendarSyncPairs))[0]!.error).not.toBeNull();
     } finally { vi.unstubAllGlobals(); }
   });
+  it("queues committed deletions immediately while preserving pauses and Microsoft backoff", async () => {
+    const { cancelEvent } = await import("../../src/lib/event_cancel.js");
+    const { requestCalendarSync } = await import("../../src/lib/calendar_sync/queue.js");
+    await account();
+    const later = new Date(Date.now() + 300_000);
+    const [pair] = await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "remote", remoteName: "Remote", state: emptyState(), nextRunAt: later }).returning();
+    const event = await makeEvent(calendarId, "Delete now");
+    await cancelEvent(event.id, { id: uid, email: "owner@example.com", displayName: null });
+    let current = (await db.select().from(schema.calendarSyncPairs))[0]!;
+    expect(current.nextRunAt.getTime()).toBeLessThanOrEqual(Date.now()); expect(current.requestVersion).toBe(1);
+    await cancelEvent(event.id, { id: uid, email: "owner@example.com", displayName: null });
+    expect((await db.select().from(schema.calendarSyncPairs))[0]!.requestVersion).toBe(1);
+    await db.update(schema.calendarSyncPairs).set({ enabled: false, nextRunAt: later }).where(eq(schema.calendarSyncPairs.id, pair!.id));
+    await requestCalendarSync(calendarId); current = (await db.select().from(schema.calendarSyncPairs))[0]!;
+    expect(current.nextRunAt).toEqual(later); expect(current.enabled).toBe(false);
+    await db.update(schema.calendarSyncPairs).set({ enabled: true, error: "rate_limited" }).where(eq(schema.calendarSyncPairs.id, pair!.id));
+    await requestCalendarSync(calendarId); current = (await db.select().from(schema.calendarSyncPairs))[0]!;
+    expect(current.nextRunAt).toEqual(later); expect(current.requestVersion).toBe(1);
+  });
+  it("does not overwrite a deletion queued while an older snapshot is syncing", async () => {
+    const { syncAccount } = await import("../../src/lib/calendar_sync/service.js");
+    const { requestCalendarSync } = await import("../../src/lib/calendar_sync/queue.js");
+    await account();
+    await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "remote", remoteName: "Remote", state: emptyState() });
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/token')) return Response.json({ access_token: "access", expires_in: 3600 });
+      if (url.includes('/calendarView')) { await requestCalendarSync(calendarId); return Response.json({ value: [] }); }
+      return Response.json({ canEdit: true });
+    }));
+    try {
+      await syncAccount(uid);
+      const current = (await db.select().from(schema.calendarSyncPairs))[0]!;
+      expect(current.requestVersion).toBe(1); expect(current.error).toBeNull(); expect(current.lastSyncedAt).not.toBeNull();
+      expect(current.nextRunAt.getTime()).toBeLessThanOrEqual(Date.now());
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("restoring a backup retains sync mappings but pauses all external writes", async () => {
     const { exportData, importData } = await import("../../src/lib/backup.js");
     await account(); await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "remote", remoteName: "Remote", state: emptyState() });

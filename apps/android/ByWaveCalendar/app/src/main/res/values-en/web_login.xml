@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">Sign in with browser</string>
+    <string name="web_login_pending">Complete sign-in in your browser, then return here.</string>
+    <string name="web_login_cancel">Cancel sign-in</string>
+    <string name="web_login_https">Browser sign-in requires an HTTPS server address.</string>
+    <string name="web_login_open_failed">Unable to open the browser. Please try again.</string>
+    <string name="web_login_expired">This sign-in has expired. Start again.</string>
+    <string name="web_login_invalid">The sign-in response is invalid. Update the app and server, then try again.</string>
+    <string name="web_login_failed">Sign-in failed. Please try again.</string>
+</resources>

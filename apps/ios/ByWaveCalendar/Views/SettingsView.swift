@@ -109,6 +109,12 @@ struct SettingsView: View {
                                tint: .orange)
                     }
                     NavigationLink {
+                        AppUpdateView()
+                    } label: {
+                        navRow(icon: "arrow.down.circle.fill", title: "appUpdate.title".loc,
+                               subtitle: "appUpdate.check".loc, tint: .indigo)
+                    }
+                    NavigationLink {
                         AboutSettingsPage(webURL: $webURL)
                     } label: {
                         navRow(icon: "info.circle.fill", title: "关于",
@@ -620,6 +626,10 @@ struct DeleteAccountPage: View {
 
 struct SyncSettingsPage: View {
     @EnvironmentObject var state: AppState
+    @State private var mirrorCalendars: [CalendarMeta] = []
+    @State private var mirrorSelection: Set<String>?
+    @State private var mirrorBusy = false
+    @State private var mirrorMessage: String?
     @State private var ekMirrorEnabled: Bool = EventKitMirror.shared.isEnabled
     @State private var ekPermissionDenied = false
     @State private var notifEnabled: Bool = LocalNotifications.shared.isEnabled
@@ -643,10 +653,25 @@ struct SyncSettingsPage: View {
             }
 
             Section {
+                NavigationLink { CalendarConnectionsView() } label: {
+                    Label("calendarSync.title".loc, systemImage: "arrow.triangle.2.circlepath")
+                }
                 Toggle("同步到系统日历", isOn: $ekMirrorEnabled)
                     .onChange(of: ekMirrorEnabled) { _, newValue in
                         Task { await handleEkToggle(newValue) }
                     }
+                ForEach(mirrorCalendars) { calendar in
+                    Toggle(calendar.name, isOn: Binding(get: { mirrorSelection?.contains(calendar.id) ?? true }, set: { enabled in
+                        guard let profileID = state.activeProfileId else { return }
+                        var selected = mirrorSelection ?? Set(mirrorCalendars.map(\.id))
+                        if enabled { selected.insert(calendar.id) } else { selected.remove(calendar.id) }
+                        EventKitMirror.shared.selectCalendars(selected, profileID: profileID)
+                        mirrorSelection = selected
+                    })).disabled(mirrorBusy)
+                }
+                Button("calendarSync.syncNow".loc) { Task { await syncMirrorNow() } }.disabled(!ekMirrorEnabled || mirrorBusy)
+                if mirrorBusy { ProgressView() }
+                if let mirrorMessage { Text(mirrorMessage).font(.footnote).foregroundStyle(.secondary) }
                 if ekPermissionDenied {
                     Label {
                         Text("没有日历权限。打开 设置 → 隐私 → 日历 → ByWaveCalendar 开启。")
@@ -698,6 +723,26 @@ struct SyncSettingsPage: View {
         }
         .navigationTitle("同步与通知")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: state.activeProfileId) {
+            guard let profileID = state.activeProfileId else { return }
+            mirrorSelection = EventKitMirror.shared.selectedCalendars(profileID: profileID)
+            do { mirrorCalendars = try await APIClient(state: state).get("/calendars") }
+            catch { if !Task.isCancelled { mirrorMessage = "calendarSync.error.unavailable".loc } }
+        }
+    }
+
+    private func syncMirrorNow() async {
+        guard let profileID = state.activeProfileId else { return }
+        mirrorBusy = true; mirrorMessage = nil
+        defer { mirrorBusy = false }
+        do {
+            let from = Date().addingTimeInterval(-90 * 86400), to = Date().addingTimeInterval(365 * 86400)
+            let formatter = ISO8601DateFormatter()
+            let response: EventsResponse = try await APIClient(state: state).get("/events?from=\(formatter.string(from: from))&to=\(formatter.string(from: to))")
+            guard state.activeProfileId == profileID, !Task.isCancelled else { return }
+            let succeeded = await EventKitMirror.shared.mirror(events: response.events, windowStart: from, windowEnd: to, selectedCalendarIDs: mirrorSelection)
+            mirrorMessage = succeeded ? "calendarSync.lastSync".loc + " · " + Date().formatted(date: .omitted, time: .shortened) : "calendarSync.error.unavailable".loc
+        } catch { if !Task.isCancelled { mirrorMessage = "calendarSync.error.unavailable".loc } }
     }
 
     private func handleEkToggle(_ enabled: Bool) async {
@@ -922,11 +967,7 @@ struct AboutSettingsPage: View {
 
     var body: some View {
         Form {
-            // Hero — app icon (recreated from Theme.brandGradient so we
-            // don't depend on Bundle.main loading the actual AppIcon),
-            // name, version, tagline. Listed first so it dominates the
-            // page like a proper "About" screen rather than reading as
-            // yet another settings list.
+            // Approved shared icon, name, version and tagline.
             Section {
                 heroBanner
                     .listRowInsets(EdgeInsets())
@@ -1017,19 +1058,12 @@ struct AboutSettingsPage: View {
         }
     }
 
-    /// Hero banner — re-uses Theme.brandGradient + white calendar glyph
-    /// matching the app icon. Stays in sync if Theme.brandStart/End ever
-    /// changes. Below it: name + version + tagline.
+    /// Shares the generated brand asset with the login and update pages.
     private var heroBanner: some View {
         VStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Theme.brandGradient)
+            Image("BrandIcon").resizable().scaledToFit()
                 .frame(width: 96, height: 96)
-                .overlay {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 44, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: Theme.brandShadow, radius: 18, y: 8)
             VStack(spacing: 4) {
                 Text("ByWave Calendar")
@@ -1199,11 +1233,11 @@ enum AccountAction: Equatable {
 
     var path: String {
         switch self {
-        case .changePassword: return "/app/settings#password"
+        case .changePassword: return "/app/settings/security#password"
         case .mfa:            return "/app/settings/mfa/setup"
-        case .passkeys:       return "/app/settings#passkeys"
-        case .ssoBind:        return "/app/settings#sso"
-        case .deleteAccount:  return "/app/settings#danger-zone"
+        case .passkeys:       return "/app/settings/security#passkey"
+        case .ssoBind:        return "/app/settings/security#login-methods"
+        case .deleteAccount:  return "/app/settings#danger"
         }
     }
 }

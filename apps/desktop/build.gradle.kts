@@ -39,10 +39,10 @@ group = "cn.bywave.calendar.desktop"
 // The integer BuildInfo.VERSION_CODE is what the in-app updater
 // compares — keep it in lockstep with apps/desktop/releases/latest.json.
 // VERSION_NAME below must equal BuildInfo.VERSION_NAME, and the manifest's
-// versionCode must equal BuildInfo.VERSION_CODE (currently 26). Never let
+// versionCode must equal BuildInfo.VERSION_CODE (currently 27). Never let
 // the marketing line (this `version`) and the updater's versionCode track
 // diverge — that's what caused the "已是最新版本" misreport pre-1.0.13.
-version = "1.2.0"
+version = "1.3.0"
 
 // Repositories are declared in settings.gradle.kts (RepositoriesMode.
 // FAIL_ON_PROJECT_REPOS forces them centralized). Don't re-declare here.
@@ -110,6 +110,7 @@ compose.desktop {
         mainClass = "cn.bywave.calendar.desktop.MainKt"
 
         nativeDistributions {
+            modules("jdk.localedata")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "ByWaveCalendar"
             // 不设 packageVersion —— Compose 的回落链是
@@ -232,3 +233,5 @@ fun brandedInstaller(taskName: String, format: String, host: String) = tasks.reg
 }
 brandedInstaller("packageBrandedDmg", "dmg", "mac")
 brandedInstaller("packageBrandedMsi", "msi", "windows")
+
+sourceSets.main { kotlin.srcDir("../shared/src/main/kotlin") }

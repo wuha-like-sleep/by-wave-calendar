@@ -5,6 +5,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const ko: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "앱에 로그인",
+  "nativeLogin.intro": "ByWave Calendar에서 직접 시작한 로그인인지 확인하세요.",
+  "nativeLogin.continue": "앱 로그인 계속",
+  "nativeLogin.switch": "다른 계정 사용",
+  "nativeLogin.cancel": "취소하고 앱으로 돌아가기",
+  "nativeLogin.upgrade": "로그인 요청이 잘못되었거나 앱 업데이트가 필요합니다. 업데이트 후 다시 시도하세요. QR 코드나 페어링 코드로도 로그인할 수 있습니다.",
+
   "adminCalendar.title": "시스템 캘린더 설정",
   "adminCalendar.intro": "플랫폼의 캘린더 연결을 설정합니다. 저장 즉시 적용되며 서버 파일 편집이나 재시작이 필요하지 않습니다.",
   "adminCalendar.outlook": "새 Outlook 및 클래식 Outlook의 Microsoft 365 / Outlook.com 클라우드 캘린더를 지원합니다.",
@@ -57,7 +64,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "전용 Outlook 캘린더를 권장합니다. 양쪽 일정이 복사되며 이후 수정과 삭제도 양방향으로 동기화됩니다.",
   "calendarSync.choose": "캘린더 선택",
   "calendarSync.start": "양방향 동기화 시작",
-  "calendarSync.scope": "Outlook은 지난 90일부터 앞으로 365일까지 동기화하며 연결된 일정은 계속 추적합니다. 제목, 설명, 장소, 시간, 종일 여부를 동기화합니다. 반복 일정은 개별 발생 항목으로 처리되며 하나를 수정해도 전체 반복이 바뀌지 않습니다. 알림, 첨부 파일, 참석자, 회의 초대는 복사되지 않습니다. 보통 매분 동기화하며 대량 일정은 나누어 처리합니다.",
+  "calendarSync.scope": "Outlook은 지난 90일부터 앞으로 365일까지 동기화하며 연결된 일정은 계속 추적합니다. 제목, 설명, 장소, 시간, 종일 여부를 동기화합니다. 반복 일정은 개별 발생 항목으로 처리되며 하나를 수정해도 전체 반복이 바뀌지 않습니다. 알림, 첨부 파일, 참석자, 회의 초대는 복사되지 않습니다. 보통 30초마다 동기화하며 대량 일정은 나누어 처리합니다.",
   "calendarSync.queued": "동기화가 예약되었습니다. 잠시 후 새로고침하세요.",
   "calendarSync.saved": "저장했습니다. 다음 동기화에 적용됩니다.",
   "calendarSync.statusTitle": "동기화 상태",

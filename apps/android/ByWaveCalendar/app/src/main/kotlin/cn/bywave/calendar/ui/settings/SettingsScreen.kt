@@ -117,6 +117,7 @@ fun SettingsScreen(
         }
     }
     val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
+    var showCalendarConnections by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -146,6 +147,10 @@ fun SettingsScreen(
         else permissionWarning = context.getString(R.string.settings_perm_notifications_denied)
     }
 
+    if (showCalendarConnections && active != null) {
+        CalendarConnectionsScreen(active, onBack = { showCalendarConnections = false })
+        return
+    }
     Scaffold(
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         topBar = {
@@ -267,6 +272,10 @@ fun SettingsScreen(
                         },
                     )
                 }
+            }
+
+            Section(title = stringResource(R.string.settings_sync_section)) {
+                ActionRow(label = cn.bywave.calendar.connect.CalendarCopy.text(context.resources.configuration.locales[0].toLanguageTag(), "title"), onClick = { showCalendarConnections = true })
             }
 
             // Sync (v0.6)
