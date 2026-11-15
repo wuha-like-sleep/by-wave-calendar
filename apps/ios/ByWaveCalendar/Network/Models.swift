@@ -262,6 +262,8 @@ struct BookingLink: Codable, Identifiable, Hashable {
     let createdAt: Date
     let updatedAt: Date
     let publicUrl: String
+    /// Scheduling zone derived from the initiating calendar (older servers may omit it).
+    let timezone: String?
 }
 
 // A single booking made against a link. Only the fields the iOS UI
@@ -314,4 +316,40 @@ struct BookingLinkUpdateInput: Encodable {
     let bufferAfterMin: Int?
     let enabled: Bool?
     let notifyEmail: Bool?
+}
+
+/// All-day API timestamps carry a Gregorian date at UTC boundaries. Convert
+/// that date into the device's local picker without shifting it a day.
+enum EventEditorDates {
+    static func timedISO(_ value: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: value)
+    }
+
+    static func localAllDay(_ value: Date, calendar: Calendar = .current) -> Date {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        var local = Calendar(identifier: .gregorian)
+        local.timeZone = calendar.timeZone
+        return local.date(from: utc.dateComponents([.year, .month, .day, .hour, .minute, .second], from: value)) ?? value
+    }
+
+    static func duplicate(start: Date, end: Date, allDay: Bool, from nextStart: Date, calendar: Calendar = .current) -> (Date, Date) {
+        guard allDay else { return (nextStart, nextStart.addingTimeInterval(max(end.timeIntervalSince(start), 900))) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let days = max(0, utc.dateComponents([.day], from: utc.startOfDay(for: start), to: utc.startOfDay(for: end)).day ?? 0)
+        let first = calendar.startOfDay(for: nextStart)
+        let lastDay = calendar.date(byAdding: .day, value: days, to: first) ?? first
+        let last = calendar.date(bySettingHour: 23, minute: 59, second: 59, of: lastDay) ?? lastDay
+        return (first, last)
+    }
+}
+
+/// Availability stays in the initiating calendar's zone; legacy calendars used Shanghai.
+func bookingTimeZone(_ explicit: String?, calendar: String?) -> String {
+    [explicit, calendar, "Asia/Shanghai"].compactMap { value in
+        value.flatMap { TimeZone(identifier: $0)?.identifier }
+    }.first ?? "Asia/Shanghai"
 }

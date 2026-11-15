@@ -9,9 +9,10 @@ import { invitationIcs } from "../lib/ical.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
-import { cancelEvent } from "../lib/event_cancel.js";
-import { expandEvent } from "../lib/rrule_expand.js";
+import { cancelEvent, markEventBookingsCancelled, notifyEventCancellation } from "../lib/event_cancel.js";
+import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
 import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
+import { activeSeriesOccurrence, planFutureSeries, truncateSeriesBefore, unchangedEventForWrite } from "../lib/scoped_series_edit.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { etagMatches, eventsWindowEtag } from "../lib/calendar_ctag.js";
@@ -667,6 +668,8 @@ export async function eventRoutes(app: FastifyInstance) {
     // 顺带把 404 排到 400 前面 —— 不是自己的事件，连「你请求体哪里写错了」都不该回。
     const target = await loadOwnedEvent(id, user.id);
     if (!target) return reply.code(404).send({ error: "not_found" });
+    if (!scopeParsed.success) return reply.code(400).send({ error: "invalid_recurrence_scope", message: "请选择有效的重复事件修改范围。" });
+    if (scope !== "series" && !recurrenceIso) return reply.code(400).send({ error: "recurrence_id_required", message: "请刷新日历并重新选择要修改的那次日程。" });
 
     const parsedBody = updateSchema.safeParse({
       ...rawBody,
@@ -680,83 +683,100 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     const body = parsedBody.data;
 
-    const isRecurring = !!target.rrule;
-
-    // --- scope=instance: detach this occurrence from the series ---
-    // Implementation: add the original instance start to master.exdates
-    // (so rrule_expand skips it), then create a NEW standalone (non-
-    // recurring) event with the user's edits + the new start/end.
-    if (isRecurring && scope === "instance" && recurrenceIso) {
-      const recurrenceDate = new Date(recurrenceIso);
-      const existingExdates: string[] = Array.isArray(target.exdates) ? target.exdates as string[] : [];
-      const newExdates = [...existingExdates, recurrenceDate.toISOString()];
-
-      // The instance the user is editing — if they didn't change start/end,
-      // default to the original recurrence time + master's duration.
-      const masterDuration = target.endsAt.getTime() - target.startsAt.getTime();
-      const newStart = body.startsAt ? new Date(body.startsAt) : recurrenceDate;
-      const newEnd = body.endsAt ? new Date(body.endsAt) : new Date(recurrenceDate.getTime() + masterDuration);
-
-      const [detached] = await db.insert(schema.events).values({
-        calendarId: target.calendarId,
-        uid: newEventUid(),
-        summary: body.summary ?? target.summary,
-        description: body.description ?? target.description,
-        location: body.location ?? target.location,
-        startsAt: newStart,
-        endsAt: newEnd,
-        allDay: body.allDay ?? target.allDay,
-        rrule: null,  // detached instance is not recurring
-        extra: mergedExtraForWrite(target.extra, body.extra) as object | null,
-      }).returning();
-
-      await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, id));
-      if (detached) {
-        void dispatchWebhook("event.updated", eventToWebhookPayload(detached)).catch(() => undefined);
-        await requestCalendarSync(detached.calendarId).catch(() => undefined);
-        void pushEventChanged(user.id, detached.id, "event.updated").catch(() => undefined);
+    if (scope === "instance" || scope === "future") {
+      const recurrenceDate = new Date(recurrenceIso!);
+      const result = await db.transaction(async (tx): Promise<
+        { error: string; status: number } | { event: typeof schema.events.$inferSelect; sourceCalendarId: string }
+      > => {
+        // Lock and re-read the current master. Concurrent scoped edits and
+        // deletes must accumulate exclusions instead of overwriting them.
+        const [locked] = await tx.select({ event: schema.events, timezone: schema.calendars.timezone })
+          .from(schema.events).innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+          .where(and(eq(schema.events.id, id), eq(schema.calendars.ownerId, user.id), isNull(schema.events.deletedAt)))
+          .for("update");
+        if (!locked) return { error: "not_found", status: 404 } as const;
+        const current = locked.event;
+        const zone = expansionTimeZone({ allDay: current.allDay, extra: current.extra,
+          calendarTimezone: locked.timezone, rawStartIsUtc: rawIcsStartIsUtc(current.rawIcs) });
+        if (!current.rrule || !activeSeriesOccurrence(current, zone, recurrenceDate)) {
+          return { error: "occurrence_changed", status: 409 } as const;
+        }
+        const freshBody = updateSchema.safeParse({ ...rawBody, extra: dropLegacyBadAlarms(rawBody.extra, current.extra) });
+        if (!freshBody.success) return { error: "invalid_body", status: 400 } as const;
+        const changes = freshBody.data;
+        const calendarId = changes.calendarId ?? current.calendarId;
+        let calendarTimezone = locked.timezone;
+        if (calendarId !== current.calendarId) {
+          const [destination] = await tx.select({ timezone: schema.calendars.timezone }).from(schema.calendars)
+            .where(and(eq(schema.calendars.id, calendarId), eq(schema.calendars.ownerId, user.id)));
+          if (!destination) return { error: "target_calendar_not_owned", status: 403 } as const;
+          calendarTimezone = destination.timezone;
+        }
+        const masterDuration = current.endsAt.getTime() - current.startsAt.getTime();
+        const newStart = changes.startsAt ? new Date(changes.startsAt) : recurrenceDate;
+        const newEnd = changes.endsAt ? new Date(changes.endsAt) : new Date(newStart.getTime() + masterDuration);
+        if (newEnd < newStart) return { error: "ends_before_starts", status: 400 } as const;
+        let extra = mergedExtraForWrite(current.extra, changes.extra) as object | null;
+        const utcSource = !current.allDay && rawIcsStartIsUtc(current.rawIcs);
+        const explicitZoneChange = changes.extra === null || (isExtraObject(changes.extra)
+          && Object.hasOwn(changes.extra, "timezone")
+          && changes.extra.timezone !== (isExtraObject(current.extra) ? current.extra.timezone : undefined));
+        if (utcSource && !explicitZoneChange) extra = { ...extra, timezone: zone };
+        const prefixExtra = utcSource ? { ...(isExtraObject(current.extra) ? current.extra : {}), timezone: zone } : undefined;
+        const allDay = changes.allDay ?? current.allDay;
+        const toZone = expansionTimeZone({ allDay, extra, calendarTimezone });
+        const suffix = scope === "future" ? planFutureSeries(current, changes, recurrenceDate, newStart, zone, toZone) : null;
+        if (scope === "future" && !suffix) return { error: "unsupported_recurrence_change", status: 409 } as const;
+        const first = scope === "future" ? seriesStartsBetween({ ...current, timeZone: zone },
+          new Date(Math.floor(current.startsAt.getTime() / 1000) * 1000), recurrenceDate, 1)?.[0] : undefined;
+        if (first?.getTime() === recurrenceDate.getTime()) {
+          // There is no earlier prefix. Keeping a master with UNTIL before
+          // DTSTART can leave a ghost occurrence in CalDAV clients.
+          const [updated] = await tx.update(schema.events).set({
+            calendarId,
+            summary: changes.summary ?? current.summary,
+            description: changes.description ?? current.description,
+            location: changes.location ?? current.location,
+            startsAt: newStart, endsAt: newEnd, allDay,
+            rrule: suffix!.rrule, exdates: suffix!.exdates, extra,
+            rawIcs: null, updatedAt: new Date(),
+          }).where(eq(schema.events.id, id)).returning();
+          if (!updated) throw new Error("scoped_event_update_failed");
+          return { event: updated, sourceCalendarId: current.calendarId } as const;
+        }
+        const [created] = await tx.insert(schema.events).values({
+          calendarId,
+          uid: newEventUid(),
+          summary: changes.summary ?? current.summary,
+          description: changes.description ?? current.description,
+          location: changes.location ?? current.location,
+          startsAt: newStart, endsAt: newEnd, allDay,
+          rrule: suffix?.rrule ?? null,
+          exdates: suffix?.exdates ?? null,
+          extra,
+        }).returning();
+        if (!created) throw new Error("scoped_event_insert_failed");
+        if (scope === "instance") {
+          const exdates = Array.isArray(current.exdates) ? current.exdates : [];
+          await tx.update(schema.events).set({ exdates: [...exdates, recurrenceDate.toISOString()], extra: prefixExtra, rawIcs: null, updatedAt: new Date() })
+            .where(eq(schema.events.id, id));
+        } else {
+          await tx.update(schema.events).set({ rrule: truncateSeriesBefore(current.rrule!, recurrenceDate), extra: prefixExtra, rawIcs: null, updatedAt: new Date() })
+            .where(eq(schema.events.id, id));
+        }
+        return { event: created, sourceCalendarId: current.calendarId } as const;
+      });
+      if ("error" in result) return reply.code(result.status).send({ error: result.error,
+        ...(result.error === "occurrence_changed" ? { message: "这次重复日程已被修改或删除，请刷新日历后重试。" } : {}),
+        ...(result.error === "unsupported_recurrence_change" ? { message: "此重复规则无法安全拆分，请选择仅修改此次或整个系列，或先调整重复规则。" } : {}),
+      });
+      const created = result.event;
+      void dispatchWebhook("event.updated", eventToWebhookPayload(created)).catch(() => undefined);
+      for (const calendarId of new Set([result.sourceCalendarId, created.calendarId])) {
+        await requestCalendarSync(calendarId).catch(() => undefined);
       }
-      return reply.send(detached ? forClient(detached) : detached);
-    }
-
-    // --- scope=future: split the series at this occurrence ---
-    // Master gets UNTIL=instance-1s appended to its RRULE (so existing
-    // earlier occurrences survive). A new standalone master starts at the
-    // chosen instance with the user's edits and same/edited RRULE.
-    if (isRecurring && scope === "future" && recurrenceIso) {
-      const recurrenceDate = new Date(recurrenceIso);
-      // RRULE UNTIL: ISO basic format YYYYMMDDTHHMMSSZ
-      const untilUtc = new Date(recurrenceDate.getTime() - 1000)
-        .toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-      const oldRrule = target.rrule || "";
-      // Strip any existing UNTIL= before adding ours, otherwise PG winds
-      // up with conflicting clauses (rrule lib just takes the first).
-      const cleanedRrule = oldRrule.split(";").filter((p) => !/^UNTIL=/i.test(p)).join(";");
-      const newMasterRrule = cleanedRrule + ";UNTIL=" + untilUtc;
-      await db.update(schema.events).set({ rrule: newMasterRrule, updatedAt: new Date() }).where(eq(schema.events.id, id));
-
-      const masterDuration = target.endsAt.getTime() - target.startsAt.getTime();
-      const newStart = body.startsAt ? new Date(body.startsAt) : recurrenceDate;
-      const newEnd = body.endsAt ? new Date(body.endsAt) : new Date(recurrenceDate.getTime() + masterDuration);
-
-      const [newMaster] = await db.insert(schema.events).values({
-        calendarId: target.calendarId,
-        uid: newEventUid(),
-        summary: body.summary ?? target.summary,
-        description: body.description ?? target.description,
-        location: body.location ?? target.location,
-        startsAt: newStart,
-        endsAt: newEnd,
-        allDay: body.allDay ?? target.allDay,
-        rrule: body.rrule ?? cleanedRrule,
-        extra: mergedExtraForWrite(target.extra, body.extra) as object | null,
-      }).returning();
-      if (newMaster) {
-        void dispatchWebhook("event.updated", eventToWebhookPayload(newMaster)).catch(() => undefined);
-        await requestCalendarSync(newMaster.calendarId).catch(() => undefined);
-        void pushEventChanged(user.id, newMaster.id, "event.updated").catch(() => undefined);
-      }
-      return reply.send(newMaster ? forClient(newMaster) : newMaster);
+      void pushEventChanged(user.id, created.id, "event.updated").catch(() => undefined);
+      return reply.send(forClient(created));
     }
 
     // --- scope=series (default) OR non-recurring: regular patch ---
@@ -777,6 +797,7 @@ export async function eventRoutes(app: FastifyInstance) {
     const plan = await seriesEditPlan(target, body, recurrenceIso, seriesBase.success ? seriesBase.data : undefined);
     const nextStartsAt = plan?.startsAt ?? (body.startsAt ? new Date(body.startsAt) : undefined);
     const nextEndsAt = plan?.endsAt ?? (body.endsAt ? new Date(body.endsAt) : undefined);
+    if ((nextEndsAt ?? target.endsAt) < (nextStartsAt ?? target.startsAt)) return reply.code(400).send({ error: "ends_before_starts" });
     const zoneShift = await remapForEventEdit(
       plan?.exdates ? { ...target, exdates: plan.exdates } : target,
       {
@@ -789,28 +810,47 @@ export async function eventRoutes(app: FastifyInstance) {
         rruleSentByClient: !plan?.rrule && body.rrule != null && body.rrule !== target.rrule,
       },
     );
-    const [row] = await db
-      .update(schema.events)
-      .set({
-        calendarId: body.calendarId ?? undefined,
-        summary: body.summary ?? undefined,
-        description: body.description ?? undefined,
-        location: body.location ?? undefined,
-        startsAt: nextStartsAt,
-        endsAt: nextEndsAt,
-        allDay: body.allDay ?? undefined,
-        rrule: zoneShift.rrule ?? plan?.rrule ?? body.rrule ?? undefined,
-        exdates: zoneShift.exdates ?? plan?.exdates ?? undefined,
-        extra: nextExtra,
-        // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
-        // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时
-        // 那份原文的缓存，编辑之后它的 summary / 时间 / VALARM 和库里全对不上；留着
-        // CalDAV 客户端下次 REPORT 会拿到旧的那份。清掉，让它读合成出来的。
-        rawIcs: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.events.id, id))
-      .returning();
+    const write = await db.transaction(async (tx): Promise<
+      { error: string; status: number } | { row: typeof schema.events.$inferSelect | undefined }
+    > => {
+      const [locked] = await tx.select({ event: schema.events }).from(schema.events)
+        .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+        .where(and(eq(schema.events.id, id), eq(schema.calendars.ownerId, user.id), isNull(schema.events.deletedAt))).for("update");
+      if (!locked) return { error: "not_found", status: 404 };
+      if (!unchangedEventForWrite(target, locked.event)) return { error: "event_changed", status: 409 };
+      if (body.calendarId && body.calendarId !== locked.event.calendarId) {
+        const [destination] = await tx.select({ id: schema.calendars.id }).from(schema.calendars)
+          .where(and(eq(schema.calendars.id, body.calendarId), eq(schema.calendars.ownerId, user.id)));
+        if (!destination) return { error: "target_calendar_not_owned", status: 403 };
+      }
+      const [row] = await tx
+        .update(schema.events)
+        .set({
+          calendarId: body.calendarId ?? undefined,
+          summary: body.summary ?? undefined,
+          description: body.description ?? undefined,
+          location: body.location ?? undefined,
+          startsAt: nextStartsAt,
+          endsAt: nextEndsAt,
+          allDay: body.allDay ?? undefined,
+          rrule: zoneShift.rrule ?? plan?.rrule ?? body.rrule ?? undefined,
+          exdates: zoneShift.exdates ?? plan?.exdates ?? undefined,
+          extra: nextExtra,
+          // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
+          // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时
+          // 那份原文的缓存，编辑之后它的 summary / 时间 / VALARM 和库里全对不上；留着
+          // CalDAV 客户端下次 REPORT 会拿到旧的那份。清掉，让它读合成出来的。
+          rawIcs: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.events.id, id))
+        .returning();
+      return { row };
+    });
+    if ("error" in write) return reply.code(write.status).send({ error: write.error,
+      ...(write.error === "event_changed" ? { message: "这条日程已在其他设备上变更，请刷新后重新编辑。" } : {}),
+    });
+    const row = write.row;
     if (row) {
       // **新加进来的人也要收到邀请。** 原来这里什么都不做：名字合并进 extra 就完事，
       // 不建 token 也不发信。于是给一个已经存在的会加人，界面上看得见他、存得下、
@@ -826,7 +866,9 @@ export async function eventRoutes(app: FastifyInstance) {
         await inviteAttendees(req.log, user, row, added);
       }
       void dispatchWebhook("event.updated", eventToWebhookPayload(row)).catch(() => undefined);
-      await requestCalendarSync(row.calendarId).catch(() => undefined);
+      for (const calendarId of new Set([target.calendarId, row.calendarId])) {
+        await requestCalendarSync(calendarId).catch(() => undefined);
+      }
       void pushEventChanged(user.id, row.id, "event.updated").catch(() => undefined);
     }
     return reply.send(row ? forClient(row) : row);
@@ -850,33 +892,64 @@ export async function eventRoutes(app: FastifyInstance) {
     }
     // Parse scope from the query string (DELETE has no body).
     const q = (req.query ?? {}) as { scope?: string; recurrenceId?: string };
-    const scope = q.scope === "instance" || q.scope === "future" ? q.scope : "series";
+    if (q.scope !== undefined && !["instance", "future", "series"].includes(q.scope)) {
+      return reply.code(400).send({ error: "invalid_scope" });
+    }
+    const scope = q.scope ?? "series";
     const recurrenceIso = q.recurrenceId;
     const isRecurring = !!target.rrule;
+    if (scope !== "series" && !isRecurring) return reply.code(409).send({ error: "event_changed" });
     if (isRecurring && scope !== "series" && (!recurrenceIso || !isoDate.safeParse(recurrenceIso).success)) {
       return reply.code(400).send({ error: "invalid_recurrence_id" });
     }
 
-    if (isRecurring && scope === "instance" && recurrenceIso) {
-      // Add to exdates and keep master alive.
+    if (isRecurring && scope !== "series" && recurrenceIso) {
       const recurrenceDate = new Date(recurrenceIso);
-      const existingExdates: string[] = Array.isArray(target.exdates) ? target.exdates as string[] : [];
-      const newExdates = [...existingExdates, recurrenceDate.toISOString()];
-      await db.update(schema.events).set({ exdates: newExdates, updatedAt: new Date() }).where(eq(schema.events.id, parsed.data.id));
-      await requestCalendarSync(target.calendarId).catch(() => undefined);
-      void pushEventChanged(user.id, target.id, "event.updated").catch(() => undefined);
-      return reply.code(204).send();
-    }
-    if (isRecurring && scope === "future" && recurrenceIso) {
-      const recurrenceDate = new Date(recurrenceIso);
-      const untilUtc = new Date(recurrenceDate.getTime() - 1000)
-        .toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-      const cleanedRrule = (target.rrule || "").split(";").filter((p) => !/^UNTIL=/i.test(p)).join(";");
-      await db.update(schema.events).set({
-        rrule: cleanedRrule + ";UNTIL=" + untilUtc, updatedAt: new Date(),
-      }).where(eq(schema.events.id, parsed.data.id));
-      await requestCalendarSync(target.calendarId).catch(() => undefined);
-      void pushEventChanged(user.id, target.id, "event.updated").catch(() => undefined);
+      const changed = await db.transaction(async tx => {
+        const [current] = await tx.select().from(schema.events).where(and(eq(schema.events.id, target.id), eq(schema.events.calendarId, target.calendarId))).for("update");
+        if (!current || current.deletedAt) return false;
+        if (!current.rrule) return "changed" as const;
+        const [cal] = await tx.select().from(schema.calendars).where(and(eq(schema.calendars.id, current.calendarId), eq(schema.calendars.ownerId, user.id)));
+        if (!cal) return false;
+        const starts = seriesStartsBetween({ ...current, timeZone: expansionTimeZone({ ...current, calendarTimezone: cal.timezone, rawStartIsUtc: rawIcsStartIsUtc(current.rawIcs) }) }, recurrenceDate, recurrenceDate);
+        if (!starts) return "changed" as const;
+        // A stale occurrence that was already removed/split is an idempotent
+        // no-op. Never let a second request extend a previous UNTIL boundary.
+        if (!starts.some(at => at.getTime() === recurrenceDate.getTime())) return false;
+        if (scope === "instance") {
+          const exdates = Array.isArray(current.exdates) ? current.exdates as string[] : [];
+          if (exdates.some(at => Date.parse(at) === recurrenceDate.getTime())) return false;
+          await tx.update(schema.events).set({ exdates: [...exdates, recurrenceDate.toISOString()], updatedAt: new Date() }).where(eq(schema.events.id, current.id));
+        } else {
+          const earlier = seriesStartsBetween({ ...current, timeZone: expansionTimeZone({ ...current, calendarTimezone: cal.timezone, rawStartIsUtc: rawIcsStartIsUtc(current.rawIcs) }) }, current.startsAt, new Date(recurrenceDate.getTime() - 1000), 1);
+          if (!earlier) return "changed" as const;
+          if (earlier.length === 0) {
+            const now = new Date();
+            await tx.update(schema.events).set({ deletedAt: now, updatedAt: now }).where(eq(schema.events.id, current.id));
+            await markEventBookingsCancelled(tx, current.id, now);
+            return { deleted: current };
+          }
+          const untilUtc = new Date(recurrenceDate.getTime() - 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+          // The selected occurrence is confirmed to be inside the existing
+          // series, so the earlier UNTIL can replace COUNT without extending it.
+          const rule = current.rrule.split(";").filter(p => !/^(UNTIL|COUNT)=/i.test(p.trim())).join(";");
+          // Raw CalDAV bodies only overlay EXDATE, not a changed RRULE. Switch
+          // to synthesis, retaining the UTC source's effective expansion zone.
+          const extra = current.extra && typeof current.extra === "object" && !Array.isArray(current.extra) ? current.extra : {};
+          await tx.update(schema.events).set({ rrule: rule + ";UNTIL=" + untilUtc, rawIcs: null,
+            ...(rawIcsStartIsUtc(current.rawIcs) && !current.allDay ? { extra: { ...extra, timezone: "UTC" } } : {}),
+            updatedAt: new Date() }).where(eq(schema.events.id, current.id));
+        }
+        return true;
+      });
+      if (changed === "changed") return reply.code(409).send({ error: "event_changed" });
+      if (changed) {
+        await requestCalendarSync(target.calendarId).catch(() => undefined);
+        if (typeof changed === "object") {
+          await notifyEventCancellation(changed.deleted, user);
+          void dispatchWebhook("event.deleted", eventToWebhookPayload(changed.deleted)).catch(() => undefined);
+        } else void pushEventChanged(user.id, target.id, "event.updated").catch(() => undefined);
+      }
       return reply.code(204).send();
     }
 
@@ -1027,34 +1100,32 @@ export async function eventRoutes(app: FastifyInstance) {
   // user just deleted something and immediately wants it back. Idempotent.
   // Only the owner of the calendar can restore. CANCEL emails already
   // sent stay sent — we don't try to "un-cancel" iMIP, that's a no-go.
+  // A cancelled booking also stays cancelled: restore only the calendar copy,
+  // detached from its old cancel token so that token cannot delete it again.
   app.post("/events/:id/restore", { config: { oauthScope: "write:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
-    // Load the soft-deleted row (loadOwnedEvent filters out deletedAt,
-    // so we query directly with the ownership join).
-    const [row] = await db
-      .select({ event: schema.events })
-      .from(schema.events)
-      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
-      .where(and(eq(schema.events.id, id), eq(schema.calendars.ownerId, user.id)))
-      .limit(1);
-    if (!row) return reply.code(404).send({ error: "not_found" });
-    if (!row.event.deletedAt) {
-      // Already alive — idempotent ok.
-      return reply.send(forClient(row.event));
-    }
-    const [restored] = await db
-      .update(schema.events)
-      .set({ deletedAt: null, updatedAt: new Date() })
-      .where(eq(schema.events.id, id))
-      .returning();
-    if (restored) {
+    const result = await db.transaction(async (tx) => {
+      const [row] = await tx.select({ event: schema.events }).from(schema.events)
+        .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
+        .where(and(eq(schema.events.id, id), eq(schema.calendars.ownerId, user.id))).for("update");
+      if (!row) return null;
+      if (!row.event.deletedAt) return { event: row.event, changed: false };
+      await markEventBookingsCancelled(tx, id, row.event.deletedAt);
+      await tx.update(schema.bookings).set({ eventId: null }).where(eq(schema.bookings.eventId, id));
+      const [restored] = await tx.update(schema.events).set({ deletedAt: null, updatedAt: new Date() })
+        .where(eq(schema.events.id, id)).returning();
+      return restored ? { event: restored, changed: true } : null;
+    });
+    if (!result) return reply.code(404).send({ error: "not_found" });
+    const restored = result.event;
+    if (result.changed) {
       void dispatchWebhook("event.updated", eventToWebhookPayload(restored)).catch(() => undefined);
       await requestCalendarSync(restored.calendarId).catch(() => undefined);
       void pushEventChanged(user.id, restored.id, "event.restored").catch(() => undefined);
     }
-    return reply.send(restored ? forClient(restored) : restored);
+    return reply.send(forClient(restored));
   });
 }
 

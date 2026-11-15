@@ -465,6 +465,10 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "留言（可選）",
   "booking.public.messagePlaceholder": "想討論什麼？",
   "booking.public.confirmButton": "確認預約",
+  "booking.manage.timezoneHint": "開放時段以所選日曆的時區為準。訪客會自動看到其裝置時區對應的時間。",
+  "booking.public.displayTimezone": "顯示時區",
+  "booking.public.deviceTimezone": "此裝置（{tz}）",
+  "booking.public.hostTimezone": "發起者（{tz}）",
   "booking.public.timezoneNote": "所有時間顯示為 {tz} 時區",
 
   // booking.cancel
@@ -1497,6 +1501,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "已暫停",
   "flash.bookingLink.enabled": "已啟用",
   "flash.bookingLink.deleted": "已刪除",
+  "flash.bookingLink.activeBookings": "此連結仍有尚未結束的預約，請先暫停連結；現有預約及取消連結將繼續有效。",
   "flash.bookingLink.notifyOff": "已關閉郵件通知",
   "flash.bookingLink.notifyOn": "已開啟郵件通知",
   "errorPage.bookingNotFound.heading": "預約連結不存在",

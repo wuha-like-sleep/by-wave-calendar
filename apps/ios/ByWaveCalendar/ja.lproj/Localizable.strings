@@ -490,3 +490,8 @@
 "appLogin.browser" = "ブラウザで続行してください";
 "appLogin.returning" = "ログインを完了しています…";
 "appLogin.help" = "サーバーへのログイン後、自動的にここに戻ります。";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "予約枠のタイムゾーン：%@。予約時刻は端末のタイムゾーンで表示します。";
+"显示时区" = "表示タイムゾーン";
+"日程时区" = "予定のタイムゾーン";

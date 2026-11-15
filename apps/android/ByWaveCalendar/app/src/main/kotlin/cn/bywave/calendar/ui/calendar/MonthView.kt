@@ -56,15 +56,16 @@ fun MonthView(
     val month = remember(anchor) { YearMonth.from(anchor) }
     val cells = remember(month) { monthGridDays(month) }
 
-    // Pre-bucket events by start-day. We bucket per the EVENT'S start
-    // day (matches iOS MonthView eventsByDay) rather than per-cell
-    // overlap — multi-day events show only on their first day in
-    // month view to keep cells readable.
-    val byDay = remember(events) {
+    // All-day spans occupy every selected date; timed events keep their start-day chip.
+    val byDay = remember(events, cells) {
         val m = mutableMapOf<LocalDate, MutableList<EventDTO>>()
         for (e in events) {
-            val d = toLocalDate(parseInstant(e.startsAt)) ?: continue
-            m.getOrPut(d) { mutableListOf() }.add(e)
+            if (e.allDay) {
+                for (d in cells.filter { eventOnDay(e, it) }) m.getOrPut(d) { mutableListOf() }.add(e)
+            } else {
+                val d = toLocalDate(parseInstant(e.startsAt)) ?: continue
+                m.getOrPut(d) { mutableListOf() }.add(e)
+            }
         }
         for ((_, list) in m) list.sortBy { it.startsAt }
         m

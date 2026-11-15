@@ -1,3 +1,4 @@
+<% const values = typeof formValues !== "undefined" ? formValues : {}; const sourceZone = typeof bookingZone !== "undefined" ? bookingZone : "Asia/Shanghai"; %>
 <div class="mx-auto max-w-2xl">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
     <div class="border-l-4 border-brand-500 pl-4 mb-6">
@@ -14,19 +15,27 @@
       <div class="rounded-lg bg-slate-50 border border-slate-200 p-6 text-center text-sm text-slate-500">
         <%= t("booking.public.noSlots") %>
       </div>
-    <% } else { %>
+    <% } %>
+    <% if (slotsByDate.length > 0 || values.guestName || values.guestEmail || values.guestMessage) { %>
       <form method="post" action="/book/<%= link.userId %>/<%= encodeURIComponent(link.slug) %>" class="space-y-5" id="booking-form">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-        <input type="hidden" name="startsAt" id="picked-slot" required />
+        <input type="hidden" name="startsAt" id="picked-slot" value="<%= values.startsAt || '' %>" />
+        <input type="hidden" name="guestTimeZone" id="guest-timezone" value="<%= values.guestTimeZone || sourceZone %>" />
 
         <!-- Date + slot picker -->
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("booking.public.pickTime") %></label>
+          <label class="block text-xs text-slate-500 mb-3">
+            <span class="block mb-1"><%= t("booking.public.displayTimezone") %></span>
+            <select id="booking-timezone" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+              <option value="host"><%= t("booking.public.hostTimezone", { tz: sourceZone }) %></option>
+            </select>
+          </label>
           <div class="grid grid-cols-1 sm:grid-cols-[1fr_2fr] gap-4">
             <ul class="rounded-lg border border-slate-200 overflow-hidden max-h-72 overflow-y-auto" id="date-list">
               <% slotsByDate.forEach(function(d, i){ %>
                 <li>
-                  <button type="button" data-date="<%= d.date %>"
+                  <button type="button" data-date="<%= d.date %>" aria-pressed="false"
                           class="date-btn w-full text-left px-3 py-2 text-sm border-b border-slate-100 last:border-b-0 hover:bg-brand-50 hover:text-brand-700 <%= i === 0 ? 'bg-brand-50 text-brand-700 font-medium' : '' %>">
                     <%= d.date %>
                     <span class="float-right text-xs text-slate-400"><%= t("booking.public.slotCount", { count: d.slots.length }) %></span>
@@ -36,24 +45,25 @@
             </ul>
             <div id="slot-grid" class="grid grid-cols-3 gap-2 content-start"></div>
           </div>
+          <p id="selected-slot-summary" role="status" aria-live="polite" class="hidden mt-3 rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700"></p>
         </div>
 
         <!-- Guest info -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label class="text-sm">
             <span class="block font-medium text-slate-700 mb-1"><%= t("booking.public.nameLabel") %></span>
-            <input type="text" name="guestName" required maxlength="100"
+            <input type="text" name="guestName" required maxlength="100" autocomplete="name" value="<%= values.guestName || '' %>"
                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           </label>
           <label class="text-sm">
             <span class="block font-medium text-slate-700 mb-1"><%= t("booking.public.emailLabel") %></span>
-            <input type="email" name="guestEmail" required maxlength="254"
+            <input type="email" name="guestEmail" required maxlength="254" autocomplete="email" value="<%= values.guestEmail || '' %>"
                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           </label>
           <label class="text-sm sm:col-span-2">
             <span class="block font-medium text-slate-700 mb-1"><%= t("booking.public.messageLabel") %></span>
             <textarea name="guestMessage" maxlength="2000" rows="3" placeholder="<%= t('booking.public.messagePlaceholder') %>"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"><%= values.guestMessage || '' %></textarea>
           </label>
         </div>
 
@@ -63,53 +73,156 @@
       </form>
     <% } %>
 
-    <p class="mt-6 text-center text-xs text-slate-400"><%= t("booking.public.timezoneNote", { tz: "Asia/Shanghai" }) %></p>
+    <p id="booking-zone-note" class="mt-6 text-center text-xs text-slate-400"><%= t("booking.public.timezoneNote", { tz: sourceZone }) %></p>
   </div>
 </div>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
-  const ALL_SLOTS = <%- jsonForScript(slotsByDate) %>;
+  const SLOTS = <%- jsonForScript(slotsByDate) %>.flatMap((day) => day.slots);
   const LOCALE = "<%= currentLocale %>";
+  const HOST_ZONE = <%- jsonForScript(sourceZone) %>;
+  const COPY = <%- jsonForScript({ device: t("booking.public.deviceTimezone", { tz: "{tz}" }), host: t("booking.public.hostTimezone", { tz: "{tz}" }), note: t("booking.public.timezoneNote", { tz: "{tz}" }), count: t("booking.public.slotCount", { count: "{count}" }) }) %>;
   const dateList = document.getElementById("date-list");
   const slotGrid = document.getElementById("slot-grid");
   const picked = document.getElementById("picked-slot");
   const confirm = document.getElementById("confirm-btn");
+  const form = document.getElementById("booking-form");
+  const summary = document.getElementById("selected-slot-summary");
+  const zoneSelect = document.getElementById("booking-timezone");
+  const zoneNote = document.getElementById("booking-zone-note");
+  const guestTimeZone = document.getElementById("guest-timezone");
   if (!dateList || !slotGrid) return;
-  const fmt = (iso) => {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const confirmText = confirm.textContent;
+  let activeDate = "";
+  let submitting = false;
+  let displayZone = "", deviceZone = "", allSlots = [];
+  let timeFormat, offsetFormat, dayFormat, summaryFormat;
+  const fmt = (iso, offset = false) => (offset ? offsetFormat : timeFormat).format(new Date(iso));
+  const dateKey = (iso) => {
+    const parts = dayFormat.formatToParts(new Date(iso));
+    const part = (type) => parts.find((value) => value.type === type).value;
+    return part("year") + "-" + part("month") + "-" + part("day");
   };
+  function selectSlot(iso) {
+    const slot = SLOTS.find((s) => s.startsAt === iso);
+    picked.value = slot ? iso : "";
+    confirm.disabled = !slot || submitting;
+    slotGrid.querySelectorAll(".slot-btn").forEach((button) => {
+      const selected = button.dataset.iso === picked.value;
+      button.classList.toggle("bg-brand-600", selected);
+      button.classList.toggle("bg-white", !selected);
+      button.classList.toggle("text-white", selected);
+      button.classList.toggle("border-brand-600", selected);
+      button.classList.toggle("border-slate-200", !selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    summary.classList.toggle("hidden", !slot);
+    summary.textContent = slot ? summaryFormat.format(new Date(slot.startsAt)) + " · " + fmt(slot.startsAt, true) + "–"
+      + (dateKey(slot.endsAt) !== dateKey(slot.startsAt) ? dateKey(slot.endsAt) + " " : "")
+      + fmt(slot.endsAt, true) + " (" + displayZone + ")" : "";
+  }
   function renderSlots(date) {
-    const entry = ALL_SLOTS.find((d) => d.date === date);
+    activeDate = date;
+    dateList.querySelectorAll(".date-btn").forEach((button) => {
+      const selected = button.dataset.date === date;
+      button.classList.toggle("bg-brand-50", selected);
+      button.classList.toggle("text-brand-700", selected);
+      button.classList.toggle("font-medium", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    const entry = allSlots.find((d) => d.date === date);
     slotGrid.innerHTML = "";
     if (!entry) return;
+    const clockCounts = new Map();
+    for (const slot of entry.slots) { const clock = fmt(slot.startsAt); clockCounts.set(clock, (clockCounts.get(clock) || 0) + 1); }
     entry.slots.forEach((s) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.dataset.iso = s.startsAt;
+      btn.setAttribute("aria-pressed", "false");
       btn.className = "slot-btn rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-brand-500 hover:text-brand-700";
-      btn.textContent = fmt(s.startsAt);
+      // During a fall-back transition two different instants can both say
+      // 01:30. Include the zone abbreviation for those otherwise identical slots.
+      const repeated = clockCounts.get(fmt(s.startsAt)) > 1;
+      btn.textContent = fmt(s.startsAt, repeated);
+      btn.setAttribute("aria-label", date + " " + fmt(s.startsAt, true) + "–" + fmt(s.endsAt, true) + " (" + displayZone + ")");
       slotGrid.appendChild(btn);
     });
   }
+  function refreshTimezone(force = false) {
+    const currentDeviceZone = new Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const choice = zoneSelect.value || "device";
+    const nextZone = choice === "host" ? HOST_ZONE : currentDeviceZone;
+    guestTimeZone.value = nextZone;
+    if (!force && currentDeviceZone === deviceZone && nextZone === displayZone) return;
+    deviceZone = currentDeviceZone; displayZone = nextZone;
+    timeFormat = new Intl.DateTimeFormat(LOCALE, { timeZone: displayZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+    offsetFormat = new Intl.DateTimeFormat(LOCALE, { timeZone: displayZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+    dayFormat = new Intl.DateTimeFormat("en-US", { timeZone: displayZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    summaryFormat = new Intl.DateTimeFormat(LOCALE, { timeZone: displayZone, year: "numeric", month: "long", day: "numeric", weekday: "short" });
+    zoneSelect.replaceChildren();
+    for (const [value, zone, label] of [["device", deviceZone, COPY.device], ["host", HOST_ZONE, COPY.host]]) {
+      const option = document.createElement("option"); option.value = value;
+      option.textContent = label.replace("{tz}", zone); zoneSelect.appendChild(option);
+    }
+    zoneSelect.value = choice;
+    zoneNote.textContent = COPY.note.replace("{tz}", displayZone);
+    const byDate = new Map();
+    for (const slot of SLOTS) {
+      const day = dateKey(slot.startsAt);
+      if (!byDate.has(day)) byDate.set(day, []);
+      byDate.get(day).push(slot);
+    }
+    allSlots = Array.from(byDate, ([date, slots]) => ({ date, slots }));
+    dateList.replaceChildren();
+    for (const day of allSlots) {
+      const li = document.createElement("li"), button = document.createElement("button"), count = document.createElement("span");
+      button.type = "button"; button.dataset.date = day.date;
+      button.className = "date-btn w-full text-left px-3 py-2 text-sm border-b border-slate-100 last:border-b-0 hover:bg-brand-50 hover:text-brand-700";
+      button.textContent = day.date;
+      count.className = "float-right text-xs text-slate-400"; count.textContent = COPY.count.replace("{count}", String(day.slots.length));
+      button.appendChild(count); li.appendChild(button); dateList.appendChild(li);
+    }
+    const selected = allSlots.find(day => day.slots.some(slot => slot.startsAt === picked.value)) || allSlots[0];
+    if (selected) renderSlots(selected.date);
+    selectSlot(picked.value);
+  }
+  zoneSelect.addEventListener("change", () => { if (!submitting) refreshTimezone(true); });
   dateList.addEventListener("click", (e) => {
     const t = e.target.closest("[data-date]");
-    if (!t) return;
-    dateList.querySelectorAll(".date-btn").forEach((b) => b.classList.remove("bg-brand-50", "text-brand-700", "font-medium"));
-    t.classList.add("bg-brand-50", "text-brand-700", "font-medium");
+    if (!t || submitting || t.dataset.date === activeDate) return;
     renderSlots(t.dataset.date);
-    picked.value = "";
-    confirm.disabled = true;
+    selectSlot("");
   });
   slotGrid.addEventListener("click", (e) => {
     const t = e.target.closest("[data-iso]");
-    if (!t) return;
-    slotGrid.querySelectorAll(".slot-btn").forEach((b) => b.classList.remove("bg-brand-600", "text-white", "border-brand-600"));
-    t.classList.add("bg-brand-600", "text-white", "border-brand-600");
-    picked.value = t.dataset.iso;
-    confirm.disabled = false;
+    if (!t || submitting) return;
+    selectSlot(t.dataset.iso);
   });
-  if (ALL_SLOTS.length > 0) renderSlots(ALL_SLOTS[0].date);
+  form.addEventListener("submit", (event) => {
+    if (submitting || !picked.value) { event.preventDefault(); return; }
+    // A device timezone can change between the last focus event and submit.
+    // This only refreshes this visitor's display/notice preference.
+    refreshTimezone();
+    submitting = true;
+    zoneSelect.disabled = true;
+    confirm.disabled = true;
+    confirm.textContent = confirmText.trim() + "…";
+    form.setAttribute("aria-busy", "true");
+  });
+  window.addEventListener("pageshow", () => {
+    submitting = false;
+    zoneSelect.disabled = false;
+    confirm.textContent = confirmText;
+    form.removeAttribute("aria-busy");
+    refreshTimezone();
+    selectSlot(picked.value);
+  });
+  zoneSelect.value = ""; // Default follows this device, including after a zone change.
+  refreshTimezone(true);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !submitting) refreshTimezone(); });
+  window.addEventListener("focus", () => { if (!submitting) refreshTimezone(); });
+  setInterval(() => { if (!document.hidden && !submitting) refreshTimezone(); }, 30_000);
 })();
 </script>

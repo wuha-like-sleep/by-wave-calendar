@@ -485,6 +485,10 @@ export const en = {
   "booking.public.messageLabel": "Message (optional)",
   "booking.public.messagePlaceholder": "What's this about?",
   "booking.public.confirmButton": "Confirm booking",
+  "booking.manage.timezoneHint": "Availability uses the selected calendar’s time zone. Visitors automatically see the corresponding times in their device’s time zone.",
+  "booking.public.displayTimezone": "Display time zone",
+  "booking.public.deviceTimezone": "My device ({tz})",
+  "booking.public.hostTimezone": "Host ({tz})",
   "booking.public.timezoneNote": "All times shown in {tz}",
 
   // booking.cancel
@@ -1518,6 +1522,7 @@ export const en = {
   "flash.bookingLink.paused": "Paused",
   "flash.bookingLink.enabled": "Enabled",
   "flash.bookingLink.deleted": "Deleted",
+  "flash.bookingLink.activeBookings": "This link has upcoming or ongoing bookings. Pause it instead to keep existing bookings and cancellation links available.",
   "flash.bookingLink.notifyOff": "Email notifications turned off",
   "flash.bookingLink.notifyOn": "Email notifications turned on",
   "errorPage.bookingNotFound.heading": "Booking link not found",

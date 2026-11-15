@@ -1,0 +1,138 @@
+package cn.bywave.calendar.desktop.ui.event
+
+import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.EventExtraDTO
+import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import cn.bywave.calendar.event.duplicateEventRange
+import cn.bywave.calendar.event.eventFormDateTime
+import cn.bywave.calendar.event.eventFormIso
+import cn.bywave.calendar.event.eventPickerDate
+import cn.bywave.calendar.event.eventPickerMillis
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.util.TimeZone
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class EventFormValuesTest {
+    private val json = Json { explicitNulls = false }
+    private val calendar = CalendarMeta("cal", "Work", "#334455")
+    private fun event(extra: EventExtraDTO? = null, allDay: Boolean = false) = EventDTO(
+        id = "event", calendarId = calendar.id, summary = "Meeting", description = "Notes", location = "Office",
+        startsAt = "2026-11-16T00:00:00Z", endsAt = "2026-11-17T23:59:59Z", allDay = allDay,
+        rrule = "FREQ=WEEKLY;BYDAY=MO", extra = extra,
+    )
+
+    @Test fun `cleared editable fields are present on the wire while unmanaged metadata is untouched`() {
+        val src = EventExtraDTO(timezone = "America/New_York", url = "https://example.com", meetingPassword = "secret",
+            attendees = listOf("a@example.com"), category = "Work", alarms = Json.parseToJsonElement("[{\"trigger\":\"-PT15M\"}]"))
+        val form = initialState(EventEditMode.Edit(event(src)), listOf(calendar)).copy(
+            description = "", location = "", url = "", meetingPassword = "", attendees = emptyList(),
+            rrule = RruleState.fromRrule(null),
+        )
+        val payload = json.encodeToJsonElement(EventUpdateInput.serializer(), buildBodies(form).second!!).jsonObject
+        assertEquals(JsonPrimitive(""), payload["description"])
+        assertEquals(JsonPrimitive(""), payload["location"])
+        assertEquals(JsonPrimitive(""), payload["rrule"])
+        val extra = payload["extra"]!!.jsonObject
+        assertEquals(JsonNull, extra["url"])
+        assertEquals(JsonNull, extra["meetingPassword"])
+        assertEquals(Json.parseToJsonElement("[]"), extra["attendees"])
+        assertEquals(JsonPrimitive("America/New_York"), extra["timezone"])
+        assertFalse("alarms" in extra)
+        assertFalse("category" in extra)
+    }
+
+    @Test fun `unchanged timed edits preserve instant in the second DST hour and after a device zone change`() {
+        val original = TimeZone.getDefault()
+        try {
+            for ((openingZone, savingZone, startIso) in listOf(
+                Triple("Asia/Shanghai", "Asia/Shanghai", "2026-11-16T01:00:00Z"),
+                Triple("Australia/Melbourne", "Australia/Melbourne", "2026-11-16T01:00:00Z"),
+                Triple("America/New_York", "America/New_York", "2026-11-01T06:30:00.123Z"),
+                Triple("Asia/Shanghai", "Australia/Melbourne", "2026-11-16T01:00:00Z"),
+            )) {
+                val source = event(EventExtraDTO(timezone = "Australia/Melbourne")).copy(
+                    startsAt = startIso,
+                    endsAt = java.time.Instant.parse(startIso).plusSeconds(1800).toString(),
+                    rrule = null,
+                )
+                TimeZone.setDefault(TimeZone.getTimeZone(openingZone))
+                val form = initialState(EventEditMode.Edit(source), listOf(calendar))
+                TimeZone.setDefault(TimeZone.getTimeZone(savingZone))
+                val saved = buildBodies(form).second!!
+                assertEquals(java.time.Instant.parse(source.startsAt), java.time.Instant.parse(saved.startsAt))
+                assertEquals(java.time.Instant.parse(source.endsAt), java.time.Instant.parse(saved.endsAt))
+                assertEquals("Australia/Melbourne", saved.extra?.timezone)
+            }
+        } finally { TimeZone.setDefault(original) }
+    }
+
+    @Test fun `partial event without extra cannot clear fields it never loaded`() {
+        val form = initialState(EventEditMode.Edit(event()), listOf(calendar))
+        val payload = json.encodeToJsonElement(EventUpdateInput.serializer(), buildBodies(form).second!!).jsonObject
+        assertNull(payload["extra"])
+    }
+
+    @Test fun `calendar arriving after typing enables save without resetting the form`() {
+        val waiting = initialState(EventEditMode.Create(), emptyList()).copy(summary = "Keep my draft", location = "Here")
+        assertFalse(waiting.canSubmit)
+        val ready = waiting.withCalendars(listOf(calendar))
+        assertTrue(ready.canSubmit)
+        assertEquals("Keep my draft", ready.summary)
+        assertEquals("Here", ready.location)
+        assertEquals(waiting.start, ready.start)
+        assertEquals(ready, ready.withCalendars(listOf(CalendarMeta("other", "Other", "#000000"))))
+    }
+
+    @Test fun `picker dates round trip in zones on either side of UTC`() {
+        val original = TimeZone.getDefault()
+        try {
+            for (zone in listOf("America/Los_Angeles", "Pacific/Auckland", "Asia/Shanghai")) {
+                TimeZone.setDefault(TimeZone.getTimeZone(zone))
+                val day = LocalDate.of(2026, 11, 16)
+                assertEquals(day, eventPickerDate(eventPickerMillis(day)))
+                assertEquals(1794787200000L, eventPickerMillis(day))
+            }
+        } finally { TimeZone.setDefault(original) }
+    }
+
+    @Test fun `all-day editing preserves dates across zones including DST`() {
+        for (zoneName in listOf("America/Los_Angeles", "Pacific/Auckland", "Australia/Melbourne")) {
+            val zone = ZoneId.of(zoneName)
+            for (date in listOf("2026-11-16", "2026-03-08", "2026-11-01")) {
+                val start = eventFormDateTime("${date}T00:00:00Z", true, zone)!!
+                val end = eventFormDateTime("${date}T23:59:59Z", true, zone)!!
+                assertEquals(LocalDate.parse(date), start.toLocalDate())
+                assertEquals(LocalDate.parse(date), end.toLocalDate())
+                assertEquals("${date}T00:00:00Z", eventFormIso(start, true, true, zone))
+                assertEquals("${date}T23:59:59Z", eventFormIso(end, true, false, zone))
+            }
+        }
+    }
+
+    @Test fun `timed form keeps the actual instant`() {
+        val zone = ZoneId.of("America/Los_Angeles")
+        val local = eventFormDateTime("2026-11-16T18:00:00Z", false, zone)!!
+        assertEquals(LocalDateTime.parse("2026-11-16T10:00:00"), local)
+        assertEquals("2026-11-16T10:00:00-08:00", eventFormIso(local, false, true, zone))
+    }
+
+    @Test fun `copying all-day events near midnight preserves the number of days`() {
+        val now = LocalDateTime.parse("2026-11-16T23:30:00")
+        val (start, end) = duplicateEventRange("2026-11-01T00:00:00Z", "2026-11-01T23:59:59Z", true, now)
+        assertEquals(LocalDateTime.parse("2026-11-16T00:00:00"), start)
+        assertEquals(LocalDateTime.parse("2026-11-16T23:59:59"), end)
+        val (_, multiEnd) = duplicateEventRange("2026-11-01T00:00:00Z", "2026-11-03T23:59:59Z", true, now)
+        assertEquals(LocalDateTime.parse("2026-11-18T23:59:59"), multiEnd)
+    }
+}

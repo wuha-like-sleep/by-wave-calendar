@@ -137,6 +137,8 @@ data class BookingLink(
     val updatedAt: String? = null,
     /** Public booking page URL — `<PUBLIC_BASE_URL>/book/<slug>`. */
     val publicUrl: String? = null,
+    /** Availability follows the initiating calendar; booked instants use the device zone. */
+    val timezone: String? = null,
 )
 
 /** POST /api/v1/booking-links body. `slug` must match
@@ -367,8 +369,8 @@ data class EventExtra(
     val timezone: String? = null,
     val attendees: List<String>? = null,
     val category: String? = null,
-    val url: String? = null,
-    val meetingPassword: String? = null,
+    val url: cn.bywave.calendar.event.EventStringField? = null,
+    val meetingPassword: cn.bywave.calendar.event.EventStringField? = null,
 )
 
 // ---- Native account management ----

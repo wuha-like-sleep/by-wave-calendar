@@ -128,6 +128,8 @@ struct BookingLinksView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Text("排期时区：%@；预约时间按设备时区显示。".locFormat(bookingTimeZone(link.timezone, calendar: calendars.first(where: { $0.id == link.calendarId })?.timezone)))
+                .font(.caption).foregroundStyle(.secondary)
             Text(link.publicUrl)
                 .font(.caption.monospaced())
                 .foregroundStyle(.secondary)
@@ -300,7 +302,7 @@ struct CreateBookingLinkView: View {
             } header: {
                 Text("日历")
             } footer: {
-                Text("预约成功后会在这个日历里创建事件。")
+                Text("排期时区：%@；预约时间按设备时区显示。".locFormat(bookingTimeZone(nil, calendar: calendars.first(where: { $0.id == calendarId })?.timezone)))
                     .font(.footnote)
             }
 
@@ -475,6 +477,9 @@ struct EditBookingLinkView: View {
                 .pickerStyle(.menu)
             } header: {
                 Text("日历")
+            } footer: {
+                Text("排期时区：%@；预约时间按设备时区显示。".locFormat(bookingTimeZone(calendarId == link.calendarId ? link.timezone : nil, calendar: calendars.first(where: { $0.id == calendarId })?.timezone)))
+                    .font(.footnote)
             }
 
             BookingLinkForm.timingSections(

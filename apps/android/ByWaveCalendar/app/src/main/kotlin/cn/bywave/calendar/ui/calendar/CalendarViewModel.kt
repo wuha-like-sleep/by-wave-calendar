@@ -7,6 +7,7 @@ package cn.bywave.calendar.ui.calendar
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cn.bywave.calendar.sync.ConfirmedEventDeletion
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
@@ -52,6 +53,7 @@ class CalendarViewModel : ViewModel() {
     // ViewModel，没有 getApplication()。和 EventEditViewModel 同一套做法。
     private val app = BywaveApp.instance
     private var undoProfileId: String? = null
+    private val deletionsInFlight = mutableSetOf<Pair<String, ConfirmedEventDeletion>>()
 
     private val _state = MutableStateFlow(CalendarUiState())
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
@@ -112,10 +114,20 @@ class CalendarViewModel : ViewModel() {
      *  recurring set. (Was the v0.8.2 silent-data-loss bug.) */
     fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
         val profile = profiles.active() ?: return
+        val deletion = ConfirmedEventDeletion(id, scope, recurrenceId)
+        val operation = profile.id to deletion
+        if (!deletionsInFlight.add(operation)) return
+        _state.update { it.copy(errorMessage = null) }
         viewModelScope.launch {
             try {
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id, scope, recurrenceId)
+                // A subsequent refresh may be slow/offline; the acknowledged
+                // deletion should disappear now, without waiting for that GET.
+                try {
+                    repository.applyConfirmedDeletion(profile, deletion)
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e
+                } catch (_: Exception) { /* Refresh retries a failed cache write. */ }
                 if (profiles.activeId.value != profile.id) return@launch
                 undoProfileId = profile.id
                 // Offer undo only for plain (non-recurring) deletes; restoring a
@@ -127,6 +139,8 @@ class CalendarViewModel : ViewModel() {
             } catch (e: Exception) {
                 if (profiles.activeId.value != profile.id) return@launch
                 _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_delete_failed)) }
+            } finally {
+                deletionsInFlight.remove(operation)
             }
         }
     }

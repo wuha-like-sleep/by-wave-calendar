@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -72,7 +73,13 @@ import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.EventExtra
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
-import java.time.Instant
+import cn.bywave.calendar.event.duplicateEventRange
+import cn.bywave.calendar.event.eventFormDateTime
+import cn.bywave.calendar.event.EventFormInstant
+import cn.bywave.calendar.event.eventFormIso
+import cn.bywave.calendar.event.eventPickerDate
+import cn.bywave.calendar.event.eventPickerMillis
+import cn.bywave.calendar.event.eventStringField
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -87,7 +94,7 @@ sealed class EventEditMode {
     data class Duplicate(val source: EventDTO) : EventEditMode()
 }
 
-private data class FormState(
+internal data class FormState(
     val isEdit: Boolean,
     val sourceId: String?,
     val sourceRrule: String?,
@@ -103,10 +110,11 @@ private data class FormState(
     val allDay: Boolean,
     val rrule: RruleState,
     val attendees: List<String>,
-    // Source event's extra (edit/duplicate) — merged back on save so
-    // fields this form doesn't edit (alarms, category, the original
-    // timezone) survive the server's replace-wholesale PATCH.
+    // Source metadata distinguishes cleared fields from unloaded fields;
+    // duplication also copies metadata this editor does not expose.
     val sourceExtra: cn.bywave.calendar.desktop.data.model.EventExtraDTO? = null,
+    val originalStart: EventFormInstant? = null,
+    val originalEnd: EventFormInstant? = null,
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank()
@@ -139,8 +147,8 @@ fun EventEditDialog(
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
-    val initial = remember(mode, calendars) { initialState(mode, calendars) }
-    var form by remember(mode) { mutableStateOf(initial) }
+    var form by remember(mode) { mutableStateOf(initialState(mode, calendars)) }
+    LaunchedEffect(calendars) { form = form.withCalendars(calendars) }
 
     // 提交入口抽出来,给「点保存」和「在标题里敲回车」共用。桌面端填完
     // 标题按回车就想存下,以前回车在单行输入框里什么都不做,用户要伸手
@@ -154,7 +162,7 @@ fun EventEditDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!saving) onDismiss() },
         title = {
             Text(
                 if (form.isEdit) t("event.edit.titleEdit") else t("event.edit.titleCreate"),
@@ -285,7 +293,7 @@ fun EventEditDialog(
                             form = if (v) form.copy(
                                 allDay = true,
                                 start = form.start.toLocalDate().atStartOfDay(),
-                                end = form.start.toLocalDate().atTime(23, 59),
+                                end = maxOf(form.start.toLocalDate(), form.end.toLocalDate()).atTime(23, 59),
                             ) else form.copy(
                                 allDay = false,
                                 end = form.start.plusHours(1),
@@ -308,7 +316,7 @@ fun EventEditDialog(
                     value = form.end,
                     allDay = form.allDay,
                     onChange = { newEnd ->
-                        val clamped = if (newEnd.isBefore(form.start)) form.start.plusMinutes(15) else newEnd
+                        val clamped = if (!newEnd.isAfter(form.start)) form.start.plusMinutes(15) else newEnd
                         form = form.copy(end = clamped)
                     },
                 )
@@ -465,8 +473,7 @@ private fun DateTimePickerRow(
 
     if (showDate) {
         val dpState = rememberDatePickerState(
-            initialSelectedDateMillis = value.toLocalDate()
-                .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            initialSelectedDateMillis = eventPickerMillis(value.toLocalDate()),
         )
         DatePickerDialog(
             onDismissRequest = { showDate = false },
@@ -474,7 +481,7 @@ private fun DateTimePickerRow(
                 TextButton(onClick = {
                     val millis = dpState.selectedDateMillis
                     if (millis != null) {
-                        val newDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val newDate = eventPickerDate(millis)
                         onChange(LocalDateTime.of(newDate, value.toLocalTime()))
                     }
                     showDate = false
@@ -558,11 +565,13 @@ private fun AttendeesSection(
 
 // ---- Helpers ----
 
-private val ISO_OFFSET: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
 private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
-private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): FormState {
+internal fun FormState.withCalendars(calendars: List<CalendarMeta>): FormState =
+    if (calendarId.isBlank() && calendars.isNotEmpty()) copy(calendarId = calendars.first().id) else this
+
+internal fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): FormState {
     return when (mode) {
         is EventEditMode.Create -> {
             val start = mode.seedStart ?: nextHalfHour()
@@ -587,8 +596,8 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
         is EventEditMode.Edit -> {
             val s = mode.source
             val zone = ZoneId.systemDefault()
-            val startInstant = runCatching { Instant.parse(s.startsAt) }.getOrNull()
-            val endInstant = runCatching { Instant.parse(s.endsAt) }.getOrNull()
+            val sourceStart = eventFormDateTime(s.startsAt, s.allDay, zone)
+            val sourceEnd = eventFormDateTime(s.endsAt, s.allDay, zone)
             FormState(
                 isEdit = true,
                 sourceId = s.id,
@@ -600,25 +609,19 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 description = s.description.orEmpty(),
                 url = s.extra?.url.orEmpty(),
                 meetingPassword = s.extra?.meetingPassword.orEmpty(),
-                start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
-                end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
+                start = sourceStart ?: nextHalfHour(),
+                end = sourceEnd ?: nextHalfHour().plusHours(1),
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(s.rrule),
                 attendees = s.extra?.attendees.orEmpty(),
                 sourceExtra = s.extra,
+                originalStart = sourceStart?.takeIf { !s.allDay }?.let { EventFormInstant(s.startsAt, it) },
+                originalEnd = sourceEnd?.takeIf { !s.allDay }?.let { EventFormInstant(s.endsAt, it) },
             )
         }
         is EventEditMode.Duplicate -> {
             val s = mode.source
-            val zone = ZoneId.systemDefault()
-            // Keep duration but shift start to next half-hour so we don't
-            // post in the past. Mirrors Android EventEditViewModel.
-            val origStart = runCatching { Instant.parse(s.startsAt) }.getOrNull()
-            val origEnd = runCatching { Instant.parse(s.endsAt) }.getOrNull()
-            val durationMin = if (origStart != null && origEnd != null) {
-                java.time.Duration.between(origStart, origEnd).toMinutes().coerceAtLeast(15L)
-            } else 60L
-            val newStart = nextHalfHour()
+            val (newStart, newEnd) = duplicateEventRange(s.startsAt, s.endsAt, s.allDay, nextHalfHour())
             FormState(
                 isEdit = false,                       // POST, not PATCH
                 sourceId = null,
@@ -631,7 +634,7 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
                 url = s.extra?.url.orEmpty(),
                 meetingPassword = s.extra?.meetingPassword.orEmpty(),
                 start = newStart,
-                end = newStart.plusMinutes(durationMin),
+                end = newEnd,
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(null),   // intentionally clear
                 attendees = s.extra?.attendees.orEmpty(),
@@ -641,30 +644,27 @@ private fun initialState(mode: EventEditMode, calendars: List<CalendarMeta>): Fo
     }
 }
 
-private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInput?> {
+internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInput?> {
     val zone = ZoneId.systemDefault()
-    val startIso = ISO_OFFSET.format(form.start.atZone(zone))
-    val endIso = ISO_OFFSET.format(form.end.atZone(zone))
+    val startIso = eventFormIso(form.start, form.allDay, isStart = true, zone, form.originalStart)
+    val endIso = eventFormIso(form.end, form.allDay, isStart = false, zone, form.originalEnd)
 
     val urlTrim = form.url.trim()
     val pwTrim = form.meetingPassword.trim()
-    val attendees = form.attendees.takeIf { it.isNotEmpty() }
-    // MERGE with the source event's extra — the server replaces `extra`
-    // wholesale on PATCH, so anything we don't echo back is destroyed.
-    // Pre-1.0.15 this rebuilt extra from form fields only, which silently
-    // wiped web-set alarms + category and overwrote the event's original
-    // timezone with the desktop's local zone on every edit.
+    val attendees = form.attendees.takeIf { it.isNotEmpty() || form.sourceExtra != null }
+    // The server merges extra keys. Only send fields this editor manages on
+    // PATCH; replaying source alarms/category could overwrite a concurrent edit.
     val src = form.sourceExtra
     val extra = run {
         val merged = EventExtra(
             // Timed events: keep the event's own zone; fall back to the
             // desktop zone only when the event never had one (create).
-            timezone = if (!form.allDay) (src?.timezone ?: zone.id) else src?.timezone,
+            timezone = src?.timezone ?: if (!form.isEdit && !form.allDay) zone.id else null,
             attendees = attendees,
-            category = src?.category,
-            url = urlTrim.ifEmpty { null },
-            meetingPassword = pwTrim.ifEmpty { null },
-            alarms = src?.alarms,
+            category = if (form.isEdit) null else src?.category,
+            url = eventStringField(urlTrim, clearWhenEmpty = form.isEdit && src != null),
+            meetingPassword = eventStringField(pwTrim, clearWhenEmpty = form.isEdit && src != null),
+            alarms = if (form.isEdit) null else src?.alarms,
         )
         val allNull = merged.timezone == null && merged.attendees == null &&
             merged.category == null && merged.url == null &&
@@ -678,12 +678,12 @@ private fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateInp
         null to EventUpdateInput(
             calendarId = form.calendarId,
             summary = form.summary,
-            description = form.description.ifBlank { null },
-            location = form.location.ifBlank { null },
+            description = form.description,
+            location = form.location,
             startsAt = startIso,
             endsAt = endIso,
             allDay = form.allDay,
-            rrule = rrule,
+            rrule = rrule.orEmpty(),
             extra = extra,
         )
     } else {

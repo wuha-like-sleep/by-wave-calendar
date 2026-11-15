@@ -309,7 +309,7 @@ describe("提醒扫描（真库）按对的时刻触发", () => {
 
 describe("预约：每一周的例会都算忙，按事件时区的那一天", () => {
   it("纽约周一 21:00 的周会（= 上海周二 10:00）挡住两周的周二 10:00，不挡周一 10:00；删掉的那周放出来", async () => {
-    const cal = await calendarIn("America/New_York");
+    const cal = await calendarIn("Asia/Shanghai");
     const [link] = await db.insert(schema.bookingLinks).values({
       userId: user.id, calendarId: cal.id, slug: "chat", title: "聊一聊",
       durationMinutes: 30, minNoticeHours: 0, maxDaysAhead: 14,
@@ -320,6 +320,7 @@ describe("预约：每一周的例会都算忙，按事件时区的那一天", (
       calendarId: cal.id, uid: "weekly-ny", summary: "周会",
       startsAt: new Date("2026-11-03T02:00:00Z"), endsAt: new Date("2026-11-03T03:00:00Z"),
       rrule: "FREQ=WEEKLY;BYDAY=MO",
+      extra: { timezone: "America/New_York" },
       exdates: ["2026-11-17T02:00:00.000Z"],   // 第三周删掉了
     });
     const slots = (await availableSlots(link!, new Date("2026-11-01T00:00:00Z"), 21)).map((s) => s.startsAt.toISOString());

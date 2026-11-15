@@ -110,6 +110,7 @@ private fun EventDetailContent(
     val clipboard = LocalClipboardManager.current
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
+    val deviceZone = cn.bywave.calendar.ui.calendar.rememberDeviceTimeZone()
 
     // 这张卡片以前不滚动。备注长一点（会议纪要、议程）就把底下的「编辑」
     // 按钮顶出屏幕，而 ModalBottomSheet 本身也滑不动——结果是内容越多的
@@ -163,6 +164,21 @@ private fun EventDetailContent(
             label = stringResource(R.string.event_detail_time),
             value = formatTimeBlock(event, LocalConfiguration.current.locales[0], stringResource(R.string.event_allday)),
         )
+
+        if (!event.allDay) {
+            DetailRow(
+                icon = Icons.Default.Schedule,
+                label = stringResource(R.string.event_detail_display_timezone),
+                value = deviceZone.id,
+            )
+            event.extra?.timezone?.takeIf { it.isNotBlank() && it != deviceZone.id }?.let { sourceZone ->
+                DetailRow(
+                    icon = Icons.Default.Schedule,
+                    label = stringResource(R.string.event_detail_source_timezone),
+                    value = sourceZone,
+                )
+            }
+        }
 
         if (!event.location.isNullOrBlank()) {
             DetailRow(
@@ -407,7 +423,11 @@ private fun formatTimeBlock(event: EventDTO, locale: Locale, allDayLabel: String
     val s = parseInstant(event.startsAt)
     val e = parseInstant(event.endsAt)
     if (s == null || e == null) return "—"
-    if (event.allDay) return "${dateFmt(locale).format(s)} ($allDayLabel)"
+    if (event.allDay) {
+        val (first, last) = cn.bywave.calendar.event.eventAllDayDates(event.startsAt, event.endsAt) ?: return allDayLabel
+        val dates = if (first == last) dateFmt(locale).format(first) else "${dateFmt(locale).format(first)} – ${dateFmt(locale).format(last)}"
+        return "$dates ($allDayLabel)"
+    }
     val fmt = dateTimeFmt(locale)
     // En-dash range separator — language-neutral, needs no translation.
     return "${fmt.format(s)}\n– ${fmt.format(e)}"

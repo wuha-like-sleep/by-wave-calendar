@@ -478,6 +478,10 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "메시지 (선택)",
   "booking.public.messagePlaceholder": "어떤 내용인가요?",
   "booking.public.confirmButton": "예약 확정",
+  "booking.manage.timezoneHint": "예약 가능 시간은 선택한 캘린더의 시간대를 기준으로 합니다. 방문자에게는 기기 시간대로 변환된 시간이 자동 표시됩니다.",
+  "booking.public.displayTimezone": "표시 시간대",
+  "booking.public.deviceTimezone": "내 기기 ({tz})",
+  "booking.public.hostTimezone": "주최자 ({tz})",
   "booking.public.timezoneNote": "모든 시간은 {tz} 기준으로 표시됩니다",
 
   // booking.cancel
@@ -1511,6 +1515,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "일시중지했습니다",
   "flash.bookingLink.enabled": "사용하도록 설정했습니다",
   "flash.bookingLink.deleted": "삭제했습니다",
+  "flash.bookingLink.activeBookings": "이 링크에 예정되었거나 진행 중인 예약이 있습니다. 기존 예약과 취소 링크를 유지하려면 링크를 일시 중지하세요.",
   "flash.bookingLink.notifyOff": "메일 알림을 껐습니다",
   "flash.bookingLink.notifyOn": "메일 알림을 켰습니다",
   "errorPage.bookingNotFound.heading": "예약 링크가 없습니다",

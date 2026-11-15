@@ -1,6 +1,6 @@
 {
   "name": "by-wave-calendar",
-  "version": "1.9.1",
+  "version": "1.9.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -26,7 +26,7 @@
     "clean:icloud": "bash scripts/clean-icloud.sh",
     "typecheck:src": "tsc -p tsconfig.json --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
-    "typecheck:test:backlog": "tsc -p tsconfig.test.backlog.json --noEmit | sed -nE 's#^(test/[^(]*)\\(.*error TS.*#\\1#p' | sort -u | awk '{ list = list \"\\n  · \" $0 } END { if (NR == 6) { print \"欠账清单仍是 6 个文件，符合预期。\"; exit 0 } print \"✗ 欠账清单对不上：实际还在欠账的是 \" NR \" 个\" list; print \"  修好的文件要同时从 tsconfig.test.json 的 exclude 和 tsconfig.test.backlog.json 的 files 里删掉。\"; exit 1 }'",
+    "typecheck:test:backlog": "tsc -p tsconfig.test.backlog.json --noEmit | sed -nE 's#^(test/[^(]*)\\(.*error TS.*#\\1#p' | sort -u | awk '{ list = list \"\\n  \u00b7 \" $0 } END { if (NR == 6) { print \"\u6b20\u8d26\u6e05\u5355\u4ecd\u662f 6 \u4e2a\u6587\u4ef6\uff0c\u7b26\u5408\u9884\u671f\u3002\"; exit 0 } print \"\u2717 \u6b20\u8d26\u6e05\u5355\u5bf9\u4e0d\u4e0a\uff1a\u5b9e\u9645\u8fd8\u5728\u6b20\u8d26\u7684\u662f \" NR \" \u4e2a\" list; print \"  \u4fee\u597d\u7684\u6587\u4ef6\u8981\u540c\u65f6\u4ece tsconfig.test.json \u7684 exclude \u548c tsconfig.test.backlog.json \u7684 files \u91cc\u5220\u6389\u3002\"; exit 1 }'",
     "typecheck": "npm run typecheck:src && npm run typecheck:test && npm run typecheck:test:backlog",
     "test": "vitest run",
     "test:int": "vitest run --config vitest.integration.config.ts",

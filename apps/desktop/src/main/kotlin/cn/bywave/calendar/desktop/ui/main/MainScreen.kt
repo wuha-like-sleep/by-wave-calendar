@@ -138,10 +138,10 @@ fun MainScreen(
     LaunchedEffect(state, focused) {
         val active = state ?: return@LaunchedEffect
         if (!focused) return@LaunchedEffect
-        active.refreshIfIdle()
+        if (active.ui.value.activeSheet !is ActiveSheet.Detail) active.refreshIfIdle()
         while (true) {
             kotlinx.coroutines.delay(15_000)
-            active.refreshIfIdle()
+            if (active.ui.value.activeSheet !is ActiveSheet.Detail) active.refreshIfIdle()
         }
     }
 
@@ -378,6 +378,8 @@ fun MainScreen(
                     onCalendarToggle = { id -> hiddenCalendars = if (id in hiddenCalendars) hiddenCalendars - id else hiddenCalendars + id },
                 )
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(start = 8.dp, top = 14.dp, end = 18.dp, bottom = 18.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
+                    val deviceZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+                    androidx.compose.runtime.key(deviceZone.id) {
                     Crossfade(targetState = ui.mode, animationSpec = tween(160), label = "calendar-view") { visibleMode ->
                     when (visibleMode) {
                         ViewMode.Day -> DayView(
@@ -424,6 +426,7 @@ fun MainScreen(
                         )
                     }
                     }
+                    }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         if (ui.error != null) {
                             ErrorBanner(message = ui.error!!, onRetry = { state.load() })
@@ -454,6 +457,7 @@ fun MainScreen(
             calendars = ui.calendars,
             onDismiss = { state.closeSheet() },
             onEdit = { state.openEdit(it) },
+            onRefresh = { state.refreshIfIdle() },
             onDelete = { ev ->
                 state.closeSheet()
                 state.delete(ev)

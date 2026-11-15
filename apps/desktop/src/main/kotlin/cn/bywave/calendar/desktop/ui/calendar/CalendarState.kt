@@ -11,6 +11,7 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import cn.bywave.calendar.sync.ConfirmedEventDeletion
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
@@ -113,6 +114,22 @@ internal fun replaceEvent(list: List<EventDTO>, from: EventDTO, to: EventDTO): L
     return if (hit) out else list
 }
 
+/** Keep a read-only detail in step with successful refreshes. An editor is a
+ * draft and must stay untouched. Recurring occurrences share an id, so matching
+ * their start instant is required before replacing the currently open detail. */
+internal fun refreshedDetail(sheet: ActiveSheet?, previousEvents: List<EventDTO>, events: List<EventDTO>): ActiveSheet? {
+    val detail = sheet as? ActiveSheet.Detail ?: return sheet
+    val previous = detail.event
+    val recurring = previous.rrule != null || previous.isOccurrence == true
+    // Search may open a detail outside the calendar's currently fetched window.
+    // Its absence from that partial snapshot tells us nothing about deletion.
+    if (previousEvents.none { it.id == previous.id && (!recurring || parseInstant(it.startsAt) == parseInstant(previous.startsAt)) }) return sheet
+    val current = events.firstOrNull {
+        it.id == previous.id && (!recurring || parseInstant(it.startsAt) == parseInstant(previous.startsAt))
+    }
+    return current?.let { ActiveSheet.Detail(it) }
+}
+
 /** Same shape for delete — we park the source while the scope picker
  *  asks for the scope. */
 data class PendingDelete(
@@ -158,6 +175,7 @@ class CalendarState(
     val ui: StateFlow<CalendarUiState> = _ui.asStateFlow()
 
     private var loadJob: Job? = null
+    private val deletionsInFlight = mutableSetOf<ConfirmedEventDeletion>()
 
     /** Refetch the active window. Stale-while-revalidate: if a fresh
      *  cache entry exists for the current (deviceId, window), we paint
@@ -170,7 +188,7 @@ class CalendarState(
      *  原位、等网络回来再跳过去，刚删掉的事件也会先冒出来一下。 */
     fun refreshIfIdle() {
         val current = _ui.value
-        if (loadJob?.isActive == true || current.saving || current.activeSheet != null || current.pendingScopeDelete != null || current.pendingScopeEdit != null) return
+        if (loadJob?.isActive == true || current.saving || isFormSheet(current.activeSheet) || current.pendingScopeDelete != null || current.pendingScopeEdit != null) return
         load(useCache = false, silent = true)
     }
 
@@ -214,6 +232,7 @@ class CalendarState(
                 _ui.value = _ui.value.copy(
                     events = resp.events,
                     calendars = resp.calendars,
+                    activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events),
                     loading = false,
                     error = null,
                 )
@@ -506,6 +525,10 @@ class CalendarState(
     }
 
     private fun sendDelete(id: String, scope: String?, recurrenceId: String?, summary: String? = null) {
+        val deletion = ConfirmedEventDeletion(id, scope, recurrenceId)
+        // Register before launching, so rapid repeated clicks share the same
+        // operation instead of reporting a second DELETE's not-found as failure.
+        if (!deletionsInFlight.add(deletion)) return
         this.scope.launch {
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
@@ -518,7 +541,10 @@ class CalendarState(
                 val undo = if ((scope == null || scope == "series") && summary != null)
                     UndoDelete(eventId = id, summary = summary, token = System.nanoTime())
                 else null
-                _ui.value = _ui.value.copy(saving = false, activeSheet = null, undoDelete = undo ?: _ui.value.undoDelete)
+                _ui.value = _ui.value.copy(
+                    events = _ui.value.events.filterNot { deletion.removes(it.id, it.startsAt) },
+                    saving = false, activeSheet = null, undoDelete = undo ?: _ui.value.undoDelete,
+                )
                 load(useCache = false)
                 // 删掉的会不该再响。
                 ReminderFeed.requestRefresh()
@@ -532,6 +558,8 @@ class CalendarState(
                     saving = false,
                     actionError = actionFailureText("action.deleteFailed", summary ?: "", e),
                 )
+            } finally {
+                deletionsInFlight.remove(deletion)
             }
         }
     }

@@ -207,7 +207,8 @@ describe("请求体校验失败必须是 400，不是 500（C6）", () => {
 
   it("POST / PATCH 都不用会冒成 500 的 schema.parse(req.body)", () => {
     expect(code).not.toMatch(/(createSchema|updateSchema)\.parse\(/);
-    expect(code.match(/(createSchema|updateSchema)\.safeParse\(/g)).toHaveLength(2);
+    expect(code).toContain("const parsedBody = createSchema.safeParse(req.body)");
+    expect(code).toMatch(/const parsedBody = updateSchema\.safeParse\(\{\s*\.\.\.rawBody,/);
   });
 
   it("两处校验失败都回 400", () => {

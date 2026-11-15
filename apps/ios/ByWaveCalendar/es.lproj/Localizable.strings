@@ -490,3 +490,8 @@
 "appLogin.browser" = "Continúa en el navegador";
 "appLogin.returning" = "Completando el inicio de sesión…";
 "appLogin.help" = "Completa el inicio de sesión en tu servidor. Volverás aquí automáticamente.";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "Zona de disponibilidad: %@. Las reservas se muestran en la zona horaria del dispositivo.";
+"显示时区" = "Zona de visualización";
+"日程时区" = "Zona del evento";

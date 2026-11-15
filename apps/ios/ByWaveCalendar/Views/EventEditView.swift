@@ -68,6 +68,7 @@ struct EventEditView: View {
     let onCancel: () -> Void
 
     @EnvironmentObject var state: AppState
+    @Environment(\.timeZone) private var displayTimeZone
 
     @State private var summary: String
     @State private var location: String
@@ -76,9 +77,9 @@ struct EventEditView: View {
     @State private var endsAt: Date
     @State private var allDay: Bool
     @State private var calendarId: String
-    // IANA timezone name interpreting start/end. Defaults to the system
-    // tz; "(默认)" in the picker means "don't send any" → server uses the
-    // calendar's stored tz (Asia/Shanghai by default).
+    // Recurrence/calendar timezone metadata. DatePicker displays the device
+    // zone and keeps Date instants; this field never reinterprets its clock.
+    // "(默认)" lets the server use the calendar's stored timezone.
     @State private var timezone: String = TimeZone.current.identifier
     // v1.3.3 — Meeting/document URL, stored at extra.url server-side.
     @State private var url: String = ""
@@ -127,14 +128,14 @@ struct EventEditView: View {
             _location = State(initialValue: e.location ?? "")
             _description = State(initialValue: e.description ?? "")
             if useOriginalTime {
-                _startsAt = State(initialValue: e.startsAt)
-                _endsAt = State(initialValue: e.endsAt)
+                _startsAt = State(initialValue: e.allDay ? EventEditorDates.localAllDay(e.startsAt) : e.startsAt)
+                _endsAt = State(initialValue: e.allDay ? EventEditorDates.localAllDay(e.endsAt) : e.endsAt)
             } else {
-                // Duplicate: snap to next half-hour, preserve duration.
-                let duration = e.endsAt.timeIntervalSince(e.startsAt)
-                let start = Self.roundUpToHalfHour(Date())
+                let (start, end) = EventEditorDates.duplicate(
+                    start: e.startsAt, end: e.endsAt, allDay: e.allDay,
+                    from: Self.roundUpToHalfHour(Date()))
                 _startsAt = State(initialValue: start)
-                _endsAt = State(initialValue: start.addingTimeInterval(max(duration, 1800)))
+                _endsAt = State(initialValue: end)
             }
             _allDay = State(initialValue: e.allDay)
             _calendarId = State(initialValue: e.calendarId)
@@ -261,7 +262,8 @@ struct EventEditView: View {
                     // Timezone picker — only meaningful for timed events.
                     // All-day events span the calendar's local day per ICS
                     // spec, so the field would be misleading.
-                    Picker("时区", selection: $timezone) {
+                    LabeledContent("显示时区", value: displayTimeZone.identifier)
+                    Picker("日程时区", selection: $timezone) {
                         ForEach(EventEditView.commonTimezones, id: \.self) { tz in
                             Text(tz).tag(tz)
                         }
@@ -516,8 +518,8 @@ struct EventEditView: View {
                 saved = try await client.patch("/events/\(existing.id)", body: EventUpdateInput(
                     calendarId: cidIfChanged,
                     summary: summary.trimmingCharacters(in: .whitespaces),
-                    description: description.isEmpty ? nil : description,
-                    location: location.isEmpty ? nil : location,
+                    description: description,
+                    location: location,
                     startsAt: isoStart,
                     endsAt: isoEnd,
                     allDay: allDay,
@@ -621,9 +623,7 @@ struct EventEditView: View {
             let utc = cal.date(from: comps) ?? d
             return ISO8601DateFormatter().string(from: utc)
         }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f.string(from: d)
+        return EventEditorDates.timedISO(d)
     }
 
     static func roundUpToHalfHour(_ d: Date) -> Date {

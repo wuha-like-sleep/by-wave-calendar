@@ -142,10 +142,12 @@ describe("网页选「这次及以后」：拆出来的后半段还是重复的"
     });
     expect(res.statusCode).toBe(200);
     const created = res.json() as { id: string; rrule?: string | null };
-    expect(created.rrule, "拆出来的后半段变成了单次").toBe(rule);
+    expect(created.rrule, "后半段保留重复，但不能重新开始 COUNT=8").toBe("FREQ=WEEKLY;BYDAY=MO;COUNT=5");
     const tail = await occurrencesOf(created.id);
     expect(tail.length).toBeGreaterThan(1);
     expect(tail[0]).toBe(split);
-    expect((await occurrencesOf(ev.id)).every((s) => s < split)).toBe(true);
+    const prefix = await occurrencesOf(ev.id);
+    expect(prefix.every((s) => s < split)).toBe(true);
+    expect([...prefix, ...tail]).toEqual(occ);
   });
 });

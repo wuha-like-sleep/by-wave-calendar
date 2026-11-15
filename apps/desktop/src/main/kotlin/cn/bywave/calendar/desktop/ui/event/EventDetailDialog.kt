@@ -26,11 +26,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,13 +53,15 @@ fun EventDetailDialog(
     onDismiss: () -> Unit,
     onEdit: (EventDTO) -> Unit = {},
     onDelete: (EventDTO) -> Unit = {},
+    onRefresh: () -> Unit = {},
 ) {
     // Observe locale so all labels + formatted strings re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
-    val timeBlock = remember(locale, event) { formatTimeBlock(event) }
+    val deviceZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    val timeBlock = remember(locale, event, deviceZone) { formatTimeBlock(event, deviceZone) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -78,6 +82,18 @@ fun EventDetailDialog(
             }
         },
         text = {
+            // A native dialog takes focus away from the main window, whose
+            // foreground polling then pauses. Keep this read-only view fresh
+            // while its own window has focus; stop when the user leaves it.
+            val focused = LocalWindowInfo.current.isWindowFocused
+            LaunchedEffect(focused, event.id, event.startsAt) {
+                if (!focused) return@LaunchedEffect
+                onRefresh()
+                while (true) {
+                    kotlinx.coroutines.delay(15_000)
+                    onRefresh()
+                }
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -89,8 +105,11 @@ fun EventDetailDialog(
                 event.location?.takeIf { it.isNotBlank() }?.let {
                     MetaRow(label = t("event.detail.location"), value = it)
                 }
-                event.extra?.timezone?.takeIf { it.isNotBlank() }?.let {
-                    MetaRow(label = t("event.detail.timezone"), value = it)
+                if (!event.allDay) {
+                    MetaRow(label = t("event.detail.displayTimezone"), value = deviceZone.id + "\n" + t("event.detail.timezoneRestart"))
+                    event.extra?.timezone?.takeIf { it.isNotBlank() && it != deviceZone.id }?.let {
+                        MetaRow(label = t("event.detail.sourceTimezone"), value = it)
+                    }
                 }
                 event.description?.takeIf { it.isNotBlank() }?.let {
                     MetaRow(label = t("event.detail.description"), value = it)
@@ -178,31 +197,31 @@ private fun uiLocale(): java.util.Locale =
 
 private fun dateFmt() =
     DateTimeFormatter.ofPattern("yyyy-MM-dd EEEE", uiLocale()).withZone(ZoneId.systemDefault())
-private val DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneId.systemDefault())
-private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+private val DATETIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+private val TIME_FMT = DateTimeFormatter.ofPattern("HH:mm")
 
 private fun t(key: String): String = cn.bywave.calendar.desktop.i18n.I18n.t(key)
 private fun t(key: String, vars: Map<String, Any>): String =
     cn.bywave.calendar.desktop.i18n.I18n.t(key, vars)
 
-private fun formatTimeBlock(event: EventDTO): String {
+internal fun formatTimeBlock(event: EventDTO, zone: ZoneId = ZoneId.systemDefault()): String {
     val s = runCatching { Instant.parse(event.startsAt) }.getOrNull()
     val e = runCatching { Instant.parse(event.endsAt) }.getOrNull()
     if (s == null || e == null) return "${event.startsAt} – ${event.endsAt}"
 
     val dateFmt = dateFmt()
     if (event.allDay) {
-        // For all-day events the end is exclusive (next-day 00:00).
-        val displayEnd = e.atZone(ZoneId.systemDefault()).toLocalDate().minusDays(1)
-        val displayStart = s.atZone(ZoneId.systemDefault()).toLocalDate()
+        val (displayStart, displayEnd) = cn.bywave.calendar.event.eventAllDayDates(event.startsAt, event.endsAt)
+            ?: return "${event.startsAt} – ${event.endsAt}"
         val allDay = t("event.allDay")
-        return if (displayStart == displayEnd) "$allDay · ${dateFmt.format(s)}"
-               else "$allDay · ${dateFmt.format(s)} – ${dateFmt.format(displayEnd.atStartOfDay(ZoneId.systemDefault()))}"
+        return if (displayStart == displayEnd) "$allDay · ${dateFmt.format(displayStart)}"
+               else "$allDay · ${dateFmt.format(displayStart)} – ${dateFmt.format(displayEnd)}"
     }
-    val sameDay = s.atZone(ZoneId.systemDefault()).toLocalDate() ==
-                  e.atZone(ZoneId.systemDefault()).toLocalDate()
-    return if (sameDay) "${DATETIME_FMT.format(s)} – ${TIME_FMT.format(e)}"
-           else "${DATETIME_FMT.format(s)} – ${DATETIME_FMT.format(e)}"
+    val dateTime = DATETIME_FMT.withZone(zone)
+    val time = TIME_FMT.withZone(zone)
+    val sameDay = s.atZone(zone).toLocalDate() == e.atZone(zone).toLocalDate()
+    return if (sameDay) "${dateTime.format(s)} – ${time.format(e)}"
+           else "${dateTime.format(s)} – ${dateTime.format(e)}"
 }
 
 /** Tiny RRULE prettifier — we only handle the common cases (DAILY /

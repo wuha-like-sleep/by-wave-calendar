@@ -466,6 +466,10 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "留言（可选）",
   "booking.public.messagePlaceholder": "想讨论什么？",
   "booking.public.confirmButton": "确认预约",
+  "booking.manage.timezoneHint": "开放时段以所选日历的时区为准。访客会自动看到其设备时区对应的时间。",
+  "booking.public.displayTimezone": "显示时区",
+  "booking.public.deviceTimezone": "我的设备（{tz}）",
+  "booking.public.hostTimezone": "发起者（{tz}）",
   "booking.public.timezoneNote": "所有时间显示为 {tz} 时区",
 
   // booking.cancel
@@ -1498,6 +1502,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "已暂停",
   "flash.bookingLink.enabled": "已启用",
   "flash.bookingLink.deleted": "已删除",
+  "flash.bookingLink.activeBookings": "此链接仍有未结束的预约，请先暂停链接；现有预约和取消链接将继续有效。",
   "flash.bookingLink.notifyOff": "已关闭邮件通知",
   "flash.bookingLink.notifyOn": "已开启邮件通知",
   "errorPage.bookingNotFound.heading": "预约链接不存在",

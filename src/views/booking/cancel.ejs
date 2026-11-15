@@ -1,3 +1,4 @@
+<% const sourceZone = typeof bookingZone !== "undefined" ? bookingZone : "UTC"; %>
 <div class="mx-auto max-w-md">
   <div class="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm">
     <h1 class="text-xl font-semibold text-slate-900 mb-2"><%= t("booking.cancel.heading") %></h1>
@@ -10,6 +11,14 @@
       <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm text-slate-700 mb-5">
         <div class="text-xs text-slate-500"><%= t("booking.cancel.guestLabel") %></div>
         <div class="font-medium"><%= booking.guestName %> &lt;<%= booking.guestEmail %>&gt;</div>
+        <p id="booking-cancel-time" aria-live="polite" class="mt-2 font-medium" data-start="<%= booking.startsAt.toISOString() %>" data-end="<%= booking.endsAt.toISOString() %>"><%= new Intl.DateTimeFormat(currentLocale, { timeZone: sourceZone, dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }).format(booking.startsAt) %> – <%= new Intl.DateTimeFormat(currentLocale, { timeZone: sourceZone, dateStyle: "medium", timeStyle: "short", hourCycle: "h23" }).format(booking.endsAt) %></p>
+        <p id="booking-zone-note" class="mt-1 text-xs text-slate-500"><%= t("booking.public.timezoneNote", { tz: sourceZone }) %></p>
+        <label class="block text-xs text-slate-500 mt-3">
+          <span class="block mb-1"><%= t("booking.public.displayTimezone") %></span>
+          <select id="booking-timezone" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700">
+            <option value="host"><%= t("booking.public.hostTimezone", { tz: sourceZone }) %></option>
+          </select>
+        </label>
       </div>
       <form method="post" action="/book-cancel/<%= encodeURIComponent(booking.cancelToken) %>"
             data-confirm="<%= t('booking.cancel.confirmPrompt') %>" data-confirm-danger="1" data-confirm-ok="<%= t('booking.cancel.confirmOk') %>">
@@ -21,3 +30,31 @@
     <% } %>
   </div>
 </div>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+(function () {
+  const time = document.getElementById("booking-cancel-time");
+  if (!time) return;
+  const select = document.getElementById("booking-timezone"), note = document.getElementById("booking-zone-note");
+  const hostZone = <%- jsonForScript(sourceZone) %>, locale = <%- jsonForScript(currentLocale) %>;
+  const copy = <%- jsonForScript({ device: t("booking.public.deviceTimezone", { tz: "{tz}" }), host: t("booking.public.hostTimezone", { tz: "{tz}" }), note: t("booking.public.timezoneNote", { tz: "{tz}" }) }) %>;
+  let previousDevice = "", previousZone = "";
+  function refresh(force = false) {
+    const device = new Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const mode = select.value || "device", zone = mode === "host" ? hostZone : device;
+    if (!force && device === previousDevice && zone === previousZone) return;
+    previousDevice = device; previousZone = zone;
+    select.replaceChildren();
+    for (const [value, timezone, label] of [["device", device, copy.device], ["host", hostZone, copy.host]]) {
+      const option = document.createElement("option"); option.value = value; option.textContent = label.replace("{tz}", timezone); select.appendChild(option);
+    }
+    select.value = mode; note.textContent = copy.note.replace("{tz}", zone);
+    const format = new Intl.DateTimeFormat(locale, { timeZone: zone, year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" });
+    time.textContent = format.format(new Date(time.dataset.start)) + " – " + format.format(new Date(time.dataset.end));
+  }
+  select.value = ""; refresh(true);
+  select.addEventListener("change", () => refresh(true));
+  window.addEventListener("pageshow", () => refresh()); window.addEventListener("focus", () => refresh());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+  setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
+})();
+</script>

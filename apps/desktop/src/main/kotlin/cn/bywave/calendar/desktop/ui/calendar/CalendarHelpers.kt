@@ -75,6 +75,10 @@ internal fun toLocalDateTime(i: Instant?): LocalDateTime? =
 
 /** True if `event` touches the given day in the device's local TZ. */
 internal fun eventOnDay(event: EventDTO, day: LocalDate): Boolean {
+    if (event.allDay) {
+        val (first, last) = cn.bywave.calendar.event.eventAllDayDates(event.startsAt, event.endsAt) ?: return false
+        return !day.isBefore(first) && !day.isAfter(last)
+    }
     val zone = ZoneId.systemDefault()
     val s = parseInstant(event.startsAt) ?: return false
     val e = parseInstant(event.endsAt) ?: return false
@@ -109,16 +113,17 @@ private fun fmt(patternKey: String): DateTimeFormatter =
 private fun localeForFormat(): java.util.Locale =
     java.util.Locale.forLanguageTag(cn.bywave.calendar.desktop.i18n.I18n.current.value.code)
 
-private val TIME_FMT: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault())
+private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
 internal fun formatTimeRange(event: EventDTO): String {
     if (event.allDay) return t("fmt.timeAllDay")
     val s = parseInstant(event.startsAt) ?: return ""
     val e = parseInstant(event.endsAt) ?: return ""
-    val sameDay = toLocalDate(s) == toLocalDate(e)
-    return if (sameDay) "${TIME_FMT.format(s)} – ${TIME_FMT.format(e)}"
-           else "${TIME_FMT.format(s)} – …"
+    val zone = ZoneId.systemDefault()
+    val time = TIME_FMT.withZone(zone)
+    val sameDay = s.atZone(zone).toLocalDate() == e.atZone(zone).toLocalDate()
+    return if (sameDay) "${time.format(s)} – ${time.format(e)}"
+           else "${time.format(s)} – …"
 }
 
 internal fun formatWeekAnchor(weekStart: LocalDate): String {

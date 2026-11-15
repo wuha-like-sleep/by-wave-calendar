@@ -45,6 +45,7 @@ beforeEach(async () => {
   await resetDb();
   user = await makeUser("owner@example.com");
   cal = await makeCalendar(user.id);
+  await db.update(schema.calendars).set({ timezone: "Asia/Shanghai" }).where(eq(schema.calendars.id, cal.id));
   const [l] = await db.insert(schema.bookingLinks).values({
     userId: user.id, calendarId: cal.id, slug: "chat", title: "聊一聊",
     durationMinutes: 30, minNoticeHours: 2, maxDaysAhead: 14,

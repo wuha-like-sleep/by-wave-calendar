@@ -5,7 +5,7 @@ import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { env } from "../env.js";
 import { ok, okList, err } from "../lib/api_response.js";
-import { DEFAULT_AVAILABILITY, type WeeklyAvailability } from "../lib/booking.js";
+import { DEFAULT_AVAILABILITY, bookingTimeZone, bookingTimeZoneFromCalendar, deleteBookingLink, type WeeklyAvailability } from "../lib/booking.js";
 
 // JSON API for booking-link management — the owner-facing side of the
 // 预约链接 feature. Until now booking was 100% server-rendered HTML forms
@@ -68,8 +68,8 @@ function publicUrlFor(userId: string, slug: string): string {
   return `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${userId}/${slug}`;
 }
 
-function withPublicUrl(userId: string, link: schema.BookingLink) {
-  return { ...link, publicUrl: publicUrlFor(userId, link.slug) };
+function withPublicUrl(userId: string, link: schema.BookingLink, timezone: string) {
+  return { ...link, publicUrl: publicUrlFor(userId, link.slug), timezone };
 }
 
 export async function bookingRoutes(app: FastifyInstance) {
@@ -78,11 +78,12 @@ export async function bookingRoutes(app: FastifyInstance) {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const rows = await db
-      .select()
+      .select({ link: schema.bookingLinks, timezone: schema.calendars.timezone })
       .from(schema.bookingLinks)
+      .innerJoin(schema.calendars, eq(schema.calendars.id, schema.bookingLinks.calendarId))
       .where(eq(schema.bookingLinks.userId, user.id))
       .orderBy(asc(schema.bookingLinks.title));
-    return okList(req, reply, rows.map((l) => withPublicUrl(user.id, l)));
+    return okList(req, reply, rows.map((row) => withPublicUrl(user.id, row.link, bookingTimeZoneFromCalendar(row.timezone))));
   });
 
   // Create a booking link. Mirrors POST /app/booking-links but takes JSON
@@ -114,7 +115,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         .returning();
       if (!row) return err(req, reply, 500, "insert_failed", "创建预约链接失败");
       reply.code(201);
-      return ok(req, reply, withPublicUrl(user.id, row));
+      return ok(req, reply, withPublicUrl(user.id, row, await bookingTimeZone(row)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("duplicate") || msg.includes("unique")) {
@@ -144,7 +145,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         .where(and(eq(schema.bookingLinks.id, id), eq(schema.bookingLinks.userId, user.id)))
         .returning();
       if (!row) return err(req, reply, 404, "not_found", "预约链接不存在");
-      return ok(req, reply, withPublicUrl(user.id, row));
+      return ok(req, reply, withPublicUrl(user.id, row, await bookingTimeZone(row)));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
       if (msg.includes("duplicate") || msg.includes("unique")) {
@@ -158,11 +159,9 @@ export async function bookingRoutes(app: FastifyInstance) {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
-    const result = await db
-      .delete(schema.bookingLinks)
-      .where(and(eq(schema.bookingLinks.id, id), eq(schema.bookingLinks.userId, user.id)))
-      .returning({ id: schema.bookingLinks.id });
-    if (result.length === 0) return err(req, reply, 404, "not_found", "预约链接不存在");
+    const result = await deleteBookingLink(id, user.id);
+    if (result === "not_found") return err(req, reply, 404, "not_found", "预约链接不存在");
+    if (result === "active_bookings") return err(req, reply, 409, "active_bookings", "此链接仍有未结束的预约，请先暂停链接；现有预约和取消链接将继续有效。");
     return ok(req, reply, { ok: true });
   });
 
@@ -173,7 +172,8 @@ export async function bookingRoutes(app: FastifyInstance) {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
     const { id } = idParam.parse(req.params);
-    const q = z.object({ all: z.coerce.boolean().default(false) }).parse(req.query ?? {});
+    const q = z.object({ all: z.enum(["0", "1", "false", "true"]).default("0")
+      .transform((value) => value === "1" || value === "true") }).parse(req.query ?? {});
     // Ownership check — the link must belong to the caller.
     const [link] = await db
       .select({ id: schema.bookingLinks.id })

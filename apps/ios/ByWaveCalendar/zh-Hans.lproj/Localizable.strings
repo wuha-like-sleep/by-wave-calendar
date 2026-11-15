@@ -496,3 +496,8 @@
 "appLogin.browser" = "请在浏览器中继续";
 "appLogin.returning" = "正在完成登录…";
 "appLogin.help" = "完成服务器登录后会自动返回这里。";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "排期时区：%@；预约时间按设备时区显示。";
+"显示时区" = "显示时区";
+"日程时区" = "日程时区";

@@ -117,11 +117,12 @@ fun EventEditScreen(
     // 自己按错了还是 APP 把内容弄丢了，只能重填一遍。
     var showDiscardConfirm by remember { mutableStateOf(false) }
     fun requestClose() {
+        if (state.saving || state.deleting) return
         if (state.hasUnsavedChanges) showDiscardConfirm = true else onDismiss()
     }
     // 系统返回键/手势和左上角的 X 必须走同一条路，否则「点 X 会问、
     // 按返回键不会问」，等于没拦。
-    BackHandler(enabled = !state.saving && !state.deleting) { requestClose() }
+    BackHandler { requestClose() }
     // Pop the scope picker before save when editing a recurring event.
     // Non-recurring events save directly (sourceRrule is null).
     var showScopePicker by remember { mutableStateOf(false) }

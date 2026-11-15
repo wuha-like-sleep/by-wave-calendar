@@ -212,4 +212,7 @@
     <string name="quickadd_cd">Interpretar</string>
     <string name="action_undo">Deshacer</string>
     <string name="event_deleted">Eliminado</string>
+    <string name="booking_schedule_timezone">Zona de disponibilidad: %1$s. Las reservas se muestran en la zona horaria del dispositivo.</string>
+    <string name="event_detail_display_timezone">Zona de visualización</string>
+    <string name="event_detail_source_timezone">Zona del evento</string>
 </resources>

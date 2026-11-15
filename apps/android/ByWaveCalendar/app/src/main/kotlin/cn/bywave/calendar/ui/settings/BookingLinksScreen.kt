@@ -198,6 +198,7 @@ fun BookingLinksScreen(
                 links.forEach { link ->
                     BookingLinkCard(
                         link = link,
+                        calendarTimezone = state.calendars.firstOrNull { it.id == link.calendarId }?.timezone,
                         working = working,
                         onCopy = {
                             clipboard.setText(AnnotatedString(link.publicUrl ?: link.slug))
@@ -299,6 +300,7 @@ fun BookingLinksScreen(
 @Composable
 private fun BookingLinkCard(
     link: BookingLink,
+    calendarTimezone: String?,
     working: Boolean,
     onCopy: () -> Unit,
     onOpen: () -> Unit,
@@ -330,6 +332,11 @@ private fun BookingLinkCard(
         }
         Text(
             text = stringResource(R.string.booking_duration_value, link.durationMinutes),
+            style = MaterialTheme.typography.bodySmall,
+            color = mutedTextColor(),
+        )
+        Text(
+            text = stringResource(R.string.booking_schedule_timezone, cn.bywave.calendar.event.bookingTimeZone(link.timezone, calendarTimezone)),
             style = MaterialTheme.typography.bodySmall,
             color = mutedTextColor(),
         )
@@ -472,6 +479,12 @@ private fun CreateBookingLinkSheet(
                 calendars = calendars,
                 selectedId = calendarId,
                 onSelect = { calendarId = it },
+            )
+
+            Text(
+                text = stringResource(R.string.booking_schedule_timezone, cn.bywave.calendar.event.bookingTimeZone(null, calendars.firstOrNull { it.id == calendarId }?.timezone)),
+                style = MaterialTheme.typography.bodySmall,
+                color = mutedTextColor(),
             )
 
             OutlinedTextField(

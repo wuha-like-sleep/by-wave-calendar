@@ -68,13 +68,16 @@ fun MonthView(
     val month = remember(anchor) { YearMonth.from(anchor) }
     val cells = remember(month) { monthGridDays(month) }
 
-    // Pre-bucket by start day. Sort within each day by startsAt so the
-    // chip order is deterministic and matches the time grid.
-    val byDay = remember(events) {
+    // All-day spans occupy every selected date; timed events keep their start-day chip.
+    val byDay = remember(events, cells) {
         val m = mutableMapOf<LocalDate, MutableList<EventDTO>>()
         for (e in events) {
-            val d = toLocalDate(parseInstant(e.startsAt)) ?: continue
-            m.getOrPut(d) { mutableListOf() }.add(e)
+            if (e.allDay) {
+                for (d in cells.filter { eventOnDay(e, it) }) m.getOrPut(d) { mutableListOf() }.add(e)
+            } else {
+                val d = toLocalDate(parseInstant(e.startsAt)) ?: continue
+                m.getOrPut(d) { mutableListOf() }.add(e)
+            }
         }
         for ((_, list) in m) list.sortBy { it.startsAt }
         m

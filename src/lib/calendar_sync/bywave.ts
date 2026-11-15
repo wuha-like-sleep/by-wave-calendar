@@ -4,13 +4,17 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "../../db/client.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../event_zone.js";
 import { seriesStartsBetween, exdateMillis } from "../rrule_expand.js";
-import { notifyEventCancellation } from "../event_cancel.js";
+import { markEventBookingsCancelled, notifyEventCancellation } from "../event_cancel.js";
 import { contentSchema, SyncConflictError, SyncUnavailableError, localOrigin, type SyncContent, type SyncItem } from "./model.js";
 import type { SyncSide } from "./engine.js";
 
 type Extra = Record<string, unknown>;
 const extraOf = (row: schema.Event): Extra => row.extra && typeof row.extra === "object" && !Array.isArray(row.extra) ? row.extra as Extra : {};
 export class ByWaveCalendar implements SyncSide {
+  // A batch can change several occurrences of the same master. Its own
+  // committed exclusions invalidate the original row hash, but must not make
+  // every following occurrence wait for another synchronization pass.
+  private seriesChanges = new Map<string, { before: schema.Event; after: schema.Event }>();
   constructor(private readonly userId: string, private readonly calendarId: string, private readonly pairId: string, private readonly from: Date, private readonly to: Date) {}
   private async calendar() {
     const [cal] = await db.select().from(schema.calendars).where(and(eq(schema.calendars.id, this.calendarId), eq(schema.calendars.ownerId, this.userId)));
@@ -38,7 +42,22 @@ export class ByWaveCalendar implements SyncSide {
     const excluded = exdateMillis(row.exdates as string[] | null);
     return starts.filter(d => !excluded.has(d.getTime()));
   }
+  private matchesRevision(row: schema.Event, timezone: string, current: SyncItem, at?: Date): boolean {
+    const actual = this.item(row, timezone, at).revision;
+    if (actual === current.revision) return true;
+    const own = at && this.seriesChanges.get(row.id);
+    // Only accept our exact last committed row. An outside edit, even to
+    // another occurrence or metadata, must still stop the stale mutation.
+    return !!own && actual === this.item(own.after, timezone, at).revision
+      && current.revision === this.item(own.before, timezone, at).revision;
+  }
+  private rememberSeriesChange(change: { before: schema.Event; after: schema.Event } | undefined) {
+    if (change) this.seriesChanges.set(change.before.id, {
+      before: this.seriesChanges.get(change.before.id)?.before ?? change.before, after: change.after,
+    });
+  }
   async snapshot(tracked: string[]): Promise<Map<string, SyncItem>> {
+    this.seriesChanges.clear();
     const cal = await this.calendar();
     const rows = await db.select().from(schema.events).where(eq(schema.events.calendarId, this.calendarId)).limit(20001);
     if (rows.length > 20000) throw new SyncUnavailableError("calendar_too_large");
@@ -83,6 +102,7 @@ export class ByWaveCalendar implements SyncSide {
   async save(content: SyncContent, current?: SyncItem, origin?: string): Promise<SyncItem> {
     content = contentSchema.parse(content);
     const cal = await this.calendar();
+    let seriesChange: { before: schema.Event; after: schema.Event } | undefined;
     const saved = await db.transaction(async tx => {
       const fields = { summary: content.summary, description: content.description, location: content.location,
         startsAt: new Date(content.startsAt), endsAt: new Date(content.endsAt), allDay: content.allDay,
@@ -101,37 +121,45 @@ export class ByWaveCalendar implements SyncSide {
       const [alias] = at ? await tx.select().from(schema.events).where(and(eq(schema.events.calendarId, this.calendarId), eq(schema.events.uid, aliasUid))).for("update") : [];
       const [original] = alias ? [] : await tx.select().from(schema.events).where(and(eq(schema.events.calendarId, this.calendarId), eq(schema.events.id, id!))).for("update");
       const row = alias ?? original;
-      if (!row || row.deletedAt || this.item(row, cal.timezone, alias ? undefined : at ? new Date(at) : undefined).revision !== current.revision) throw new SyncConflictError();
+      if (!row || row.deletedAt || !this.matchesRevision(row, cal.timezone, current, alias ? undefined : at ? new Date(at) : undefined)) throw new SyncConflictError();
       if (at && !alias) {
         const exdates = [...new Set([...(Array.isArray(row.exdates) ? row.exdates as string[] : []), at])];
-        await tx.update(schema.events).set({ exdates, updatedAt: new Date() }).where(eq(schema.events.id, row.id));
+        const [master] = await tx.update(schema.events).set({ exdates, updatedAt: new Date() }).where(eq(schema.events.id, row.id)).returning();
         const [created] = await tx.insert(schema.events).values({ ...fields, calendarId: this.calendarId, uid: aliasUid,
           extra: { ...extraOf(row), outlookPairId: this.pairId, outlookOccurrenceKey: key } }).returning();
+        seriesChange = { before: row, after: master! };
         return this.item(created!, cal.timezone);
       }
       const [updated] = await tx.update(schema.events).set(fields).where(eq(schema.events.id, row.id)).returning();
       return this.item(updated!, cal.timezone);
     });
+    this.rememberSeriesChange(seriesChange);
     void pushEventChanged(this.userId, saved.id.split("@")[0]!, "event.updated").catch(() => undefined);
     return saved;
   }
   async remove(current: SyncItem): Promise<void> {
     const cal = await this.calendar();
+    let seriesChange: { before: schema.Event; after: schema.Event } | undefined;
     const deleted = await db.transaction(async tx => {
       const [id, at] = current.id.split("@");
       const [alias] = at ? await tx.select().from(schema.events).where(and(eq(schema.events.calendarId, this.calendarId), eq(schema.events.uid, localOrigin(this.pairId, "occurrence:" + current.id)))).for("update") : [];
       const [original] = alias ? [] : await tx.select().from(schema.events).where(and(eq(schema.events.calendarId, this.calendarId), eq(schema.events.id, id!))).for("update");
       const row = alias ?? original;
-      if (!row || row.deletedAt) return null;
-      if (this.item(row, cal.timezone, alias ? undefined : at ? new Date(at) : undefined).revision !== current.revision) throw new SyncConflictError();
+      if (!row) return null;
+      if (row.deletedAt) { await markEventBookingsCancelled(tx, row.id, row.deletedAt); return null; }
+      if (!this.matchesRevision(row, cal.timezone, current, alias ? undefined : at ? new Date(at) : undefined)) throw new SyncConflictError();
       if (at && !alias) {
         const exdates = [...new Set([...(Array.isArray(row.exdates) ? row.exdates as string[] : []), at])];
-        await tx.update(schema.events).set({ exdates, updatedAt: new Date() }).where(eq(schema.events.id, row.id));
+        const [master] = await tx.update(schema.events).set({ exdates, updatedAt: new Date() }).where(eq(schema.events.id, row.id)).returning();
+        seriesChange = { before: row, after: master! };
         return null;
       }
-      await tx.update(schema.events).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(schema.events.id, row.id));
+      const now = new Date();
+      await tx.update(schema.events).set({ deletedAt: now, updatedAt: now }).where(eq(schema.events.id, row.id));
+      await markEventBookingsCancelled(tx, row.id, now);
       return row;
     });
+    this.rememberSeriesChange(seriesChange);
     if (!deleted) void pushEventChanged(this.userId, current.id.split("@")[0]!, "event.updated").catch(() => undefined);
     if (deleted) {
       const [user] = await db.select().from(schema.users).where(eq(schema.users.id, this.userId));

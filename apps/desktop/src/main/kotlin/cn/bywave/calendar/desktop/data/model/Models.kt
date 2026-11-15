@@ -36,9 +36,8 @@ data class EventExtraDTO(
     val category: String? = null,
     val url: String? = null,
     val meetingPassword: String? = null,
-    // Per-event reminders, edited on web. Kept as raw JSON so the desktop
-    // round-trips them untouched — the server REPLACES extra wholesale on
-    // PATCH, so dropping this field here silently wiped web-set alarms.
+    // Per-event reminders, edited on web. Retained for event duplication;
+    // ordinary edits omit them and rely on the server's shallow merge.
     val alarms: kotlinx.serialization.json.JsonElement? = null,
 )
 
@@ -141,8 +140,8 @@ data class EventExtra(
     val timezone: String? = null,
     val attendees: List<String>? = null,
     val category: String? = null,
-    val url: String? = null,
-    val meetingPassword: String? = null,
+    val url: cn.bywave.calendar.event.EventStringField? = null,
+    val meetingPassword: cn.bywave.calendar.event.EventStringField? = null,
     val alarms: kotlinx.serialization.json.JsonElement? = null,
 )
 
@@ -235,6 +234,8 @@ data class BookingLink(
     /** Server-rendered public scheduling page URL (e.g.
      *  https://server/book/<slug>). Shown with a Copy button + open-in-browser. */
     val publicUrl: String,
+    /** Availability follows the initiating calendar; booked instants use the device zone. */
+    val timezone: String? = null,
 )
 
 /** A single guest booking for a link, from

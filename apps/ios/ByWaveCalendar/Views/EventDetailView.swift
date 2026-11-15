@@ -18,6 +18,8 @@ struct EventDetailView: View {
 
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var editing = false
     @State private var editScope: RecurringScope? = nil
@@ -85,6 +87,10 @@ struct EventDetailView: View {
                     }
                     LabeledContent("结束") {
                         Text(absoluteTime(current.endsAt))
+                    }
+                    LabeledContent("显示时区", value: deviceTimeZone.identifier)
+                    if let sourceZone = current.extra?.timezone, !sourceZone.isEmpty, sourceZone != deviceTimeZone.identifier {
+                        LabeledContent("日程时区", value: sourceZone)
                     }
                     LabeledContent("时长") {
                         Text(durationLabel)
@@ -235,6 +241,12 @@ struct EventDetailView: View {
                 .disabled(deleting)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { deviceTimeZone = DateFormatters.refreshDeviceTimeZone() }
+        }
         .navigationTitle("事件详情")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -324,6 +336,7 @@ struct EventDetailView: View {
 
     private func absoluteTime(_ d: Date) -> String {
         let f = DateFormatter(); f.locale = Locale.current
+        f.timeZone = deviceTimeZone
         f.setLocalizedDateFormatFromTemplate("yMMMdHm")  // 24h time, localized field order
         return f.string(from: d)
     }

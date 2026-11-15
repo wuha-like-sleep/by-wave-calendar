@@ -478,6 +478,10 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "Nachricht (optional)",
   "booking.public.messagePlaceholder": "Worum geht es?",
   "booking.public.confirmButton": "Buchung bestätigen",
+  "booking.manage.timezoneHint": "Die Verfügbarkeit richtet sich nach der Zeitzone des ausgewählten Kalenders. Besucher sehen die Zeiten automatisch in der Zeitzone ihres Geräts.",
+  "booking.public.displayTimezone": "Angezeigte Zeitzone",
+  "booking.public.deviceTimezone": "Mein Gerät ({tz})",
+  "booking.public.hostTimezone": "Veranstalter ({tz})",
   "booking.public.timezoneNote": "Alle Zeiten in {tz} angezeigt",
 
   // booking.cancel
@@ -1511,6 +1515,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "Pausiert",
   "flash.bookingLink.enabled": "Aktiviert",
   "flash.bookingLink.deleted": "Gelöscht",
+  "flash.bookingLink.activeBookings": "Dieser Link hat bevorstehende oder laufende Buchungen. Pausieren Sie ihn, damit bestehende Buchungen und Stornierungslinks gültig bleiben.",
   "flash.bookingLink.notifyOff": "E-Mail-Benachrichtigungen deaktiviert",
   "flash.bookingLink.notifyOn": "E-Mail-Benachrichtigungen aktiviert",
   "errorPage.bookingNotFound.heading": "Buchungslink existiert nicht",

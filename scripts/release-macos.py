@@ -139,6 +139,7 @@ def build(args):
     env["JAVA_HOME"] = str(java)
     env["PATH"] = str(java / "bin") + os.pathsep + env["PATH"]
     run(DESKTOP / "gradlew", "-p", DESKTOP, "-I", init,
+        "--project-cache-dir", stage / "project-cache",
         "test", "createDistributable", "--no-daemon", env=env)
     app = stage / "build/compose/binaries/main/app/ByWaveCalendar.app"
     for jar in sorted(app.rglob("*.jar")):

@@ -490,3 +490,8 @@
 "appLogin.browser" = "Continuez dans le navigateur";
 "appLogin.returning" = "Connexion en cours…";
 "appLogin.help" = "Terminez la connexion à votre serveur pour revenir automatiquement ici.";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "Fuseau des disponibilités : %@. Les réservations utilisent le fuseau de votre appareil.";
+"显示时区" = "Fuseau affiché";
+"日程时区" = "Fuseau de l’événement";

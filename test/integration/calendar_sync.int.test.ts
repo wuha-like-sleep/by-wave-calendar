@@ -79,6 +79,39 @@ describe("ByWave adapter", () => {
     const row = await makeEvent(calendarId, "bad"); await db.update(schema.events).set({ rrule: "THIS IS NOT A RULE" }).where(eq(schema.events.id, row.id));
     await expect(adapter().snapshot([])).rejects.toThrow("unsupported_recurrence");
   });
+  it("deletes a recurring batch from one snapshot without treating its own exclusions as conflicts", async () => {
+    const row = await makeEvent(calendarId, "delete-series");
+    await db.update(schema.events).set({ startsAt: new Date("2026-06-01T09:00:00Z"), endsAt: new Date("2026-06-01T10:00:00Z"), rrule: "FREQ=DAILY;COUNT=8" }).where(eq(schema.events.id, row.id));
+    const a = adapter(), items = [...(await a.snapshot([])).values()];
+    expect(items).toHaveLength(8);
+    for (const item of items) await a.remove(item);
+    expect((await a.snapshot(items.map(i => i.id))).size).toBe(0);
+    expect((await db.select().from(schema.events).where(eq(schema.events.id, row.id)))[0]!.exdates).toHaveLength(8);
+  });
+  it("applies multiple recurring edits and deletions in one pass", async () => {
+    const row = await makeEvent(calendarId, "edit-series");
+    await db.update(schema.events).set({ startsAt: new Date("2026-06-01T09:00:00Z"), endsAt: new Date("2026-06-01T10:00:00Z"), rrule: "FREQ=DAILY;COUNT=3" }).where(eq(schema.events.id, row.id));
+    const a = adapter(), items = [...(await a.snapshot([])).values()];
+    await a.save({ ...items[0]!.content, summary: "First exception" }, items[0]);
+    await a.remove(items[1]!);
+    await a.save({ ...items[2]!.content, summary: "Last exception" }, items[2]);
+    const result = await a.snapshot(items.map(i => i.id));
+    expect(result.size).toBe(2);
+    expect(result.get(items[0]!.id)!.content.summary).toBe("First exception");
+    expect(result.get(items[2]!.id)!.content.summary).toBe("Last exception");
+  });
+  it("still rejects an outside edit between mutations of the same series", async () => {
+    const row = await makeEvent(calendarId, "concurrent-series");
+    await db.update(schema.events).set({ startsAt: new Date("2026-06-01T09:00:00Z"), endsAt: new Date("2026-06-01T10:00:00Z"), rrule: "FREQ=DAILY;COUNT=3" }).where(eq(schema.events.id, row.id));
+    const a = adapter(), items = [...(await a.snapshot([])).values()];
+    await a.remove(items[0]!);
+    await db.update(schema.events).set({ summary: "Edited on another device" }).where(eq(schema.events.id, row.id));
+    await expect(a.remove(items[1]!)).rejects.toThrow("sync_conflict");
+    await expect(a.save({ ...items[2]!.content, summary: "Stale edit" }, items[2])).rejects.toThrow("sync_conflict");
+    const current = (await db.select().from(schema.events).where(eq(schema.events.id, row.id)))[0]!;
+    expect(current.summary).toBe("Edited on another device");
+    expect(current.exdates).toHaveLength(1);
+  });
   it("never reads another user's calendar", async () => {
     const other = await makeUser("other@example.com");
     await expect(new ByWaveCalendar(other.id, calendarId, "p", from, to).snapshot([])).rejects.toThrow("calendar_unavailable");
@@ -211,6 +244,82 @@ describe("Microsoft authorization and worker", () => {
     await db.update(schema.calendarSyncPairs).set({ enabled: true, error: "rate_limited" }).where(eq(schema.calendarSyncPairs.id, pair!.id));
     await requestCalendarSync(calendarId); current = (await db.select().from(schema.calendarSyncPairs))[0]!;
     expect(current.nextRunAt).toEqual(later); expect(current.requestVersion).toBe(1);
+  });
+  it("retries a concurrent deletion revision promptly while honoring Microsoft's throttle", async () => {
+    const { syncAccount } = await import("../../src/lib/calendar_sync/service.js");
+    const { SyncConflictError } = await import("../../src/lib/calendar_sync/model.js");
+    await account(); const row = await makeEvent(calendarId, "race");
+    const item = (await adapter().snapshot([row.id])).get(row.id)!;
+    await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "remote", remoteName: "Remote",
+      state: { ...emptyState(), links: [{ leftId: row.id, rightId: "gone", base: item.content }] } });
+    let throttled = false;
+    vi.spyOn(ByWaveCalendar.prototype, "remove").mockRejectedValue(new SyncConflictError());
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith("/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+      if (throttled) return new Response(null, { status: 429, headers: { "Retry-After": "120" } });
+      if (url.includes("/calendarView")) return Response.json({ value: [] });
+      if (url.includes("/events/")) return new Response(null, { status: 404 });
+      return Response.json({ canEdit: true });
+    }));
+    try {
+      const before = Date.now(); await syncAccount(uid);
+      let pair = (await db.select().from(schema.calendarSyncPairs))[0]!;
+      expect(pair.error).toBe("calendar_changed_retry");
+      expect(pair.nextRunAt.getTime()).toBeGreaterThanOrEqual(before + 2_000);
+      expect(pair.nextRunAt.getTime()).toBeLessThanOrEqual(Date.now() + 2_000);
+      throttled = true; await db.update(schema.calendarSyncPairs).set({ nextRunAt: new Date(0) });
+      const throttleAt = Date.now(); await syncAccount(uid);
+      pair = (await db.select().from(schema.calendarSyncPairs))[0]!;
+      expect(pair.nextRunAt.getTime()).toBeGreaterThanOrEqual(throttleAt + 120_000);
+      expect((await db.select().from(schema.events).where(eq(schema.events.id, row.id)))[0]!.deletedAt).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("selects due accounts without processing leased or disabled accounts", async () => {
+    const { startCalendarSyncScheduler } = await import("../../src/lib/calendar_sync/service.js");
+    await account();
+    await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "ready", remoteName: "Ready", state: emptyState() });
+    for (const kind of ["leased", "disabled"]) {
+      const other = await makeUser(kind + "@example.com"), cal = await makeCalendar(other.id);
+      if (kind === "disabled") await db.update(schema.users).set({ disabledAt: new Date() }).where(eq(schema.users.id, other.id));
+      await db.insert(schema.calendarSyncAccounts).values({ userId: other.id, accountId: kind, label: kind,
+        clientId: "00000000-0000-4000-a000-000000000000", refreshToken: sealToken(other.id, "refresh-secret"),
+        ...(kind === "leased" ? { lease: "00000000-0000-4000-a000-000000000001", leaseUntil: new Date(Date.now() + 120_000) } : {}) });
+      await db.insert(schema.calendarSyncPairs).values({ userId: other.id, calendarId: cal.id, remoteId: kind, remoteName: kind, state: emptyState() });
+    }
+    const fetcher = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith("/token")) return Response.json({ access_token: "access", expires_in: 3600 });
+      return Response.json(url.includes("/calendarView") ? { value: [] } : { canEdit: true });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const warn = vi.fn(), stop = startCalendarSyncScheduler(warn);
+    try {
+      await vi.waitFor(async () => {
+        const pair = (await db.select().from(schema.calendarSyncPairs).where(eq(schema.calendarSyncPairs.userId, uid)))[0]!;
+        expect(pair.lastSyncedAt).not.toBeNull();
+        expect((await db.select().from(schema.calendarSyncAccounts).where(eq(schema.calendarSyncAccounts.userId, uid)))[0]!.lease).toBeNull();
+      });
+      expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith("/token"))).toHaveLength(1);
+      expect(warn).not.toHaveBeenCalled();
+      expect((await db.select().from(schema.calendarSyncPairs)).filter(p => p.userId !== uid).every(p => p.lastSyncedAt === null)).toBe(true);
+    } finally { stop(); vi.unstubAllGlobals(); }
+  });
+  it("does not let an expired token-refresh worker overwrite the new lease owner's status", async () => {
+    const { syncAccount } = await import("../../src/lib/calendar_sync/service.js");
+    await account();
+    const [pair] = await db.insert(schema.calendarSyncPairs).values({ userId: uid, calendarId, remoteId: "remote", remoteName: "Remote", state: emptyState() }).returning();
+    const winnerNextRun = new Date(Date.now() + 30_000);
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async () => {
+      await db.update(schema.calendarSyncAccounts).set({ lease: "00000000-0000-4000-a000-000000000099" }).where(eq(schema.calendarSyncAccounts.userId, uid));
+      await db.update(schema.calendarSyncPairs).set({ nextRunAt: winnerNextRun, error: null, lastSyncedAt: new Date() }).where(eq(schema.calendarSyncPairs.id, pair!.id));
+      return Response.json({ access_token: "access", refresh_token: "rotated", expires_in: 3600 });
+    }));
+    try {
+      await expect(syncAccount(uid)).rejects.toThrow("sync_lease_lost");
+      const current = (await db.select().from(schema.calendarSyncPairs))[0]!;
+      expect(current.nextRunAt).toEqual(winnerNextRun); expect(current.error).toBeNull();
+    } finally { vi.unstubAllGlobals(); }
   });
   it("does not overwrite a deletion queued while an older snapshot is syncing", async () => {
     const { syncAccount } = await import("../../src/lib/calendar_sync/service.js");

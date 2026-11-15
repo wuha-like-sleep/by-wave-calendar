@@ -212,4 +212,7 @@
     <string name="quickadd_cd">Analyser</string>
     <string name="action_undo">Annuler</string>
     <string name="event_deleted">Supprimé</string>
+    <string name="booking_schedule_timezone">Fuseau des disponibilités : %1$s. Les réservations utilisent le fuseau de votre appareil.</string>
+    <string name="event_detail_display_timezone">Fuseau affiché</string>
+    <string name="event_detail_source_timezone">Fuseau de l’événement</string>
 </resources>

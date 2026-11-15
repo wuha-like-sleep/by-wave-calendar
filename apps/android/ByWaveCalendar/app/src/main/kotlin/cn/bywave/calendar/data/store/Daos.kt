@@ -4,6 +4,7 @@
 package cn.bywave.calendar.data.store
 
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -22,6 +23,9 @@ interface EventDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(rows: List<EventEntity>)
+
+    @Delete
+    suspend fun deleteRows(rows: List<EventEntity>)
 
     @Query("DELETE FROM events WHERE profileId = :profileId")
     suspend fun clearProfile(profileId: String)

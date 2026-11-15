@@ -478,6 +478,10 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "Message (facultatif)",
   "booking.public.messagePlaceholder": "De quoi s'agit-il ?",
   "booking.public.confirmButton": "Confirmer la réservation",
+  "booking.manage.timezoneHint": "Les disponibilités utilisent le fuseau du calendrier sélectionné. Les visiteurs voient automatiquement les heures dans le fuseau de leur appareil.",
+  "booking.public.displayTimezone": "Fuseau horaire affiché",
+  "booking.public.deviceTimezone": "Mon appareil ({tz})",
+  "booking.public.hostTimezone": "Organisateur ({tz})",
   "booking.public.timezoneNote": "Toutes les heures affichées en {tz}",
 
   // booking.cancel
@@ -1511,6 +1515,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "Mis en pause",
   "flash.bookingLink.enabled": "Activé",
   "flash.bookingLink.deleted": "Supprimé",
+  "flash.bookingLink.activeBookings": "Ce lien comporte des réservations à venir ou en cours. Mettez-le en pause pour conserver les réservations et leurs liens d’annulation.",
   "flash.bookingLink.notifyOff": "Notifications par e-mail désactivées",
   "flash.bookingLink.notifyOn": "Notifications par e-mail activées",
   "errorPage.bookingNotFound.heading": "Lien de réservation introuvable",

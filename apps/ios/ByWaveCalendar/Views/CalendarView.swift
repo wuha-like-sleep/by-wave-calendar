@@ -24,6 +24,7 @@ private enum ViewMode: String, CaseIterable, Identifiable {
 struct CalendarView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var mode: ViewMode = .day
     @State private var anchor: Date = Calendar.current.startOfDay(for: Date())
@@ -67,6 +68,7 @@ struct CalendarView: View {
                 navBar
                 ZStack(alignment: .top) {
                     contentForMode
+                        .id(deviceTimeZone.identifier)
                         // Without these the WeekView's outer VStack would
                         // be vertically centered inside the ZStack (default
                         // .center alignment), pushing the date headers and
@@ -108,10 +110,15 @@ struct CalendarView: View {
                 await load(force: false)
                 startPolling()
             }
+            .environment(\.timeZone, deviceTimeZone)
+            .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+                deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
+            }
             .onDisappear { stopPolling() }
             .onChange(of: scenePhase) { _, new in
                 // Returning to foreground → refresh + restart polling.
                 if new == .active {
+                    deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
                     Task { await load(force: false) }
                     startPolling()
                 } else {

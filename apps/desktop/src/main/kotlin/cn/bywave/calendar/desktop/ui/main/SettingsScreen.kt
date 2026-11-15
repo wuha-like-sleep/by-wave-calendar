@@ -1283,6 +1283,12 @@ private fun BookingSection(
                             }
                         }
                         Text(
+                            cn.bywave.calendar.desktop.i18n.I18n.t("booking.scheduleTimezone", mapOf("zone" to
+                                cn.bywave.calendar.event.bookingTimeZone(link.timezone, calendars.firstOrNull { it.id == link.calendarId }?.timezone))),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
                             link.publicUrl,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1489,6 +1495,13 @@ private fun BookingCreateDialog(
                         }
                     }
                 }
+
+                Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t("booking.scheduleTimezone", mapOf("zone" to
+                        cn.bywave.calendar.event.bookingTimeZone(null, calendars.firstOrNull { it.id == calendarId }?.timezone))),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
                 // Numeric fields. Kept as text fields with numeric parsing
                 // (canSubmit gates bad input) rather than steppers — simpler

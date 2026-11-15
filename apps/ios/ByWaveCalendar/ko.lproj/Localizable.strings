@@ -490,3 +490,8 @@
 "appLogin.browser" = "브라우저에서 계속하세요";
 "appLogin.returning" = "로그인을 완료하는 중…";
 "appLogin.help" = "서버 로그인을 마치면 자동으로 돌아옵니다.";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "예약 가능 시간대: %@. 예약된 시간은 기기 시간대로 표시됩니다.";
+"显示时区" = "표시 시간대";
+"日程时区" = "일정 시간대";

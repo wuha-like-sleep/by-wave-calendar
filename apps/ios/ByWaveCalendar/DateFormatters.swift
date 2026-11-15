@@ -10,7 +10,7 @@
 //
 // DateFormatter is documented as "thread-safe to use a single instance
 // across threads as long as you don't mutate it" — these are configured
-// once at load-time and never touched after, so safe.
+// once per locale/zone and never mutated after publication, so safe.
 
 import Foundation
 
@@ -27,14 +27,14 @@ enum DateFormatters {
 
     /// Same-day event time. 24-hour + colon reads the same everywhere, so a
     /// fixed pattern is fine (only the locale's numerals differ).
-    static let timeShort: DateFormatter = makeFixed("HH:mm")
+    static var timeShort: DateFormatter { localFormatter("HH:mm", template: false) }
     /// Month/day + time for multi-day events; CLDR orders the fields per
     /// locale, "H" keeps 24-hour time.
-    static let dateTimeShort: DateFormatter = makeTemplate("MdHm")
+    static var dateTimeShort: DateFormatter { localFormatter("MdHm", template: true) }
     /// Month + day ("5月25日" / "May 25"). Month-view day sheet + all-day pill.
-    static let monthDay: DateFormatter = makeTemplate("MMMd")
+    static var monthDay: DateFormatter { localFormatter("MMMd", template: true) }
     /// Abbreviated weekday for week-view headers ("周一" / "Mon" / "Lun").
-    static let weekdayShort: DateFormatter = makeFixed("EEE")
+    static var weekdayShort: DateFormatter { localFormatter("EEE", template: false) }
 
     /// 全天事件专用：模板一样，但按 UTC 渲染。
     /// 全天事件的 startsAt 存的是「那一天的 UTC 午夜」，用本地时区去渲染，
@@ -56,6 +56,26 @@ enum DateFormatters {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    /// Foundation caches the system zone. Clear it on OS notifications and
+    /// foregrounding; this does not alter the user's timezone or app override.
+    static func refreshDeviceTimeZone() -> TimeZone {
+        NSTimeZone.resetSystemTimeZone()
+        return NSTimeZone.default
+    }
+
+    private static let localCache = NSCache<NSString, DateFormatter>()
+
+    private static func localFormatter(_ pattern: String, template: Bool) -> DateFormatter {
+        let zone = NSTimeZone.default
+        let locale = Locale.current
+        let key = "\(zone.identifier)|\(locale.identifier)|\(template)|\(pattern)" as NSString
+        if let cached = localCache.object(forKey: key) { return cached }
+        let formatter = template ? makeTemplate(pattern) : makeFixed(pattern)
+        formatter.timeZone = zone
+        localCache.setObject(formatter, forKey: key)
+        return formatter
+    }
 
     /// Fixed pattern under the app's current locale (honors the in-app
     /// AppleLanguages override, which a language change relaunch applies).

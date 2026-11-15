@@ -87,7 +87,7 @@ fun AgendaView(
         events
             .mapNotNull { ev ->
                 val ins = parseInstant(ev.startsAt) ?: return@mapNotNull null
-                val date = toLocalDate(ins) ?: return@mapNotNull null
+                val date = cn.bywave.calendar.event.eventFormDateTime(ev.startsAt, ev.allDay)?.toLocalDate() ?: return@mapNotNull null
                 Triple(ev, ins, date)
             }
             .sortedBy { it.second }

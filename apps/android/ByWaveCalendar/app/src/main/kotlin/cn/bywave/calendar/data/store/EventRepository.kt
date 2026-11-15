@@ -16,6 +16,8 @@ import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import cn.bywave.calendar.sync.ConfirmedEventDeletion
+import cn.bywave.calendar.sync.SnapshotMutationGate
 import cn.bywave.calendar.sync.Reminders
 import cn.bywave.calendar.sync.SystemCalendarMirror
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,36 +71,71 @@ class EventRepository(
      * without blocking the existing cached UI.
      */
     private val fetchMutex = Mutex()
+    private val snapshotGate = SnapshotMutationGate()
 
     suspend fun fetchAndCache(fromIso: String, toIso: String): Unit = fetchMutex.withLock {
         val profile = profiles.active() ?: error("not signed in")
+        val revision = snapshotGate.capture()
         val client = ApiClient.forProfile(profile, profiles)
         val resp = client.api.events(from = fromIso, to = toIso)
-        if (profiles.active()?.id != profile.id) return@withLock
-        currentCoroutineContext().ensureActive()
-        db.withTransaction {
-            if (profiles.active()?.id != profile.id) return@withTransaction
-            db.eventDao().replaceForProfile(
-                profile.id,
-                resp.events.map { EventEntity.from(it, profile.id, json) },
-            )
-            db.calendarDao().replaceForProfile(
-                profile.id,
-                resp.calendars.map { CalendarEntity.from(it, profile.id) },
-            )
+        snapshotGate.applySnapshot(revision, relevant = { profiles.active()?.id == profile.id }) {
+            currentCoroutineContext().ensureActive()
+            val previousEvents = db.withTransaction {
+                // Alarm identity needs no optional metadata. A corrupt old
+                // extraJson must not prevent replacing the cache.
+                val previous = db.eventDao().listForProfile(profile.id)
+                    .map { it.copy(extraJson = null).toDto(json) }
+                db.eventDao().replaceForProfile(
+                    profile.id,
+                    resp.events.map { EventEntity.from(it, profile.id, json) },
+                )
+                db.calendarDao().replaceForProfile(
+                    profile.id,
+                    resp.calendars.map { CalendarEntity.from(it, profile.id) },
+                )
+                previous
+            }
+            // Finish an already-started application under the gate. A delete
+            // queued during this pass runs afterwards and removes its event
+            // from BOTH the new cache and the freshly scheduled side effects.
+            // Cancelling the old list also catches remotely deleted/moved
+            // events which no longer exist in the replacement cache.
+            runCatching { reminders.cancelAll(profile, previousEvents) }
+            currentCoroutineContext().ensureActive()
+            if (profiles.active()?.id != profile.id) return@applySnapshot
+            val current = prefs.current()
+            val selectedCalendars = if (current.mirrorToSystemCalendar) prefs.selectedCalendars(profile.id) else null
+            currentCoroutineContext().ensureActive()
+            if (profiles.active()?.id != profile.id) return@applySnapshot
+            if (current.mirrorToSystemCalendar) {
+                runCatching { mirror.mirror(profile, resp.calendars, resp.events, selectedCalendars) }
+            }
+            if (current.remindersEnabled) {
+                runCatching { reminders.reschedule(profile, resp.events, current.reminderLeadMinutes) }
+            }
         }
-        currentCoroutineContext().ensureActive()
-        if (profiles.active()?.id != profile.id) return@withLock
+    }
 
-        // Ambient sync (v0.6) — opt-in via Settings. Each is gated on
-        // its own runtime permission inside the helper, so calling
-        // them unconditionally is safe (no-ops when off / unpermitted).
+    /** Remove a server-confirmed delete immediately, including its reminders
+     * and local system-calendar copy. A slow GET never owns this short gate;
+     * an already-applying snapshot finishes first and cannot undo this removal. */
+    suspend fun applyConfirmedDeletion(profile: Profile, deletion: ConfirmedEventDeletion) = snapshotGate.mutate {
+        val removed = db.withTransaction {
+            val rows = db.eventDao().listForProfile(profile.id)
+                .filter { deletion.removes(it.id, it.startsAt) }
+            if (rows.isNotEmpty()) db.eventDao().deleteRows(rows)
+            rows.map { it.copy(extraJson = null).toDto(json) }
+        }
+        runCatching { reminders.cancelAll(profile, removed) }
+        if (profiles.active()?.id != profile.id) return@mutate
         val current = prefs.current()
         if (current.mirrorToSystemCalendar) {
-            runCatching { mirror.mirror(profile, resp.calendars, resp.events, prefs.selectedCalendars(profile.id)) }
-        }
-        if (current.remindersEnabled) {
-            runCatching { reminders.reschedule(profile, resp.events, current.reminderLeadMinutes) }
+            val selected = prefs.selectedCalendars(profile.id)
+            val events = db.eventDao().listForProfile(profile.id).map { it.toDto(json) }
+            val calendars = db.calendarDao().listForProfile(profile.id).map { it.toDto() }
+            currentCoroutineContext().ensureActive()
+            if (profiles.active()?.id != profile.id) return@mutate
+            runCatching { mirror.mirror(profile, calendars, events, selected) }
         }
     }
 
@@ -119,10 +156,10 @@ class EventRepository(
      * 取消提醒必须能重建出当初的 PendingIntent，所以要先从 Room 把事件
      * 读出来再操作。两个动作各自 runCatching：镜像失败不该让提醒也不生效。
      */
-    suspend fun applySyncPreferences(throwOnCalendarError: Boolean = false) {
-        val profile = profiles.active() ?: return
+    suspend fun applySyncPreferences(throwOnCalendarError: Boolean = false) = snapshotGate.exclusively {
+        val profile = profiles.active() ?: return@exclusively
         val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
-            .getOrElse { return }
+            .getOrElse { return@exclusively }
         val current = prefs.current()
 
         if (current.remindersEnabled) {
@@ -143,7 +180,7 @@ class EventRepository(
     }
 
     /** Wipe just one profile's cache (used when removing that account). */
-    suspend fun wipeProfile(profileId: String): Unit = fetchMutex.withLock {
+    suspend fun wipeProfile(profileId: String): Unit = snapshotGate.mutate {
         AppDatabase.wipeProfile(context, profileId)
     }
 
@@ -160,7 +197,7 @@ class EventRepository(
      * 取消提醒需要能重建出当初的 PendingIntent，所以必须在清 Room **之前**
      * 把事件读出来。
      */
-    suspend fun wipeProfileFully(profile: cn.bywave.calendar.data.auth.Profile): Unit = fetchMutex.withLock {
+    suspend fun wipeProfileFully(profile: cn.bywave.calendar.data.auth.Profile): Unit = snapshotGate.mutate {
         val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
             .getOrElse { emptyList() }
         runCatching { reminders.cancelAll(profile, events) }
@@ -169,7 +206,7 @@ class EventRepository(
     }
 
     /** Wipe everything (used by "sign out all"). */
-    suspend fun wipeAll(): Unit = fetchMutex.withLock {
+    suspend fun wipeAll(): Unit = snapshotGate.mutate {
         AppDatabase.wipeAll(context)
     }
 }

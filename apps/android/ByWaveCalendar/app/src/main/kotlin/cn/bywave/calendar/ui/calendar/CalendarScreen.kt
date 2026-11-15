@@ -459,6 +459,8 @@ private fun CalendarBody(
 
         Spacer(Modifier.size(4.dp))
 
+        val deviceZone = rememberDeviceTimeZone()
+        androidx.compose.runtime.key(deviceZone.id) {
         Box(modifier = Modifier.fillMaxSize().weight(1f)) {
             if (state.loading && state.events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -488,6 +490,7 @@ private fun CalendarBody(
                     )
                 }
             }
+        }
         }
     }
 }

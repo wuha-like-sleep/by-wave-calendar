@@ -490,3 +490,8 @@
 "appLogin.browser" = "Continue in your browser";
 "appLogin.returning" = "Completing sign-in…";
 "appLogin.help" = "Finish signing in with your server. You will return here automatically.";
+
+// Scheduling uses the calendar zone; booked instants use the device zone.
+"排期时区：%@；预约时间按设备时区显示。" = "Scheduling zone: %@. Booked times use your device timezone.";
+"显示时区" = "Display timezone";
+"日程时区" = "Event timezone";

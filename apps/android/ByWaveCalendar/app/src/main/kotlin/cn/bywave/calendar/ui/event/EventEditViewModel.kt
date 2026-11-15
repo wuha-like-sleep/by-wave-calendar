@@ -27,17 +27,22 @@ import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventExtra
 import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.ParseEventInput
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.Instant
+import cn.bywave.calendar.event.duplicateEventRange
+import cn.bywave.calendar.event.eventFormDateTime
+import cn.bywave.calendar.event.EventFormInstant
+import cn.bywave.calendar.event.eventFormIso
+import cn.bywave.calendar.event.eventStringField
+import cn.bywave.calendar.data.model.EventExtraDTO
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 sealed class EventEditMode {
     // seedEnd/seedSummary let the natural-language quick-add prefill a full
@@ -71,6 +76,9 @@ data class EventEditUiState(
      *  when scope is "instance" or "future" so it knows WHICH occurrence
      *  the user is editing. */
     val sourceStartsAt: String? = null,
+    val sourceExtra: EventExtraDTO? = null,
+    val originalStart: EventFormInstant? = null,
+    val originalEnd: EventFormInstant? = null,
     val calendars: List<CalendarMeta> = emptyList(),
     val calendarId: String = "",
     val summary: String = "",
@@ -91,7 +99,7 @@ data class EventEditUiState(
     val pristine: String = "",
 ) {
     val canSubmit: Boolean
-        get() = summary.isNotBlank() && calendarId.isNotBlank() && !saving
+        get() = summary.isNotBlank() && calendarId.isNotBlank() && !saving && !deleting && !parsing && !finished
 
     /** 当前字段的指纹。字段增删时记得同步这里，否则新字段的改动会被
      *  当成「没改过」——那就又变成静默丢弃。 */
@@ -119,6 +127,32 @@ internal fun EventEditUiState.withCalendars(calendars: List<CalendarMeta>): Even
     // 用户的改动，一按返回就凭空弹出「放弃修改？」。
     return if (fingerprint == pristine) updated.copy(pristine = updated.fingerprint) else updated
 }
+
+
+internal fun EventEditUiState.buildExtra(zone: ZoneId): EventExtra = EventExtra(
+    timezone = sourceExtra?.timezone ?: if (!isEdit && !allDay) zone.id else null,
+    attendees = if (isEdit) null else sourceExtra?.attendees,
+    category = if (isEdit) null else sourceExtra?.category,
+    url = eventStringField(url, clearWhenEmpty = isEdit && sourceExtra != null),
+    meetingPassword = eventStringField(meetingPassword, clearWhenEmpty = isEdit && sourceExtra != null),
+)
+
+internal fun EventEditUiState.buildUpdateInput(
+    scope: String? = null,
+    recurrenceId: String? = null,
+    zone: ZoneId = ZoneId.systemDefault(),
+): EventUpdateInput = EventUpdateInput(
+    calendarId = calendarId,
+    summary = summary,
+    description = description,
+    location = location,
+    startsAt = eventFormIso(start, allDay, isStart = true, zone, originalStart),
+    endsAt = eventFormIso(end, allDay, isStart = false, zone, originalEnd),
+    allDay = allDay,
+    extra = buildExtra(zone),
+    scope = scope,
+    recurrenceId = recurrenceId,
+)
 
 class EventEditViewModel : ViewModel() {
     // Application singleton doubles as a Context for resolving localized
@@ -153,14 +187,17 @@ class EventEditViewModel : ViewModel() {
             }
             is EventEditMode.Edit -> {
                 val s = mode.source
-                val startInstant = runCatching { Instant.parse(s.startsAt) }.getOrNull()
-                val endInstant = runCatching { Instant.parse(s.endsAt) }.getOrNull()
                 val zone = ZoneId.systemDefault()
+                val sourceStart = eventFormDateTime(s.startsAt, s.allDay, zone)
+                val sourceEnd = eventFormDateTime(s.endsAt, s.allDay, zone)
                 _state.value = EventEditUiState(
                     isEdit = true,
                     sourceId = s.id,
                     sourceRrule = s.rrule,
                     sourceStartsAt = s.startsAt,
+                    sourceExtra = s.extra,
+                    originalStart = sourceStart?.takeIf { !s.allDay }?.let { EventFormInstant(s.startsAt, it) },
+                    originalEnd = sourceEnd?.takeIf { !s.allDay }?.let { EventFormInstant(s.endsAt, it) },
                     calendars = calendars,
                     calendarId = s.calendarId,
                     summary = s.summary,
@@ -168,28 +205,21 @@ class EventEditViewModel : ViewModel() {
                     description = s.description.orEmpty(),
                     url = s.extra?.url.orEmpty(),
                     meetingPassword = s.extra?.meetingPassword.orEmpty(),
-                    start = startInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour(),
-                    end = endInstant?.atZone(zone)?.toLocalDateTime() ?: nextHalfHour().plusHours(1),
+                    start = sourceStart ?: nextHalfHour(),
+                    end = sourceEnd ?: nextHalfHour().plusHours(1),
                     allDay = s.allDay,
                 )
             }
             is EventEditMode.Duplicate -> {
                 val s = mode.source
-                val zone = ZoneId.systemDefault()
-                // Keep the original duration but shift the start to
-                // next half-hour so we don't post in the past.
-                val origStart = runCatching { Instant.parse(s.startsAt) }.getOrNull()
-                val origEnd = runCatching { Instant.parse(s.endsAt) }.getOrNull()
-                val durationMin = if (origStart != null && origEnd != null) {
-                    java.time.Duration.between(origStart, origEnd).toMinutes().coerceAtLeast(15L)
-                } else 60L
-                val newStart = nextHalfHour()
+                val (newStart, newEnd) = duplicateEventRange(s.startsAt, s.endsAt, s.allDay, nextHalfHour())
                 _state.value = EventEditUiState(
                     isEdit = false,                     // POST, not PATCH
                     // Fresh idempotency key — "copy as new" is a create,
                     // so it gets its own once-per-open clientUid too.
                     clientUid = newClientUid(),
                     sourceId = null,
+                    sourceExtra = s.extra,
                     calendars = calendars,
                     calendarId = s.calendarId,
                     summary = s.summary,
@@ -198,7 +228,7 @@ class EventEditViewModel : ViewModel() {
                     url = s.extra?.url.orEmpty(),
                     meetingPassword = s.extra?.meetingPassword.orEmpty(),
                     start = newStart,
-                    end = newStart.plusMinutes(durationMin),
+                    end = newEnd,
                     allDay = s.allDay,
                 )
             }
@@ -233,7 +263,7 @@ class EventEditViewModel : ViewModel() {
      *  hint and leave the form so the user can still fill it by hand. */
     fun quickParse(text: String) {
         val phrase = text.trim()
-        if (phrase.isEmpty()) return
+        if (phrase.isEmpty() || _state.value.parsing || _state.value.saving || _state.value.deleting) return
         _state.update { it.copy(parsing = true, errorMessage = null) }
         viewModelScope.launch {
             try {
@@ -252,6 +282,8 @@ class EventEditViewModel : ViewModel() {
                         errorMessage = null,
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(parsing = false, errorMessage = app.getString(R.string.quickadd_failed)) }
             }
@@ -264,7 +296,7 @@ class EventEditViewModel : ViewModel() {
         if (v) it.copy(
             allDay = true,
             start = it.start.toLocalDate().atStartOfDay(),
-            end = it.start.toLocalDate().atTime(23, 59),
+            end = maxOf(it.start.toLocalDate(), it.end.toLocalDate()).atTime(23, 59),
         ) else it.copy(
             allDay = false,
             start = it.start,
@@ -280,7 +312,7 @@ class EventEditViewModel : ViewModel() {
     fun onEnd(date: LocalDate, time: LocalTime) = _state.update {
         var newEnd = LocalDateTime.of(date, time)
         // End must be >= start; clamp.
-        if (newEnd.isBefore(it.start)) newEnd = it.start.plusMinutes(15)
+        if (!newEnd.isAfter(it.start)) newEnd = it.start.plusMinutes(15)
         it.copy(end = newEnd)
     }
 
@@ -300,30 +332,13 @@ class EventEditViewModel : ViewModel() {
                 val client = ApiClient.forProfile(profile, profiles)
 
                 val zone = ZoneId.systemDefault()
-                val startIso = ISO.format(s.start.atZone(zone))
-                val endIso = ISO.format(s.end.atZone(zone))
+                val startIso = eventFormIso(s.start, s.allDay, isStart = true, zone)
+                val endIso = eventFormIso(s.end, s.allDay, isStart = false, zone)
 
-                val urlTrim = s.url.trim()
-                val pwTrim = s.meetingPassword.trim()
-                val extra = if (urlTrim.isNotEmpty() || pwTrim.isNotEmpty()) {
-                    EventExtra(timezone = zone.id, url = urlTrim.ifEmpty { null }, meetingPassword = pwTrim.ifEmpty { null })
-                } else if (!s.allDay) {
-                    EventExtra(timezone = zone.id)
-                } else null
+                val extra = s.buildExtra(zone)
 
                 if (s.isEdit) {
-                    val body = EventUpdateInput(
-                        calendarId = s.calendarId,
-                        summary = s.summary,
-                        description = s.description.ifBlank { null },
-                        location = s.location.ifBlank { null },
-                        startsAt = startIso,
-                        endsAt = endIso,
-                        allDay = s.allDay,
-                        extra = extra,
-                        scope = scope,
-                        recurrenceId = recurrenceId,
-                    )
+                    val body = s.buildUpdateInput(scope, recurrenceId, zone)
                     client.api.updateEvent(s.sourceId!!, body)
                 } else {
                     val body = EventCreateInput(
@@ -343,6 +358,8 @@ class EventEditViewModel : ViewModel() {
                     client.api.createEvent(body)
                 }
                 _state.update { it.copy(saving = false, finished = true) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update {
                     it.copy(saving = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_save_failed))
@@ -354,6 +371,7 @@ class EventEditViewModel : ViewModel() {
     fun delete(scope: String? = null, recurrenceId: String? = null) {
         val s = _state.value
         val id = s.sourceId ?: return
+        if (s.saving || s.deleting || s.finished) return
         _state.update { it.copy(deleting = true, errorMessage = null) }
 
         viewModelScope.launch {
@@ -362,6 +380,8 @@ class EventEditViewModel : ViewModel() {
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id, scope, recurrenceId)
                 _state.update { it.copy(deleting = false, finished = true) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update {
                     it.copy(deleting = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_delete_failed))
@@ -377,9 +397,6 @@ class EventEditViewModel : ViewModel() {
     private fun newClientUid(): String =
         java.util.UUID.randomUUID().toString() + "@bywave"
 
-    private companion object {
-        val ISO: DateTimeFormatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-    }
 }
 
 /** Round current time up to the next :00 or :30. Used as the default

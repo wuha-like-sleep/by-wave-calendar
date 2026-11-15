@@ -1643,8 +1643,8 @@
     const body = {
       calendarId: data.calendarId,
       summary: data.summary,
-      location: data.location || undefined,
-      description: data.description || undefined,
+      location: data.location || (id ? "" : undefined),
+      description: data.description || (id ? "" : undefined),
       allDay: isAllDay,
       startsAt: startsIso,
       endsAt: endsIso,

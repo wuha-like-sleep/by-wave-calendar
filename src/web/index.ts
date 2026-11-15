@@ -20,7 +20,8 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
 import { cancelEvent } from "../lib/event_cancel.js";
-import { availableSlots, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
+import { availableSlots, bookingTimeZone, bookingTimeZoneFromCalendar, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, deleteBookingLink, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
+import { canonicalTimeZone } from "../lib/zoned_time.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -2396,14 +2397,14 @@ export async function webRoutes(app: FastifyInstance) {
     const user = await loadAuthedUser(req, reply);
     if (!user) return reply;
     const links = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.userId, user.id)).orderBy(asc(schema.bookingLinks.title));
-    const cals = await db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color }).from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
+    const cals = await db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color, timezone: schema.calendars.timezone }).from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
     return reply.view("app/booking-links", {
       title: tr(req, "page.bookingLinks"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
-      links: links.map((l) => ({ ...l, publicUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${l.slug}` })),
-      calendars: cals,
+      links: links.map((l) => ({ ...l, timezone: bookingTimeZoneFromCalendar(cals.find(c => c.id === l.calendarId)?.timezone), publicUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${l.slug}` })),
+      calendars: cals.map(c => ({ ...c, timezone: bookingTimeZoneFromCalendar(c.timezone) })),
       defaultAvailability: DEFAULT_AVAILABILITY,
     });
   });
@@ -2479,7 +2480,8 @@ export async function webRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/app/booking-links");
-    await db.delete(schema.bookingLinks).where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id)));
+    const result = await deleteBookingLink(id.data, user.id);
+    if (result === "active_bookings") return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.activeBookings") });
     return redirectWith(reply, "/app/booking-links", { success: tr(req, "flash.bookingLink.deleted") });
   });
 
@@ -2506,6 +2508,39 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // -------- Public booking pages --------
+  async function renderBookingPage(
+    req: FastifyRequest, reply: FastifyReply, link: schema.BookingLink,
+    owner: { email: string; displayName: string | null },
+    error?: string, values: Record<string, unknown> = {},
+  ) {
+    const bookingZone = await bookingTimeZone(link);
+    const slots = await availableSlots(link, new Date(), link.maxDaysAhead, db, bookingZone);
+    const byDate = new Map<string, { startsAt: Date; endsAt: Date }[]>();
+    const dateFormat = new Intl.DateTimeFormat("en-US", { timeZone: bookingZone, year: "numeric", month: "2-digit", day: "2-digit" });
+    for (const slot of slots) {
+      // Initial markup uses the host zone; the browser regroups these same
+      // instants into the visitor's device zone without changing the booking.
+      const parts = dateFormat.formatToParts(slot.startsAt);
+      const part = (type: string) => parts.find(value => value.type === type)!.value;
+      const date = `${part("year")}-${part("month")}-${part("day")}`;
+      if (!byDate.has(date)) byDate.set(date, []);
+      byDate.get(date)!.push(slot);
+    }
+    const field = (name: string, max: number) => typeof values[name] === "string" ? values[name].slice(0, max) : "";
+    const selected = slots.find((slot) => slot.startsAt.toISOString() === values.startsAt)?.startsAt.toISOString() ?? "";
+    // A failed submission can contain personal details; keep them only in this
+    // response, never in a redirect URL, flash cookie, or shared browser cache.
+    reply.header("Cache-Control", "no-store");
+    return reply.view("booking/public", {
+      title: link.title, user: null, csrfToken: csrfTokenFor(req),
+      flash: error ? { error } : readFlash(req, reply), link, owner, bookingZone,
+      formValues: { guestName: field("guestName", 100), guestEmail: field("guestEmail", 254),
+        guestMessage: field("guestMessage", 2000), startsAt: selected,
+        guestTimeZone: canonicalTimeZone(field("guestTimeZone", 100)) ?? "" },
+      slotsByDate: Array.from(byDate.entries()).map(([date, slots]) => ({ date, slots })),
+    });
+  }
+
   app.get<{ Params: { userId: string; slug: string } }>("/book/:userId/:slug", async (req, reply) => {
     const userId = z.string().uuid().safeParse(req.params.userId);
     if (!userId.success) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.bookingNotFound.heading"), message: tr(req, "errorPage.bookingNotFound.message") });
@@ -2521,23 +2556,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (owner.disabledAt) {
       return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.bookingDisabled.heading"), message: tr(req, "errorPage.bookingDisabled.message") });
     }
-    const slots = await availableSlots(link, new Date(), link.maxDaysAhead);
-    // Group slots by date string for the picker.
-    const byDate = new Map<string, { startsAt: Date; endsAt: Date }[]>();
-    for (const s of slots) {
-      const key = s.startsAt.toISOString().slice(0, 10);
-      if (!byDate.has(key)) byDate.set(key, []);
-      byDate.get(key)!.push(s);
-    }
-    return reply.view("booking/public", {
-      title: link.title,
-      user: null,
-      csrfToken: csrfTokenFor(req),
-      flash: readFlash(req, reply),
-      link,
-      owner,
-      slotsByDate: Array.from(byDate.entries()).map(([date, slots]) => ({ date, slots })),
-    });
+    return renderBookingPage(req, reply, link, owner);
   });
 
   app.post<{ Params: { userId: string; slug: string } }>("/book/:userId/:slug", {
@@ -2550,30 +2569,38 @@ export async function webRoutes(app: FastifyInstance) {
     if (!link || !link.enabled) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.linkDisabled") });
     // Disabled-account gate: stop the booking before we INSERT an event
     // into the disabled user's calendar.
-    const [ownerCheck] = await db.select({ disabledAt: schema.users.disabledAt }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+    const [ownerCheck] = await db.select({ disabledAt: schema.users.disabledAt, email: schema.users.email,
+      displayName: schema.users.displayName }).from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
     if (!ownerCheck || ownerCheck.disabledAt) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.linkDisabled") });
     const body = z.object({
       startsAt: z.string().datetime({ offset: true }),
-      guestEmail: z.string().email().max(254),
-      guestName: z.string().min(1).max(100),
-      guestMessage: z.string().max(2000).optional(),
+      guestEmail: z.string().trim().email().max(254),
+      guestName: z.string().trim().min(1).max(100),
+      guestMessage: z.string().trim().max(2000).optional(),
+      guestTimeZone: z.string().trim().max(100).optional(),
     }).safeParse(req.body);
-    if (!body.success) return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: tr(req, "flash.booking.needEmailName") });
+    if (!body.success) return renderBookingPage(req, reply.code(400), link, ownerCheck,
+      tr(req, "flash.booking.needEmailName"), (req.body ?? {}) as Record<string, unknown>);
+    const guestTimeZone = body.data.guestTimeZone ? canonicalTimeZone(body.data.guestTimeZone) : undefined;
+    if (guestTimeZone === null) return renderBookingPage(req, reply.code(400), link, ownerCheck,
+      tr(req, "flash.booking.failed"), body.data);
     const startsAt = new Date(body.data.startsAt);
     const endsAt = new Date(startsAt.getTime() + link.durationMinutes * 60_000);
     try {
-      const { booking } = await bookSlot({ link, startsAt, endsAt, guestEmail: body.data.guestEmail, guestName: body.data.guestName, guestMessage: body.data.guestMessage });
+      const { booking, timeZone } = await bookSlot({ link, startsAt, endsAt, guestEmail: body.data.guestEmail, guestName: body.data.guestName, guestMessage: body.data.guestMessage, guestTimeZone });
       // Confirmation emails (don't fail the booking if mail breaks).
-      const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
+      const owner = ownerCheck;
+      const htmlText = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
       const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
       const cancelUrl = `${baseUrl}/book-cancel/${encodeURIComponent(booking.cancelToken)}`;
-      const fmt = (d: Date) => new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
-      const lines = `${link.title}\n时间：${fmt(startsAt)} — ${fmt(endsAt)}\n${body.data.guestMessage ? "\n留言：" + body.data.guestMessage + "\n" : ""}\n取消链接：${cancelUrl}`;
+      const formatIn = (zone: string) => (d: Date) => new Intl.DateTimeFormat("zh-CN", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "short" }).format(d) + ` (${zone})`;
+      const guestFmt = formatIn(guestTimeZone ?? timeZone), ownerFmt = formatIn(timeZone);
+      const lines = (fmt: (date: Date) => string) => `${link.title}\n时间：${fmt(startsAt)} — ${fmt(endsAt)}\n${body.data.guestMessage ? "\n留言：" + body.data.guestMessage + "\n" : ""}\n取消链接：${cancelUrl}`;
       sendMail({
         to: body.data.guestEmail,
         subject: `✓ 预约确认：${link.title}`,
-        text: `你的预约已确认。\n\n${lines}`,
-        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">✓ 预约已确认</h1><p style="font-size:15px;color:#0f172a;font-weight:600;margin:0 0 6px;">${link.title}</p><p style="font-size:14px;color:#475569;margin:0 0 14px;">与 ${(owner?.displayName || owner?.email || "").replace(/[<>&]/g, "")} 的预约</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}<p style="margin:16px 0 6px;font-size:13px;color:#64748b;">需要取消？<a href="${cancelUrl}" style="color:#dc2626;">点这里</a>。</p></div></div>`,
+        text: `你的预约已确认。\n\n${lines(guestFmt)}`,
+        html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">✓ 预约已确认</h1><p style="font-size:15px;color:#0f172a;font-weight:600;margin:0 0 6px;">${htmlText(link.title)}</p><p style="font-size:14px;color:#475569;margin:0 0 14px;">与 ${htmlText(owner.displayName || owner.email)} 的预约</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${guestFmt(startsAt)} — ${guestFmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;">${htmlText(body.data.guestMessage)}</div>` : ""}<p style="margin:16px 0 6px;font-size:13px;color:#64748b;">需要取消？<a href="${htmlText(cancelUrl)}" style="color:#dc2626;">点这里</a>。</p></div></div>`,
       }).catch(() => undefined);
       // Guest's confirmation email above is unconditional — they need
       // the cancel link. The OWNER notification respects link.notifyEmail
@@ -2583,25 +2610,28 @@ export async function webRoutes(app: FastifyInstance) {
         sendMail({
           to: owner.email,
           subject: `📅 新预约：${body.data.guestName} — ${link.title}`,
-          text: `新预约：${body.data.guestName} <${body.data.guestEmail}>\n${lines}`,
-          html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">📅 新预约</h1><p style="font-size:14px;color:#475569;margin:0 0 14px;"><strong>${body.data.guestName.replace(/[<>&]/g, "")}</strong> &lt;${body.data.guestEmail.replace(/[<>&]/g, "")}&gt; 通过<strong>${link.title}</strong>预约了你的时间</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${fmt(startsAt)} — ${fmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;white-space:pre-wrap;">${body.data.guestMessage.replace(/[<>&]/g, "")}</div>` : ""}</div></div>`,
+          text: `新预约：${body.data.guestName} <${body.data.guestEmail}>\n${lines(ownerFmt)}`,
+          html: `<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;max-width:560px;margin:auto;padding:24px;background:#f1f5f9;"><div style="background:#fff;border-radius:16px;padding:24px;"><h1 style="font-size:22px;color:#0f172a;margin:0 0 12px;">📅 新预约</h1><p style="font-size:14px;color:#475569;margin:0 0 14px;"><strong>${htmlText(body.data.guestName)}</strong> &lt;${htmlText(body.data.guestEmail)}&gt; 通过<strong>${htmlText(link.title)}</strong>预约了你的时间</p><div style="background:#f8fafc;border-left:3px solid #6366f1;padding:12px 14px;border-radius:6px;font-size:14px;color:#334155;">📅 ${ownerFmt(startsAt)} — ${ownerFmt(endsAt)}</div>${body.data.guestMessage ? `<div style="margin-top:12px;padding:12px;background:#f8fafc;border-radius:6px;color:#475569;font-size:13px;white-space:pre-wrap;">${htmlText(body.data.guestMessage)}</div>` : ""}</div></div>`,
         }).catch(() => undefined);
       }
-      return redirectWith(reply, `/book/${userId.data}/${req.params.slug}?success=${encodeURIComponent(tr(req, "flash.booking.success"))}`);
+      return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { success: tr(req, "flash.booking.success") });
     } catch (err) {
       // BookingError 带的是原因码，翻译在这里做 —— 以前这里贴的是 err.message，
       // 而那是一句硬编码中文，德语 / 日语访客看到的就是中文。
       const msg = err instanceof BookingError
         ? tr(req, `flash.booking.${err.code}`)
         : tr(req, "flash.booking.failed");
-      return redirectWith(reply, `/book/${userId.data}/${req.params.slug}`, { error: msg });
+      return renderBookingPage(req, reply.code(err instanceof BookingError ? 409 : 500), link, ownerCheck, msg, body.data);
     }
   });
 
   app.get<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
     if (!b) return reply.code(404).view("error", { title: tr(req, "page.notFound"), user: null, csrfToken: csrfTokenFor(req), flash: {}, statusCode: 404, heading: tr(req, "errorPage.cancelLinkInvalid.heading"), message: tr(req, "errorPage.cancelLinkInvalid.message") });
+    const [bookingLink] = await db.select({ calendarId: schema.bookingLinks.calendarId }).from(schema.bookingLinks).where(eq(schema.bookingLinks.id, b.linkId));
     return reply.view("booking/cancel", {
+      bookingZone: bookingLink ? await bookingTimeZone(bookingLink) : "UTC",
       title: tr(req, "page.cancelBooking"),
       user: null, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       booking: b,

@@ -478,6 +478,10 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "booking.public.messageLabel": "メッセージ（任意）",
   "booking.public.messagePlaceholder": "ご用件は何ですか？",
   "booking.public.confirmButton": "予約を確定",
+  "booking.manage.timezoneHint": "空き時間は選択したカレンダーのタイムゾーンに基づきます。訪問者にはデバイスのタイムゾーンに換算した時間が表示されます。",
+  "booking.public.displayTimezone": "表示タイムゾーン",
+  "booking.public.deviceTimezone": "このデバイス（{tz}）",
+  "booking.public.hostTimezone": "主催者（{tz}）",
   "booking.public.timezoneNote": "すべての時刻は {tz} で表示されています",
 
   // booking.cancel
@@ -1511,6 +1515,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "flash.bookingLink.paused": "一時停止しました",
   "flash.bookingLink.enabled": "有効にしました",
   "flash.bookingLink.deleted": "削除しました",
+  "flash.bookingLink.activeBookings": "このリンクには今後または進行中の予約があります。既存の予約とキャンセルリンクを維持するには、一時停止してください。",
   "flash.bookingLink.notifyOff": "メール通知をオフにしました",
   "flash.bookingLink.notifyOn": "メール通知をオンにしました",
   "errorPage.bookingNotFound.heading": "予約リンクが見つかりません",

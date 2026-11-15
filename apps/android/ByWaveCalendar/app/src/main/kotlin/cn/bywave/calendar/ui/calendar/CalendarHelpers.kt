@@ -59,6 +59,10 @@ internal fun toLocalDate(i: Instant?): LocalDate? =
 
 /** True if `event` touches the given day in the device's local TZ. */
 internal fun eventOnDay(event: EventDTO, day: LocalDate): Boolean {
+    if (event.allDay) {
+        val (first, last) = cn.bywave.calendar.event.eventAllDayDates(event.startsAt, event.endsAt) ?: return false
+        return !day.isBefore(first) && !day.isAfter(last)
+    }
     val zone = ZoneId.systemDefault()
     val s = parseInstant(event.startsAt) ?: return false
     val e = parseInstant(event.endsAt) ?: return false
@@ -114,7 +118,7 @@ internal class CalendarFormats(
     use24Hour: Boolean,
     private val bestPattern: BestPatternProvider = PlatformBestPattern,
 ) {
-    private val zone: ZoneId = ZoneId.systemDefault()
+    val zone: ZoneId = ZoneId.systemDefault()
 
     private fun of(skeleton: String, fallback: String): DateTimeFormatter {
         val safe = runCatching { bestPattern(locale, skeleton) }
@@ -161,7 +165,8 @@ internal fun rememberCalendarFormats(): CalendarFormats {
     // 这个设置对日期不生效。
     val locale = LocalConfiguration.current.locales[0]
     val use24Hour = DateFormat.is24HourFormat(context)
-    return remember(locale, use24Hour) { CalendarFormats(locale, use24Hour) }
+    val zone = ZoneId.systemDefault()
+    return remember(locale, use24Hour, zone) { CalendarFormats(locale, use24Hour) }
 }
 
 internal fun formatTimeRange(
@@ -172,7 +177,7 @@ internal fun formatTimeRange(
     if (event.allDay) return allDayLabel
     val s = parseInstant(event.startsAt) ?: return "—"
     val e = parseInstant(event.endsAt) ?: return "—"
-    val sameDay = toLocalDate(s) == toLocalDate(e)
+    val sameDay = s.atZone(formats.zone).toLocalDate() == e.atZone(formats.zone).toLocalDate()
     return if (sameDay) "${formats.time.format(s)} – ${formats.time.format(e)}"
            else "${formats.time.format(s)} – …" // 跨天，完整日期在详情页
 }
