@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+import os
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('mirror', Path(__file__).with_name('mirror-release-to-gitee.py'))
@@ -57,5 +58,36 @@ class MirrorSafetyTest(unittest.TestCase):
             for url in ['http://example.test/file','https://name:password@example.test/file']:
                 with self.assertRaises(ValueError):m.download(url,Path('/tmp/unused'),1)
             run.assert_not_called()
+
+    def test_gitee_limit_requires_complete_compact_pair(self):
+        tag = 'desktop-v1.3.1'
+        assets = {name: {'size': 100} for name in m.expected_names(tag)}
+        original = 'ByWaveCalendar-1.3.1-arm64-signed.dmg'
+        assets[original]['size'] = m.GITEE_ASSET_LIMIT + 1
+        with self.assertRaises(ValueError): m.select_mirror_names(tag, assets)
+        compact = 'ByWaveCalendar-1.3.1-arm64-compact-signed.dmg'
+        assets[compact] = {'size': m.GITEE_ASSET_LIMIT}
+        with self.assertRaises(ValueError): m.select_mirror_names(tag, assets)
+        assets['SHA256SUMS-compact.txt'] = {'size': 100}
+        selected = m.select_mirror_names(tag, assets)
+        self.assertNotIn(original, selected)
+        self.assertIn(compact, selected)
+        assets[compact]['size'] += 1
+        with self.assertRaises(ValueError): m.select_mirror_names(tag, assets)
+
+    def test_compact_checksums_only_cover_declared_variant(self):
+        names = m.compact_names('desktop-v1.3.1')
+        name = 'ByWaveCalendar-1.3.1-arm64-compact-signed.dmg'
+        text = 'a' * 64 + '  ' + name + '\n'
+        self.assertEqual(m.parse_checksums(text, names, 'SHA256SUMS-compact.txt'), {name: 'a' * 64})
+        with self.assertRaises(ValueError):
+            m.parse_checksums(text.replace('-compact', ''), names, 'SHA256SUMS-compact.txt')
+
+    def test_dns_override_keeps_tls_host_and_rejects_local_addresses(self):
+        for address in ['127.0.0.1', '10.0.0.1', '169.254.169.254', '::1', 'evil.test', '180.76.198.225\nurl=https://evil.test']:
+            with self.subTest(address=address), patch.dict(os.environ, {'GITEE_RESOLVE_IPV4': address}), self.assertRaises(ValueError):
+                m.gitee_connection_options()
+        with patch.dict(os.environ, {'GITEE_RESOLVE_IPV4': '180.76.198.225'}):
+            self.assertEqual(m.gitee_connection_options(), ['--resolve', 'gitee.com:443:180.76.198.225'])
 
 if __name__=='__main__': unittest.main()

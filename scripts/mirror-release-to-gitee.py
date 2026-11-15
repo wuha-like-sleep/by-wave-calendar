@@ -4,6 +4,7 @@ import argparse
 import base64
 import tarfile
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,20 @@ from urllib.parse import quote, urlsplit
 
 GITHUB_REPO = "wuha-like-sleep/by-wave-calendar"
 GITEE_REPO = "zhaorunsen/by-wave-calendar"
+GITEE_ASSET_LIMIT = 100 * 1024 * 1024
+
+
+def gitee_connection_options():
+    # Optional DNS override for an unreachable CDN edge. The destination remains
+    # gitee.com, with normal TLS hostname/certificate validation and no redirects
+    # on authenticated API requests. Never accept a private or arbitrary host.
+    address = os.environ.get("GITEE_RESOLVE_IPV4", "")
+    if not address:
+        return []
+    ip = ipaddress.ip_address(address)
+    if ip.version != 4 or not ip.is_global:
+        raise ValueError("Gitee address override must be a public IPv4 address")
+    return ["--resolve", f"gitee.com:443:{ip}"]
 
 
 def validate_tag(tag):
@@ -34,6 +49,8 @@ def api(service, method, path, data=None, file=None):
     with tempfile.TemporaryDirectory(prefix="bywave-api-") as temp:
         response = Path(temp) / "response.json"
         args = ["curl", "--silent", "--show-error", "--connect-timeout", "20", "--max-time", "3600" if file else "90", "--config", "-", "--request", method, "--output", str(response), "--write-out", "%{http_code}", f"https://{host}/repos/{repo}{path}"]
+        if service == "gitee":
+            args += gitee_connection_options()
         if data is not None:
             body = Path(temp) / "body.json"
             body.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -61,7 +78,7 @@ def download(url, target, size, checksum=None):
     parts = urlsplit(url)
     if parts.scheme != "https" or parts.username or parts.password:
         raise ValueError("Only public HTTPS download URLs are allowed")
-    result = subprocess.run(["curl", "--silent", "--show-error", "--fail", "--location", "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20", "--max-time", "1800", "--retry", "3", "--max-filesize", str(size), "--output", str(target), url])
+    result = subprocess.run(["curl", "--silent", "--show-error", "--fail", "--location", "--proto", "=https", "--proto-redir", "=https", "--connect-timeout", "20", "--max-time", "1800", "--retry", "3", "--max-filesize", str(size), "--output", str(target), *gitee_connection_options(), url])
     if result.returncode or target.stat().st_size != size:
         raise ValueError("Download failed or its size does not match the published asset")
     with target.open("rb") as stream:
@@ -80,14 +97,32 @@ def expected_names(tag):
     return {f"by-wave-calendar-v{version}.tar.gz", f"by-wave-calendar-v{version}.tar.gz.sig", "SHA256SUMS.txt"}
 
 
-def parse_checksums(text, names):
+def compact_names(tag):
+    if not tag.startswith("desktop-"):
+        return set()
+    return {f"ByWaveCalendar-{tag.rsplit('v', 1)[1]}-arm64-compact-signed.dmg", "SHA256SUMS-compact.txt"}
+
+
+def select_mirror_names(tag, assets):
+    canonical, compact = expected_names(tag), compact_names(tag)
+    names = set(assets)
+    if names != canonical and (not compact or names != canonical | compact):
+        raise ValueError("Unexpected or missing GitHub assets")
+    if compact and compact <= names:
+        names.remove(f"ByWaveCalendar-{tag.rsplit('v', 1)[1]}-arm64-signed.dmg")
+    if any(not 0 < assets[name]["size"] <= GITEE_ASSET_LIMIT for name in names):
+        raise ValueError("Gitee attachment exceeds 100 MiB; prepare a smaller local installer before publishing")
+    return names
+
+
+def parse_checksums(text, names, checksum_name="SHA256SUMS.txt"):
     checksums = {}
     for line in text.splitlines():
         match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
         if not match or match[2] in checksums:
             raise ValueError("Malformed or duplicate checksum entry")
         checksums[match[2]] = match[1]
-    if set(checksums) != names - {"SHA256SUMS.txt"}:
+    if set(checksums) != names - {checksum_name}:
         raise ValueError("Every release file must have exactly one checksum")
     return checksums
 
@@ -102,8 +137,9 @@ def mirror(tag, check_only=False):
         raise ValueError("Only a published stable release may be mirrored")
     assets = {a["name"]: a for a in release["assets"]}
     names = expected_names(tag)
-    if set(assets) != names or len(assets) != len(release["assets"]):
-        raise ValueError("Unexpected, missing or duplicate GitHub assets")
+    if len(assets) != len(release["assets"]):
+        raise ValueError("Duplicate GitHub assets")
+    mirror_names = select_mirror_names(tag, assets)
     prefix = f"https://github.com/{GITHUB_REPO}/releases/download/{tag}/"
     for name, asset in assets.items():
         if asset["browser_download_url"] != prefix + quote(name) or not 0 < asset["size"] <= 500_000_000:
@@ -120,6 +156,13 @@ def mirror(tag, check_only=False):
         checksum = digest[7:] if digest and digest.startswith("sha256:") else None
         sums_hash = download(sums["browser_download_url"], folder / sums["name"], sums["size"], checksum)
         checksums = parse_checksums((folder / sums["name"]).read_text(), names)
+        compact = compact_names(tag)
+        if compact and compact <= set(assets):
+            extra_sums = assets["SHA256SUMS-compact.txt"]
+            digest = extra_sums.get("digest") or ""
+            extra_hash = download(extra_sums["browser_download_url"], folder / extra_sums["name"], extra_sums["size"], digest[7:] if digest.startswith("sha256:") else None)
+            checksums.update(parse_checksums((folder / extra_sums["name"]).read_text(), compact, "SHA256SUMS-compact.txt"))
+            checksums["SHA256SUMS-compact.txt"] = extra_hash
         for name in sorted(checksums):
             download(assets[name]["browser_download_url"], folder / name, assets[name]["size"], checksums[name])
         version = tag.rsplit("v", 1)[1]
@@ -141,16 +184,26 @@ def mirror(tag, check_only=False):
             if manifest.get("versionName") != version:
                 raise ValueError("Update manifest does not match the release tag")
         checksums["SHA256SUMS.txt"] = sums_hash
-        print(f"Verified {len(names)} published files for {tag}", flush=True)
+        print(f"Verified {len(assets)} published files for {tag}", flush=True)
         if check_only:
             return
-        existing = get("gitee", "/releases?per_page=100")
-        match = next((r for r in existing if r["tag_name"] == tag), None)
         body = {"tag_name": tag, "name": release["name"], "body": release["body"], "target_commitish": ref["sha"], "prerelease": True}
-        if match is None:
-            match = api("gitee", "POST", "/releases", body)
+        for attempt in range(4):
+            existing = get("gitee", "/releases?per_page=100")
+            match = next((r for r in existing if r["tag_name"] == tag), None)
+            if match is not None:
+                break
+            try:
+                match = api("gitee", "POST", "/releases", body)
+                break
+            except RuntimeError:
+                if attempt == 3:
+                    raise
+                # A timed-out create may have succeeded; query by tag before
+                # sending another POST. Never overwrite another release.
+                time.sleep(10 * (attempt + 1))
         release_path = "/releases/" + str(int(match["id"]))
-        for name in sorted(names):
+        for name in sorted(mirror_names):
             items = get("gitee", release_path + "/attach_files")
             matches = [a for a in items if a["name"] == name]
             if len(matches) > 1:
@@ -158,6 +211,7 @@ def mirror(tag, check_only=False):
             if not matches:
                 # A timed-out POST may have succeeded. A later run rechecks the
                 # remote attachment before retrying; never delete/overwrite it.
+                print(f"Uploading Gitee attachment: {name} ({assets[name]['size']} bytes)", flush=True)
                 api("gitee", "POST", release_path + "/attach_files", file=folder / name)
                 items = get("gitee", release_path + "/attach_files")
                 matches = [a for a in items if a["name"] == name]

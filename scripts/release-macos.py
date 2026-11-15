@@ -246,10 +246,15 @@ def package_notarized_app(app, dmg, stage, state):
             run("xcrun", "stapler", "validate", packaged_app)
         finally:
             run("hdiutil", "detach", folder)
-    run("hdiutil", "convert", editable, "-format", "ULMO", "-o", sealed)
+    # Four-MiB compression blocks reduce installer size without changing its
+    # filesystem, Finder presentation or the already-notarized app bundle.
+    run("hdiutil", "convert", editable, "-format", "ULMO",
+        "-imagekey", "udif-chunk-size=8192", "-o", sealed)
     sealed.replace(dmg)
     editable.unlink()
     sign(dmg, state["identity"])
+    if dmg.stat().st_size >= 100 * 1024 * 1024 - 65536:
+        raise ValueError("Installer exceeds Gitee's 100 MiB limit; reduce size before notarizing")
     # Inspect the actual final container BEFORE submitting or distributing it.
     verify_dmg_payload(dmg, state)
 
@@ -286,6 +291,8 @@ def notarize(args):
     run("spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "-v", dmg)
     verify_dmg_payload(dmg, state)
     output = Path(args.output).expanduser().resolve()
+    if dmg.stat().st_size > 100 * 1024 * 1024:
+        raise ValueError("Final notarized installer exceeds Gitee's 100 MiB attachment limit")
     output.mkdir(parents=True, exist_ok=True)
     architecture = "arm64" if state["architecture"] == "arm64" else "x64"
     name = f"ByWaveCalendar-{state['version']}-{architecture}-signed.dmg"
