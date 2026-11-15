@@ -216,7 +216,10 @@ fun brandedInstaller(taskName: String, format: String, host: String) = tasks.reg
                 <WixVariable Id="WixUIBannerBmp" Value="$banner" />
                 <WixVariable Id="WixUIDialogBmp" Value="$dialog" />
             """.trimIndent()
-            installerResources.resolve("main.wxs").writeText(template.replace(marker, "$branding\n$marker"))
+            val media = "<Media Id=\"1\" Cabinet=\"Data.cab\" EmbedCab=\"yes\" />"
+            check(template.split(media).size == 2) { "Unsupported JDK MSI media template; verify installer compression" }
+            val compressed = template.replace(media, "<Media Id=\"1\" Cabinet=\"Data.cab\" EmbedCab=\"yes\" CompressionLevel=\"high\" />")
+            installerResources.resolve("main.wxs").writeText(compressed.replace(marker, "$branding\n$marker"))
         }
         val command = mutableListOf(
             File(javaRoot, "bin/jpackage" + if (format == "msi") ".exe" else "").absolutePath,

@@ -246,7 +246,7 @@ def package_notarized_app(app, dmg, stage, state):
             run("xcrun", "stapler", "validate", packaged_app)
         finally:
             run("hdiutil", "detach", folder)
-    run("hdiutil", "convert", editable, "-format", "UDZO", "-o", sealed)
+    run("hdiutil", "convert", editable, "-format", "ULMO", "-o", sealed)
     sealed.replace(dmg)
     editable.unlink()
     sign(dmg, state["identity"])
