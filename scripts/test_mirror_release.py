@@ -9,10 +9,12 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 class MirrorSafetyTest(unittest.TestCase):
-    def test_only_client_release_tags(self):
-        for tag in ['../main', 'desktop-v1.3.1;echo bad', 'v1.9.0', 'android-v1.0.0\n']:
+    def test_only_versioned_release_tags(self):
+        for tag in ['../main', 'desktop-v1.3.1;echo bad', 'server-v1.9.0', 'android-v1.0.0\n']:
             with self.subTest(tag=tag), self.assertRaises(ValueError): m.validate_tag(tag)
         self.assertEqual(m.validate_tag('desktop-v1.3.1'), 'desktop-v1.3.1')
+        self.assertEqual(m.validate_tag('v1.9.1'), 'v1.9.1')
+        self.assertEqual(m.expected_names('v1.9.1'), {'by-wave-calendar-v1.9.1.tar.gz', 'by-wave-calendar-v1.9.1.tar.gz.sig', 'SHA256SUMS.txt'})
 
     def test_credential_cannot_inject_curl_configuration(self):
         for value in ['', 'token\nurl=https://example.test', 'token"', 'token\\']:

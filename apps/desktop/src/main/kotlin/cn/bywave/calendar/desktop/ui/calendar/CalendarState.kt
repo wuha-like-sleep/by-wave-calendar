@@ -24,6 +24,8 @@ import cn.bywave.calendar.desktop.util.userFacingError
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -208,6 +210,7 @@ class CalendarState(
             //    load() call wins and we don't surface the cancellation.
             try {
                 val resp = client.events(from = fromIso, to = toIso)
+                currentCoroutineContext().ensureActive()
                 _ui.value = _ui.value.copy(
                     events = resp.events,
                     calendars = resp.calendars,
@@ -322,6 +325,7 @@ class CalendarState(
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
                 client.createEvent(body, clientUid = clientUid)
+                client.profileId?.let { EventCache.clear(it) }
                 _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load(useCache = false)
                 // 提醒有自己的一份数据（ReminderFeed），跟这里的 load() 不是同一份。
@@ -413,6 +417,7 @@ class CalendarState(
             if (dragged == null) _ui.value = _ui.value.copy(saving = true, formError = null)
             try {
                 client.updateEvent(sourceId, body)
+                client.profileId?.let { EventCache.clear(it) }
                 if (dragged == null) _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load(useCache = false)
                 ReminderFeed.requestRefresh()
@@ -505,6 +510,7 @@ class CalendarState(
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
                 client.deleteEvent(id, scope, recurrenceId)
+                client.profileId?.let { EventCache.clear(it) }
                 // Whole-event (series) deletes are plain soft-deletes the
                 // /restore endpoint can reverse — offer undo. Instance/
                 // future scopes edit the master (exdate/UNTIL) and can't
@@ -538,6 +544,7 @@ class CalendarState(
             _ui.value = _ui.value.copy(actionError = null)
             try {
                 client.restoreEvent(undo.eventId)
+                client.profileId?.let { EventCache.clear(it) }
                 _ui.value = _ui.value.copy(undoDelete = null)
                 load(useCache = false)
                 ReminderFeed.requestRefresh()

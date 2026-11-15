@@ -4,7 +4,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cookie from "@fastify/cookie";
 import { eq } from "drizzle-orm";
 import { db, schema, ensureSchema, resetDb, makeUser, loginAs } from "./harness.js";
-process.env.PUBLIC_BASE_URL ??= "https://calendar.test";
+// CalDAV credential provisioning requires HTTPS, regardless of the outer test runner environment.
+process.env.PUBLIC_BASE_URL = "https://calendar.test";
 process.env.DATABASE_URL ??= "postgres://integration-test/unused";
 process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 const { eventRoutes } = await import("../../src/routes/events.js");

@@ -22,14 +22,18 @@ vi.mock("../../src/db/client.js", async () => {
   return { db: h.db, schema: h.schema };
 });
 
-import { eq } from "drizzle-orm";
+vi.mock("../../src/lib/calendar_sync/queue.js", () => ({ requestCalendarSync: vi.fn(async () => undefined) }));
+vi.mock("../../src/lib/apns.js", () => ({ pushEventChanged: vi.fn(async () => undefined) }));
+vi.mock("../../src/lib/event_cancel.js", () => ({ notifyEventCancellation: vi.fn(async () => ({ ok: true, cancelledNotices: 0 })) }));
+
+import { eq, sql } from "drizzle-orm";
 import { ensureSchema, resetDb, db, schema, makeUser, makeCalendar } from "./harness.js";
 
 process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= "postgres://integration-test/unused";
 process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 
-const { availableSlots, bookSlot, BookingError } = await import("../../src/lib/booking.js");
+const { availableSlots, bookSlot, cancelBooking, BookingError } = await import("../../src/lib/booking.js");
 
 beforeAll(async () => { await ensureSchema(); });
 
@@ -140,6 +144,97 @@ describe("公开预约不能往店主日历里写任意时间", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(BookingError);
       expect((e as InstanceType<typeof BookingError>).code).toBe("slotUnavailable");
+    }
+  });
+});
+
+
+describe("预约一致性与边界", () => {
+  it("首尾相接的时段都可以预约", async () => {
+    const slots = await availableSlots(link, new Date(), 14);
+    const first = slots.find((s, i) => slots[i + 1]?.startsAt.getTime() === s.endsAt.getTime())!;
+    await book(first.startsAt);
+    await book(first.endsAt);
+    expect(await eventCount()).toBe(2);
+  });
+  it("提交时重新读取链接状态，旧页面不能预约已关闭的链接", async () => {
+    const slots = await availableSlots(link, new Date(), 14);
+    await db.update(schema.bookingLinks).set({ enabled: false }).where(eq(schema.bookingLinks.id, link.id));
+    expect(await refuses(slots[0]!.startsAt)).toBe(true);
+    expect(await eventCount()).toBe(0);
+  });
+  it("账号停用后旧预约页也不能创建日程", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    await db.update(schema.users).set({ disabledAt: new Date() }).where(eq(schema.users.id, user.id));
+    expect(await refuses(slot!.startsAt)).toBe(true);
+    expect(await eventCount()).toBe(0);
+  });
+  it("重试取消能够修复旧版遗留的已取消但未删除日程", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    const created = await book(slot!.startsAt);
+    await db.update(schema.bookings).set({ cancelledAt: new Date() }).where(eq(schema.bookings.id, created.booking.id));
+    expect(await cancelBooking(created.booking.cancelToken)).toEqual({ found: true, alreadyCancelled: true });
+    const [event] = await db.select().from(schema.events).where(eq(schema.events.id, created.event.id));
+    expect(event!.deletedAt).not.toBeNull();
+  });
+  it("不能提交与链接时长不符的结束时间", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    await expect(bookSlot({ link, startsAt: slot!.startsAt, endsAt: new Date(slot!.endsAt.getTime() + 60_000),
+      guestEmail: "g@example.com", guestName: "G" })).rejects.toBeInstanceOf(BookingError);
+    expect(await eventCount()).toBe(0);
+  });
+  it("同日窗口乱序和重叠不会遗漏冲突或重复展示", async () => {
+    const windows: [string, string][] = [["14:00", "15:00"], ["09:00", "10:00"], ["09:00", "09:30"]];
+    link = { ...link, weeklyAvailability: Object.fromEntries(Array.from({ length: 7 }, (_, i) => [String(i), windows])) };
+    const slots = await availableSlots(link, new Date(), 14);
+    expect(slots.length).toBeGreaterThan(0);
+    expect(new Set(slots.map(s => +s.startsAt)).size).toBe(slots.length);
+    expect(slots.map(s => +s.startsAt)).toEqual(slots.map(s => +s.startsAt).sort((a, b) => a - b));
+  });
+  it("上海午夜后按当地星期生成今天的时段", async () => {
+    const slots = await availableSlots({ ...link, minNoticeHours: 0, weeklyAvailability: { "1": [["01:00", "02:00"]] } },
+      new Date("2026-11-15T16:30:00Z"), 1);
+    expect(slots.map(s => s.startsAt.toISOString())).toEqual(["2026-11-15T17:00:00.000Z", "2026-11-15T17:30:00.000Z"]);
+  });
+  it("边界外的事件也会占用预约缓冲时间", async () => {
+    link = { ...link, bufferBeforeMin: 15 };
+    const [slot] = await availableSlots(link, new Date(), 14);
+    await db.insert(schema.events).values({ calendarId: cal.id, uid: "buffer@test", summary: "Buffer",
+      startsAt: new Date(+slot!.startsAt - 20 * 60_000), endsAt: new Date(+slot!.startsAt - 5 * 60_000) });
+    const after = await availableSlots(link, new Date(), 14);
+    expect(after.some(s => +s.startsAt === +slot!.startsAt)).toBe(false);
+  });
+  it("并发重复提交只生成一个预约", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    const results = await Promise.allSettled([book(slot!.startsAt), book(slot!.startsAt)]);
+    expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
+    expect(await eventCount()).toBe(1);
+  });
+  it("取消预约同时删除事件，重复取消保持幂等", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    const created = await book(slot!.startsAt);
+    expect(await cancelBooking(created.booking.cancelToken)).toEqual({ found: true, alreadyCancelled: false });
+    const [event] = await db.select().from(schema.events).where(eq(schema.events.id, created.event.id));
+    const [booking] = await db.select().from(schema.bookings).where(eq(schema.bookings.id, created.booking.id));
+    expect(event!.deletedAt).not.toBeNull();
+    expect(booking!.cancelledAt).not.toBeNull();
+    expect(await cancelBooking(created.booking.cancelToken)).toEqual({ found: true, alreadyCancelled: true });
+    expect((await availableSlots(link, new Date(), 14)).some(s => +s.startsAt === +slot!.startsAt)).toBe(true);
+  });
+  it("取消记录写入失败时事件删除也回滚", async () => {
+    const [slot] = await availableSlots(link, new Date(), 14);
+    const created = await book(slot!.startsAt);
+    await db.execute(sql`CREATE FUNCTION fail_booking_cancel() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'test failure'; END; $$ LANGUAGE plpgsql`);
+    await db.execute(sql`CREATE TRIGGER fail_cancel BEFORE UPDATE ON bookings FOR EACH ROW EXECUTE FUNCTION fail_booking_cancel()`);
+    try {
+      await expect(cancelBooking(created.booking.cancelToken)).rejects.toThrow();
+      const [event] = await db.select().from(schema.events).where(eq(schema.events.id, created.event.id));
+      const [booking] = await db.select().from(schema.bookings).where(eq(schema.bookings.id, created.booking.id));
+      expect(event!.deletedAt).toBeNull();
+      expect(booking!.cancelledAt).toBeNull();
+    } finally {
+      await db.execute(sql`DROP TRIGGER fail_cancel ON bookings`);
+      await db.execute(sql`DROP FUNCTION fail_booking_cancel()`);
     }
   });
 });

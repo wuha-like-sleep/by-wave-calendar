@@ -5,10 +5,8 @@
 
 package cn.bywave.calendar.ui.calendar
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
@@ -53,6 +51,7 @@ class CalendarViewModel : ViewModel() {
     // Application 单例兼作取本地化文案的 Context——这个 VM 继承的是普通
     // ViewModel，没有 getApplication()。和 EventEditViewModel 同一套做法。
     private val app = BywaveApp.instance
+    private var undoProfileId: String? = null
 
     private val _state = MutableStateFlow(CalendarUiState())
     val state: StateFlow<CalendarUiState> = _state.asStateFlow()
@@ -73,6 +72,10 @@ class CalendarViewModel : ViewModel() {
         // events get pulled from the network too.
         profiles.activeId
             .onEach { id ->
+                loadJob?.cancel()
+                undoProfileId = null
+                _state.update { it.copy(undoDeleteId = null, errorMessage = null, loading = false,
+                    fetchedFrom = null, fetchedTo = null, lastSyncedAt = null) }
                 if (id != null) load()
             }
             .launchIn(viewModelScope)
@@ -108,17 +111,21 @@ class CalendarViewModel : ViewModel() {
      *  missing scope to "series", which would silently nuke the whole
      *  recurring set. (Was the v0.8.2 silent-data-loss bug.) */
     fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
+        val profile = profiles.active() ?: return
         viewModelScope.launch {
             try {
-                val profile = profiles.active() ?: return@launch
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.deleteEvent(id, scope, recurrenceId)
+                if (profiles.activeId.value != profile.id) return@launch
+                undoProfileId = profile.id
                 // Offer undo only for plain (non-recurring) deletes; restoring a
                 // scoped recurring delete (EXDATE / split) by id wouldn't cleanly
                 // reverse it, so we don't tempt the user with a broken undo.
                 if (scope == null) _state.update { it.copy(undoDeleteId = id) }
                 load()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) {
+                if (profiles.activeId.value != profile.id) return@launch
                 _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_delete_failed)) }
             }
         }
@@ -127,14 +134,16 @@ class CalendarViewModel : ViewModel() {
     /** Undo the last non-recurring delete via the restore endpoint. */
     fun restoreLastDelete() {
         val id = _state.value.undoDeleteId ?: return
+        val profile = profiles.active()?.takeIf { it.id == undoProfileId } ?: return
         _state.update { it.copy(undoDeleteId = null) }
         viewModelScope.launch {
             try {
-                val profile = profiles.active() ?: return@launch
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.restoreEvent(id)
-                load()
+                if (profiles.activeId.value == profile.id) load()
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) {
+                if (profiles.activeId.value != profile.id) return@launch
                 _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_undo_failed)) }
             }
         }
@@ -149,18 +158,9 @@ class CalendarViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val active = profiles.active() ?: return@launch
-                // Best-effort cache wipe — a Room hiccup here must NOT crash the
-                // app (unguarded, this launch had no handler) nor leave the user
-                // stuck signed in, so swallow it and still invalidate + remove.
-                // 完整清理：Room + 已排期的系统提醒 + 系统日历里的镜像。
-                // 只清 Room 的话，提醒会按旧数据继续响、系统日历里的日程永久残留，
-                // 而 App 里已经查无此账号——用户关不掉也删不掉。
-                runCatching { repository.wipeProfileFully(active) }
-                    // 正式包不输出日志：这行带的是异常原文，对用户没用，
-                    // 对旁观 logcat 的人反而是信息。
-                    .onFailure { if (BuildConfig.DEBUG) Log.w("SignOut", "wipeProfileFully failed: ${it.message}") }
                 ApiClient.invalidate(active.id)
                 profiles.remove(active.id)
+                profiles.onPassiveRemoval?.invoke(active)
             } catch (e: Exception) {
                 _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_signout_failed)) }
             }

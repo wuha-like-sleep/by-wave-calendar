@@ -1,21 +1,8 @@
-// In-app update checker. Polls /api/app/desktop/latest on the user's
-// own server (whichever they're paired to) — same endpoint Android +
-// iOS use the equivalent of, so server-side ops are unified.
-//
-// Anonymous endpoint (no Bearer needed), so we can hit it as soon as
-// the app has a serverUrl, even before bearer-auth is established.
-// 6-hour throttle in-process so we don't pelt the server during a
-// long session; also runs at app start.
-//
-// Update install model: simple "download in browser" — we open the
-// .dmg / .msi URL via Desktop.browse. Future v0.8+ could in-app
-// download + auto-relaunch via JNA on macOS, but that's a lot of
-// platform-specific machinery for marginal UX gain over the manual
-// flow (mount DMG → drag to Applications is muscle-memory for Mac
-// users; double-click MSI is the same for Windows).
-
 package cn.bywave.calendar.desktop.data.update
 
+import cn.bywave.calendar.update.ReleaseLookup
+import kotlinx.coroutines.CancellationException
+import java.net.URI
 import cn.bywave.calendar.desktop.BuildInfo
 import cn.bywave.calendar.desktop.util.DebugLog
 import io.ktor.client.HttpClient
@@ -61,8 +48,8 @@ object UpdateChecker {
     private val _available = MutableStateFlow<DesktopUpdateInfo?>(null)
     val available: StateFlow<DesktopUpdateInfo?> = _available.asStateFlow()
 
-    private var lastCheckAt: Long = 0L
-    private val THROTTLE_MS = 6L * 60 * 60 * 1000   // 6 hours
+    private val lookup = ReleaseLookup<DesktopUpdateInfo>({ it.versionCode }, { validManifest(it, platform) })
+    private var requestedServer: String? = null
 
     private val client: HttpClient by lazy {
         HttpClient(CIO) {
@@ -92,12 +79,7 @@ object UpdateChecker {
     private const val GITHUB_MANIFEST_URL =
         "https://raw.githubusercontent.com/wuha-like-sleep/by-wave-calendar/main/apps/desktop/releases/latest.json"
 
-    /** Hit /api/app/desktop/latest and compare versionCode. If the
-     *  user's server check fails OR returns a versionCode that's not
-     *  newer than the running build, ALSO try the canonical GitHub raw
-     *  manifest as a fallback. Throttled to once per 6 hours; pass
-     *  force=true to override (e.g. user clicked "check for updates"
-     *  in settings). */
+    /** Compare both sources; successful checks are cached for six hours, failures for one minute. */
     /** Outcome of a check: an update is available, we're confirmed
      *  up-to-date (reached ≥1 manifest source, nothing newer), or we
      *  couldn't reach ANY source. The last case must NEVER be surfaced
@@ -105,39 +87,30 @@ object UpdateChecker {
     enum class CheckResult { UpdateAvailable, UpToDate, Unreachable }
 
     suspend fun check(serverUrl: String, force: Boolean = false): CheckResult {
-        val now = System.currentTimeMillis()
-        if (!force && now - lastCheckAt < THROTTLE_MS) return CheckResult.UpToDate
-        lastCheckAt = now
-
-        // 1) Primary: user's own ByWave server.
-        val fromServer = fetchManifest("${serverUrl.trimEnd('/')}/api/app/desktop/latest", "server")
-        if (fromServer != null && fromServer.versionCode > BuildInfo.VERSION_CODE) {
-            _available.value = fromServer
-            DebugLog.d("ByWave Updater") { "update found via server: v${fromServer.versionName} (code ${fromServer.versionCode})" }
+        val server = serverUrl.trimEnd('/')
+        requestedServer = server
+        val result = lookup.check(server, force, listOf(
+            { fetchManifest("$server/api/app/desktop/latest", "server") },
+            { fetchManifest(GITHUB_MANIFEST_URL, "github") },
+        ))
+        if (requestedServer != server) return CheckResult.Unreachable
+        val release = result.release ?: return CheckResult.Unreachable
+        if (release.versionCode > BuildInfo.VERSION_CODE) {
+            if (result.fresh || force) _available.value = release
             return CheckResult.UpdateAvailable
         }
-
-        // 2) Fallback: GitHub raw manifest. We try this on EVERY check
-        //    (not just when server returns nothing) because a stale
-        //    server can hand back an older manifest and lock users out
-        //    of newer releases. The fallback is well-behaved when the
-        //    user is offline — fetchManifest returns null silently.
-        val fromGithub = fetchManifest(GITHUB_MANIFEST_URL, "github")
-        if (fromGithub != null && fromGithub.versionCode > BuildInfo.VERSION_CODE) {
-            _available.value = fromGithub
-            DebugLog.d("ByWave Updater") { "update found via github fallback: v${fromGithub.versionName} (code ${fromGithub.versionCode})" }
-            return CheckResult.UpdateAvailable
-        }
-
-        // Clear any previously-surfaced prompt (e.g. a stale "0.7.3 → 0.7.4").
         _available.value = null
-        // fetchManifest returns null for BOTH a network error AND a legit 404.
-        // So if NEITHER source yielded a manifest we CANNOT confirm we're
-        // current — report a check FAILURE rather than falsely claim
-        // 「已是最新版本」. Only when ≥1 source actually answered is it truly latest.
-        val reached = fromServer != null || fromGithub != null
-        DebugLog.d("ByWave Updater") { "${if (reached) "up to date" else "UNREACHABLE"} — server=${fromServer?.versionCode ?: "null"}, github=${fromGithub?.versionCode ?: "null"}, running ${BuildInfo.VERSION_CODE}" }
-        return if (reached) CheckResult.UpToDate else CheckResult.Unreachable
+        return CheckResult.UpToDate
+    }
+
+    internal fun validManifest(info: DesktopUpdateInfo, platform: String?): Boolean {
+        if (info.versionCode <= 0 || info.versionName.isBlank()) return false
+        val asset = info.assets[platform] ?: return false
+        val suffix = when (platform) { "mac", "macIntel" -> ".dmg"; "win" -> ".msi"; "linux" -> ".deb"; else -> return false }
+        val uri = runCatching { URI(asset.url) }.getOrNull() ?: return false
+        return uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.fragment == null &&
+            uri.path.orEmpty().lowercase().endsWith(suffix) && asset.sizeBytes in 1..1_073_741_824L &&
+            asset.sha256.matches(Regex("[a-fA-F0-9]{64}"))
     }
 
     /** Fetch + parse manifest from one source. Returns null on network
@@ -146,6 +119,8 @@ object UpdateChecker {
     private suspend fun fetchManifest(url: String, sourceTag: String): DesktopUpdateInfo? {
         val resp = try {
             client.get(url)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DebugLog.d("ByWave Updater") { "$sourceTag fetch failed: ${e::class.simpleName}: ${e.message}" }
             return null
@@ -162,6 +137,8 @@ object UpdateChecker {
         }
         return try {
             resp.body<DesktopUpdateInfo>()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DebugLog.d("ByWave Updater") { "$sourceTag JSON parse failed: ${e::class.simpleName}: ${e.message}" }
             null
@@ -197,12 +174,17 @@ object UpdateChecker {
         // "already latest" apart from "couldn't reach any update source"
         // (network down / server + GitHub both unreachable). The latter shows
         // an error instead of falsely reassuring the user they're up to date.
-        _lastForceCheckOutcome.value = when (check(serverUrl, force = true)) {
-            CheckResult.UpdateAvailable -> ForceCheckOutcome.UpdateFound
-            CheckResult.UpToDate -> ForceCheckOutcome.UpToDate
-            CheckResult.Unreachable -> ForceCheckOutcome.Error(
-                cn.bywave.calendar.desktop.i18n.I18n.t("update.check.unreachable"),
-            )
+        try {
+            _lastForceCheckOutcome.value = when (check(serverUrl, force = true)) {
+                CheckResult.UpdateAvailable -> ForceCheckOutcome.UpdateFound
+                CheckResult.UpToDate -> ForceCheckOutcome.UpToDate
+                CheckResult.Unreachable -> ForceCheckOutcome.Error(
+                    cn.bywave.calendar.desktop.i18n.I18n.t("update.check.unreachable"),
+                )
+            }
+        } catch (e: CancellationException) {
+            _lastForceCheckOutcome.value = ForceCheckOutcome.Idle
+            throw e
         }
     }
 

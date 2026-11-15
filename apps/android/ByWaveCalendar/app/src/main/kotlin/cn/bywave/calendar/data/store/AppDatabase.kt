@@ -9,6 +9,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 
 @Database(
     entities = [EventEntity::class, CalendarEntity::class],
@@ -37,16 +38,20 @@ abstract class AppDatabase : RoomDatabase() {
          *  starts with an empty cache. */
         suspend fun wipeAll(context: Context) {
             val db = get(context)
-            db.eventDao().clearAll()
-            db.calendarDao().clearAll()
+            db.withTransaction {
+                db.eventDao().clearAll()
+                db.calendarDao().clearAll()
+            }
         }
 
         /** Wipe just one profile's cache (sign out from one account
          *  but keep the others). */
         suspend fun wipeProfile(context: Context, profileId: String) {
             val db = get(context)
-            db.eventDao().clearProfile(profileId)
-            db.calendarDao().clearProfile(profileId)
+            db.withTransaction {
+                db.eventDao().clearProfile(profileId)
+                db.calendarDao().clearProfile(profileId)
+            }
         }
     }
 }

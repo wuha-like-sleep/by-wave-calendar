@@ -12,6 +12,7 @@
 package cn.bywave.calendar.update
 
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -45,8 +46,8 @@ object UpdateChecker {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state.asStateFlow()
 
-    private var lastCheckMs: Long = 0
-    private const val THROTTLE_MS: Long = 6 * 60 * 60 * 1000L  // 6h
+    private val lookup = ReleaseLookup<AndroidReleaseDto>({ it.versionCode }, ::validReleaseDownload)
+    private var forceNext = false
 
     /** Canonical manifest on GitHub raw. Fallback when the user's own
      *  server returns nothing newer (or is unreachable) — a server that
@@ -57,13 +58,14 @@ object UpdateChecker {
 
     /** Force a check on the next call regardless of throttle. Used by
      *  the "立即检查更新" button in Settings. */
-    fun resetThrottle() { lastCheckMs = 0 }
+    fun resetThrottle() { forceNext = true }
 
     suspend fun checkIfDue(context: Context, force: Boolean = false) {
-        val now = System.currentTimeMillis()
-        if (!force && now - lastCheckMs < THROTTLE_MS) return
-        lastCheckMs = now
-        runCatching { doCheck(context) }
+        val forceCheck = force || forceNext
+        forceNext = false
+        try { doCheck(context, force = forceCheck) }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { /* The next automatic attempt retries after one minute. */ }
     }
 
     /** Explicit user-initiated check from Settings → 检查更新. Always
@@ -72,20 +74,13 @@ object UpdateChecker {
      *  side-effects still happen (Available flips on, etc.) but the
      *  returned value drives the immediate snackbar. */
     suspend fun checkNow(context: Context): UserCheckResult {
-        lastCheckMs = System.currentTimeMillis()
         val profile = BywaveApp.instance.profiles.active()
             ?: return UserCheckResult.NotSignedIn
         return try {
-            val newer = doCheck(context, profileServerUrlOverride = profile.serverUrl)
+            val newer = doCheck(context, profileServerUrlOverride = profile.serverUrl, force = true)
             if (newer) UserCheckResult.UpdateFound else UserCheckResult.UpToDate
-        } catch (e: retrofit2.HttpException) {
-            if (e.code() == 404) {
-                // 404 = no release published. Treat as up-to-date —
-                // there's nothing newer to install.
-                UserCheckResult.UpToDate
-            } else {
-                UserCheckResult.Failed(context.getString(R.string.update_err_server))
-            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             UserCheckResult.Failed(context.getString(R.string.update_err_network))
         }
@@ -96,6 +91,7 @@ object UpdateChecker {
     private suspend fun doCheck(
         context: Context,
         profileServerUrlOverride: String? = null,
+        force: Boolean = false,
     ): Boolean {
         val baseUrl = profileServerUrlOverride
             ?: BywaveApp.instance.profiles.active()?.serverUrl
@@ -103,29 +99,13 @@ object UpdateChecker {
         val api = UpdateApiFactory.create(baseUrl)
         val localVersionCode = localVersionCode(context)
 
-        // 1) Primary: the user's own server. 2) Fallback: canonical GitHub
-        // raw manifest — tried whenever the server gives us nothing newer
-        // (or errors), so a stale/unreachable server can't lock users out
-        // of newer releases. If BOTH are unreachable we re-throw the server
-        // error so the user-initiated "检查更新" path can report a failure.
-        val serverResult = runCatching { api.latest().also { require(validReleaseDownload(it)) } }
+        val result = lookup.check(baseUrl, force, listOf(
+            { api.latest() }, { api.fetchManifest(GITHUB_MANIFEST_URL) },
+        ))
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
-        val fromServer = serverResult.getOrNull()
-        val serverIsNewer = fromServer != null && fromServer.versionCode > localVersionCode
-        val fromGithub =
-            if (serverIsNewer) null
-            else runCatching { api.fetchManifest(GITHUB_MANIFEST_URL).also { require(validReleaseDownload(it)) } }.getOrNull()
-        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-        if (BywaveApp.instance.profiles.active()?.serverUrl != baseUrl) return false
-        val rel = listOfNotNull(fromServer, fromGithub).maxByOrNull { it.versionCode }
-        if (rel == null) {
-            // Neither source reachable — surface the server error to callers
-            // (checkNow turns it into a "检查失败" snackbar). Auto-poll
-            // swallows it via its own runCatching.
-            serverResult.exceptionOrNull()?.let { throw it }
-            _state.value = UpdateState.Idle
-            return false
-        }
+        if (BywaveApp.instance.profiles.active()?.serverUrl != baseUrl) throw CancellationException("Profile changed")
+        // A 404 combined with an unreachable mirror is not proof that we are current.
+        val rel = result.release ?: throw java.io.IOException("No valid update manifest")
 
         // Determine if update is needed.
         val newer = rel.versionCode > localVersionCode
@@ -143,7 +123,7 @@ object UpdateChecker {
         // Respect the user's "稍后" choice — UNLESS this is mandatory,
         // in which case we always re-surface.
         val current = _state.value
-        if (!mandatory && current is UpdateState.Dismissed && current.versionCode == rel.versionCode) {
+        if (!force && !mandatory && current is UpdateState.Dismissed && current.versionCode == rel.versionCode) {
             return false
         }
         _state.value = UpdateState.Available(rel, mandatory)

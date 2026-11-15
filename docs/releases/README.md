@@ -1,5 +1,6 @@
 # 历史发布说明
 
+- [1.9.1](release-notes-1.9.1.md)
 - [1.9.0](release-notes-1.9.0.md)
 - [1.8.1](release-notes-1.8.1.md)
 - [1.8.0](release-notes-1.8.0.md)

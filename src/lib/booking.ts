@@ -1,5 +1,8 @@
 import { and, eq, gte, lte, isNotNull, isNull, or } from "drizzle-orm";
-import { db, schema } from "../db/client.js";
+import { db, schema, type DB } from "../db/client.js";
+import { requestCalendarSync } from "./calendar_sync/queue.js";
+import { notifyEventCancellation } from "./event_cancel.js";
+import { pushEventChanged } from "./apns.js";
 import { newEventUid, newInvitationToken } from "./ids.js";
 import { expandEvent } from "./rrule_expand.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "./event_zone.js";
@@ -39,8 +42,10 @@ function parseHM(s: string): { h: number; m: number } | null {
 // Times are computed as UTC instants from the link's weekly availability
 // interpreted as the *server's local time* (Asia/Shanghai by default —
 // matches existing convention).
-export async function availableSlots(link: schema.BookingLink, fromUtc: Date, daysWindow: number): Promise<Slot[]> {
+export async function availableSlots(link: schema.BookingLink, fromUtc: Date, daysWindow: number, query: Pick<DB, "select"> = db): Promise<Slot[]> {
   const slotMinutes = link.durationMinutes;
+  if (!Number.isInteger(slotMinutes) || slotMinutes <= 0 || slotMinutes > 1440 || !Number.isFinite(fromUtc.getTime())) return [];
+  daysWindow = Math.min(Math.max(0, Math.floor(daysWindow)), 90);
   const bufferAfterMin = link.bufferAfterMin || 0;
   const bufferBeforeMin = link.bufferBeforeMin || 0;
   const minNoticeMs = (link.minNoticeHours || 0) * 60 * 60 * 1000;
@@ -51,7 +56,7 @@ export async function availableSlots(link: schema.BookingLink, fromUtc: Date, da
   const availability = (link.weeklyAvailability as WeeklyAvailability) || DEFAULT_AVAILABILITY;
   const candidates: Slot[] = [];
   for (let i = 0; i < daysWindow; i++) {
-    const day = new Date(fromUtc);
+    const day = new Date(fromUtc.getTime() + 8 * 60 * 60_000);
     day.setUTCDate(day.getUTCDate() + i);
     const dow = String(day.getUTCDay());
     const windows = availability[dow];
@@ -72,14 +77,16 @@ export async function availableSlots(link: schema.BookingLink, fromUtc: Date, da
       }
     }
   }
-  if (candidates.length === 0) return [];
+  candidates.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const uniqueCandidates = candidates.filter((slot, index) => index === 0 || slot.startsAt.getTime() !== candidates[index - 1]!.startsAt.getTime());
+  if (uniqueCandidates.length === 0) return [];
 
   // Subtract existing events in the owner's calendar that overlap (including
   // a buffer cushion before and after each candidate).
   const calId = link.calendarId;
-  const windowFrom = candidates[0]!.startsAt;
-  const windowTo = candidates[candidates.length - 1]!.endsAt;
-  const conflicts: { startsAt: Date; endsAt: Date }[] = await db
+  const windowFrom = new Date(uniqueCandidates[0]!.startsAt.getTime() - bufferBeforeMin * 60_000);
+  const windowTo = new Date(uniqueCandidates[uniqueCandidates.length - 1]!.endsAt.getTime() + bufferAfterMin * 60_000);
+  const conflicts: { startsAt: Date; endsAt: Date }[] = await query
     .select({ startsAt: schema.events.startsAt, endsAt: schema.events.endsAt })
     .from(schema.events)
     .where(and(
@@ -92,22 +99,22 @@ export async function availableSlots(link: schema.BookingLink, fromUtc: Date, da
     ));
   // 重复事件：以前只认主事件自己那一次（每周例会只挡住了第一周）。
   // 把窗口里的每一次都展开出来，按日历上画出来的那一批时刻（同一个时区口径）算忙。
-  conflicts.push(...await recurringBusy(calId, windowFrom, windowTo));
+  conflicts.push(...await recurringBusy(calId, windowFrom, windowTo, query));
 
-  return candidates.filter((slot) => {
+  return uniqueCandidates.filter((slot) => {
     const startWithBuffer = new Date(slot.startsAt.getTime() - bufferBeforeMin * 60_000);
     const endWithBuffer = new Date(slot.endsAt.getTime() + bufferAfterMin * 60_000);
     return !conflicts.some((c) => c.endsAt > startWithBuffer && c.startsAt < endWithBuffer);
   });
 }
 
-async function recurringBusy(calendarId: string, from: Date, to: Date): Promise<Slot[]> {
-  const [cal] = await db
+async function recurringBusy(calendarId: string, from: Date, to: Date, query: Pick<DB, "select">): Promise<Slot[]> {
+  const [cal] = await query
     .select({ timezone: schema.calendars.timezone })
     .from(schema.calendars)
     .where(eq(schema.calendars.id, calendarId))
     .limit(1);
-  const masters = await db
+  const masters = await query
     .select({
       id: schema.events.id, startsAt: schema.events.startsAt, endsAt: schema.events.endsAt,
       allDay: schema.events.allDay, rrule: schema.events.rrule, exdates: schema.events.exdates,
@@ -148,18 +155,9 @@ export type CreatedBooking = {
   event: schema.Event;
 };
 
-// Atomic booking: SELECT-then-INSERT inside a single transaction so two
-// guests racing for the same slot can't both insert. Postgres default
-// READ COMMITTED gives us the visibility we need for the overlap check
-// to actually see the other transaction's INSERT once it commits — the
-// SELECT here runs at the start of *this* tx, so if the other tx commits
-// first our INSERT will see it and we throw; if we commit first the
-// other tx will see ours.
-//
-// (For true serialization under heavier load, escalate to a SERIALIZABLE
-// isolation tx + retry-on-conflict, or add a PG exclusion constraint
-// on (calendar_id, tsrange(starts_at, ends_at)). For the current scale
-// the in-tx re-check is sufficient.)
+// Serialize reservations for one calendar across all booking links. The slot
+// rules and recurring-event conflicts are rechecked after acquiring the row
+// lock, so a waiting request observes the preceding committed reservation.
 export async function bookSlot(input: {
   link: schema.BookingLink;
   startsAt: Date;
@@ -168,45 +166,24 @@ export async function bookSlot(input: {
   guestName: string;
   guestMessage?: string;
 }): Promise<CreatedBooking> {
-  // **请求体里的 startsAt 必须真的是一个可约时段。**
-  //
-  // 原来这里只查「有没有和已有事件撞上」，于是任何人都能往店主日历里写任意
-  // 时间的事件：凌晨三点、周日、去年、五年以后都行 —— 只要那个时刻恰好没排东西。
-  // 页面上根本不会显示这些时段，但那张表单是公开的，谁都可以自己拼一个 POST。
-  // CSRF 挡不住：访客本来就能打开页面拿到 token，它防的是跨站，不是越权。
-  //
-  // 判据直接问 availableSlots —— 也就是页面用来画可选时段的那一个函数。
-  // 不另写一份「合法性校验」：两份判据迟早会各走各的，而那种偏差没人看得见。
-  // 它一并覆盖了可用时间窗、时长对齐、最短预约提前量、可约天数上限，
-  // 以及前后缓冲（缓冲是下面那个 conflicts 查询没有的）。
-  const now = new Date();
-  const bookable = await availableSlots(input.link, now, input.link.maxDaysAhead);
-  const wanted = input.startsAt.getTime();
-  if (!bookable.some((s) => s.startsAt.getTime() === wanted)) {
-    throw new BookingError("slotUnavailable");
-  }
-
-  return await db.transaction(async (tx) => {
-    // 上面那一步是按「刚才那一瞬间」算的；这里再查一次是为了守住并发窗口
-    // ——两个人同时点同一个时段。
-    const conflicts = await tx
-      .select({ id: schema.events.id })
-      .from(schema.events)
-      .where(and(
-        eq(schema.events.calendarId, input.link.calendarId),
-        gte(schema.events.endsAt, input.startsAt),
-        lte(schema.events.startsAt, input.endsAt),
-        isNull(schema.events.deletedAt),
-      ))
-      .limit(1);
-    if (conflicts.length > 0) {
-      throw new BookingError("slotTaken");
-    }
+  const created = await db.transaction(async (tx) => {
+    const [calendar] = await tx.select({ ownerId: schema.calendars.ownerId })
+      .from(schema.calendars).where(eq(schema.calendars.id, input.link.calendarId)).for("update");
+    const [link] = await tx.select().from(schema.bookingLinks)
+      .where(eq(schema.bookingLinks.id, input.link.id)).for("update");
+    if (!calendar || !link || !link.enabled || link.calendarId !== input.link.calendarId ||
+        link.userId !== calendar.ownerId) throw new BookingError("slotUnavailable");
+    const [owner] = await tx.select({ disabledAt: schema.users.disabledAt }).from(schema.users)
+      .where(eq(schema.users.id, link.userId));
+    if (!owner || owner.disabledAt) throw new BookingError("slotUnavailable");
+    const bookable = await availableSlots(link, new Date(), link.maxDaysAhead, tx);
+    if (!bookable.some((slot) => slot.startsAt.getTime() === input.startsAt.getTime() &&
+        slot.endsAt.getTime() === input.endsAt.getTime())) throw new BookingError("slotUnavailable");
 
     const [event] = await tx.insert(schema.events).values({
-      calendarId: input.link.calendarId,
+      calendarId: link.calendarId,
       uid: newEventUid(),
-      summary: `${input.link.title} — ${input.guestName}`,
+      summary: `${link.title} — ${input.guestName}`,
       description: input.guestMessage || null,
       location: null,
       startsAt: input.startsAt,
@@ -215,14 +192,14 @@ export async function bookSlot(input: {
       rrule: null,
       extra: {
         attendees: [input.guestEmail],
-        bookingLinkId: input.link.id,
+        bookingLinkId: link.id,
         guestName: input.guestName,
       },
     }).returning();
     if (!event) throw new Error("事件创建失败");
 
     const [booking] = await tx.insert(schema.bookings).values({
-      linkId: input.link.id,
+      linkId: link.id,
       eventId: event.id,
       guestEmail: input.guestEmail,
       guestName: input.guestName,
@@ -235,4 +212,31 @@ export async function bookSlot(input: {
 
     return { booking, event };
   });
+  await requestCalendarSync(created.event.calendarId).catch(() => undefined);
+  void pushEventChanged(input.link.userId, created.event.id, "event.created").catch(() => undefined);
+  return created;
+}
+
+/** Commit the booking and event cancellation together; notifications run afterwards. */
+export async function cancelBooking(token: string): Promise<{ found: boolean; alreadyCancelled: boolean }> {
+  const result = await db.transaction(async (tx) => {
+    const [booking] = await tx.select().from(schema.bookings)
+      .where(eq(schema.bookings.cancelToken, token)).for("update");
+    if (!booking) return { found: false, alreadyCancelled: false };
+
+    const now = new Date();
+    const [event] = booking.eventId ? await tx.update(schema.events)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(schema.events.id, booking.eventId), isNull(schema.events.deletedAt))).returning() : [];
+    if (!booking.cancelledAt) await tx.update(schema.bookings).set({ cancelledAt: now }).where(eq(schema.bookings.id, booking.id));
+    const [owner] = event ? await tx.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName })
+      .from(schema.users).innerJoin(schema.calendars, eq(schema.calendars.ownerId, schema.users.id))
+      .where(eq(schema.calendars.id, event.calendarId)) : [];
+    return { found: true, alreadyCancelled: !!booking.cancelledAt, event, owner };
+  });
+  if (result.event) {
+    await requestCalendarSync(result.event.calendarId).catch(() => undefined);
+    if (result.owner) await notifyEventCancellation(result.event, result.owner).catch(() => undefined);
+  }
+  return { found: result.found, alreadyCancelled: result.alreadyCancelled };
 }

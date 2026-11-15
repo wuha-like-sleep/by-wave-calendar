@@ -20,7 +20,7 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
 import { cancelEvent } from "../lib/event_cancel.js";
-import { availableSlots, BookingError, bookSlot, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
+import { availableSlots, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -2610,23 +2610,9 @@ export async function webRoutes(app: FastifyInstance) {
 
   app.post<{ Params: { token: string } }>("/book-cancel/:token", async (req, reply) => {
     if (!verifyCsrf(req, reply)) return;
-    const [b] = await db.select().from(schema.bookings).where(eq(schema.bookings.cancelToken, req.params.token)).limit(1);
-    if (!b) return reply.redirect("/");
-    if (b.cancelledAt) return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: tr(req, "flash.booking.alreadyCancelled") });
-    // Mark booking + soft-delete the underlying event.
-    await db.update(schema.bookings).set({ cancelledAt: new Date() }).where(eq(schema.bookings.id, b.id));
-    if (b.eventId) {
-      const [ev] = await db.select().from(schema.events).where(eq(schema.events.id, b.eventId)).limit(1);
-      if (ev && !ev.deletedAt) {
-        const [link] = await db.select().from(schema.bookingLinks).where(eq(schema.bookingLinks.id, b.linkId)).limit(1);
-        if (link) {
-          const [owner] = await db.select().from(schema.users).where(eq(schema.users.id, link.userId)).limit(1);
-          if (owner) {
-            await cancelEvent(ev.id, { id: owner.id, email: owner.email, displayName: owner.displayName });
-          }
-        }
-      }
-    }
+    const result = await cancelBooking(req.params.token);
+    if (!result.found) return reply.redirect("/");
+    if (result.alreadyCancelled) return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: tr(req, "flash.booking.alreadyCancelled") });
     return redirectWith(reply, `/book-cancel/${req.params.token}`, { success: tr(req, "flash.booking.cancelled") });
   });
 }

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Published desktop-vX.Y.Z or android-vX.Y.Z tag'
+        description: 'Published desktop-vX.Y.Z, android-vX.Y.Z or vX.Y.Z tag'
         required: true
         type: string
 

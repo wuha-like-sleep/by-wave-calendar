@@ -6,6 +6,9 @@
 package cn.bywave.calendar.data.store
 
 import android.content.Context
+import androidx.room.withTransaction
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
@@ -72,14 +75,20 @@ class EventRepository(
         val client = ApiClient.forProfile(profile, profiles)
         val resp = client.api.events(from = fromIso, to = toIso)
         if (profiles.active()?.id != profile.id) return@withLock
-        db.eventDao().replaceForProfile(
-            profile.id,
-            resp.events.map { EventEntity.from(it, profile.id, json) },
-        )
-        db.calendarDao().replaceForProfile(
-            profile.id,
-            resp.calendars.map { CalendarEntity.from(it, profile.id) },
-        )
+        currentCoroutineContext().ensureActive()
+        db.withTransaction {
+            if (profiles.active()?.id != profile.id) return@withTransaction
+            db.eventDao().replaceForProfile(
+                profile.id,
+                resp.events.map { EventEntity.from(it, profile.id, json) },
+            )
+            db.calendarDao().replaceForProfile(
+                profile.id,
+                resp.calendars.map { CalendarEntity.from(it, profile.id) },
+            )
+        }
+        currentCoroutineContext().ensureActive()
+        if (profiles.active()?.id != profile.id) return@withLock
 
         // Ambient sync (v0.6) — opt-in via Settings. Each is gated on
         // its own runtime permission inside the helper, so calling
@@ -134,7 +143,7 @@ class EventRepository(
     }
 
     /** Wipe just one profile's cache (used when removing that account). */
-    suspend fun wipeProfile(profileId: String) {
+    suspend fun wipeProfile(profileId: String): Unit = fetchMutex.withLock {
         AppDatabase.wipeProfile(context, profileId)
     }
 
@@ -151,7 +160,7 @@ class EventRepository(
      * 取消提醒需要能重建出当初的 PendingIntent，所以必须在清 Room **之前**
      * 把事件读出来。
      */
-    suspend fun wipeProfileFully(profile: cn.bywave.calendar.data.auth.Profile) {
+    suspend fun wipeProfileFully(profile: cn.bywave.calendar.data.auth.Profile): Unit = fetchMutex.withLock {
         val events = runCatching { db.eventDao().listForProfile(profile.id).map { it.toDto(json) } }
             .getOrElse { emptyList() }
         runCatching { reminders.cancelAll(profile, events) }
@@ -160,7 +169,7 @@ class EventRepository(
     }
 
     /** Wipe everything (used by "sign out all"). */
-    suspend fun wipeAll() {
+    suspend fun wipeAll(): Unit = fetchMutex.withLock {
         AppDatabase.wipeAll(context)
     }
 }

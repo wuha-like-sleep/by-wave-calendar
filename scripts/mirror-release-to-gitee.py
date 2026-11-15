@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Mirror already published, checksum-verified installers; never compile code."""
 import argparse
+import base64
+import tarfile
 import hashlib
 import json
 import os
@@ -16,8 +18,8 @@ GITEE_REPO = "zhaorunsen/by-wave-calendar"
 
 
 def validate_tag(tag):
-    if not re.fullmatch(r"(?:desktop|android)-v[0-9]+\.[0-9]+\.[0-9]+", tag):
-        raise ValueError("Expected a published desktop-vX.Y.Z or android-vX.Y.Z tag")
+    if not re.fullmatch(r"(?:(?:desktop|android)-)?v[0-9]+\.[0-9]+\.[0-9]+", tag):
+        raise ValueError("Expected a published desktop-vX.Y.Z, android-vX.Y.Z or vX.Y.Z tag")
     return tag
 
 
@@ -70,10 +72,12 @@ def download(url, target, size, checksum=None):
 
 
 def expected_names(tag):
-    version = tag.split("-v", 1)[1]
+    version = tag.rsplit("v", 1)[1]
     if tag.startswith("desktop-"):
         return {f"ByWaveCalendar-{version}-arm64-signed.dmg", f"ByWaveCalendar-{version}-x64-signed.dmg", f"ByWaveCalendar-{version}-x64.msi", "latest.json", "SHA256SUMS.txt"}
-    return {f"bywave-calendar-{version}.apk", "latest.json", "SHA256SUMS.txt"}
+    if tag.startswith("android-"):
+        return {f"bywave-calendar-{version}.apk", "latest.json", "SHA256SUMS.txt"}
+    return {f"by-wave-calendar-v{version}.tar.gz", f"by-wave-calendar-v{version}.tar.gz.sig", "SHA256SUMS.txt"}
 
 
 def parse_checksums(text, names):
@@ -118,9 +122,24 @@ def mirror(tag, check_only=False):
         checksums = parse_checksums((folder / sums["name"]).read_text(), names)
         for name in sorted(checksums):
             download(assets[name]["browser_download_url"], folder / name, assets[name]["size"], checksums[name])
-        manifest = json.loads((folder / "latest.json").read_text())
-        if manifest.get("versionName") != tag.split("-v", 1)[1]:
-            raise ValueError("Update manifest does not match the release tag")
+        version = tag.rsplit("v", 1)[1]
+        if tag.startswith("v"):
+            archive = folder / f"by-wave-calendar-v{version}.tar.gz"
+            with tarfile.open(archive) as tar:
+                package = tar.extractfile(f"by-wave-calendar-v{version}/package.json")
+                if package is None or json.load(package).get("version") != version:
+                    raise ValueError("Server package does not match the release tag")
+            signature = base64.b64decode(Path(str(archive) + ".sig").read_text().strip(), validate=True)
+            if len(signature) != 64:
+                raise ValueError("Invalid server package signature")
+            sigfile = folder / "signature.bin"
+            sigfile.write_bytes(signature)
+            key = Path(__file__).resolve().parents[1] / "deploy/update-signing-pub.pem"
+            subprocess.run(["openssl", "pkeyutl", "-verify", "-pubin", "-inkey", str(key), "-rawin", "-in", str(archive), "-sigfile", str(sigfile)], check=True)
+        else:
+            manifest = json.loads((folder / "latest.json").read_text())
+            if manifest.get("versionName") != version:
+                raise ValueError("Update manifest does not match the release tag")
         checksums["SHA256SUMS.txt"] = sums_hash
         print(f"Verified {len(names)} published files for {tag}", flush=True)
         if check_only:
