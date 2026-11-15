@@ -54,6 +54,7 @@ class SystemCalendarMirror(private val context: Context) {
         profile: Profile,
         calendars: List<CalendarMeta>,
         events: List<EventDTO>,
+        selectedCalendarIds: Set<String>? = null,
     ) {
         if (!isAvailable()) return
         val resolver = context.contentResolver
@@ -62,7 +63,17 @@ class SystemCalendarMirror(private val context: Context) {
         //    keyed by (profileId, calendarId). Stash the resulting
         //    system calendar id in a lookup map.
         val sysIds = mutableMapOf<String, Long>()
-        for (cal in calendars) {
+        // Remove only calendars created by this profile and explicitly deselected.
+        if (selectedCalendarIds != null) {
+            val uri = CalendarContract.Calendars.CONTENT_URI.buildUpon()
+                .appendQueryParameter(CalendarContract.CALLER_IS_SYNCADAPTER, "true")
+                .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_NAME, accountName)
+                .appendQueryParameter(CalendarContract.Calendars.ACCOUNT_TYPE, accountType).build()
+            for (cal in calendars.filter { it.id !in selectedCalendarIds }) {
+                resolver.delete(uri, "${CalendarContract.Calendars.ACCOUNT_NAME} = ? AND ${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND ${CalendarContract.Calendars.NAME} = ?", arrayOf(accountName, accountType, "bywave-${profile.id}-${cal.id}"))
+            }
+        }
+        for (cal in calendars.filter { selectedCalendarIds == null || it.id in selectedCalendarIds }) {
             val sysId = ensureSystemCalendar(resolver, profile, cal)
             if (sysId > 0) sysIds[cal.id] = sysId
         }
@@ -113,8 +124,8 @@ class SystemCalendarMirror(private val context: Context) {
         // disambiguates).
         val proj = arrayOf(CalendarContract.Calendars._ID)
         val sel = "${CalendarContract.Calendars.ACCOUNT_NAME} = ? AND " +
-            "${CalendarContract.Calendars.CALENDAR_DISPLAY_NAME} = ?"
-        val args = arrayOf(accountName, displayName)
+            "${CalendarContract.Calendars.ACCOUNT_TYPE} = ? AND ${CalendarContract.Calendars.NAME} = ?"
+        val args = arrayOf(accountName, accountType, "bywave-${profile.id}-${cal.id}")
         resolver.query(CalendarContract.Calendars.CONTENT_URI, proj, sel, args, null)?.use { c ->
             if (c.moveToFirst()) return c.getLong(0)
         }

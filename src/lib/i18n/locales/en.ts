@@ -12,6 +12,13 @@
 // the English key HERE first, then translate in the sibling locale files.
 
 export const en = {
+  "nativeLogin.title": "Sign in to the app",
+  "nativeLogin.intro": "Continue only if you started this sign-in in ByWave Calendar.",
+  "nativeLogin.continue": "Continue to app",
+  "nativeLogin.switch": "Use another account",
+  "nativeLogin.cancel": "Cancel and return to app",
+  "nativeLogin.upgrade": "This sign-in request is invalid or the app needs an update. Update the app and try again. You can still sign in with a QR code or pairing code.",
+
   "adminCalendar.title": "System calendar configuration",
   "adminCalendar.intro": "Configure calendar connections for your platform. Changes take effect immediately, without editing server files or restarting.",
   "adminCalendar.outlook": "Supports Microsoft 365 / Outlook.com cloud calendars in new and classic Outlook.",
@@ -64,7 +71,7 @@ export const en = {
   "calendarSync.pairHelp": "We recommend a dedicated Outlook calendar. Events in both selected calendars will be copied across; later edits and deletions sync in both directions.",
   "calendarSync.choose": "Choose a calendar",
   "calendarSync.start": "Start two-way sync",
-  "calendarSync.scope": "Outlook sync covers the past 90 days and next 365 days; linked events remain tracked. Titles, descriptions, locations, times and all-day status sync. Recurring events sync as individual occurrences; editing one does not change the series. Reminders, attachments, attendees and invitations are not copied across. Sync normally runs every minute, with large calendars processed in batches.",
+  "calendarSync.scope": "Outlook sync covers the past 90 days and next 365 days; linked events remain tracked. Titles, descriptions, locations, times and all-day status sync. Recurring events sync as individual occurrences; editing one does not change the series. Reminders, attachments, attendees and invitations are not copied across. Sync normally runs every 30 seconds, with large calendars processed in batches.",
   "calendarSync.queued": "Sync queued. Refresh shortly to check progress.",
   "calendarSync.saved": "Saved. Changes take effect on the next sync pass.",
   "calendarSync.statusTitle": "Sync status",

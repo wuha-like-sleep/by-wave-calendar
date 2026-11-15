@@ -63,6 +63,13 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 interface BywaveApi {
+    @GET("api/v1/calendar-sync")
+    suspend fun calendarConnection(@Query("remote") remote: String): cn.bywave.calendar.connect.CalendarConnection
+    @POST("api/v1/calendar-sync/action")
+    suspend fun calendarCommand(@Body command: cn.bywave.calendar.connect.CalendarCommand): cn.bywave.calendar.connect.CalendarCommandResult
+    @GET("api/v1/calendar-sync/apple-profile")
+    suspend fun calendarProfile(): cn.bywave.calendar.connect.AppleProfile
+
     // CRITICAL: this is /auth/login-password, NOT /auth/login.
     // /auth/login is the WEB cookie endpoint — it returns user info and
     // sets a session cookie but does NOT mint access/refresh tokens.

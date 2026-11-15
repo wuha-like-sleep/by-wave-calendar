@@ -6,7 +6,7 @@
 //   - Fetching events for the visible window
 //   - On-disk cache (cold launch = instant render, then refetch)
 //   - Foreground refresh (scenePhase becomes .active → reload)
-//   - 60s background polling timer
+//   - Foreground refresh every 15 seconds
 //   - Last-synced label
 //   - "+" toolbar to create events
 //   - "齿轮" toolbar to open settings
@@ -31,6 +31,7 @@ struct CalendarView: View {
     @State private var events: [EventDTO] = []
     @State private var calendars: [CalendarMeta] = []
     @State private var isLoading = false
+    @State private var loadGeneration = 0
     /// 系统现在有没有给竖栏（iPhone Duo 外屏）。见 VerticalBarProbe。
     @State private var hasVerticalBar = false
     @State private var lastSyncedAt: Date?
@@ -632,10 +633,12 @@ struct CalendarView: View {
     private func load(force: Bool) async {
         // De-duplicate concurrent loads (polling + manual refresh racing).
         if isLoading && !force { return }
+        loadGeneration += 1
+        let generation = loadGeneration
         let (from, to) = currentWindow()
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer { if generation == loadGeneration { isLoading = false } }
         // 注意：lastFetchedWindow 只在**请求成功之后**才记录（见下面成功分支）。
         //
         // 以前是在这里、发请求之前就记上的。于是一旦这次加载失败，这个窗口
@@ -667,7 +670,7 @@ struct CalendarView: View {
             }.value
             // 账号已经换了（或已退出）：这份数据不属于现在的账号，整个丢掉。
             // 这个视图本身也马上会被 RootView 按新账号重新挂载。
-            guard state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
+            guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
             self.calendars = resp.calendars
             self.events = sortedEvents
             self.lastSyncedAt = Date()
@@ -686,7 +689,8 @@ struct CalendarView: View {
             EventCache.shared.write(key: key, payload: payload)
             // Fire EventKit mirror (no-op if disabled / no permission).
             Task {
-                await EventKitMirror.shared.mirror(events: resp.events, windowStart: from, windowEnd: to)
+                guard generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId, let profileID = loadingProfileId else { return }
+                await EventKitMirror.shared.mirror(events: resp.events, windowStart: from, windowEnd: to, selectedCalendarIDs: EventKitMirror.shared.selectedCalendars(profileID: profileID))
             }
             // Re-schedule local notifications. No-op when feature disabled
             // or permission denied. Always uses the full event set so
@@ -711,6 +715,7 @@ struct CalendarView: View {
             // 账号在请求途中换了（AppState.refreshIfNeeded 丢掉了上一个账号的令牌），
             // 或者视图正在被撤下。不是错误，别在界面上写一行看不懂的英文。
         } catch {
+            guard generation == loadGeneration, !Task.isCancelled, state.activeProfileId == loadingProfileId else { return }
             errorMessage = error.localizedDescription
         }
     }
@@ -739,7 +744,7 @@ struct CalendarView: View {
             // Sleep first, then loop forever. Foreground only — the
             // scenePhase observer cancels us when going to background.
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60 * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: 15 * 1_000_000_000)
                 if Task.isCancelled { return }
                 guard state != nil else { return }
                 await load(force: false)
@@ -825,92 +830,15 @@ extension Color {
     }
 }
 
-// MARK: - iPhone Duo 外屏的竖栏
-//
-// Mac 版（Mac Catalyst）用的是 macOS 的 SDK，里面没有 axisBehavior / verticalBarEdge
-// 这几样东西。`if #available(iOS 27.1, *)` 只管运行时，挡不住编译 —— 不隔开的话
-// Mac 版整个编不过。Mac 上也没有竖栏，所以那边 hasVerticalBar 恒为 false、
-// 工具栏照旧排在顶上。
-
-/// 把整组工具栏按钮声明成「有竖栏就优先放竖栏」（iOS 27.1 的 axisBehavior）。
-/// ToolbarContentBuilder 不支持 `if #available`，所以版本判断放在 View 这一层。
+// Toolbar uses the SDK-supported horizontal layout on iPhone, iPad and Catalyst.
 private struct VerticalPreferredToolbar<Items: ToolbarContent, VerticalOnly: ToolbarContent, HorizontalOnly: ToolbarContent>: ViewModifier {
     let items: Items
-    /// 只在有竖栏时才加的一组（日/周/月/年），和上面那组之间隔开。
     let verticalOnly: VerticalOnly
-    /// 只在有竖栏时才加、但必须留在顶栏的（‹ 日期 ›）。
     let horizontalOnly: HorizontalOnly
     let hasVerticalBar: Bool
-
-    func body(content: Content) -> some View {
-        #if targetEnvironment(macCatalyst)
-        content.toolbar { items }
-        #else
-        if #available(iOS 27.1, *) {
-            content.toolbar {
-                items.axisBehavior(.verticalPreferred)
-                if hasVerticalBar {
-                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
-                    verticalOnly.axisBehavior(.verticalPreferred)
-                    horizontalOnly.axisBehavior(.horizontalOnly)
-                }
-            }
-        } else {
-            content.toolbar { items }
-        }
-        #endif
-    }
+    func body(content: Content) -> some View { content.toolbar { items } }
 }
-
-/// 系统此刻有没有给竖栏。这个值只在 UIKit 的 trait 里（verticalBarEdge），
-/// SwiftUI 没有对应的环境变量，所以垫一个看不见、不接触摸的 UIView 去读，
-/// 折叠/展开、转屏时 trait 变了再报一次。
-private struct VerticalBarProbe: UIViewRepresentable {
+private struct VerticalBarProbe: View {
     @Binding var isPresent: Bool
-
-    func makeUIView(context: Context) -> ProbeView {
-        let view = ProbeView()
-        view.onChange = { present in
-            if isPresent != present { isPresent = present }
-        }
-        return view
-    }
-
-    func updateUIView(_ uiView: ProbeView, context: Context) {}
-
-    final class ProbeView: UIView {
-        var onChange: ((Bool) -> Void)?
-
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            isUserInteractionEnabled = false
-            isAccessibilityElement = false
-            #if !targetEnvironment(macCatalyst)
-            if #available(iOS 27.1, *) {
-                registerForTraitChanges(UITraitCollection.systemTraitsAffectingVerticalBarEdge) { (view: ProbeView, _) in
-                    view.report()
-                }
-            }
-            #endif
-        }
-
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            report()
-        }
-
-        private func report() {
-            guard window != nil else { return }
-            var present = false
-            #if !targetEnvironment(macCatalyst)
-            if #available(iOS 27.1, *) {
-                present = traitCollection.verticalBarEdge != .unspecified
-            }
-            #endif
-            // 不在 SwiftUI 更新视图的这一轮里改状态。
-            DispatchQueue.main.async { [weak self] in self?.onChange?(present) }
-        }
-    }
+    var body: some View { Color.clear.allowsHitTesting(false).accessibilityHidden(true).onAppear { isPresent = false } }
 }

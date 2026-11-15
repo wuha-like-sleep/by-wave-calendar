@@ -19,6 +19,8 @@ const bimi = brandSvg(32).replace('width="32" height="32"', 'version="1.2" baseP
 await writeFile('src/public/bimi/logo.svg', bimi);
 
 await writeFile('apps/ios/ByWaveCalendar/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png', await brandPng(1024, 'full-bleed'));
+await mkdir('apps/ios/ByWaveCalendar/Assets.xcassets/BrandIcon.imageset', { recursive: true });
+await writeFile('apps/ios/ByWaveCalendar/Assets.xcassets/BrandIcon.imageset/BrandIcon.png', await brandPng(1024, 'full-bleed'));
 const android = 'apps/android/ByWaveCalendar/app/src/main/res';
 for (const [density, size] of [['mdpi',48],['hdpi',72],['xhdpi',96],['xxhdpi',144],['xxxhdpi',192]]) {
   await writeFile(`${android}/mipmap-${density}/ic_launcher.png`, await brandPng(size));

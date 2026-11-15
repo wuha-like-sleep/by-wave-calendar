@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">ブラウザでログイン</string>
+    <string name="web_login_pending">ブラウザでログインを完了し、ここに戻ってください。</string>
+    <string name="web_login_cancel">ログインをキャンセル</string>
+    <string name="web_login_https">HTTPS のサーバーアドレスが必要です。</string>
+    <string name="web_login_open_failed">ブラウザを開けません。再試行してください。</string>
+    <string name="web_login_expired">ログインの有効期限が切れました。やり直してください。</string>
+    <string name="web_login_invalid">応答が無効です。アプリとサーバーを更新して再試行してください。</string>
+    <string name="web_login_failed">ログインに失敗しました。再試行してください。</string>
+</resources>

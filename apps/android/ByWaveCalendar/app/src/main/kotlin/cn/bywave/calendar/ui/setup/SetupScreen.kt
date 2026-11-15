@@ -5,6 +5,11 @@
 
 package cn.bywave.calendar.ui.setup
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,6 +50,7 @@ fun SetupScreen(
     vm: SetupViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // 被动登出（改了密码 / 这台设备被后台移除）的说明。ProfileStore 一直
     // 在记这个原因，注释也写着「配对页读它显示提示」，但全仓没有任何地方
@@ -72,6 +78,13 @@ fun SetupScreen(
             onPasswordChange = vm::onPasswordChange,
             onSignIn = vm::signIn,
             onScanQr = onScanQr,
+            onBrowserLogin = {
+                vm.beginBrowserLogin()?.let { url ->
+                    try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    catch (_: Exception) { vm.browserLaunchFailed() }
+                }
+            },
+            onCancelBrowser = vm::cancelBrowserLogin,
         )
     }
 
@@ -96,6 +109,8 @@ private fun SetupContent(
     onPasswordChange: (String) -> Unit,
     onSignIn: () -> Unit,
     onScanQr: () -> Unit,
+    onBrowserLogin: () -> Unit,
+    onCancelBrowser: () -> Unit,
 ) {
     // imePadding 不能少。APP 是 edge-to-edge 的（MainActivity 调了
     // enableEdgeToEdge），系统就不再替我们把窗口缩到键盘上方了——键盘弹出来
@@ -111,6 +126,8 @@ private fun SetupContent(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(24.dp))
+        Image(painterResource(R.mipmap.ic_launcher), contentDescription = null, modifier = Modifier.size(80.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.setup_title),
             style = MaterialTheme.typography.headlineSmall,
@@ -142,6 +159,19 @@ private fun SetupContent(
             modifier = Modifier.fillMaxWidth(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
         )
+
+        Button(onClick = onBrowserLogin, enabled = !state.busy && !state.browserPending && state.server.isNotBlank(), modifier = Modifier.fillMaxWidth().height(54.dp)) {
+            Text(stringResource(R.string.web_login_button))
+        }
+        AnimatedVisibility(state.browserPending) {
+            androidx.compose.material3.Card(Modifier.fillMaxWidth().animateContentSize()) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                    Text(stringResource(R.string.web_login_pending), style = MaterialTheme.typography.bodyMedium)
+                    androidx.compose.material3.TextButton(onClick = onCancelBrowser) { Text(stringResource(R.string.web_login_cancel)) }
+                }
+            }
+        }
 
         OutlinedTextField(
             value = state.email,

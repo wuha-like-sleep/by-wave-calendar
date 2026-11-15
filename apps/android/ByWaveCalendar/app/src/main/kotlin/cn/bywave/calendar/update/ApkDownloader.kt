@@ -1,25 +1,8 @@
-// Downloads the APK from the release URL into <cache>/updates/, streams
-// progress via a Flow, and verifies sha256 before signaling done. We use
-// OkHttp directly (not Android's DownloadManager) because:
-//   - DownloadManager writes to public Downloads/ which means
-//     READ_EXTERNAL_STORAGE noise on older devices and an extra
-//     "where do I save it" surface,
-//   - it's awkward to give DownloadManager-saved files to FileProvider
-//     (the file is owned by the system downloader, not us),
-//   - keeping it in cacheDir means Android can reclaim space if low,
-//     which is the right policy for a one-time-use APK.
-//
-// Failure modes (sha mismatch, IO error, cancel) all surface as
-// DownloadProgress.Failed with a Chinese-localized message — the sheet
-// just shows it to the user.
-
 package cn.bywave.calendar.update
 
-import cn.bywave.calendar.R
 import android.content.Context
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
+import cn.bywave.calendar.R
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -28,6 +11,9 @@ import okhttp3.Request
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.AtomicMoveNotSupportedException
 
 sealed class DownloadProgress {
     data class Downloading(val bytesRead: Long, val totalBytes: Long) : DownloadProgress() {
@@ -39,124 +25,94 @@ sealed class DownloadProgress {
 
 object ApkDownloader {
     private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            // No read timeout — big APK on slow networks shouldn't trip a timer.
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .build()
+        OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS).callTimeout(20, TimeUnit.MINUTES)
+            .followSslRedirects(false).build()
     }
 
-    /** Returns the file we'd download into (or have already downloaded into)
-     *  for a given release. Lets the sheet check if a prior successful
-     *  download is still cached and skip the network round trip. */
     fun cachedFileFor(context: Context, release: AndroidReleaseDto): File {
         val dir = File(context.cacheDir, "updates").also { it.mkdirs() }
-        // Filename includes versionCode so we can't confuse two different
-        // releases that happened to ship the same versionName by accident.
-        val safeName = "bywave-${release.versionCode}-${release.versionName.replace("[^\\w.\\-]".toRegex(), "_")}.apk"
-        return File(dir, safeName)
+        val digest = release.sha256.lowercase().filter { it in "0123456789abcdef" }.take(16)
+        return File(dir, "bywave-${release.versionCode}-$digest.apk")
     }
 
-    /** Returns the cached APK iff its sha matches the release manifest.
-     *  If sha matches we can skip re-downloading entirely. */
-    fun verifiedCachedFile(context: Context, release: AndroidReleaseDto): File? {
-        val f = cachedFileFor(context, release)
-        if (!f.exists() || f.length() <= 0) return null
-        if (release.sha256.isBlank()) return null  // can't trust without a checksum
-        return if (sha256(f).equals(release.sha256, ignoreCase = true)) f else null
+    suspend fun verifiedCachedFile(context: Context, release: AndroidReleaseDto): File? = withContext(Dispatchers.IO) {
+        if (!validReleaseDownload(release)) return@withContext null
+        val file = cachedFileFor(context, release)
+        if (!file.isFile || file.length() != release.sizeBytes) return@withContext null
+        try { file.takeIf { sha256(it).equals(release.sha256, ignoreCase = true) } }
+        catch (e: CancellationException) { throw e }
+        catch (_: java.io.IOException) { null }
     }
 
     fun download(context: Context, release: AndroidReleaseDto): Flow<DownloadProgress> = flow {
-        // Quick win — already in cache and checksums match? Skip the network.
-        verifiedCachedFile(context, release)?.let {
-            emit(DownloadProgress.Downloading(it.length(), it.length()))
-            emit(DownloadProgress.Done(it))
+        if (!validReleaseDownload(release)) {
+            emit(DownloadProgress.Failed(context.getString(R.string.update_err_checksum)))
             return@flow
         }
-
+        verifiedCachedFile(context, release)?.let {
+            emit(DownloadProgress.Done(it)); return@flow
+        }
         val target = cachedFileFor(context, release)
-        // Clean up any stale partial from a previous failed attempt.
-        if (target.exists()) target.delete()
-        // Clean other release files in the dir — keep just one APK
-        // around at a time.
-        target.parentFile?.listFiles()?.forEach { if (it != target) it.delete() }
-
-        val req = Request.Builder().url(release.url).build()
-        val call = client.newCall(req)
+        val partial = try { File.createTempFile("bywave-", ".part", target.parentFile) }
+        catch (_: java.io.IOException) {
+            emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
+            return@flow
+        }
+        val call = client.newCall(Request.Builder().url(release.url).build())
+        // A separate child observes cancellation even while byteStream.read is
+        // blocked; closing the socket promptly releases that blocking read.
+        val cancellation = CoroutineScope(currentCoroutineContext()).launch(start = CoroutineStart.UNDISPATCHED) {
+            try { awaitCancellation() } finally { call.cancel() }
+        }
         try {
-            call.execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_server)))
-                    return@flow
-                }
-                val body = resp.body ?: run {
-                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
-                    return@flow
-                }
-                val total = body.contentLength().let { if (it > 0) it else release.sizeBytes }
-                val source = body.byteStream()
-                target.outputStream().use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    var totalRead = 0L
-                    var emittedAt = 0L
+            call.execute().use { response ->
+                check(response.isSuccessful)
+                val body = checkNotNull(response.body)
+                val declared = body.contentLength()
+                check(declared < 0 || declared == release.sizeBytes)
+                var read = 0L
+                var emittedAt = 0L
+                val digest = MessageDigest.getInstance("SHA-256")
+                body.byteStream().use { source -> partial.outputStream().use { output ->
+                    val buffer = ByteArray(64 * 1024)
                     while (true) {
-                        // Cooperative cancellation — if the user hit "取消",
-                        // ensureActive() throws CancellationException which
-                        // the outer catch handles (closes the OkHttp call +
-                        // deletes the partial APK).
-                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                        val n = source.read(buf)
-                        if (n <= 0) break
-                        out.write(buf, 0, n)
-                        totalRead += n
-                        // Throttle progress emissions to ~10/s — Flow
-                        // collectors don't need a notification per chunk.
+                        currentCoroutineContext().ensureActive()
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        check(read + count <= release.sizeBytes)
+                        output.write(buffer, 0, count); digest.update(buffer, 0, count); read += count
                         val now = System.currentTimeMillis()
                         if (now - emittedAt >= 100) {
-                            emit(DownloadProgress.Downloading(totalRead, total))
-                            emittedAt = now
+                            emit(DownloadProgress.Downloading(read, release.sizeBytes)); emittedAt = now
                         }
                     }
-                    emit(DownloadProgress.Downloading(totalRead, total))
-                }
+                } }
+                check(read == release.sizeBytes)
+                check(digest.digest().joinToString("") { "%02x".format(it) }.equals(release.sha256, true))
+                currentCoroutineContext().ensureActive()
+                try { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING) }
+                catch (_: AtomicMoveNotSupportedException) { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+                emit(DownloadProgress.Done(target))
             }
-
-            // Verify sha256 if the manifest provided one. Reject the file
-            // if it doesn't match — an MITM attacker could otherwise
-            // serve a swapped APK over plain HTTP. (TLS catches this for
-            // most users; the sha is defense in depth.)
-            if (release.sha256.isNotBlank()) {
-                val actual = sha256(target)
-                if (!actual.equals(release.sha256, ignoreCase = true)) {
-                    target.delete()
-                    emit(DownloadProgress.Failed(context.getString(R.string.update_err_checksum)))
-                    return@flow
-                }
-            }
-            emit(DownloadProgress.Done(target))
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // User cancelled — close the OkHttp call so the socket doesn't
-            // sit in TIME_WAIT, wipe the partial file, and rethrow so the
-            // surrounding coroutine machinery sees the cancel.
-            call.cancel()
-            target.delete()
-            throw e
-        } catch (e: Exception) {
-            target.delete()
+        } catch (e: CancellationException) { throw e }
+        catch (_: Exception) {
+            currentCoroutineContext().ensureActive()
             emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
-        }
+        } finally { cancellation.cancel(); call.cancel(); partial.delete() }
     }.flowOn(Dispatchers.IO)
 
-    private fun sha256(f: File): String {
-        val md = MessageDigest.getInstance("SHA-256")
-        f.inputStream().use { input ->
-            val buf = ByteArray(64 * 1024)
+    private suspend fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
             while (true) {
-                val n = input.read(buf)
-                if (n <= 0) break
-                md.update(buf, 0, n)
+                currentCoroutineContext().ensureActive()
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
             }
         }
-        return md.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

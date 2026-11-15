@@ -1,6 +1,7 @@
 // Business logic for the device pairing flow. Routes delegate to these
 // functions; the routes file stays Fastify-shaped only.
 
+import { createHash, randomBytes } from "node:crypto";
 import { and, asc, eq, gt, isNull, lt, ne } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import {
@@ -29,6 +30,23 @@ export async function initPairing(userId: string): Promise<PairingInitResult> {
   return { code, expiresAt };
 }
 
+// Native browser codes are proof-bound and cannot be redeemed as ordinary QR codes.
+// Store the code digest and S256 challenge in the existing text key; no schema
+// migration or process-local state is needed for multi-instance deployments.
+export const WEB_CODE = /^BW1\.[A-Za-z0-9_-]{43}$/;
+export const PKCE_VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/;
+export const PKCE_CHALLENGE = /^[A-Za-z0-9_-]{43}$/;
+export function browserPairingKey(code: string, challenge: string): string {
+  return `web:${createHash("sha256").update(code).digest("hex")}:${challenge}`;
+}
+export async function initBrowserPairing(userId: string, challenge: string): Promise<PairingInitResult> {
+  if (!PKCE_CHALLENGE.test(challenge)) throw new Error("Invalid S256 challenge");
+  const code = `BW1.${randomBytes(32).toString("base64url")}`;
+  const expiresAt = new Date(Date.now() + PAIRING_TTL_MS);
+  await db.insert(schema.devicePairings).values({ userId, code: browserPairingKey(code, challenge), expiresAt });
+  return { code, expiresAt };
+}
+
 export type ClaimedPairing = {
   refreshToken: string;
   accessToken: string;
@@ -54,6 +72,7 @@ export type ClaimedPairing = {
 // Keychain even after the user clears its refresh token locally.
 export async function claimPairing(input: {
   code: string;
+  codeVerifier?: string;
   label: string;
   kind: string;
   appVersion?: string | null;
@@ -61,10 +80,17 @@ export async function claimPairing(input: {
   ip?: string | null;
   userAgent?: string | null;
 }): Promise<ClaimedPairing | null> {
+  let lookupCode = input.code;
+  if (input.codeVerifier !== undefined) {
+    if (!WEB_CODE.test(input.code) || !PKCE_VERIFIER.test(input.codeVerifier)) return null;
+    lookupCode = browserPairingKey(input.code, createHash("sha256").update(input.codeVerifier).digest("base64url"));
+  } else if (!/^[A-Z0-9]{4,20}$/.test(input.code)) {
+    return null;
+  }
   const [pair] = await db
     .select()
     .from(schema.devicePairings)
-    .where(eq(schema.devicePairings.code, input.code))
+    .where(eq(schema.devicePairings.code, lookupCode))
     .limit(1);
   if (!pair) return null;
   if (pair.claimedAt) return null;            // already used
@@ -74,6 +100,12 @@ export async function claimPairing(input: {
   const [u] = await db.select().from(schema.users).where(eq(schema.users.id, pair.userId)).limit(1);
   if (!u || !userIsActive(u)) return null;
 
+  // Claim before issuing credentials. The conditional write is the single-use
+  // gate even when two requests hit different server instances simultaneously.
+  const [won] = await db.update(schema.devicePairings).set({ claimedAt: new Date() })
+    .where(and(eq(schema.devicePairings.id, pair.id), isNull(schema.devicePairings.claimedAt), gt(schema.devicePairings.expiresAt, new Date())))
+    .returning({ id: schema.devicePairings.id });
+  if (!won) return null;
   const refresh = await issueRefreshToken();
   const device = await upsertDeviceForUser({
     userId: pair.userId,

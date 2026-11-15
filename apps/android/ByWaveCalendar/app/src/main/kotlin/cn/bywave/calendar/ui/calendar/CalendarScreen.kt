@@ -65,6 +65,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.SignedOutNotice
@@ -100,6 +103,16 @@ fun CalendarScreen(
     val signedOutNotices by profiles.signedOutNotices.collectAsState()
 
     val state by vm.state.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(vm, lifecycleOwner, activeId) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            vm.refreshIfIdle()
+            while (true) {
+                kotlinx.coroutines.delay(15_000)
+                vm.refreshIfIdle()
+            }
+        }
+    }
     // Subtle haptic on primary (FAB create) + destructive (delete confirm)
     // taps, to match the iOS app's feel. Long-press already buzzes via
     // Compose's built-in combinedClickable haptic.

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">Connexion dans le navigateur</string>
+    <string name="web_login_pending">Terminez la connexion dans le navigateur, puis revenez ici.</string>
+    <string name="web_login_cancel">Annuler la connexion</string>
+    <string name="web_login_https">La connexion nécessite une adresse de serveur HTTPS.</string>
+    <string name="web_login_open_failed">Impossible d’ouvrir le navigateur. Réessayez.</string>
+    <string name="web_login_expired">La connexion a expiré. Recommencez.</string>
+    <string name="web_login_invalid">La réponse est invalide. Mettez à jour l’application et le serveur, puis réessayez.</string>
+    <string name="web_login_failed">Échec de connexion. Réessayez.</string>
+</resources>

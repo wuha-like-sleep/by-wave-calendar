@@ -72,6 +72,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.ByWaveCalendar"
@@ -90,7 +91,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="${appAuthRedirectScheme}" />
+                <data android:scheme="${appAuthRedirectScheme}" android:host="auth" android:path="/complete" />
             </intent-filter>
         </activity>
 

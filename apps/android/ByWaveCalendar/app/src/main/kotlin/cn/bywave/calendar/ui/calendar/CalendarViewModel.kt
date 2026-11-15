@@ -187,14 +187,19 @@ class CalendarViewModel : ViewModel() {
 
     // ---- Fetch ----
 
+    private var loadJob: kotlinx.coroutines.Job? = null
+    fun refreshIfIdle() { if (loadJob?.isActive != true) load() }
+
     private fun load() {
         if (profiles.active() == null) {
             _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_not_signed_in)) }
             return
         }
+        val loadingProfile = profiles.activeId.value
+        loadJob?.cancel()
         _state.update { it.copy(loading = true, errorMessage = null) }
 
-        viewModelScope.launch {
+        loadJob = viewModelScope.launch {
             try {
                 val zone = ZoneId.systemDefault()
                 val anchor = _state.value.anchor
@@ -208,6 +213,7 @@ class CalendarViewModel : ViewModel() {
                     toIso = ISO.format(toInstant.atZone(zone)),
                 )
 
+                if (profiles.activeId.value != loadingProfile) return@launch
                 _state.update {
                     it.copy(
                         loading = false,
@@ -216,7 +222,10 @@ class CalendarViewModel : ViewModel() {
                         fetchedTo = to,
                     )
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
+                if (profiles.activeId.value != loadingProfile) return@launch
                 _state.update {
                     it.copy(
                         loading = false,

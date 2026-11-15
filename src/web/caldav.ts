@@ -1,7 +1,9 @@
+import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
+import { pushEventChanged } from "../lib/apns.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
-import { basicAuth } from "../lib/caldav_auth.js";
+import { basicAuth, calDavCalendarAllowed } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
 import { normalizeAlarms } from "../lib/reminder_triggers.js";
@@ -231,7 +233,8 @@ function depthHeader(req: FastifyRequest): "0" | "1" | "infinity" {
   return "0";
 }
 
-async function loadCalendarOwned(userId: string, calId: string) {
+async function loadCalendarOwned(userId: string, calId: string, req: FastifyRequest) {
+  if (!calDavCalendarAllowed(req, calId)) return null;
   const [cal] = await db
     .select()
     .from(schema.calendars)
@@ -472,7 +475,7 @@ async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
   if (depth !== "0") {
     const cals = await db.select().from(schema.calendars).where(eq(schema.calendars.ownerId, user.id));
     const ctags = await calendarCtags(cals.map(c => c.id));
-    for (const c of cals) {
+    for (const c of cals.filter(c => calDavCalendarAllowed(req, c.id))) {
       entries.push(responseEntry(calendarHref(user.id, c.id), {
         resourcetype: '<collection/><C:calendar/>',
         displayname: c.name,
@@ -496,7 +499,7 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
   if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
-  const cal = await loadCalendarOwned(user.id, params.calId ?? "");
+  const cal = await loadCalendarOwned(user.id, params.calId ?? "", req);
   if (!cal) return reply.code(404).send("Not Found");
 
   const depth = depthHeader(req);
@@ -541,7 +544,7 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
   if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
-  const cal = await loadCalendarOwned(user.id, params.calId ?? "");
+  const cal = await loadCalendarOwned(user.id, params.calId ?? "", req);
   if (!cal) return reply.code(404).send("Not Found");
 
   const bodyStr = String(req.body ?? "");
@@ -705,7 +708,7 @@ async function getEvent(req: FastifyRequest, reply: FastifyReply) {
   if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
-  const cal = await loadCalendarOwned(user.id, params.calId ?? "");
+  const cal = await loadCalendarOwned(user.id, params.calId ?? "", req);
   if (!cal) return reply.code(404).send("Not Found");
 
   const [event] = await db
@@ -783,7 +786,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   if (!user) return reply;
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
-  const cal = await loadCalendarOwned(user.id, params.calId ?? "");
+  const cal = await loadCalendarOwned(user.id, params.calId ?? "", req);
   if (!cal) return reply.code(404).send("Not Found");
 
   const bodyStr = typeof req.body === "string" ? req.body : "";
@@ -1036,6 +1039,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   }
 
   reply.header("ETag", etagOf(stored.updatedAt));
+  await requestCalendarSync(cal.id).catch(() => undefined);
+  void pushEventChanged(user.id, stored.id, "event.updated").catch(() => undefined);
   if (isResurrectOrCreate) reply.header("Location", eventHref(user.id, cal.id, stored.uid));
   return reply.code(isResurrectOrCreate ? 201 : 204).send();
 }
@@ -1047,7 +1052,7 @@ async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
   const params = req.params as { userId?: string; calId?: string; uid?: string };
   req.log.info({ caldav: "delete", userId: user.id, calId: params.calId, uid: params.uid, ifMatch: req.headers["if-match"] }, "caldav_delete");
   if (params.userId !== user.id) return reply.code(403).send("Forbidden");
-  const cal = await loadCalendarOwned(user.id, params.calId ?? "");
+  const cal = await loadCalendarOwned(user.id, params.calId ?? "", req);
   if (!cal) return reply.code(404).send("Not Found");
 
   const [event] = await db

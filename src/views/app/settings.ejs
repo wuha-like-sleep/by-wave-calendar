@@ -1,11 +1,5 @@
-<%# v1.3.16: replaced the in-page anchor-scrolling tabs with admin-
-   style separate routes. `currentTab` (passed by /app/settings,
-   /app/settings/security, /app/settings/devices, /app/settings/
-   notifications, /app/settings/appearance) controls which section
-   blocks render. Backward-compat: visiting /app/settings still
-   works (lands on "account" tab); old anchor URLs like
-   #passkey resolve too because the routes are still mounted, the
-   anchor just goes to the section within the current tab. %>
+<%# Legacy fragment links are redirected to the matching settings route by settings-navigation.js. %>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>" src="<%= typeof jsBasePath !== 'undefined' ? jsBasePath : '/static' %>/js/settings-navigation.js?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>"></script>
 <% const tab = (typeof currentTab !== 'undefined' && currentTab) || 'account';
    // Per-tab section visibility map. Section IDs that aren't in the
    // active tab's list get a `hidden` class — keeps all the JS in one

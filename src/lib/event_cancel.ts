@@ -1,8 +1,10 @@
-import { eq } from "drizzle-orm";
+import { and, isNull, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { invitationIcs } from "./ical.js";
 import { sendMail } from "./mailer.js";
 import { eventCancelMail } from "./email_templates.js";
+import { requestCalendarSync } from "./calendar_sync/queue.js";
+import { pushEventChanged } from "./apns.js";
 
 // Soft-delete the event and email a METHOD:CANCEL .ics to anyone who was
 // invited. Idempotent — if the event is already in the deleted state we
@@ -13,10 +15,12 @@ export async function cancelEvent(eventId: string, deletedBy: { id: string; emai
   if (event.deletedAt) return { ok: true, cancelledNotices: 0 };
 
   // Mark soft-deleted first so concurrent reads see "已取消" immediately.
-  await db
+  const changed = await db
     .update(schema.events)
     .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(schema.events.id, eventId));
+    .where(and(eq(schema.events.id, eventId), isNull(schema.events.deletedAt))).returning({ id: schema.events.id });
+  if (!changed.length) return { ok: true, cancelledNotices: 0 };
+  await requestCalendarSync(event.calendarId).catch(() => undefined);
 
   return notifyEventCancellation(event, deletedBy);
 }
@@ -24,6 +28,7 @@ export async function cancelEvent(eventId: string, deletedBy: { id: string; emai
 /** Called after a conditional deletion has committed. */
 export async function notifyEventCancellation(event: schema.Event, deletedBy: { id: string; email: string; displayName: string | null }): Promise<{ ok: boolean; cancelledNotices: number }> {
   const eventId = event.id;
+  void pushEventChanged(deletedBy.id, eventId, "event.deleted").catch(() => undefined);
   // Collect every distinct attendee email we ever invited to this event.
   const tokens = await db
     .select()

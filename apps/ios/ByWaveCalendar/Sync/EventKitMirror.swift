@@ -40,6 +40,7 @@ final class EventKitMirror {
 
     private static let mappingKey = "bwc.ekMirror.mapping"
     private static let calendarIdKey = "bwc.ekMirror.calendarId"
+    private static let calendarMappingKey = "bwc.ekMirror.sourceCalendars"
     private static let enabledKey = "bwc.ekMirror.enabled"
 
     var isEnabled: Bool {
@@ -93,22 +94,26 @@ final class EventKitMirror {
     // toggle the mirror off and we want to clean up the calendar.
     func tearDown() {
         if let calId = UserDefaults.standard.string(forKey: Self.calendarIdKey),
-           let cal = store.calendar(withIdentifier: calId) {
+           let cal = store.calendar(withIdentifier: calId), cal.source.sourceType == .local {
             try? store.removeCalendar(cal, commit: true)
         }
         UserDefaults.standard.removeObject(forKey: Self.mappingKey)
         UserDefaults.standard.removeObject(forKey: Self.calendarIdKey)
+        UserDefaults.standard.removeObject(forKey: Self.calendarMappingKey)
     }
 
     // Main entry. Mirrors the given event list into our calendar. Called
     // from CalendarView.load() AFTER the API fetch succeeds. The window
     // (`from`/`to`) is used to scope deletions: don't touch local events
     // outside this range, because the server didn't tell us about them.
-    func mirror(events: [EventDTO], windowStart: Date, windowEnd: Date) async {
-        guard isEnabled else { return }
-        guard permission == .granted else { return }
-
-        guard let calendar = findOrCreateCalendar() else { return }
+    @discardableResult
+    func mirror(events allEvents: [EventDTO], windowStart: Date, windowEnd: Date, selectedCalendarIDs: Set<String>? = nil) async -> Bool {
+        guard isEnabled, permission == .granted else { return false }
+        guard let calendar = findOrCreateCalendar() else { return false }
+        let events = allEvents.filter { selectedCalendarIDs == nil || selectedCalendarIDs!.contains($0.calendarId) }
+        var sources = (UserDefaults.standard.dictionary(forKey: Self.calendarMappingKey) as? [String: String]) ?? [:]
+        var failed = false
+        var savedEvents: [String: EKEvent] = [:]
 
         var mapping = (UserDefaults.standard.dictionary(forKey: Self.mappingKey) as? [String: String]) ?? [:]
 
@@ -117,19 +122,21 @@ final class EventKitMirror {
         // Upsert each server event
         for ev in events {
             let key = stableKey(for: ev)
+            sources[key] = ev.calendarId
             if let existingId = mapping[key],
                let existing = store.event(withIdentifier: existingId) {
                 apply(server: ev, to: existing)
-                try? store.save(existing, span: .thisEvent, commit: false)
+                do { try store.save(existing, span: .thisEvent, commit: false); savedEvents[key] = existing } catch { failed = true }
             } else {
                 let new = EKEvent(eventStore: store)
                 new.calendar = calendar
                 apply(server: ev, to: new)
                 do {
                     try store.save(new, span: .thisEvent, commit: false)
-                    if let id = new.eventIdentifier { mapping[key] = id }
+                    savedEvents[key] = new
                 } catch {
                     // single-event save failure shouldn't abort the whole mirror
+                    failed = true
                     continue
                 }
             }
@@ -140,19 +147,49 @@ final class EventKitMirror {
         // outside the time range the server told us about.
         let predicate = store.predicateForEvents(withStart: windowStart, end: windowEnd, calendars: [calendar])
         let localEventsInWindow = store.events(matching: predicate)
-        let mappedIds = Set(mapping.values)
+        let keysByID = Dictionary(mapping.map { ($0.value, $0.key) }, uniquingKeysWith: { first, _ in first })
+        let mappedIds = Set(keysByID.keys)
         for local in localEventsInWindow {
             guard let id = local.eventIdentifier, mappedIds.contains(id) else { continue }
             // Find which mapping key points here
-            let key = mapping.first { $0.value == id }?.key
+            let key = keysByID[id]
             if let key, !serverIds.contains(key) {
-                try? store.remove(local, span: .thisEvent, commit: false)
-                mapping.removeValue(forKey: key)
+                do {
+                    try store.remove(local, span: .thisEvent, commit: false)
+                    mapping.removeValue(forKey: key)
+                    sources.removeValue(forKey: key)
+                } catch { failed = true }
             }
         }
 
-        try? store.commit()
+        do { try store.commit() } catch { store.reset(); return false }
+        // EventKit assigns permanent identifiers on commit. Reading them earlier
+        // can lose the mapping, leaving copies that future deletions cannot find.
+        for (key, event) in savedEvents {
+            if let id = event.eventIdentifier { mapping[key] = id } else { failed = true }
+        }
         UserDefaults.standard.set(mapping, forKey: Self.mappingKey)
+        UserDefaults.standard.set(sources, forKey: Self.calendarMappingKey)
+        return !failed
+    }
+
+    func selectedCalendars(profileID: String) -> Set<String>? {
+        UserDefaults.standard.stringArray(forKey: "bwc.ekMirror.selection." + profileID).map { Set($0) }
+    }
+
+    func selectCalendars(_ ids: Set<String>, profileID: String) {
+        UserDefaults.standard.set(Array(ids), forKey: "bwc.ekMirror.selection." + profileID)
+        guard permission == .granted else { return }
+        var mapping = (UserDefaults.standard.dictionary(forKey: Self.mappingKey) as? [String: String]) ?? [:]
+        var sources = (UserDefaults.standard.dictionary(forKey: Self.calendarMappingKey) as? [String: String]) ?? [:]
+        for (key, calendarID) in sources where !ids.contains(calendarID) {
+            if let eventID = mapping[key], let event = store.event(withIdentifier: eventID) {
+                do { try store.remove(event, span: .thisEvent, commit: true) } catch { continue }
+            }
+            mapping.removeValue(forKey: key); sources.removeValue(forKey: key)
+        }
+        UserDefaults.standard.set(mapping, forKey: Self.mappingKey)
+        UserDefaults.standard.set(sources, forKey: Self.calendarMappingKey)
     }
 
     // Choose a stable key for the (event, occurrence) pair. The server's
@@ -203,13 +240,8 @@ final class EventKitMirror {
             // try to update events in the orphaned remote calendar.
             UserDefaults.standard.removeObject(forKey: Self.mappingKey)
         }
-        // Find by title (in case the stored ID was lost across reinstall).
-        // ONLY local-source matches; we won't reuse an existing iCloud /
-        // Exchange / CalDAV calendar even if it has our title.
-        if let existing = store.calendars(for: .event).first(where: { $0.title == calendarTitle && $0.source.sourceType == .local }) {
-            UserDefaults.standard.set(existing.calendarIdentifier, forKey: Self.calendarIdKey)
-            return existing
-        }
+        // A matching title does not prove ownership. Only the saved identifier
+        // may be reused; otherwise create an independent managed calendar.
         // Create fresh — ONLY on the local source. No iCloud fallback;
         // if .local doesn't exist on this device, the mirror is a
         // no-op for this session. See file header for rationale.

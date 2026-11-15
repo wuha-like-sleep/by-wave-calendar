@@ -103,20 +103,21 @@ enum PairingService {
         return try? JSONDecoder().decode(PairingPayload.self, from: data)
     }
 
-    static func claim(serverURL: URL, code: String, label: String, appVersion: String) async throws -> ClaimResponse {
+    static func claim(serverURL: URL, code: String, label: String, appVersion: String, codeVerifier: String? = nil) async throws -> ClaimResponse {
         var req = URLRequest(url: serverURL.appendingPathComponent("/api/v1/devices/pair-claim"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         // clientDeviceId is the stable per-Apple-ID UUID (iCloud Keychain).
         // The server uses it to dedup — re-pairing from the same physical
         // device updates the existing row instead of growing a duplicate.
-        let body: [String: Any] = [
-            "code": code.uppercased(),
+        var body: [String: Any] = [
+            "code": codeVerifier == nil ? code.uppercased() : code,
             "label": label,
             "kind": "ios",
             "appVersion": appVersion,
             "clientDeviceId": Keychain.clientDeviceId(),
         ]
+        if let codeVerifier { body["codeVerifier"] = codeVerifier }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         do {

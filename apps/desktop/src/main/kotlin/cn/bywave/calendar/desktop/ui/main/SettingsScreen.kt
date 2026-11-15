@@ -1,33 +1,10 @@
-// Desktop Settings page — opened from the toolbar gear icon (or Cmd+,).
-// Mirrors the web /app/settings sections but trimmed for what makes
-// sense on a desktop client:
-//
-//   Account     — email / displayName / serverUrl readout, profile switch,
-//                 sign out
-//   Calendars   — list calendars with color + name (read-only for now;
-//                 edit links to web)
-//   Security    — 修改密码 / Passkey / MFA / 我的设备 / 删除账号 — all
-//                 deep-link to the web /app/settings#... via a one-shot
-//                 web-session token (POST /api/v1/auth/web-session).
-//                 The desktop has full bearer access, so the bridge
-//                 mints the cookie session in the browser without the
-//                 user re-entering their password.
-//   Appearance  — same deep-link to /app/settings#theme. (Desktop doesn't
-//                 read the server-side theme preference yet — that's a
-//                 future enhancement; for now Settings just opens the
-//                 web picker so changes take effect there.)
-//   About       — version + check-for-update + GitHub + license
-//
-// Layout: left rail nav (220dp) + right pane content. Renders as a
-// full-screen overlay above MainScreen — Esc or the X button closes.
-//
-// Deep-links use java.awt.Desktop.browse(URI) which delegates to the OS
-// default browser. We don't bundle Chromium / open inside the app —
-// keeping the app surface trimmed is the whole point of routing these
-// flows out.
+// Native desktop settings. Browser-only security operations use authenticated deep links.
 
 package cn.bywave.calendar.desktop.ui.main
 
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Devices
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -123,6 +103,9 @@ private enum class SettingsTab(val labelKey: String, val icon: ImageVector) {
     SystemCalendar("settings.tabSystemCalendar", Icons.Default.CalendarMonth),
     Booking("settings.tabBooking", Icons.Default.Link),
     Security("settings.tabSecurity", Icons.Default.Security),
+    Devices("settings.devices.title", Icons.Default.Devices),
+    Reminders("settings.reminders.title", Icons.Default.Notifications),
+    Language("settings.language.title", Icons.Default.Language),
     Appearance("settings.tabAppearance", Icons.Default.Brush),
     About("settings.tabAbout", Icons.Default.Info),
 }
@@ -146,6 +129,8 @@ fun SettingsScreen(
     onCalendarsChanged: () -> Unit,
 ) {
     var tab by remember { mutableStateOf(SettingsTab.Account) }
+    val contentScroll = remember(tab, profile.deviceId) { ScrollState(0) }
+    val navScroll = rememberScrollState()
     // Observe locale so the header + close button re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -178,19 +163,21 @@ fun SettingsScreen(
                     Icon(Icons.Default.Close, contentDescription = t("settings.close"))
                 }
             }
-            HorizontalDivider()
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
 
             Row(modifier = Modifier.fillMaxSize()) {
                 // Left rail — nav tabs.
                 Column(
                     modifier = Modifier
-                        .width(220.dp)
+                        .width(236.dp)
                         .fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                        .verticalScroll(rememberScrollState())
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                        .background(MaterialTheme.colorScheme.background)
+                        .verticalScroll(navScroll)
+                        .padding(vertical = 24.dp, horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
+                    cn.bywave.calendar.desktop.ui.theme.BrandMark(42.dp)
+                    Spacer(Modifier.height(24.dp))
                     SettingsTab.values().forEach { t ->
                         NavRow(
                             tab = t,
@@ -199,37 +186,18 @@ fun SettingsScreen(
                         )
                     }
                 }
-                VerticalDivider()
-                // Right pane — content for the selected tab.
-                //
-                // CRITICAL BUG FIX (v0.7.7): this was a Box, which
-                // stacks children on top of each other (Compose's Box
-                // is the same as FrameLayout/RelativeLayout). Every
-                // SectionTitle / SectionCard / Spacer in the section
-                // composables got placed at (0,0), making the title,
-                // description, and buttons overlap — exactly the
-                // "字全部挤在一起" the user reported on v0.7.6.
-                // Column is the right container: stacks children
-                // vertically, respects Spacers, supports verticalScroll.
-                // 右栏内容限宽并居中。以前是 fillMaxSize:在一台 32 寸
-                // 显示器上全屏打开设置,一个填邮箱/服务器地址的输入框会横跨
-                // 两千多像素,标签在最左、光标在最右,读都读不成一句话。
-                // 760dp 是一行长文本还舒服的上限(和 iPad 版刚修过的是同一
-                // 类问题)。窗口窄于这个数时 widthIn 不起作用,照常铺满。
+                VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .35f))
+                // Keep each section at the top when navigating, with a visible scrollbar.
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                     contentAlignment = Alignment.TopCenter,
                 ) {
                     Column(
                         modifier = Modifier
-                            // widthIn 要排在 fillMaxWidth 前面,否则 fillMaxWidth
-                            // 先把约束钉成父容器宽度,760 的上限会被 coerce 掉,
-                            // 限宽静默失效(窄窗口上还看不出来)。
-                            .widthIn(max = 760.dp)
+                            .verticalScroll(contentScroll)
+                            .widthIn(max = 840.dp)
                             .fillMaxWidth()
-                            .padding(horizontal = 32.dp, vertical = 24.dp),
+                            .padding(horizontal = 40.dp, vertical = 32.dp),
                     ) {
                         when (tab) {
                             SettingsTab.Account -> AccountSection(
@@ -251,6 +219,9 @@ fun SettingsScreen(
                             )
                             SettingsTab.SystemCalendar -> SystemCalendarSection(profile)
                             SettingsTab.Security -> SecuritySection(profile = profile)
+                            SettingsTab.Devices -> DevicesSection(profile = profile)
+                            SettingsTab.Reminders -> RemindersSection()
+                            SettingsTab.Language -> LanguageSection()
                             SettingsTab.Appearance -> AppearanceSection(profile = profile)
                             SettingsTab.About -> AboutSection(
                                 profile = profile,
@@ -258,6 +229,10 @@ fun SettingsScreen(
                             )
                         }
                     }
+                    VerticalScrollbar(
+                        adapter = rememberScrollbarAdapter(contentScroll),
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(vertical = 12.dp, horizontal = 6.dp),
+                    )
                 }
             }
         }
@@ -266,14 +241,14 @@ fun SettingsScreen(
 
 @Composable
 private fun NavRow(tab: SettingsTab, active: Boolean, onClick: () -> Unit) {
-    val bg = if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent
+    val bg by androidx.compose.animation.animateColorAsState(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, androidx.compose.animation.core.tween(140), label = "settings-selection")
     val fg = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val label = remember(locale, tab) { cn.bywave.calendar.desktop.i18n.I18n.t(tab.labelKey) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick)
@@ -1719,27 +1694,28 @@ private fun BookingDeleteDialog(
 @Composable
 private fun SystemCalendarSection(profile: Profile) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
-    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
-    SectionTitle(t("settings.tabSystemCalendar"))
-    Text(t("sync.intro"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Spacer(Modifier.height(24.dp))
-    SectionCard {
-        Text("macOS Calendar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(t("sync.apple"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Spacer(Modifier.height(16.dp))
-    SectionCard {
-        Text("Outlook · Windows", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text(t("sync.outlook"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    Spacer(Modifier.height(24.dp))
-    SectionCard {
-        OpenInWebRow(profile, "/app/settings/calendar-sync", t("sync.open"), t("sync.openDetail"))
-    }
-    Spacer(Modifier.height(16.dp))
-    Text(t("sync.scope"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val api = remember(profile.deviceId, profile.serverUrl) { ApiClient(profile).calendarConnectionApi() }
+    cn.bywave.calendar.connect.CalendarConnectionPanel(
+        api = api, locale = locale.code,
+        apple = System.getProperty("os.name").orEmpty().lowercase().contains("mac"),
+        deviceLabel = "ByWave · " + System.getProperty("os.name"),
+        openUrl = { java.awt.Desktop.getDesktop().browse(java.net.URI(it)) },
+        copy = ::copyToClipboard,
+        installProfile = { xml ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val file = java.nio.file.Files.createTempFile("ByWave-Calendar-", ".mobileconfig")
+                java.nio.file.Files.writeString(file, xml)
+                file.toFile().deleteOnExit()
+                java.awt.Desktop.getDesktop().open(file.toFile())
+            }
+        },
+        active = androidx.compose.ui.platform.LocalWindowInfo.current.isWindowFocused,
+        errorMessage = { e ->
+            if (e is cn.bywave.calendar.desktop.data.api.ApiException && e.status == 404)
+                cn.bywave.calendar.connect.CalendarCopy.text(locale.code, "serverUpdate")
+            else cn.bywave.calendar.desktop.util.userFacingError(e, cn.bywave.calendar.connect.CalendarCopy.text(locale.code, "error.unavailable"))
+        },
+    )
 }
 
 @Composable
@@ -1769,16 +1745,12 @@ private fun SecuritySection(profile: Profile) {
             onClick = { changePassword = true },
         )
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings#passkey", title = t("settings.security.passkey"), subtitle = t("settings.security.passkey.sub"))
+        OpenInWebRow(profile = profile, next = "/app/settings/security#passkey", title = t("settings.security.passkey"), subtitle = t("settings.security.passkey.sub"))
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings#mfa", title = t("settings.security.mfa"), subtitle = t("settings.security.mfa.sub"))
+        OpenInWebRow(profile = profile, next = "/app/settings/security#mfa", title = t("settings.security.mfa"), subtitle = t("settings.security.mfa.sub"))
         HorizontalDivider()
         OpenInWebRow(profile = profile, next = "/app/logins", title = t("settings.security.loginHistory"), subtitle = t("settings.security.loginHistory.sub"))
     }
-
-    // Native devices list — load on first render, refresh after revoke.
-    Spacer(Modifier.height(32.dp))
-    DevicesSection(profile = profile)
 
     Spacer(Modifier.height(32.dp))
     SectionTitle(t("settings.security.danger"), danger = true)
@@ -2188,7 +2160,7 @@ private fun ActionRow(title: String, subtitle: String, onClick: () -> Unit) {
 // -------- Appearance --------
 
 @Composable
-private fun AppearanceSection(profile: Profile) {
+private fun LanguageSection() {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
 
@@ -2231,9 +2203,13 @@ private fun AppearanceSection(profile: Profile) {
         }
     }
 
-    Spacer(Modifier.height(36.dp))
+}
 
-    // -- Event reminders (desktop notifications; per-install) --
+@Composable
+private fun RemindersSection() {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    // Event reminders are local to this installation.
     val remindersOn by cn.bywave.calendar.desktop.data.notify.ReminderPrefs.enabled.collectAsState()
     val leadMinutes by cn.bywave.calendar.desktop.data.notify.ReminderPrefs.leadMinutes.collectAsState()
     SectionTitle(t("settings.reminders.title"))
@@ -2292,9 +2268,13 @@ private fun AppearanceSection(profile: Profile) {
         }
     }
 
-    Spacer(Modifier.height(36.dp))
+}
 
-    // -- 浅色 / 深色 / 跟随系统(本机设置,立即生效)
+@Composable
+private fun AppearanceSection(profile: Profile) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    // Appearance changes take effect immediately.
     val appearance by cn.bywave.calendar.desktop.data.AppearancePrefs.mode.collectAsState()
     SectionTitle(t("settings.theme.title"))
     Text(
@@ -2338,7 +2318,7 @@ private fun AppearanceSection(profile: Profile) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 16.dp),
     )
-    OpenInWebButton(profile = profile, next = "/app/settings#theme", label = t("settings.appearance.openOnWeb"))
+    OpenInWebButton(profile = profile, next = "/app/settings/appearance#theme", label = t("settings.appearance.openOnWeb"))
 }
 
 // -------- About --------

@@ -122,6 +122,9 @@ export async function runPendingMigrations(): Promise<void> {
  * 「安全网本身是坏的」这种事只有真跑一次才看得见。
  */
 export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: string }> = [
+  { why: "calendar_sync_pairs.request_version", statement: `ALTER TABLE calendar_sync_pairs ADD COLUMN IF NOT EXISTS request_version integer NOT NULL DEFAULT 0` },
+  { why: "app_passwords.calendar_ids", statement: `ALTER TABLE app_passwords ADD COLUMN IF NOT EXISTS calendar_ids jsonb` },
+  { why: "app_passwords.paused", statement: `ALTER TABLE app_passwords ADD COLUMN IF NOT EXISTS paused boolean NOT NULL DEFAULT false` },
   {
     why: "site_settings.microsoft_calendar_client_id",
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS microsoft_calendar_client_id text`,

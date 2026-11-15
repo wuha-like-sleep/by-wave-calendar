@@ -25,6 +25,10 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import java.io.File
+import android.content.pm.PackageManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import cn.bywave.calendar.R
 
 sealed class InstallResult {
@@ -40,7 +44,15 @@ object ApkInstaller {
     /** Try to launch the system installer for [apk]. Returns
      *  Launched on success, NeedsUnknownSources if the user must grant
      *  the per-app toggle first, or Failed for any other error. */
-    fun install(context: Context, apk: File): InstallResult {
+    suspend fun install(context: Context, apk: File, release: AndroidReleaseDto): InstallResult {
+        val valid = withContext(Dispatchers.IO) {
+            try {
+                val checked = ApkDownloader.verifiedCachedFile(context, release)
+                checked?.canonicalFile == apk.canonicalFile && matchesInstalledApp(context, apk, release)
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { false }
+        }
+        if (!valid) return InstallResult.Failed(context.getString(R.string.update_err_checksum))
         if (!apk.exists() || apk.length() <= 0) {
             return InstallResult.Failed(context.getString(R.string.update_err_apk_missing))
         }
@@ -73,4 +85,27 @@ object ApkInstaller {
             InstallResult.Failed(context.getString(R.string.update_err_installer))
         }
     }
+    @Suppress("DEPRECATION")
+    private fun matchesInstalledApp(context: Context, apk: File, release: AndroidReleaseDto): Boolean {
+        val pm = context.packageManager
+        val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+        val candidate = pm.getPackageArchiveInfo(apk.absolutePath, flags) ?: return false
+        val installed = pm.getPackageInfo(context.packageName, flags)
+        if (candidate.packageName != context.packageName) return false
+        val candidateVersion = if (Build.VERSION.SDK_INT >= 28) candidate.longVersionCode else candidate.versionCode.toLong()
+        val installedVersion = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
+        if (candidateVersion != release.versionCode.toLong() || candidateVersion <= installedVersion) return false
+        if (Build.VERSION.SDK_INT >= 28) {
+            val next = candidate.signingInfo ?: return false
+            val current = installed.signingInfo ?: return false
+            val trusted = current.apkContentsSigners.map { it.toCharsString() }.toSet()
+            if (trusted.isEmpty()) return false
+            return if (next.hasMultipleSigners() || current.hasMultipleSigners()) {
+                next.apkContentsSigners.map { it.toCharsString() }.toSet() == trusted
+            } else next.signingCertificateHistory.any { it.toCharsString() in trusted }
+        }
+        val trusted = installed.signatures?.map { it.toCharsString() }?.toSet().orEmpty()
+        return trusted.isNotEmpty() && candidate.signatures?.map { it.toCharsString() }?.toSet() == trusted
+    }
+
 }

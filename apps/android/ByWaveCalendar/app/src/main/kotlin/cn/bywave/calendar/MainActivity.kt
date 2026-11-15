@@ -14,6 +14,7 @@
 
 package cn.bywave.calendar
 
+import android.content.Intent
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -57,6 +58,18 @@ import cn.bywave.calendar.update.UpdateState
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val webCallback = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    private fun receiveWebCallback(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW) {
+            intent.dataString?.takeIf { it.length <= 2048 }?.let { webCallback.value = it }
+            // Do not replay credentials on a later activity recreation.
+            setIntent(Intent(this, MainActivity::class.java))
+        }
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receiveWebCallback(intent)
+    }
     // APP 内语言在 Android 12 及以下就是在这里生效的：Activity 的
     // Configuration 换成带目标 locale 的那一份，Compose 的
     // LocalConfiguration / stringResource 全部跟着走。13+ 上 wrap() 原样
@@ -67,11 +80,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        receiveWebCallback(intent)
         enableEdgeToEdge()
         setContent {
             ByWaveTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    AppRoot()
+                    val callback by webCallback.collectAsState()
+                    AppRoot(callback) { webCallback.value = null }
                 }
             }
         }
@@ -89,7 +104,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot() {
+private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
     val profiles = remember { BywaveApp.instance.profiles }
     val activeId by profiles.activeId.collectAsState()
     val nav = rememberNavController()
@@ -122,6 +137,15 @@ private fun AppRoot() {
         }
     }
 
+    LaunchedEffect(webCallback) {
+        if (webCallback != null && nav.currentDestination?.route != AuthRouting.SETUP) {
+            if (BywaveApp.instance.webLogin.load() != null) {
+                profiles.prefillNextSignIn(null)
+                nav.navigate(AuthRouting.SETUP) { launchSingleTop = true }
+            } else { callbackHandled() }
+        }
+    }
+
     // In-app updater sheet — surfaces above whatever screen is showing
     // whenever UpdateChecker flips to Available. Sits at the root so
     // "settings → 立即检查更新" or a forced check from anywhere bubbles
@@ -142,6 +166,9 @@ private fun AppRoot() {
     ) {
         composable(AuthRouting.SETUP) {
             val setupVm: SetupViewModel = viewModel()
+            LaunchedEffect(webCallback) {
+                webCallback?.let { setupVm.finishBrowserLogin(it); callbackHandled() }
+            }
             SetupScreen(
                 vm = setupVm,
                 onSignedIn = {

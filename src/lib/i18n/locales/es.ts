@@ -5,6 +5,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const es: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "Iniciar sesión en la app",
+  "nativeLogin.intro": "Continúa solo si has iniciado esta conexión desde ByWave Calendar.",
+  "nativeLogin.continue": "Continuar a la app",
+  "nativeLogin.switch": "Usar otra cuenta",
+  "nativeLogin.cancel": "Cancelar y volver a la app",
+  "nativeLogin.upgrade": "La solicitud no es válida o la app necesita actualizarse. Actualízala e inténtalo de nuevo. También puedes usar un código QR o de vinculación.",
+
   "adminCalendar.title": "Configuración del calendario del sistema",
   "adminCalendar.intro": "Configura las conexiones de calendario de tu plataforma. Los cambios se aplican al instante, sin editar archivos del servidor ni reiniciar.",
   "adminCalendar.outlook": "Compatible con calendarios en la nube de Microsoft 365 / Outlook.com en Outlook nuevo y clásico.",
@@ -57,7 +64,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "Recomendamos un calendario independiente en Outlook. Se copiarán los eventos de ambos calendarios y los cambios y eliminaciones posteriores se sincronizarán en ambos sentidos.",
   "calendarSync.choose": "Elegir calendario",
   "calendarSync.start": "Iniciar sincronización bidireccional",
-  "calendarSync.scope": "Outlook sincroniza desde hace 90 días hasta los próximos 365 y sigue rastreando eventos vinculados. Incluye título, descripción, lugar, horas y día completo. Las repeticiones se sincronizan individualmente: editar una no cambia la serie. No se copian recordatorios, adjuntos, asistentes ni invitaciones. Se sincroniza normalmente cada minuto y por lotes si hay muchos eventos.",
+  "calendarSync.scope": "Outlook sincroniza desde hace 90 días hasta los próximos 365 y sigue rastreando eventos vinculados. Incluye título, descripción, lugar, horas y día completo. Las repeticiones se sincronizan individualmente: editar una no cambia la serie. No se copian recordatorios, adjuntos, asistentes ni invitaciones. Se sincroniza normalmente cada 30 segundos y por lotes si hay muchos eventos.",
   "calendarSync.queued": "Sincronización en cola. Actualiza en unos momentos.",
   "calendarSync.saved": "Guardado. Se aplicará en la próxima sincronización.",
   "calendarSync.statusTitle": "Estado de sincronización",

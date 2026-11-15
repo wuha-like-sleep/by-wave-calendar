@@ -66,6 +66,7 @@ def build(args):
     project = stage / "desktop"
     # UNC/shared/iCloud locations are unsuitable for jpackage and Gradle's native tools.
     shutil.copytree(source, project, ignore=shutil.ignore_patterns("build", ".gradle", ".kotlin", ".idea", ".DS_Store"))
+    shutil.copytree(repo / "apps/shared", stage / "shared", ignore=shutil.ignore_patterns("build", ".gradle", ".DS_Store"))
     print(f"Build directory: {project}", flush=True)
     env = os.environ.copy()
     env["JAVA_HOME"] = str(java)

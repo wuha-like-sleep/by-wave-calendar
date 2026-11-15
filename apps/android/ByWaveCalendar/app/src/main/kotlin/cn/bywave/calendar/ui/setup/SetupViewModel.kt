@@ -36,6 +36,7 @@ data class SetupUiState(
     val errorMessage: String? = null,
     val signedIn: Boolean = false,
     val mfaToken: String? = null,
+    val browserPending: Boolean = false,
 ) {
     val canSubmit: Boolean
         get() = ServerUrl.looksValid(server) && email.isNotBlank() && password.isNotBlank()
@@ -57,6 +58,10 @@ class SetupViewModel : ViewModel() {
     private val profiles = BywaveApp.instance.profiles
     private val _state = MutableStateFlow(SetupUiState.initial(profiles.takeSignInPrefill()))
     val state: StateFlow<SetupUiState> = _state.asStateFlow()
+    private val browserStore = BywaveApp.instance.webLogin
+    init {
+        browserStore.load()?.let { pending -> _state.update { it.copy(server = pending.server, browserPending = true) } }
+    }
     private val jsonLenient = Json { ignoreUnknownKeys = true }
 
     /** Localized string via the Application context (BywaveApp is an
@@ -71,11 +76,69 @@ class SetupViewModel : ViewModel() {
         LoginErrorText.Unknown -> str(fallback)
     }
 
-    fun onServerChange(v: String) = _state.update { it.copy(server = v, errorMessage = null) }
+    fun onServerChange(v: String) {
+        cancelBrowserLogin()
+        _state.update { it.copy(server = v, errorMessage = null) }
+    }
+
+    fun beginBrowserLogin(): String? {
+        if (_state.value.busy) return null
+        return try {
+            val request = WebLoginRequest.create(ServerUrl.normalize(_state.value.server), if (BuildConfig.DEBUG) "bywave-staging" else "bywave")
+            browserStore.save(request)
+            _state.update { it.copy(browserPending = true, errorMessage = null) }
+            request.authorizationUrl
+        } catch (_: Exception) {
+            _state.update { it.copy(errorMessage = str(R.string.web_login_https)) }; null
+        }
+    }
+    fun cancelBrowserLogin() {
+        browserStore.clear()
+        _state.update { it.copy(browserPending = false) }
+    }
+    fun browserLaunchFailed() {
+        cancelBrowserLogin()
+        _state.update { it.copy(errorMessage = str(R.string.web_login_open_failed)) }
+    }
+    fun finishBrowserLogin(callback: String) {
+        if (_state.value.busy || _state.value.signedIn) return
+        val request = browserStore.load()
+        if (request == null) {
+            _state.update { it.copy(browserPending = false, errorMessage = str(R.string.web_login_expired)) }
+            return
+        }
+        val code = try { request.callbackCode(callback) }
+        catch (_: WebLoginCancelled) { cancelBrowserLogin(); return }
+        catch (_: Exception) {
+            _state.update { it.copy(errorMessage = str(R.string.web_login_invalid)) }; return
+        }
+        // Consume the local attempt before launching a network request. A repeated
+        // Intent cannot redeem it again or overwrite a newly selected account.
+        browserStore.clear()
+        _state.update { it.copy(busy = true, browserPending = false, errorMessage = null) }
+        viewModelScope.launch {
+            try {
+                val resp = ApiClient.forSetup(request.server).pairClaim(PairClaimRequest(
+                    code = code, codeVerifier = request.verifier, label = androidDeviceLabel(),
+                    kind = "android", appVersion = BuildConfig.VERSION_NAME,
+                    clientDeviceId = ClientDeviceId.get(BywaveApp.instance)))
+                val email = resp.userEmail.orEmpty()
+                if (completeLogin(request.server, email, resp) == null) {
+                    _state.update { it.copy(busy = false, errorMessage = str(R.string.setupvm_missing_token)) }
+                } else {
+                    _state.update { it.copy(busy = false, signedIn = true, email = email) }
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(busy = false, errorMessage = describe(e, LoginStep.Pair, R.string.web_login_failed)) }
+            }
+        }
+    }
     fun onEmailChange(v: String) = _state.update { it.copy(email = v, errorMessage = null) }
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorMessage = null) }
 
     fun onScanned(raw: String) {
+        if (_state.value.busy) return
+        cancelBrowserLogin()
         // The server's QR encodes a JSON envelope:
         //   { "v": 1, "url": "https://rl.lz-ss.com", "code": "ABC123" }
         // Earlier Android builds incorrectly tried to parse a
@@ -129,7 +192,8 @@ class SetupViewModel : ViewModel() {
 
     fun signIn() {
         val s = _state.value
-        if (!s.canSubmit) return
+        if (!s.canSubmit || s.busy) return
+        cancelBrowserLogin()
         // 发出去的、存进账号列表的都是去掉首尾空格的那一份（见 SetupUiState.signInEmail）。
         val email = s.signInEmail
         _state.update { it.copy(busy = true, errorMessage = null) }

@@ -8,6 +8,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const zhCN: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "登录到 App",
+  "nativeLogin.intro": "请确认这是你刚刚在 ByWave Calendar 中发起的登录。",
+  "nativeLogin.continue": "继续登录 App",
+  "nativeLogin.switch": "使用其他账号",
+  "nativeLogin.cancel": "取消并返回 App",
+  "nativeLogin.upgrade": "登录请求无效，或 App 版本需要更新。请更新 App 后重新发起登录；也可以先使用扫码或配对码登录。",
+
   "adminCalendar.title": "系统日历配置",
   "adminCalendar.intro": "在这里配置平台的日历连接。保存后立即生效，无需修改服务器文件或重启。",
   "adminCalendar.outlook": "支持新版和经典版 Outlook 的 Microsoft 365 / Outlook.com 云端日历。",
@@ -60,7 +67,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "建议使用独立的 Outlook 日历。开始后，这两个日历内的日程会相互复制；之后的修改和删除也会双向同步。",
   "calendarSync.choose": "请选择日历",
   "calendarSync.start": "开始双向同步",
-  "calendarSync.scope": "Outlook 同步范围：过去 90 天至未来 365 天，已关联的日程会继续跟踪。同步标题、说明、地点、时间和全天状态。重复日程按每次发生同步，修改一次不会改变整组；提醒、附件、参会人和会议邀请不跨平台复制。通常每分钟同步一次，大批日程分批完成。",
+  "calendarSync.scope": "Outlook 同步范围：过去 90 天至未来 365 天，已关联的日程会继续跟踪。同步标题、说明、地点、时间和全天状态。重复日程按每次发生同步，修改一次不会改变整组；提醒、附件、参会人和会议邀请不跨平台复制。通常每 30 秒同步一次，大批日程分批完成。",
   "calendarSync.queued": "已安排同步，稍后刷新可查看进度。",
   "calendarSync.saved": "设置已保存，下一轮同步时生效。",
   "calendarSync.statusTitle": "同步状态",

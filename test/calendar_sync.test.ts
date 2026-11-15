@@ -41,6 +41,35 @@ describe("three-way synchronization", () => {
     const a = side(direction === "left" ? [] : [item("a")]), b = side(direction === "right" ? [] : [item("b")]), state = linked();
     await run(state, a, b); expect(a.rows.size + b.rows.size).toBe(0); expect(state.links).toHaveLength(0);
   });
+  it.each(["left", "right"] as const)("prioritizes %s deletions over older pending edits and schedules remaining work", async direction => {
+    const a = side([item("edit-a", "Edited"), ...(direction === "right" ? [item("delete-a")] : [])]);
+    const b = side([item("edit-b"), ...(direction === "left" ? [item("delete-b")] : [])]);
+    const state = emptyState(); state.links = [
+      { leftId: "edit-a", rightId: "edit-b", base: content },
+      { leftId: "delete-a", rightId: "delete-b", base: content },
+    ];
+    const deferred = vi.fn();
+    await synchronize("pair", state, a, b, async () => {}, async () => {}, 1, deferred);
+    expect(a.rows.has("delete-a") || b.rows.has("delete-b")).toBe(false);
+    expect(b.rows.get("edit-b")!.content.summary).toBe("Plan");
+    expect(deferred).toHaveBeenCalled();
+    deferred.mockClear();
+    await synchronize("pair", state, a, b, async () => {}, async () => {}, 1, deferred);
+    expect(b.rows.get("edit-b")!.content.summary).toBe("Edited");
+    expect(deferred).not.toHaveBeenCalled();
+  });
+  it("drains bulk deletions in bounded batches without resurrecting them", async () => {
+    const a = side(), b = side(Array.from({ length: 205 }, (_, n) => item("b" + n)));
+    const state = emptyState(); state.links = Array.from({ length: 205 }, (_, n) => ({ leftId: "a" + n, rightId: "b" + n, base: content }));
+    const deferred = vi.fn();
+    for (const remaining of [105, 5, 0]) {
+      deferred.mockClear();
+      await synchronize("pair", state, a, b, async () => {}, async () => {}, 100, deferred);
+      expect(b.rows.size).toBe(remaining);
+      expect(deferred.mock.calls.length > 0).toBe(remaining > 0);
+    }
+    expect(a.save).not.toHaveBeenCalled(); expect(b.save).not.toHaveBeenCalled();
+  });
   it("preserves simultaneous edits and edit versus delete", async () => {
     const a = side([item("a", "Left edit")]), b = side([item("b", "Right edit")]);
     expect(await run(linked(), a, b)).toHaveLength(1);

@@ -11,6 +11,8 @@
 
 package cn.bywave.calendar.update
 
+import kotlinx.coroutines.ensureActive
+
 import android.content.Context
 import android.content.pm.PackageManager
 import cn.bywave.calendar.BywaveApp
@@ -106,12 +108,15 @@ object UpdateChecker {
         // (or errors), so a stale/unreachable server can't lock users out
         // of newer releases. If BOTH are unreachable we re-throw the server
         // error so the user-initiated "检查更新" path can report a failure.
-        val serverResult = runCatching { api.latest() }
+        val serverResult = runCatching { api.latest().also { require(validReleaseDownload(it)) } }
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
         val fromServer = serverResult.getOrNull()
         val serverIsNewer = fromServer != null && fromServer.versionCode > localVersionCode
         val fromGithub =
             if (serverIsNewer) null
-            else runCatching { api.fetchManifest(GITHUB_MANIFEST_URL) }.getOrNull()
+            else runCatching { api.fetchManifest(GITHUB_MANIFEST_URL).also { require(validReleaseDownload(it)) } }.getOrNull()
+        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+        if (BywaveApp.instance.profiles.active()?.serverUrl != baseUrl) return false
         val rel = listOfNotNull(fromServer, fromGithub).maxByOrNull { it.versionCode }
         if (rel == null) {
             // Neither source reachable — surface the server error to callers

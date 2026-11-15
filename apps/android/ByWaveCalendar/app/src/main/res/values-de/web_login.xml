@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">Im Browser anmelden</string>
+    <string name="web_login_pending">Schließen Sie die Anmeldung im Browser ab und kehren Sie zurück.</string>
+    <string name="web_login_cancel">Anmeldung abbrechen</string>
+    <string name="web_login_https">Die Browser-Anmeldung erfordert eine HTTPS-Serveradresse.</string>
+    <string name="web_login_open_failed">Der Browser konnte nicht geöffnet werden. Bitte erneut versuchen.</string>
+    <string name="web_login_expired">Diese Anmeldung ist abgelaufen. Bitte neu starten.</string>
+    <string name="web_login_invalid">Die Antwort ist ungültig. App und Server aktualisieren und erneut versuchen.</string>
+    <string name="web_login_failed">Anmeldung fehlgeschlagen. Bitte erneut versuchen.</string>
+</resources>

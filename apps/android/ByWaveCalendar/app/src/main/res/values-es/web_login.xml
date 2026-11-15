@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">Iniciar sesión en el navegador</string>
+    <string name="web_login_pending">Completa el inicio de sesión en el navegador y vuelve aquí.</string>
+    <string name="web_login_cancel">Cancelar inicio de sesión</string>
+    <string name="web_login_https">Se requiere una dirección de servidor HTTPS.</string>
+    <string name="web_login_open_failed">No se pudo abrir el navegador. Inténtalo de nuevo.</string>
+    <string name="web_login_expired">El inicio de sesión ha caducado. Empieza de nuevo.</string>
+    <string name="web_login_invalid">La respuesta no es válida. Actualiza la app y el servidor e inténtalo de nuevo.</string>
+    <string name="web_login_failed">Error de inicio de sesión. Inténtalo de nuevo.</string>
+</resources>

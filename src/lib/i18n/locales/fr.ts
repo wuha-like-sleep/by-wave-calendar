@@ -5,6 +5,13 @@
 import type { TranslationKey } from "./en.js";
 
 export const fr: Partial<Record<TranslationKey, string>> = {
+  "nativeLogin.title": "Se connecter à l’application",
+  "nativeLogin.intro": "Continuez uniquement si vous avez lancé cette connexion dans ByWave Calendar.",
+  "nativeLogin.continue": "Continuer vers l’application",
+  "nativeLogin.switch": "Utiliser un autre compte",
+  "nativeLogin.cancel": "Annuler et revenir à l’application",
+  "nativeLogin.upgrade": "Cette demande est invalide ou l’application doit être mise à jour. Mettez-la à jour et réessayez. Vous pouvez aussi utiliser un code QR ou de jumelage.",
+
   "adminCalendar.title": "Configuration des calendriers système",
   "adminCalendar.intro": "Configurez les connexions de calendrier de votre plateforme. Les modifications sont immédiates, sans modifier les fichiers du serveur ni redémarrer.",
   "adminCalendar.outlook": "Compatible avec les calendriers cloud Microsoft 365 / Outlook.com dans le nouvel Outlook et Outlook classique.",
@@ -57,7 +64,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "calendarSync.pairHelp": "Un calendrier Outlook dédié est recommandé. Les événements des deux calendriers seront copiés, puis les modifications et suppressions seront synchronisées dans les deux sens.",
   "calendarSync.choose": "Choisir un calendrier",
   "calendarSync.start": "Démarrer la synchronisation",
-  "calendarSync.scope": "Outlook couvre les 90 derniers et les 365 prochains jours et continue à suivre les événements liés. Titres, descriptions, lieux, horaires et journées entières sont synchronisés. Les récurrences sont traitées individuellement : modifier une occurrence ne change pas la série. Rappels, pièces jointes, participants et invitations ne sont pas copiés. La synchronisation a lieu normalement chaque minute, par lots pour les grands calendriers.",
+  "calendarSync.scope": "Outlook couvre les 90 derniers et les 365 prochains jours et continue à suivre les événements liés. Titres, descriptions, lieux, horaires et journées entières sont synchronisés. Les récurrences sont traitées individuellement : modifier une occurrence ne change pas la série. Rappels, pièces jointes, participants et invitations ne sont pas copiés. La synchronisation a lieu normalement toutes les 30 secondes, par lots pour les grands calendriers.",
   "calendarSync.queued": "Synchronisation programmée. Actualisez dans un instant.",
   "calendarSync.saved": "Enregistré. Application lors de la prochaine synchronisation.",
   "calendarSync.statusTitle": "État de synchronisation",

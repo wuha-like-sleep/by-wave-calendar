@@ -1,3 +1,4 @@
+import { registerNativeLoginRoutes } from "./native_login.js";
 import { readFlash, redirectWithFlash as redirectWith, type Flash } from "../lib/flash.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
@@ -2132,56 +2133,7 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
-  // Native APP "Sign in with browser" bridge. Used by iOS/Android/desktop
-  // APPs to delegate login to the web flow — which covers passkey + MFA
-  // + OIDC SSO without any new server endpoints.
-  //
-  // Flow:
-  //   1. APP opens ASWebAuthenticationSession to this URL
-  //   2. If not logged in → user gets the web login (any method)
-  //   3. We mint a one-time pairing code bound to this user
-  //   4. Redirect to bywave://auth/complete?code=<code>&state=<state>
-  //   5. APP catches the redirect, exchanges code via existing
-  //      /api/v1/devices/pair-claim → has refresh + access tokens
-  //
-  // The pairing code is short-lived (5 min) and single-use, identical to
-  // the QR pairing flow — just kicked off automatically instead of
-  // displayed as a QR. apps_enabled gate applies (admin can disable).
-  app.get("/app/auth/native", async (req, reply) => {
-    const user = await loadAuthedUser(req, reply);
-    if (!user) return reply;
-    const q = z.object({
-      // Opaque round-trip identifier the APP supplies so it can verify
-      // the callback corresponds to its own request (anti-CSRF for the
-      // URL scheme handoff). We just echo it back.
-      state: z.string().min(1).max(200).optional(),
-      // Custom URL scheme the APP wants the redirect to use. We only
-      // honor `bywave://` (and `bywave-staging://` for dev builds);
-      // anything else is rejected so this can't be turned into an open
-      // redirect.
-      scheme: z.string().regex(/^[a-z0-9-]{2,32}$/).optional(),
-    }).safeParse(req.query);
-    if (!q.success) return reply.code(400).send("bad_request");
-
-    const settings = await getSettings();
-    if (!settings.appsEnabled) {
-      return reply.code(403).view("error", {
-        title: tr(req, "page.appsDisabled"), user, csrfToken: csrfTokenFor(req), flash: {},
-        statusCode: 403, heading: tr(req, "errorPage.appsDisabled.heading"),
-        message: tr(req, "errorPage.appsDisabled.message"),
-      });
-    }
-
-    const scheme = q.data.scheme === "bywave-staging" ? "bywave-staging" : "bywave";
-    // Reuse the existing pairing-code flow. The APP claims it via
-    // /api/v1/devices/pair-claim (no need for a new endpoint).
-    const { initPairing } = await import("../lib/devices.js");
-    const { code } = await initPairing(user.id);
-
-    const params = new URLSearchParams({ code });
-    if (q.data.state) params.set("state", q.data.state);
-    return reply.redirect(`${scheme}://auth/complete?${params.toString()}`);
-  });
+  registerNativeLoginRoutes(app, loadAuthedUser);
 
   // Companion to POST /api/v1/auth/web-session. The iOS APP opens this
   // URL inside SFSafariViewController; we consume the one-shot token,

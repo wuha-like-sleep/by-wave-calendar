@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="web_login_button">網頁登入</string>
+    <string name="web_login_pending">請在瀏覽器中完成登入，然後返回這裡。</string>
+    <string name="web_login_cancel">取消登入</string>
+    <string name="web_login_https">網頁登入需要 HTTPS 伺服器地址。</string>
+    <string name="web_login_open_failed">無法開啟瀏覽器，請重試。</string>
+    <string name="web_login_expired">本次登入已過期，請重新發起。</string>
+    <string name="web_login_invalid">登入回傳無效，請更新 App 和伺服器後重試。</string>
+    <string name="web_login_failed">登入失敗，請重試。</string>
+</resources>

@@ -9,6 +9,13 @@
 
 package cn.bywave.calendar.desktop.ui.main
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -57,6 +64,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -123,6 +134,16 @@ fun MainScreen(
     }
 
     LaunchedEffect(state) { state?.load() }
+    val focused = LocalWindowInfo.current.isWindowFocused
+    LaunchedEffect(state, focused) {
+        val active = state ?: return@LaunchedEffect
+        if (!focused) return@LaunchedEffect
+        active.refreshIfIdle()
+        while (true) {
+            kotlinx.coroutines.delay(15_000)
+            active.refreshIfIdle()
+        }
+    }
 
     // 事件提醒。
     //
@@ -294,7 +315,9 @@ fun MainScreen(
         val compact = maxWidth < 1180.dp
         // 侧栏在窄窗口收窄而不是消失:账号切换器和日历色卡都在里面,整块拿掉
         // 用户就没法切账号了。
-        val sidebarWidth = if (compact) 210.dp else 260.dp
+        val sidebarWidth = if (compact) 224.dp else 256.dp
+        var hiddenCalendars by remember(p.deviceId) { mutableStateOf(emptySet<String>()) }
+        val displayedEvents = remember(ui.events, hiddenCalendars) { ui.events.filterNot { it.calendarId in hiddenCalendars } }
 
         Column(modifier = Modifier.fillMaxSize()) {
             TopBar(
@@ -349,13 +372,17 @@ fun MainScreen(
                     onProfileSelect = { ProfileStore.setActive(it) },
                     onAddAccount = onAddAccount,
                     onProfileRemove = { ProfileStore.remove(it) },
+                    anchor = ui.anchor,
+                    onDaySelect = { state.jumpToDay(it) },
+                    hiddenCalendars = hiddenCalendars,
+                    onCalendarToggle = { id -> hiddenCalendars = if (id in hiddenCalendars) hiddenCalendars - id else hiddenCalendars + id },
                 )
-                VerticalDivider()
-                Box(modifier = Modifier.fillMaxSize()) {
-                    when (ui.mode) {
+                Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(start = 8.dp, top = 14.dp, end = 18.dp, bottom = 18.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
+                    Crossfade(targetState = ui.mode, animationSpec = tween(160), label = "calendar-view") { visibleMode ->
+                    when (visibleMode) {
                         ViewMode.Day -> DayView(
                             anchor = ui.anchor,
-                            events = ui.events,
+                            events = displayedEvents,
                             calendars = ui.calendars,
                             loading = ui.loading,
                             onEventClick = { state.openDetail(it) },
@@ -365,7 +392,7 @@ fun MainScreen(
                         )
                         ViewMode.Week -> WeekView(
                             weekStart = startOfWeek(ui.anchor),
-                            events = ui.events,
+                            events = displayedEvents,
                             calendars = ui.calendars,
                             onEventClick = { state.openDetail(it) },
                             onEventEdit = { state.openEdit(it) },
@@ -377,7 +404,7 @@ fun MainScreen(
                         )
                         ViewMode.Month -> MonthView(
                             anchor = ui.anchor,
-                            events = ui.events,
+                            events = displayedEvents,
                             calendars = ui.calendars,
                             onDayClick = { state.jumpToDay(it) },
                             onEventClick = { state.openDetail(it) },
@@ -387,7 +414,7 @@ fun MainScreen(
                         )
                         ViewMode.Agenda -> AgendaView(
                             anchor = ui.anchor,
-                            events = ui.events,
+                            events = displayedEvents,
                             calendars = ui.calendars,
                             loading = ui.loading,
                             onEventClick = { state.openDetail(it) },
@@ -395,6 +422,7 @@ fun MainScreen(
                             onEventDuplicate = { state.openDuplicate(it) },
                             onEventDelete = { state.delete(it) },
                         )
+                    }
                     }
                     Column(modifier = Modifier.fillMaxWidth()) {
                         if (ui.error != null) {
@@ -680,21 +708,11 @@ private fun TopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(76.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 16.dp),
+            .height(80.dp)
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (!compact) {
-            BrandMark(32.dp)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                t("app.name"),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.width(20.dp))
-        }
 
         WithTooltip(prevLabel(mode, t), "←") {
             IconButton(onClick = onPrev) {
@@ -765,13 +783,13 @@ private fun TopBar(
         // Global search (Cmd/Ctrl+F) — opens the event search dialog.
         WithTooltip(t("topbar.search"), "F") {
             IconButton(onClick = onOpenSearch) {
-                Icon(Icons.Default.Search, contentDescription = t("topbar.search"))
+                Icon(Icons.Outlined.Search, contentDescription = t("topbar.search"))
             }
         }
         WithTooltip(t("topbar.refresh"), "R") {
             IconButton(onClick = onRefresh, enabled = !loading) {
                 if (loading) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Default.Refresh, contentDescription = t("topbar.refresh"))
+                else Icon(Icons.Outlined.Refresh, contentDescription = t("topbar.refresh"))
             }
         }
         // Settings (Cmd+,) — primary entry to the Settings page. Logout
@@ -779,7 +797,7 @@ private fun TopBar(
         // (a misclick used to drop the active profile with no confirm).
         WithTooltip(t("topbar.settings"), ",") {
             IconButton(onClick = onOpenSettings) {
-                Icon(Icons.Default.Settings, contentDescription = t("topbar.settings"))
+                Icon(Icons.Outlined.Settings, contentDescription = t("topbar.settings"))
             }
         }
     }
@@ -818,6 +836,10 @@ private fun Sidebar(
     onProfileSelect: (String) -> Unit,
     onAddAccount: () -> Unit,
     onProfileRemove: (String) -> Unit,
+    anchor: java.time.LocalDate,
+    onDaySelect: (java.time.LocalDate) -> Unit,
+    hiddenCalendars: Set<String>,
+    onCalendarToggle: (String) -> Unit,
 ) {
     // Observe locale so the section header + empty state re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -826,10 +848,18 @@ private fun Sidebar(
         modifier = Modifier
             .width(width)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(12.dp),
+            .padding(horizontal = 18.dp, vertical = 20.dp),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BrandMark(44.dp)
+            Column {
+                Text("ByWave", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                Text(t("app.name"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(28.dp))
         ProfileSwitcher(
             active = active,
             profiles = profiles,
@@ -837,8 +867,9 @@ private fun Sidebar(
             onAddAccount = onAddAccount,
             onRemove = onProfileRemove,
         )
-        Spacer(Modifier.height(16.dp))
-
+        Spacer(Modifier.height(24.dp))
+        MiniCalendar(anchor, onDaySelect)
+        Spacer(Modifier.height(28.dp))
         Text(
             t("sidebar.myCalendars"),
             style = MaterialTheme.typography.labelMedium,
@@ -860,13 +891,8 @@ private fun Sidebar(
                 modifier = Modifier.padding(horizontal = 10.dp),
             ) {
                 for (cal in calendars) {
-                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)).padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(parseHex(cal.color)),
-                        )
+                    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onCalendarToggle(cal.id) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = cal.id !in hiddenCalendars, onCheckedChange = { onCalendarToggle(cal.id) }, colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = parseHex(cal.color)), modifier = Modifier.size(32.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(
                             cal.name,
@@ -875,6 +901,37 @@ private fun Sidebar(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiniCalendar(anchor: java.time.LocalDate, onSelect: (java.time.LocalDate) -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    var month by remember(anchor.month, anchor.year) { mutableStateOf(java.time.YearMonth.from(anchor)) }
+    val t = cn.bywave.calendar.desktop.i18n.I18n
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(formatMonthAnchor(month.atDay(1)), modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = { month = month.minusMonths(1) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ChevronLeft, t.t("topbar.prevMonth"), Modifier.size(18.dp)) }
+            IconButton(onClick = { month = month.plusMonths(1) }, modifier = Modifier.size(28.dp)) { Icon(Icons.Default.ChevronRight, t.t("topbar.nextMonth"), Modifier.size(18.dp)) }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row {
+            (1..7).forEach { day -> Box(Modifier.weight(1f).height(24.dp), contentAlignment = Alignment.Center) { Text(t.t("weekday.short.$day"), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+        }
+        val days = cn.bywave.calendar.desktop.ui.calendar.monthGridDays(month)
+        days.chunked(7).forEach { week ->
+            Row {
+                week.forEach { day ->
+                    val selected = day == anchor
+                    val bg by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent, tween(120), label = "selected-date")
+                    Box(Modifier.weight(1f).aspectRatio(1f).padding(1.dp).clip(CircleShape).background(bg).clickable(role = androidx.compose.ui.semantics.Role.Button) { onSelect(day) }, contentAlignment = Alignment.Center) {
+                        Text(day.dayOfMonth.toString(), fontSize = 11.sp, fontWeight = if (day == java.time.LocalDate.now() || selected) FontWeight.Bold else FontWeight.Normal,
+                            color = when { selected -> MaterialTheme.colorScheme.onPrimary; day == java.time.LocalDate.now() -> MaterialTheme.colorScheme.primary; day.month != month.month -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .45f); else -> MaterialTheme.colorScheme.onSurface })
                     }
                 }
             }
