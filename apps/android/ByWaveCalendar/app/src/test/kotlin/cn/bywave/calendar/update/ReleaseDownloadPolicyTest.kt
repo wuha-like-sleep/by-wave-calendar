@@ -10,6 +10,12 @@ class ReleaseDownloadPolicyTest {
         for (hash in listOf("", "a".repeat(63), "g".repeat(64))) assertFalse(validReleaseDownload(release.copy(sha256 = hash)))
         for (size in listOf(0L, -1L, 512L * 1024 * 1024 + 1)) assertFalse(validReleaseDownload(release.copy(sizeBytes = size)))
     }
+    @Test fun rejectsImpossibleMandatoryUpgradeAndEmptyVersion() {
+        assertFalse(validReleaseDownload(release.copy(minSupportedVersionCode = 31)))
+        assertFalse(validReleaseDownload(release.copy(minSupportedVersionCode = 0)))
+        assertFalse(validReleaseDownload(release.copy(versionName = " ")))
+        assertTrue(validReleaseDownload(release.copy(minSupportedVersionCode = 30)))
+    }
     @Test fun rejectsInsecureAndCredentialBearingUrls() {
         for (url in listOf("http://calendar.example/app.apk", "file:///tmp/app.apk", "https://user:password@calendar.example/app.apk", "https://calendar.example/app.apk#file", "not a URL")) {
             assertFalse(url, validReleaseDownload(release.copy(url = url)))
