@@ -1694,7 +1694,9 @@ private fun BookingDeleteDialog(
 @Composable
 private fun SystemCalendarSection(profile: Profile) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
-    val api = remember(profile.deviceId, profile.serverUrl) { ApiClient(profile).calendarConnectionApi() }
+    val client = remember(profile.deviceId, profile.serverUrl) { ApiClient(profile) }
+    val api = remember(client) { client.calendarConnectionApi() }
+    androidx.compose.runtime.DisposableEffect(client) { onDispose { client.close() } }
     cn.bywave.calendar.connect.CalendarConnectionPanel(
         api = api, locale = locale.code,
         apple = System.getProperty("os.name").orEmpty().lowercase().contains("mac"),

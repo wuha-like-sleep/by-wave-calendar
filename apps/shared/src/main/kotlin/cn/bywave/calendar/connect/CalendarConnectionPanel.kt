@@ -16,7 +16,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.net.URI
@@ -35,13 +34,31 @@ fun CalendarConnectionPanel(
     errorMessage: (Throwable) -> String,
     active: Boolean = true,
 ) {
+    key(api) {
+        CalendarConnectionContent(api, locale, apple, deviceLabel, openUrl, copy, installProfile, errorMessage, active)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CalendarConnectionContent(
+    api: CalendarConnectionApi,
+    locale: String,
+    apple: Boolean,
+    deviceLabel: String,
+    openUrl: (String) -> Unit,
+    copy: (String) -> Unit,
+    installProfile: suspend (String) -> Unit,
+    errorMessage: (Throwable) -> String,
+    active: Boolean,
+) {
     val t: (String) -> String = { CalendarCopy.text(locale, it) }
     val scope = rememberCoroutineScope()
-    var data by remember(api) { mutableStateOf<CalendarConnection?>(null) }
-    var busy by remember(api) { mutableStateOf(false) }
-    var error by remember(api) { mutableStateOf<String?>(null) }
+    val requests = remember(api) { CalendarConnectionState(api) }
+    val data = requests.data
+    val busy = requests.busy
     var notice by remember(api) { mutableStateOf<String?>(null) }
-    var secret by remember(api) { mutableStateOf<String?>(null) }
+    var secret by remember(api) { mutableStateOf<IssuedCalendarPassword?>(null) }
     var copied by remember(api) { mutableStateOf(false) }
     var left by remember(api) { mutableStateOf("") }
     var right by remember(api) { mutableStateOf("") }
@@ -50,40 +67,31 @@ fun CalendarConnectionPanel(
     var editingPassword by remember(api) { mutableStateOf<CalendarPassword?>(null) }
     var editingCalendars by remember(api) { mutableStateOf(emptySet<String>()) }
     var details by remember { mutableStateOf(false) }
-    var generation by remember(api) { mutableStateOf(0) }
-
-    suspend fun load(remote: Boolean) {
-        val requestedGeneration = generation
-        val next = api.load(remote)
-        if (requestedGeneration != generation) return
-        data = if (!remote && next.account != null) next.copy(remote = data?.remote, remoteError = data?.remoteError ?: false) else next
+    LaunchedEffect(data) {
+        val next = data ?: return@LaunchedEffect
         if (next.pairs.any { it.calendarId == left } || next.calendars.none { it.id == left }) left = ""
         if (next.pairs.any { it.remoteId == right } || (next.remote != null && next.remote.none { it.id == right })) right = ""
     }
-    fun run(work: suspend () -> Unit) {
-        if (busy) return
-        generation++
-        busy = true; error = null; notice = null
+    fun run(reload: Boolean = false, work: suspend () -> Unit) {
         scope.launch {
-            try { work() }
-            catch (e: CancellationException) { throw e }
-            catch (e: Exception) { error = errorMessage(e) }
-            finally { busy = false }
+            requests.perform(reload) { notice = null; work() }
         }
     }
-    fun command(value: CalendarCommand) = run {
+    fun command(value: CalendarCommand) = run(reload = true) {
         val result = api.command(value)
-        if (result.password != null) { secret = result.password.plain; copied = false }
+        if (result.password != null) { secret = result.password; copied = false }
+        if (value.action == "revoke-password" && value.id == secret?.id) { secret = null; copied = false }
         notice = t(if (value.action in listOf("sync", "pair")) "queued" else "saved")
-        load(true)
     }
+    // Load once even if this window has not received focus yet. Focus changes
+    // only control polling, and cannot cancel a save or clear its busy state.
+    LaunchedEffect(api) { requests.refresh(remote = true) }
     LaunchedEffect(api, active) {
         if (!active) return@LaunchedEffect
-        busy = true
-        try { load(data == null) } catch (e: CancellationException) { throw e } catch (e: Exception) { error = errorMessage(e) } finally { busy = false }
+        requests.refresh(remote = requests.data == null)
         while (true) {
-            delay(if (data?.pairs?.isNotEmpty() == true) 5_000 else 30_000)
-            if (!busy) try { load(false) } catch (e: CancellationException) { throw e } catch (_: Exception) { /* Keep the last readable snapshot; manual refresh exposes errors. */ }
+            delay(if (requests.data?.pairs?.isNotEmpty() == true) 5_000 else 30_000)
+            requests.refresh(remote = false, quiet = true)
         }
     }
     Column(verticalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.fillMaxWidth()) {
@@ -93,11 +101,28 @@ fun CalendarConnectionPanel(
                 Text("ByWave Connect", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp))
             }
             if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-            TextButton(onClick = { run { load(true) } }, enabled = !busy) { Text(t("refresh")) }
+            TextButton(onClick = { run(reload = true) {} }, enabled = !busy) { Text(t("refresh")) }
         }
-        error?.let { ConnectionCard { Text(it, color = MaterialTheme.colorScheme.error) } }
-        notice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+        requests.error?.let { failure ->
+            val saved = failure is CalendarStatusRefreshFailed && notice != null
+            ConnectionCard {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (saved) Icon(Icons.Default.CheckCircle, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+                    Text(
+                        if (saved) t("savedRefreshFailed") else errorMessage(failure.cause.takeIf { failure is CalendarStatusRefreshFailed } ?: failure),
+                        modifier = Modifier.weight(1f),
+                        color = if (saved) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+        notice?.takeUnless { requests.error is CalendarStatusRefreshFailed }?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
         val state = data
+        if (state == null && requests.error == null) ConnectionCard {
+            Text(t("loading"), style = MaterialTheme.typography.titleMedium)
+            Text(t("intro"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
         if (state != null) {
             ConnectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -133,7 +158,7 @@ fun CalendarConnectionPanel(
                     CalendarPicker("ByWave", left, state.calendars.filter { c -> state.pairs.none { it.calendarId == c.id } }, t("choose"), !busy) { left = it }
                     CalendarPicker("Outlook", right, state.remote.orEmpty().filter { c -> state.pairs.none { it.remoteId == c.id } }, t("choose"), !busy && !state.remoteError) { right = it }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { command(CalendarCommand("pair", calendarId = left, remoteId = right)) }, enabled = !busy && !state.remoteError && left.isNotBlank() && right.isNotBlank()) { Text(t("start")) }
+                        Button(onClick = { command(CalendarCommand("pair", calendarId = left, remoteId = right)) }, enabled = !busy && !state.remoteError && state.calendars.any { it.id == left } && state.remote.orEmpty().any { it.id == right } && state.pairs.none { it.calendarId == left || it.remoteId == right }) { Text(t("start")) }
                         TextButton(onClick = { command(CalendarCommand("create-calendar")) }, enabled = !busy) { Text(t("createCalendar")) }
                     }
                 }
@@ -182,8 +207,8 @@ fun CalendarConnectionPanel(
                     Button(enabled = !busy && chosen.isNotEmpty(), onClick = { command(CalendarCommand("apple-password", label = deviceLabel, calendarIds = chosen.toList())) }) { Text(t("appleStep1")) }
                     secret?.let { password ->
                         Text(t("passwordOnce"), style = MaterialTheme.typography.bodySmall)
-                        SelectionContainer { Text(password, style = MaterialTheme.typography.titleMedium) }
-                        TextButton(onClick = { run { copy(password); copied = true } }) { Text(t(if (copied) "copied" else "copy")) }
+                        SelectionContainer { Text(password.plain, style = MaterialTheme.typography.titleMedium) }
+                        TextButton(onClick = { run { copy(password.plain); copied = true } }) { Text(t(if (copied) "copied" else "copy")) }
                     }
                     OutlinedButton(enabled = !busy, onClick = { run { installProfile(api.appleProfile().profile) } }) { Text(t("appleStep2")) }
                     Text(t("appleStep3"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -11,6 +11,8 @@ object CalendarCopy {
     }
     private val translations = mapOf(
         "en" to mapOf(
+            "loading" to "Loading calendar connections…",
+            "savedRefreshFailed" to "Your change was saved, but the updated status could not be loaded. Refresh to check it; you do not need to submit the change again.",
             "save" to "Save",
             "title" to "System calendars",
             "intro" to "Keep your plans in sync while using the desktop calendar you prefer.",
@@ -82,6 +84,8 @@ object CalendarCopy {
             "details" to "Sync details",
         ),
         "zh-CN" to mapOf(
+            "loading" to "正在加载日历连接…",
+            "savedRefreshFailed" to "更改已保存，但暂时无法读取最新状态。请刷新查看，无需再次提交更改。",
             "save" to "保存",
             "title" to "系统日历",
             "intro" to "在 ByWave 与常用日历之间同步安排，继续使用熟悉的桌面应用。",
@@ -153,6 +157,8 @@ object CalendarCopy {
             "details" to "同步范围与说明",
         ),
         "zh-TW" to mapOf(
+            "loading" to "正在載入行事曆連線…",
+            "savedRefreshFailed" to "變更已儲存，但暫時無法讀取最新狀態。請重新整理查看，不需再次提交變更。",
             "save" to "儲存",
             "title" to "系統行事曆",
             "intro" to "在 ByWave 與常用行事曆之間同步安排，繼續使用熟悉的桌面應用程式。",
@@ -224,6 +230,8 @@ object CalendarCopy {
             "details" to "同步範圍與說明",
         ),
         "ja" to mapOf(
+            "loading" to "カレンダー接続を読み込み中…",
+            "savedRefreshFailed" to "変更は保存されましたが、最新の状態を読み込めませんでした。更新して確認してください。変更を再送信する必要はありません。",
             "save" to "保存",
             "title" to "システムカレンダー",
             "intro" to "使い慣れたデスクトップアプリと ByWave の予定を同期します。",
@@ -295,6 +303,8 @@ object CalendarCopy {
             "details" to "同期の詳細",
         ),
         "ko" to mapOf(
+            "loading" to "캘린더 연결을 불러오는 중…",
+            "savedRefreshFailed" to "변경 사항은 저장되었지만 최신 상태를 불러오지 못했습니다. 새로고침하여 확인하세요. 변경 사항을 다시 제출할 필요는 없습니다.",
             "save" to "저장",
             "title" to "시스템 캘린더",
             "intro" to "익숙한 데스크톱 앱과 ByWave 사이에서 일정을 동기화하세요.",
@@ -366,6 +376,8 @@ object CalendarCopy {
             "details" to "동기화 세부 정보",
         ),
         "de" to mapOf(
+            "loading" to "Kalenderverbindungen werden geladen…",
+            "savedRefreshFailed" to "Die Änderung wurde gespeichert, aber der aktuelle Status konnte nicht geladen werden. Bitte aktualisieren. Die Änderung muss nicht erneut gesendet werden.",
             "save" to "Speichern",
             "title" to "Systemkalender",
             "intro" to "Synchronisieren Sie Termine zwischen ByWave und Ihren vertrauten Desktop-Apps.",
@@ -437,6 +449,8 @@ object CalendarCopy {
             "details" to "Synchronisierungsdetails",
         ),
         "fr" to mapOf(
+            "loading" to "Chargement des connexions aux calendriers…",
+            "savedRefreshFailed" to "La modification a été enregistrée, mais le nouvel état n’a pas pu être chargé. Actualisez pour le vérifier, sans soumettre à nouveau la modification.",
             "save" to "Enregistrer",
             "title" to "Calendriers système",
             "intro" to "Synchronisez vos rendez-vous entre ByWave et vos applications habituelles.",
@@ -508,6 +522,8 @@ object CalendarCopy {
             "details" to "Détails de synchronisation",
         ),
         "es" to mapOf(
+            "loading" to "Cargando conexiones de calendario…",
+            "savedRefreshFailed" to "El cambio se ha guardado, pero no se pudo cargar el estado actualizado. Actualiza para comprobarlo; no necesitas enviar el cambio otra vez.",
             "save" to "Guardar",
             "title" to "Calendarios del sistema",
             "intro" to "Sincroniza tus planes entre ByWave y tus aplicaciones de escritorio habituales.",

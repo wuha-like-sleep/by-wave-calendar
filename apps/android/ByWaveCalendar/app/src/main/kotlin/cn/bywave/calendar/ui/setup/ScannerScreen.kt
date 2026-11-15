@@ -157,6 +157,7 @@ private fun PermissionPrompt(onRequest: () -> Unit) {
     }
 }
 
+@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 @Composable
 private fun CameraPreview(onResult: (String) -> Unit) {
     val context = LocalContext.current

@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -122,9 +121,14 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
     // 一个账号都不剩了（自己退出最后一个 / 最后一个被服务端登出）→ 清空返回栈回登录页。
     // 以前这一步是「起始页跟着变、整张图重建」顺带做掉的；起始页定死之后要显式做。
     LaunchedEffect(loggedIn) {
-        val stack = nav.currentBackStack.value
-            .filter { it.destination !is NavGraph }
-            .map { it.destination.route }
+        // Every authenticated destination is rooted at calendar. Inspect that
+        // entry through the public API, including when setup/scanner covers it.
+        val calendarRoute = try {
+            nav.getBackStackEntry(AuthRouting.CALENDAR).destination.route
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        val stack = listOfNotNull(nav.currentDestination?.route, calendarRoute)
         if (AuthRouting.mustResetToSetup(signedIn = loggedIn, stack = stack)) {
             // 这一张登录页是空白的。往登录页跳的每一处都先说清楚要不要预填（「添加账号」
             // 清空、「重新登录」放那个账号），这里也一样：格子里不管留着什么，都不能
@@ -185,8 +189,8 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable(AuthRouting.SCANNER) {
-            val parentEntry = remember(nav) { nav.getBackStackEntry(AuthRouting.SETUP) }
+        composable(AuthRouting.SCANNER) { entry ->
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry(AuthRouting.SETUP) }
             val setupVm: SetupViewModel = viewModel(viewModelStoreOwner = parentEntry)
             ScannerScreen(
                 onResult = { raw ->
@@ -242,14 +246,14 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable("search") {
+        composable("search") { entry ->
             // Search VM observes the same EventRepository the calendar
             // VM does, so it sees the same wide-window cache and re-
             // renders if a background fetch lands while open.
             // Capture the calendar VM at composable scope so the
             // onEventClick lambda can drive it without ViewModelProvider
             // gymnastics.
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             SearchScreen(
                 onBack = { nav.popBackStack() },
@@ -271,8 +275,8 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable("settings") {
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+        composable("settings") { entry ->
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             SettingsScreen(
                 onBack = { nav.popBackStack() },
@@ -290,12 +294,12 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable("calendars") {
+        composable("calendars") { entry ->
             // Reuse the calendar-VM from the calendar back-stack entry —
             // its state.calendars is the same list we want to manage.
             // Saving an edit also calls vm.reload() so the calendar
             // pickers / sidebar pick up the new name/color/timezone.
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             CalendarListScreen(
                 onBack = { nav.popBackStack() },
@@ -303,12 +307,12 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable("booking_links") {
+        composable("booking_links") { entry ->
             // Reuse the calendar-VM from the calendar back-stack entry so
             // the create form's calendar picker sees the same calendars
             // the rest of the app already loaded. Booking links themselves
             // are fetched ad-hoc inside the screen.
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             BookingLinksScreen(
                 onBack = { nav.popBackStack() },
@@ -316,8 +320,8 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             )
         }
 
-        composable("event_new") {
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+        composable("event_new") { entry ->
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             val state by calVm.state.collectAsState()
             EventEditScreen(
@@ -339,7 +343,7 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             arguments = listOf(navArgument("id") { type = NavType.StringType }),
         ) { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             val state by calVm.state.collectAsState()
             val source = remember(id, state.events) {
@@ -368,7 +372,7 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
             arguments = listOf(navArgument("id") { type = NavType.StringType }),
         ) { entry ->
             val id = entry.arguments?.getString("id") ?: return@composable
-            val parentEntry = remember(nav) { nav.getBackStackEntry("calendar") }
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry("calendar") }
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             val state by calVm.state.collectAsState()
             val source = remember(id, state.events) {
