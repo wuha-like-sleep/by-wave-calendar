@@ -3,6 +3,9 @@ from pathlib import Path
 import tempfile
 import unittest
 import os
+import hashlib
+import json
+from threading import Lock
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('mirror', Path(__file__).with_name('mirror-release-to-gitee.py'))
@@ -89,5 +92,66 @@ class MirrorSafetyTest(unittest.TestCase):
                 m.gitee_connection_options()
         with patch.dict(os.environ, {'GITEE_RESOLVE_IPV4': '180.76.198.225'}):
             self.assertEqual(m.gitee_connection_options(), ['--resolve', 'gitee.com:443:180.76.198.225'])
+
+    def test_stable_publication_requires_every_parallel_download_to_verify(self):
+        tag = 'android-v0.13.1'
+        payloads = {'bywave-calendar-0.13.1.apk': b'installer',
+                    'latest.json': json.dumps({'versionName': '0.13.1'}).encode()}
+        payloads['SHA256SUMS.txt'] = ''.join(hashlib.sha256(data).hexdigest() + '  ' + name + '\n'
+                                          for name, data in payloads.items()).encode()
+        prefix = f'https://github.com/{m.GITHUB_REPO}/releases/download/{tag}/'
+        release = {'tag_name': tag, 'draft': False, 'prerelease': False, 'name': 'Android', 'body': 'Notes',
+                   'assets': [{'name': name, 'size': len(data), 'browser_download_url': prefix + name}
+                              for name, data in payloads.items()]}
+        for corrupt in (False, True):
+            with self.subTest(corrupt=corrupt):
+                uploaded, verified, destinations = {}, set(), set()
+                lock = Lock()
+                published = []
+
+                def api(service, method, path, data=None, file=None):
+                    if service == 'github':
+                        if path == '': return {'private': False, 'full_name': m.GITHUB_REPO}
+                        if path.startswith('/releases/tags/'): return release
+                        return {'object': {'type': 'commit', 'sha': 'a' * 40}}
+                    if path == '/releases?per_page=100': return []
+                    if path == '/releases': return {'id': 1}
+                    with lock:
+                        if method == 'POST':
+                            self.assertNotIn(file.name, uploaded)
+                            uploaded[file.name] = {'name': file.name, 'size': file.stat().st_size,
+                                                   'browser_download_url': 'https://gitee.com/' + file.name}
+                            return uploaded[file.name]
+                        if method == 'PATCH':
+                            self.assertEqual(verified, set(payloads))
+                            published.append(data)
+                            return {}
+                        return list(uploaded.values())
+
+                def download(url, target, size, checksum=None):
+                    name = url.rsplit('/', 1)[1]
+                    data = payloads[name]
+                    is_gitee = url.startswith('https://gitee.com/')
+                    if is_gitee:
+                        with lock:
+                            self.assertNotIn(str(target), destinations)
+                            destinations.add(str(target))
+                        if corrupt and name.endswith('.apk'): data += b'corruption'
+                    target.write_bytes(data)
+                    digest = hashlib.sha256(data).hexdigest()
+                    if len(data) != size or (checksum and digest != checksum):
+                        raise ValueError('Downloaded attachment failed verification')
+                    if is_gitee:
+                        with lock: verified.add(name)
+                    return digest
+
+                with patch.object(m, 'api', side_effect=api), patch.object(m, 'download', side_effect=download):
+                    if corrupt:
+                        with self.assertRaises(ValueError): m.mirror(tag)
+                        self.assertEqual(published, [])
+                    else:
+                        m.mirror(tag)
+                        self.assertEqual(len(published), 1)
+                        self.assertIs(published[0]['prerelease'], False)
 
 if __name__=='__main__': unittest.main()
