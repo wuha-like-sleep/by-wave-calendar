@@ -111,7 +111,21 @@ export class MicrosoftClient {
     const rows = await this.pages("/me/calendars/" + encodeURIComponent(calendarId) + "/calendarView?" + query);
     const items = new Map<string, SyncItem>();
     for (const row of rows) { const item = await this.item(calendarId, eventSchema.parse(row)); if (item) items.set(item.id, item); }
-    for (const id of tracked) { if (!items.has(id)) { const item = await this.get(calendarId, id); if (item) items.set(id, item); } }
+    // Missing items need individual confirmation: moving outside the date
+    // window is not deletion. Bound concurrent probes so a bulk remote deletion
+    // does not pay every network round trip serially. Drain in-flight probes on
+    // any failure; a partial snapshot must never drive destructive writes.
+    const missing = [...new Set(tracked)].filter(id => !items.has(id));
+    let next = 0, failed = false;
+    const probes = await Promise.allSettled(Array.from({ length: Math.min(3, missing.length) }, async () => {
+      while (!failed && next < missing.length) {
+        const id = missing[next++]!;
+        try { const item = await this.get(calendarId, id); if (item) items.set(id, item); }
+        catch (error) { failed = true; throw error; }
+      }
+    }));
+    const failure = probes.find(result => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
     // Recheck after pagination: deleting the entire calendar mid-snapshot must
     // not turn a batch of event 404s into deletions on the other platform.
     const stillPresent = z.object({ canEdit: z.boolean() }).parse(await this.request("/me/calendars/" + encodeURIComponent(calendarId) + "?$select=canEdit"));

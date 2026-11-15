@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { synchronize, type SyncSide } from "../src/lib/calendar_sync/engine.js";
 import { contentSchema, decide, emptyState, stableTransactionId, type SyncContent, type SyncItem, type SyncState } from "../src/lib/calendar_sync/model.js";
-import { MicrosoftClient, graphUrl, microsoftItem } from "../src/lib/calendar_sync/microsoft.js";
+import { MicrosoftClient, MicrosoftError, graphUrl, microsoftItem } from "../src/lib/calendar_sync/microsoft.js";
 import { parseDesktopManifest } from "../src/lib/desktop_release.js";
 import { appleCalendarProfile } from "../src/lib/calendar_sync/apple_profile.js";
 const content: SyncContent = { summary: "Plan", description: "", location: "", startsAt: "2026-11-13T09:00:00.000Z", endsAt: "2026-11-13T10:00:00.000Z", allDay: false };
@@ -139,6 +139,36 @@ describe("Graph transport and dates", () => {
   it("requires calendar access before interpreting missing events", async () => {
     const fetcher = vi.fn(async () => new Response(null, { status: 403 }));
     await expect(new MicrosoftClient("secret", fetcher).snapshot("c", content.startsAt, content.endsAt, ["e"])).rejects.toThrow(); expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("confirms bulk remote deletions concurrently with a bounded request count", async () => {
+    const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("calendarView") ? { value: [] } : { canEdit: true }));
+    const client = new MicrosoftClient("secret", fetcher);
+    let active = 0, peak = 0;
+    const get = vi.spyOn(client, "get").mockImplementation(async (_calendar, id) => {
+      active++; peak = Math.max(peak, active);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      active--;
+      return id === "moved" ? item(id) : null;
+    });
+    const result = await client.snapshot("c", content.startsAt, content.endsAt, ["a", "b", "c", "d", "e", "f", "moved", "a"]);
+    expect(peak).toBe(3); expect(active).toBe(0); expect(get).toHaveBeenCalledTimes(7);
+    expect([...result.keys()]).toEqual(["moved"]);
+    expect(fetcher).toHaveBeenCalledTimes(3); // Calendar access before and after the snapshot.
+  });
+  it("drains in-flight probes and rejects a partial snapshot on throttling", async () => {
+    const fetcher = vi.fn<typeof fetch>(async url => Response.json(String(url).includes("calendarView") ? { value: [] } : { canEdit: true }));
+    const client = new MicrosoftClient("secret", fetcher);
+    let release!: () => void, active = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const get = vi.spyOn(client, "get").mockImplementation(async (_calendar, id) => {
+      if (id === "throttled") throw new MicrosoftError(429, "microsoft_unavailable", 120);
+      active++; await gate; active--; return null;
+    });
+    const result = client.snapshot("c", content.startsAt, content.endsAt, ["throttled", "b", "c", "d", "e"]);
+    const assertion = expect(result).rejects.toMatchObject({ status: 429, retryAfter: 120 });
+    await vi.waitFor(() => expect(get).toHaveBeenCalledTimes(3));
+    release(); await assertion;
+    expect(active).toBe(0); expect(get).toHaveBeenCalledTimes(3); expect(fetcher).toHaveBeenCalledTimes(2);
   });
   it("normalizes timestamps and preserves all-day civil dates", () => {
     expect(microsoftItem(event).content.startsAt).toBe(content.startsAt);
