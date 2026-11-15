@@ -163,8 +163,23 @@ def build(args):
           "--keychain-profile YOUR_PROFILE --output /absolute/path/to/releases", flush=True)
 
 
-def notarize_file(path, stage, state, key, profile):
-    auth = ["--keychain-profile", profile]
+def notary_auth(args):
+    if args.keychain_profile:
+        if args.key_id or args.issuer:
+            raise ValueError("Use either a Keychain profile or API key credentials")
+        return ["--keychain-profile", args.keychain_profile]
+    key = Path(args.api_key).expanduser().resolve()
+    if not key.is_file() or not re.fullmatch(r"[A-Z0-9]{10}", args.key_id or ""):
+        raise ValueError("API key mode needs an existing private key file and its 10-character key ID")
+    if not re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", args.issuer or ""):
+        raise ValueError("API key mode needs the App Store Connect issuer UUID")
+    # Pass the file path only. Credentials never enter resumable state or reports.
+    return ["--key", str(key), "--key-id", args.key_id, "--issuer", args.issuer]
+
+
+def notarize_file(path, stage, state, key, auth):
+    if isinstance(auth, str):
+        auth = ["--keychain-profile", auth]
     if key not in state:
         reply = json.loads(run("xcrun", "notarytool", "submit", path, *auth,
                                "--output-format", "json", capture=True))
@@ -240,6 +255,7 @@ def package_notarized_app(app, dmg, stage, state):
 
 
 def notarize(args):
+    auth = notary_auth(args)
     stage = Path(args.stage).resolve()
     state = json.loads((stage / "state.json").read_text())
     app = Path(state["app"])
@@ -251,12 +267,12 @@ def notarize(args):
     # ZIPs cannot be stapled: submit the ZIP, staple its app bundle.
     if "appSubmission" not in state:
         reply = json.loads(run("xcrun", "notarytool", "submit", archive,
-                               "--keychain-profile", args.keychain_profile,
+                               *auth,
                                "--output-format", "json", capture=True))
         state["appSubmission"] = reply["id"]
         write_state(stage, state)
         print(f"Submitted app: {state['appSubmission']}", flush=True)
-    notarize_file(app, stage, state, "appSubmission", args.keychain_profile)
+    notarize_file(app, stage, state, "appSubmission", auth)
     run("spctl", "--assess", "--type", "execute", "--verbose=2", app)
     dmg_dir = stage / "dmg"
     dmg = dmg_dir / f"ByWaveCalendar-{state['version']}.dmg"
@@ -264,7 +280,7 @@ def notarize(args):
         dmg_dir.mkdir(exist_ok=True)
         dmg.unlink(missing_ok=True)
         package_notarized_app(app, dmg, stage, state)
-    notarize_file(dmg, stage, state, "dmgSubmission", args.keychain_profile)
+    notarize_file(dmg, stage, state, "dmgSubmission", auth)
     run("codesign", "--verify", "--strict", "--verbose=2", dmg)
     run("hdiutil", "verify", dmg)
     run("spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "-v", dmg)
@@ -297,7 +313,11 @@ def main():
     build_parser.add_argument("--java-home", help="Full JDK 21; architecture determines the package")
     notary_parser = commands.add_parser("notarize", help="Resume notarization and verify the final DMG")
     notary_parser.add_argument("--stage", required=True)
-    notary_parser.add_argument("--keychain-profile", required=True)
+    auth_group = notary_parser.add_mutually_exclusive_group(required=True)
+    auth_group.add_argument("--keychain-profile")
+    auth_group.add_argument("--api-key", help="Existing App Store Connect private key file; never copied into outputs")
+    notary_parser.add_argument("--key-id")
+    notary_parser.add_argument("--issuer")
     notary_parser.add_argument("--output", required=True)
     args = parser.parse_args()
     if sys.platform != "darwin" or os.environ.get("GITHUB_ACTIONS") == "true":
