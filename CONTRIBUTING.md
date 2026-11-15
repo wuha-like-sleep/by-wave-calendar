@@ -49,7 +49,7 @@ npm run audit:prod   # 查询生产依赖的已知漏洞（需要联网）
 | Android | `app/build.gradle.kts` 的 `versionName` + `versionCode` |
 | 桌面 | `build.gradle.kts` 的 `version` + `BuildInfo.kt` 的 `VERSION_NAME`/`VERSION_CODE` |
 
-桌面端和安卓的 `versionCode` 还必须和 `releases/latest.json` 里的一致,否则应用内更新会误判「已是最新」。
+正式发布时，桌面端和安卓的版本号必须与 `releases/latest.json` 一致。先验证安装包的公开下载，再切换清单；桌面本地验证版本可暂用 `releases/pending.json` 标记，发布时移除。全部构建和检查均在本地执行，GitHub Actions 保持停用。
 
 **提交信息**用中文或英文都行,写清「改了什么 + 为什么」,尤其是为什么。
 
@@ -94,7 +94,7 @@ Read [the migration guide](drizzle/README.md) before changing the schema: the sn
 
 - **Any user-facing string must land in all 8 locales** (`src/lib/i18n/locales/*.ts`, en is the source). Never hardcode text in templates or client JS — it shows up the moment someone switches language.
 - The **natural-language parser has one source**, `src/lib/nl_parse.ts`. `npm run build:nl` generates the browser preview bundle; `dev` and `build` already run it. Do not edit generated bundles.
-- **Native version numbers live in two places per platform** and must stay in sync with the matching `releases/latest.json`, or the in-app updater will report "already up to date" forever.
+- **Native version numbers live in two places per platform.** On publication, match the corresponding `releases/latest.json`; upload and verify public installers before switching that manifest. Desktop local validation may use `releases/pending.json`, which must be removed when publishing. Build and test locally; keep GitHub Actions disabled.
 - Write commit messages that explain **why**, not just what.
 
 Security issues: please don't open a public issue — see [SECURITY.md](SECURITY.md).

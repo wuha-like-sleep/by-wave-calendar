@@ -62,24 +62,26 @@ ByWave Calendar 是一个**自己服务器上跑的日历共享平台**。一个
 |---|---|---|
 | 🌐 Web / PWA | — | 浏览器打开你的 ByWave 服务器即可，支持装到桌面 / 主屏 |
 | 📱 iOS | v1.7.1 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
-| 🤖 Android | v0.12.1 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
-| 🍎 macOS | v1.2.0 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg) / [DMG (Intel)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.dmg) |
-| 🪟 Windows | v1.2.0 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.msi) |
+| 🤖 Android | v0.13.0 | [APK 直链](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.0/bywave-calendar-0.13.0.apk) · [历次版本](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
+| 🍎 macOS | v1.3.0 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.0/ByWaveCalendar-1.3.0-arm64-signed.dmg) / [DMG (Intel)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.0/ByWaveCalendar-1.3.0-x64-signed.dmg) |
+| 🪟 Windows | v1.3.0 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.0/ByWaveCalendar-1.3.0-x64.msi) |
 | 🐧 Linux | v1.2.0 | [DEB (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/bywave-calendar_1.2.0_amd64.deb) |
 
-桌面端 1.2.0 的安装与签名状态见 [发行说明](apps/desktop/RELEASE_NOTES.md)。
+桌面端 1.3.0 的安装与签名状态见 [发行说明](apps/desktop/RELEASE_NOTES.md)。Mac 两种架构均已签名并公证；Windows 安装器尚未签名。
+
+Gitee 镜像：[桌面端 1.3.0](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-desktop-v1.3.0) · [Android 0.13.0](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-android-v0.13.0) · [服务端 1.9.0](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-v1.9.0)。每个发行版均提供 SHA-256 校验清单。Linux 本次保持 1.2.0。
 Windows / macOS 双向日历接入见 [系统日历配置](docs/system-calendar-sync.md)。
 
 <div align="center">
 
 [![App Store](https://img.shields.io/badge/iOS-App%20Store-000000?logo=apple&logoColor=white&style=for-the-badge)](https://apps.apple.com/us/app/bywavecalendar/id6772655143)
-[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk)
-[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64.dmg)
-[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64.msi)
+[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.0/bywave-calendar-0.13.0.apk)
+[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.0/ByWaveCalendar-1.3.0-arm64-signed.dmg)
+[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.0/ByWaveCalendar-1.3.0-x64.msi)
 
 </div>
 
-**Android 首装提示**：首次安装需在系统设置里允许「来自此应用的未知应用」，开一次终身有效；后续升级走 APP 内自动更新，无需重新下载。
+**Android 首装提示**：首次安装需在系统设置里允许对应来源安装应用；后续可在 App 内检查和下载更新，安装时仍需系统确认。
 
 **桌面端**：用 [Compose Multiplatform](apps/desktop/README.md) 实现，**不是浏览器套壳** —— Skia 原生渲染，Mac / Win / Linux 一份 Kotlin 代码出三平台，自带 Sparkle 风格 in-place 自动更新。详见 [apps/desktop/README.md](apps/desktop/README.md)。
 

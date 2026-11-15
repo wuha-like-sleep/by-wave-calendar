@@ -46,7 +46,7 @@ Windows 可使用 `gradlew.bat` 执行相同任务。
 ### Mac 本地签名与公证
 
 正式发行使用 [本地发布脚本](../../scripts/release-macos.py)。需要完整 JDK 21、Xcode 命令行工具、
-钥匙串中的 Developer ID Application 证书与私钥，以及已验证的 notarytool 钥匙串配置。
+钥匙串中的 Developer ID Application 证书与私钥，以及 notarytool 钥匙串配置或 App Store Connect API 密钥。
 凭据只保留在本机，不导出私钥，不上传到仓库或 GitHub Secrets。
 发布脚本的离线检查：`python3 -m unittest discover -s scripts -p test_release_macos.py`。
 
@@ -67,6 +67,8 @@ python3 scripts/release-macos.py notarize \
   --stage /private/tmp/bywave-macos-ARCH-XXXX \
   --keychain-profile bywave-calendar --output /absolute/path/to/releases
 ```
+
+已有 API 密钥时，`notarize` 可用 `--api-key /absolute/path/to/AuthKey.p8 --key-id YOUR_KEY_ID --issuer YOUR_ISSUER_ID` 替代 `--keychain-profile`。参数只传本机私钥路径，私钥内容不要写入日志。
 
 JDK 架构决定安装包架构：Apple Silicon 使用 arm64 JDK，Intel 使用 x64 JDK。
 Apple Silicon 可安装 Rosetta 后用 x64 JDK 本地构建 Intel 版本；两个架构分别运行测试。
@@ -102,7 +104,7 @@ python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home
 
 此入口只用于没有代码签名证书时的本地测试，安装器会显示未知发布者。
 它不修改版本或更新清单，也不发布和替换发行附件。同版本测试包须先卸载旧测试包再安装；
-正式升级必须递增版本，并配置 Windows 代码签名后另行验证。
+正式升级必须递增版本，并在真实 Windows 安装环境验证从旧版升级、资料保留和卸载。当前 1.3.0 以未签名安装器分发，发行说明已明确发布者状态；获得代码签名证书后，应对签名后的最终文件重新计算校验值并验证升级。
 
 ## 分发与更新清单
 
@@ -115,7 +117,7 @@ python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home
 | `src/main/kotlin/cn/bywave/calendar/desktop/BuildInfo.kt` | `VERSION_NAME`、递增的 `VERSION_CODE` |
 | `releases/latest.json` | `versionName`、`versionCode`、发布日期、说明、各平台产物 |
 
-清单各平台的 `downloadUrl` 可指向 GitHub Releases。自托管时把安装器放在
+清单各平台同时提供 `url` 和 `downloadUrl`，值一致：客户端备用源读取前者，服务器读取后者。两者可指向 GitHub Releases。自托管时把安装器放在
 服务端的 `data/desktop-binaries/`，并提供对应 `filename`。
 每个产物的 `sha256` 和 `sizeBytes` 必须来自实际发布文件。
 
@@ -126,10 +128,12 @@ python scripts/package-windows-local.py --java-home "C:\Tools\jdk-21" --wix-home
 共用源文件为 `src/public/brand/logo.svg`，小尺寸使用 `logo-small.svg`；
 构建脚本生成含 16–1024 像素及 Retina 表示的 ICNS、Windows ICO、Linux PNG，
 并同步窗口、安装卷、Windows 安装器以及网站和手机端的默认图标。
-手机端只更新图标资源，界面与发布版本保持原状；各平台裁切规则见 [图标说明](../../src/public/brand/README.md)。
+手机登录、授权返回、系统日历和更新页面的改动见 [1.9.0 发布说明](../../docs/releases/release-notes-1.9.0.md)；各平台图标裁切规则见 [图标说明](../../src/public/brand/README.md)。
 GitHub 桌面打包工作流已移除，云端 CI 也已停用；检查在本地执行。
 Windows 在 Windows 本机运行 `gradlew.bat test packageBrandedMsi`，Linux 本地运行 `./gradlew test packageDeb`。
 发布前核对实际安装包 SHA-256、大小、架构、签名状态与更新清单。
+先上传附件并校验公开下载，再提交正式 `latest.json`，避免 App 收到无法下载的版本。本地验证期间可使用 `releases/pending.json` 标记待发布桌面版本，发布时移除。
+GitHub 和 Gitee 镜像必须提供相同字节的文件和 SHA-256 清单；本地打包不启动任何云端流水线。
 已发布附件不可覆盖，否则会使已部署清单中的校验值失效；补签安装包使用新文件名。
 相同版本的补签包不会触发已安装同版本客户端的版本升级提示，可从下载页重新安装。
 

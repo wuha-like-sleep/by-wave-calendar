@@ -1,17 +1,18 @@
-# 桌面端 1.2.0
+# 桌面端 1.3.0
 
-- 新增「设置 → 系统日历」：macOS 通过 CalDAV 接入系统日历；新版和经典版 Outlook 通过 Microsoft 账号的云端日历双向同步。
-- 重做首次连接引导、顶部工具栏、视图切换、侧栏和设置卡片，统一深浅色与品牌图标。
-- Mac 安装窗口加入拖入「应用程序」的引导；Windows MSI 使用统一的品牌侧栏、横幅与图标。
-- 分别提供 Apple Silicon 和 Intel Mac 安装包，更新器按处理器架构选择；Windows 菜单快捷键使用 Ctrl。
-- Mac 更新先复制和验证新应用，再替换旧应用，失败可回退；保留系统安全校验。
+- 在 App 内连接 Outlook、选择日历、管理双向同步、暂停、恢复和处理冲突。Mac 的系统日历专用密码与日历范围也可在 App 内管理。
+- 加快两个方向的删除同步：删除优先处理，回到前台主动刷新，前台每 15 秒刷新日程。完整同步优化需要服务端 1.9.0。
+- 按旧版核对设置入口，保留账号、安全、设备、提醒、语言、外观与预约等功能，修复旧设置链接。
+- 统一品牌图标，调整工具栏、侧栏、月历导航、设置布局和切换动画。
+- 优化本地安装包压缩，减少下载体积；发布文件附 SHA-256 校验清单。
 
-Outlook 需要站长先配置 Microsoft Entra 公共客户端 ID。同步的范围、冲突处理与配置步骤见仓库的 `docs/system-calendar-sync.md`。
+macOS Apple Silicon / Intel 安装包均使用 Developer ID 签名并通过 Apple 公证。
+Windows x64 安装器尚无代码签名证书，会显示未验证发布者；已在本地 Windows 11 虚拟机验证旧版升级、全新安装、卸载和资料保留。
 
-Mac 补签发行（2026-11-13）：Apple Silicon 和 Intel 安装包均在本机重新构建，使用 Developer ID Application 签名并通过 Apple 公证；应用和 DMG 均附带公证票据，已验证 Gatekeeper 信任。请下载文件名以 `-signed.dmg` 结尾的安装包。
+本次未发布新的 Linux 包，Linux 1.2.0 可继续从原发行版下载。系统日历及 Outlook 自身的刷新周期仍会影响最终显示。
 
-Mac 下载：[Apple Silicon](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-arm64-signed.dmg) · [Intel](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/ByWaveCalendar-1.2.0-x64-signed.dmg) · [SHA-256 校验值](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/SHA256SUMS-macos-signed.txt)。
+下载：[GitHub](https://github.com/wuha-like-sleep/by-wave-calendar/releases/tag/desktop-v1.3.0) · [Gitee](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-desktop-v1.3.0)。
 
-客户端版本仍为 1.2.0。已经安装 1.2.0 的用户可下载对应芯片的补签包，将应用拖入「应用程序」替换；相同版本不会再弹出版本升级提示，账户和数据保留在用户目录。旧附件保留原地址和校验值，以兼容尚未更新下载清单的服务器。
+已安装用户可在 App 设置中检查更新。Outlook 需要平台管理员配置 Microsoft Entra 公共客户端 ID；完整的新同步控制与删除优化需要服务端 1.9.0。配置说明见 [系统日历同步](../../docs/system-calendar-sync.md)。
 
-Windows 安装包仍未配置发行签名，可能显示未知发布者。后续构建、测试、签名和打包均在本地完成，GitHub 不再承担构建任务。
+全部安装包在本机构建；GitHub Actions 保持停用。
