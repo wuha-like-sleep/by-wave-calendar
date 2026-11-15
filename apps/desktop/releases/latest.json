@@ -1,30 +1,30 @@
 {
-  "versionCode": 28,
-  "versionName": "1.3.1",
-  "releasedAt": "2026-11-15T06:07:30Z",
-  "notes": "桌面端 1.3.1（版本代码 28）\n\n- 同时比较服务器和公开发布清单，选择有效的最高版本；网络失败一分钟后可以重试，手动检查随时可用。\n- 更新检查合并并发请求，区分无法连接与已是最新版，拒绝缺少校验信息或不适用于当前系统的安装包。\n- 事件缓存按账号隔离、原子写入，七天过期，最多保留 32 个日期窗口；事件变更后清理旧快照，避免切换视图时显示已删除的日程。\n- 修复系统日历设置请求竞争、重复提交、旧请求覆盖新账号，以及保存成功后刷新失败时的反馈。\n\nMac Apple Silicon 和 Intel 安装包均在本机编译，使用既有 Developer ID 签名并通过 Apple 公证。Windows x64 安装包在本机 Windows 11 虚拟机编译；尚未签名，会显示未验证发布者。发布前验证 1.3.0 覆盖升级、全新安装、卸载、特殊路径、原生渲染与测试资料保留。\n\n完整预约并发及取消修复需要服务端 1.9.1。本轮不发布新的 Linux 安装包。所有编译在本机完成；GitHub 免费标准 Ubuntu 运行器仅转传经过校验的现成文件到 Gitee。\n",
+  "versionCode": 29,
+  "versionName": "1.3.2",
+  "releasedAt": "2026-11-15T16:21:10Z",
+  "notes": "# 桌面端 1.3.2（版本代码 29）\n\n- 预约链接管理标明发起方日历时区；日程详情显示设备与日程时区。更改电脑系统时区后，重启桌面 App 生效。\n- 修复日期选择器在西半球偏移一天、全天日程显示及复制日期偏移。\n- 清空描述、地点、会议链接、会议密码、重复规则及最后一位参与者后正确保存。\n- 事件详情窗口持续接收刷新；删除成功后立即移除可见日程，防止重复提交，并保留尚未保存的编辑内容。\n- 服务端修复批量删除重复实例时的冲突重试和同步排队，减轻双向同步删除延迟。\n\nMac Apple Silicon 和 Intel 安装包均在本机编译，使用既有 Developer ID 签名及 Apple 公证。Windows x64 安装包在本机 Windows 11 虚拟机编译，仍未签名；安装时会显示未验证发布者。\n\n预约时区计算、重复事件事务与服务器同步修复需要服务端 1.9.2。本轮不发布新的 Linux 安装包。GitHub 编译 CI 保持停用，免费标准 Ubuntu 运行器仅转传已验证文件到 Gitee。\n\n下载：[GitHub](https://github.com/wuha-like-sleep/by-wave-calendar/releases/tag/desktop-v1.3.2) · [Gitee](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-desktop-v1.3.2)。\n",
   "mandatory": false,
   "assets": {
     "mac": {
-      "filename": "ByWaveCalendar-1.3.1-arm64-signed.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-arm64-signed.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-arm64-signed.dmg",
-      "sha256": "3104d670ca116366d86c62999ea8fb8d1972fef36467fd0b242e83370afa2076",
-      "sizeBytes": 104862145
+      "filename": "ByWaveCalendar-1.3.2-arm64-signed.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-arm64-signed.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-arm64-signed.dmg",
+      "sha256": "187d9f91fdd327f7a426df0e77e9ecc0ed9824d18f37211cfbfba6c6afd4ab99",
+      "sizeBytes": 102487301
     },
     "macIntel": {
-      "filename": "ByWaveCalendar-1.3.1-x64-signed.dmg",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-x64-signed.dmg",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-x64-signed.dmg",
-      "sha256": "dd59fce651ba149c2a95b56f6c4060365eac0f194a5a1fd19be9bb3053bd1ab2",
-      "sizeBytes": 97970699
+      "filename": "ByWaveCalendar-1.3.2-x64-signed.dmg",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-x64-signed.dmg",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-x64-signed.dmg",
+      "sha256": "c5243f7c180c7cce47cf431f0b59b3f38e25a7f2a4b4d037cbc172a38ac4dfba",
+      "sizeBytes": 95588411
     },
     "win": {
-      "filename": "ByWaveCalendar-1.3.1-x64.msi",
-      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-x64.msi",
-      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.1/ByWaveCalendar-1.3.1-x64.msi",
-      "sha256": "5840652802c643c84bc5abcde18b588f0da36a55dbdeaacb86cd9d032bdd6e05",
-      "sizeBytes": 100133158
+      "filename": "ByWaveCalendar-1.3.2-x64.msi",
+      "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-x64.msi",
+      "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.2/ByWaveCalendar-1.3.2-x64.msi",
+      "sha256": "cddb028d9fcb3b918c964c7c4f8affb68a0204277e30cbf22a1bdb19c5b8d523",
+      "sizeBytes": 100145450
     }
   }
 }

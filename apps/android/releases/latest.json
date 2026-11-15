@@ -1,13 +1,13 @@
 {
-  "versionCode": 24,
-  "versionName": "0.13.1",
-  "filename": "bywave-calendar-0.13.1.apk",
-  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.1/bywave-calendar-0.13.1.apk",
-  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.1/bywave-calendar-0.13.1.apk",
-  "sha256": "268032b76115349f10927f187b76cace08db85fed2ef577f020d313bf2edebe1",
-  "sizeBytes": 25125284,
-  "releasedAt": "2026-11-15T05:58:51Z",
-  "notes": "Android 0.13.1（版本代码 24）\n\n- 更新检查同时比较服务器与公开发布清单，选择有效的最高版本；网络失败一分钟后可重试，手动检查随时可用。\n- 合并同时发起的检查，正确处理取消与无有效清单的情况，拒绝无法完成的强制升级配置。\n- 事件和日历缓存以事务更新；清理缓存与刷新互斥，退出账号后清理本机缓存、提醒和日历镜像。\n- 删除撤销绑定原账号，切换账号后清除旧的撤销操作和加载状态。\n- 修复系统日历设置请求竞争、保存后刷新失败提示，以及返回页面时的生命周期问题。\n\n本机编译、测试、签名；使用与 0.13.0 相同的发布证书，已通过独立 Android 15 模拟器覆盖升级和启动验证。安装仍由 Android 系统确认。预约并发与取消修复需要服务端 1.9.1。\n",
+  "versionCode": 25,
+  "versionName": "0.13.2",
+  "filename": "bywave-calendar-0.13.2.apk",
+  "downloadUrl": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.2/bywave-calendar-0.13.2.apk",
+  "url": "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.2/bywave-calendar-0.13.2.apk",
+  "sha256": "21645769e50131061902820b776a76d240a11fed4f13ee7488f9f6cf5ea8c2c7",
+  "sizeBytes": 25144284,
+  "releasedAt": "2026-11-15T16:21:10Z",
+  "notes": "Android 0.13.2（版本代码 25）\n\n• 删除成功后立即清理本机事件、提醒和已启用的系统日历镜像，阻止较早的刷新响应把已删除内容写回。\n• 预约链接管理标明发起方日历时区；日程详情区分显示时区与来源时区，手机时区变化后刷新时间与日期分组。\n• 修复全天日程日期显示和复制、清空描述/地点/会议信息后未保存等问题。\n• 保存时防止重复操作和误返回。\n\n使用既有发布证书在本机打包。预约时区及服务器同步修复需要服务端 1.9.2；手机的系统日历镜像保持现有同步方向。\n",
   "mandatory": false,
   "minSupportedVersionCode": 1
 }
