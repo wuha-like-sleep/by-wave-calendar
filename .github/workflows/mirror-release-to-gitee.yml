@@ -1,0 +1,35 @@
+name: Mirror published release to Gitee
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published desktop-vX.Y.Z or android-vX.Y.Z tag'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitee-release-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    # Standard Ubuntu runners in public repositories are free. Refuse private
+    # repositories and non-main branches instead of using paid compute.
+    if: github.repository == 'wuha-like-sleep/by-wave-calendar' && github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Read release transfer script
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify and mirror published files
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GITEE_RELEASE_TOKEN: ${{ secrets.GITEE_RELEASE_TOKEN }}
+        run: python3 scripts/mirror-release-to-gitee.py "$RELEASE_TAG"
