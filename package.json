@@ -11,7 +11,7 @@
     "build:vendor": "node scripts/copy-vendor.mjs",
     "build:css": "tailwindcss -i src/styles/input.css -o src/public/css/styles.css --minify",
     "build:js": "node scripts/minify-public-js.mjs",
-    "build:assets": "npm run build:vendor && npm run build:nl && npm run build:css && npm run build:js",
+    "build:assets": "npm run build:vendor && npm run build:nl && npm run build:js && npm run build:css && node scripts/asset-version.mjs",
     "build": "npm run build:assets && tsc -p tsconfig.json",
     "start": "node dist/src/server.js",
     "db:generate": "drizzle-kit generate",
