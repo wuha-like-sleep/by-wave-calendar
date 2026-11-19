@@ -44,6 +44,12 @@ export type IcalEvent = {
   transp?: string | null;
   status?: string | null;
   categories?: string[] | null;
+  // 会议 / 文档链接（extra.url）。ICS 里就是 URL 属性：以前解析不收、序列化不写，
+  // 网页上填的会议链接同步到手机自带日历就丢，导入的 .ics 里带的也进不了库。
+  url?: string | null;
+  // RECURRENCE-ID：这条 VEVENT 不是主记录，而是某个重复系列里「被单独改过的
+  // 一次」。只有导入路径需要区分（见 ics_import.ts 的转换），其余路径忽略。
+  recurrenceId?: string | null;
   organizer?: string | null;
   // 两种存量形状都收：CalDAV 存的是 {email,cn,role,partstat} 对象数组，
   // 网页 / JSON API 存的是邮箱字符串数组。序列化时统一过 attendeeDetails，
@@ -187,6 +193,16 @@ export function serializeEvent(event: IcalEvent): string {
   if (event.location) lines.push(`LOCATION:${escapeText(event.location)}`);
   if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`);
   if (event.rrule) lines.push(`RRULE:${event.rrule}`);
+  // TRANSP / STATUS / CATEGORIES / URL：解析侧早就收、PUT 也早就存进 extra，
+  // 但合成路径以前一条都不写。后果：网页/API 建的事件（没有 rawIcs 可回放）到了
+  // 手机自带日历里，「忙碌/空闲」永远是默认值、分类消失、状态（TENTATIVE 等）
+  // 丢失、会议链接不见。rawIcs 回放路径不受影响（原文里本来就有这几行）。
+  if (event.transp) lines.push(`TRANSP:${event.transp.toUpperCase()}`);
+  if (event.status) lines.push(`STATUS:${event.status.toUpperCase()}`);
+  if (event.categories && event.categories.length > 0) {
+    lines.push(`CATEGORIES:${event.categories.map(escapeText).join(",")}`);
+  }
+  if (event.url) lines.push(`URL:${event.url}`);
   // ORGANIZER + ATTENDEE for events that have them. CalDAV clients
   // (iOS Calendar, macOS Calendar, Thunderbird) display these as the
   // attendee list and surface the organizer's name on the event card.
@@ -263,8 +279,9 @@ export function serializeCalendar(events: IcalEvent[], calendarName: string): st
  * EXDATE：以前这里走 ical-generator，时间写成不带时区的浮动时间（靠 X-WR-TIMEZONE，
  * 不少客户端不认）、EXDATE 一行都不输出 —— 网页上「删掉这一次」的那次在订阅的人那里照样出现。
  *
- * 调用方传进来的 IcalEvent 不该带 attendees / organizer / alarms：订阅链接是公开的，
- * 拿到链接的人不该看到参与者的邮箱。
+ * 公开订阅链接那一路（buildIcsFeed 默认口径）不带 attendees / organizer / alarms：
+ * 拿到链接的人不该看到参与者的邮箱。属主本人的一次性导出走 full 口径才带，
+ * 分野在 services/ics.ts 的 buildIcsFeed，不在这里。
  */
 export function serializePublishedCalendar(
   cal: { name: string; description?: string | null; timezone?: string | null; url?: string | null },
@@ -463,7 +480,9 @@ export function parseEvent(ics: string): IcalEvent | null {
       const v = parsed.line.value || "";
       organizer = v.toLowerCase().startsWith("mailto:") ? v.slice(7) : v;
     } else if (parsed.name === "CATEGORIES") {
-      categories = parsed.line.value.split(",").map((s) => unescapeText(s.trim())).filter(Boolean);
+      // 按「未被反斜杠转义的逗号」切：分类名本身可以含逗号（写出时是 \,），
+      // 先 split(",") 再 unescape 会把 "Q3\, Planning" 劈成两截烂分类。
+      categories = parsed.line.value.split(/(?<!\\),/).map((s) => unescapeText(s.trim())).filter(Boolean);
     } else {
       singleProps[parsed.name] = parsed.line;
     }
@@ -474,11 +493,35 @@ export function parseEvent(ics: string): IcalEvent | null {
   const summary = singleProps["SUMMARY"]?.value;
   const dtstart = singleProps["DTSTART"];
   const dtend = singleProps["DTEND"];
-  if (!uid || !summary || !dtstart || !dtend) return null;
+  if (!uid || !summary || !dtstart) return null;
 
   const allDay = dtstart.params["VALUE"] === "DATE";
   const startTzid = dtstart.params["TZID"];
-  const endTzid = dtend.params["TZID"];
+  const startsAt = parseICalDateValue(dtstart.value, allDay, startTzid);
+  // DTEND 不是必填（RFC 5545 §3.6.1）：没有 DTEND 时先看 DURATION，
+  // 再没有就按缺省——DATE 型默认 1 天，DATE-TIME 型默认与 DTSTART 同时刻。
+  // 以前这里要求 DTEND 必填：用 DURATION 写时长的客户端（部分 Google /
+  // Thunderbird 导出就是这种）整条事件被判无效，CalDAV PUT 直接 400、
+  // .ics 导入静默丢弃，用户只会看到「有些日程导不进来」。
+  let endsAt: Date;
+  if (dtend) {
+    endsAt = parseICalDateValue(dtend.value, allDay, dtend.params["TZID"]);
+  } else {
+    const dur = singleProps["DURATION"]?.value ? parseDurationMs(singleProps["DURATION"].value) : null;
+    endsAt = dur !== null
+      ? new Date(startsAt.getTime() + dur)
+      : allDay ? new Date(startsAt.getTime() + 86_400_000) : startsAt;
+  }
+  // RECURRENCE-ID：这条 VEVENT 是重复系列里被单独改过的一次。值就是那一次
+  // 「原本的」开始时刻，解析口径和 DTSTART 一致（TZID / DATE 都要认）。
+  const recProp = singleProps["RECURRENCE-ID"];
+  let recurrenceId: string | null = null;
+  if (recProp) {
+    try {
+      const d = parseICalDateValue(recProp.value, recProp.params["VALUE"] === "DATE" || recProp.value.length === 8, recProp.params["TZID"]);
+      if (!isNaN(d.getTime())) recurrenceId = d.toISOString();
+    } catch { /* 坏的 RECURRENCE-ID 当普通事件处理，别整份丢掉 */ }
+  }
 
   // 第三方来源的口径（CalDAV PUT / .ics 导入）：解析不了的那一条丢掉，其余保留，
   // 不要因为一条 TRIGGER 写坏了就整份事件 400 —— 这些客户端我们控制不了，
@@ -492,11 +535,13 @@ export function parseEvent(ics: string): IcalEvent | null {
     summary: unescapeText(summary),
     description: singleProps["DESCRIPTION"] ? unescapeText(singleProps["DESCRIPTION"].value) : null,
     location: singleProps["LOCATION"] ? unescapeText(singleProps["LOCATION"].value) : null,
-    startsAt: parseICalDateValue(dtstart.value, allDay, startTzid),
-    endsAt: parseICalDateValue(dtend.value, allDay, endTzid),
+    startsAt,
+    endsAt,
     allDay,
     rrule: singleProps["RRULE"]?.value ?? null,
     exdates: exdates.length ? exdates : null,
+    url: singleProps["URL"]?.value?.trim() ? singleProps["URL"].value.trim() : null,
+    recurrenceId,
     // Capture the TZID parameter from DTSTART for round-trip preservation.
     // We don't try to merge start vs end TZID — an event spanning timezones
     // is rare and CalDAV clients all use DTSTART's TZID for display anyway.
@@ -532,6 +577,19 @@ export function parseEvents(ics: string): IcalEvent[] {
     }
   }
   return events;
+}
+
+/**
+ * ISO 8601 duration（RFC 5545 的 dur-value）→ 毫秒。支持周/天/时/分/秒与负号，
+ * 不支持年月（历法相关、长度不定，事件时长里不会出现）。解析不了返回 null。
+ */
+export function parseDurationMs(raw: string): number | null {
+  const m = /^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/.exec(raw.trim());
+  if (!m) return null;
+  const [, sign, w, d, h, mi, s] = m;
+  if ([w, d, h, mi, s].every((v) => v === undefined)) return null;
+  const ms = (((((Number(w ?? 0) * 7 + Number(d ?? 0)) * 24 + Number(h ?? 0)) * 60 + Number(mi ?? 0)) * 60 + Number(s ?? 0)) * 1000);
+  return sign === "-" ? -ms : ms;
 }
 
 function parseICalDateValue(val: string, allDay: boolean, tzid?: string): Date {
