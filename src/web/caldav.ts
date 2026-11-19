@@ -1,13 +1,13 @@
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { pushEventChanged } from "../lib/apns.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { basicAuth, calDavCalendarAllowed } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
 import { normalizeAlarms } from "../lib/reminder_triggers.js";
-import { attendeeEmails, type AttendeeLike } from "../lib/attendees.js";
+import { attendeeDetails, attendeeEmails, type AttendeeLike } from "../lib/attendees.js";
 import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
@@ -932,6 +932,32 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   if (outcome.kind === "412") return reply.code(412).send("Precondition Failed");
   const stored = outcome.stored;
   const isResurrectOrCreate = outcome.isCreate;
+
+  // 入站 PARTSTAT 回写：受邀者用自己的日历客户端（经 CalDAV）改出席
+  // 状态时，PUT 里带的 PARTSTAT 要落回 event_invite_tokens.response_status
+  // —— 那是 RSVP 的事实源，组织者的管理页和 GET overlay 都读它。
+  // 一条防线：NEEDS-ACTION 是「还没回复」的填充值，组织者手机里的旧
+  // 副本在任何一次编辑保存时都会把它原样带回来，绝不能让它把别人已经
+  // 回过的状态冲回 pending。真实回复（ACCEPTED/DECLINED/TENTATIVE）
+  // 之间则允许改口，与网页回应页同口径。
+  if (parsed.attendees && parsed.attendees.length > 0 && !isResurrectOrCreate) {
+    const PARTSTAT_TO_STATUS: Record<string, string> = {
+      ACCEPTED: "accepted", DECLINED: "declined", TENTATIVE: "tentative",
+    };
+    for (const a of attendeeDetails(parsed.attendees)) {
+      const status = a.partstat ? PARTSTAT_TO_STATUS[a.partstat.toUpperCase()] : undefined;
+      if (!status) continue;
+      if (a.email === user.email.toLowerCase()) continue;
+      await db
+        .update(schema.eventInviteTokens)
+        .set({ responseStatus: status, respondedAt: new Date() })
+        .where(and(
+          eq(schema.eventInviteTokens.sourceEventId, stored.id),
+          eq(schema.eventInviteTokens.recipientEmail, a.email),
+          ne(schema.eventInviteTokens.responseStatus, status),
+        ));
+    }
+  }
 
   // Send invitation emails to attendees who haven't received one yet.
   // For first-creation this is the full list; for updates this is the
