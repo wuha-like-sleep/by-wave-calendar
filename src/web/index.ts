@@ -24,7 +24,7 @@ import { notifyEventInvitation, notifyOrganizerRsvp } from "../lib/invite_notify
 import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookingTimeZone, bookingTimeZoneFromCalendar, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, deleteBookingLink, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { canonicalTimeZone, fromWallClock, toWallClock } from "../lib/zoned_time.js";
-import { createTimeProposal, decideTimeProposal } from "../lib/time_proposals.js";
+import { createTimeProposal, decideTimeProposal, listProposalsForEvent } from "../lib/time_proposals.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -1634,6 +1634,15 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.eventInviteTokens)
       .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
       .orderBy(desc(schema.eventInviteTokens.createdAt));
+    // 参与者里有注册账号的，把显示名带出来（名单对齐主流邀请页：
+    // 头像 + 名字 + 状态，而不只是一串邮箱）。
+    const attendeeUsers = attendees.length > 0 ? await db
+      .select({ email: schema.users.email, displayName: schema.users.displayName })
+      .from(schema.users)
+      .where(inArray(sql<string>`lower(${schema.users.email})`, attendees)) : [];
+    const attendeeNames: Record<string, string | null> = {};
+    for (const u of attendeeUsers) attendeeNames[u.email.toLowerCase()] = u.displayName;
+    const proposals = await listProposalsForEvent(event.id);
     return reply.view("app/event-attendees", {
       title: tr(req, "page.attendees", { summary: event.summary }),
       user,
@@ -1645,7 +1654,15 @@ export async function webRoutes(app: FastifyInstance) {
         endsAtLocal: localTime(event.endsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
       },
       calendar,
+      organizer: { name: user.displayName || user.email, email: user.email },
       attendees,
+      attendeeNames,
+      proposals: proposals.map((p) => ({
+        ...p,
+        startsAtLocal: localTime(p.proposedStartsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(p.proposedEndsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+      })),
+      pendingProposalCount: proposals.filter((p) => p.status === "pending").length,
       tokens: tokens.map((t) => ({
         ...t,
         createdAtLocal: localTime(t.createdAt),
