@@ -120,7 +120,22 @@
         <span class="block text-sm text-slate-500"><%= t("settings.notifications.reminderPushDesc") %></span>
       </span>
     </label>
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="checkbox" name="eventChanges" value="on" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"<% if (user.notifyEventChanges !== false) { %> checked<% } %> />
+      <span>
+        <span class="block text-sm font-medium text-slate-900"><%= t("settings.notifications.eventChanges") %></span>
+        <span class="block text-sm text-slate-500"><%= t("settings.notifications.eventChangesDesc") %></span>
+      </span>
+    </label>
+    <label class="flex items-start gap-3 cursor-pointer">
+      <input type="checkbox" name="inboxPush" value="on" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"<% if (user.notifyInboxPush !== false) { %> checked<% } %> />
+      <span>
+        <span class="block text-sm font-medium text-slate-900"><%= t("settings.notifications.inboxPush") %></span>
+        <span class="block text-sm text-slate-500"><%= t("settings.notifications.inboxPushDesc") %></span>
+      </span>
+    </label>
     <p class="text-xs text-slate-400"><%= t("settings.notifications.securityMailNote") %></p>
+    <p class="text-xs text-slate-400"><%= t("settings.notifications.securityInboxNote") %></p>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
 </section>

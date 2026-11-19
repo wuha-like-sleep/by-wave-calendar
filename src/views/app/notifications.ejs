@@ -1,3 +1,18 @@
+<%
+  // 每种通知一个视觉身份：柔和的同色系圆底 + 线性图标。颜色走站内 CSS
+  // 变量调色板（slate/brand/emerald/…），深色模式自动翻转，不需要 dark: 类。
+  // 语义配色：邀请=品牌色、预约成功=绿、取消=红（预约与日程共用）、
+  // 日程变更=琥珀、安全=紫盾。
+  var NOTIF_VISUALS = {
+    calendar_invitation: { chip: "bg-brand-50 text-brand-600", path: "M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" },
+    booking_created: { chip: "bg-emerald-50 text-emerald-600", path: "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9 6l2.25 2.25L18.75 12" },
+    booking_cancelled: { chip: "bg-rose-50 text-rose-600", path: "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-7.5-6l4.5 4.5m0-4.5l-4.5 4.5" },
+    event_updated: { chip: "bg-amber-50 text-amber-600", path: "M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" },
+    event_cancelled: { chip: "bg-rose-50 text-rose-600", path: "M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-7.5-6l4.5 4.5m0-4.5l-4.5 4.5" },
+    security_alert: { chip: "bg-violet-50 text-violet-600", path: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" },
+  };
+  var NOTIF_FALLBACK = { chip: "bg-slate-100 text-slate-500", path: "M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" };
+%>
 <div class="text-sm text-slate-500 mb-3">
   <a href="/app" class="hover:text-slate-700"><%= t("nav.calendar") %></a>
   <span class="px-2">/</span>
@@ -16,31 +31,40 @@
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <% if (!notifications || notifications.length === 0) { %>
-    <div class="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500"><%= t("notifications.empty") %></div>
+    <div class="py-10 text-center">
+      <span class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-brand-50 text-brand-400" aria-hidden="true">
+        <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+      </span>
+      <p class="text-base font-medium text-slate-900"><%= t("notifications.emptyTitle") %></p>
+      <p class="mx-auto mt-1 max-w-sm text-sm text-slate-500"><%= t("notifications.emptyHint") %></p>
+    </div>
   <% } else { %>
-    <ul class="divide-y divide-slate-100">
-      <% notifications.forEach(function(n){ %>
-        <li>
+    <%# 分组标题（今天/昨天/更早）由 notifications-page.js 按浏览器本地日界
+        插入 —— 服务端不知道观看者时区，硬分组只会把半夜的消息分错组；
+        无 JS 时列表照常可读，只是没有小标题。 %>
+    <ul id="notif-list" class="divide-y divide-slate-100">
+      <% notifications.forEach(function(n){ var v = NOTIF_VISUALS[n.type] || NOTIF_FALLBACK; %>
+        <li data-ts="<%= n.createdAtMs %>">
           <form method="post" action="/app/notifications/<%= n.id %>/open" class="m-0">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="w-full text-left px-2 py-3 rounded-lg hover:bg-slate-50 flex gap-3 items-start">
-              <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full <%= n.unread ? 'bg-brand-600' : 'bg-transparent' %>" aria-hidden="true"></span>
+            <button type="submit" class="w-full text-left px-2 py-3 rounded-lg flex gap-3 items-start <%= n.unread ? 'bg-brand-50/60 hover:bg-brand-50' : 'hover:bg-slate-50' %>">
+              <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full <%= v.chip %>" aria-hidden="true">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="<%= v.path %>" /></svg>
+              </span>
               <span class="min-w-0 flex-1">
-                <span class="block text-sm <%= n.unread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700' %>"><%= n.title %></span>
+                <span class="block text-sm break-words <%= n.unread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700' %>"><%= n.title %></span>
                 <% if (n.body) { %>
                   <span class="block mt-0.5 text-sm text-slate-500 break-words"><%= n.body %></span>
                 <% } %>
-                <span class="block mt-1 text-xs text-slate-400">
-                  <time data-tz data-style="relative" datetime="<%= n.createdAtIso %>"><%= n.createdAtLocal %></time>
-                </span>
+                <span class="block mt-1 text-xs text-slate-400"><%- n.createdAtLocal %></span>
               </span>
-              <% if (n.type === 'calendar_invitation') { %><span class="text-base" aria-hidden="true">🗂️</span>
-              <% } else if (n.type === 'booking_created') { %><span class="text-base" aria-hidden="true">📅</span>
-              <% } else if (n.type === 'booking_cancelled') { %><span class="text-base" aria-hidden="true">🚫</span><% } %>
+              <% if (n.unread) { %><span class="mt-2 h-2 w-2 shrink-0 rounded-full bg-brand-600" aria-hidden="true"></span><% } %>
             </button>
           </form>
         </li>
       <% }); %>
     </ul>
+    <script type="application/json" id="bwc-notif-i18n"><%- jsonForScript({ today: t("notifications.group.today"), yesterday: t("notifications.group.yesterday"), earlier: t("notifications.group.earlier") }) %></script>
+    <script src="/static/notifications-page.js" defer></script>
   <% } %>
 </section>
