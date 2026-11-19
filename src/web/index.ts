@@ -1232,7 +1232,8 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.events)
       .where(and(eq(schema.events.calendarId, cal.id), isNull(schema.events.deletedAt)))
       .orderBy(asc(schema.events.startsAt));
-    const body = buildIcsFeed(cal, events);
+    // 属主本人下载 = 备份口径：参与者/提醒/分类等全带（见 services/ics.ts）。
+    const body = buildIcsFeed(cal, events, { full: true });
     // Slug the filename so e.g. "工作 / Work" doesn't blow up downloads.
     // The slug can still contain CJK characters, which Node rejects in a
     // plain filename= header (ERR_INVALID_CHAR) — so filename= carries an
