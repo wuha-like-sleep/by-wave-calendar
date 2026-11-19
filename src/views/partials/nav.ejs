@@ -74,7 +74,7 @@
         <%# The desktop bar's language switcher and sign-out live here below md. %>
         <div class="mt-2 border-t border-slate-100 pt-2">
           <div class="px-3 py-1 text-xs text-slate-400 truncate"><%= user.displayName || user.email %></div>
-          <div class="px-3 py-1.5"><%- include('lang-switcher') %></div>
+          <div class="px-3 py-1.5"><%- include('lang-switcher', { wide: true }) %></div>
           <form method="post" action="/sign-out" class="m-0 px-3 pt-1">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
             <button type="submit" class="w-full text-left px-0 py-2 text-sm text-slate-700 hover:text-slate-900"><%= t("nav.signOut") %></button>
