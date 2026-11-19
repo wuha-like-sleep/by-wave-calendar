@@ -76,6 +76,22 @@
       </div>
     </dl>
 
+    <%# 发布后自检：版本号对不等于链路通。地址是按「本站有没有这个文件」
+        解析出来的，站长在这里亲眼看到 App 会被送去哪儿，就不用等用户
+        反馈「更新下不动」才发现本地包没生效。 %>
+    <% if (p.clientAssets && p.clientAssets.length) { %>
+    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-1">
+      <p class="font-medium text-slate-700">App 实际会拿到的下载地址（保存清单 / 上传安装包后刷新本页即为最新）</p>
+      <% p.clientAssets.forEach(function (a) { %>
+        <p class="break-all">
+          <% if (p.platform === 'desktop') { %><span class="font-medium"><%= a.platform %></span> · <% } %>
+          主：<a class="text-brand-700 hover:underline" href="<%= a.url %>" rel="noopener" target="_blank"><%= a.url %></a>
+          <% if (a.fallbackUrl) { %><br />备：<a class="text-brand-700 hover:underline" href="<%= a.fallbackUrl %>" rel="noopener" target="_blank"><%= a.fallbackUrl %></a><% } %>
+        </p>
+      <% }); %>
+    </div>
+    <% } %>
+
     <% if (p.source === 'none') { %>
       <p class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 mb-4">
         这个平台还没有任何清单，所以 App 里的「检查更新」会得到「暂无发布」，
