@@ -289,7 +289,7 @@ export async function webRoutes(app: FastifyInstance) {
   // views at legal/content/<page>/<locale>.ejs. The effective locale honors
   // ?lang= (so the native apps open these in the app's language), then cookie /
   // user / site default / Accept-Language. updatedDate tracks the release date.
-  const LEGAL_UPDATED = "2026-11-19";
+  const LEGAL_UPDATED = "2026-11-20";
   async function renderLegal(req: FastifyRequest, reply: FastifyReply, page: string, titleKey: string) {
     const settings = await getSettings();
     const user = await loadUserFromRequest(req);
