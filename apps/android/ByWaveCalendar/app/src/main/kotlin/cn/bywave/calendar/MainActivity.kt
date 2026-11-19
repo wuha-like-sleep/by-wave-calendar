@@ -385,12 +385,18 @@ private fun AppRoot(
                     nav.popBackStack(AuthRouting.CALENDAR, inclusive = false)
                 },
                 onManageCalendars = { nav.navigate("calendars") },
+                onCreateCalendar = { nav.navigate("calendars?create=1") },
                 onManageBookingLinks = { nav.navigate("booking_links") },
                 onScanDesktopPair = { nav.navigate("desktop_pair_scanner") },
             )
         }
 
-        composable("calendars") { entry ->
+        composable(
+            "calendars?create={create}",
+            arguments = listOf(
+                navArgument("create") { type = NavType.IntType; defaultValue = 0 },
+            ),
+        ) { entry ->
             // Reuse the calendar-VM from the calendar back-stack entry —
             // its state.calendars is the same list we want to manage.
             // Saving an edit also calls vm.reload() so the calendar
@@ -402,6 +408,9 @@ private fun AppRoot(
                 // Same pending-import pipeline as the system intents:
                 // setting it while signed in navigates to import_ics.
                 onImportFile = { uri -> pendingImport = uri },
+                // Settings' "new calendar" row deep-links here with
+                // create=1 so the create sheet opens immediately.
+                startCreating = entry.arguments?.getInt("create") == 1,
                 vm = calVm,
             )
         }

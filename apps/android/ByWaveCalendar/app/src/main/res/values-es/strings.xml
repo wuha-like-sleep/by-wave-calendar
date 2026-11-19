@@ -208,6 +208,27 @@
     <string name="booking_deleted">Enlace de reserva eliminado</string>
     <string name="booking_delete_failed">No se pudo eliminar el enlace de reserva</string>
     <string name="booking_update_failed">No se pudo actualizar el enlace de reserva</string>
+    <string name="booking_loading">Cargando…</string>
+    <string name="booking_availability">Disponibilidad semanal</string>
+    <string name="booking_availability_hint">Ventanas reservables por día de la semana, en la zona horaria de programación indicada arriba.</string>
+    <string name="booking_availability_add">Añadir ventana</string>
+    <string name="booking_availability_invalid">Cada ventana debe tener formato HH:MM y la hora de inicio debe ser anterior a la de fin.</string>
+    <string name="booking_view_bookings">Reservas</string>
+    <string name="booking_bookings_title">Reservas · %1$s</string>
+    <string name="booking_bookings_empty">Aún no hay reservas.</string>
+    <string name="booking_bookings_upcoming">Próximas</string>
+    <string name="booking_bookings_all">Todas</string>
+    <string name="booking_bookings_load_failed">No se pudieron cargar las reservas.</string>
+    <string name="booking_guest_label">Invitado</string>
+    <string name="booking_message_label">Mensaje</string>
+    <string name="booking_status_confirmed">Confirmada</string>
+    <string name="booking_status_past">Finalizada</string>
+    <string name="booking_status_cancelled">Cancelada</string>
+    <string name="booking_cancel_booking">Cancelar reserva</string>
+    <string name="booking_cancel_booking_title">¿Cancelar esta reserva?</string>
+    <string name="booking_cancel_booking_warning">Esto cancela la reserva de %1$s a las %2$s y envía al invitado un aviso de cancelación por correo.</string>
+    <string name="booking_booking_cancelled">Reserva cancelada.</string>
+    <string name="booking_cancel_booking_failed">No se pudo cancelar la reserva.</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">Evento recurrente</string>

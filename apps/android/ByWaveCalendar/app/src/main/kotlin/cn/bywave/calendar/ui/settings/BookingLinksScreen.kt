@@ -10,8 +10,10 @@
 // (confirm dialog).
 //
 // The server's GET/POST/PATCH/DELETE /booking-links endpoints supported
-// all of this already; this is the missing native UI. weeklyAvailability
-// is NOT edited here — the server defaults it on create.
+// all of this already; this is the missing native UI. The create/edit
+// sheet also edits weeklyAvailability (per-weekday windows, the server's
+// matrix) and each card opens a bookings viewer (list / detail /
+// owner-side cancel) — both used to be web-only on this platform.
 //
 // Reuses the CalendarViewModel from the calendar back-stack entry for
 // its state.calendars (the calendar picker's options); booking links
@@ -30,8 +32,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -52,6 +57,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,6 +99,7 @@ import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.api.serverErrorMessage
+import cn.bywave.calendar.data.model.Booking
 import cn.bywave.calendar.data.model.BookingLink
 import cn.bywave.calendar.data.model.BookingLinkCreateRequest
 import cn.bywave.calendar.data.model.BookingLinkUpdateInput
@@ -127,6 +134,7 @@ fun BookingLinksScreen(
     var creating by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<BookingLink?>(null) }
     var deleting by remember { mutableStateOf<BookingLink?>(null) }
+    var viewingBookings by remember { mutableStateOf<BookingLink?>(null) }
 
     suspend fun reloadLinks() {
         try {
@@ -233,6 +241,7 @@ fun BookingLinksScreen(
                         },
                         onEdit = { editing = link },
                         onDelete = { deleting = link },
+                        onViewBookings = { viewingBookings = link },
                     )
                 }
             }
@@ -283,6 +292,14 @@ fun BookingLinksScreen(
                 editing = null
                 scope.launch { reloadLinks() }
             },
+            snackbar = snackbar,
+        )
+    }
+
+    viewingBookings?.let { link ->
+        BookingsSheet(
+            link = link,
+            onDismiss = { viewingBookings = null },
             snackbar = snackbar,
         )
     }
@@ -343,6 +360,7 @@ private fun BookingLinkCard(
     onToggleEnabled: (Boolean) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onViewBookings: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -406,6 +424,9 @@ private fun BookingLinkCard(
             )
         }
         Row {
+            TextButton(onClick = onViewBookings, enabled = !working) {
+                Text(stringResource(R.string.booking_view_bookings))
+            }
             Spacer(Modifier.weight(1f))
             TextButton(onClick = onEdit, enabled = !working) {
                 Icon(
@@ -463,6 +484,10 @@ private fun CreateBookingLinkSheet(
     var bufferBefore by remember { mutableStateOf(existing?.bufferBeforeMin?.toString() ?: "0") }
     var bufferAfter by remember { mutableStateOf(existing?.bufferAfterMin?.toString() ?: "0") }
     var notifyEmail by remember { mutableStateOf(existing?.notifyEmail ?: false) }
+    // Per-weekday windows (dow 0=Sun..6=Sat → [start, end] text pairs).
+    // Absent key = not bookable that day. Seeded from the link's stored
+    // matrix; a fresh create starts from the server's default matrix.
+    var availability by remember { mutableStateOf(seedAvailability(existing?.weeklyAvailability)) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -480,7 +505,8 @@ private fun CreateBookingLinkSheet(
         minNoticeInt != null && minNoticeInt >= 0 &&
         maxDaysInt != null && maxDaysInt > 0 &&
         bufferBeforeInt != null && bufferBeforeInt >= 0 &&
-        bufferAfterInt != null && bufferAfterInt >= 0
+        bufferAfterInt != null && bufferAfterInt >= 0 &&
+        availabilityValid(availability)
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -610,6 +636,11 @@ private fun CreateBookingLinkSheet(
                 Switch(checked = notifyEmail, onCheckedChange = { notifyEmail = it })
             }
 
+            AvailabilityEditorSection(
+                availability = availability,
+                onChange = { availability = it },
+            )
+
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
@@ -652,6 +683,7 @@ private fun CreateBookingLinkSheet(
                                             bufferBeforeMin = bufferBeforeInt?.takeIf { it > 0 },
                                             bufferAfterMin = bufferAfterInt?.takeIf { it > 0 },
                                             notifyEmail = notifyEmail,
+                                            weeklyAvailability = availabilityWire(availability),
                                         ),
                                     )
                                     snackbar.showSnackbar(context.getString(R.string.booking_saved))
@@ -669,6 +701,7 @@ private fun CreateBookingLinkSheet(
                                             bufferBeforeMin = bufferBeforeInt?.takeIf { it > 0 },
                                             bufferAfterMin = bufferAfterInt?.takeIf { it > 0 },
                                             notifyEmail = notifyEmail.takeIf { it },
+                                            weeklyAvailability = availabilityWire(availability),
                                         ),
                                     )
                                     // 「已创建 + 复制链接」的 snackbar 由父屏弹
@@ -759,6 +792,377 @@ private fun CalendarPicker(
             }
         }
     }
+}
+
+// ---- Weekly availability (shared by the create/edit sheet) ----
+//
+// The wire matrix is keyed by dow "0".."6" (0 = Sunday) with
+// ["HH:MM", "HH:MM"] wall-clock pairs in the link's scheduling zone.
+// The editor state keeps only bookable days: dow -> (start, end) pairs;
+// an absent day is "off".
+
+private val HHMM_REGEX = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+
+/** The server's DEFAULT_AVAILABILITY: Mon–Fri 09:00–18:00. */
+private val DEFAULT_AVAILABILITY_DOWS: Map<Int, List<Pair<String, String>>> =
+    (1..5).associateWith { listOf("09:00" to "18:00") }
+
+private fun seedAvailability(wire: Map<String, List<List<String>>?>?): Map<Int, List<Pair<String, String>>> {
+    if (wire == null) return DEFAULT_AVAILABILITY_DOWS
+    val out = mutableMapOf<Int, List<Pair<String, String>>>()
+    for ((key, windows) in wire) {
+        val dow = key.toIntOrNull() ?: continue
+        if (windows.isNullOrEmpty()) continue
+        out[dow] = windows.mapNotNull { pair ->
+            if (pair.size == 2) pair[0] to pair[1] else null
+        }
+    }
+    return out
+}
+
+private fun availabilityValid(availability: Map<Int, List<Pair<String, String>>>): Boolean =
+    availability.values.all { windows ->
+        windows.all { (start, end) -> HHMM_REGEX.matches(start) && HHMM_REGEX.matches(end) && start < end }
+    }
+
+/** Editor state → wire matrix. Only bookable days are sent (absent day =
+ *  not bookable), so no explicit nulls ride along. */
+private fun availabilityWire(availability: Map<Int, List<Pair<String, String>>>): Map<String, List<List<String>>> =
+    availability.filterValues { it.isNotEmpty() }
+        .mapKeys { it.key.toString() }
+        .mapValues { (_, windows) -> windows.map { listOf(it.first, it.second) } }
+
+private fun weekdayShortLabel(dow: Int): String =
+    java.time.DayOfWeek.of(if (dow == 0) 7 else dow)
+        .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())
+
+@Composable
+private fun AvailabilityEditorSection(
+    availability: Map<Int, List<Pair<String, String>>>,
+    onChange: (Map<Int, List<Pair<String, String>>>) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(R.string.booking_availability),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = stringResource(R.string.booking_availability_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = mutedTextColor(),
+        )
+        // Monday-first rows, like the rest of the app.
+        listOf(1, 2, 3, 4, 5, 6, 0).forEach { dow ->
+            val windows = availability[dow]
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = weekdayShortLabel(dow),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.width(36.dp),
+                )
+                Switch(
+                    checked = windows != null,
+                    onCheckedChange = { on ->
+                        onChange(
+                            if (on) availability + (dow to listOf("09:00" to "18:00"))
+                            else availability - dow,
+                        )
+                    },
+                )
+                if (windows == null) {
+                    Text("—", style = MaterialTheme.typography.bodySmall, color = mutedTextColor())
+                }
+            }
+            windows?.forEachIndexed { idx, window ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 44.dp),
+                ) {
+                    OutlinedTextField(
+                        value = window.first,
+                        onValueChange = { raw ->
+                            val v = raw.filter { c -> c.isDigit() || c == ':' }.take(5)
+                            val next = windows.toMutableList()
+                            next[idx] = v to window.second
+                            onChange(availability + (dow to next))
+                        },
+                        singleLine = true,
+                        isError = !HHMM_REGEX.matches(window.first),
+                        modifier = Modifier.width(104.dp),
+                    )
+                    Text("–")
+                    OutlinedTextField(
+                        value = window.second,
+                        onValueChange = { raw ->
+                            val v = raw.filter { c -> c.isDigit() || c == ':' }.take(5)
+                            val next = windows.toMutableList()
+                            next[idx] = window.first to v
+                            onChange(availability + (dow to next))
+                        },
+                        singleLine = true,
+                        isError = !HHMM_REGEX.matches(window.second),
+                        modifier = Modifier.width(104.dp),
+                    )
+                    IconButton(onClick = {
+                        val next = windows.toMutableList()
+                        next.removeAt(idx)
+                        onChange(if (next.isEmpty()) availability - dow else availability + (dow to next))
+                    }) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                }
+            }
+            if (windows != null) {
+                TextButton(
+                    onClick = {
+                        val lastEnd = windows.lastOrNull()?.second ?: "09:00"
+                        onChange(availability + (dow to (windows + (lastEnd to lastEnd))))
+                    },
+                    modifier = Modifier.padding(start = 36.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text(stringResource(R.string.booking_availability_add))
+                }
+            }
+        }
+        if (!availabilityValid(availability)) {
+            Text(
+                text = stringResource(R.string.booking_availability_invalid),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+// ---- Bookings viewer (per-link records: list / detail / owner cancel) ----
+
+private val BOOKING_TIME_FMT: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        .withZone(java.time.ZoneId.systemDefault())
+
+private fun formatBookingInstant(iso: String): String =
+    runCatching { BOOKING_TIME_FMT.format(java.time.Instant.parse(iso)) }.getOrDefault(iso)
+
+private fun bookingStatusRes(booking: Booking): Int = when {
+    booking.cancelledAt != null -> R.string.booking_status_cancelled
+    runCatching { java.time.Instant.parse(booking.endsAt) }.getOrNull()
+        ?.isBefore(java.time.Instant.now()) == true -> R.string.booking_status_past
+    else -> R.string.booking_status_confirmed
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookingsSheet(
+    link: BookingLink,
+    onDismiss: () -> Unit,
+    snackbar: SnackbarHostState,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    var showAll by remember { mutableStateOf(false) }
+    var bookings by remember { mutableStateOf<List<Booking>?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var selected by remember { mutableStateOf<Booking?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(showAll, reloadKey) {
+        bookings = null
+        loadError = null
+        try {
+            val profile = BywaveApp.instance.profiles.active()
+                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
+            val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
+            bookings = client.api.bookings(link.id, if (showAll) 1 else null)
+        } catch (e: Exception) {
+            loadError = serverErrorMessage(e)
+                ?: context.getString(R.string.booking_bookings_load_failed)
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .heightIn(max = 560.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.booking_bookings_title, link.title),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = !showAll,
+                    onClick = { showAll = false },
+                    label = { Text(stringResource(R.string.booking_bookings_upcoming)) },
+                )
+                FilterChip(
+                    selected = showAll,
+                    onClick = { showAll = true },
+                    label = { Text(stringResource(R.string.booking_bookings_all)) },
+                )
+            }
+            when {
+                loadError != null -> Text(loadError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                bookings == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(10.dp))
+                    Text(stringResource(R.string.booking_loading), color = mutedTextColor())
+                }
+                bookings!!.isEmpty() -> Text(
+                    stringResource(R.string.booking_bookings_empty),
+                    color = mutedTextColor(),
+                )
+                else -> bookings!!.forEach { booking ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selected = booking }
+                            .padding(vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                booking.guestName,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                stringResource(bookingStatusRes(booking)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (booking.cancelledAt != null) MaterialTheme.colorScheme.error else mutedTextColor(),
+                            )
+                        }
+                        Text(booking.guestEmail, style = MaterialTheme.typography.bodySmall, color = mutedTextColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            formatBookingInstant(booking.startsAt) + " – " + formatBookingInstant(booking.endsAt),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = mutedTextColor(),
+                        )
+                    }
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+
+    selected?.let { booking ->
+        BookingDetailDialog(
+            link = link,
+            booking = booking,
+            onDismiss = { selected = null },
+            onCancelled = {
+                selected = null
+                reloadKey++
+                scope.launch { snackbar.showSnackbar(context.getString(R.string.booking_booking_cancelled)) }
+            },
+        )
+    }
+}
+
+@Composable
+private fun BookingDetailDialog(
+    link: BookingLink,
+    booking: Booking,
+    onDismiss: () -> Unit,
+    onCancelled: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var confirming by remember { mutableStateOf(false) }
+    var cancelling by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                if (confirming) stringResource(R.string.booking_cancel_booking_title) else booking.guestName,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (confirming) {
+                    Text(
+                        stringResource(
+                            R.string.booking_cancel_booking_warning,
+                            booking.guestName,
+                            formatBookingInstant(booking.startsAt),
+                        ),
+                    )
+                } else {
+                    Text(stringResource(R.string.booking_guest_label) + ": " + booking.guestName)
+                    Text(booking.guestEmail, style = MaterialTheme.typography.bodySmall, color = mutedTextColor())
+                    Text(formatBookingInstant(booking.startsAt) + " – " + formatBookingInstant(booking.endsAt))
+                    Text(
+                        stringResource(bookingStatusRes(booking)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (booking.cancelledAt != null) MaterialTheme.colorScheme.error else mutedTextColor(),
+                    )
+                    if (!booking.guestMessage.isNullOrBlank()) {
+                        Text(stringResource(R.string.booking_message_label) + ": " + booking.guestMessage)
+                    }
+                }
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            if (confirming) {
+                TextButton(
+                    enabled = !cancelling,
+                    onClick = {
+                        scope.launch {
+                            cancelling = true
+                            error = null
+                            try {
+                                val profile = BywaveApp.instance.profiles.active()
+                                    ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
+                                val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
+                                client.api.cancelBooking(link.id, booking.id)
+                                onCancelled()
+                            } catch (e: Exception) {
+                                error = serverErrorMessage(e)
+                                    ?: context.getString(R.string.booking_cancel_booking_failed)
+                            } finally {
+                                cancelling = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.booking_cancel_booking),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else if (booking.cancelledAt == null) {
+                TextButton(onClick = { confirming = true }) {
+                    Text(
+                        stringResource(R.string.booking_cancel_booking),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { if (confirming) confirming = false else onDismiss() }) {
+                Text(stringResource(if (confirming) R.string.action_cancel else R.string.action_close))
+            }
+        },
+    )
 }
 
 private fun openExternalUrl(context: android.content.Context, url: String?) {

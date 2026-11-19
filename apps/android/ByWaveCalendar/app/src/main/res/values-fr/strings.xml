@@ -208,6 +208,27 @@
     <string name="booking_deleted">Lien de réservation supprimé</string>
     <string name="booking_delete_failed">Impossible de supprimer le lien de réservation</string>
     <string name="booking_update_failed">Impossible de mettre à jour le lien de réservation</string>
+    <string name="booking_loading">Chargement…</string>
+    <string name="booking_availability">Disponibilité hebdomadaire</string>
+    <string name="booking_availability_hint">Créneaux réservables par jour de semaine, dans le fuseau de planification ci-dessus.</string>
+    <string name="booking_availability_add">Ajouter un créneau</string>
+    <string name="booking_availability_invalid">Chaque créneau doit être au format HH:MM, avec un début avant la fin.</string>
+    <string name="booking_view_bookings">Réservations</string>
+    <string name="booking_bookings_title">Réservations · %1$s</string>
+    <string name="booking_bookings_empty">Aucune réservation pour le moment.</string>
+    <string name="booking_bookings_upcoming">À venir</string>
+    <string name="booking_bookings_all">Toutes</string>
+    <string name="booking_bookings_load_failed">Impossible de charger les réservations.</string>
+    <string name="booking_guest_label">Invité</string>
+    <string name="booking_message_label">Message</string>
+    <string name="booking_status_confirmed">Confirmée</string>
+    <string name="booking_status_past">Terminée</string>
+    <string name="booking_status_cancelled">Annulée</string>
+    <string name="booking_cancel_booking">Annuler la réservation</string>
+    <string name="booking_cancel_booking_title">Annuler cette réservation ?</string>
+    <string name="booking_cancel_booking_warning">Cela annule la réservation de %1$s à %2$s et envoie un avis d\'annulation à l\'invité par e-mail.</string>
+    <string name="booking_booking_cancelled">Réservation annulée.</string>
+    <string name="booking_cancel_booking_failed">Impossible d\'annuler la réservation.</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">Événement récurrent</string>

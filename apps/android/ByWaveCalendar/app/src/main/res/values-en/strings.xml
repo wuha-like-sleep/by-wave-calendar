@@ -213,6 +213,27 @@ to match the development locale.
     <string name="booking_deleted">Booking link deleted</string>
     <string name="booking_delete_failed">Couldn\'t delete booking link</string>
     <string name="booking_update_failed">Couldn\'t update booking link</string>
+    <string name="booking_loading">Loading…</string>
+    <string name="booking_availability">Weekly availability</string>
+    <string name="booking_availability_hint">Bookable windows per weekday, in the scheduling zone above.</string>
+    <string name="booking_availability_add">Add window</string>
+    <string name="booking_availability_invalid">Each window must be HH:MM with the start before the end.</string>
+    <string name="booking_view_bookings">Bookings</string>
+    <string name="booking_bookings_title">Bookings · %1$s</string>
+    <string name="booking_bookings_empty">No bookings yet.</string>
+    <string name="booking_bookings_upcoming">Upcoming</string>
+    <string name="booking_bookings_all">All</string>
+    <string name="booking_bookings_load_failed">Couldn\'t load bookings.</string>
+    <string name="booking_guest_label">Guest</string>
+    <string name="booking_message_label">Message</string>
+    <string name="booking_status_confirmed">Confirmed</string>
+    <string name="booking_status_past">Past</string>
+    <string name="booking_status_cancelled">Cancelled</string>
+    <string name="booking_cancel_booking">Cancel booking</string>
+    <string name="booking_cancel_booking_title">Cancel this booking?</string>
+    <string name="booking_cancel_booking_warning">This cancels %1$s\'s booking at %2$s and emails the guest a cancellation notice.</string>
+    <string name="booking_booking_cancelled">Booking cancelled.</string>
+    <string name="booking_cancel_booking_failed">Couldn\'t cancel the booking.</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">Recurring event</string>

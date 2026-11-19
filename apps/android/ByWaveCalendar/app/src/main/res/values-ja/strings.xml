@@ -208,6 +208,27 @@
     <string name="booking_deleted">予約リンクを削除しました</string>
     <string name="booking_delete_failed">予約リンクを削除できませんでした</string>
     <string name="booking_update_failed">予約リンクを更新できませんでした</string>
+    <string name="booking_loading">読み込み中…</string>
+    <string name="booking_availability">週ごとの予約可能時間</string>
+    <string name="booking_availability_hint">曜日ごとに予約可能な時間帯を設定します。時刻は上のスケジュール用タイムゾーン基準です。</string>
+    <string name="booking_availability_add">時間帯を追加</string>
+    <string name="booking_availability_invalid">各時間帯は HH:MM 形式で、開始が終了より前である必要があります。</string>
+    <string name="booking_view_bookings">予約一覧</string>
+    <string name="booking_bookings_title">予約一覧 · %1$s</string>
+    <string name="booking_bookings_empty">まだ予約はありません。</string>
+    <string name="booking_bookings_upcoming">今後の予約</string>
+    <string name="booking_bookings_all">すべて</string>
+    <string name="booking_bookings_load_failed">予約一覧を読み込めませんでした。</string>
+    <string name="booking_guest_label">ゲスト</string>
+    <string name="booking_message_label">メッセージ</string>
+    <string name="booking_status_confirmed">確定済み</string>
+    <string name="booking_status_past">終了</string>
+    <string name="booking_status_cancelled">キャンセル済み</string>
+    <string name="booking_cancel_booking">予約をキャンセル</string>
+    <string name="booking_cancel_booking_title">この予約をキャンセルしますか？</string>
+    <string name="booking_cancel_booking_warning">%1$s の %2$s の予約をキャンセルし、ゲストへキャンセル通知メールを送ります。</string>
+    <string name="booking_booking_cancelled">予約をキャンセルしました。</string>
+    <string name="booking_cancel_booking_failed">予約をキャンセルできませんでした。</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">繰り返しの予定</string>
