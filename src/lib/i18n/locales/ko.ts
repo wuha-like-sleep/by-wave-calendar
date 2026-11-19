@@ -489,6 +489,11 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "캘린더 공유 플랫폼",
   "footer.ourOpenSource": "우리의 오픈 소스 프로젝트",
+  "webUpdate.chip": "새 버전을 사용할 수 있습니다",
+  "webUpdate.chipTitle": "클릭하여 최신 버전으로 새로고침",
+  "webUpdate.offlineText": "서버에 연결할 수 없는 것 같습니다. 캐시된 버전이 표시되고 있을 수 있습니다",
+  "webUpdate.offlinePurge": "캐시를 지우고 다시 시도",
+  "webUpdate.offlineDismiss": "무시",
   "footer.linkHome": "홈",
   "footer.linkDownload": "다운로드",
   "footer.linkAbout": "소개",

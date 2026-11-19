@@ -489,6 +489,11 @@ export const de: Partial<Record<TranslationKey, string>> = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "Plattform zum Teilen von Kalendern",
   "footer.ourOpenSource": "Unser Open-Source-Projekt",
+  "webUpdate.chip": "Neue Version bereit",
+  "webUpdate.chipTitle": "Klicken, um auf die neueste Version zu aktualisieren",
+  "webUpdate.offlineText": "Der Server scheint nicht erreichbar zu sein – möglicherweise siehst du eine zwischengespeicherte Version",
+  "webUpdate.offlinePurge": "Cache leeren und erneut versuchen",
+  "webUpdate.offlineDismiss": "Ignorieren",
   "footer.linkHome": "Startseite",
   "footer.linkDownload": "Download",
   "footer.linkAbout": "Über uns",

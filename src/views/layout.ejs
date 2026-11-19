@@ -50,6 +50,24 @@
     <script defer src="/static/lib/htmx.min.js"></script>
     <script src="<%= js %>/app.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/local-time.js?v=<%= v %>" defer></script>
+    <%# version-check.js 在所有页面都跑，拿不到 /app 才注入的 BWC_T。
+        沿用 login 页的办法：把它的几条文案在服务端先解析好递过去，
+        免得英文/日文用户看到一个中文的「新版本就绪」浮标和离线横幅。
+        jsonForScript 是服务端注册进视图默认值的；直接渲染这个模板的
+        场景（测试）可能没有它 —— 那时退回同款转义手工做一遍，
+        不能因为少一个辅助函数就让整个 layout 渲染不出来。 %>
+    <% const bwcUpdateStrings = {
+      chip: t("webUpdate.chip"),
+      chipTitle: t("webUpdate.chipTitle"),
+      offlineText: t("webUpdate.offlineText"),
+      offlinePurge: t("webUpdate.offlinePurge"),
+      offlineDismiss: t("webUpdate.offlineDismiss"),
+    }; %>
+    <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+      window.BWC_UPDATE_T = <%- typeof jsonForScript !== 'undefined'
+        ? jsonForScript(bwcUpdateStrings)
+        : JSON.stringify(bwcUpdateStrings).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026") %>;
+    </script>
     <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/banners.js?v=<%= v %>" defer></script>
     <%# Inline critical splash styles. Inlined so the splash renders
