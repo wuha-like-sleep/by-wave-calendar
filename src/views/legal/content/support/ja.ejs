@@ -88,7 +88,64 @@
       </div>
     </details>
 
+        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API トークンと外部ツールの連携</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>「設定 → デバイス → API トークン」で自分で作成できます。ツールが書き込む必要がなければ読み取りのみを選んでください。トークン全体が表示されるのは一度だけなので、そのままツールに入力してください。</li>
+          <li>401 が返ったらこの順で確認してください：(1) サイト運営者が API を有効にしていない（変更できるのは運営者だけです）；(2) トークンが取り消されたか期限切れ（同じ設定ページで確認し、新しく作り直してください）；(3) アカウントが停止されている（これも運営者側です）。</li>
+          <li>取り消しはすぐに効きます。取り消したり作り直したりしたら、n8n、Zapier、スクリプト側の設定も合わせて更新してください。</li>
+        </ul>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 登録と確認メール</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>登録後、メールで届いた確認コードを入力するとアカウントの作成が完了します。</li>
+          <li>メールが届かない場合は、まず迷惑メールフォルダを確認し、数分待ってください。それでも来なければ、確認ページから再送信してください。</li>
+          <li>コードの期限が切れたら、古いコードを繰り返さず新しいものを請求してください。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> エラーコードの意味</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li><code>401 invalid_token</code> — トークンが間違っている、取り消された、期限切れ、API が無効、またはアカウントが停止されています。上の API トークンの項目を順に確認してください。</li>
+          <li><code>403 token_is_read_only</code> — トークンが読み取り専用なのにツールが書き込もうとしています。読み書きトークンを作るか、ツールを読み取りだけにしてください。</li>
+          <li><code>400</code> — リクエストの内容に問題があります（開始・終了時刻の欠けなど）。ツール側の項目対応を確認してください。</li>
+          <li><code>404</code> — カレンダーや予定が存在しないか、あなたのものではありません。<code>429</code> — リクエストが多すぎます。少し待って再試行してください。<code>5xx</code> — サーバー側の問題です。時間をおいて再試行してください。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> 問い合わせの前に用意するもの</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>サーバーのバージョン：ブラウザで <code>/health</code> を開き、表示される version を控えてください。使っているクライアントとそのバージョン、ブラウザ、起きた時刻とタイムゾーンも添えてください。</li>
+          <li>行った操作の手順、期待した結果、実際の結果。</li>
+          <li>公開の場所に貼る前に、スクリーンショットやログからパスワード、トークン全体、メールアドレスを取り除いてください。</li>
+        </ul>
+      </div>
+    </details>
+
+<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> アカウントの解約 / すべてのデータの削除</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>

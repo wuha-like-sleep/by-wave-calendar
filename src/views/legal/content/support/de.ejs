@@ -88,7 +88,64 @@
       </div>
     </details>
 
+        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API-Token und Drittanbieter-Tools</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Erstellen Sie selbst eines unter „Einstellungen → Geräte → API-Token“. Wählen Sie „Nur lesen“, außer das Tool muss schreiben — das vollständige Token wird nur einmal gezeigt, tragen Sie es direkt in das Tool ein.</li>
+          <li>Ein 401? Prüfen Sie in dieser Reihenfolge: (1) Der Site-Betreiber hat die API nicht aktiviert — das kann nur der Betreiber ändern; (2) das Token wurde widerrufen oder ist abgelaufen — prüfen Sie es auf derselben Einstellungsseite und erstellen Sie ein neues; (3) das Konto wurde gesperrt — auch das ist Betreibersache.</li>
+          <li>Ein Widerruf wirkt sofort. Wenn Sie widerrufen oder neu erstellen, aktualisieren Sie das Token auch in n8n, Zapier oder Ihren Skripten.</li>
+        </ul>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> Registrierung und Bestätigungs-E-Mails</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Geben Sie nach der Registrierung den per E-Mail erhaltenen Bestätigungscode ein, um das Konto fertig anzulegen.</li>
+          <li>Keine E-Mail? Sehen Sie im Spam-Ordner nach und warten Sie ein paar Minuten. Kommt sie nicht, nutzen Sie auf der Bestätigungsseite „Erneut senden“.</li>
+          <li>Ist der Code abgelaufen, fordern Sie einen neuen an, statt den alten erneut zu versuchen.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> Was Fehlercodes bedeuten</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li><code>401 invalid_token</code> — das Token ist falsch, widerrufen oder abgelaufen, die API ist aus, oder das Konto ist gesperrt. Gehen Sie die Punkte im Abschnitt API-Token oben der Reihe nach durch.</li>
+          <li><code>403 token_is_read_only</code> — das Token ist nur lesend, aber das Tool wollte schreiben. Erstellen Sie ein Token mit Schreibzugriff, oder lassen Sie das Tool nur lesen.</li>
+          <li><code>400</code> — an der Anfrage stimmt etwas nicht (z. B. fehlende Start- oder Endzeit). Prüfen Sie die Feldzuordnung im Tool.</li>
+          <li><code>404</code> — der Kalender oder Termin existiert nicht oder gehört nicht Ihnen. <code>429</code> — zu viele Anfragen; warten Sie kurz und versuchen Sie es erneut. <code>5xx</code> — ein serverseitiges Problem; versuchen Sie es später erneut.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> Vor einer Anfrage: das bereithalten</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>Die Serverversion — öffnen Sie <code>/health</code> im Browser und notieren Sie die angezeigte version. Dazu Ihren Client und seine Version, den Browser sowie Uhrzeit und Zeitzone des Problems.</li>
+          <li>Welche Schritte Sie gemacht haben, was Sie erwartet haben und was tatsächlich passiert ist.</li>
+          <li>Entfernen Sie vor dem Posten an öffentlicher Stelle Passwörter, vollständige Token und E-Mail-Adressen aus Screenshots und Logs.</li>
+        </ul>
+      </div>
+    </details>
+
+<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> Konto auflösen / alle Daten löschen</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>

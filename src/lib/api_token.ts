@@ -89,6 +89,51 @@ export async function revokeApiTokenAdmin(id: string): Promise<void> {
     .where(eq(schema.apiTokens.id, id));
 }
 
+// Self-service cap: how many live tokens one user may hold at once. Kept
+// small on purpose — these are long-lived account-level credentials, and a
+// handful covers the usual n8n / Zapier / script setups.
+export const MAX_API_TOKENS_PER_USER = 5;
+
+// User-facing: list only the caller's own non-revoked tokens (same field
+// set as the admin list, minus the owner join).
+export async function listApiTokensForUser(userId: string) {
+  return db
+    .select({
+      id: schema.apiTokens.id,
+      label: schema.apiTokens.label,
+      prefix: schema.apiTokens.prefix,
+      scope: schema.apiTokens.scope,
+      lastUsedAt: schema.apiTokens.lastUsedAt,
+      lastUsedIp: schema.apiTokens.lastUsedIp,
+      expiresAt: schema.apiTokens.expiresAt,
+      createdAt: schema.apiTokens.createdAt,
+    })
+    .from(schema.apiTokens)
+    .where(and(eq(schema.apiTokens.userId, userId), isNull(schema.apiTokens.revokedAt)))
+    .orderBy(asc(schema.apiTokens.createdAt));
+}
+
+export async function countActiveApiTokensForUser(userId: string): Promise<number> {
+  const rows = await db
+    .select({ id: schema.apiTokens.id })
+    .from(schema.apiTokens)
+    .where(and(eq(schema.apiTokens.userId, userId), isNull(schema.apiTokens.revokedAt)));
+  return rows.length;
+}
+
+// User-facing revoke: the userId condition is the whole point — a user must
+// never be able to revoke someone else's token by guessing its id. Returns
+// true only when a row was actually revoked, so callers can skip the audit
+// entry for no-op attempts.
+export async function revokeApiTokenForUser(userId: string, id: string): Promise<boolean> {
+  const rows = await db
+    .update(schema.apiTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(schema.apiTokens.id, id), eq(schema.apiTokens.userId, userId), isNull(schema.apiTokens.revokedAt)))
+    .returning({ id: schema.apiTokens.id });
+  return rows.length > 0;
+}
+
 /**
  * Rotate a token: issue a NEW token with the same userId/label/scope, then put
  * the OLD token on a short grace period instead of revoking it immediately.

@@ -88,7 +88,64 @@
       </div>
     </details>
 
+        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API Token 與第三方接入</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>在「設定 → 裝置 → API Token」裡自己建立。工具不需要寫入時就選唯讀；完整 Token 只顯示一次，建好直接填到工具裡。</li>
+          <li>遇到 401 按這個順序查：(1) 本站營運者還沒開啟 API——只有營運者能改；(2) Token 已被撤銷或已過期——在同一個設定頁檢查、重新建一個；(3) 帳號被停用——這也要找營運者。</li>
+          <li>撤銷立即生效。撤銷或換了新 Token 後，記得同步改 n8n、Zapier 或腳本裡的設定，不然它們會一直拿舊的失敗。</li>
+        </ul>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 註冊與驗證郵件</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>註冊後，把郵件裡的驗證碼填回去，帳號才算建好。</li>
+          <li>沒收到？先查垃圾箱，再等幾分鐘；還沒有就在驗證頁重新傳送。</li>
+          <li>驗證碼過期了就重新要一個，別反覆試舊碼。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> 錯誤代碼是什麼意思</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li><code>401 invalid_token</code>——Token 寫錯、已被撤銷或過期，或 API 沒開啟，或帳號被停用。按上面 API Token 那條逐項查。</li>
+          <li><code>403 token_is_read_only</code>——Token 是唯讀的，但工具想寫入。改建讀寫 Token，或者讓工具只讀。</li>
+          <li><code>400</code>——請求內容有問題（比如缺開始或結束時間），檢查工具那邊的欄位對應。</li>
+          <li><code>404</code>——行事曆或行程不存在，或者不是你的。<code>429</code>——請求太頻繁，等一會兒再試。<code>5xx</code>——伺服器端問題，過一會兒再試。</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> 求助前先整理好這些</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>伺服器版本號：在瀏覽器打開 <code>/health</code>，把顯示的 version 記下來。再寫清你用的用戶端和版本、瀏覽器、出問題的時間和時區。</li>
+          <li>你做了哪些步驟、期望發生什麼、實際發生了什麼。</li>
+          <li>發到公開地方之前，把截圖和日誌裡的密碼、完整 Token 和電子郵件地址去掉。</li>
+        </ul>
+      </div>
+    </details>
+
+<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> 註銷帳號 / 刪除所有資料</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>

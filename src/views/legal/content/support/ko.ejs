@@ -88,7 +88,64 @@
       </div>
     </details>
 
+        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API 토큰과 외부 도구 연동</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>「설정 → 기기 → API 토큰」에서 직접 만들 수 있습니다. 도구가 쓸 필요가 없으면 읽기 전용을 선택하세요. 전체 토큰은 한 번만 표시되니 바로 도구에 넣으세요.</li>
+          <li>401이 나오면 이 순서로 확인하세요: (1) 사이트 운영자가 API를 켜지 않음 — 운영자만 바꿀 수 있습니다; (2) 토큰이 해지됐거나 만료됨 — 같은 설정 페이지에서 확인하고 새로 만드세요; (3) 계정이 정지됨 — 이것도 운영자 쪽입니다.</li>
+          <li>해지는 즉시 적용됩니다. 해지하거나 새로 만들면 n8n, Zapier, 스크립트에 넣은 토큰도 함께 바꾸세요.</li>
+        </ul>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 가입과 인증 메일</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>가입 후 메일로 받은 인증 코드를 입력해야 계정 만들기가 끝납니다.</li>
+          <li>메일이 안 오면 스팸함을 확인하고 몇 분 기다려 보세요. 그래도 없으면 인증 페이지에서 다시 보내세요.</li>
+          <li>코드가 만료됐으면 예전 코드를 반복하지 말고 새 코드를 요청하세요.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> 오류 코드의 뜻</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li><code>401 invalid_token</code> — 토큰이 틀렸거나, 해지·만료됐거나, API가 꺼져 있거나, 계정이 정지된 경우입니다. 위의 API 토큰 항목을 순서대로 확인하세요.</li>
+          <li><code>403 token_is_read_only</code> — 토큰이 읽기 전용인데 도구가 쓰려고 한 경우입니다. 읽기·쓰기 토큰을 만들거나 도구가 읽기만 하게 하세요.</li>
+          <li><code>400</code> — 요청 내용이 잘못된 경우입니다(시작·종료 시간 누락 등). 도구의 항목 연결을 확인하세요.</li>
+          <li><code>404</code> — 캘린더나 일정이 없거나 내 것이 아닙니다. <code>429</code> — 요청이 너무 많습니다. 잠시 후 다시 시도하세요. <code>5xx</code> — 서버 쪽 문제입니다. 나중에 다시 시도하세요.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> 문의하기 전에 준비할 것</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <ul class="list-disc pl-5 space-y-1.5">
+          <li>서버 버전: 브라우저에서 <code>/health</code>를 열어 표시되는 version을 적어 두세요. 쓰는 클라이언트와 버전, 브라우저, 문제가 생긴 시간과 시간대도 함께 적어 주세요.</li>
+          <li>어떤 순서로 무엇을 했는지, 기대한 결과와 실제 결과.</li>
+          <li>공개된 곳에 올리기 전에 스크린샷과 로그에서 비밀번호, 전체 토큰, 이메일 주소를 지우세요.</li>
+        </ul>
+      </div>
+    </details>
+
+<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> 계정 탈퇴 / 모든 데이터 삭제</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
