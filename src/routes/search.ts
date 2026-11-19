@@ -28,6 +28,8 @@ import { and, desc, eq, inArray, isNull, ilike, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { parseSearchTerms, likeNeedle, textMatchesAllTerms, eventRelevance } from "../lib/search_query.js";
+import { expandEvent } from "../lib/rrule_expand.js";
+import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 
 const MAX_CALENDAR_RESULTS = 8;
 const MAX_BOOKING_RESULTS = 8;
@@ -48,18 +50,20 @@ export async function searchRoutes(app: FastifyInstance) {
     const limit = parsed.data.limit;
 
     // ---- ISOLATION BOUNDARY: the calendars this user may see ----
+    // timezone 只在服务端内部用来算重复事件的下一次发生（见下面 nextStartsAt），
+    // 不进返回 —— 返回的日历形状和以前一样只有 name / color。
     const owned = await db
-      .select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color })
+      .select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color, timezone: schema.calendars.timezone })
       .from(schema.calendars)
       .where(eq(schema.calendars.ownerId, user.id));
     const shared = await db
-      .select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color })
+      .select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color, timezone: schema.calendars.timezone })
       .from(schema.calendars)
       .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
       .where(eq(schema.calendarMembers.userId, user.id));
 
-    const calById = new Map<string, { name: string; color: string }>();
-    for (const c of [...owned, ...shared]) calById.set(c.id, { name: c.name, color: c.color });
+    const calById = new Map<string, { name: string; color: string; timezone: string | null }>();
+    for (const c of [...owned, ...shared]) calById.set(c.id, { name: c.name, color: c.color, timezone: c.timezone });
     const allowedIds = Array.from(calById.keys());
 
     // ---- Events (constrained to allowedIds) ----
@@ -74,6 +78,10 @@ export async function searchRoutes(app: FastifyInstance) {
     type EventRow = {
       id: string; calendarId: string; summary: string; location: string | null;
       startsAt: Date; endsAt: Date; allDay: boolean; rrule: string | null;
+      // 下面三个只在服务端内部用来算 nextStartsAt（展开要按事件自己的时区，
+      // 见 event_zone.ts），**不进返回** —— extra 里有入会密码，文件头的规矩不变。
+      exdates: unknown; extra: unknown; rawIcs: string | null;
+      updatedAt: Date;
     };
     let eventRows: EventRow[] = [];
     if (allowedIds.length > 0) {
@@ -105,6 +113,10 @@ export async function searchRoutes(app: FastifyInstance) {
           // description 不在这里 —— 见文件头，那是特意不返回的。
           allDay: schema.events.allDay,
           rrule: schema.events.rrule,
+          exdates: schema.events.exdates,
+          extra: schema.events.extra,
+          rawIcs: schema.events.rawIcs,
+          updatedAt: schema.events.updatedAt,
         })
         .from(schema.events)
         .where(and(inArray(schema.events.calendarId, allowedIds), isNull(schema.events.deletedAt), ...termConds))
@@ -119,6 +131,42 @@ export async function searchRoutes(app: FastifyInstance) {
       });
       eventRows = eventRows.slice(0, limit);
     }
+    // 重复事件的 startsAt 是系列开始（可能是一年前），用户搜「周会」想看的是
+    // 下一次。给结果带上 nextStartsAt：从现在起第一次发生的开始时刻；系列已经
+    // 结束（UNTIL / COUNT 用完）就是 null，前端回落到 startsAt 显示。
+    // 只增字段，不动 startsAt 本身 —— 老客户端读到的形状一个字没变。
+    const now = new Date();
+    // 展开窗口的起点压到整分钟：展开结果有进程内缓存（rrule_expand.ts），
+    // 每请求一个新秒数会让键永远对不上、缓存白建。压完不改变结果 ——
+    // 下面挑的是 startsAt >= now（精确值）的第一次，多展开的那几秒用不上。
+    const expandFrom = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+    const expandTo = new Date(now.getTime() + 2 * 366 * 86_400_000);
+    const nextStartsAtOf = (e: EventRow): Date | null => {
+      if (!e.rrule) return null;
+      const occurrences = expandEvent(
+        {
+          id: e.id,
+          startsAt: e.startsAt,
+          endsAt: e.endsAt,
+          rrule: e.rrule,
+          exdates: (e.exdates as string[] | null) ?? null,
+          allDay: e.allDay,
+          timeZone: expansionTimeZone({
+            allDay: e.allDay,
+            extra: e.extra,
+            calendarTimezone: calById.get(e.calendarId)?.timezone ?? null,
+            rawStartIsUtc: rawIcsStartIsUtc(e.rawIcs),
+          }),
+          updatedAt: e.updatedAt,
+        },
+        expandFrom,
+        expandTo,
+      );
+      for (const occ of occurrences) {
+        if (occ.startsAt.getTime() >= now.getTime()) return occ.startsAt;
+      }
+      return null;
+    };
     const events = eventRows.map((e) => ({
       id: e.id,
       calendarId: e.calendarId,
@@ -130,6 +178,7 @@ export async function searchRoutes(app: FastifyInstance) {
       endsAt: e.endsAt,
       allDay: e.allDay,
       rrule: e.rrule,
+      nextStartsAt: nextStartsAtOf(e),
     }));
 
     // ---- Calendars (filter the already-scoped owned+shared list in memory) ----

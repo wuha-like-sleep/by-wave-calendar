@@ -130,7 +130,7 @@
             <div class="min-w-0 flex-1">
               <div class="text-sm font-medium text-slate-900 truncate">${highlight(e.summary, query)}</div>
               <div class="mt-0.5 text-xs text-slate-500 truncate">
-                ${fmtDate(e.startsAt)}
+                ${fmtDate(e.nextStartsAt || e.startsAt)}
                 ${e.location ? ' · 📍 ' + highlight(e.location, query) : ''}
                 · <span class="text-slate-400">${escapeHtml(e.calendarName)}</span>
               </div>
