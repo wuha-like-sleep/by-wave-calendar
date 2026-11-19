@@ -1749,7 +1749,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     };
 
-    const qp = (req.query ?? {}) as { cat?: string; actor?: string; q?: string; page?: string };
+    const qp = (req.query ?? {}) as { cat?: string; actor?: string; q?: string; page?: string; fw?: string };
     const PER_PAGE = 50;
     const page = Math.max(1, Math.min(100000, Number(qp.page) || 1));
     const cat = (qp.cat ?? "").trim().slice(0, 40);
@@ -1809,6 +1809,58 @@ export async function adminRoutes(app: FastifyInstance) {
       .orderBy(desc(sql`count(*)`));
     const categories = prefRows.map((r) => ({ key: r.p, count: r.c, label: catMeta(r.p).label }));
 
+    // ---- 登录失败聚合 ------------------------------------------------------
+    // 数据来自 lib/security_events.ts 的采样行（auth.login_failed /
+    // api_token.auth_failed）。每行 details.failures 是「自上一行以来的
+    // 增量」，所以 SUM(failures) 是已落库增量的精确合计（未跨里程碑的
+    // 低量尾巴暂不计入，下一次跨越时结清 —— 采样器文件头有完整口径）。
+    // 账号归属：能对上用户的用账号邮箱，查无此人的用 details.email，
+    // 只知 prefix 的 token 猜测用 prefix。
+    const fw = qp.fw === "24h" || qp.fw === "30d" ? qp.fw : "7d";
+    const fwHours = fw === "24h" ? 24 : fw === "30d" ? 24 * 30 : 24 * 7;
+    const failSince = new Date(Date.now() - fwHours * 3600_000);
+    const failWhere = and(
+      inArray(schema.adminAuditLog.action, ["auth.login_failed", "api_token.auth_failed"]),
+      gte(schema.adminAuditLog.createdAt, failSince),
+    );
+    const failCount = sql<number>`coalesce(sum(coalesce((${schema.adminAuditLog.details}->>'failures')::int, 1)), 0)::int`;
+    const accountKey = sql<string>`coalesce(${schema.users.email}, ${schema.adminAuditLog.details}->>'email', ${schema.adminAuditLog.details}->>'prefix', '—')`;
+    const failByAccountRows = await db
+      .select({
+        account: accountKey,
+        failures: failCount,
+        ips: sql<number>`count(distinct ${schema.adminAuditLog.ip})::int`,
+        lastAt: sql<Date>`max(${schema.adminAuditLog.createdAt})`,
+      })
+      .from(schema.adminAuditLog)
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      .where(failWhere)
+      .groupBy(accountKey)
+      .orderBy(desc(failCount))
+      .limit(20);
+    const failByIpRows = await db
+      .select({
+        ip: schema.adminAuditLog.ip,
+        failures: failCount,
+        accounts: sql<number>`count(distinct ${accountKey})::int`,
+        lastAt: sql<Date>`max(${schema.adminAuditLog.createdAt})`,
+      })
+      .from(schema.adminAuditLog)
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      .where(failWhere)
+      .groupBy(schema.adminAuditLog.ip)
+      .orderBy(desc(failCount))
+      .limit(20);
+    const failTimeIso = (d: Date | string) => {
+      const iso = d instanceof Date ? d.toISOString() : new Date(d).toISOString();
+      return `<time data-tz datetime="${iso}" data-style="datetime">${iso}</time>`;
+    };
+    const failureAgg = {
+      window: fw,
+      byAccount: failByAccountRows.map((r) => ({ ...r, lastAtIso: failTimeIso(r.lastAt) })),
+      byIp: failByIpRows.map((r) => ({ ...r, lastAtIso: failTimeIso(r.lastAt) })),
+    };
+
     return reply.view("admin/audit", {
       title: "审计日志 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
@@ -1816,6 +1868,7 @@ export async function adminRoutes(app: FastifyInstance) {
       filter: { cat, actor, q: term },
       page, totalPages, total: total ?? 0, perPage: PER_PAGE,
       categories,
+      failureAgg,
       entries: rows.map((r) => ({
         ...r,
         cat: catMeta((r.action.split(".")[0] ?? "")),

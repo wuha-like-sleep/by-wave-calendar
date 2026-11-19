@@ -22,8 +22,12 @@ process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import rateLimit from "@fastify/rate-limit";
+import cookie from "@fastify/cookie";
+import formbody from "@fastify/formbody";
+import ejs from "ejs";
+import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
-import { ensureSchema, resetDb, makeUser, buildRoutedApp } from "./harness.js";
+import { ensureSchema, resetDb, makeUser, buildRoutedApp, loginAs } from "./harness.js";
 import { db, schema } from "../../src/db/client.js";
 import { createApiToken } from "../../src/lib/api_token.js";
 import { hashPassword } from "../../src/lib/password.js";
@@ -36,6 +40,8 @@ import {
 } from "../../src/lib/security_events.js";
 import { calendarRoutes } from "../../src/routes/calendars.js";
 import { authRoutes } from "../../src/routes/auth.js";
+import { adminRoutes } from "../../src/web/admin.js";
+import { csrfTokenFor } from "../../src/lib/csrf.js";
 
 function fakeReq(ip: string, url = "/api/v1/events"): FastifyRequest {
   return {
@@ -181,6 +187,86 @@ describe("登录失败留痕", () => {
     expect(rows).toHaveLength(2);
     const total = rows.reduce((a, r) => a + ((r.details as Record<string, unknown>).failures as number), 0);
     expect(total).toBe(10);
+  });
+});
+
+describe("审计页登录失败聚合", () => {
+  let app: FastifyInstance;
+  let adminSession: string;
+  beforeAll(async () => {
+    app = Fastify({ logger: false });
+    await app.register(cookie, { secret: "test-cookie-secret-at-least-32-characters" });
+    await app.register(formbody);
+    app.decorateReply("view", function (template: string, locals: object) {
+      return this.send({ template, locals });
+    });
+    app.get("/test/csrf", (req) => ({ token: csrfTokenFor(req) }));
+    await app.register(adminRoutes);
+    await app.ready();
+  });
+  afterAll(async () => { await app.close(); });
+
+  beforeEach(async () => {
+    const admin = await makeUser("admin@example.com", { isAdmin: true });
+    adminSession = await loginAs(app, admin.id);
+  });
+
+  async function auditLocals(qs: string) {
+    const res = await app.inject({ method: "GET", url: `/admin/audit${qs}`, headers: { cookie: adminSession } });
+    expect(res.statusCode).toBe(200);
+    return res.json().locals as {
+      failureAgg: {
+        window: string;
+        byAccount: { account: string; failures: number; ips: number }[];
+        byIp: { ip: string; failures: number; accounts: number }[];
+      };
+    };
+  }
+
+  it("按账号 / 按 IP 聚合，采样增量加总是精确总数", async () => {
+    const victim = await makeUser("victim@example.com");
+    // 同一 IP 打同一账号 10 次（采样落 2 行：1 + 9），另一 IP 打查无此人 3 次（落 1 行：1，再 2 次不落行但也不该被算——见下）。
+    for (let i = 0; i < 10; i++) {
+      await recordLoginAuthFailure(fakeReq("203.0.113.9", "/login"), "victim@example.com", victim.id);
+    }
+    for (let i = 0; i < 3; i++) {
+      await recordLoginAuthFailure(fakeReq("198.51.100.4", "/login"), "ghost@example.com", null);
+    }
+
+    const locals = await auditLocals("?fw=7d");
+    expect(locals.failureAgg.window).toBe("7d");
+    const byAccount = new Map(locals.failureAgg.byAccount.map((r) => [r.account, r]));
+    expect(byAccount.get("victim@example.com")!.failures).toBe(10);
+    expect(byAccount.get("victim@example.com")!.ips).toBe(1);
+    // ghost 只落了里程碑 1 那一行（增量 1）——聚合看到的是已落库的 1，
+    // 这是采样的固有口径：窗口内总数以落库增量为准，未跨里程碑的尾巴
+    // 要等下一次跨越时才结清。断言钉住这个口径，别悄悄变成估算。
+    expect(byAccount.get("ghost@example.com")!.failures).toBe(1);
+
+    const byIp = new Map(locals.failureAgg.byIp.map((r) => [r.ip, r]));
+    expect(byIp.get("203.0.113.9")!.failures).toBe(10);
+    expect(byIp.get("203.0.113.9")!.accounts).toBe(1);
+    expect(byIp.get("198.51.100.4")!.failures).toBe(1);
+  });
+
+  it("窗口参数只认 24h / 7d / 30d，乱传回落 7d；Token 失败也进聚合", async () => {
+    const victim = await makeUser("tok-victim@example.com");
+    const issued = await createApiToken({ userId: victim.id, label: "n8n", scope: "write" });
+    await recordApiTokenAuthFailure(fakeReq("203.0.113.9"), issued.prefix);
+
+    const locals = await auditLocals("?fw=bogus");
+    expect(locals.failureAgg.window).toBe("7d");
+    const row = locals.failureAgg.byAccount.find((r) => r.account === "tok-victim@example.com");
+    expect(row!.failures).toBe(1);
+
+    const day = await auditLocals("?fw=24h");
+    expect(day.failureAgg.window).toBe("24h");
+    expect(day.failureAgg.byAccount.find((r) => r.account === "tok-victim@example.com")).toBeTruthy();
+  });
+
+  it("审计页模板能编译（语法层面）", () => {
+    const src = readFileSync("src/views/admin/audit.ejs", "utf8");
+    expect(() => ejs.compile(src, { filename: "src/views/admin/audit.ejs" })).not.toThrow();
   });
 });
 
