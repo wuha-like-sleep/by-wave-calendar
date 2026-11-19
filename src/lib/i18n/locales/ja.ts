@@ -462,6 +462,13 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "デフォルトの間隔",
   "settings.appearance.densityCompact": "コンパクト",
   "settings.appearance.densityCompactHint": "画面により多く表示",
+  "settings.appearance.modeLabel": "明暗モード",
+  "settings.appearance.modeSystem": "システムに従う",
+  "settings.appearance.modeSystemHint": "デバイスの外観に合わせる",
+  "settings.appearance.modeLight": "ライト",
+  "settings.appearance.modeLightHint": "常にライト",
+  "settings.appearance.modeDark": "ダーク",
+  "settings.appearance.modeDarkHint": "常にダーク、暗い場所で目に優しい",
   "settings.appearance.saveTheme": "外観を保存",
 
   // /admin/site

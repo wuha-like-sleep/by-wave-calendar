@@ -709,7 +709,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.appearance.themeTitle") %> <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.appearance.themeScope") %></span></h2>
       <p class="mt-1 text-sm text-slate-500"><%= t("settings.appearance.themeDesc") %></p>
     </div>
-    <% if (userPalette || userDensity) { %>
+    <% if (userPalette || userDensity || userMode) { %>
       <form method="post" action="/app/settings/theme" class="m-0">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="hidden" name="reset" value="1" />
@@ -720,6 +720,24 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
   <form method="post" action="/app/settings/theme" class="space-y-4">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+
+    <div>
+      <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("settings.appearance.modeLabel") %></label>
+      <div class="grid grid-cols-3 gap-2 max-w-lg">
+        <% const modes = [
+          { id: 'system', nameKey: 'settings.appearance.modeSystem', hintKey: 'settings.appearance.modeSystemHint', preview: 'linear-gradient(90deg, #ffffff 50%, #0f172a 50%)' },
+          { id: 'light',  nameKey: 'settings.appearance.modeLight',  hintKey: 'settings.appearance.modeLightHint',  preview: '#ffffff' },
+          { id: 'dark',   nameKey: 'settings.appearance.modeDark',   hintKey: 'settings.appearance.modeDarkHint',   preview: '#0f172a' },
+        ]; const currentMode = userMode || 'system'; modes.forEach(function(m){ %>
+          <label class="cursor-pointer rounded-xl border-2 p-3 transition <%= currentMode === m.id ? 'border-brand-600 bg-brand-50' : 'border-slate-200 hover:border-slate-300 bg-white' %>">
+            <input type="radio" name="mode" value="<%= m.id %>" <%= currentMode === m.id ? 'checked' : '' %> class="sr-only" />
+            <span class="block h-8 rounded-md border border-slate-200 mb-2" style="background: <%= m.preview %>"></span>
+            <div class="text-sm font-medium text-slate-900"><%= t(m.nameKey) %></div>
+            <div class="text-xs text-slate-500 mt-0.5"><%= t(m.hintKey) %></div>
+          </label>
+        <% }) %>
+      </div>
+    </div>
 
     <div>
       <label class="block text-sm font-medium text-slate-700 mb-2"><%- t("settings.appearance.paletteLabel", { palette: sitePalette }) %></label>

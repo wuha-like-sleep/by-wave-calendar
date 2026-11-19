@@ -40,6 +40,10 @@ export const users = pgTable("users", {
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
   themePalette: text("theme_palette"),
   themeDensity: text("theme_density"),
+  // Colour mode: "system" | "light" | "dark". NULL means "system" (follow
+  // the OS) — that is also the behaviour for logged-out pages, which have
+  // no user row to read.
+  themeMode: text("theme_mode"),
   // Per-user UI language. NULL means "inherit site default". Valid
   // values are entries in src/lib/i18n.ts SUPPORTED_LOCALES (zh-CN, en).
   // The locale resolver falls back to site_settings.default_locale →

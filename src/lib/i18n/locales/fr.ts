@@ -462,6 +462,13 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "Espacement par défaut",
   "settings.appearance.densityCompact": "Compact",
   "settings.appearance.densityCompactHint": "Afficher davantage à l'écran",
+  "settings.appearance.modeLabel": "Mode d'apparence",
+  "settings.appearance.modeSystem": "Suivre le système",
+  "settings.appearance.modeSystemHint": "Selon l'apparence de l'appareil",
+  "settings.appearance.modeLight": "Clair",
+  "settings.appearance.modeLightHint": "Toujours clair",
+  "settings.appearance.modeDark": "Sombre",
+  "settings.appearance.modeDarkHint": "Toujours sombre, plus doux en faible lumière",
   "settings.appearance.saveTheme": "Enregistrer l'apparence",
 
   // /admin/site

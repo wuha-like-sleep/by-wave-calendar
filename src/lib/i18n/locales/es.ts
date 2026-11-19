@@ -462,6 +462,13 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "Espaciado predeterminado",
   "settings.appearance.densityCompact": "Compacta",
   "settings.appearance.densityCompactHint": "Cabe más en pantalla",
+  "settings.appearance.modeLabel": "Modo de apariencia",
+  "settings.appearance.modeSystem": "Seguir el sistema",
+  "settings.appearance.modeSystemHint": "Según la apariencia del dispositivo",
+  "settings.appearance.modeLight": "Claro",
+  "settings.appearance.modeLightHint": "Siempre claro",
+  "settings.appearance.modeDark": "Oscuro",
+  "settings.appearance.modeDarkHint": "Siempre oscuro, mejor con poca luz",
   "settings.appearance.saveTheme": "Guardar apariencia",
 
   // /admin/site

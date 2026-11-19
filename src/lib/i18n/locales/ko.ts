@@ -462,6 +462,13 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "기본 간격",
   "settings.appearance.densityCompact": "조밀하게",
   "settings.appearance.densityCompactHint": "화면에 더 많이 표시",
+  "settings.appearance.modeLabel": "명암 모드",
+  "settings.appearance.modeSystem": "시스템 설정 따르기",
+  "settings.appearance.modeSystemHint": "기기 외관에 맞춤",
+  "settings.appearance.modeLight": "라이트",
+  "settings.appearance.modeLightHint": "항상 라이트",
+  "settings.appearance.modeDark": "다크",
+  "settings.appearance.modeDarkHint": "항상 다크, 어두운 곳에서 눈이 편해요",
   "settings.appearance.saveTheme": "외관 저장",
 
   // /admin/site

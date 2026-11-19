@@ -26,6 +26,23 @@
       color: #94a3b8; text-decoration: none; background: rgba(255,255,255,0.85);
       padding: 2px 6px; border-radius: 4px;
     }
+    /* The embed has no account context, so it follows the OS colour scheme
+       of the embedding browser. Event blocks keep the calendar colour. */
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #0f172a; color: #f1f5f9; color-scheme: dark; }
+      .embed-toolbar { border-bottom-color: #334155; }
+      .embed-toolbar button { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+      .embed-toolbar button:hover { background: #334155; }
+      .embed-toolbar .period { color: #94a3b8; }
+      #view-select { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9; }
+      .powered { background: rgba(15,23,42,0.85); color: #64748b; }
+      .toastui-calendar-timegrid-time,
+      .toastui-calendar-weekday-event-title { color: #94a3b8; }
+      .toastui-calendar-timezone-labels-slot,
+      .toastui-calendar-timegrid-timezone-label { background-color: #1e293b; }
+      .toastui-calendar-popup-container { background-color: #1e293b; color: #f1f5f9; border-color: #334155; }
+      .toastui-calendar-popup-section-item { background-color: #0f172a; border-color: #334155; color: #f1f5f9; }
+    }
   </style>
 </head>
 <body>
@@ -80,6 +97,16 @@
       try { return JSON.parse(document.getElementById('bwc-embed-i18n').textContent); }
       catch { return { dayLong: [], dayShort: [] }; }
     })();
+    // Same luminance rule as the main calendar app: bright calendar
+    // colours get dark event text so titles stay readable.
+    function textOn(hex) {
+      const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+      if (!m) return "#ffffff";
+      const n = parseInt(m[1], 16);
+      const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4); };
+      const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+      return lum > 0.21 ? "#1e293b" : "#ffffff";
+    }
     const cal = new tui.Calendar("#embed-cal", {
       defaultView: "week",
       useFormPopup: false,
@@ -92,7 +119,7 @@
         showNowIndicator: true,
       },
       month: { startDayOfWeek: 1, dayNames: BWC_I18N.dayShort, visibleWeeksCount: 0, isAlways6Weeks: false },
-      calendars: [{ id: "embed", name: "", backgroundColor: CAL_COLOR, borderColor: CAL_COLOR, dragBackgroundColor: CAL_COLOR, color: "#fff" }],
+      calendars: [{ id: "embed", name: "", backgroundColor: CAL_COLOR, borderColor: CAL_COLOR, dragBackgroundColor: CAL_COLOR, color: textOn(CAL_COLOR) }],
     });
     cal.createEvents(EVENTS.map(e => ({
       id: e.id, calendarId: "embed",

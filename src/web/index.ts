@@ -48,7 +48,7 @@ import { randomBytes } from "node:crypto";
 // .ics 导入的大小上限放在 lib 里：单元测试要拿它和八门语言的文案对账，
 // 而 import 这个文件会把整个 web 层连同数据库一起拉进来。
 import { MAX_ICS_IMPORT_BYTES, MAX_ICS_IMPORT_MB, MAX_ICS_PASTE_CHARS, MAX_ICS_PASTE_BODY_BYTES } from "../lib/ics_limits.js";
-import { clearThemeCookies, DENSITIES, isValidDensity, isValidPalette, PALETTES, setThemeCookies } from "../lib/user_theme.js";
+import { clearThemeCookies, DENSITIES, isValidDensity, isValidMode, isValidPalette, PALETTES, setModeCookie, setThemeCookies } from "../lib/user_theme.js";
 import {
   RETURN_TO_COOKIE,
   RETURN_TO_TTL_S,
@@ -563,6 +563,7 @@ export async function webRoutes(app: FastifyInstance) {
 
     await createSession(reply, user.id, { kind: "password" }, { rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
+    setModeCookie(reply, user.themeMode);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
@@ -615,6 +616,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (!user) return redirectWith(reply, "/login", { error: tr(req, "flash.login.userNotFound") });
     await createSession(reply, user.id, { kind: "password" }, { rememberMe });
     setThemeCookies(reply, user.themePalette, user.themeDensity);
+    setModeCookie(reply, user.themeMode);
     if (user.mfaEnabled) return reply.redirect("/login/mfa");
     void notifyLoginSuccess(req, user, "password").catch((err) => req.log.warn({ err }, "login_alert_failed"));
     void recordLoginEvent(req, user.id, "password").catch((err) => req.log.warn({ err }, "login_event_failed"));
@@ -2163,6 +2165,7 @@ export async function webRoutes(app: FastifyInstance) {
       createdAtLocal: localTime(user.createdAt),
       userPalette: user.themePalette,
       userDensity: user.themeDensity,
+      userMode: user.themeMode,
       passkeys: passkeys.map((p) => ({
         ...p,
         createdAtLocal: localTime(p.createdAt),
@@ -2466,6 +2469,7 @@ export async function webRoutes(app: FastifyInstance) {
       .object({
         palette: z.string().optional(),
         density: z.string().optional(),
+        mode: z.string().optional(),
         reset: z.string().optional(),
       })
       .safeParse(req.body);
@@ -2473,14 +2477,16 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/app/settings/appearance", { error: tr(req, "flash.appearance.invalid") });
     }
     if (body.data.reset) {
-      await db.update(schema.users).set({ themePalette: null, themeDensity: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+      await db.update(schema.users).set({ themePalette: null, themeDensity: null, themeMode: null, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
       clearThemeCookies(reply);
       return redirectWith(reply, "/app/settings/appearance", { success: tr(req, "flash.appearance.reset") });
     }
     const palette = isValidPalette(body.data.palette) ? body.data.palette : null;
     const density = isValidDensity(body.data.density) ? body.data.density : null;
-    await db.update(schema.users).set({ themePalette: palette, themeDensity: density, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
+    const mode = isValidMode(body.data.mode) ? body.data.mode : null;
+    await db.update(schema.users).set({ themePalette: palette, themeDensity: density, themeMode: mode, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     setThemeCookies(reply, palette, density);
+    setModeCookie(reply, mode);
     return redirectWith(reply, "/app/settings/appearance", { success: tr(req, "flash.appearance.updated") });
   });
 

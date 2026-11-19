@@ -920,6 +920,10 @@ app.addHook("onRequest", async (req, reply) => {
       siteDensity: settings.themeDensity,
       themePalette: userTheme.palette ?? settings.themePalette,
       themeDensity: userTheme.density ?? settings.themeDensity,
+      // Colour-mode preference ("system" unless the user picked a side).
+      // layout.ejs renders it into <html data-mode-pref> and resolves it
+      // to a concrete data-mode before first paint.
+      themeMode: userTheme.mode ?? "system",
       currentUser,
       // i18n surface — templates call `t("key")` or read `currentLocale`
       // for HTML <html lang> + the picker UI. `locales` and

@@ -462,6 +462,13 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "Standardabstand",
   "settings.appearance.densityCompact": "Kompakt",
   "settings.appearance.densityCompactHint": "Mehr auf den Bildschirm passen",
+  "settings.appearance.modeLabel": "Anzeigemodus",
+  "settings.appearance.modeSystem": "System folgen",
+  "settings.appearance.modeSystemHint": "Wie die Geräteeinstellung",
+  "settings.appearance.modeLight": "Hell",
+  "settings.appearance.modeLightHint": "Immer hell",
+  "settings.appearance.modeDark": "Dunkel",
+  "settings.appearance.modeDarkHint": "Immer dunkel, angenehmer bei wenig Licht",
   "settings.appearance.saveTheme": "Darstellung speichern",
 
   // /admin/site

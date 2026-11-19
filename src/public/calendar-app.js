@@ -362,13 +362,28 @@
   backdrop.addEventListener("click", hideOnMobile);
 
   // ---------- Toast UI Calendar setup ----------
+  // Event text colour follows the calendar colour's luminance: white text
+  // on a pale yellow/blue calendar colour is unreadable in BOTH modes, so
+  // bright colours get near-black text instead. (WCAG relative luminance,
+  // threshold picked so mid-tones like #22c55e keep white text.)
+  function readableTextOn(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return "#ffffff";
+    const n = parseInt(m[1], 16);
+    const lin = (v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+    };
+    const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+    return lum > 0.21 ? "#1e293b" : "#ffffff";
+  }
   const tuiCalendars = ctx.calendars.map((c) => ({
     id: c.id,
     name: c.name,
     backgroundColor: c.color,
     borderColor: c.color,
     dragBackgroundColor: c.color,
-    color: "#ffffff",
+    color: readableTextOn(c.color),
   }));
 
   // On phones the 7-column week view is unreadable — labels truncate to
@@ -570,13 +585,21 @@
       // just dim them.
       const endMs = +new Date(e.endsAt);
       const isPast = endMs < now;
+      const darkMode = document.documentElement.getAttribute("data-mode") === "dark";
       const style = isPast
-        ? {
-            backgroundColor: "#e2e8f0",
-            borderColor: "#cbd5e1",
-            dragBackgroundColor: "#cbd5e1",
-            color: "#64748b",
-          }
+        ? darkMode
+          ? {
+              backgroundColor: "#334155",
+              borderColor: "#475569",
+              dragBackgroundColor: "#475569",
+              color: "#cbd5e1",
+            }
+          : {
+              backgroundColor: "#e2e8f0",
+              borderColor: "#cbd5e1",
+              dragBackgroundColor: "#cbd5e1",
+              color: "#64748b",
+            }
         : {};
       return {
         id: e.id,
@@ -1954,7 +1977,8 @@
       sw.type = "button";
       sw.dataset.color = c;
       sw.className = "color-swatch relative h-7 w-7 rounded-md border border-slate-200 hover:scale-110 transition-transform";
-      sw.style.background = `linear-gradient(135deg, ${c} 50%, #f8fafc 50%)`;
+      const swatchBase = document.documentElement.getAttribute("data-mode") === "dark" ? "#1e293b" : "#f8fafc";
+      sw.style.background = `linear-gradient(135deg, ${c} 50%, ${swatchBase} 50%)`;
       sw.setAttribute("aria-label", T("app.js.colorLabel", { c }));
       container.appendChild(sw);
     });
