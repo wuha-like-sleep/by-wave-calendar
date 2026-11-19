@@ -476,6 +476,19 @@ header.bwc-site-nav {
   [id^="modal-"] { padding-bottom: var(--bwc-sab); }
 }
 
+/* ---------- Dynamic viewport height ----------
+   100vh on iOS Safari is the LARGE viewport (URL bar hidden), so a
+   min-h-screen page starts out taller than the visible area and the
+   layout settles with a jump once the bar state is known. dvh tracks
+   the actually-visible height; keep the vh line first as the fallback
+   for engines without dvh. (Modal panels and the calendar's fallback
+   min-height carry the same dual declaration inline in the templates,
+   where their exact rem/vh values live.) */
+body.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
 /* ---------- Modal + drawer + FAB motion ----------
    Every modal is a full-screen backdrop container ([id^="modal-"]) whose single
    child is the panel card. The JS (openModal/closeModal) un-hides the element,
