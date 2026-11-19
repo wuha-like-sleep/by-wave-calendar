@@ -33,6 +33,7 @@ import { gzipSync, brotliCompressSync } from "node:zlib";
 import { readFileSync, existsSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import type { FastifyInstance } from "fastify";
+import type { InjectOptions, Response as InjectResponse } from "light-my-request";
 import {
   ensureSchema, resetDb, db, schema, pg,
   makeUser, buildRoutedApp, loginAs,
@@ -164,9 +165,9 @@ async function timed(fn: () => Promise<{ ms: number }>, n = 25) {
   return { median, p95 };
 }
 
-async function injectTimed(app: FastifyInstance, opts: Parameters<FastifyInstance["inject"]>[0]) {
+async function injectTimed(app: FastifyInstance, opts: InjectOptions) {
   const t0 = performance.now();
-  const res = await app.inject(opts);
+  const res: InjectResponse = await app.inject(opts);
   return { ms: performance.now() - t0, res };
 }
 
