@@ -364,10 +364,13 @@ export async function eventRoutes(app: FastifyInstance) {
     if (allowed.length === 0) return reply.send({ calendars: visible, events: [] });
 
     // 网页每 30 秒轮询当前窗口，绝大多数时候没变。先比令牌，没变就回 304，不取行、不展开规则。
-    // no-store：只有客户端自己带令牌才走这条路（网页的镜像带），别让浏览器或手机端的 HTTP 库
-    // 把日程存进磁盘缓存。
+    // private, no-cache：浏览器可以存，但每次用前必须拿 ETag 回来核对（核对便宜，没变就是
+    // 一个 304 空响应）；private 挡住共享缓存（CDN / 代理）—— 日程是个人数据，绝不能让
+    // 中间缓存把一个人的响应发给另一个人。令牌本身由「这个人能看的日历集合」算出来，
+    // 换个人拿着旧令牌来核对也只会算出不同的令牌、拿到自己的 200，不会串数据。
+    // 原生客户端不受影响：它们本来就自己存令牌、自己发 If-None-Match。
     const tag = await eventsWindowEtag(allowed, visible, q.data.from, q.data.to);
-    reply.header("ETag", tag).header("Cache-Control", "no-store");
+    reply.header("ETag", tag).header("Cache-Control", "private, no-cache");
     if (etagMatches(req.headers["if-none-match"], tag)) return reply.code(304).send();
 
     // Pull the master rows that can contribute an occurrence to the window.
