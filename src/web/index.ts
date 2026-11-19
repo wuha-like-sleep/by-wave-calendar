@@ -896,7 +896,7 @@ export async function webRoutes(app: FastifyInstance) {
     const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
     if (!body.success) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.code.sixDigits") });
 
-    const result = await verifyCode(email, body.data.code);
+    const result = await verifyCode(email, body.data.code, req.ip);
     if (!result.ok) {
       const reasonMap: Record<string, string> = {
         no_pending: tr(req, "flash.verifyEmail.noPending"),
