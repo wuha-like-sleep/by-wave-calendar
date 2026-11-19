@@ -480,3 +480,91 @@ describe("parseNaturalLanguageEvent — 地点", () => {
     expect(r?.summary).toBe("team meeting");
   });
 });
+
+// ── 歧义约定（固化，不许悄悄改） ────────────────────────────────────────────
+//
+// 下面这组钉的是「一半人会理解成另一个意思」的约定。它们是全端共用解析器的
+// 既有语义，老用户已经按这个习惯在用了 —— 要改先过产品决定，不许顺手改。
+// NOW 是 2026-07-03（周五）10:00。
+describe("parseNaturalLanguageEvent — 歧义约定", () => {
+  it("裸星期永远是「即将到来的那个」，哪怕今天就是周五也不是今天", () => {
+    expect(parseNaturalLanguageEvent("周五 9点 打球", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("Friday 9am gym", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("金曜日 9時 会議", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("금요일 오후 3시 회의", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("viernes 15:00 reunión", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("vendredi 15h réunion", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("Freitag 15 Uhr Treffen", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+  });
+
+  it("「下周X」= 裸 X 的结果再 +7 天（周五说下周五 = 14 天后，不是 7 天后）", () => {
+    // 这个约定最容易被「顺手修正」：口语里不少人用「下周五」指 7 天后那个周五。
+    // 现约定是先按裸星期落到即将到来的周五（+7），位移词再 +7 → +14。
+    // 下周一同理：裸周一是 +3（下周一），再 +7 → +10。这里钉死，改要走产品决定。
+    expect(parseNaturalLanguageEvent("下周五 9点 打球", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
+    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-13T10:00:00");
+    expect(parseNaturalLanguageEvent("next Friday 9am gym", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
+    expect(parseNaturalLanguageEvent("来週金曜日 9時 会議", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
+    expect(parseNaturalLanguageEvent("다음 주 금요일 오후 3시 회의", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+    expect(parseNaturalLanguageEvent("viernes que viene 15:00 reunión", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+    expect(parseNaturalLanguageEvent("próximo viernes 15:00 reunión", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+    expect(parseNaturalLanguageEvent("vendredi prochain 15h réunion", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+    expect(parseNaturalLanguageEvent("nächsten Freitag 15 Uhr Treffen", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+  });
+
+  it("「本周五」在周五当天也落到下周五（裸星期约定优先于「本周」字面）", () => {
+    expect(parseNaturalLanguageEvent("本周五 10点 复盘", NOW)?.startsAt).toBe("2026-07-10T10:00:00");
+  });
+
+  it("位移词 + 星期挖掉后标题不许残字（下周五的标题曾经是「五 打球」）", () => {
+    expect(parseNaturalLanguageEvent("下周五 9点 打球", NOW)?.summary).toBe("打球");
+    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.summary).toBe("复盘");
+    expect(parseNaturalLanguageEvent("下周三 10点 复盘", NOW)?.summary).toBe("复盘");
+    expect(parseNaturalLanguageEvent("下周日 10点 复盘", NOW)?.summary).toBe("复盘");
+    expect(parseNaturalLanguageEvent("下下周五 10点 复盘", NOW)?.summary).toBe("复盘");
+    expect(parseNaturalLanguageEvent("本周五 10点 复盘", NOW)?.summary).toBe("复盘");
+  });
+});
+
+// ── 月底（新说法）：本月 / 下个月的最后一天 ─────────────────────────────────
+describe("parseNaturalLanguageEvent — 月底", () => {
+  it("月底 / 本月底 → 本月最后一天", () => {
+    expect(parseNaturalLanguageEvent("月底 交房租", NOW)?.startsAt).toBe("2026-07-31T09:00:00");
+    expect(parseNaturalLanguageEvent("本月底 总结", NOW)?.startsAt).toBe("2026-07-31T09:00:00");
+    expect(parseNaturalLanguageEvent("月底 交房租", NOW)?.summary).toBe("交房租");
+  });
+
+  it("下个月底 / 下月底 → 下个月最后一天；下下个月底再顺延一个月", () => {
+    expect(parseNaturalLanguageEvent("下个月底 交房租", NOW)?.startsAt).toBe("2026-08-31T09:00:00");
+    expect(parseNaturalLanguageEvent("下月底 总结", NOW)?.startsAt).toBe("2026-08-31T09:00:00");
+    expect(parseNaturalLanguageEvent("下下个月底 总结", NOW)?.startsAt).toBe("2026-09-30T09:00:00");
+  });
+
+  it("月末（ja）/ 월말（ko）/ end of month（en）同义", () => {
+    expect(parseNaturalLanguageEvent("月末 締め切り", NOW)?.startsAt).toBe("2026-07-31T09:00:00");
+    expect(parseNaturalLanguageEvent("월말 마감", NOW)?.startsAt).toBe("2026-07-31T09:00:00");
+    expect(parseNaturalLanguageEvent("end of month report", NOW)?.startsAt).toBe("2026-07-31T09:00:00");
+    expect(parseNaturalLanguageEvent("end of next month report", NOW)?.startsAt).toBe("2026-08-31T09:00:00");
+  });
+
+  it("边界：1 月 31 天、平年 2 月 28、闰年 2 月 29、跨年顺延", () => {
+    expect(parseNaturalLanguageEvent("月底 交房租", "2026-01-30T10:00:00")?.startsAt).toBe("2026-01-31T09:00:00");
+    expect(parseNaturalLanguageEvent("月底 交房租", "2026-02-10T10:00:00")?.startsAt).toBe("2026-02-28T09:00:00");
+    expect(parseNaturalLanguageEvent("月底 交房租", "2028-02-10T10:00:00")?.startsAt).toBe("2028-02-29T09:00:00");
+    expect(parseNaturalLanguageEvent("下个月底 交房租", "2026-12-15T10:00:00")?.startsAt).toBe("2027-01-31T09:00:00");
+    expect(parseNaturalLanguageEvent("下个月底 交房租", "2026-01-31T10:00:00")?.startsAt).toBe("2026-02-28T09:00:00");
+  });
+
+  it("今天恰好是月底 → 就今天，不往下滚", () => {
+    expect(parseNaturalLanguageEvent("月底 交房租", "2026-07-31T10:00:00")?.startsAt).toBe("2026-07-31T09:00:00");
+  });
+
+  it("「每月底」是重复说法，这一步不许吃掉（重复锚不住月底，整体仍是 null）", () => {
+    expect(parseNaturalLanguageEvent("每月底 交房租", NOW)).toBeNull();
+  });
+
+  it("季度说法没有词表基础，暂不支持（要支持先定语义：季初 / 季末 / 具体哪天）", () => {
+    expect(parseNaturalLanguageEvent("下个季度 复盘", NOW)).toBeNull();
+    expect(parseNaturalLanguageEvent("季度末 总结", NOW)).toBeNull();
+  });
+});

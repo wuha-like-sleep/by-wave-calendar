@@ -80,6 +80,20 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/** 把若干 [start, end) 区段从文本里挖掉（重叠的先合并），每段换成一个空格。 */
+function removeSpans(text: string, spans: Array<readonly [number, number]>): string {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+  let out = "";
+  let cursor = 0;
+  for (const [start, end] of sorted) {
+    const s = Math.max(start, cursor);
+    if (end <= s) continue;
+    out += text.slice(cursor, s) + " ";
+    cursor = end;
+  }
+  return out + text.slice(cursor);
+}
+
 /** All patterns are matched case-insensitively and with Unicode property
  *  escapes (tok() uses \p{L}), so every regex is built through this. */
 function re(source: string): RegExp {
@@ -287,13 +301,20 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       const m = remaining.match(wdRe);
       if (!m) continue;
       let shift = 0;
+      // 命中的区段先记下来，最后一次性挖掉 —— 不能像以前那样先 replace 位移词
+      // 再 replace 星期词：「下周五」里两个词共用一个「周」字，先挖掉「下周」
+      // 就只剩一个「五」，第二个 replace 找不到「周五」，那个字会漏进标题
+      // （「下周五 9点 打球」的标题曾经是「五 打球」）。日期结果不受影响，
+      // 纯粹是标题被污染，所以这里只改挖法、不改任何日期语义。
+      const spans: Array<readonly [number, number]> = [[m.index!, m.index! + m[0].length]];
       // Look for a shift word immediately before, or anywhere in the text
       // for languages that put it after ("viernes de la semana que viene").
       for (const [shiftPattern, weeks] of WEEK_SHIFT) {
         const sRe = re(alt([shiftPattern]));
-        if (sRe.test(remaining)) {
+        const sm = remaining.match(sRe);
+        if (sm) {
           shift = weeks;
-          remaining = remaining.replace(sRe, " ");
+          spans.push([sm.index!, sm.index! + sm[0].length]);
           break;
         }
       }
@@ -302,15 +323,16 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       // standalone week-shift pass.
       if (shift === 0) {
         const nextRe = re(alt([NEXT_BEFORE_WEEKDAY.join("|")]));
-        if (nextRe.test(remaining)) {
+        const nm = remaining.match(nextRe);
+        if (nm) {
           shift = 7;
-          remaining = remaining.replace(nextRe, " ");
+          spans.push([nm.index!, nm.index! + nm[0].length]);
         }
       }
       let diff = (target - dow + 7) % 7;
       if (diff === 0) diff = 7; // upcoming, not today
       dateOffset = diff + shift;
-      remaining = remaining.replace(wdRe, " ");
+      remaining = removeSpans(remaining, spans);
       break;
     }
   }
@@ -394,6 +416,25 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       const tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + addMonths, Number(m[2]));
       dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
       remaining = remaining.replace(relMonthRe, " ");
+    }
+  }
+
+  // 1g2. "月底 / 下个月底 / 月末 / 월말 / end of month" → the last day of the
+  //      (possibly shifted) month. 裸「月底」永远是本月最后一天 —— 它不可能
+  //      已经过去，所以没有「过了往下滚」的问题；今天恰好是月底就是今天。
+  //      「每月底 / 每个月底」是重复说法，不许在这里吃掉：lookbehind 挡住
+  //      每 / 个月 直接领头的那两种，留给重复那一步（它目前锚不住月底，
+  //      整体返回 null —— 那是另一个缺口，不在这一步里假装解决）。
+  if (dateOffset === null) {
+    const monthEndRe = /(?<!每|个月|個月)(下下个月底|下下個月底|下个月底|下個月底|下月底|本月底|这个月底|這個月底|月底|月末|월말|end of next month|end of (?:the )?month)/i;
+    const m = remaining.match(monthEndRe);
+    if (m) {
+      const phrase = m[1]!;
+      const addMonths = phrase.includes("下下") ? 2
+        : phrase.startsWith("下") || /next/i.test(phrase) ? 1 : 0;
+      const tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + addMonths + 1, 0);
+      dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
+      remaining = remaining.replace(monthEndRe, " ");
     }
   }
 
