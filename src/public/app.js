@@ -172,6 +172,23 @@
     true, // capture phase — beat any per-form handler
   );
 
+  // Deep-linked <details> (e.g. Settings links to /support#api-token):
+  // browsers scroll to the element but leave it collapsed, so the link
+  // lands on a closed question. Open the targeted entry and re-scroll —
+  // opening it shifts the layout, so the native anchor jump ends up
+  // pointing at the wrong spot without the second scroll.
+  if (location.hash.length > 1) {
+    try {
+      const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+      if (target && target.tagName === "DETAILS" && !target.open) {
+        target.open = true;
+        target.scrollIntoView();
+      }
+    } catch {
+      // A malformed hash is not worth breaking page init for.
+    }
+  }
+
   // Buttons (outside <form>) with data-confirm: intercept clicks the
   // same way. Used for things like a standalone "delete" <button> that
   // triggers an HTMX request.

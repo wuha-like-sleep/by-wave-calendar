@@ -36,6 +36,9 @@ import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
+import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
+import { verifyTotpCode } from "../lib/mfa.js";
+import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
 import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
@@ -279,7 +282,7 @@ export async function webRoutes(app: FastifyInstance) {
   // views at legal/content/<page>/<locale>.ejs. The effective locale honors
   // ?lang= (so the native apps open these in the app's language), then cookie /
   // user / site default / Accept-Language. updatedDate tracks the release date.
-  const LEGAL_UPDATED = "2026-05-31";
+  const LEGAL_UPDATED = "2026-11-19";
   async function renderLegal(req: FastifyRequest, reply: FastifyReply, page: string, titleKey: string) {
     const settings = await getSettings();
     const user = await loadUserFromRequest(req);
@@ -2063,6 +2066,7 @@ export async function webRoutes(app: FastifyInstance) {
     const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     const caldavBaseUrl = `${baseUrl}/caldav/`;
     const siteSettings = await getSettings();
+    const apiTokens = await listApiTokensForUser(user.id);
 
     // Linked SSO identities + available providers (for the "登录方式" block).
     const { listIdentities } = await import("../lib/identities.js");
@@ -2090,6 +2094,20 @@ export async function webRoutes(app: FastifyInstance) {
       })),
       newAppPassword: newPlain,
       newAppLabel: newLabel,
+      apiTokens: apiTokens.map((a) => ({
+        ...a,
+        createdAtLocal: localTime(a.createdAt),
+        lastUsedAtLocal: a.lastUsedAt ? localTime(a.lastUsedAt) : null,
+        expiresAtLocal: a.expiresAt ? localTime(a.expiresAt) : null,
+        // Status display only — expired tokens stay listed (and revocable)
+        // instead of being silently auto-revoked.
+        expired: a.expiresAt ? a.expiresAt.getTime() < Date.now() : false,
+      })),
+      apiEnabled: siteSettings.apiEnabled,
+      apiTokenLimit: MAX_API_TOKENS_PER_USER,
+      apiTokenLimitReached: apiTokens.length >= MAX_API_TOKENS_PER_USER,
+      issuedToken: feedback.issuedToken ?? null,
+      issuedLabel: feedback.issuedLabel ?? null,
       caldavBaseUrl,
       appsEnabled: siteSettings.appsEnabled,
       linkedIdentities: linkedIdentities.map((i) => ({
@@ -2224,6 +2242,139 @@ export async function webRoutes(app: FastifyInstance) {
     // revoked password should fail next sync, not 60s from now.
     invalidateCalDavAuthCache(user.id);
     return redirectWith(reply, "/app/settings/devices", { success: tr(req, "flash.device.appPasswordRevoked") });
+  });
+
+  // Step-up check before minting a self-service API token. A token is a
+  // long-lived account-level credential, so a live session alone is not
+  // enough. passwordSet tells us which factor the account actually has:
+  // true = the user set a password themselves, false = SSO-created with an
+  // unusable random hash, null = legacy row we cannot tell apart — for null
+  // we accept whichever factor verifies and fail closed otherwise.
+  async function verifyTokenStepUp(
+    user: { passwordSet: boolean | null; passwordHash: string; mfaEnabled: boolean; mfaTotpSecret: string | null },
+    input: { currentPassword?: string; mfaCode?: string },
+    scope: "read" | "write",
+  ): Promise<"ok" | "failed" | "need_admin"> {
+    const mfaOk = !!(user.mfaEnabled && user.mfaTotpSecret && input.mfaCode && verifyTotpCode(user.mfaTotpSecret, input.mfaCode));
+    if (user.passwordSet === true) {
+      // Password is always required, read or write. A write token on an
+      // MFA account additionally needs a fresh TOTP code — it is the
+      // closest thing to handing out the account itself.
+      if (!input.currentPassword || !(await verifyPassword(input.currentPassword, user.passwordHash))) return "failed";
+      if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
+      return "ok";
+    }
+    if (user.passwordSet === false) {
+      // SSO-created account: the stored hash is unusable by design, so the
+      // only self-service factor is MFA. Without MFA there is nothing to
+      // step up with — an operator has to issue the token instead.
+      if (user.mfaEnabled && user.mfaTotpSecret) return mfaOk ? "ok" : "failed";
+      return "need_admin";
+    }
+    // passwordSet === null (legacy row): accept a verified password (with
+    // the same write+MFA rule as above), or a verified MFA code on its own.
+    if (input.currentPassword && (await verifyPassword(input.currentPassword, user.passwordHash))) {
+      if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
+      return "ok";
+    }
+    if (mfaOk) return "ok";
+    return "failed";
+  }
+
+  app.post("/app/settings/api-tokens", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const settings = await getSettings();
+    if (!settings.apiEnabled) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "api_disabled", via: "self_service" },
+      });
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.apiDisabled") });
+    }
+    const body = z
+      .object({
+        label: z.string().min(1).max(80),
+        scope: z.enum(["read", "write"]).default("read"),
+        expiresInDays: z.coerce.number().int().min(0).max(3650).default(365),
+        currentPassword: z.string().max(200).optional(),
+        mfaCode: z.string().max(16).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.invalidInput") });
+    }
+    if (isLocked(user)) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "account_locked", via: "self_service" },
+      });
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
+    }
+    const stepUp = await verifyTokenStepUp(user, body.data, body.data.scope);
+    if (stepUp !== "ok") {
+      // A wrong password / TOTP here is a failed authentication, same as
+      // at login or MFA verify — feed it into the shared lockout counter
+      // (site-configured threshold, 5 by default, then a timed lock).
+      if (stepUp === "failed") await recordFailedLogin(user);
+      // Denied attempts are audited too — a burst of step-up failures is
+      // exactly the trace you want when a session gets borrowed. Never put
+      // the attempted password/code in the details.
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: stepUp === "need_admin" ? "step_up_unavailable" : "step_up_failed", scope: body.data.scope, via: "self_service" },
+      });
+      if (stepUp === "need_admin") {
+        return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.needAdmin") });
+      }
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
+    }
+    if ((await countActiveApiTokensForUser(user.id)) >= MAX_API_TOKENS_PER_USER) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "limit_reached", via: "self_service" },
+      });
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.limitReached", { limit: MAX_API_TOKENS_PER_USER }) });
+    }
+    await resetFailedLogin(user.id);
+    const issued = await createApiToken({
+      userId: user.id,
+      label: body.data.label,
+      scope: body.data.scope,
+      expiresInDays: body.data.expiresInDays > 0 ? body.data.expiresInDays : null,
+    });
+    await audit(req, user.id, "api_token.create", {
+      targetType: "api_token", targetId: issued.id,
+      // Prefix only — the audit log must never carry the plain token.
+      details: { label: body.data.label, scope: body.data.scope, expiresInDays: body.data.expiresInDays, prefix: issued.prefix, via: "self_service" },
+    });
+    return redirectWith(reply, "/app/settings/devices#api-tokens", {
+      success: tr(req, "flash.apiToken.created"),
+      issuedToken: issued.plain,
+      issuedLabel: body.data.label,
+    });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/settings/api-tokens/:id/revoke", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/settings/devices");
+    const own = (await listApiTokensForUser(user.id)).find((t) => t.id === id.data);
+    const revoked = await revokeApiTokenForUser(user.id, id.data);
+    if (revoked) {
+      await audit(req, user.id, "api_token.revoke", {
+        targetType: "api_token", targetId: id.data,
+        details: { prefix: own?.prefix ?? null, via: "self_service" },
+      });
+    }
+    return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
   });
 
   app.post("/app/settings/theme", async (req, reply) => {
