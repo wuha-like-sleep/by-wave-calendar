@@ -37,6 +37,19 @@ class EventRepository(
     private val reminders = Reminders(context)
     private val prefs = SyncPreferences(context)
 
+    /** /events 窗口的 ETag 存档，按 (服务器, 账号, 窗口) 分键。服务端
+     *  的令牌由「可见日历集合 + 窗口 + 内容版本」算出，键里少了哪一维
+     *  都可能拿着别的窗口的令牌去问、换回一个假的 304。令牌只是上次
+     *  服务端发的那一个字符串：本地或服务端任何一处改过数据，服务端
+     *  的令牌都会变，下一次条件请求自然拿回 200，不存在「拿着旧令牌
+     *  永远看不到新数据」的风险。 */
+    private val etagPrefs by lazy {
+        context.getSharedPreferences("bwc-events-etag", Context.MODE_PRIVATE)
+    }
+
+    private fun etagKey(profile: Profile, fromIso: String, toIso: String) =
+        "${profile.serverUrl}|${profile.id}|$fromIso|$toIso"
+
     data class CacheSnapshot(
         val events: List<EventDTO>,
         val calendars: List<CalendarMeta>,
@@ -113,7 +126,21 @@ class EventRepository(
         val profile = profiles.active() ?: error("not signed in")
         val revision = snapshotGate.capture()
         val client = ApiClient.forProfile(profile, profiles)
-        val resp = client.api.events(from = fromIso, to = toIso)
+        // 条件请求：这个窗口的内容没变时服务端只回 304 空响应，
+        // 整个窗口（15 个月）的正文、JSON 解析、Room 全量替换、提醒
+        // 重排、系统日历镜像全部省掉。304 不是错误——信封拦截器对没
+        // 有 JSON 正文的响应直接放行，Retrofit 也不会替我们抛异常，
+        // 所以要在这里显式判状态码；非 304 的失败则手动抛回
+        // HttpException，保持和以前「events() 直接抛」一样的报错面。
+        val key = etagKey(profile, fromIso, toIso)
+        val httpResp = client.api.events(
+            from = fromIso, to = toIso,
+            ifNoneMatch = etagPrefs.getString(key, null),
+        )
+        if (httpResp.code() == 304) return@withLock
+        if (!httpResp.isSuccessful) throw retrofit2.HttpException(httpResp)
+        val resp = httpResp.body() ?: throw retrofit2.HttpException(httpResp)
+        httpResp.headers()["ETag"]?.let { etagPrefs.edit().putString(key, it).apply() }
         snapshotGate.applySnapshot(revision, relevant = { profiles.active()?.id == profile.id }) {
             currentCoroutineContext().ensureActive()
             val previousEvents = db.withTransaction {
