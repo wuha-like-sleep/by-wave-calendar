@@ -1517,14 +1517,20 @@ private fun CalendarEditDialog(
                         val desc = description.trim().ifBlank { null }
                         runCatching {
                             if (isEdit) {
-                                // PATCH: only send what could have changed.
+                                // PATCH 口径与 Android / 服务端对齐：只发与原值
+                                // 不同的字段。description 尤其不能走 desc——
+                                // 清空时 desc 是 null，而本端 JSON 配置
+                                // explicitNulls=false 会把 null 字段整个省掉，
+                                // 服务端收到「没这个字段」= 不改，旧描述永远
+                                // 清不掉。改后：清空时照发空串，服务端存为空。
                                 api.updateCalendar(
                                     id = existing!!.id,
                                     body = CalendarUpdateInput(
-                                        name = name.trim(),
-                                        description = desc,
-                                        color = color,
-                                        timezone = tz,
+                                        name = name.trim().takeIf { it != existing.name },
+                                        description = description.takeIf { it != existing.description.orEmpty() },
+                                        color = color.takeIf { it != existing.color },
+                                        // 时区没有「清空」的概念：空值仍旧不发。
+                                        timezone = tz?.takeIf { it != existing.timezone },
                                     ),
                                 )
                             } else {
@@ -2145,7 +2151,11 @@ private fun BookingCreateDialog(
                                     BookingLinkUpdateInput(
                                         slug = slug.trim(),
                                         title = title.trim(),
-                                        description = description.trim().ifBlank { null },
+                                        // 与原值不同才发：清空时照发空串。
+                                        // 以前 ifBlank{null} + explicitNulls=false
+                                        // 会把清空吞掉，旧描述清不掉（与日历
+                                        // 描述同一个坑）；服务端 PATCH 收 ""。
+                                        description = description.trim().takeIf { it != (existing.description ?: "") },
                                         calendarId = calendarId,
                                         durationMinutes = durationInt!!,
                                         minNoticeHours = minNoticeInt!!,

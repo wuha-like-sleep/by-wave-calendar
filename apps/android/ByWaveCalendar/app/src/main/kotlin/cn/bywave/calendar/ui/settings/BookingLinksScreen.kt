@@ -619,7 +619,11 @@ private fun CreateBookingLinkSheet(
                                         BookingLinkUpdateInput(
                                             slug = slug.trim(),
                                             title = title.trim(),
-                                            description = description.takeIf { it.isNotBlank() },
+                                            // 与原值不同才发：清空时照发空串。
+                                            // 以前 takeIf{isNotBlank} 把清空吞成
+                                            // null→字段省略，服务端当作不改，
+                                            // 旧描述清不掉（服务端 PATCH 收 ""）。
+                                            description = description.takeIf { it != existing.description.orEmpty() },
                                             calendarId = calendarId,
                                             durationMinutes = durationInt ?: 30,
                                             minNoticeHours = minNoticeInt ?: 0,

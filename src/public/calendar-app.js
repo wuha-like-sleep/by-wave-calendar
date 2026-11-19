@@ -2430,18 +2430,21 @@
     e.preventDefault();
     if (!currentMenuCalId) return;
     const form = e.target;
-    const body = {
-      name: form.elements.name.value.trim(),
-      description: form.elements.description.value,
-      color: form.elements.color.value,
-      timezone: form.elements.timezone.value,
-    };
-    // Skip empty optional fields so we never overwrite with the empty
-    // string — the server treats "" and absent the same for description,
-    // but timezone "" would change the calendar default and isn't what
-    // the user means.
-    if (!body.description) delete body.description;
-    if (!body.timezone) delete body.timezone;
+    // 只发送真正改过的字段（与 Android 编辑日历、服务端 PATCH 的口径
+    // 一致：缺席 = 不改）。关键在 description：以前这里把空描述直接
+    // 删掉不发，于是「清空描述」永远存不进去——服务端对 PATCH 里
+    // 出现的 "" 是照单全收存为空的，缺席才是不动。timezone 例外：
+    // 它没有「清空」的概念，空值仍旧不发。
+    const orig = editCalOriginal || {};
+    const body = {};
+    const name = form.elements.name.value.trim();
+    if (name !== (orig.name || "")) body.name = name;
+    const description = form.elements.description.value;
+    if (description !== (orig.description || "")) body.description = description;
+    const color = form.elements.color.value;
+    if (color !== (orig.color || "")) body.color = color;
+    const timezone = form.elements.timezone.value;
+    if (timezone && timezone !== (orig.timezone || "")) body.timezone = timezone;
     try {
       const resp = await fetch(`/api/calendars/${currentMenuCalId}`,
         fetchOpts({ method: "PATCH", body: JSON.stringify(body) }));
