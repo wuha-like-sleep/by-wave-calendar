@@ -12,7 +12,8 @@ import { pushToUser } from "./push.js";
 
 export type NotificationType =
   | "calendar_invitation" | "booking_created" | "booking_cancelled"
-  | "event_updated" | "event_cancelled" | "security_alert";
+  | "event_updated" | "event_cancelled" | "security_alert"
+  | "event_invitation" | "rsvp_response" | "time_proposal" | "time_proposal_result";
 
 export type NewNotificationInput = {
   userId: string;

@@ -26,16 +26,16 @@ type Actor = { id: string; email: string; displayName: string | null };
 type EventRow = typeof schema.events.$inferSelect;
 type Recipient = { id: string; locale: string | null; notifyEventChanges: boolean };
 
-async function siteDefaultLocale(): Promise<string | null> {
+export async function siteDefaultLocale(): Promise<string | null> {
   return (await getSettings().catch(() => null))?.defaultLocale ?? null;
 }
 
-function recipientLocale(userLocale: string | null, siteDefault: string | null): LocaleCode {
+export function recipientLocale(userLocale: string | null, siteDefault: string | null): LocaleCode {
   return isValidLocale(userLocale) ? userLocale : isValidLocale(siteDefault) ? siteDefault : "zh-CN";
 }
 
 /** 事件的展示时区：事件自带时区优先，其次日历时区；全天事件按 UTC 日期。 */
-async function eventTimeZone(event: EventRow): Promise<string> {
+export async function eventTimeZone(event: EventRow): Promise<string> {
   if (event.allDay) return "UTC";
   const extra = event.extra as { timezone?: unknown } | null;
   const own = canonicalTimeZone(extra?.timezone);
@@ -48,7 +48,7 @@ async function eventTimeZone(event: EventRow): Promise<string> {
   return canonicalTimeZone(cal?.timezone) ?? "UTC";
 }
 
-function formatWhen(locale: LocaleCode, event: EventRow, timeZone: string): string {
+export function formatWhen(locale: LocaleCode, event: EventRow, timeZone: string): string {
   const tz = event.allDay ? "UTC" : timeZone;
   const date = new Intl.DateTimeFormat(locale, {
     timeZone: tz, month: "2-digit", day: "2-digit", weekday: "short",
