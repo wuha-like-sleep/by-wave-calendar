@@ -43,6 +43,28 @@ export function sanitizeReturnTo(raw: unknown): string | null {
   return raw.split("#")[0] ?? null;
 }
 
+/**
+ * 同源站内路径校验 —— 给「原地打转」型的回跳用（典型：语言切换器切完
+ * 回到刚才那一页）。和 sanitizeReturnTo 的区别是**不套登录白名单**：
+ * 登录回跳只许去 /app /admin 等几个入口，是登录流程自己的语义；而语言
+ * 切换器挂在每一页上（首页、下载、支持、法律、重置密码……），套那个
+ * 白名单的结果是：在任何公开页切语言都判「不合法」→ 兜底去 /app →
+ * 未登录用户被甩到登录页，等于「一切语言就跳走」。这里保留的都是
+ * 防开放重定向/防响应头注入的判据：必须 "/" 开头、挡 "//" 与 "/\"、
+ * 挡反斜杠与控制字符、长度上限、去掉片段。
+ */
+export function sanitizeInternalPath(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  if (raw.length === 0 || raw.length > 500) return null;
+  if (!raw.startsWith("/")) return null;
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return null;
+  if (raw.includes("\\")) return null;
+  // 控制字符（含 CR/LF）混进 Location 头就是响应头注入。
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(raw)) return null;
+  return raw.split("#")[0] ?? null;
+}
+
 /** 把「他本来要去哪」写进签名 cookie。在把人送去 /login 之前调。 */
 export function rememberReturnTo(reply: FastifyReply, path: string | null): void {
   if (!path) return;

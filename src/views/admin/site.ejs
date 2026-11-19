@@ -79,7 +79,7 @@
               class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
         <% siteLocaleOptions.forEach(function(opt){ %>
           <option value="<%= opt.code %>" <%= settings.defaultLocale === opt.code ? "selected" : "" %>>
-            <%= opt.label %><% if (opt.code !== "auto" && currentLocale === "en") { %> (<%= opt.labelEn %>)<% } %>
+            <%= localeLabel(opt, true) %>
           </option>
         <% }) %>
       </select>

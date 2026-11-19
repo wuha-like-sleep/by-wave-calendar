@@ -1,20 +1,21 @@
-<%# Compact header language switcher. POSTs to /locale (sets bwc_locale
-    cookie, works for logged-out users too) and bounces back to the current
-    page via return_to. csrfToken / currentPath / locales / currentLocale are
-    global view locals (src/server.ts). onchange auto-submit — inline JS is
-    permitted by the site CSP (script-src-attr 'unsafe-inline'). %>
+<%# Compact language switcher. POSTs to /locale (sets the bwc_locale
+    cookie; works logged-out too) and bounces back to the current page
+    via return_to. csrfToken / currentPath / locales / currentLocale /
+    localeLabel are global view locals (src/server.ts). onchange
+    auto-submit — inline JS is permitted by the site CSP
+    (script-src-attr 'unsafe-inline').
+    Option labels come from localeLabel() — the one site-wide rule
+    (native name always, no flag icons; see lib/i18n.ts). Callers with
+    room to spare (the mobile menu) pass `wide: true` to lift the
+    compact max-width cap that keeps the cramped logged-out top bar
+    from overflowing at 390px. %>
 <form method="post" action="/locale" class="m-0">
   <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
   <input type="hidden" name="return_to" value="<%= typeof currentPath !== 'undefined' ? currentPath : '' %>" />
-  <%# Option labels: native names (label) in CJK UIs; in non-CJK UIs the
-      Han/Kana-scripted names (简体中文 / 繁體中文 / 日本語) switch to their
-      English form (labelEn) so the chrome stays script-consistent —
-      Latin-scripted native names (Deutsch, Español…) are kept as-is. %>
-  <% const uiIsCjk = typeof currentLocale !== 'undefined' && ['zh-CN', 'zh-TW', 'ja'].includes(currentLocale); %>
   <select name="locale" data-bwc-autosubmit aria-label="<%= t("nav.languageLabel") %>"
-          class="max-w-24 sm:max-w-none text-sm rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 cursor-pointer">
+          class="<%= (typeof wide !== 'undefined' && wide) ? 'w-full max-w-xs' : 'max-w-24 sm:max-w-none' %> text-sm rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-100 cursor-pointer">
     <% (typeof locales !== 'undefined' ? locales : []).forEach(function(l){ %>
-      <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= (uiIsCjk || !/[぀-ヿ一-鿿]/.test(l.label)) ? l.label : l.labelEn %></option>
+      <option value="<%= l.code %>" <%= (typeof currentLocale !== 'undefined' && currentLocale === l.code) ? 'selected' : '' %>><%= (typeof localeLabel !== 'undefined') ? localeLabel(l) : l.label %></option>
     <% }) %>
   </select>
 </form>

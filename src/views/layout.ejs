@@ -198,8 +198,17 @@
     <% if (typeof bareLayout !== 'undefined' && bareLayout) { %>
       <%# Single-purpose pages (e.g. password reset): NO header nav, NO footer,
           NO command palette — just a non-clickable brand mark + the body, so the
-          page can do exactly one thing and offers no way to navigate elsewhere. %>
-      <main class="flex-1 mx-auto w-full max-w-md px-4 py-12 sm:py-20">
+          page can do exactly one thing and offers no way to navigate elsewhere.
+          The one exception is the language switcher, placed AFTER the body:
+          these are exactly the pages a user lands on from an email (reset /
+          verify / login challenge), quite possibly in a language they don't
+          read, and with no nav they'd have no way to change it. It navigates
+          nowhere — it only re-renders this same page in another language.
+          After, not before, on purpose: the page's own form must stay the
+          FIRST form in DOM order (the native-login consent flow — and
+          form-autofill heuristics — key on that), so the switcher's form
+          must not jump the queue. %>
+      <main class="flex-1 mx-auto w-full max-w-md px-4 pt-12 sm:pt-20 pb-4">
         <div class="mb-6 flex items-center justify-center gap-2.5">
           <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
             <img src="<%= siteLogoUrl %>" alt="" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200" />
@@ -211,6 +220,9 @@
         <%- include('partials/flash', { flash: flash }) %>
         <%- body %>
       </main>
+      <div class="mx-auto w-full max-w-md px-4 pb-8 flex justify-end">
+        <%- include('partials/lang-switcher') %>
+      </div>
     <% } else { %>
     <%- include('partials/nav', { user: user, siteName: typeof siteName !== 'undefined' ? siteName : 'ByWave-Calendar', siteLogoUrl: typeof siteLogoUrl !== 'undefined' ? siteLogoUrl : null }) %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>

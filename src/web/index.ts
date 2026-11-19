@@ -57,6 +57,7 @@ import {
   RETURN_TO_TTL_S,
   consumeReturnTo,
   returnToOrApp,
+  sanitizeInternalPath,
   sanitizeReturnTo,
 } from "../lib/return_to.js";
 
@@ -429,10 +430,13 @@ export async function webRoutes(app: FastifyInstance) {
   app.get("/support", (req, reply) => renderLegal(req, reply, "support", "legal.support.title"));
 
   // -------- Auth pages --------
-  // -------- Anonymous language switcher --------
-  // Used by the 🌐 picker on /login (visitors who haven't signed in).
-  // Logged-in users have a separate, persistent endpoint at
-  // /app/settings/locale that also writes to user.locale.
+  // -------- Language switcher (header / mobile menu / bare pages) --------
+  // The one switcher partial (views/partials/lang-switcher.ejs) posts
+  // here from every page, logged in or out. It only sets the bwc_locale
+  // cookie — deliberately NOT user.locale: the cookie is the "right
+  // now, this browser" override and outranks the saved preference in
+  // resolveLocale. The settings page has a separate, persistent
+  // endpoint at /app/settings/locale that also writes to user.locale.
   // CSRF protected to prevent a malicious page from setting the cookie
   // for our domain via a hidden form post.
   app.post("/locale", async (req, reply) => {
@@ -440,7 +444,7 @@ export async function webRoutes(app: FastifyInstance) {
     const { isValidLocale, LOCALE_COOKIE, LOCALE_COOKIE_TTL_S } = await import("../lib/i18n.js");
     const body = z.object({
       locale: z.string().max(20),
-      return_to: z.string().max(200).optional(),
+      return_to: z.string().max(500).optional(),
     }).safeParse(req.body);
     if (!body.success || !isValidLocale(body.data.locale)) {
       return reply.redirect("/login");
@@ -449,10 +453,15 @@ export async function webRoutes(app: FastifyInstance) {
       httpOnly: false, sameSite: "lax", secure: env.NODE_ENV === "production",
       path: "/", maxAge: LOCALE_COOKIE_TTL_S,
     });
-    // Bounce back to the page they switched language on. sanitizeReturnTo
-    // only allows same-origin internal paths (no open redirect); falls back
-    // to /app (which itself bounces unauth'd users to /login).
-    const r = sanitizeReturnTo(body.data.return_to);
+    // Bounce back to the page they switched language on. This must NOT
+    // use sanitizeReturnTo: that allowlist is the post-login one (only
+    // /app, /admin, …), so switching from any public page — home,
+    // download, support, legal, password reset — "failed" validation
+    // and dumped the user on /app (and from there, logged-out users
+    // onto /login). sanitizeInternalPath keeps the open-redirect
+    // guards (leading slash, no "//", no backslashes/control chars)
+    // without the login-flow prefix list. Falls back to /app.
+    const r = sanitizeInternalPath(body.data.return_to);
     return reply.redirect(r ?? "/app");
   });
 
