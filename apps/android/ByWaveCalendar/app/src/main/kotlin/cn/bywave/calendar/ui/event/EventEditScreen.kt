@@ -29,8 +29,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -40,6 +42,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -75,6 +78,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseHex
 import cn.bywave.calendar.ui.calendar.rememberCalendarFormats
 import java.time.LocalDate
@@ -250,6 +254,13 @@ fun EventEditScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // Category — the web editor's value set, stored in
+            // extra.category. "" is an explicit "none" (sends null).
+            CategoryRow(
+                selected = state.category,
+                onSelected = vm::onCategory,
+            )
+
             // All-day toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -273,6 +284,34 @@ fun EventEditScreen(
                 allDay = state.allDay,
                 onChange = { date, time -> vm.onEnd(date, time) },
             )
+
+            // Reminder — event-level (extra.alarms), value sets differ
+            // for timed vs all-day; see EventEditViewModel's trigger
+            // lists (copied from the server's reminder_triggers.ts).
+            ReminderRow(
+                allDay = state.allDay,
+                selected = state.reminder,
+                onSelected = vm::onReminder,
+            )
+
+            // Recurrence — RRULE editor (freq / interval / end / BYDAY).
+            // Unmodelable rules pass through untouched; see
+            // RruleEditor.kt. On edit saves the scope picker still
+            // applies first (it decides series vs instance vs future);
+            // the rule itself only goes out when it actually changed.
+            RruleEditorSection(
+                state = state.rruleState,
+                onChange = vm::onRruleChange,
+            )
+
+            // Deleted occurrences of this series (edit mode) — each
+            // can be restored, which removes it from exdates on save.
+            if (state.isEdit && state.exdates.isNotEmpty()) {
+                ExdatesSection(
+                    exdates = state.exdates,
+                    onRestore = vm::onRestoreExdate,
+                )
+            }
 
             OutlinedTextField(
                 value = state.location,
@@ -402,6 +441,61 @@ fun EventEditScreen(
                 },
             )
         }
+    }
+
+    // Conflict confirmation — the save is paused in the VM
+    // (state.pendingConflicts) and nothing has been written yet.
+    // List at most 3 titles and fold the rest into a count, matching
+    // the web editor's prompt.
+    if (state.pendingConflicts.isNotEmpty()) {
+        val conflicts = state.pendingConflicts
+        val formats = rememberCalendarFormats()
+        AlertDialog(
+            onDismissRequest = { vm.dismissConflicts() },
+            title = { Text(stringResource(R.string.conflict_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(stringResource(R.string.conflict_intro))
+                    conflicts.take(3).forEach { c ->
+                        val range = runCatching {
+                            val start = java.time.Instant.parse(c.startsAt)
+                                .atZone(ZoneId.systemDefault()).toLocalDateTime()
+                            val end = java.time.Instant.parse(c.endsAt)
+                                .atZone(ZoneId.systemDefault()).toLocalDateTime()
+                            formats.monthDayYear.format(start.toLocalDate()) + " " +
+                                formats.time.format(start) + " – " + formats.time.format(end)
+                        }.getOrNull()
+                        Column {
+                            Text(c.summary, style = MaterialTheme.typography.bodyMedium)
+                            if (range != null) {
+                                Text(
+                                    range,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    if (conflicts.size > 3) {
+                        Text(
+                            stringResource(R.string.conflict_more, conflicts.size - 3),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.confirmSaveDespiteConflicts() }) {
+                    Text(stringResource(R.string.conflict_save_anyway))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissConflicts() }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
     }
 
     // Recurring-event scope picker for SAVE.
@@ -569,3 +663,148 @@ private fun DateTimeRow(
 }
 
 
+
+
+/** Label resource for one reminder trigger value. Both value sets
+ *  (timed + all-day) share this one mapping — the trigger literals
+ *  don't overlap except "", which is "none" in both. */
+private fun reminderLabelRes(trigger: String): Int = when (trigger) {
+    "-PT0M" -> R.string.reminder_at_start
+    "-PT5M" -> R.string.reminder_5m
+    "-PT15M" -> R.string.reminder_15m
+    "-PT30M" -> R.string.reminder_30m
+    "-PT1H" -> R.string.reminder_1h
+    "-PT2H" -> R.string.reminder_2h
+    "-P1D" -> R.string.reminder_1d
+    "-P1W" -> R.string.reminder_1w
+    "PT9H" -> R.string.reminder_allday_same
+    "-PT15H" -> R.string.reminder_allday_before
+    "-P1DT15H" -> R.string.reminder_allday_2d
+    "-P6DT15H" -> R.string.reminder_allday_week
+    else -> R.string.reminder_none
+}
+
+@Composable
+private fun ReminderRow(
+    allDay: Boolean,
+    selected: String,
+    onSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = reminderTriggersFor(allDay)
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.event_reminder_label), modifier = Modifier.weight(1f))
+            Text(text = stringResource(reminderLabelRes(selected)), color = mutedTextColor())
+            Spacer(Modifier.size(8.dp))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = mutedTextColor())
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            for (trigger in options) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(reminderLabelRes(trigger))) },
+                    onClick = {
+                        onSelected(trigger)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+
+/** The web editor's category values (extra.category). "" = none. */
+private val CATEGORY_OPTIONS: List<Pair<String, Int>> = listOf(
+    "" to R.string.category_none,
+    "work" to R.string.category_work,
+    "personal" to R.string.category_personal,
+    "family" to R.string.category_family,
+    "health" to R.string.category_health,
+    "travel" to R.string.category_travel,
+    "meeting" to R.string.category_meeting,
+)
+
+@Composable
+private fun CategoryRow(
+    selected: String,
+    onSelected: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    // An unknown stored value (set by another client) still displays —
+    // as itself — instead of pretending the event has no category.
+    val currentLabel = CATEGORY_OPTIONS.firstOrNull { it.first == selected }
+        ?.let { stringResource(it.second) }
+        ?: selected.ifBlank { stringResource(R.string.category_none) }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.event_category_label), modifier = Modifier.weight(1f))
+            Text(text = currentLabel, color = mutedTextColor())
+            Spacer(Modifier.size(8.dp))
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = mutedTextColor())
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            for ((value, labelRes) in CATEGORY_OPTIONS) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(labelRes)) },
+                    onClick = {
+                        onSelected(value)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** 「已删除的单次」— occurrences the user deleted one by one from this
+ *  series (the master's exdates). Restoring removes the entry from the
+ *  list; the change is sent with the next save. */
+@Composable
+private fun ExdatesSection(
+    exdates: List<String>,
+    onRestore: (String) -> Unit,
+) {
+    val formats = rememberCalendarFormats()
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.exdates_title),
+            style = MaterialTheme.typography.bodyMedium,
+            color = mutedTextColor(),
+        )
+        exdates.forEach { iso ->
+            val label = runCatching {
+                val ldt = java.time.Instant.parse(iso)
+                    .atZone(ZoneId.systemDefault()).toLocalDateTime()
+                formats.monthDayYear.format(ldt.toLocalDate()) + " " + formats.time.format(ldt)
+            }.getOrDefault(iso)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, modifier = Modifier.weight(1f))
+                TextButton(onClick = { onRestore(iso) }) {
+                    Text(stringResource(R.string.exdates_restore))
+                }
+            }
+        }
+    }
+}

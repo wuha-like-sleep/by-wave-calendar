@@ -35,4 +35,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">システムに従う · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">認証アプリに下のシークレットを手入力するか、otpauth リンクを取り込んでから、アプリに表示される6桁のコードを入力してください。</string>
+    <string name="mfa_settings_secret_label">シークレット</string>
+    <string name="mfa_settings_otpauth_label">otpauth リンク</string>
+    <string name="mfa_settings_code_label">確認コード</string>
+    <string name="mfa_settings_verify_button">確認して有効にする</string>
+    <string name="mfa_settings_enabled_note">二段階認証は有効です。サインイン時に認証アプリのコードが必要です。</string>
+    <string name="mfa_settings_backup_title">バックアップコードを保存</string>
+    <string name="mfa_settings_backup_warn">これらのバックアップコードは一度しか表示されません。認証アプリを失った場合、各コードで一度だけサインインできます。安全な場所に保管してください。</string>
+    <string name="mfa_settings_backup_copy_all">バックアップコードをすべてコピー</string>
+    <string name="mfa_settings_backup_done">保存しました</string>
+    <string name="mfa_settings_copied">コピーしました</string>
+    <string name="mfa_settings_disable_button">二段階認証を無効にする</string>
+    <string name="mfa_settings_failed">二段階認証の操作に失敗しました</string>
+    <string name="mfa_settings_disabled_toast">二段階認証を無効にしました</string>
+    <string name="mfa_settings_load_failed">二段階認証の状態を読み込めませんでした</string>
+    <string name="settings_devices_row">サインイン中のデバイス</string>
+    <string name="devices_current_badge">このデバイス</string>
+    <string name="devices_last_seen">最終アクティブ：%1$s</string>
+    <string name="devices_revoke">解除</string>
+    <string name="devices_revoke_title">このデバイスを解除しますか？</string>
+    <string name="devices_revoke_message">「%1$s」はサインアウトされ、続けて使うには再びサインインが必要です。</string>
+    <string name="devices_revoke_current_message">これは現在のデバイスです。解除すると、このデバイスはすぐにサインアウトされます。</string>
+    <string name="devices_revoked">デバイスを解除しました</string>
+    <string name="devices_revoke_failed">デバイスを解除できませんでした</string>
+    <string name="devices_empty">デバイスはまだありません</string>
+    <string name="devices_load_failed">デバイス一覧を読み込めませんでした</string>
+    <string name="devices_unknown_label">名前のないデバイス</string>
+    <string name="subs_title">カレンダーの購読</string>
+    <string name="subs_desc">外部の .ics URL を購読すると、イベントが定期的にこのカレンダーへ同期されます。</string>
+    <string name="subs_empty">購読はまだありません</string>
+    <string name="subs_url_label">購読 URL（.ics リンク）</string>
+    <string name="subs_label_label">ラベル（任意）</string>
+    <string name="subs_add">購読を追加</string>
+    <string name="subs_added">購読を追加しました</string>
+    <string name="subs_added_first_sync_failed">購読は保存されましたが、初回同期に失敗しました：%1$s</string>
+    <string name="subs_add_failed">購読を追加できませんでした</string>
+    <string name="subs_refresh">今すぐ更新</string>
+    <string name="subs_refreshed">購読を更新しました</string>
+    <string name="subs_refresh_failed">購読を更新できませんでした</string>
+    <string name="subs_delete_title">この購読を削除しますか？</string>
+    <string name="subs_delete_message">削除すると、この購読は今後同期されなくなります。</string>
+    <string name="subs_deleted">購読を削除しました</string>
+    <string name="subs_delete_failed">購読を削除できませんでした</string>
+    <string name="subs_status_events">%1$d 件のイベント</string>
+    <string name="subs_status_error">前回の同期に失敗</string>
+    <string name="subs_status_never">まだ同期されていません</string>
+    <string name="subs_status_ok">前回の同期に成功</string>
+    <string name="subs_load_failed">購読を読み込めませんでした</string>
+    <string name="export_ics">.ics をエクスポート</string>
+    <string name="export_failed">エクスポートに失敗しました</string>
+    <string name="export_done">%1$s をエクスポートしました</string>
 </resources>

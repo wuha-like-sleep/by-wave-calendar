@@ -118,6 +118,8 @@ fun SettingsScreen(
     }
     val prefs by prefsStore.flow.collectAsState(initial = cn.bywave.calendar.data.store.SyncPrefs())
     var showCalendarConnections by remember { mutableStateOf(false) }
+    var showMfaSettings by remember { mutableStateOf(false) }
+    var showDevices by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -149,6 +151,20 @@ fun SettingsScreen(
 
     if (showCalendarConnections && active != null) {
         CalendarConnectionsScreen(active, onBack = { showCalendarConnections = false })
+        return
+    }
+    if (showMfaSettings && active != null) {
+        MfaSettingsScreen(onBack = { showMfaSettings = false })
+        return
+    }
+    if (showDevices && active != null) {
+        DevicesScreen(
+            onBack = { showDevices = false },
+            // Revoking the CURRENT device kills this phone's refresh
+            // token server-side — leave via the same sign-out path as
+            // 退出登录 instead of stranding a zombie session.
+            onSignOut = onSignOut,
+        )
         return
     }
     Scaffold(
@@ -188,6 +204,23 @@ fun SettingsScreen(
                 ActionRow(
                     label = stringResource(R.string.settings_change_password),
                     onClick = { showChangePassword = true },
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
+                HorizontalDivider()
+                // Two-step verification management — the /account/mfa/*
+                // endpoints existed, settings just had no entry. The
+                // page probes setup to learn the current state (no
+                // mfaEnabled field is exposed to native clients).
+                ActionRow(
+                    label = stringResource(R.string.mfa_title),
+                    onClick = { showMfaSettings = true },
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
+                HorizontalDivider()
+                // Signed-in devices — list + revoke, incl. this phone.
+                ActionRow(
+                    label = stringResource(R.string.settings_devices_row),
+                    onClick = { showDevices = true },
                     trailingIcon = Icons.Default.ChevronRight,
                 )
             }

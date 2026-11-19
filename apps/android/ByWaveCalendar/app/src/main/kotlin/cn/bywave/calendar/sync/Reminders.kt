@@ -34,8 +34,12 @@ import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.MainActivity
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
+import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 class Reminders(private val context: Context) {
 
@@ -43,69 +47,148 @@ class Reminders(private val context: Context) {
 
     /**
      * Cancel + reschedule all reminders for [profile] from the given
-     * [events]. Caller passes `leadMinutes` from SyncPreferences.
+     * [events]. Caller passes `leadMinutes` from SyncPreferences (the
+     * global fallback) and the profile's [calendars] (an all-day
+     * event-level alarm anchors in its calendar's timezone when the
+     * event itself carries none).
+     *
+     * 事件级优先：extra.alarms 非空就按 alarms 逐条排（见 alarmFireTimes），
+     * 全局提前量只在事件一条 alarms 都没有时才用 —— 和网页/服务端
+     * reminder_triggers.ts 的口径一致，否则用户在事件上设的提醒会被
+     * 全局设置悄悄盖掉。
+     *
      * No-op when notification permission isn't granted.
      */
-    fun reschedule(profile: Profile, events: List<EventDTO>, leadMinutes: Int) {
+    fun reschedule(
+        profile: Profile,
+        events: List<EventDTO>,
+        leadMinutes: Int,
+        calendars: List<CalendarMeta> = emptyList(),
+    ) {
         if (!isAvailable()) return
 
-        // Best-effort cancel: we re-use the stable hash of
-        // (profileId + event id + occurrence start) for each PendingIntent
-        // request code, so cancel just iterates through known events.
         val now = System.currentTimeMillis()
         val leadMs = leadMinutes * 60_000L
+        val calendarZones = calendars.associate { it.id to it.timezone }
+
+        // Cancel pass first, over EVERY slot an event could occupy.
+        // Slot identity is (profile, event, occurrence start, slot) —
+        // NOT derived from the alarm contents — so cancelling works
+        // even for cache rows whose extra was stripped or has changed
+        // since the alarms were scheduled (edits, remote deletes).
+        for (ev in events) {
+            for (slot in ALL_SLOTS) {
+                val cancelIntent = buildPendingIntent(
+                    reminderRequestCode(profile.id, ev.id, ev.startsAt, slot),
+                    profile.id, ev,
+                    flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                )
+                if (cancelIntent != null) alarms.cancel(cancelIntent)
+            }
+        }
 
         var scheduled = 0
         for (ev in events) {
-            if (ev.allDay) continue
-            val start = runCatching { Instant.parse(ev.startsAt).toEpochMilli() }.getOrNull() ?: continue
-            val fireAt = start - leadMs
-            val requestCode = reminderRequestCode(profile.id, ev.id, ev.startsAt)
-
-            // Cancel any previously scheduled one for this slot first
-            // (handles event time edits — old time's alarm goes away,
-            // new time gets a fresh one below).
-            val cancelIntent = buildPendingIntent(requestCode, profile.id, ev, flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-            if (cancelIntent != null) alarms.cancel(cancelIntent)
-
-            if (fireAt <= now) continue       // already past
             if (scheduled >= MAX_PENDING) break
-
-            val pending = buildPendingIntent(
-                requestCode, profile.id, ev,
-                flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            ) ?: continue
-            try {
-                alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAt, pending)
-                scheduled++
-            } catch (_: SecurityException) {
-                // Android 12+ requires SCHEDULE_EXACT_ALARM for some
-                // setExact calls; fall back to setWindow with a tight
-                // tolerance so we still fire approximately on time. Log it so
-                // a "my reminder was a few minutes late" report is diagnosable
-                // instead of a silent downgrade.
-                // 事件 id 属于用户数据，正式包不往 logcat 里写。
-                if (BuildConfig.DEBUG) {
-                    Log.w("Reminders", "SCHEDULE_EXACT_ALARM denied; using setWindow for event ${ev.id}")
+            val alarmsForEvent = ev.extra?.alarms?.filter { it.trigger.isNotBlank() }
+            val fireTimes = alarmFireTimes(ev, leadMs, calendarZones[ev.calendarId])
+            for ((index, fireAt) in fireTimes.withIndex()) {
+                if (fireAt <= now) continue       // already past
+                if (scheduled >= MAX_PENDING) break
+                // Event-level alarms occupy slots 0..7 by position; the
+                // global fallback occupies slot -1 (FALLBACK_SLOT).
+                val slot = if (alarmsForEvent.isNullOrEmpty()) FALLBACK_SLOT else index
+                val pending = buildPendingIntent(
+                    reminderRequestCode(profile.id, ev.id, ev.startsAt, slot),
+                    profile.id, ev,
+                    flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ) ?: continue
+                try {
+                    alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, fireAt, pending)
+                    scheduled++
+                } catch (_: SecurityException) {
+                    // Android 12+ requires SCHEDULE_EXACT_ALARM for some
+                    // setExact calls; fall back to setWindow with a tight
+                    // tolerance so we still fire approximately on time. Log it so
+                    // a "my reminder was a few minutes late" report is diagnosable
+                    // instead of a silent downgrade.
+                    // 事件 id 属于用户数据，正式包不往 logcat 里写。
+                    if (BuildConfig.DEBUG) {
+                        Log.w("Reminders", "SCHEDULE_EXACT_ALARM denied; using setWindow for event ${ev.id}")
+                    }
+                    alarms.setWindow(AlarmManager.RTC_WAKEUP, fireAt, 60_000L, pending)
+                    scheduled++
                 }
-                alarms.setWindow(AlarmManager.RTC_WAKEUP, fireAt, 60_000L, pending)
-                scheduled++
             }
         }
     }
 
     /** Cancel everything tied to this profile. Called on sign-out
      *  / disable. We can only cancel PendingIntents we can rebuild,
-     *  so callers must pass the same events that were scheduled. */
+     *  so callers must pass the same events that were scheduled.
+     *  Every slot is cancelled (see reschedule's slot note), so this
+     *  works even when the passed rows have no extra/alarms left. */
     fun cancelAll(profile: Profile, events: List<EventDTO>) {
         for (ev in events) {
-            val requestCode = reminderRequestCode(profile.id, ev.id, ev.startsAt)
-            val intent = buildPendingIntent(
-                requestCode, profile.id, ev,
-                flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
-            ) ?: continue
-            alarms.cancel(intent)
+            for (slot in ALL_SLOTS) {
+                val intent = buildPendingIntent(
+                    reminderRequestCode(profile.id, ev.id, ev.startsAt, slot),
+                    profile.id, ev,
+                    flags = PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+                ) ?: continue
+                alarms.cancel(intent)
+            }
         }
+    }
+
+    /**
+     * 某个事件要响的时刻（epoch millis），按优先级：
+     *
+     *   1. extra.alarms 非空 → 逐条解析 trigger：
+     *      · 定时事件：startsAt + 有符号时长（绝对时长，跨夏令时不变）。
+     *      · 全天事件：基准是事件时区（extra.timezone → 日历时区 → 系统
+     *        时区）当天 00:00 的**墙上时间**，再加有符号时长 —— PT9H
+     *        永远落在当地 09:00，哪怕当天是夏令时切换日。日期取
+     *        startsAt 的 UTC 日期（全天事件的 startsAt 是 UTC 零点）。
+     *      · trigger 解析不了的那条跳过，不连累同一事件的其它条。
+     *   2. 没有 alarms → 回落全局提前量，且只对定时事件（全天事件套
+     *      「提前 N 分钟」会落在前一天的奇怪时刻，这是原有行为，
+     *      保持不变）。
+     */
+    private fun alarmFireTimes(ev: EventDTO, leadMs: Long, calendarTimezone: String?): List<Long> {
+        val alarms = ev.extra?.alarms?.filter { it.trigger.isNotBlank() }
+        if (!alarms.isNullOrEmpty()) {
+            return alarms.mapNotNull { alarm ->
+                val duration = parseReminderTriggerDuration(alarm.trigger)
+                    ?: return@mapNotNull null
+                if (ev.allDay) {
+                    val date = runCatching {
+                        Instant.parse(ev.startsAt).atZone(ZoneOffset.UTC).toLocalDate()
+                    }.getOrNull() ?: return@mapNotNull null
+                    val zone = reminderZone(ev.extra?.timezone ?: calendarTimezone)
+                    // LocalDateTime arithmetic IS wall-clock arithmetic:
+                    // plus(Duration) on a naive date-time moves the clock
+                    // reading, which is exactly the all-day semantics.
+                    date.atStartOfDay().plus(duration).atZone(zone)
+                        .toInstant().toEpochMilli()
+                } else {
+                    val start = runCatching { Instant.parse(ev.startsAt) }.getOrNull()
+                        ?: return@mapNotNull null
+                    start.plus(duration).toEpochMilli()
+                }
+            }
+        }
+        if (ev.allDay) return emptyList()
+        val start = runCatching { Instant.parse(ev.startsAt).toEpochMilli() }.getOrNull()
+            ?: return emptyList()
+        return listOf(start - leadMs)
+    }
+
+    private fun reminderZone(name: String?): ZoneId {
+        if (!name.isNullOrBlank()) {
+            runCatching { return ZoneId.of(name) }
+        }
+        return ZoneId.systemDefault()
     }
 
     fun isAvailable(): Boolean {
@@ -134,15 +217,31 @@ class Reminders(private val context: Context) {
         return PendingIntent.getBroadcast(context, requestCode, intent, flags)
     }
 
-    private fun reminderRequestCode(profileId: String, eventId: String, startsAt: String): Int {
+    private fun reminderRequestCode(profileId: String, eventId: String, startsAt: String, slot: Int): Int {
         // Stable hash that fits Int; collisions are tolerated because
         // FLAG_UPDATE_CURRENT overwrites on insert anyway.
-        return ("$profileId@$eventId@$startsAt").hashCode()
+        // The FALLBACK slot deliberately keeps the pre-alarms formula
+        // (no "#slot" suffix): alarms scheduled by older builds used
+        // exactly this code, and they must stay cancellable after the
+        // upgrade or they would fire forever with no way to revoke.
+        return if (slot == FALLBACK_SLOT) {
+            ("$profileId@$eventId@$startsAt").hashCode()
+        } else {
+            ("$profileId@$eventId@$startsAt#$slot").hashCode()
+        }
     }
 
     companion object {
         const val CHANNEL_ID = "bwc-reminders"
         private const val MAX_PENDING = 64
+        /** Slot of the global-lead-time fallback alarm. */
+        private const val FALLBACK_SLOT = -1
+        /** Event-level alarms occupy slots 0..7 — the server caps an
+         *  event at 8 alarms (MAX_ALARMS_PER_EVENT in
+         *  reminder_triggers.ts); slots beyond an event's actual alarm
+         *  count are simply never scheduled, only cancelled. */
+        private const val MAX_ALARM_SLOTS = 8
+        private val ALL_SLOTS: IntRange = FALLBACK_SLOT until MAX_ALARM_SLOTS
         const val EXTRA_PROFILE_ID = "profileId"
         const val EXTRA_EVENT_ID = "eventId"
         const val EXTRA_EVENT_TITLE = "eventTitle"
@@ -207,4 +306,47 @@ class ReminderReceiver : BroadcastReceiver() {
 
         NotificationManagerCompat.from(context).notify(eventId.hashCode(), n)
     }
+}
+
+
+// ---- Trigger parsing ----
+//
+// 先搜过：Android 端此前没有任何 trigger 解析（Reminders 只会用全局
+// 提前量），shared 里也没有，所以这里新写一个小的。只认裸的 ISO 8601
+// duration（带符号 P[nW][nD]T[nH][nM][nS]），和服务端
+// reminder_triggers.ts 的 DURATION_RE 同口径：W 可以和 D/T 同现并
+// 直接相加；年/月故意不认（一个月是 28 还是 31 天没法猜，猜错的提醒
+// 比不提醒更难排查）。带参数前缀的写法（RELATED=END:-PT15M 等）不在
+// 本解析范围内，解析不了就返回 null、调用方跳过那一条。
+
+private val TRIGGER_DURATION_RE = Regex(
+    "^([+-])?P(?:(\\d+)W)?(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?)?$",
+    RegexOption.IGNORE_CASE,
+)
+
+/** Parse a signed ISO 8601 duration trigger into a [Duration].
+ *  The sign is significant: "-PT15M" is 15 minutes BEFORE the anchor,
+ *  "PT9H" is 9 hours after it, and "-PT0M" / "PT0S" are a legitimate
+ *  zero (a reminder exactly at the anchor), NOT a parse failure.
+ *  Returns null for anything unparseable — including a bare "P" with
+ *  no components at all. */
+internal fun parseReminderTriggerDuration(raw: String): Duration? {
+    // runCatching: an absurd component (P99999999999999999999D) must
+    // fail THIS trigger, not the whole reschedule pass.
+    return runCatching {
+        val match = TRIGGER_DURATION_RE.matchEntire(raw.trim()) ?: return null
+        val (sign, weeks, days, hours, minutes, seconds) = match.destructured
+        if (weeks.isEmpty() && days.isEmpty() && hours.isEmpty() &&
+            minutes.isEmpty() && seconds.isEmpty()
+        ) {
+            return null
+        }
+        var duration = Duration.ZERO
+        if (weeks.isNotEmpty()) duration = duration.plusDays(weeks.toLong() * 7)
+        if (days.isNotEmpty()) duration = duration.plusDays(days.toLong())
+        if (hours.isNotEmpty()) duration = duration.plusHours(hours.toLong())
+        if (minutes.isNotEmpty()) duration = duration.plusMinutes(minutes.toLong())
+        if (seconds.isNotEmpty()) duration = duration.plusSeconds(seconds.toLong())
+        if (sign == "-") duration.negated() else duration
+    }.getOrNull()
 }

@@ -35,4 +35,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">Suivre le système · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">Saisissez le secret ci-dessous dans votre application d\'authentification (ou importez le lien otpauth), puis entrez le code à 6 chiffres affiché par l\'application.</string>
+    <string name="mfa_settings_secret_label">Secret</string>
+    <string name="mfa_settings_otpauth_label">Lien otpauth</string>
+    <string name="mfa_settings_code_label">Code de vérification</string>
+    <string name="mfa_settings_verify_button">Vérifier et activer</string>
+    <string name="mfa_settings_enabled_note">La vérification en deux étapes est activée. La connexion exige un code de votre application d\'authentification.</string>
+    <string name="mfa_settings_backup_title">Enregistrez vos codes de secours</string>
+    <string name="mfa_settings_backup_warn">Ces codes de secours ne s\'affichent qu\'une seule fois. Si vous perdez votre application d\'authentification, chaque code permet une connexion. Conservez-les en lieu sûr.</string>
+    <string name="mfa_settings_backup_copy_all">Copier tous les codes</string>
+    <string name="mfa_settings_backup_done">Je les ai enregistrés</string>
+    <string name="mfa_settings_copied">Copié</string>
+    <string name="mfa_settings_disable_button">Désactiver la vérification en deux étapes</string>
+    <string name="mfa_settings_failed">L\'opération de vérification en deux étapes a échoué</string>
+    <string name="mfa_settings_disabled_toast">La vérification en deux étapes est désactivée</string>
+    <string name="mfa_settings_load_failed">Impossible de charger l\'état de la vérification en deux étapes</string>
+    <string name="settings_devices_row">Appareils connectés</string>
+    <string name="devices_current_badge">Cet appareil</string>
+    <string name="devices_last_seen">Dernière activité : %1$s</string>
+    <string name="devices_revoke">Retirer</string>
+    <string name="devices_revoke_title">Retirer cet appareil ?</string>
+    <string name="devices_revoke_message">%1$s sera déconnecté et devra se reconnecter pour continuer à utiliser l\'application.</string>
+    <string name="devices_revoke_current_message">Il s\'agit de l\'appareil actuel. Le retirer déconnectera cet appareil immédiatement.</string>
+    <string name="devices_revoked">Appareil retiré</string>
+    <string name="devices_revoke_failed">Impossible de retirer l\'appareil</string>
+    <string name="devices_empty">Aucun appareil pour le moment</string>
+    <string name="devices_load_failed">Impossible de charger les appareils</string>
+    <string name="devices_unknown_label">Appareil sans nom</string>
+    <string name="subs_title">Abonnements de calendrier</string>
+    <string name="subs_desc">Abonnez-vous à une URL .ics externe et ses événements se synchroniseront régulièrement dans ce calendrier.</string>
+    <string name="subs_empty">Aucun abonnement pour le moment</string>
+    <string name="subs_url_label">URL d\'abonnement (lien .ics)</string>
+    <string name="subs_label_label">Libellé (facultatif)</string>
+    <string name="subs_add">Ajouter un abonnement</string>
+    <string name="subs_added">Abonnement ajouté</string>
+    <string name="subs_added_first_sync_failed">L\'abonnement est enregistré, mais la première synchronisation a échoué : %1$s</string>
+    <string name="subs_add_failed">Impossible d\'ajouter l\'abonnement</string>
+    <string name="subs_refresh">Actualiser maintenant</string>
+    <string name="subs_refreshed">Abonnement actualisé</string>
+    <string name="subs_refresh_failed">Impossible d\'actualiser l\'abonnement</string>
+    <string name="subs_delete_title">Supprimer cet abonnement ?</string>
+    <string name="subs_delete_message">Après suppression, cet abonnement ne synchronisera plus de mises à jour.</string>
+    <string name="subs_deleted">Abonnement supprimé</string>
+    <string name="subs_delete_failed">Impossible de supprimer l\'abonnement</string>
+    <string name="subs_status_events">%1$d événements</string>
+    <string name="subs_status_error">La dernière synchronisation a échoué</string>
+    <string name="subs_status_never">Pas encore synchronisé</string>
+    <string name="subs_status_ok">La dernière synchronisation a réussi</string>
+    <string name="subs_load_failed">Impossible de charger les abonnements</string>
+    <string name="export_ics">Exporter en .ics</string>
+    <string name="export_failed">L\'exportation a échoué</string>
+    <string name="export_done">%1$s exporté</string>
 </resources>

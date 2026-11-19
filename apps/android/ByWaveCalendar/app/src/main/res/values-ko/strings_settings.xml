@@ -35,4 +35,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">시스템 설정 사용 · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">인증 앱에 아래 비밀 키를 직접 입력하거나 otpauth 링크를 가져온 뒤, 앱에 표시되는 6자리 코드를 입력하세요.</string>
+    <string name="mfa_settings_secret_label">비밀 키</string>
+    <string name="mfa_settings_otpauth_label">otpauth 링크</string>
+    <string name="mfa_settings_code_label">인증 코드</string>
+    <string name="mfa_settings_verify_button">확인하고 사용</string>
+    <string name="mfa_settings_enabled_note">2단계 인증이 켜져 있습니다. 로그인할 때 인증 앱의 코드가 필요합니다.</string>
+    <string name="mfa_settings_backup_title">백업 코드 저장</string>
+    <string name="mfa_settings_backup_warn">이 백업 코드는 한 번만 표시됩니다. 인증 앱을 잃어버리면 각 코드로 한 번씩 로그인할 수 있습니다. 안전한 곳에 보관하세요.</string>
+    <string name="mfa_settings_backup_copy_all">백업 코드 모두 복사</string>
+    <string name="mfa_settings_backup_done">저장했습니다</string>
+    <string name="mfa_settings_copied">복사됨</string>
+    <string name="mfa_settings_disable_button">2단계 인증 끄기</string>
+    <string name="mfa_settings_failed">2단계 인증 작업에 실패했습니다</string>
+    <string name="mfa_settings_disabled_toast">2단계 인증이 꺼졌습니다</string>
+    <string name="mfa_settings_load_failed">2단계 인증 상태를 불러오지 못했습니다</string>
+    <string name="settings_devices_row">로그인된 기기</string>
+    <string name="devices_current_badge">이 기기</string>
+    <string name="devices_last_seen">마지막 활동: %1$s</string>
+    <string name="devices_revoke">해제</string>
+    <string name="devices_revoke_title">이 기기를 해제할까요?</string>
+    <string name="devices_revoke_message">%1$s 기기가 로그아웃되며, 계속 사용하려면 다시 로그인해야 합니다.</string>
+    <string name="devices_revoke_current_message">현재 기기입니다. 해제하면 이 기기가 즉시 로그아웃됩니다.</string>
+    <string name="devices_revoked">기기가 해제되었습니다</string>
+    <string name="devices_revoke_failed">기기를 해제하지 못했습니다</string>
+    <string name="devices_empty">아직 기기가 없습니다</string>
+    <string name="devices_load_failed">기기 목록을 불러오지 못했습니다</string>
+    <string name="devices_unknown_label">이름 없는 기기</string>
+    <string name="subs_title">캘린더 구독</string>
+    <string name="subs_desc">외부 .ics 주소를 구독하면 일정이 정기적으로 이 캘린더에 동기화됩니다.</string>
+    <string name="subs_empty">아직 구독이 없습니다</string>
+    <string name="subs_url_label">구독 주소(.ics 링크)</string>
+    <string name="subs_label_label">이름(선택 사항)</string>
+    <string name="subs_add">구독 추가</string>
+    <string name="subs_added">구독이 추가되었습니다</string>
+    <string name="subs_added_first_sync_failed">구독은 저장되었지만 첫 동기화에 실패했습니다: %1$s</string>
+    <string name="subs_add_failed">구독을 추가하지 못했습니다</string>
+    <string name="subs_refresh">지금 새로고침</string>
+    <string name="subs_refreshed">구독이 새로고침되었습니다</string>
+    <string name="subs_refresh_failed">구독을 새로고침하지 못했습니다</string>
+    <string name="subs_delete_title">이 구독을 삭제할까요?</string>
+    <string name="subs_delete_message">삭제하면 이 구독은 더 이상 업데이트를 동기화하지 않습니다.</string>
+    <string name="subs_deleted">구독이 삭제되었습니다</string>
+    <string name="subs_delete_failed">구독을 삭제하지 못했습니다</string>
+    <string name="subs_status_events">일정 %1$d개</string>
+    <string name="subs_status_error">마지막 동기화 실패</string>
+    <string name="subs_status_never">아직 동기화되지 않음</string>
+    <string name="subs_status_ok">마지막 동기화 성공</string>
+    <string name="subs_load_failed">구독을 불러오지 못했습니다</string>
+    <string name="export_ics">.ics 내보내기</string>
+    <string name="export_failed">내보내기에 실패했습니다</string>
+    <string name="export_done">내보내기 완료: %1$s</string>
 </resources>

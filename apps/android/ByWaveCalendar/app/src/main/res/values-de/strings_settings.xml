@@ -35,4 +35,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">Systemsprache · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">Geben Sie das untenstehende Geheimnis in Ihrer Authenticator-App ein (oder importieren Sie den otpauth-Link) und geben Sie dann den 6-stelligen Code ein, den die App anzeigt.</string>
+    <string name="mfa_settings_secret_label">Geheimnis</string>
+    <string name="mfa_settings_otpauth_label">otpauth-Link</string>
+    <string name="mfa_settings_code_label">Bestätigungscode</string>
+    <string name="mfa_settings_verify_button">Bestätigen und aktivieren</string>
+    <string name="mfa_settings_enabled_note">Die Zwei-Faktor-Authentifizierung ist aktiviert. Für die Anmeldung ist ein Code aus Ihrer Authenticator-App erforderlich.</string>
+    <string name="mfa_settings_backup_title">Backup-Codes speichern</string>
+    <string name="mfa_settings_backup_warn">Diese Backup-Codes werden nur einmal angezeigt. Wenn Sie Ihre Authenticator-App verlieren, können Sie sich mit jedem Code einmal anmelden. Bewahren Sie sie sicher auf.</string>
+    <string name="mfa_settings_backup_copy_all">Alle Backup-Codes kopieren</string>
+    <string name="mfa_settings_backup_done">Ich habe sie gespeichert</string>
+    <string name="mfa_settings_copied">Kopiert</string>
+    <string name="mfa_settings_disable_button">Zwei-Faktor-Authentifizierung deaktivieren</string>
+    <string name="mfa_settings_failed">Die Zwei-Faktor-Operation ist fehlgeschlagen</string>
+    <string name="mfa_settings_disabled_toast">Die Zwei-Faktor-Authentifizierung ist deaktiviert</string>
+    <string name="mfa_settings_load_failed">Der Status der Zwei-Faktor-Authentifizierung konnte nicht geladen werden</string>
+    <string name="settings_devices_row">Angemeldete Geräte</string>
+    <string name="devices_current_badge">Dieses Gerät</string>
+    <string name="devices_last_seen">Zuletzt aktiv: %1$s</string>
+    <string name="devices_revoke">Entfernen</string>
+    <string name="devices_revoke_title">Dieses Gerät entfernen?</string>
+    <string name="devices_revoke_message">%1$s wird abgemeldet und muss sich erneut anmelden, um die App weiter zu nutzen.</string>
+    <string name="devices_revoke_current_message">Dies ist das aktuelle Gerät. Beim Entfernen wird dieses Gerät sofort abgemeldet.</string>
+    <string name="devices_revoked">Gerät entfernt</string>
+    <string name="devices_revoke_failed">Das Gerät konnte nicht entfernt werden</string>
+    <string name="devices_empty">Noch keine Geräte</string>
+    <string name="devices_load_failed">Die Geräte konnten nicht geladen werden</string>
+    <string name="devices_unknown_label">Unbenanntes Gerät</string>
+    <string name="subs_title">Kalenderabonnements</string>
+    <string name="subs_desc">Abonnieren Sie eine externe .ics-URL, deren Termine regelmäßig in diesen Kalender synchronisiert werden.</string>
+    <string name="subs_empty">Noch keine Abonnements</string>
+    <string name="subs_url_label">Abo-URL (.ics-Link)</string>
+    <string name="subs_label_label">Bezeichnung (optional)</string>
+    <string name="subs_add">Abonnement hinzufügen</string>
+    <string name="subs_added">Abonnement hinzugefügt</string>
+    <string name="subs_added_first_sync_failed">Das Abonnement wurde gespeichert, aber die erste Synchronisierung ist fehlgeschlagen: %1$s</string>
+    <string name="subs_add_failed">Das Abonnement konnte nicht hinzugefügt werden</string>
+    <string name="subs_refresh">Jetzt aktualisieren</string>
+    <string name="subs_refreshed">Abonnement aktualisiert</string>
+    <string name="subs_refresh_failed">Das Abonnement konnte nicht aktualisiert werden</string>
+    <string name="subs_delete_title">Dieses Abonnement löschen?</string>
+    <string name="subs_delete_message">Nach dem Löschen synchronisiert dieses Abonnement keine Aktualisierungen mehr.</string>
+    <string name="subs_deleted">Abonnement gelöscht</string>
+    <string name="subs_delete_failed">Das Abonnement konnte nicht gelöscht werden</string>
+    <string name="subs_status_events">%1$d Termine</string>
+    <string name="subs_status_error">Letzte Synchronisierung fehlgeschlagen</string>
+    <string name="subs_status_never">Noch nicht synchronisiert</string>
+    <string name="subs_status_ok">Letzte Synchronisierung erfolgreich</string>
+    <string name="subs_load_failed">Die Abonnements konnten nicht geladen werden</string>
+    <string name="export_ics">.ics exportieren</string>
+    <string name="export_failed">Der Export ist fehlgeschlagen</string>
+    <string name="export_done">%1$s exportiert</string>
 </resources>
