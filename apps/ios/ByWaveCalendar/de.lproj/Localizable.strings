@@ -495,3 +495,20 @@
 "排期时区：%@；预约时间按设备时区显示。" = "Zeitzone der Verfügbarkeit: %@. Gebuchte Termine erscheinen in der Gerätezeitzone.";
 "显示时区" = "Anzeigezeitzone";
 "日程时区" = "Terminzeitzone";
+
+// ICS 导入
+"导入日程" = "Termine importieren";
+"导入 .ics 文件" = "ICS-Datei importieren";
+"选择要导入到的日历" = "Kalender für den Import wählen";
+"还没有日历，先创建一个日历再导入" = "Noch keine Kalender — zuerst einen Kalender erstellen";
+"读不到这个文件" = "Die Datei konnte nicht gelesen werden";
+"文件过大（超过 8 MB）" = "Datei zu groß (über 8 MB)";
+"这个文件不是日历文件（.ics）" = "Diese Datei ist keine Kalenderdatei (.ics)";
+"导入失败，请稍后再试" = "Import fehlgeschlagen, bitte später erneut versuchen";
+"导入完成：新增 %lld · 更新 %lld · 跳过 %lld" = "Import abgeschlossen: %lld neu · %lld aktualisiert · %lld übersprungen";
+"共 %lld 条：新增 %lld · 更新 %lld · 重复 %lld · 无效 %lld" = "%lld Termine: %lld neu · %lld aktualisiert · %lld Duplikate · %lld ungültig";
+"无效条目" = "Ungültige Einträge";
+"正在导入…" = "Wird importiert…";
+"正在计算…" = "Wird berechnet…";
+"确认导入" = "Import bestätigen";
+"预览" = "Vorschau";

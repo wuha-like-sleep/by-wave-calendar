@@ -12,6 +12,7 @@
 //   - "齿轮" toolbar to open settings
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum ViewMode: String, CaseIterable, Identifiable {
     case day = "日"
@@ -42,6 +43,10 @@ struct CalendarView: View {
     @State private var showingFilter = false
     @State private var showingSearch = false
     @State private var showingProfileSwitcher = false
+    // ICS import: the fileImporter toggle, plus the file (picked or
+    // handed over by the system) whose confirmation sheet is showing.
+    @State private var showingImportPicker = false
+    @State private var importFileURL: URL?
     // Horizontal-swipe tracking for date navigation. Reset on each new
     // gesture; commits to a direction once user has moved > 50 pt.
     @State private var swipeOffset: CGFloat = 0
@@ -180,6 +185,46 @@ struct CalendarView: View {
             .sheet(isPresented: $showingProfileSwitcher) {
                 ProfileSwitcherView().environmentObject(state)
             }
+            // ICS import confirmation — one sheet for both entry
+            // points (the toolbar menu's fileImporter below and a
+            // system handover parked in AppState.pendingImportURL).
+            .sheet(isPresented: Binding(
+                get: { importFileURL != nil },
+                set: { if !$0 { importFileURL = nil } }
+            )) {
+                if let url = importFileURL {
+                    ImportIcsView(
+                        fileURL: url,
+                        calendars: calendars,
+                        onFinished: { didImport in
+                            importFileURL = nil
+                            if didImport { Task { await load(force: true) } }
+                        }
+                    )
+                    .environmentObject(state)
+                }
+            }
+            .fileImporter(
+                isPresented: $showingImportPicker,
+                allowedContentTypes: [UTType(filenameExtension: "ics") ?? .data],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    importFileURL = url
+                }
+            }
+            .onChange(of: state.pendingImportURL) { _, url in
+                if let url {
+                    importFileURL = url
+                    state.pendingImportURL = nil
+                }
+            }
+            .onAppear {
+                if let url = state.pendingImportURL {
+                    importFileURL = url
+                    state.pendingImportURL = nil
+                }
+            }
             // Horizontal swipe on the body navigates dates. We only commit
             // when the gesture is decisively horizontal (avoids stealing
             // List scroll). Translation > 60 pt → snap to prev/next.
@@ -251,6 +296,9 @@ struct CalendarView: View {
                     Task { await load(force: true) }
                 } label: { Label("刷新", systemImage: "arrow.clockwise") }
                     .disabled(isLoading)
+                Button {
+                    showingImportPicker = true
+                } label: { Label("导入 .ics 文件", systemImage: "square.and.arrow.down") }
             } label: {
                 Image(systemName: "line.3.horizontal.decrease.circle")
             }

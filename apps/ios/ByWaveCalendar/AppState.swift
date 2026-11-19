@@ -130,6 +130,14 @@ final class AppState: ObservableObject {
     /// undo an exdate/UNTIL edit, only a soft-delete.
     @Published var pendingUndoDelete: PendingUndoDelete?
 
+    /// A .ics file handed to the app by the system ("Open in ByWave"
+    /// from Files / Mail / the share sheet — see CFBundleDocumentTypes
+    /// in Info.plist). RootView's onOpenURL stores it here;
+    /// CalendarView picks it up once it is on screen (the user may
+    /// still be on the setup screen when the file arrives) and clears
+    /// it. Same wait-for-sign-in shape as the Android handover.
+    @Published var pendingImportURL: URL?
+
     func noteEventDeleted(id: String, summary: String) {
         pendingUndoDelete = PendingUndoDelete(eventId: id, summary: summary, token: UUID())
     }

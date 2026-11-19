@@ -347,6 +347,38 @@ enum EventEditorDates {
     }
 }
 
+// MARK: - ICS 导入 (POST /api/v1/calendars/:id/import[/preview])
+
+/// Body for the ICS import endpoints. `text` is the whole .ics file
+/// decoded as UTF-8. `filename` only feeds the server's sourceTag
+/// (the same `file:<name>` shape the web upload produces) — the tag
+/// takes part in the "did anything change" judgement, so sending the
+/// real name keeps re-importing the same file a no-op even when it
+/// was first imported through another channel.
+struct IcsImportRequest: Encodable {
+    let text: String
+    let filename: String?
+}
+
+/// Preview counts for an ICS import — computed server-side by the
+/// same judgement the real import uses, but writes nothing.
+struct IcsImportPreview: Decodable {
+    let total: Int
+    let inserted: Int
+    let updated: Int
+    let duplicates: Int
+    let invalid: Int
+    let invalidReasons: [String]
+}
+
+/// Result of an ICS import. `skipped` = duplicates + invalid.
+struct IcsImportResult: Decodable {
+    let inserted: Int
+    let updated: Int
+    let skipped: Int
+    let total: Int
+}
+
 /// Availability stays in the initiating calendar's zone; legacy calendars used Shanghai.
 func bookingTimeZone(_ explicit: String?, calendar: String?) -> String {
     [explicit, calendar, "Asia/Shanghai"].compactMap { value in

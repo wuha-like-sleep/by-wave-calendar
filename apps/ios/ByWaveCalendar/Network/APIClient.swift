@@ -308,6 +308,23 @@ extension APIClient {
     }
 }
 
+// MARK: - ICS 导入 (对齐 web/Android 的两步导入)
+extension APIClient {
+    /// POST /calendars/:id/import/preview — counts only, the server
+    /// writes nothing. Same judgement (and sourceTag) as the real
+    /// import, mirroring the web import dialog's first step.
+    func previewIcsImport(calendarId: String, text: String, filename: String?) async throws -> IcsImportPreview {
+        try await post("/calendars/\(calendarId)/import/preview", body: IcsImportRequest(text: text, filename: filename))
+    }
+
+    /// POST /calendars/:id/import — same dedupe semantics as the web
+    /// import: uid-keyed upsert, soft-deleted rows stay deleted,
+    /// unchanged rows are skipped without touching them.
+    func importIcs(calendarId: String, text: String, filename: String?) async throws -> IcsImportResult {
+        try await post("/calendars/\(calendarId)/import", body: IcsImportRequest(text: text, filename: filename))
+    }
+}
+
 struct EmptyJSONBody: Encodable {}
 
 /// Response of POST /parse-event. startsAt/endsAt are NAIVE local
