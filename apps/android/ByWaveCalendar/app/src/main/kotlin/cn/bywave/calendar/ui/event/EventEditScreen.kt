@@ -7,6 +7,7 @@
 
 package cn.bywave.calendar.ui.event
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,12 +80,14 @@ import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.calendar.parseHex
 import cn.bywave.calendar.ui.calendar.rememberCalendarFormats
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,6 +131,7 @@ fun EventEditScreen(
     // Pop the scope picker before save when editing a recurring event.
     // Non-recurring events save directly (sourceRrule is null).
     var showScopePicker by remember { mutableStateOf(false) }
+    var showTzPicker by remember { mutableStateOf(false) }
 
     fun attemptSave() {
         if (state.isEdit && !state.sourceRrule.isNullOrBlank()) {
@@ -274,6 +280,21 @@ fun EventEditScreen(
                 onChange = { date, time -> vm.onEnd(date, time) },
             )
 
+            // Timezone (timed events only, same as iOS — for all-day
+            // events the field would be misleading). The wall clock
+            // above stays in the device zone; this is the event's
+            // anchor zone, which the server expands recurrences and
+            // exports against. Until this row existed the editor had
+            // no way to see or change it at all: an event created on
+            // the web for another city kept its zone invisibly, and a
+            // new event silently inherited whatever buildExtra chose.
+            if (!state.allDay) {
+                TimezoneRow(
+                    zoneId = state.zoneId,
+                    onClick = { showTzPicker = true },
+                )
+            }
+
             // Parsed recurrence (quick-add only) — read-only display
             // plus a way out: the editor has no recurrence picker, so
             // without this row a mis-parsed 每周 would silently mint a
@@ -370,6 +391,17 @@ fun EventEditScreen(
             }
             Spacer(Modifier.size(24.dp))
         }
+    }
+
+    if (showTzPicker) {
+        TimezonePickerDialog(
+            current = state.zoneId,
+            onPick = { id ->
+                vm.onZoneChange(id)
+                showTzPicker = false
+            },
+            onDismiss = { showTzPicker = false },
+        )
     }
 
     if (showDiscardConfirm) {
@@ -592,3 +624,132 @@ private fun DateTimeRow(
 }
 
 
+
+/** The event's anchor-zone row. Shows the zone the server will expand
+ *  recurrences / export against; when it differs from the device zone
+ *  the device zone is spelled out underneath, so the wall clock above
+ *  (which is always device-zone) can't be misread as event-zone time.
+ *  Mirrors the two rows the detail sheet already shows. */
+@Composable
+private fun TimezoneRow(
+    zoneId: String,
+    onClick: () -> Unit,
+) {
+    val deviceZoneId = remember { ZoneId.systemDefault().id }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.event_detail_source_timezone),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                zoneId.ifBlank { deviceZoneId },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (zoneId.isNotBlank() && zoneId != deviceZoneId) {
+                Text(
+                    stringResource(R.string.event_detail_display_timezone) + ": " + deviceZoneId,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.eventedit_timezone_change),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+    }
+}
+
+/** Searchable full-IANA zone picker. The web uses a curated list with
+ *  search; Android's calendar form is free text, but for events a
+ *  typo'd zone would be silently dropped by the server's fallback, so
+ *  the picker only ever commits a real ZoneId. */
+@Composable
+private fun TimezonePickerDialog(
+    current: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var query by remember { mutableStateOf("") }
+    val allZones = remember { ZoneId.getAvailableZoneIds().sorted() }
+    val deviceZoneId = remember { ZoneId.systemDefault().id }
+    val filtered = remember(query, allZones) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) allZones
+        else allZones.filter { it.lowercase().contains(q) || it.lowercase().replace('_', ' ').contains(q) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.event_detail_source_timezone)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.eventedit_timezone_search_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.size(8.dp))
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(filtered, key = { it }) { id ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onPick(id) }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(id, style = MaterialTheme.typography.bodyLarge)
+                                val offset = zoneOffsetLabel(id)
+                                val caption = when {
+                                    id == deviceZoneId && offset.isNotEmpty() ->
+                                        offset + " · " + stringResource(R.string.event_detail_display_timezone)
+                                    else -> offset
+                                }
+                                if (caption.isNotEmpty()) {
+                                    Text(
+                                        caption,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (id == current) {
+                                Icon(Icons.Default.Check, contentDescription = null)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/** "UTC+11:00" for the zone's offset right now (DST-aware via the
+ *  zone's own rules). Blank when the id doesn't resolve. */
+private fun zoneOffsetLabel(id: String): String {
+    val offset = runCatching { ZoneId.of(id).rules.getOffset(Instant.now()) }.getOrNull() ?: return ""
+    val total = offset.totalSeconds
+    val sign = if (total < 0) "-" else "+"
+    val absTotal = abs(total)
+    val hh = (absTotal / 3600).toString().padStart(2, '0')
+    val mm = ((absTotal % 3600) / 60).toString().padStart(2, '0')
+    return "UTC$sign$hh:$mm"
+}

@@ -55,5 +55,7 @@
     <string name="eventedit_keep_editing">繼續編輯</string>
     <string name="eventedit_need_calendar">還沒取得你的日曆清單，暫時無法儲存。連上網後會自動補上。</string>
     <string name="eventedit_retry">重試</string>
+    <string name="eventedit_timezone_search_hint">搜尋時區</string>
+    <string name="eventedit_timezone_change">更改</string>
     <string name="eventedit_need_title">填個標題就能儲存了。</string>
 </resources>

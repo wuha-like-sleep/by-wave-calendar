@@ -55,5 +55,7 @@
     <string name="eventedit_keep_editing">Seguir editando</string>
     <string name="eventedit_need_calendar">Tu lista de calendarios aún no se ha cargado, así que no se puede guardar. Se cargará cuando vuelvas a estar en línea.</string>
     <string name="eventedit_retry">Reintentar</string>
+    <string name="eventedit_timezone_search_hint">Buscar zonas horarias</string>
+    <string name="eventedit_timezone_change">Cambiar</string>
     <string name="eventedit_need_title">Añade un título y podrás guardar.</string>
 </resources>

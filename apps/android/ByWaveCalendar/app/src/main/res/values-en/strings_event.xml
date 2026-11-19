@@ -55,5 +55,7 @@
     <string name="eventedit_keep_editing">Keep editing</string>
     <string name="eventedit_need_calendar">Your calendar list hasn\'t loaded yet, so this can\'t be saved. It fills in once you\'re online.</string>
     <string name="eventedit_retry">Retry</string>
+    <string name="eventedit_timezone_search_hint">Search time zones</string>
+    <string name="eventedit_timezone_change">Change</string>
     <string name="eventedit_need_title">Add a title and you can save.</string>
 </resources>

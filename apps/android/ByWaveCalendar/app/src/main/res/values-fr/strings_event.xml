@@ -55,5 +55,7 @@
     <string name="eventedit_keep_editing">Continuer</string>
     <string name="eventedit_need_calendar">Votre liste de calendriers n\'est pas encore chargée : impossible d\'enregistrer. Elle se chargera dès que vous serez en ligne.</string>
     <string name="eventedit_retry">Réessayer</string>
+    <string name="eventedit_timezone_search_hint">Rechercher un fuseau horaire</string>
+    <string name="eventedit_timezone_change">Modifier</string>
     <string name="eventedit_need_title">Ajoutez un titre pour pouvoir enregistrer.</string>
 </resources>
