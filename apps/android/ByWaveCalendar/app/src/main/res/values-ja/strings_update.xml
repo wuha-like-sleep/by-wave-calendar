@@ -18,4 +18,9 @@
     <string name="update_err_checksum">ダウンロードの検証に失敗しました。しばらくしてからお試しください。</string>
     <string name="update_err_server">サーバーが応答しません。しばらくしてからお試しください。</string>
     <string name="update_err_network">ネットワークに接続できません。接続を確認してもう一度お試しください。</string>
+    <string name="update_grace_note">このアップデートは最終的に必須です。%1$s までは後回しにできます。</string>
+    <string name="update_notify_title">アップデートをダウンロードしました</string>
+    <string name="update_notify_body">%1$s のダウンロードが完了し、インストールできます。</string>
+    <string name="update_channel_name">アプリのアップデート</string>
+    <string name="update_channel_desc">アップデートのダウンロードが完了し、インストール可能になったら通知します</string>
 </resources>

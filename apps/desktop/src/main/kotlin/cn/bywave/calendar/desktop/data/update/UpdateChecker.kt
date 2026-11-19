@@ -31,6 +31,10 @@ data class DesktopUpdateAsset(
      *  doesn't carry it. Declared last: call sites build this
      *  positionally. */
     val fallbackUrl: String = "",
+    /** Third source (mirror, e.g. Gitee), tried only after both the
+     *  primary and the fallback fail. Same contract as fallbackUrl.
+     *  Also appended last. */
+    val mirrorUrl: String = "",
 )
 
 @Serializable
@@ -48,6 +52,19 @@ data class DesktopUpdateInfo(
      *  parser → API → here) only learned it later, so manifests
      *  without it deserialize as 1 = no floor. */
     val minSupportedVersionCode: Int = 1,
+    /** Staged-rollout percentage (0–100). Absent in older manifests
+     *  → 100 = everyone. Applied locally with the shared Rollout
+     *  rule, because the GitHub-manifest source never passes through
+     *  the server's gate. Appended last, like the fields above. */
+    val rolloutPercent: Int = 100,
+    /** Days of grace before a forced upgrade turns hard. Same field,
+     *  same meaning as Android — one definition in shared Rollout. */
+    val graceDays: Int = 7,
+    /** Set by UpdateChecker when a forced upgrade is still inside
+     *  its grace window: the dialog stays dismissible but shows this
+     *  deadline. Never serialized — it's computed per check. */
+    @kotlinx.serialization.Transient
+    val graceDeadlineMillis: Long? = null,
 )
 
 object UpdateChecker {
@@ -97,23 +114,65 @@ object UpdateChecker {
      *  to the user as 「已是最新版本」 — that's the bug this type fixes. */
     enum class CheckResult { UpdateAvailable, UpToDate, Unreachable }
 
-    suspend fun check(serverUrl: String, force: Boolean = false): CheckResult {
+    suspend fun check(serverUrl: String, deviceId: String? = null, force: Boolean = false): CheckResult {
         val server = serverUrl.trimEnd('/')
         requestedServer = server
+        // deviceId + currentVersionCode let the server apply its
+        // rollout gate (and the recall exemption). The GitHub source
+        // takes no params — the local gate below covers that path.
+        val serverLatest = buildString {
+            append(server).append("/api/app/desktop/latest")
+            if (!deviceId.isNullOrBlank()) {
+                append("?deviceId=").append(java.net.URLEncoder.encode(deviceId, "UTF-8"))
+                append("&currentVersionCode=").append(BuildInfo.VERSION_CODE)
+            }
+        }
         val result = lookup.check(server, force, listOf(
-            { fetchManifest("$server/api/app/desktop/latest", "server") },
+            { fetchManifest(serverLatest, "server") },
             { fetchManifest(GITHUB_MANIFEST_URL, "github") },
         ))
         if (requestedServer != server) return CheckResult.Unreachable
         val release = result.release ?: return CheckResult.Unreachable
         if (release.versionCode > BuildInfo.VERSION_CODE) {
-            // Below the minimum supported version counts as mandatory
-            // even when the release itself isn't flagged — that's the
-            // point of the floor (retroactively recalling a bad build),
-            // same rule the Android checker applies.
-            val effective = if (BuildInfo.VERSION_CODE < release.minSupportedVersionCode && !release.mandatory) {
-                release.copy(mandatory = true)
-            } else release
+            // Staged rollout, applied locally with the SAME rule the
+            // server uses (shared Rollout): the GitHub manifest merged
+            // in above never passed through the server's gate. Not in
+            // the rollout = no update exists for this machine yet.
+            if (!cn.bywave.calendar.update.Rollout.isInRollout(
+                    deviceId = deviceId, platform = "desktop",
+                    versionCode = release.versionCode, rolloutPercent = release.rolloutPercent,
+                    currentVersionCode = BuildInfo.VERSION_CODE,
+                    minSupportedVersionCode = release.minSupportedVersionCode,
+                )
+            ) {
+                _available.value = null
+                return CheckResult.UpToDate
+            }
+            // Below the minimum supported version counts as a forced
+            // upgrade even when the release itself isn't flagged —
+            // that's the point of the floor (retroactively recalling
+            // a bad build), same rule the Android checker applies.
+            // "Forced" then splits by the grace window (shared
+            // Rollout.forceState): inside grace the dialog stays
+            // dismissible and carries the deadline; past it, the
+            // emitted info is mandatory.
+            val hitForce = release.mandatory || BuildInfo.VERSION_CODE < release.minSupportedVersionCode
+            val firstSeen = UpdateFirstSeenStore.firstSeenMillis(release.versionCode)
+            val forceState = cn.bywave.calendar.update.Rollout.forceState(
+                hitForce = hitForce, firstSeenMillis = firstSeen,
+                graceDays = release.graceDays, nowMillis = System.currentTimeMillis(),
+            )
+            val effective = when (forceState) {
+                cn.bywave.calendar.update.Rollout.ForceState.FORCED ->
+                    release.copy(mandatory = true)
+                cn.bywave.calendar.update.Rollout.ForceState.IN_GRACE ->
+                    release.copy(
+                        mandatory = false,
+                        graceDeadlineMillis = cn.bywave.calendar.update.Rollout
+                            .graceDeadlineMillis(firstSeen, release.graceDays),
+                    )
+                cn.bywave.calendar.update.Rollout.ForceState.NOT_FORCED -> release
+            }
             if (result.fresh || force) _available.value = effective
             return CheckResult.UpdateAvailable
         }
@@ -189,14 +248,14 @@ object UpdateChecker {
     /** User-triggered "check now" — bypasses the 6h throttle and
      *  surfaces the outcome via [lastForceCheckOutcome] so the UI
      *  can show a transient confirmation/error chip. */
-    suspend fun forceCheck(serverUrl: String) {
+    suspend fun forceCheck(serverUrl: String, deviceId: String? = null) {
         _lastForceCheckOutcome.value = ForceCheckOutcome.Checking
         // check() now returns a tagged result, so we can tell a genuine
         // "already latest" apart from "couldn't reach any update source"
         // (network down / server + GitHub both unreachable). The latter shows
         // an error instead of falsely reassuring the user they're up to date.
         try {
-            _lastForceCheckOutcome.value = when (check(serverUrl, force = true)) {
+            _lastForceCheckOutcome.value = when (check(serverUrl, deviceId, force = true)) {
                 CheckResult.UpdateAvailable -> ForceCheckOutcome.UpdateFound
                 CheckResult.UpToDate -> ForceCheckOutcome.UpToDate
                 CheckResult.Unreachable -> ForceCheckOutcome.Error(

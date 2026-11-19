@@ -497,6 +497,9 @@
 
 // App updates
 "appUpdate.title" = "App updates";
+"announcement.defaultTitle" = "A new version is available";
+"announcement.updateNow" = "Update now";
+"announcement.newVersion" = "Version %@ is available";
 "appUpdate.check" = "Check for updates";
 "appUpdate.checking" = "Checking for updates…";
 "appUpdate.available" = "An update is available";

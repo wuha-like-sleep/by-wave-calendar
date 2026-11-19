@@ -20,4 +20,9 @@
     <string name="update_err_checksum">下载的安装包校验没通过，请稍后再试</string>
     <string name="update_err_server">服务器暂时没有响应，请稍后再试</string>
     <string name="update_err_network">网络连接不上，请检查网络后重试</string>
+    <string name="update_grace_note">这次更新最终必须完成，%1$s 之前可以先稍后。</string>
+    <string name="update_notify_title">新版本已下载好</string>
+    <string name="update_notify_body">%1$s 已下载完成，点按即可安装。</string>
+    <string name="update_channel_name">应用更新</string>
+    <string name="update_channel_desc">新版本下载完成、可以安装时提醒</string>
 </resources>

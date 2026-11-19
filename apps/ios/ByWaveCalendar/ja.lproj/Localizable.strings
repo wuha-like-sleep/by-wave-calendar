@@ -497,6 +497,9 @@
 
 // App updates
 "appUpdate.title" = "アプリのアップデート";
+"announcement.defaultTitle" = "新しいバージョンがあります";
+"announcement.updateNow" = "今すぐ更新";
+"announcement.newVersion" = "バージョン %@ があります";
 "appUpdate.check" = "アップデートを確認";
 "appUpdate.checking" = "確認中…";
 "appUpdate.available" = "アップデートがあります";

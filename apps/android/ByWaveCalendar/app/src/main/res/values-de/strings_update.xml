@@ -18,4 +18,9 @@
     <string name="update_err_checksum">Der Download konnte nicht verifiziert werden. Bitte später erneut versuchen.</string>
     <string name="update_err_server">Der Server antwortet nicht. Bitte später erneut versuchen.</string>
     <string name="update_err_network">Keine Netzwerkverbindung. Verbindung prüfen und erneut versuchen.</string>
+    <string name="update_grace_note">Dieses Update wird verpflichtend — bis zum %1$s können Sie es aufschieben.</string>
+    <string name="update_notify_title">Update heruntergeladen</string>
+    <string name="update_notify_body">%1$s wurde heruntergeladen und kann installiert werden.</string>
+    <string name="update_channel_name">App-Updates</string>
+    <string name="update_channel_desc">Benachrichtigt, wenn ein Update heruntergeladen und installationsbereit ist</string>
 </resources>
