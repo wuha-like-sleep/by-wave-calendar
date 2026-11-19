@@ -25,7 +25,8 @@ import { canonicalTimeZone } from "../lib/zoned_time.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
-import { resolveLocaleFromRequest, makeT, clientStrings, tForRequest } from "../lib/i18n.js";
+import { resolveLocaleFromRequest, makeT, clientStrings, tForRequest, isValidLocale, translate, type LocaleCode } from "../lib/i18n.js";
+import { createNotification, listNotifications, markAllNotificationsRead, markNotificationRead, safeNotificationUrl } from "../lib/notifications.js";
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { validateInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { provisionAccount, emailDomainAllowed, type ProvisionDenial } from "../lib/account_provisioning.js";
@@ -1826,6 +1827,24 @@ export async function webRoutes(app: FastifyInstance) {
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     });
 
+    // 站内通知：被邀者已是本站用户时，除了邀请邮件再在他的铃铛里留一条。
+    // 此前只有邮件一条腿 —— 邮件没到（SMTP 未配、进垃圾箱）他就完全不知道
+    // 有人邀他共享日历，只能等邀请过期。文字按被邀者 locale 定稿。
+    if (invitee) {
+      const siteDefault = (await getSettings().catch(() => null))?.defaultLocale;
+      const locale: LocaleCode = isValidLocale(invitee.locale) ? invitee.locale : isValidLocale(siteDefault) ? siteDefault : "zh-CN";
+      await createNotification({
+        userId: invitee.id,
+        type: "calendar_invitation",
+        title: translate(locale, "notif.calendarInvitation.title", { calendar: cal.name }),
+        body: translate(locale, "notif.calendarInvitation.body", {
+          inviter: user.displayName || user.email,
+          role: translate(locale, body.data.role === "editor" ? "notif.calendarInvitation.roleEditor" : "notif.calendarInvitation.roleViewer"),
+        }),
+        url: `/invite/${token}`,
+      }).catch(() => undefined);
+    }
+
     try {
       await sendMail(calendarInviteMail(inviteeEmail, {
         calendarName: cal.name,
@@ -2247,6 +2266,50 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
+  // -------- 站内通知（铃铛收件箱） --------
+  // 列表页：最近 50 条，未读高亮。时间走 <time data-tz> 让浏览器按用户
+  // 本地时区渲染（服务端只给 UTC ISO 和一个兜底字符串）。
+  app.get("/app/notifications", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    const rows = await listNotifications(user.id, 50);
+    return reply.view("app/notifications", {
+      title: tr(req, "notifications.title"),
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: readFlash(req, reply),
+      notifications: rows.map((n) => ({
+        ...n,
+        createdAtIso: n.createdAt.toISOString(),
+        createdAtLocal: localTime(n.createdAt),
+        unread: !n.readAt,
+      })),
+      unreadCount: rows.filter((n) => !n.readAt).length,
+    });
+  });
+
+  // 点开一条：标已读后跳到它指向的对象。目标 url 只用通知行里存的那个
+  // （写入时已过滤成站内路径，这里再过一遍 safeNotificationUrl 兜底），
+  // 绝不接受请求参数里的跳转地址，防开放重定向。
+  app.post<{ Params: { id: string } }>("/app/notifications/:id/open", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/notifications");
+    const row = await markNotificationRead(user.id, id.data);
+    const target = safeNotificationUrl(row?.url) ?? "/app/notifications";
+    return reply.redirect(target);
+  });
+
+  app.post("/app/notifications/read-all", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    await markAllNotificationsRead(user.id);
+    return redirectWith(reply, "/app/notifications", { success: tr(req, "flash.notifications.allRead") });
+  });
+
   registerNativeLoginRoutes(app, loadAuthedUser);
 
   // Companion to POST /api/v1/auth/web-session. The iOS APP opens this
@@ -2548,6 +2611,32 @@ export async function webRoutes(app: FastifyInstance) {
     // and a hardcoded Chinese "语言已更新" toast looked wrong after switching
     // to another language. Just redirect back to the language section.
     return reply.redirect("/app/settings#language");
+  });
+
+  // -------- 通知偏好 -------- (per-user；只管事件提醒的两个渠道)
+  // 安全类邮件（登录提醒、安全变更）不走这里，故意不给关，表单里也写明。
+  // checkbox 缺席 = 关，出现且为 "on" = 开（HTML 表单的老规矩）。
+  app.post("/app/settings/notification-prefs", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z
+      .object({
+        // 注意：不能写成 union 里塞 z.undefined() —— zod 里字段缺席和
+        // 「值是 undefined」是两回事，缺席只有 .optional() 放行。
+        reminderEmail: z.union([z.literal("on"), z.literal("off")]).optional(),
+        reminderPush: z.union([z.literal("on"), z.literal("off")]).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings/notifications", { error: tr(req, "flash.notificationPrefs.invalid") });
+    }
+    await db.update(schema.users).set({
+      notifyReminderEmail: body.data.reminderEmail === "on",
+      notifyReminderPush: body.data.reminderPush === "on",
+      updatedAt: new Date(),
+    }).where(eq(schema.users.id, user.id));
+    return redirectWith(reply, "/app/settings/notifications", { success: tr(req, "flash.notificationPrefs.updated") });
   });
 
   app.post("/app/settings/delete-account", async (req, reply) => {
