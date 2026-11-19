@@ -31,6 +31,12 @@
             <span class="hidden lg:inline"><%= t("search.heading") %></span>
             <kbd class="hidden lg:inline rounded border border-slate-300 bg-white px-1 text-[11px] leading-tight text-slate-400">⌘K</kbd>
           </a>
+          <a href="/app/notifications" title="<%= t("nav.notifications") %>"
+             class="relative inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+             aria-label="<%= t("nav.notifications") %>">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+            <span id="bwc-notif-badge" hidden class="absolute -top-1.5 -right-1.5 min-w-[1.1rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold leading-[1.1rem] text-white"></span>
+          </a>
           <%# Below md these two move into #mobile-menu. Leaving them in the bar
               at 375px squeezed the sign-out button to 40px wide and the browser
               broke its label onto one character per line, spilling out of the
@@ -59,6 +65,7 @@
     <% if (user) { %>
       <nav id="mobile-menu" class="md:hidden hidden pb-3 flex-col gap-1 text-sm text-slate-700">
         <a href="/app/search" data-bwc-search class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("search.heading") %></a>
+        <a href="/app/notifications" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.notifications") %></a>
         <a href="/app" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.calendar") %></a>
         <a href="/app/settings" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.settings") %></a>
         <% if (user.isAdmin) { %>

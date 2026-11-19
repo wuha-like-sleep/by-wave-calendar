@@ -2,6 +2,9 @@ import { and, eq, gte, lte, isNotNull, isNull, or } from "drizzle-orm";
 import { db, schema, type DB } from "../db/client.js";
 import { requestCalendarSync } from "./calendar_sync/queue.js";
 import { notifyEventCancellation } from "./event_cancel.js";
+import { createNotification } from "./notifications.js";
+import { isValidLocale, translate, type LocaleCode } from "./i18n.js";
+import { getSettings } from "./site_settings.js";
 import { pushEventChanged } from "./apns.js";
 import { newEventUid, newInvitationToken } from "./ids.js";
 import { expandEvent } from "./rrule_expand.js";
@@ -312,7 +315,60 @@ export async function bookSlot(input: {
   });
   await requestCalendarSync(created.event.calendarId).catch(() => undefined);
   void pushEventChanged(input.link.userId, created.event.id, "event.created").catch(() => undefined);
+  // 站内通知：所有者通知邮件受 link.notifyEmail 控制，但站内这一条不受它
+  // 管 —— 那个开关的语义是「别往我邮箱里塞」，站内收件箱正是关掉邮件后
+  // 还能看见新预约的地方。写失败不影响预约本身（createNotification 不抛）。
+  await notifyBookingCreated(input, created).catch(() => undefined);
   return created;
+}
+
+/** 给链接所有者写一条「新预约」站内通知。文字按所有者 locale 定稿，时间按日历时区。 */
+async function notifyBookingCreated(
+  input: { link: schema.BookingLink; guestName: string; guestEmail: string },
+  created: CreatedBooking,
+): Promise<void> {
+  const [owner] = await db.select({ locale: schema.users.locale }).from(schema.users)
+    .where(eq(schema.users.id, input.link.userId)).limit(1);
+  const siteDefault = (await getSettings().catch(() => null))?.defaultLocale;
+  const locale: LocaleCode = isValidLocale(owner?.locale) ? owner.locale : isValidLocale(siteDefault) ? siteDefault : "zh-CN";
+  const when = new Intl.DateTimeFormat(locale, {
+    timeZone: created.timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(created.booking.startsAt);
+  await createNotification({
+    userId: input.link.userId,
+    type: "booking_created",
+    title: translate(locale, "notif.bookingCreated.title", { title: input.link.title }),
+    body: translate(locale, "notif.bookingCreated.body", {
+      guest: `${input.guestName} <${input.guestEmail}>`,
+      when: `${when} (${created.timeZone})`,
+    }),
+    // 深链接直达这条预约生成的事件（日历应用会按参数打开它）。
+    url: `/app?event=${created.event.id}&cal=${input.link.calendarId}`,
+  });
+}
+
+/** 给链接所有者写一条「预约被取消」站内通知（访客走取消链接那条路）。 */
+async function notifyBookingCancelled(ownerId: string, linkTitle: string, guestName: string, startsAt: Date, timeZone: string): Promise<void> {
+  const [owner] = await db.select({ locale: schema.users.locale }).from(schema.users)
+    .where(eq(schema.users.id, ownerId)).limit(1);
+  const siteDefault = (await getSettings().catch(() => null))?.defaultLocale;
+  const locale: LocaleCode = isValidLocale(owner?.locale) ? owner.locale : isValidLocale(siteDefault) ? siteDefault : "zh-CN";
+  const when = new Intl.DateTimeFormat(locale, {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(startsAt);
+  await createNotification({
+    userId: ownerId,
+    type: "booking_cancelled",
+    title: translate(locale, "notif.bookingCancelled.title", { title: linkTitle }),
+    body: translate(locale, "notif.bookingCancelled.body", {
+      guest: guestName,
+      when: `${when} (${timeZone})`,
+    }),
+    // 事件已经删了，深链接指过去只会扑空；落到预约管理页。
+    url: "/app/booking-links",
+  });
 }
 
 /** Commit the booking and event cancellation together; notifications run afterwards. */
@@ -338,11 +394,20 @@ export async function cancelBooking(token: string): Promise<{ found: boolean; al
     const [owner] = event ? await tx.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName })
       .from(schema.users).innerJoin(schema.calendars, eq(schema.calendars.ownerId, schema.users.id))
       .where(eq(schema.calendars.id, event.calendarId)) : [];
-    return { found: true, alreadyCancelled: !!booking.cancelledAt, event, owner };
+    return { found: true, alreadyCancelled: !!booking.cancelledAt, event, owner, booking };
   });
   if (result.event) {
     await requestCalendarSync(result.event.calendarId).catch(() => undefined);
     if (result.owner) await notifyEventCancellation(result.event, result.owner).catch(() => undefined);
+    // 站内通知给所有者：访客取消预约目前只有一封取消邮件能告诉他，邮件
+    // 没到（SMTP 未配/被拦）就只能等他自己翻日历才发现。result.event 非空
+    // 意味着这次调用真的删掉了事件，重复取消不会重复写。
+    if (result.owner && result.booking) {
+      const [link] = await db.select({ title: schema.bookingLinks.title }).from(schema.bookingLinks)
+        .where(eq(schema.bookingLinks.id, result.booking.linkId)).limit(1);
+      const tz = await bookingTimeZone({ calendarId: result.event.calendarId }).catch(() => "UTC");
+      await notifyBookingCancelled(result.owner.id, link?.title ?? result.event.summary, result.booking.guestName, result.booking.startsAt, tz).catch(() => undefined);
+    }
   }
   return { found: result.found, alreadyCancelled: result.alreadyCancelled };
 }

@@ -53,6 +53,8 @@ type HarnessOpts = {
   members?: MemberRow[];
   /** 这些 user id 的账号是停用状态 */
   disabledUserIds?: string[];
+  /** 按 user id 给 loadUsers 的行加提醒渠道偏好（缺省 = 老数据，两渠道都开） */
+  userPrefs?: Record<string, { notifyReminderEmail?: boolean; notifyReminderPush?: boolean }>;
 };
 
 function harness(events: EventRow[], calendars: CalRow[], opts: HarnessOpts = {}): Harness {
@@ -81,6 +83,7 @@ function harness(events: EventRow[], calendars: CalRow[], opts: HarnessOpts = {}
         disabledAt: (disabled.has(id) || (opts.ownerDisabled && id === "user-1"))
           ? new Date("2026-01-01T00:00:00Z") : null,
         locale: "en",
+        ...(opts.userPrefs?.[id] ?? {}),
       }));
     },
     async loadSent(keys) {
@@ -619,5 +622,59 @@ describe("composeCalendarAudience — 可见性和提醒共用的收件人定义
 
   it("没有成员时就只有所有者", () => {
     expect(composeCalendarAudience("o", [])).toEqual([{ userId: "o", isOwner: true }]);
+  });
+});
+
+describe("提醒渠道偏好 — 邮件与推送可以分别关", () => {
+  it("两个都关：什么都不发，但落幂等行，不算失败也不重复评估", async () => {
+    const h = harness([ev()], [CAL], {
+      userPrefs: { "user-1": { notifyReminderEmail: false, notifyReminderPush: false } },
+    });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+    expect(mockSendMail).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(h.sentRows).toHaveLength(1);
+    expect(r).toMatchObject({ sent: 0, failed: 0 });
+  });
+
+  it("只开推送：不发邮件，推送带事件深链接，发完落幂等行（推送没有回执，不能靠重试兜底）", async () => {
+    const h = harness([ev()], [CAL], {
+      userPrefs: { "user-1": { notifyReminderEmail: false, notifyReminderPush: true } },
+    });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+    expect(mockSendMail).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(pushToUser).mock.calls[0]![1].url).toBe("/app?event=ev-1&cal=cal-1");
+    expect(h.sentRows).toHaveLength(1);
+    expect(r).toMatchObject({ sent: 1, failed: 0 });
+  });
+
+  it("只开邮件：发邮件，不推送", async () => {
+    const h = harness([ev()], [CAL], {
+      userPrefs: { "user-1": { notifyReminderEmail: true, notifyReminderPush: false } },
+    });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+    expect(mockSendMail).toHaveBeenCalledTimes(1);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(h.sentRows).toHaveLength(1);
+    expect(r).toMatchObject({ sent: 1, failed: 0 });
+  });
+
+  it("偏好只关一个成员的渠道时，所有者照常双发", async () => {
+    const h = harness([ev()], [CAL], {
+      members: [{ calendarId: "cal-1", userId: "user-2" }],
+      userPrefs: { "user-2": { notifyReminderEmail: false, notifyReminderPush: false } },
+    });
+    at("2026-07-14T01:45:00Z");
+    const r = await dispatchDueReminders(logger(), h.store);
+    // 所有者（user-1）双渠道都发；成员（user-2）两个都关，只落幂等。
+    expect(mockSendMail).toHaveBeenCalledTimes(1);
+    expect(mockSendMail.mock.calls[0]![0].to).toBe("user-1@example.com");
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(h.sentRows).toHaveLength(2);
+    expect(r).toMatchObject({ sent: 1, failed: 0 });
   });
 });

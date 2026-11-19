@@ -1,0 +1,46 @@
+<div class="text-sm text-slate-500 mb-3">
+  <a href="/app" class="hover:text-slate-700"><%= t("nav.calendar") %></a>
+  <span class="px-2">/</span>
+  <span class="text-slate-900"><%= t("notifications.title") %></span>
+</div>
+
+<div class="flex items-end justify-between gap-3 mb-6">
+  <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("notifications.title") %></h1>
+  <% if (unreadCount > 0) { %>
+    <form method="post" action="/app/notifications/read-all" class="m-0">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <button type="submit" class="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 whitespace-nowrap"><%= t("notifications.markAllRead") %></button>
+    </form>
+  <% } %>
+</div>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <% if (!notifications || notifications.length === 0) { %>
+    <div class="rounded-lg bg-slate-50 p-6 text-center text-sm text-slate-500"><%= t("notifications.empty") %></div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100">
+      <% notifications.forEach(function(n){ %>
+        <li>
+          <form method="post" action="/app/notifications/<%= n.id %>/open" class="m-0">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="w-full text-left px-2 py-3 rounded-lg hover:bg-slate-50 flex gap-3 items-start">
+              <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full <%= n.unread ? 'bg-brand-600' : 'bg-transparent' %>" aria-hidden="true"></span>
+              <span class="min-w-0 flex-1">
+                <span class="block text-sm <%= n.unread ? 'font-semibold text-slate-900' : 'font-medium text-slate-700' %>"><%= n.title %></span>
+                <% if (n.body) { %>
+                  <span class="block mt-0.5 text-sm text-slate-500 break-words"><%= n.body %></span>
+                <% } %>
+                <span class="block mt-1 text-xs text-slate-400">
+                  <time data-tz data-style="relative" datetime="<%= n.createdAtIso %>"><%= n.createdAtLocal %></time>
+                </span>
+              </span>
+              <% if (n.type === 'calendar_invitation') { %><span class="text-base" aria-hidden="true">🗂️</span>
+              <% } else if (n.type === 'booking_created') { %><span class="text-base" aria-hidden="true">📅</span>
+              <% } else if (n.type === 'booking_cancelled') { %><span class="text-base" aria-hidden="true">🚫</span><% } %>
+            </button>
+          </form>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+</section>

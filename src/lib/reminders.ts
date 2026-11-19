@@ -126,6 +126,9 @@ type RecipientRow = {
   displayName: string | null;
   disabledAt: Date | null;
   locale: string | null;
+  /** 提醒渠道偏好（users.notify_reminder_*）。可选：测试的假 store 不给就是「两个都开」。 */
+  notifyReminderEmail?: boolean | null;
+  notifyReminderPush?: boolean | null;
 };
 
 /** 幂等键。和 reminders_sent 上的唯一索引 (event_id, trigger, instance_start) 一一对应。 */
@@ -239,6 +242,8 @@ const dbStore: ReminderStore = {
       .select({
         id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName,
         disabledAt: schema.users.disabledAt, locale: schema.users.locale,
+        notifyReminderEmail: schema.users.notifyReminderEmail,
+        notifyReminderPush: schema.users.notifyReminderPush,
       })
       .from(schema.users)
       .where(inArray(schema.users.id, ids));
@@ -478,6 +483,18 @@ export async function dispatchDueReminders(
     const when = ev.allDay ? fmtAllDayDate(loc, c.instanceStart) : fmtTime(loc, c.instanceStart, c.tz);
     const headline = lead ?? when;
 
+    // 渠道偏好：用户可以在设置里分别关掉提醒邮件 / 提醒推送。
+    // 两个都关 = 这条提醒对这个人视为已处理：必须落幂等行，否则它会留在
+    // pending 里被每一跳重复评估（而且永远不会自己消失，直到窗口走完）。
+    // 这是用户的正常选择，不是异常，所以不进 skipped 计数（那个计数会
+    // 触发「tick had problems」的告警日志）。
+    const wantEmail = user.notifyReminderEmail !== false;
+    const wantPush = user.notifyReminderPush !== false;
+    if (!wantEmail && !wantPush) {
+      await store.markSent(d.key);
+      continue;
+    }
+
     // Fire a web-push notification in parallel with the email. If the
     // user has no push subscriptions registered, pushToUser is a no-op.
     // Tag includes the trigger so identical reminders on different
@@ -485,12 +502,24 @@ export async function dispatchDueReminders(
     // (shouldn't happen due to remindersSent unique key) collapses.
     // 注意：这一发是 fire-and-forget 的，它的成败**不参与**下面「算不算发出去了」
     // 的判断 —— 用户没订阅 push 是常态，拿它当失败会把邮件也一起判失败。
-    void pushToUser(d.userId, {
-      title: `⏰ ${ev.summary}`,
-      body: `${headline}${lead ? " · " + when : ""}${ev.location ? " · " + ev.location : ""}`,
-      url: "/app",
-      tag: `event-${ev.id}-${c.trigger}`,
-    }).catch(() => undefined);
+    // url 带上事件深链接：点开推送直接打开那条事件，而不是扔到日历首页
+    // 让用户自己找（日历应用会按 ?event=&cal= 打开对应事件弹窗）。
+    if (wantPush) {
+      void pushToUser(d.userId, {
+        title: `⏰ ${ev.summary}`,
+        body: `${headline}${lead ? " · " + when : ""}${ev.location ? " · " + ev.location : ""}`,
+        url: `/app?event=${ev.id}&cal=${ev.calendarId}`,
+        tag: `event-${ev.id}-${c.trigger}`,
+      }).catch(() => undefined);
+    }
+
+    if (!wantEmail) {
+      // 只剩推送这一个渠道：推送没有「发送成功回执」可等（订阅不存在也是
+      // 常态），发完即落幂等行。不落的话下一跳会把同一条推送再发一遍，
+      // 每分钟一次直到窗口走完 —— 那是轰炸，不是重试。
+      if (await store.markSent(d.key)) result.sent++;
+      continue;
+    }
 
     try {
       const mail = await sendMail({
