@@ -22,6 +22,7 @@ import { calendarRoutes } from "./routes/calendars.js";
 import { registerApiCsrf } from "./lib/api_csrf.js";
 import { isNoindexPath, robotsTxt } from "./lib/crawler_policy.js";
 import { makeSharedRouteStore } from "./lib/rate_limit_store.js";
+import { recordRateLimitExceeded } from "./lib/security_events.js";
 import { eventRoutes } from "./routes/events.js";
 import { importRoutes } from "./routes/import.js";
 import { searchRoutes } from "./routes/search.js";
@@ -403,6 +404,10 @@ await app.register(rateLimit, {
   // 同一条路由在 /api 和 /api/v1 下共用一个计数器 —— 否则换着前缀打，每条的
   // 额度都翻倍（登录、两步验证码、配对码都在其中）。见 lib/rate_limit_store.ts。
   store: makeSharedRouteStore(),
+  // 429 触发留痕：以前撞上限流什么都不记，攻击者把登录/Token 创建顶到
+  // 429 猛打，后台完全看不见。只记敏感路由、按窗口采样，见
+  // lib/security_events.ts —— 采样是为了防「留痕本身被打爆」。
+  onExceeded: (req) => { recordRateLimitExceeded(req); },
   // 按请求方的语言给这句话。以前是写死的中文 —— 而三端 App 是直接把服务端的
   // message 摆给用户看的，于是德语/日语用户撞上限流会突然看到一句中文。
   // 限流在生产里是常态，不是边角。

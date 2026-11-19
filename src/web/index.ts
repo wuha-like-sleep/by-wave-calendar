@@ -43,6 +43,7 @@ import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type I
 import { buildIcsFeed } from "../services/ics.js";
 import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
+import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
 // .ics 导入的大小上限放在 lib 里：单元测试要拿它和八门语言的文案对账，
@@ -510,6 +511,9 @@ export async function webRoutes(app: FastifyInstance) {
       // registered emails by measuring response time.
       await verifyPasswordTimingSafe(body.data.password);
       req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
+      // 查无此人也要留痕（采样）：喷洒未注册邮箱在后台不可见的话，
+      // 「哪些邮箱正在被试」就永远查不到。见 lib/security_events.ts。
+      void recordLoginAuthFailure(req, body.data.email, null);
       return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     if (user.disabledAt) {
@@ -523,6 +527,8 @@ export async function webRoutes(app: FastifyInstance) {
     if (!(await verifyPassword(body.data.password, user.passwordHash))) {
       await recordFailedLogin(user);
       req.log.warn({ userId: user.id, email: body.data.email, ip: req.ip }, "login_failed");
+      // 与计入锁定的同一步留痕（采样写审计），后台才有登录失败聚合可看。
+      void recordLoginAuthFailure(req, user.email, user.id);
       return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     await resetFailedLogin(user.id);
@@ -890,7 +896,7 @@ export async function webRoutes(app: FastifyInstance) {
     const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(req.body);
     if (!body.success) return redirectWith(reply, "/verify-email", { error: tr(req, "flash.code.sixDigits") });
 
-    const result = await verifyCode(email, body.data.code);
+    const result = await verifyCode(email, body.data.code, req.ip);
     if (!result.ok) {
       const reasonMap: Record<string, string> = {
         no_pending: tr(req, "flash.verifyEmail.noPending"),
@@ -2435,6 +2441,17 @@ export async function webRoutes(app: FastifyInstance) {
       // Prefix only — the audit log must never carry the plain token.
       details: { label: body.data.label, scope: body.data.scope, expiresInDays: body.data.expiresInDays, prefix: issued.prefix, via: "self_service" },
     });
+    // 安全变更通知：新建 Token 必须让账号本人知道 —— 否则会话被借用的人
+    // 偷偷建一个长期 Token，本人永远收不到任何信号。邮件只带 prefix /
+    // 权限 / 到期，**绝不带明文**（明文只在下面这次页面响应里出现一次）。
+    void sendMail(securityChangeMail(user.email, {
+      kind: "api_token_created",
+      token: {
+        label: body.data.label, prefix: issued.prefix, scope: body.data.scope,
+        expiresAt: body.data.expiresInDays > 0 ? new Date(Date.now() + body.data.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        via: "self_service",
+      },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
     return redirectWith(reply, "/app/settings/devices#api-tokens", {
       success: tr(req, "flash.apiToken.created"),
       issuedToken: issued.plain,
@@ -2457,6 +2474,12 @@ export async function webRoutes(app: FastifyInstance) {
         targetType: "api_token", targetId: id.data,
         details: { prefix: own?.prefix ?? null, via: "self_service" },
       });
+      if (own) {
+        void sendMail(securityChangeMail(user.email, {
+          kind: "api_token_revoked",
+          token: { label: own.label, prefix: own.prefix, scope: own.scope === "read" ? "read" : "write", expiresAt: own.expiresAt, via: "self_service" },
+        })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+      }
     }
     return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
   });

@@ -26,6 +26,7 @@ import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
 import { recordLoginEvent } from "../lib/login_history.js";
+import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { setModeCookie, setThemeCookies } from "../lib/user_theme.js";
 import { returnToOrApp } from "../lib/return_to.js";
 
@@ -114,6 +115,7 @@ export async function mfaRoutes(app: FastifyInstance) {
     // 半登录能活好几天，只受「每个 IP 每分钟 10 次」限制，可以一直猜下去。
     // 锁定的次数和时长就是后台已经在配的那一套，没有另起一套。
     await recordFailedLogin(s.user);
+    void recordLoginAuthFailure(req, s.user.email, s.user.id, "mfa");
     const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, s.user.id)).limit(1);
     if (fresh && isLocked(fresh)) {
       // 刚被锁上：这个半登录作废，要猜就得重新输密码 —— 而密码那一关也锁着。

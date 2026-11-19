@@ -1749,7 +1749,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     };
 
-    const qp = (req.query ?? {}) as { cat?: string; actor?: string; q?: string; page?: string };
+    const qp = (req.query ?? {}) as { cat?: string; actor?: string; q?: string; page?: string; fw?: string };
     const PER_PAGE = 50;
     const page = Math.max(1, Math.min(100000, Number(qp.page) || 1));
     const cat = (qp.cat ?? "").trim().slice(0, 40);
@@ -1809,6 +1809,58 @@ export async function adminRoutes(app: FastifyInstance) {
       .orderBy(desc(sql`count(*)`));
     const categories = prefRows.map((r) => ({ key: r.p, count: r.c, label: catMeta(r.p).label }));
 
+    // ---- 登录失败聚合 ------------------------------------------------------
+    // 数据来自 lib/security_events.ts 的采样行（auth.login_failed /
+    // api_token.auth_failed）。每行 details.failures 是「自上一行以来的
+    // 增量」，所以 SUM(failures) 是已落库增量的精确合计（未跨里程碑的
+    // 低量尾巴暂不计入，下一次跨越时结清 —— 采样器文件头有完整口径）。
+    // 账号归属：能对上用户的用账号邮箱，查无此人的用 details.email，
+    // 只知 prefix 的 token 猜测用 prefix。
+    const fw = qp.fw === "24h" || qp.fw === "30d" ? qp.fw : "7d";
+    const fwHours = fw === "24h" ? 24 : fw === "30d" ? 24 * 30 : 24 * 7;
+    const failSince = new Date(Date.now() - fwHours * 3600_000);
+    const failWhere = and(
+      inArray(schema.adminAuditLog.action, ["auth.login_failed", "api_token.auth_failed"]),
+      gte(schema.adminAuditLog.createdAt, failSince),
+    );
+    const failCount = sql<number>`coalesce(sum(coalesce((${schema.adminAuditLog.details}->>'failures')::int, 1)), 0)::int`;
+    const accountKey = sql<string>`coalesce(${schema.users.email}, ${schema.adminAuditLog.details}->>'email', ${schema.adminAuditLog.details}->>'prefix', '—')`;
+    const failByAccountRows = await db
+      .select({
+        account: accountKey,
+        failures: failCount,
+        ips: sql<number>`count(distinct ${schema.adminAuditLog.ip})::int`,
+        lastAt: sql<Date>`max(${schema.adminAuditLog.createdAt})`,
+      })
+      .from(schema.adminAuditLog)
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      .where(failWhere)
+      .groupBy(accountKey)
+      .orderBy(desc(failCount))
+      .limit(20);
+    const failByIpRows = await db
+      .select({
+        ip: schema.adminAuditLog.ip,
+        failures: failCount,
+        accounts: sql<number>`count(distinct ${accountKey})::int`,
+        lastAt: sql<Date>`max(${schema.adminAuditLog.createdAt})`,
+      })
+      .from(schema.adminAuditLog)
+      .leftJoin(schema.users, eq(schema.users.id, schema.adminAuditLog.actorUserId))
+      .where(failWhere)
+      .groupBy(schema.adminAuditLog.ip)
+      .orderBy(desc(failCount))
+      .limit(20);
+    const failTimeIso = (d: Date | string) => {
+      const iso = d instanceof Date ? d.toISOString() : new Date(d).toISOString();
+      return `<time data-tz datetime="${iso}" data-style="datetime">${iso}</time>`;
+    };
+    const failureAgg = {
+      window: fw,
+      byAccount: failByAccountRows.map((r) => ({ ...r, lastAtIso: failTimeIso(r.lastAt) })),
+      byIp: failByIpRows.map((r) => ({ ...r, lastAtIso: failTimeIso(r.lastAt) })),
+    };
+
     return reply.view("admin/audit", {
       title: "审计日志 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
@@ -1816,6 +1868,7 @@ export async function adminRoutes(app: FastifyInstance) {
       filter: { cat, actor, q: term },
       page, totalPages, total: total ?? 0, perPage: PER_PAGE,
       categories,
+      failureAgg,
       entries: rows.map((r) => ({
         ...r,
         cat: catMeta((r.action.split(".")[0] ?? "")),
@@ -2191,8 +2244,8 @@ export async function adminRoutes(app: FastifyInstance) {
       expiresInDays: z.coerce.number().int().min(0).max(3650).default(0),
     }).safeParse(req.body);
     if (!body.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("参数无效"));
-    const targetExists = await db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, body.data.userId)).limit(1);
-    if (targetExists.length === 0) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("目标用户不存在"));
+    const targetRows = await db.select({ id: schema.users.id, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, body.data.userId)).limit(1);
+    if (targetRows.length === 0) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("目标用户不存在"));
     const issued = await createApiToken({
       userId: body.data.userId,
       label: body.data.label,
@@ -2203,6 +2256,16 @@ export async function adminRoutes(app: FastifyInstance) {
       targetType: "api_token", targetId: issued.id,
       details: { label: body.data.label, scope: body.data.scope, actsAsUserId: body.data.userId, expiresInDays: body.data.expiresInDays },
     });
+    // 管理员给别人签发 Token 也必须通知账号本人 —— 这正是「被盗后偷偷
+    // 建 Token」最需要留信号的路径。只带 prefix / 权限 / 到期，无明文。
+    void sendMail(securityChangeMail(targetRows[0]!.email, {
+      kind: "api_token_created",
+      token: {
+        label: body.data.label, prefix: issued.prefix, scope: body.data.scope,
+        expiresAt: body.data.expiresInDays > 0 ? new Date(Date.now() + body.data.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        via: "admin",
+      },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
     return redirectWithFlash(reply, "/admin/api", { issuedToken: issued.plain, issuedLabel: body.data.label, success: "Token 已生成，仅显示一次，请立即复制" });
   });
 
@@ -2212,8 +2275,26 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/api");
+    // 先把 token 和主人查出来再撤销 —— 撤销完就查不到归属了，
+    // 而撤销通知要发给主人。
+    const [victim] = await db
+      .select({
+        label: schema.apiTokens.label, prefix: schema.apiTokens.prefix,
+        scope: schema.apiTokens.scope, expiresAt: schema.apiTokens.expiresAt,
+        ownerEmail: schema.users.email,
+      })
+      .from(schema.apiTokens)
+      .innerJoin(schema.users, eq(schema.users.id, schema.apiTokens.userId))
+      .where(eq(schema.apiTokens.id, id.data))
+      .limit(1);
     await revokeApiTokenAdmin(id.data);
     await audit(req, u.id, "api_token.revoke", { targetType: "api_token", targetId: id.data });
+    if (victim) {
+      void sendMail(securityChangeMail(victim.ownerEmail, {
+        kind: "api_token_revoked",
+        token: { label: victim.label, prefix: victim.prefix, scope: victim.scope === "read" ? "read" : "write", expiresAt: victim.expiresAt, via: "admin" },
+      })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    }
     return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent("Token 已撤销"));
   });
 
@@ -2239,12 +2320,32 @@ export async function adminRoutes(app: FastifyInstance) {
       const grace = z.coerce.number().int().min(0).max(30).safeParse(graceRaw);
       if (!grace.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("grace 天数无效（0–30）"));
       try {
+        // 轮换 = 给主人新签一个 Token，同样要通知主人（先查归属再轮换）。
+        const [oldRow] = await db
+          .select({
+            label: schema.apiTokens.label, scope: schema.apiTokens.scope,
+            ownerEmail: schema.users.email,
+          })
+          .from(schema.apiTokens)
+          .innerJoin(schema.users, eq(schema.users.id, schema.apiTokens.userId))
+          .where(eq(schema.apiTokens.id, id.data))
+          .limit(1);
         const issued = await rotateApiToken({ oldTokenId: id.data, graceDays: grace.data });
         await audit(req, u.id, "api_token.rotate", {
           targetType: "api_token",
           targetId: id.data,
           details: { newTokenId: issued.id, graceDays: grace.data, oldExpiresAt: issued.oldExpiresAt.toISOString() },
         });
+        if (oldRow) {
+          void sendMail(securityChangeMail(oldRow.ownerEmail, {
+            kind: "api_token_created",
+            token: {
+              label: oldRow.label, prefix: issued.prefix,
+              scope: oldRow.scope === "read" ? "read" : "write",
+              expiresAt: null, via: "admin",
+            },
+          })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+        }
         const feedback = {
           issuedToken: issued.plain,
           issuedLabel: "Rotated token",

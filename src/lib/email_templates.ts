@@ -582,19 +582,57 @@ export function calendarInviteMail(
 }
 
 // ---------- Security alert: 2FA / Passkey enabled ----------
-export function securityChangeMail(to: string, ctx: { kind: "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"; deviceName?: string | null }): SendArgs {
+export type SecurityChangeKind =
+  | "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"
+  | "api_token_created" | "api_token_revoked";
+
+/** API Token 变更通知里允许出现的信息：只有 prefix（公开标识，本来就印在
+ *  设置页和后台列表里）、标签、权限和到期。**明文绝不能进邮件** —— 明文
+ *  只在创建那一刻的页面上显示一次，邮件是长期留存物，进了邮件就等于
+ *  把长期凭据写进了邮箱。 */
+export type SecurityTokenInfo = {
+  label: string;
+  prefix: string;
+  scope: "read" | "write";
+  expiresAt: Date | null;
+  via: "self_service" | "admin";
+};
+
+export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; deviceName?: string | null; token?: SecurityTokenInfo }): SendArgs {
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
   const label = ctx.kind === "passkey_added" ? "Passkey 已添加"
               : ctx.kind === "mfa_enabled"   ? "二次验证 (TOTP) 已启用"
               : ctx.kind === "mfa_disabled"  ? "二次验证 (TOTP) 已关闭"
+              : ctx.kind === "api_token_created" ? "API Token 已创建"
+              : ctx.kind === "api_token_revoked" ? "API Token 已撤销"
               :                                "密码已修改";
   const emoji = ctx.kind === "passkey_added" ? "🔐"
               : ctx.kind === "mfa_enabled"   ? "🛡️"
               : ctx.kind === "mfa_disabled"  ? "⚠️"
+              : ctx.kind === "api_token_created" ? "🗝️"
+              : ctx.kind === "api_token_revoked" ? "⚠️"
               :                                "🔑";
+  const tokenDescription = (): string => {
+    if (!ctx.token) return "";
+    const masked = `bwc_${ctx.token.prefix}_…`;
+    const scopeLabel = ctx.token.scope === "read" ? "只读" : "可读写";
+    const expiry = ctx.token.expiresAt
+      ? `到期时间 ${ctx.token.expiresAt.toLocaleString("zh-CN", { hour12: false })}`
+      : "永不过期";
+    const what = `API Token「${ctx.token.label}」（${masked}，权限：${scopeLabel}，${expiry}）`;
+    if (ctx.kind === "api_token_created") {
+      return ctx.token.via === "admin"
+        ? `管理员刚刚为你的账号新建了一个${what}。持有这个 Token 即可绕过登录直接调用你账号的 API。如果这不是你申请的，请立即在设置页撤销它并联系管理员。`
+        : `你刚刚在设置页新建了一个${what}。持有这个 Token 即可绕过登录直接调用你账号的 API。如果不是你本人操作，说明你的登录会话可能已被盗用 —— 请立即撤销这个 Token 并修改密码。`;
+    }
+    return ctx.token.via === "admin"
+      ? `管理员刚刚撤销了你账号的${what}。持有旧 Token 的集成已即刻失效；如果是误撤，重新创建一个即可。`
+      : `你账号的${what}刚刚被撤销，持有旧 Token 的集成已即刻失效。如果不是你本人操作，说明你的登录会话可能已被盗用 —— 请立即修改密码。`;
+  };
   const description = ctx.kind === "passkey_added" ? `你刚刚为账号添加了一把新的 Passkey${ctx.deviceName ? `「${ctx.deviceName}」` : ""}。今后登录时即可用指纹 / Face ID / 设备锁直接通过。`
               : ctx.kind === "mfa_enabled"   ? "你刚刚启用了 TOTP 二次验证。今后登录需要密码 + 认证器 6 位验证码（除非使用 Passkey）。请把备用码妥善保存到密码管理器。"
               : ctx.kind === "mfa_disabled"  ? "你刚刚关闭了 TOTP 二次验证 —— 登录从此只需密码（或 Passkey）。如果不是你本人操作，立即修改密码！"
+              : ctx.kind === "api_token_created" || ctx.kind === "api_token_revoked" ? tokenDescription()
               :                                "你刚刚修改了账号密码 —— 所有已登录设备都已被强制下线，需要使用新密码重新登录。";
   const isWarning = ctx.kind === "mfa_disabled";
   const text = `${label}\n\n${description}\n\n如果不是你本人操作，立即前往 ${baseUrl}/app/settings 检查账号安全。`;
@@ -616,6 +654,44 @@ export function securityChangeMail(to: string, ctx: { kind: "passkey_added" | "m
       </p>`,
   });
   return { to, subject: `【${brand}】${label}`, html, text };
+}
+
+// ---------- API Token idle reminder ----------
+/** 长期未使用的 API Token 提醒：闲置的长期凭据是账号被盗后最容易被忽略的
+ *  攻击面 —— 建的时候热闹，忘了撤就一直有效。只带 prefix（公开标识）、
+ *  标签、权限和闲置起点，绝不带明文。 */
+export function tokenIdleReminderMail(to: string, ctx: { label: string; prefix: string; scope: "read" | "write"; idleSince: Date }): SendArgs {
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const masked = `bwc_${ctx.prefix}_…`;
+  const scopeLabel = ctx.scope === "read" ? "只读" : "可读写";
+  const idleDate = ctx.idleSince.toLocaleDateString("zh-CN");
+  const settingsUrl = `${baseUrl}/app/settings/devices#api-tokens`;
+  const title = "有个 API Token 已经 90 天没用过了";
+  const subject = `【${brand}】${title}`;
+  const text = [
+    `你好，`,
+    ``,
+    `你账号里的 API Token「${ctx.label}」（${masked}，权限：${scopeLabel}）自 ${idleDate} 起就没有被使用过，至今已超过 90 天。`,
+    ``,
+    `长期闲置的 Token 是最容易被遗忘的长期凭据：如果它对应的集成已经停用，建议直接撤销，需要时再新建一个只要几秒钟。`,
+    ``,
+    `管理 Token：${settingsUrl}`,
+    ``,
+    `如果你还在使用这个 Token（比如低频的备份脚本），忽略这封邮件即可，我们 30 天内不会就同一个 Token 再提醒。`,
+  ].join("\n");
+  const html = baseLayout({
+    title,
+    preheader: `Token「${ctx.label}」已闲置超过 90 天`,
+    body: `
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;font-weight:600;">🗝️ API Token 闲置提醒</h1>
+      <p style="margin:0 0 12px;color:#475569;line-height:1.6;font-size:14px;">你账号里的 API Token「${escape(ctx.label)}」（<code>${escape(masked)}</code>，权限：${scopeLabel}）自 ${idleDate} 起就没有被使用过，至今已超过 <strong>90 天</strong>。</p>
+      <p style="margin:0 0 12px;color:#475569;line-height:1.6;font-size:14px;">长期闲置的 Token 是最容易被遗忘的长期凭据：如果它对应的集成已经停用，建议直接撤销，需要时再新建一个只要几秒钟。</p>
+      <p style="margin:24px 0;">
+        <a href="${settingsUrl}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">管理我的 API Token</a>
+      </p>
+      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">如果你还在使用这个 Token（比如低频的备份脚本），忽略这封邮件即可，我们 30 天内不会就同一个 Token 再提醒。</p>`,
+  });
+  return { to, subject, text, html };
 }
 
 // ---------- Welcome email after register ----------
@@ -706,6 +782,17 @@ export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
     }),
   },
   { key: "securityChange", label: "安全变更（启用 MFA）", build: (to) => securityChangeMail(to, { kind: "mfa_enabled" }) },
+  {
+    key: "tokenIdleReminder", label: "API Token 闲置提醒",
+    build: (to) => tokenIdleReminderMail(to, { label: "n8n 同步", prefix: "Ab3dEf7h", scope: "read", idleSince: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }),
+  },
+  {
+    key: "securityChangeToken", label: "安全变更（API Token 创建）",
+    build: (to) => securityChangeMail(to, {
+      kind: "api_token_created",
+      token: { label: "n8n 同步", prefix: "Ab3dEf7h", scope: "read", expiresAt: null, via: "self_service" },
+    }),
+  },
   {
     key: "calendarInvite", label: "日历协作邀请",
     build: (to) => calendarInviteMail(to, {

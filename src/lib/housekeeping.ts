@@ -1,6 +1,7 @@
 import { lt, isNotNull, and } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { purgeStaleDeviceRows } from "./devices.js";
+import { remindIdleApiTokens } from "./token_idle_reminders.js";
 
 // Days after which soft-deleted events are physically purged. 90 days is
 // long enough that the user can recover via DB backup if they realize a
@@ -37,6 +38,12 @@ export function startHousekeepingScheduler(log: { info: (m: string) => void; war
       const dev = await purgeStaleDeviceRows();
       if (dev.pairings + dev.devices > 0) {
         log.info(`[housekeeping] purged ${dev.pairings} stale pairing code(s), ${dev.devices} long-revoked device(s)`);
+      }
+      // 90 天没用过的 API Token 给主人发提醒（30 天内不重复，见
+      // token_idle_reminders.ts）。闲置长期凭据是被遗忘的攻击面。
+      const idle = await remindIdleApiTokens();
+      if (idle.sent > 0) {
+        log.info(`[housekeeping] sent ${idle.sent} idle API token reminder(s)`);
       }
     } catch (err) {
       log.warn({ err });
