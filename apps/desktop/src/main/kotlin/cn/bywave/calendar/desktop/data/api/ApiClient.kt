@@ -28,6 +28,7 @@
 package cn.bywave.calendar.desktop.data.api
 
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.AttendeesResponse
 import cn.bywave.calendar.desktop.data.model.Booking
 import cn.bywave.calendar.desktop.data.model.BookingCancelResult
 import cn.bywave.calendar.desktop.data.model.BookingLink
@@ -310,6 +311,26 @@ class ApiClient(
      *  re-anchoring is the caller's job (see CalendarState). */
     suspend fun getEvent(id: String): EventDTO {
         return getAuthed("/api/v1/events/$id", EventDTO.serializer())
+    }
+
+    /** GET /api/v1/events/{id}/attendees — organizer view of an event's
+     *  invitees: RSVP status per invitee + time proposals. */
+    suspend fun attendees(id: String): AttendeesResponse {
+        return getAuthed("/api/v1/events/$id/attendees", AttendeesResponse.serializer())
+    }
+
+    /** POST /api/v1/events/{id}/proposals/{pid}/accept|decline — the
+     *  server moves the event itself when a proposal is accepted. */
+    suspend fun decideProposal(id: String, proposalId: String, accept: Boolean) {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.post("$baseUrl/api/v1/events/$id/proposals/$proposalId/${if (accept) "accept" else "decline"}") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "proposal decision failed")
+        }
     }
 
     /** POST /api/v1/calendars/{id}/import/preview — counts only, the

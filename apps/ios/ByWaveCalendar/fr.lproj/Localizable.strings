@@ -182,6 +182,13 @@
 "还没有人" = "Personne pour l’instant";
 "已接受" = "Accepté";
 "已邀请 · 等待回复" = "Invité · en attente";
+"已接受参加" = "Accepté";
+"已拒绝参加" = "Refusé";
+"可能参加" = "Peut-être";
+"时间提议" = "Propositions d'horaire";
+"接受并改时间" = "Accepter et déplacer";
+"拒绝提议" = "Refuser";
+"已被取代" = "Remplacée";
 "该参与者会从事件移除，待接受的邀请也会作废。" = "Retire le participant et annule les invitations en attente.";
 
 // MARK: - Recurring events

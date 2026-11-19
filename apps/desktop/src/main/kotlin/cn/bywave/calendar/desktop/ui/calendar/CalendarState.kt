@@ -178,6 +178,11 @@ data class CalendarUiState(
     val undoDelete: UndoDelete? = null,
     /** 一句话直接保存成功后的「已创建」反馈条（打开 / 撤销）。 */
     val createdNotice: CreatedNotice? = null,
+    /** 详情弹窗打开时按需拉的参与者视图（RSVP 状态 + 时间提议），
+     *  detailAttendeesFor 是它属于哪个事件 —— 换了事件就作废重拉。
+     *  非组织者（共享日历查看者）拉不到，保持 null，弹窗回落到纯邮箱名单。 */
+    val detailAttendees: cn.bywave.calendar.desktop.data.model.AttendeesResponse? = null,
+    val detailAttendeesFor: String? = null,
     /** 弹窗外的操作（删除、拖动改时间、撤销删除）失败时给用户看的那句话，
      *  主界面顶部提示条显示，用户点 × 关掉。和 [formError] 分开：那个只在
      *  编辑弹窗里渲染，弹窗外的失败写进去等于没写。 */
@@ -345,7 +350,39 @@ class CalendarState(
     // ---- Sheet routing ----
 
     fun openDetail(event: EventDTO) {
-        _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(event), formError = null)
+        _ui.value = _ui.value.copy(
+            activeSheet = ActiveSheet.Detail(event), formError = null,
+            detailAttendees = null, detailAttendeesFor = null,
+        )
+        loadDetailAttendees(event.id)
+    }
+
+    /** 拉详情弹窗的参与者视图。失败（无权限/离线/老服务端）静默保持
+     *  null —— 详情本体不受影响。回来时弹窗若已经换了事件就丢弃。 */
+    private fun loadDetailAttendees(eventId: String) {
+        scope.launch {
+            val resp = runCatching { client.attendees(eventId) }.getOrNull() ?: return@launch
+            val sheet = _ui.value.activeSheet as? ActiveSheet.Detail ?: return@launch
+            if (sheet.event.id != eventId) return@launch
+            _ui.value = _ui.value.copy(detailAttendees = resp, detailAttendeesFor = eventId)
+        }
+    }
+
+    /** 组织者在详情弹窗里裁决时间提议。接受后事件时间变了，
+     *  顺带刷新网格；失败把话写进 actionError（弹窗外提示条）。 */
+    fun decideProposal(proposal: cn.bywave.calendar.desktop.data.model.TimeProposal, accept: Boolean) {
+        val sheet = _ui.value.activeSheet as? ActiveSheet.Detail ?: return
+        val eventId = sheet.event.id
+        scope.launch {
+            runCatching { client.decideProposal(eventId, proposal.id, accept) }
+                .onSuccess {
+                    loadDetailAttendees(eventId)
+                    load()
+                }
+                .onFailure { e ->
+                    _ui.value = _ui.value.copy(actionError = e.message)
+                }
+        }
     }
 
     /** Open the detail for a SEARCH result. Local hits are full DTOs and

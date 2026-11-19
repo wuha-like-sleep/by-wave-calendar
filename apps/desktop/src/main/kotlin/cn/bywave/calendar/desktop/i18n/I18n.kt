@@ -606,6 +606,14 @@ object I18n {
 
         // Event detail
         "event.detail.time" to "Time",
+        "attendees.status.accepted" to "Accepted",
+        "attendees.status.declined" to "Declined",
+        "attendees.status.tentative" to "Maybe",
+        "attendees.status.pending" to "Awaiting reply",
+        "attendees.proposals" to "Time proposals",
+        "attendees.proposal.accept" to "Accept & move event",
+        "attendees.proposal.decline" to "Decline",
+        "attendees.proposal.superseded" to "Superseded",
         "event.detail.calendar" to "Calendar",
         "event.detail.location" to "Location",
         "event.detail.timezone" to "Timezone",
@@ -1217,6 +1225,14 @@ object I18n {
 
         // 事件详情
         "event.detail.time" to "时间",
+        "attendees.status.accepted" to "已接受",
+        "attendees.status.declined" to "已拒绝",
+        "attendees.status.tentative" to "可能参加",
+        "attendees.status.pending" to "待回复",
+        "attendees.proposals" to "时间提议",
+        "attendees.proposal.accept" to "接受并改时间",
+        "attendees.proposal.decline" to "拒绝",
+        "attendees.proposal.superseded" to "已被取代",
         "event.detail.calendar" to "日历",
         "event.detail.location" to "地点",
         "event.detail.timezone" to "时区",
@@ -1832,6 +1848,14 @@ object I18n {
 
         // 事件詳情
         "event.detail.time" to "時間",
+        "attendees.status.accepted" to "已接受",
+        "attendees.status.declined" to "已拒絕",
+        "attendees.status.tentative" to "可能參加",
+        "attendees.status.pending" to "待回覆",
+        "attendees.proposals" to "時間提議",
+        "attendees.proposal.accept" to "接受並改時間",
+        "attendees.proposal.decline" to "拒絕",
+        "attendees.proposal.superseded" to "已被取代",
         "event.detail.calendar" to "行事曆",
         "event.detail.location" to "地點",
         "event.detail.timezone" to "時區",
@@ -2447,6 +2471,14 @@ object I18n {
 
         // イベント詳細
         "event.detail.time" to "時間",
+        "attendees.status.accepted" to "承諾済み",
+        "attendees.status.declined" to "辞退",
+        "attendees.status.tentative" to "未定",
+        "attendees.status.pending" to "返信待ち",
+        "attendees.proposals" to "時間の提案",
+        "attendees.proposal.accept" to "受け入れて時間を変更",
+        "attendees.proposal.decline" to "却下",
+        "attendees.proposal.superseded" to "置き換え済み",
         "event.detail.calendar" to "カレンダー",
         "event.detail.location" to "場所",
         "event.detail.timezone" to "タイムゾーン",
@@ -3062,6 +3094,14 @@ object I18n {
 
         // 일정 상세
         "event.detail.time" to "시간",
+        "attendees.status.accepted" to "수락함",
+        "attendees.status.declined" to "거절함",
+        "attendees.status.tentative" to "미정",
+        "attendees.status.pending" to "답변 대기",
+        "attendees.proposals" to "시간 제안",
+        "attendees.proposal.accept" to "수락하고 시간 변경",
+        "attendees.proposal.decline" to "거절",
+        "attendees.proposal.superseded" to "대체됨",
         "event.detail.calendar" to "캘린더",
         "event.detail.location" to "위치",
         "event.detail.timezone" to "시간대",
@@ -3677,6 +3717,14 @@ object I18n {
 
         // Detalle del evento
         "event.detail.time" to "Hora",
+        "attendees.status.accepted" to "Aceptó",
+        "attendees.status.declined" to "Rechazó",
+        "attendees.status.tentative" to "Quizás",
+        "attendees.status.pending" to "Esperando respuesta",
+        "attendees.proposals" to "Propuestas de hora",
+        "attendees.proposal.accept" to "Aceptar y mover",
+        "attendees.proposal.decline" to "Rechazar",
+        "attendees.proposal.superseded" to "Reemplazada",
         "event.detail.calendar" to "Calendario",
         "event.detail.location" to "Ubicación",
         "event.detail.timezone" to "Zona horaria",
@@ -4292,6 +4340,14 @@ object I18n {
 
         // Détail de l'événement
         "event.detail.time" to "Heure",
+        "attendees.status.accepted" to "Accepté",
+        "attendees.status.declined" to "Refusé",
+        "attendees.status.tentative" to "Peut-être",
+        "attendees.status.pending" to "En attente de réponse",
+        "attendees.proposals" to "Propositions d'horaire",
+        "attendees.proposal.accept" to "Accepter et déplacer",
+        "attendees.proposal.decline" to "Refuser",
+        "attendees.proposal.superseded" to "Remplacée",
         "event.detail.calendar" to "Calendrier",
         "event.detail.location" to "Lieu",
         "event.detail.timezone" to "Fuseau horaire",
@@ -4907,6 +4963,14 @@ object I18n {
 
         // Termindetails
         "event.detail.time" to "Zeit",
+        "attendees.status.accepted" to "Angenommen",
+        "attendees.status.declined" to "Abgelehnt",
+        "attendees.status.tentative" to "Vielleicht",
+        "attendees.status.pending" to "Antwort ausstehend",
+        "attendees.proposals" to "Zeitvorschläge",
+        "attendees.proposal.accept" to "Annehmen & verschieben",
+        "attendees.proposal.decline" to "Ablehnen",
+        "attendees.proposal.superseded" to "Ersetzt",
         "event.detail.calendar" to "Kalender",
         "event.detail.location" to "Ort",
         "event.detail.timezone" to "Zeitzone",

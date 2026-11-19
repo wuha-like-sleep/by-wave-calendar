@@ -477,6 +477,13 @@
       "when": 1795219200000,
       "tag": "0067_ios_announcement",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1795305600000,
+      "tag": "0068_event_time_proposals",
+      "breakpoints": true
     }
   ]
 }

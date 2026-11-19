@@ -113,6 +113,13 @@ function patchEvent(id: string, payload: Record<string, unknown>) {
 describe("事件变更站内通知", () => {
   it("改时间 → 成员与已注册参与者各收到一条 event_updated，操作者本人没有，且不推 Push", async () => {
     const ev = await createEvent({ attendees: [attendee.email] });
+    // 建事件时受邀者先收到一条 event_invitation（邀请线站内通知），
+    // 它是邀请类、带 Push —— 先等它落库并把推送计数快照下来，
+    // 下面断言的是「改时间这一步」的净效果，不把邀请算进来。
+    const inviteRows = await waitRows(attendee.id, 1);
+    expect(inviteRows[0]!.type).toBe("event_invitation");
+    const pushesAfterInvite = pushCalls.length;
+
     const res = await patchEvent(ev.id, { startsAt: "2026-07-14T03:00:00.000Z", endsAt: "2026-07-14T04:00:00.000Z" });
     expect([200, 204], `改事件失败: ${res.body.slice(0, 300)}`).toContain(res.statusCode);
 
@@ -123,13 +130,12 @@ describe("事件变更站内通知", () => {
     expect(memberRows[0]!.body).toContain("03:00");
     expect(memberRows[0]!.url).toBe(`/app?event=${ev.id}&cal=${cal.id}`);
 
-    const attendeeRows = await waitRows(attendee.id, 1);
-    expect(attendeeRows).toHaveLength(1);
-    expect(attendeeRows[0]!.type).toBe("event_updated");
+    const attendeeUpdated = (await waitRows(attendee.id, 2)).filter((r) => r.type === "event_updated");
+    expect(attendeeUpdated).toHaveLength(1);
 
     expect(await rowsFor(owner.id)).toHaveLength(0);
     // event_updated 是高频低急迫类：只进收件箱，永不推 Push。
-    expect(pushCalls).toHaveLength(0);
+    expect(pushCalls).toHaveLength(pushesAfterInvite);
   });
 
   it("只改描述 → 谁都不通知", async () => {

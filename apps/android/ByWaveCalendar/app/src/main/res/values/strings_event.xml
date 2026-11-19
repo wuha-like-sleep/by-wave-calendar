@@ -115,4 +115,14 @@
     <string name="rrule_passthrough_note">高级重复规则将保持原样</string>
     <string name="exdates_title">已删除的单次</string>
     <string name="exdates_restore">恢复</string>
+
+    <!-- RSVP 状态与时间提议 -->
+    <string name="attendees_status_accepted">已接受</string>
+    <string name="attendees_status_declined">已拒绝</string>
+    <string name="attendees_status_tentative">可能参加</string>
+    <string name="attendees_status_pending">待回复</string>
+    <string name="attendees_proposals_title">时间提议</string>
+    <string name="attendees_proposal_accept">接受并改时间</string>
+    <string name="attendees_proposal_decline">拒绝</string>
+    <string name="attendees_proposal_superseded">已被取代</string>
 </resources>

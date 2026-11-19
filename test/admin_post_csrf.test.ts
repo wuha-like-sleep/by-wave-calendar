@@ -119,6 +119,7 @@ const EXEMPT: Record<string, string> = {
   // 邮件里那条邀请链接的回执。凭据是 URL 里的邀请令牌：拿不到令牌改不了，
   // 拿到了也不需要借谁的登录 —— 没有会话可被冒用。
   "POST /event-invite/:token/respond": "凭据是 URL 里的邀请令牌，不读 cookie",
+  "POST /event-invite/:token/propose": "凭据是 URL 里的邀请令牌，不读 cookie（提议人账号由服务端按受邀邮箱解析）",
   // OAuth 2.0 的令牌端点，是第三方客户端的服务器在调：client_id/secret（或 Basic 头）+ 授权码。
   "POST /oauth/token": "OAuth 客户端凭据 + 授权码，不读 cookie",
   // 凭据是请求体里那个要撤销的令牌本身。

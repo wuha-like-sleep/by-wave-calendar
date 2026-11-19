@@ -59,6 +59,8 @@ export const EXPORT_TABLES = [
   { name: "share_tokens",         table: schema.shareTokens },
   { name: "calendar_subscriptions", table: schema.calendarSubscriptions },
   { name: "event_invite_tokens",  table: schema.eventInviteTokens },
+  // 「提议新时间」的台账：丢了组织者就看不到待处理的提议，用户会发现。
+  { name: "event_time_proposals", table: schema.eventTimeProposals },
   // 站内通知收件箱：未读通知丢了用户会发现（铃铛突然变空），要跟着走。
   { name: "notifications",        table: schema.notifications },
 ] as const;

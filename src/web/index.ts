@@ -2,7 +2,7 @@ import { registerNativeLoginRoutes } from "./native_login.js";
 import { readFlash, redirectWithFlash as redirectWith, type Flash } from "../lib/flash.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { env } from "../env.js";
 import { hashPassword, passwordPolicyError, verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
@@ -20,9 +20,11 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
+import { notifyEventInvitation, notifyOrganizerRsvp } from "../lib/invite_notify.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookingTimeZone, bookingTimeZoneFromCalendar, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, deleteBookingLink, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
-import { canonicalTimeZone } from "../lib/zoned_time.js";
+import { canonicalTimeZone, fromWallClock, toWallClock } from "../lib/zoned_time.js";
+import { createTimeProposal, decideTimeProposal, listProposalsForEvent } from "../lib/time_proposals.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -1643,6 +1645,15 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.eventInviteTokens)
       .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
       .orderBy(desc(schema.eventInviteTokens.createdAt));
+    // 参与者里有注册账号的，把显示名带出来（名单对齐主流邀请页：
+    // 头像 + 名字 + 状态，而不只是一串邮箱）。
+    const attendeeUsers = attendees.length > 0 ? await db
+      .select({ email: schema.users.email, displayName: schema.users.displayName })
+      .from(schema.users)
+      .where(inArray(sql<string>`lower(${schema.users.email})`, attendees)) : [];
+    const attendeeNames: Record<string, string | null> = {};
+    for (const u of attendeeUsers) attendeeNames[u.email.toLowerCase()] = u.displayName;
+    const proposals = await listProposalsForEvent(event.id);
     return reply.view("app/event-attendees", {
       title: tr(req, "page.attendees", { summary: event.summary }),
       user,
@@ -1654,7 +1665,15 @@ export async function webRoutes(app: FastifyInstance) {
         endsAtLocal: localTime(event.endsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
       },
       calendar,
+      organizer: { name: user.displayName || user.email, email: user.email },
       attendees,
+      attendeeNames,
+      proposals: proposals.map((p) => ({
+        ...p,
+        startsAtLocal: localTime(p.proposedStartsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(p.proposedEndsAt, calendar.timezone, event.allDay ? "date" : "datetime"),
+      })),
+      pendingProposalCount: proposals.filter((p) => p.status === "pending").length,
       tokens: tokens.map((t) => ({
         ...t,
         createdAtLocal: localTime(t.createdAt),
@@ -1703,6 +1722,12 @@ export async function webRoutes(app: FastifyInstance) {
         recipientEmail: inviteeEmail,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
+      void notifyEventInvitation({
+        event,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName },
+        inviteeEmail,
+        inviteToken,
+      }).catch(() => undefined);
       const ics = invitationIcs({
         event: {
           uid: event.uid,
@@ -1776,6 +1801,40 @@ export async function webRoutes(app: FastifyInstance) {
       ));
     return redirectWith(reply, `/app/events/${evId.data}/attendees`, { success: tr(req, "flash.attendee.revoked", { email: target }) });
   });
+
+  // ---------- Time proposals: organizer decision ----------
+  // 两条路由分开写死而不是循环注册：CSRF 审计（test/admin_post_csrf）
+  // 按字面量扫 app.post(...)，循环 + 模板路径在它眼里是「方法不明」。
+  const decideProposalWeb = (accept: boolean) => async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const params = req.params as { id: string; pid: string };
+    const evId = z.string().uuid().safeParse(params.id);
+    const pid = z.string().uuid().safeParse(params.pid);
+    if (!evId.success || !pid.success) return reply.redirect("/app");
+    const back = `/app/events/${evId.data}/attendees`;
+    const result = await decideTimeProposal({
+      proposalId: pid.data,
+      organizer: { id: user.id, email: user.email, displayName: user.displayName },
+      accept,
+    });
+    if (!result.ok) {
+      // not_owner 在这里表现为「这个事件不归你管」，和页面其他入口一样
+      // 直接回日历，不泄露提议存在与否。
+      if (result.error === "not_owner" || result.error === "not_found" || result.error === "event_missing") {
+        return reply.redirect("/app");
+      }
+      const key = result.error === "event_cancelled" ? "flash.proposal.eventCancelled" : "flash.proposal.alreadyDecided";
+      return redirectWith(reply, back, { error: tr(req, key) });
+    }
+    if (result.event.id !== evId.data) return reply.redirect("/app");
+    return redirectWith(reply, back, {
+      success: tr(req, accept ? "flash.proposal.accepted" : "flash.proposal.declined"),
+    });
+  };
+  app.post<{ Params: { id: string; pid: string } }>("/app/events/:id/proposals/:pid/accept", decideProposalWeb(true));
+  app.post<{ Params: { id: string; pid: string } }>("/app/events/:id/proposals/:pid/decline", decideProposalWeb(false));
 
   app.post<{ Params: { id: string } }>("/app/events/:id/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
@@ -1991,6 +2050,11 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.events)
       .set({ updatedAt: new Date() })
       .where(eq(schema.events.id, tok.sourceEventId));
+    // 组织者要能「实时看到回复」：站内通知（+推送）报一声是谁回了什么。
+    const [fullEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (fullEvent) {
+      void notifyOrganizerRsvp({ event: fullEvent, inviteeEmail: tok.recipientEmail, status: body.data.status }).catch(() => undefined);
+    }
     const msg = body.data.status === "accepted" ? tr(req, "flash.rsvp.accepted")
               : body.data.status === "declined" ? tr(req, "flash.rsvp.declined")
               :                                   tr(req, "flash.rsvp.tentative");
@@ -2027,6 +2091,47 @@ export async function webRoutes(app: FastifyInstance) {
       .from(schema.calendars)
       .where(eq(schema.calendars.ownerId, currentUser.id))
       .orderBy(asc(schema.calendars.name)) : [];
+    // 详情页的「组织者 + 邀请名单」区：持 token 者本身就是受邀者之一，
+    // 给他看全名单与各自状态（对齐主流日历邀请页的信息架构）；没有
+    // token 的人连这一页都打不开，不存在向外人泄露名单的问题。
+    const [calendar] = await db
+      .select()
+      .from(schema.calendars)
+      .where(eq(schema.calendars.id, sourceEvent.calendarId))
+      .limit(1);
+    const [organizer] = calendar ? await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, calendar.ownerId))
+      .limit(1) : [];
+    const displayTz = canonicalTimeZone((sourceEvent.extra as { timezone?: unknown } | null)?.timezone)
+      ?? canonicalTimeZone(calendar?.timezone)
+      ?? "Asia/Shanghai";
+    const allTokens = await db
+      .select()
+      .from(schema.eventInviteTokens)
+      .where(eq(schema.eventInviteTokens.sourceEventId, sourceEvent.id))
+      .orderBy(asc(schema.eventInviteTokens.createdAt));
+    const inviteeEmails = [...new Set(allTokens.map((t) => t.recipientEmail.toLowerCase()))];
+    const inviteeUsers = inviteeEmails.length > 0 ? await db
+      .select({ email: schema.users.email, displayName: schema.users.displayName })
+      .from(schema.users)
+      .where(inArray(sql<string>`lower(${schema.users.email})`, inviteeEmails)) : [];
+    const nameByEmail = new Map(inviteeUsers.map((u) => [u.email.toLowerCase(), u.displayName]));
+    const invitees = allTokens.map((t) => ({
+      email: t.recipientEmail,
+      name: nameByEmail.get(t.recipientEmail.toLowerCase()) ?? null,
+      status: t.responseStatus,
+      isMe: t.token === tok.token,
+    }));
+    const myProposals = await db
+      .select()
+      .from(schema.eventTimeProposals)
+      .where(and(
+        eq(schema.eventTimeProposals.sourceEventId, sourceEvent.id),
+        eq(schema.eventTimeProposals.inviteToken, tok.token),
+      ))
+      .orderBy(desc(schema.eventTimeProposals.createdAt));
     return reply.view("invite/event-accept", {
       title: tr(req, "page.addToCalendar"),
       user: currentUser,
@@ -2035,10 +2140,21 @@ export async function webRoutes(app: FastifyInstance) {
       token: tok.token,
       recipientEmail: tok.recipientEmail,
       responseStatus: tok.responseStatus,
+      organizer: organizer ? { name: organizer.displayName || organizer.email, email: organizer.email } : null,
+      invitees,
+      displayTz,
+      myProposals: myProposals.map((p) => ({
+        ...p,
+        startsAtLocal: localTime(p.proposedStartsAt, displayTz, sourceEvent.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(p.proposedEndsAt, displayTz, sourceEvent.allDay ? "date" : "datetime"),
+      })),
+      proposalDefaults: sourceEvent.allDay
+        ? { start: sourceEvent.startsAt.toISOString().slice(0, 10), end: sourceEvent.endsAt.toISOString().slice(0, 10) }
+        : { start: toWallClock(sourceEvent.startsAt, displayTz).toISOString().slice(0, 16), end: toWallClock(sourceEvent.endsAt, displayTz).toISOString().slice(0, 16) },
       sourceEvent: {
         ...sourceEvent,
-        startsAtLocal: localTime(sourceEvent.startsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
-        endsAtLocal: localTime(sourceEvent.endsAt, "Asia/Shanghai", sourceEvent.allDay ? "date" : "datetime"),
+        startsAtLocal: localTime(sourceEvent.startsAt, displayTz, sourceEvent.allDay ? "date" : "datetime"),
+        endsAtLocal: localTime(sourceEvent.endsAt, displayTz, sourceEvent.allDay ? "date" : "datetime"),
         // The view checks this to render the "已取消" notice + hide RSVP/add-to-calendar.
         deletedAt: sourceEvent.deletedAt,
       },
@@ -2047,6 +2163,51 @@ export async function webRoutes(app: FastifyInstance) {
       googleCalendarUrl: `https://www.google.com/calendar/render?${gcalParams.toString()}`,
       icsDownloadUrl: `${baseUrl}/event-invite/${encodeURIComponent(tok.token)}.ics`,
     });
+  });
+
+  // 提议新时间 — token 即凭据（与 respond 同口径）。表单交来的是事件
+  // 展示时区下的墙上时间，按该时区解释；全天事件按日期（UTC 日界）。
+  app.post<{ Params: { token: string } }>("/event-invite/:token/propose", async (req, reply) => {
+    const back = `/event-invite/${encodeURIComponent(req.params.token)}`;
+    const body = z.object({
+      start: z.string().min(10).max(16),
+      end: z.string().min(10).max(16),
+      note: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, back, { error: tr(req, "flash.proposal.badTime") });
+    const [tok] = await db.select().from(schema.eventInviteTokens).where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok) return redirectWith(reply, back, { error: tr(req, "flash.proposal.badTime") });
+    const [ev] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (!ev) return redirectWith(reply, back, { error: tr(req, "flash.proposal.badTime") });
+    const [cal] = await db.select().from(schema.calendars).where(eq(schema.calendars.id, ev.calendarId)).limit(1);
+    const tz = canonicalTimeZone((ev.extra as { timezone?: unknown } | null)?.timezone)
+      ?? canonicalTimeZone(cal?.timezone) ?? "Asia/Shanghai";
+    const parseWall = (s: string): Date | null => {
+      const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/.exec(s.trim());
+      if (!m) return null;
+      const wall = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] ?? 0), Number(m[5] ?? 0));
+      if (Number.isNaN(wall)) return null;
+      return ev.allDay ? new Date(wall) : fromWallClock(wall, tz);
+    };
+    const startsAt = parseWall(body.data.start);
+    const endsAt = parseWall(body.data.end);
+    if (!startsAt || !endsAt) return redirectWith(reply, back, { error: tr(req, "flash.proposal.badTime") });
+    // 注意：这里刻意不读 cookie 会话（proposerUserId 由 createTimeProposal
+    // 按受邀邮箱解析）—— 这条路由和 respond 一样凭 token 授权，读了会话
+    // 就丢掉 CSRF 豁免的资格（见 test/admin_post_csrf 的 EXEMPT 规则）。
+    const result = await createTimeProposal({
+      inviteToken: tok.token,
+      startsAt,
+      endsAt,
+      note: body.data.note ?? null,
+    });
+    if (!result.ok) {
+      const key = result.error === "event_cancelled" ? "flash.proposal.eventCancelled"
+        : result.error === "token_expired" ? "flash.proposal.expired"
+        : "flash.proposal.badTime";
+      return redirectWith(reply, back, { error: tr(req, key) });
+    }
+    return redirectWith(reply, back, { success: tr(req, "flash.proposal.sent") });
   });
 
   app.post<{ Params: { token: string } }>("/event-invite/:token/accept", async (req, reply) => {

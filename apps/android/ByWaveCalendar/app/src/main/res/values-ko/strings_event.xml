@@ -110,4 +110,14 @@
     <string name="rrule_passthrough_note">고급 반복 규칙은 그대로 유지됩니다</string>
     <string name="exdates_title">삭제된 일정</string>
     <string name="exdates_restore">복원</string>
+
+    <!-- RSVP 状态与时间提议 -->
+    <string name="attendees_status_accepted">수락함</string>
+    <string name="attendees_status_declined">거절함</string>
+    <string name="attendees_status_tentative">미정</string>
+    <string name="attendees_status_pending">답변 대기</string>
+    <string name="attendees_proposals_title">시간 제안</string>
+    <string name="attendees_proposal_accept">수락하고 변경</string>
+    <string name="attendees_proposal_decline">거절</string>
+    <string name="attendees_proposal_superseded">대체됨</string>
 </resources>

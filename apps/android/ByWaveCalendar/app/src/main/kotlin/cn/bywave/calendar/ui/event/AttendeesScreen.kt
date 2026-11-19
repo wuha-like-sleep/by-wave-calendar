@@ -145,6 +145,66 @@ fun AttendeesScreen(
                 )
             }
 
+            // Time proposals from invitees — pending ones need a decision.
+            if (state.proposals.isNotEmpty()) {
+                Spacer(Modifier.size(16.dp))
+                HorizontalDivider()
+                Text(
+                    text = stringResource(R.string.attendees_proposals_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                state.proposals.forEach { proposal ->
+                    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Text(
+                            text = proposal.proposerEmail,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = "${formatProposalInstant(proposal.proposedStartsAt)} → ${formatProposalInstant(proposal.proposedEndsAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (!proposal.note.isNullOrBlank()) {
+                            Text(
+                                text = proposal.note,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (proposal.status == "pending") {
+                            Row(
+                                modifier = Modifier.padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Button(onClick = { vm.decideProposal(proposal, accept = true) }) {
+                                    Text(stringResource(R.string.attendees_proposal_accept))
+                                }
+                                TextButton(onClick = { vm.decideProposal(proposal, accept = false) }) {
+                                    Text(stringResource(R.string.attendees_proposal_decline))
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = stringResource(
+                                    when (proposal.status) {
+                                        "accepted" -> R.string.attendees_status_accepted
+                                        "declined" -> R.string.attendees_status_declined
+                                        else -> R.string.attendees_proposal_superseded
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
+                }
+            }
+
             Spacer(Modifier.size(16.dp))
             HorizontalDivider()
 
@@ -177,13 +237,36 @@ fun AttendeesScreen(
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                text = email,
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = email,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                // RSVP 状态：组织者要能一眼看到谁回了什么，
+                                // 口径与网页管理页一致（服务端 token 的
+                                // responseStatus 是唯一事实源）。
+                                val status = state.statusByEmail[email]
+                                if (status != null) {
+                                    Text(
+                                        text = stringResource(
+                                            when (status) {
+                                                "accepted" -> R.string.attendees_status_accepted
+                                                "declined" -> R.string.attendees_status_declined
+                                                "tentative" -> R.string.attendees_status_tentative
+                                                else -> R.string.attendees_status_pending
+                                            },
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = when (status) {
+                                            "accepted" -> MaterialTheme.colorScheme.primary
+                                            "declined" -> MaterialTheme.colorScheme.error
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
+                                }
+                            }
                             IconButton(onClick = { pendingRevoke = email }) {
                                 Icon(
                                     Icons.Default.PersonRemove,
@@ -202,6 +285,7 @@ fun AttendeesScreen(
 
     val toRevoke = pendingRevoke
     if (toRevoke != null) {
+
         AlertDialog(
             onDismissRequest = { pendingRevoke = null },
             title = { Text(stringResource(R.string.attendees_revoke_title)) },
@@ -219,4 +303,13 @@ fun AttendeesScreen(
             },
         )
     }
+}
+
+/** 提议时间是服务端给的 ISO 时刻，按设备时区显示成 MM-dd HH:mm。 */
+private fun formatProposalInstant(iso: String): String = try {
+    java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+        .withZone(java.time.ZoneId.systemDefault())
+        .format(java.time.Instant.parse(iso))
+} catch (e: Exception) {
+    iso
 }

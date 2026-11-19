@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { fetchEventMastersInWindow } from "../lib/events_query.js";
@@ -11,6 +11,8 @@ import { eventInviteMail } from "../lib/email_templates.js";
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { cancelEvent, markEventBookingsCancelled, notifyEventCancellation } from "../lib/event_cancel.js";
 import { notifyEventUpdated } from "../lib/event_change_notify.js";
+import { notifyEventInvitation, notifyOrganizerRsvp } from "../lib/invite_notify.js";
+import { createTimeProposal, decideTimeProposal, listProposalsForEvent } from "../lib/time_proposals.js";
 import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
 import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
 import { activeSeriesOccurrence, planFutureSeries, truncateSeriesBefore, unchangedEventForWrite } from "../lib/scoped_series_edit.js";
@@ -271,7 +273,7 @@ function zodMessage(error: z.ZodError): string {
  *  所以**调用点必须自己挑准收件人**，别指望这里的失败能被谁看见。 */
 async function inviteAttendees(
   log: FastifyBaseLogger,
-  user: { email: string; displayName?: string | null },
+  user: { id: string; email: string; displayName?: string | null },
   row: {
     id: string; uid: string; summary: string; description: string | null;
     location: string | null; startsAt: Date; endsAt: Date; allDay: boolean;
@@ -299,9 +301,13 @@ async function inviteAttendees(
     method: "REQUEST",
   });
   const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  // 站内邀请通知要完整的事件行（算展示时区要日历时区兜底）；拿不到就只
+  // 跳过站内这一份，邮件照发。
+  const [fullEvent] = await db.select().from(schema.events).where(eq(schema.events.id, row.id)).limit(1);
   for (const to of emails) {
     // 每人一个 token，好让邮件里那个「添加到我的日历」一键跳回来。
     const inviteToken = newInvitationToken();
+    let tokenStored = false;
     try {
       await db.insert(schema.eventInviteTokens).values({
         token: inviteToken,
@@ -309,8 +315,17 @@ async function inviteAttendees(
         recipientEmail: to,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
       });
+      tokenStored = true;
     } catch (err) {
       log.warn({ err, to }, "event_invite_token_failed");
+    }
+    if (tokenStored && fullEvent) {
+      void notifyEventInvitation({
+        event: fullEvent,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName ?? null },
+        inviteeEmail: to,
+        inviteToken,
+      }).catch(() => undefined);
     }
     sendMail(eventInviteMail(to, {
       organizerEmail: user.email,
@@ -1021,6 +1036,7 @@ export async function eventRoutes(app: FastifyInstance) {
       .from(schema.eventInviteTokens)
       .where(eq(schema.eventInviteTokens.sourceEventId, event.id))
       .orderBy(asc(schema.eventInviteTokens.createdAt));
+    const proposals = await listProposalsForEvent(event.id);
     return reply.send({
       attendees,
       tokens: tokens.map((t) => ({
@@ -1029,7 +1045,152 @@ export async function eventRoutes(app: FastifyInstance) {
         createdAt: t.createdAt.toISOString(),
         expiresAt: t.expiresAt.toISOString(),
         acceptedAt: t.acceptedAt?.toISOString() ?? null,
+        // RSVP 状态（pending/accepted/declined/tentative）——客户端参与者
+        // 页据此逐人显示回复状态，与网页管理页同口径。
+        responseStatus: t.responseStatus,
+        respondedAt: t.respondedAt?.toISOString() ?? null,
       })),
+      proposals: proposals.map((p) => ({
+        id: p.id,
+        proposerEmail: p.proposerEmail,
+        proposedStartsAt: p.proposedStartsAt.toISOString(),
+        proposedEndsAt: p.proposedEndsAt.toISOString(),
+        note: p.note,
+        status: p.status,
+        createdAt: p.createdAt.toISOString(),
+        decidedAt: p.decidedAt?.toISOString() ?? null,
+      })),
+    });
+  });
+
+  // Organizer decides a time proposal. Accept moves the event to the
+  // proposed time (state machine lives in lib/time_proposals.ts).
+  for (const decision of ["accept", "decline"] as const) {
+    app.post<{ Params: { id: string; pid: string } }>(`/events/:id/proposals/:pid/${decision}`, {
+      config: { oauthScope: "write:events" },
+    }, async (req, reply) => {
+      const user = await requireUserOrSend(req, reply);
+      if (!user) return reply;
+      const { id } = idParam.parse(req.params);
+      const pid = z.string().uuid().safeParse(req.params.pid);
+      if (!pid.success) return reply.code(400).send({ error: "bad_proposal_id" });
+      const event = await loadOwnedEvent(id, user.id);
+      if (!event) return reply.code(404).send({ error: "not_found" });
+      const result = await decideTimeProposal({
+        proposalId: pid.data,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName },
+        accept: decision === "accept",
+      });
+      if (!result.ok) {
+        if (result.error === "not_found" || result.error === "event_missing") return reply.code(404).send({ error: "not_found" });
+        if (result.error === "not_pending") return reply.code(409).send({ error: "already_decided" });
+        if (result.error === "event_cancelled") return reply.code(410).send({ error: "event_cancelled" });
+        return reply.code(403).send({ error: "not_owner" });
+      }
+      if (result.event.id !== event.id) return reply.code(404).send({ error: "not_found" });
+      return reply.send({ ok: true, status: result.proposal.status });
+    });
+  }
+
+  // ---------- Invitee side (token is the credential, like the web page) ----------
+
+  // My invitations: everything addressed to my account email.
+  app.get("/invitations", { config: { oauthScope: "read:events" } }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    const rows = await db
+      .select({ tok: schema.eventInviteTokens, event: schema.events })
+      .from(schema.eventInviteTokens)
+      .innerJoin(schema.events, eq(schema.events.id, schema.eventInviteTokens.sourceEventId))
+      .where(eq(sql<string>`lower(${schema.eventInviteTokens.recipientEmail})`, user.email.toLowerCase()))
+      .orderBy(desc(schema.eventInviteTokens.createdAt))
+      .limit(100);
+    const ownerIds = [...new Set(rows.map((r) => r.event.calendarId))];
+    const cals = ownerIds.length > 0
+      ? await db.select().from(schema.calendars).where(inArray(schema.calendars.id, ownerIds))
+      : [];
+    const ownerByCal = new Map(cals.map((c) => [c.id, c.ownerId]));
+    const owners = [...new Set(cals.map((c) => c.ownerId))];
+    const ownerRows = owners.length > 0
+      ? await db.select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName })
+          .from(schema.users).where(inArray(schema.users.id, owners))
+      : [];
+    const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
+    return reply.send({
+      invitations: rows.map(({ tok, event }) => {
+        const owner = ownerById.get(ownerByCal.get(event.calendarId) ?? "");
+        return {
+          token: tok.token,
+          responseStatus: tok.responseStatus,
+          respondedAt: tok.respondedAt?.toISOString() ?? null,
+          expiresAt: tok.expiresAt.toISOString(),
+          organizer: owner ? { email: owner.email, name: owner.displayName || owner.email } : null,
+          event: {
+            id: event.id,
+            summary: event.summary,
+            description: event.description,
+            location: event.location,
+            startsAt: event.startsAt.toISOString(),
+            endsAt: event.endsAt.toISOString(),
+            allDay: event.allDay,
+            cancelled: !!event.deletedAt,
+          },
+        };
+      }),
+    });
+  });
+
+  // RSVP via API — same semantics as POST /event-invite/:token/respond.
+  app.post<{ Params: { token: string } }>("/invitations/:token/respond", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const body = z.object({ status: z.enum(["accepted", "declined", "tentative"]) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_status" });
+    const [tok] = await db.select().from(schema.eventInviteTokens)
+      .where(eq(schema.eventInviteTokens.token, req.params.token)).limit(1);
+    if (!tok || tok.expiresAt < new Date()) return reply.code(410).send({ error: "invitation_expired" });
+    const [event] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (!event) return reply.code(404).send({ error: "not_found" });
+    if (event.deletedAt) return reply.code(410).send({ error: "event_cancelled" });
+    await db.update(schema.eventInviteTokens)
+      .set({ responseStatus: body.data.status, respondedAt: new Date() })
+      .where(eq(schema.eventInviteTokens.token, tok.token));
+    await db.update(schema.events).set({ updatedAt: new Date() }).where(eq(schema.events.id, event.id));
+    void notifyOrganizerRsvp({ event, inviteeEmail: tok.recipientEmail, status: body.data.status }).catch(() => undefined);
+    return reply.send({ ok: true, status: body.data.status });
+  });
+
+  // Propose a new time via API — ISO instants, no wall-clock ambiguity.
+  app.post<{ Params: { token: string } }>("/invitations/:token/propose", {
+    config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const body = z.object({
+      startsAt: z.string().datetime(),
+      endsAt: z.string().datetime(),
+      note: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_time_range" });
+    const result = await createTimeProposal({
+      inviteToken: req.params.token,
+      startsAt: new Date(body.data.startsAt),
+      endsAt: new Date(body.data.endsAt),
+      note: body.data.note ?? null,
+    });
+    if (!result.ok) {
+      if (result.error === "token_invalid") return reply.code(404).send({ error: "not_found" });
+      if (result.error === "token_expired") return reply.code(410).send({ error: "invitation_expired" });
+      if (result.error === "event_cancelled") return reply.code(410).send({ error: "event_cancelled" });
+      if (result.error === "bad_range") return reply.code(400).send({ error: "bad_time_range" });
+      return reply.code(404).send({ error: "not_found" });
+    }
+    return reply.send({
+      ok: true,
+      proposal: {
+        id: result.proposal.id,
+        proposedStartsAt: result.proposal.proposedStartsAt.toISOString(),
+        proposedEndsAt: result.proposal.proposedEndsAt.toISOString(),
+        status: result.proposal.status,
+      },
     });
   });
 
@@ -1067,6 +1228,12 @@ export async function eventRoutes(app: FastifyInstance) {
         recipientEmail: body.data.email,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
+      void notifyEventInvitation({
+        event,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName },
+        inviteeEmail: body.data.email,
+        inviteToken,
+      }).catch(() => undefined);
       const ics = invitationIcs({
         event: {
           uid: event.uid,

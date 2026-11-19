@@ -549,6 +549,63 @@ export function eventCancelMail(to: string, ctx: {
   };
 }
 
+// ---------- Time proposal result (to an external proposer) ----------
+// 站内用户走站内通知；这封只发给没有账号的提议人。接受时事件时间已经
+// 改了，正文给的是新时间并附回应页链接（点开可把新时间加进自己日历）；
+// 拒绝时给的是维持不变的原时间。
+export function proposalResultMail(to: string, ctx: {
+  organizerName: string;
+  summary: string;
+  accepted: boolean;
+  startsAt: Date;
+  endsAt: Date;
+  allDay: boolean;
+  timezone?: string | null;
+  inviteToken: string;
+}): SendArgs {
+  const tz = ctx.timezone || "Asia/Shanghai";
+  const fmt = (d: Date) => formatInZone(d, tz, !!ctx.allDay);
+  const tzLabel = zoneLabel(tz);
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const link = `${baseUrl}/event-invite/${encodeURIComponent(ctx.inviteToken)}`;
+  const en = emailLocale === "en";
+  const when = `${fmt(ctx.startsAt)} — ${fmt(ctx.endsAt)}`;
+  const text = en
+    ? (ctx.accepted
+        ? `Your proposed time for "${ctx.summary}" was accepted. The event now runs ${when} (${tzLabel}).\nOpen your invitation page to add the new time to your calendar: ${link}`
+        : `Your proposed time for "${ctx.summary}" was not taken. The event stays at ${when} (${tzLabel}).\nYour invitation page: ${link}`)
+    : (ctx.accepted
+        ? `你为「${ctx.summary}」提议的新时间已被接受，活动时间改为 ${when}（${tzLabel}）。\n打开邀请页把新时间加进你的日历：${link}`
+        : `你为「${ctx.summary}」提议的新时间未被采纳，活动时间不变：${when}（${tzLabel}）。\n邀请页：${link}`);
+  const html = baseLayout({
+    title: ctx.summary,
+    preheader: en
+      ? (ctx.accepted ? `Your time proposal for ${ctx.summary} was accepted` : `Your time proposal for ${ctx.summary} was declined`)
+      : (ctx.accepted ? `你为「${ctx.summary}」提议的新时间已被接受` : `你为「${ctx.summary}」提议的新时间未被采纳`),
+    body: `
+      <h1 style="margin:0 0 12px;font-size:20px;color:#0f172a;">${ctx.accepted ? "🕐 " + (en ? "Time proposal accepted" : "提议的新时间已接受") : "🕐 " + (en ? "Time proposal declined" : "提议的新时间未被采纳")}</h1>
+      <p style="margin:0 0 6px;color:#0f172a;font-size:16px;font-weight:600;">${escape(ctx.summary)}</p>
+      <p style="margin:0 0 14px;color:#475569;font-size:14px;">
+        ${en
+          ? (ctx.accepted ? `The organizer accepted your proposed time. The event now runs:` : `The organizer kept the original time:`)
+          : (ctx.accepted ? `组织者接受了你提议的新时间，活动时间改为：` : `组织者维持了原时间：`)}
+      </p>
+      <div style="margin:14px 0;padding:12px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;color:#0f172a;font-size:13px;line-height:1.6;">
+        ${escape(when)} <span style="color:#94a3b8;font-size:11px;">${escape(tzLabel)}</span>
+      </div>
+      <p style="margin:14px 0 0;">
+        <a href="${link}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">${en ? "Open invitation" : "打开邀请页"}</a>
+      </p>`,
+  });
+  return {
+    to,
+    subject: en
+      ? (ctx.accepted ? `[Time updated] ${ctx.summary}` : `[Time proposal declined] ${ctx.summary}`)
+      : (ctx.accepted ? `【时间已更新】${ctx.summary}` : `【提议未采纳】${ctx.summary}`),
+    html, text,
+  };
+}
+
 // ---------- Calendar invitation ----------
 export function calendarInviteMail(
   to: string,

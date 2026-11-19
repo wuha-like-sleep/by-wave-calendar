@@ -110,4 +110,14 @@
     <string name="rrule_passthrough_note">高度な繰り返しルールはそのまま保持されます</string>
     <string name="exdates_title">削除した回</string>
     <string name="exdates_restore">復元</string>
+
+    <!-- RSVP 状态与时间提议 -->
+    <string name="attendees_status_accepted">承諾済み</string>
+    <string name="attendees_status_declined">辞退</string>
+    <string name="attendees_status_tentative">未定</string>
+    <string name="attendees_status_pending">返信待ち</string>
+    <string name="attendees_proposals_title">時間の提案</string>
+    <string name="attendees_proposal_accept">受け入れて変更</string>
+    <string name="attendees_proposal_decline">却下</string>
+    <string name="attendees_proposal_superseded">置き換え済み</string>
 </resources>
