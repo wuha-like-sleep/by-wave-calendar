@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">Le format de l’e-mail ou du mot de passe n’est pas valide</string>
     <string name="setupvm_err_rate_limited">Trop de tentatives. Réessayez plus tard.</string>
     <string name="setupvm_err_server">Erreur du serveur. Réessayez plus tard.</string>
+    <string name="importics_title">Importer des événements</string>
+    <string name="importics_pick_calendar">Choisir le calendrier de destination</string>
+    <string name="importics_preview">Aperçu</string>
+    <string name="importics_confirm">Confirmer l\'import</string>
+    <string name="importics_working_preview">Calcul…</string>
+    <string name="importics_importing">Import…</string>
+    <string name="importics_summary">%1$d événements : %2$d nouveaux · %3$d mis à jour · %4$d doublons · %5$d invalides</string>
+    <string name="importics_invalid_title">Éléments invalides</string>
+    <string name="importics_result">Import terminé : %1$d ajoutés · %2$d mis à jour · %3$d ignorés</string>
+    <string name="importics_done">Terminé</string>
+    <string name="importics_no_calendars">Aucun calendrier — créez-en un d\'abord</string>
+    <string name="importics_error_read">Impossible de lire ce fichier</string>
+    <string name="importics_error_too_large">Fichier trop volumineux (plus de 8 Mo)</string>
+    <string name="importics_error_not_ics">Ce fichier n\'est pas un fichier de calendrier (.ics)</string>
+    <string name="importics_error_generic">Échec de l\'import, réessayez plus tard</string>
 </resources>

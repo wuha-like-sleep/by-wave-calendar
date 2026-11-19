@@ -65,6 +65,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Refresh
@@ -184,6 +185,9 @@ fun MainScreen(
     // Global search dialog visibility. Opened by the toolbar magnifier or
     // Cmd/Ctrl+F; Esc closes it (handled in the ShortcutAction.Escape arm).
     var showSearch by remember { mutableStateOf(false) }
+    // ICS import: the file picked in the toolbar's native file dialog.
+    // Non-null → the import confirmation dialog is showing.
+    var importFile by remember { mutableStateOf<java.io.File?>(null) }
     // When MenuBar's "检查更新" fires, ShortcutAction.CheckUpdate
     // arrives here; we kick the force-check then auto-pop the dialog
     // if something new was found. forceCheckOutcome lets us show a
@@ -225,7 +229,7 @@ fun MainScreen(
     // 参数 —— 组件没被重建,上一个账号的搜索结果会原样留在屏幕上,点一下
     // 还会跳到那条并不属于当前账号的日期。切账号时直接关掉最干净。
     // 这个 effect 首次挂载也会跑一次,那时 showSearch 本来就是 false。
-    LaunchedEffect(state) { showSearch = false }
+    LaunchedEffect(state) { showSearch = false; importFile = null }
 
     // Pipe keyboard shortcuts (Cmd/Ctrl+N, etc.) into CalendarState.
     // Re-attaches when CalendarState rebuilds on profile switch. Escape
@@ -336,6 +340,7 @@ fun MainScreen(
                 onRefresh = { state.load() },
                 onNew = { state.openCreate() },
                 onOpenSearch = { showSearch = true },
+                onOpenImport = { pickIcsFile()?.let { importFile = it } },
                 // Settings page hosts sign-out + all account / security /
                 // appearance / about controls. Previously the toolbar had
                 // its own Logout icon — removed in favor of the Settings
@@ -572,6 +577,23 @@ fun MainScreen(
         )
     }
 
+    // ICS import confirmation — the file was picked with the native
+    // file dialog from the toolbar. A successful import reloads the
+    // events fetch so the imported events (and the calendar list)
+    // flow into the views, same as after a Settings calendar change.
+    importFile?.let { file ->
+        ImportIcsDialog(
+            profile = p,
+            file = file,
+            calendars = ui.calendars,
+            onImported = {
+                importFile = null
+                state.load()
+            },
+            onDismiss = { importFile = null },
+        )
+    }
+
     // Settings page — rendered as a full-screen overlay on top of the
     // calendar. Hosts account / calendars / security / appearance /
     // about. Sign-out, profile switch, and "+ add account" all bubble
@@ -706,6 +728,7 @@ private fun TopBar(
     onRefresh: () -> Unit,
     onNew: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     // Collect locale so this whole TopBar re-renders when the user
@@ -791,6 +814,11 @@ private fun TopBar(
         WithTooltip(t("topbar.search"), "F") {
             IconButton(onClick = onOpenSearch) {
                 Icon(Icons.Outlined.Search, contentDescription = t("topbar.search"))
+            }
+        }
+        WithTooltip(t("import.title"), "I") {
+            IconButton(onClick = onOpenImport) {
+                Icon(Icons.Outlined.FileUpload, contentDescription = t("import.title"))
             }
         }
         WithTooltip(t("topbar.refresh"), "R") {

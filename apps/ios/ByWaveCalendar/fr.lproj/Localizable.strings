@@ -495,3 +495,20 @@
 "排期时区：%@；预约时间按设备时区显示。" = "Fuseau des disponibilités : %@. Les réservations utilisent le fuseau de votre appareil.";
 "显示时区" = "Fuseau affiché";
 "日程时区" = "Fuseau de l’événement";
+
+// ICS 导入
+"导入日程" = "Importer des événements";
+"导入 .ics 文件" = "Importer un fichier .ics";
+"选择要导入到的日历" = "Choisir le calendrier de destination";
+"还没有日历，先创建一个日历再导入" = "Aucun calendrier — créez-en un d'abord";
+"读不到这个文件" = "Impossible de lire ce fichier";
+"文件过大（超过 8 MB）" = "Fichier trop volumineux (plus de 8 Mo)";
+"这个文件不是日历文件（.ics）" = "Ce fichier n'est pas un fichier de calendrier (.ics)";
+"导入失败，请稍后再试" = "Échec de l'import, réessayez plus tard";
+"导入完成：新增 %lld · 更新 %lld · 跳过 %lld" = "Import terminé : %lld ajoutés · %lld mis à jour · %lld ignorés";
+"共 %lld 条：新增 %lld · 更新 %lld · 重复 %lld · 无效 %lld" = "%lld événements : %lld nouveaux · %lld mis à jour · %lld doublons · %lld invalides";
+"无效条目" = "Éléments invalides";
+"正在导入…" = "Import…";
+"正在计算…" = "Calcul…";
+"确认导入" = "Confirmer l'import";
+"预览" = "Aperçu";

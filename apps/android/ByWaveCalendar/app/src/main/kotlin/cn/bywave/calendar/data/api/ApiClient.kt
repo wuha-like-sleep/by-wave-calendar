@@ -28,6 +28,9 @@ import cn.bywave.calendar.data.model.ParseEventInput
 import cn.bywave.calendar.data.model.ParseEventResult
 import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.EventsResponse
+import cn.bywave.calendar.data.model.IcsImportPreview
+import cn.bywave.calendar.data.model.IcsImportRequest
+import cn.bywave.calendar.data.model.IcsImportResult
 import cn.bywave.calendar.data.model.LoginRequest
 import cn.bywave.calendar.data.model.LoginResponse
 import cn.bywave.calendar.data.model.MfaVerifyRequest
@@ -69,6 +72,18 @@ interface BywaveApi {
      *  palette and iOS SearchView use. */
     @GET("api/v1/search")
     suspend fun search(@Query("q") q: String, @Query("limit") limit: Int = 100): SearchResponse
+
+    /** Preview an ICS import into one calendar — counts only, the
+     *  server writes nothing. Mirrors the web import dialog's first
+     *  step (same judgement, same sourceTag). */
+    @POST("api/v1/calendars/{id}/import/preview")
+    suspend fun importPreview(@Path("id") id: String, @Body body: IcsImportRequest): IcsImportPreview
+
+    /** Import ICS text into one calendar. Same dedupe semantics as
+     *  the web import: uid-keyed upsert, soft-deleted rows stay
+     *  deleted, unchanged rows are skipped without touching them. */
+    @POST("api/v1/calendars/{id}/import")
+    suspend fun importIcs(@Path("id") id: String, @Body body: IcsImportRequest): IcsImportResult
 
     @GET("api/v1/calendar-sync")
     suspend fun calendarConnection(@Query("remote") remote: String): cn.bywave.calendar.connect.CalendarConnection

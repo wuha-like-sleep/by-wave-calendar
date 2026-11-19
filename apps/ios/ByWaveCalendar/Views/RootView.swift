@@ -31,6 +31,12 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.2), value: state.isSignedIn)
         .animation(.easeOut(duration: 0.2), value: state.isBootstrapping)
+        .onOpenURL { url in
+            // Only real files count as import handovers — the bywave://
+            // auth callback is handled by ASWebAuthenticationSession,
+            // never by URL, so nothing else should land here.
+            if url.isFileURL { state.pendingImportURL = url }
+        }
     }
 }
 

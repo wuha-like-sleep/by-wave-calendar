@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">이메일 또는 비밀번호 형식이 올바르지 않습니다</string>
     <string name="setupvm_err_rate_limited">시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요.</string>
     <string name="setupvm_err_server">서버 오류가 발생했습니다. 잠시 후 다시 시도하세요.</string>
+    <string name="importics_title">일정 가져오기</string>
+    <string name="importics_pick_calendar">가져올 캘린더 선택</string>
+    <string name="importics_preview">미리보기</string>
+    <string name="importics_confirm">가져오기 확인</string>
+    <string name="importics_working_preview">계산 중…</string>
+    <string name="importics_importing">가져오는 중…</string>
+    <string name="importics_summary">총 %1$d개: 신규 %2$d · 업데이트 %3$d · 중복 %4$d · 무효 %5$d</string>
+    <string name="importics_invalid_title">무효한 항목</string>
+    <string name="importics_result">가져오기 완료: 신규 %1$d · 업데이트 %2$d · 건너뜀 %3$d</string>
+    <string name="importics_done">완료</string>
+    <string name="importics_no_calendars">캘린더가 없습니다. 먼저 캘린더를 만드세요</string>
+    <string name="importics_error_read">파일을 읽을 수 없습니다</string>
+    <string name="importics_error_too_large">파일이 너무 큽니다(8MB 초과)</string>
+    <string name="importics_error_not_ics">이 파일은 캘린더 파일(.ics)이 아닙니다</string>
+    <string name="importics_error_generic">가져오기에 실패했습니다. 나중에 다시 시도하세요</string>
 </resources>

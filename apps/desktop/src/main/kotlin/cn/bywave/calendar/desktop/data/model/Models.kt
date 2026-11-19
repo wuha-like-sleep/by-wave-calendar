@@ -177,6 +177,42 @@ data class SearchResponse(
     val events: List<SearchResultDTO>,
 )
 
+// ---- ICS import ----
+//
+// POST /api/v1/calendars/{id}/import[/preview]. `text` is the whole
+// .ics file decoded as UTF-8. `filename` only feeds the server's
+// sourceTag (the same `file:<name>` shape the web upload produces) —
+// the tag takes part in the "did anything change" judgement, so
+// sending the real name keeps re-importing the same file a no-op
+// even when it was first imported through another channel.
+
+@Serializable
+data class IcsImportRequest(
+    val text: String,
+    val filename: String? = null,
+)
+
+/** Preview counts for an ICS import — computed server-side by the
+ *  same judgement the real import uses, but writes nothing. */
+@Serializable
+data class IcsImportPreview(
+    val total: Int = 0,
+    val inserted: Int = 0,
+    val updated: Int = 0,
+    val duplicates: Int = 0,
+    val invalid: Int = 0,
+    val invalidReasons: List<String> = emptyList(),
+)
+
+/** Result of an ICS import. `skipped` = duplicates + invalid. */
+@Serializable
+data class IcsImportResult(
+    val inserted: Int = 0,
+    val updated: Int = 0,
+    val skipped: Int = 0,
+    val total: Int = 0,
+)
+
 // ---- Share / subscribe links ----
 //
 // GET/POST/DELETE /api/v1/calendars/{id}/share-tokens. A share token is an

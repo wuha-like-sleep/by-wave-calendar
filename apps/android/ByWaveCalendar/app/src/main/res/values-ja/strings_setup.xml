@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">メールアドレスまたはパスワードの形式が正しくありません</string>
     <string name="setupvm_err_rate_limited">試行回数が多すぎます。しばらくしてから再試行してください。</string>
     <string name="setupvm_err_server">サーバーでエラーが発生しました。しばらくしてから再試行してください。</string>
+    <string name="importics_title">予定をインポート</string>
+    <string name="importics_pick_calendar">インポート先のカレンダーを選択</string>
+    <string name="importics_preview">プレビュー</string>
+    <string name="importics_confirm">インポートを確認</string>
+    <string name="importics_working_preview">計算中…</string>
+    <string name="importics_importing">インポート中…</string>
+    <string name="importics_summary">全%1$d件：新規%2$d · 更新%3$d · 重複%4$d · 無効%5$d</string>
+    <string name="importics_invalid_title">無効な項目</string>
+    <string name="importics_result">インポート完了：新規%1$d · 更新%2$d · スキップ%3$d</string>
+    <string name="importics_done">完了</string>
+    <string name="importics_no_calendars">カレンダーがまだありません。先にカレンダーを作成してください</string>
+    <string name="importics_error_read">ファイルを読み取れませんでした</string>
+    <string name="importics_error_too_large">ファイルが大きすぎます（8 MB超）</string>
+    <string name="importics_error_not_ics">このファイルはカレンダーファイル（.ics）ではありません</string>
+    <string name="importics_error_generic">インポートに失敗しました。後でもう一度お試しください</string>
 </resources>

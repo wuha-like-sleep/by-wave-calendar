@@ -77,6 +77,30 @@ class EventRepository(
         return client.api.search(query, limit)
     }
 
+    /** Preview an ICS import for the active profile — the server runs
+     *  the same dedupe judgement as the real import but writes
+     *  nothing, so the user sees the counts before committing. */
+    suspend fun previewImport(
+        calendarId: String,
+        text: String,
+        filename: String?,
+    ): cn.bywave.calendar.data.model.IcsImportPreview {
+        val profile = profiles.active() ?: error("not signed in")
+        val client = ApiClient.forProfile(profile, profiles)
+        return client.api.importPreview(calendarId, cn.bywave.calendar.data.model.IcsImportRequest(text, filename))
+    }
+
+    /** Import ICS text into one of the active profile's calendars. */
+    suspend fun importIcs(
+        calendarId: String,
+        text: String,
+        filename: String?,
+    ): cn.bywave.calendar.data.model.IcsImportResult {
+        val profile = profiles.active() ?: error("not signed in")
+        val client = ApiClient.forProfile(profile, profiles)
+        return client.api.importIcs(calendarId, cn.bywave.calendar.data.model.IcsImportRequest(text, filename))
+    }
+
     /**
      * Fetch a window from the server and replace the active profile's
      * cache. Errors bubble so the ViewModel can surface a banner

@@ -48,6 +48,9 @@ import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.EventsResponse
+import cn.bywave.calendar.desktop.data.model.IcsImportPreview
+import cn.bywave.calendar.desktop.data.model.IcsImportRequest
+import cn.bywave.calendar.desktop.data.model.IcsImportResult
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
 import cn.bywave.calendar.desktop.data.model.SearchResponse
@@ -264,6 +267,32 @@ class ApiClient(
             parameter("q", query)
             parameter("limit", limit)
         }
+    }
+
+    /** POST /api/v1/calendars/{id}/import/preview — counts only, the
+     *  server writes nothing. Same judgement (and sourceTag) as the
+     *  real import, mirroring the web import dialog's first step. */
+    suspend fun importPreview(calendarId: String, text: String, filename: String?): IcsImportPreview {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/calendars/$calendarId/import/preview",
+            body = IcsImportRequest(text, filename),
+            bodySerializer = IcsImportRequest.serializer(),
+            respSerializer = IcsImportPreview.serializer(),
+        )
+    }
+
+    /** POST /api/v1/calendars/{id}/import — same dedupe semantics as
+     *  the web import: uid-keyed upsert, soft-deleted rows stay
+     *  deleted, unchanged rows are skipped without touching them. */
+    suspend fun importIcs(calendarId: String, text: String, filename: String?): IcsImportResult {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/calendars/$calendarId/import",
+            body = IcsImportRequest(text, filename),
+            bodySerializer = IcsImportRequest.serializer(),
+            respSerializer = IcsImportResult.serializer(),
+        )
     }
 
     // ---- Calendars (CRUD) ----

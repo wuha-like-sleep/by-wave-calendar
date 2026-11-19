@@ -24,3 +24,12 @@ export const MAX_ICS_PASTE_CHARS = 1_000_000;
  *  UTF-8 × 3；代理对是 4 字节 UTF-8 占两个码元，折合 6），再留 64KB 给
  *  _csrf 和字段名。这样 MAX_ICS_PASTE_CHARS 才是真正生效的那一个数。 */
 export const MAX_ICS_PASTE_BODY_BYTES = MAX_ICS_PASTE_CHARS * 9 + 64 * 1024;
+
+/** API 导入那条路（JSON { text }）自己的请求体上限。
+ *
+ *  和粘贴那条同一个道理：bodyLimit 只是传输层的护栏，真正生效的上限是
+ *  路由里对解码后文本量的字节检查（MAX_ICS_IMPORT_BYTES，和网页文件
+ *  上传同一个数）。JSON 里一个 BMP 字符最坏被转义成 \uXXXX 共 6 字节，
+ *  而它在 UTF-8 里最多 3 字节，所以按字节上限的 2 倍放宽再留 64KB 给
+ *  字段名和引号，处在上限边缘的合法文件不会先撞传输层。 */
+export const MAX_ICS_IMPORT_JSON_BODY_BYTES = MAX_ICS_IMPORT_BYTES * 2 + 64 * 1024;

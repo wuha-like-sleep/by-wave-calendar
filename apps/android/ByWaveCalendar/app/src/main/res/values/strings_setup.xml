@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">邮箱或密码格式不对</string>
     <string name="setupvm_err_rate_limited">尝试太频繁，请稍后再试</string>
     <string name="setupvm_err_server">服务器出错，请稍后再试</string>
+    <string name="importics_title">导入日程</string>
+    <string name="importics_pick_calendar">选择要导入到的日历</string>
+    <string name="importics_preview">预览</string>
+    <string name="importics_confirm">确认导入</string>
+    <string name="importics_working_preview">正在计算…</string>
+    <string name="importics_importing">正在导入…</string>
+    <string name="importics_summary">共 %1$d 条：新增 %2$d · 更新 %3$d · 重复 %4$d · 无效 %5$d</string>
+    <string name="importics_invalid_title">无效条目</string>
+    <string name="importics_result">导入完成：新增 %1$d · 更新 %2$d · 跳过 %3$d</string>
+    <string name="importics_done">完成</string>
+    <string name="importics_no_calendars">还没有日历，先创建一个日历再导入</string>
+    <string name="importics_error_read">读不到这个文件</string>
+    <string name="importics_error_too_large">文件过大（超过 8 MB）</string>
+    <string name="importics_error_not_ics">这个文件不是日历文件（.ics）</string>
+    <string name="importics_error_generic">导入失败，请稍后再试</string>
 </resources>

@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">電子郵件或密碼格式不對</string>
     <string name="setupvm_err_rate_limited">嘗試太頻繁，請稍後再試</string>
     <string name="setupvm_err_server">伺服器出錯，請稍後再試</string>
+    <string name="importics_title">導入日程</string>
+    <string name="importics_pick_calendar">選擇要導入到的日曆</string>
+    <string name="importics_preview">預覽</string>
+    <string name="importics_confirm">確認導入</string>
+    <string name="importics_working_preview">正在計算…</string>
+    <string name="importics_importing">正在導入…</string>
+    <string name="importics_summary">共 %1$d 條：新增 %2$d · 更新 %3$d · 重複 %4$d · 無效 %5$d</string>
+    <string name="importics_invalid_title">無效條目</string>
+    <string name="importics_result">導入完成：新增 %1$d · 更新 %2$d · 跳過 %3$d</string>
+    <string name="importics_done">完成</string>
+    <string name="importics_no_calendars">還沒有日曆，先建立一個日曆再導入</string>
+    <string name="importics_error_read">讀不到這個檔案</string>
+    <string name="importics_error_too_large">檔案過大（超過 8 MB）</string>
+    <string name="importics_error_not_ics">這個檔案不是日曆檔案（.ics）</string>
+    <string name="importics_error_generic">導入失敗，請稍後再試</string>
 </resources>
