@@ -31,6 +31,19 @@
     <meta name="theme-color" content="#0f172a" />
     <meta name="csrf-token" content="<%= csrfToken %>" />
     <title><%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></title>
+    <%# SEO / 分享卡片：公开页（首页、下载、支持、法律页）靠这几行在搜索
+        结果和聊天软件里有个像样的摘要。页面可传 metaDescription 覆盖，
+        缺省走全站文案。og:url / og:image 需要绝对地址，而本站是自托管、
+        域名由运营者决定，服务端没有可靠的公开 origin，就不写死。 %>
+    <% const metaDesc = (typeof metaDescription !== 'undefined' && metaDescription) ? metaDescription : t("meta.description"); %>
+    <meta name="description" content="<%= metaDesc %>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %>" />
+    <meta property="og:title" content="<%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %>" />
+    <meta property="og:description" content="<%= metaDesc %>" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="<%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %>" />
+    <meta name="twitter:description" content="<%= metaDesc %>" />
     <% const v = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
     <link rel="icon" type="image/svg+xml" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/favicon.svg?v=' + encodeURIComponent(v) %>" />
     <link rel="apple-touch-icon" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/icons/apple-touch-icon.png?v=' + encodeURIComponent(v) %>" />

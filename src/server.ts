@@ -221,17 +221,23 @@ app.setErrorHandler(async (err: FastifyError, req, reply) => {
   // 记的是完整的 err，含堆栈）—— 为了省开发者一次看日志，把所有自建站点
   // 的内网信息暴露出去，这笔账不划算。
   req.log.error({ err }, "request_failed");
-  const safeMessage = "服务器内部错误";
+  // 文案按请求语言走（与 onRequest 钩子给模板定的 locale 同一条口径）。
+  // 此前这里写死中文：英文用户撞上 500 看到的是一整页中文，而 error.*
+  // 词条 8 种语言一直都在。JSON 分支同理——message 是给人看的，跟着
+  // 请求语言走；机器读的 error 码保持不变。
+  const errUser = await loadUserFromRequest(req).catch(() => null);
+  const errSettings = await getSettings().catch(() => null);
+  const errLocale = resolveLocaleFromRequest(req, errUser?.locale ?? null, errSettings?.defaultLocale);
+  const safeMessage = translatePlain(errLocale, "error.internal");
 
   if ((req.headers.accept ?? "").includes("text/html")) {
-    const user = await loadUserFromRequest(req).catch(() => null);
     return reply.code(status).view("error", {
-      title: "出错了",
-      user,
+      title: translatePlain(errLocale, "error.title"),
+      user: errUser,
       csrfToken: csrfTokenFor(req),
       flash: {},
       statusCode: status,
-      heading: "出错了",
+      heading: translatePlain(errLocale, "error.title"),
       message: safeMessage,
     });
   }
@@ -1008,14 +1014,17 @@ app.setNotFoundHandler(async (req, reply) => {
   const accept = req.headers.accept ?? "";
   if (accept.includes("text/html")) {
     const user = await loadUserFromRequest(req).catch(() => null);
+    // 同 5xx 处理器：404 页文案按请求语言走，别写死中文。
+    const settings = await getSettings().catch(() => null);
+    const locale = resolveLocaleFromRequest(req, user?.locale ?? null, settings?.defaultLocale);
     return reply.code(404).view("error", {
-      title: "未找到",
+      title: translatePlain(locale, "error.notFoundTitle"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: {},
       statusCode: 404,
-      heading: "页面未找到",
-      message: "你访问的内容不存在或已被移除。",
+      heading: translatePlain(locale, "error.notFoundTitle"),
+      message: translatePlain(locale, "error.notFoundMessage"),
     });
   }
   return reply.code(404).send({ error: "not_found" });
