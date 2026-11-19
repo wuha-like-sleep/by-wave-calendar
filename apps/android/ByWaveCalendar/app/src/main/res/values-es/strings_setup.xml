@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">Busca en títulos, notas y ubicaciones</string>
     <string name="search2_no_results_title">No hay eventos coincidentes</string>
     <string name="search2_no_results_subtitle">Prueba con otra palabra clave</string>
+    <string name="search2_server_section">Todo el historial (servidor)</string>
+    <string name="search2_server_more">Buscar en todo el historial</string>
+    <string name="search2_server_searching">Buscando en todo el historial…</string>
+    <string name="search2_offline_hint">Sin conexión: solo se muestran resultados locales</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

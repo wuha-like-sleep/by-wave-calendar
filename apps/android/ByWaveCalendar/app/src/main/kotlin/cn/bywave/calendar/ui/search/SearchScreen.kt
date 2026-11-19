@@ -1,10 +1,14 @@
-// Global event search across the locally cached wide window. No
-// server call — we already have ~15 months of events in Room, filter
-// in-memory by case-insensitive substring on summary / description /
-// location. Mirrors iOS SearchView.
+// Event search, local-first with a server fallback.
 //
-// Sub-second on a few thousand events; if usage grows past that we'd
-// move to FTS5 via Room. For v0.7 plain List.filter is plenty.
+// Local: filter the Room cache (~15 months) in memory by
+// case-insensitive substring on summary / description / location —
+// instant and offline-capable.
+// Server: when the local filter finds nothing (or the user taps
+// "search all history"), SearchViewModel asks GET /api/v1/search —
+// the same endpoint the web palette and iOS SearchView use — and the
+// extra hits land in a separate "all history" section below, so the
+// two scopes are never silently mixed. Offline, only local results
+// show, with a hint saying so.
 
 package cn.bywave.calendar.ui.search
 
@@ -29,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -67,6 +72,7 @@ import cn.bywave.calendar.ui.calendar.parseInstant
 import cn.bywave.calendar.ui.calendar.rememberCalendarFormats
 import cn.bywave.calendar.ui.calendar.toLocalDate
 import cn.bywave.calendar.ui.components.EmptyState
+import java.time.Instant
 import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -125,14 +131,21 @@ fun SearchScreen(
                     title = stringResource(R.string.search2_empty_prompt_title),
                     subtitle = stringResource(R.string.search2_empty_prompt_subtitle),
                 )
-                state.results.isEmpty() -> EmptyState(
+                // 服务端还在查的时候不算「没有结果」—— 空状态要等两边都查完。
+                state.results.isEmpty() && state.serverResults.isEmpty() && !state.serverLoading -> EmptyState(
                     icon = Icons.Default.SearchOff,
                     title = stringResource(R.string.search2_no_results_title),
-                    subtitle = stringResource(R.string.search2_no_results_subtitle),
+                    subtitle = if (state.offline) stringResource(R.string.search2_offline_hint)
+                               else stringResource(R.string.search2_no_results_subtitle),
                 )
                 else -> ResultsList(
                     results = state.results,
+                    serverResults = state.serverResults,
                     calendars = state.calendars,
+                    serverLoading = state.serverLoading,
+                    serverDone = state.serverDone,
+                    offline = state.offline,
+                    onSearchAllHistory = vm::searchAllHistory,
                     onEventClick = { ev ->
                         ime?.hide()
                         onEventClick(ev)
@@ -146,7 +159,12 @@ fun SearchScreen(
 @Composable
 private fun ResultsList(
     results: List<EventDTO>,
+    serverResults: List<EventDTO>,
     calendars: List<CalendarMeta>,
+    serverLoading: Boolean,
+    serverDone: Boolean,
+    offline: Boolean,
+    onSearchAllHistory: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
 ) {
     val formats = rememberCalendarFormats()
@@ -160,6 +178,18 @@ private fun ResultsList(
             .toSortedMap(compareByDescending { it ?: LocalDate.MIN })  // 最近的在上面
     }
     LazyColumn(modifier = Modifier.fillMaxSize()) {
+        if (offline) {
+            item(key = "offline-hint") {
+                Text(
+                    text = stringResource(R.string.search2_offline_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedTextColor(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        }
         for ((day, items) in grouped) {
             // 解析不出时间的事件仍然成组显示，不让它整块消失。
             val header = day?.let { formats.dayHeader.format(it) } ?: "—"
@@ -181,8 +211,83 @@ private fun ResultsList(
                 }
             }
         }
+        // ---- 服务端「全部历史」区段：和本地结果分开标明范围，不混排 ----
+        if (serverResults.isNotEmpty()) {
+            item(key = "server-header") {
+                Text(
+                    text = stringResource(R.string.search2_server_section),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = mutedTextColor(),
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            items(items = serverResults, key = { "server-${it.id}@${it.startsAt}" }) { ev ->
+                Column(Modifier.animateItem()) {
+                    ServerResultRow(event = ev, calendars = calendars, onClick = { onEventClick(ev) })
+                    HorizontalDivider()
+                }
+            }
+        }
+        if (serverLoading) {
+            item(key = "server-loading") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(12.dp))
+                    Text(
+                        text = stringResource(R.string.search2_server_searching),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = mutedTextColor(),
+                    )
+                }
+            }
+        } else if (!serverDone && results.isNotEmpty()) {
+            // 本地有结果时不自动打扰服务器，把「查全部历史」留给用户点。
+            // （本地没结果的那种情况 ViewModel 已经自动问过服务器了。）
+            item(key = "server-more") {
+                Text(
+                    text = stringResource(R.string.search2_server_more),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onSearchAllHistory)
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+        }
         item { Spacer(Modifier.size(24.dp)) }
     }
+}
+
+/** 服务端结果行：重复事件显示「下一次发生」的时间（服务端给的
+ *  nextStartsAt），整段平移、时长不变。点击打开的仍然是原始那条 ——
+ *  显示用的副本只改展示时间，主事件的 startsAt 不能被它污染。 */
+@Composable
+private fun ServerResultRow(
+    event: EventDTO,
+    calendars: List<CalendarMeta>,
+    onClick: () -> Unit,
+) {
+    val display = remember(event) {
+        val next = event.nextStartsAt ?: return@remember event
+        val start = parseInstant(event.startsAt) ?: return@remember event
+        val end = parseInstant(event.endsAt) ?: return@remember event
+        val nextInstant = parseInstant(next) ?: return@remember event
+        event.copy(
+            startsAt = next,
+            endsAt = Instant.ofEpochMilli(end.toEpochMilli() + (nextInstant.toEpochMilli() - start.toEpochMilli())).toString(),
+        )
+    }
+    ResultRow(event = display, calendars = calendars, onClick = onClick)
 }
 
 @Composable

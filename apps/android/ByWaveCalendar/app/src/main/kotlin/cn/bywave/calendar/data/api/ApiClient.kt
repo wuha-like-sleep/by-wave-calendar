@@ -34,6 +34,7 @@ import cn.bywave.calendar.data.model.MfaVerifyRequest
 import cn.bywave.calendar.data.model.PairClaimRequest
 import cn.bywave.calendar.data.model.RefreshRequest
 import cn.bywave.calendar.data.model.RefreshResponse
+import cn.bywave.calendar.data.model.SearchResponse
 import cn.bywave.calendar.data.model.ShareToken
 import cn.bywave.calendar.data.model.ShareTokenCreateRequest
 import kotlinx.serialization.json.Json
@@ -63,6 +64,12 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 interface BywaveApi {
+    /** Full-history search across all of the user's calendars (the local
+     *  Room cache only holds a ~15-month window). Same endpoint the web
+     *  palette and iOS SearchView use. */
+    @GET("api/v1/search")
+    suspend fun search(@Query("q") q: String, @Query("limit") limit: Int = 100): SearchResponse
+
     @GET("api/v1/calendar-sync")
     suspend fun calendarConnection(@Query("remote") remote: String): cn.bywave.calendar.connect.CalendarConnection
     @POST("api/v1/calendar-sync/action")

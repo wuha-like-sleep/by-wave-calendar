@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">Durchsucht Titel, Notizen und Orte</string>
     <string name="search2_no_results_title">Keine passenden Termine</string>
     <string name="search2_no_results_subtitle">Versuche es mit einem anderen Stichwort</string>
+    <string name="search2_server_section">Gesamter Verlauf (Server)</string>
+    <string name="search2_server_more">Im gesamten Verlauf suchen</string>
+    <string name="search2_server_searching">Gesamter Verlauf wird durchsucht…</string>
+    <string name="search2_offline_hint">Offline – es werden nur lokale Ergebnisse angezeigt</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">Searches titles, notes, and locations</string>
     <string name="search2_no_results_title">No matching events</string>
     <string name="search2_no_results_subtitle">Try a different keyword</string>
+    <string name="search2_server_section">All history (server)</string>
+    <string name="search2_server_more">Search all history</string>
+    <string name="search2_server_searching">Searching all history…</string>
+    <string name="search2_offline_hint">Offline — showing local results only</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

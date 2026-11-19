@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">タイトル、メモ、場所を検索します</string>
     <string name="search2_no_results_title">一致する予定がありません</string>
     <string name="search2_no_results_subtitle">別のキーワードで試してください</string>
+    <string name="search2_server_section">全履歴（サーバー）</string>
+    <string name="search2_server_more">全履歴を検索</string>
+    <string name="search2_server_searching">全履歴を検索中…</string>
+    <string name="search2_offline_hint">オフラインのため、ローカルの結果のみ表示しています</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->
