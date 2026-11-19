@@ -435,6 +435,13 @@
       "when": 1794700800000,
       "tag": "0061_native_calendar_access",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1794787200000,
+      "tag": "0062_search_trgm_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -24,7 +24,7 @@
 
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull, ilike, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ilike, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { parseSearchTerms, likeNeedle, textMatchesAllTerms, eventRelevance } from "../lib/search_query.js";
@@ -63,9 +63,14 @@ export async function searchRoutes(app: FastifyInstance) {
     const allowedIds = Array.from(calById.keys());
 
     // ---- Events (constrained to allowedIds) ----
-    // Each term must appear in summary OR description OR location (AND across
-    // terms = "all words present somewhere"). Then re-rank: title relevance
-    // first, recency as tie-breaker.
+    // Each term must appear in summary OR description OR location OR the
+    // attendee list (AND across terms = "all words present somewhere"). Then
+    // re-rank: title relevance first, recency as tie-breaker.
+    // The four ILIKE branches are backed by pg_trgm GIN indexes (migration
+    // 0062): a term long enough to yield trigrams can be served by a bitmap
+    // index scan, while 1–2 character terms (most Chinese queries) extract no
+    // trigrams and simply fall back to the sequential scan they always used —
+    // same substring semantics either way.
     type EventRow = {
       id: string; calendarId: string; summary: string; location: string | null;
       startsAt: Date; endsAt: Date; allDay: boolean; rrule: string | null;
@@ -74,7 +79,16 @@ export async function searchRoutes(app: FastifyInstance) {
     if (allowedIds.length > 0) {
       const termConds = terms.map((t) => {
         const n = likeNeedle(t);
-        return or(ilike(schema.events.summary, n), ilike(schema.events.description, n), ilike(schema.events.location, n));
+        return or(
+          ilike(schema.events.summary, n),
+          ilike(schema.events.description, n),
+          ilike(schema.events.location, n),
+          // 参与人也算事件的文本：extra.attendees 是邮箱字符串数组，->> 取成
+          // 文本后用同一条 ILIKE 命中（迁移 0062 在这个表达式上建了 trgm 索引）。
+          // 只参与 WHERE，绝不进返回列 —— extra 里有入会密码，搜索结果按文件头
+          // 的规矩不回 extra。
+          ilike(sql`${schema.events.extra} ->> 'attendees'`, n),
+        );
       });
       eventRows = await db
         .select({
