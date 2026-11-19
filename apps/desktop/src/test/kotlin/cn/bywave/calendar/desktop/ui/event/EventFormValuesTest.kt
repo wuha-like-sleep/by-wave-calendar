@@ -182,6 +182,28 @@ class EventFormValuesTest {
         assertEquals("2026-11-16T10:00:00-08:00", eventFormIso(local, false, true, zone))
     }
 
+    @Test fun `shared iso conversion keeps the original offset side inside a DST overlap`() {
+        // The desktop editor's own draftInstant has always resolved an
+        // edited wall time with the original event's offset as the
+        // preferred one; the shared eventFormIso (the Android save path)
+        // now applies the same rule, so both editors land on the same
+        // instant. New York 2026-11-01: 01:00–02:00 happens first at
+        // -04:00, then again at -05:00.
+        val zone = ZoneId.of("America/New_York")
+        val secondPass = cn.bywave.calendar.event.EventFormInstant(
+            "2026-11-01T01:30:00-05:00", LocalDateTime.parse("2026-11-01T01:30:00"))
+        assertEquals(
+            "2026-11-01T01:15:00-05:00",
+            eventFormIso(LocalDateTime.parse("2026-11-01T01:15:00"), false, true, zone, secondPass),
+        )
+        val firstPass = cn.bywave.calendar.event.EventFormInstant(
+            "2026-11-01T01:30:00-04:00", LocalDateTime.parse("2026-11-01T01:30:00"))
+        assertEquals(
+            "2026-11-01T01:45:00-04:00",
+            eventFormIso(LocalDateTime.parse("2026-11-01T01:45:00"), false, true, zone, firstPass),
+        )
+    }
+
     @Test fun `copying all-day events near midnight preserves the number of days`() {
         val now = LocalDateTime.parse("2026-11-16T23:30:00")
         val (start, end) = duplicateEventRange("2026-11-01T00:00:00Z", "2026-11-01T23:59:59Z", true, now)

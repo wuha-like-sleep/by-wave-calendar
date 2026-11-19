@@ -1521,6 +1521,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "Saisissez un nom d'agenda",
   "flash.calendar.created": "Agenda créé",
   "flash.calendar.deleted": "Agenda supprimé",
+  "flash.calendar.invalidTimezone": "Fuseau horaire invalide — utilisez un nom de fuseau horaire IANA, par exemple Asia/Shanghai",
+  "api.error.invalidTimezone": "Le fuseau horaire « {tz} » est invalide. Utilisez un nom de fuseau horaire IANA, par exemple Asia/Shanghai.",
   "flash.import.pickFile": "Choisissez un fichier .ics",
   "flash.import.fileTooLarge": "Fichier trop volumineux ({mb} Mo max)",
   "flash.import.notIcs": "Ce n'est pas un fichier iCalendar valide",

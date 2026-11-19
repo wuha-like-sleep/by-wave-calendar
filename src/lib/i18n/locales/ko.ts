@@ -1521,6 +1521,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "캘린더 이름을 입력하세요",
   "flash.calendar.created": "캘린더를 만들었습니다",
   "flash.calendar.deleted": "캘린더를 삭제했습니다",
+  "flash.calendar.invalidTimezone": "시간대가 올바르지 않습니다. Asia/Shanghai 같은 IANA 시간대 이름을 사용하세요",
+  "api.error.invalidTimezone": "시간대 \"{tz}\"이(가) 올바르지 않습니다. Asia/Shanghai 같은 IANA 시간대 이름을 사용하세요.",
   "flash.import.pickFile": ".ics 파일을 선택하세요",
   "flash.import.fileTooLarge": "파일이 너무 큽니다 (최대 {mb}MB)",
   "flash.import.notIcs": "유효한 iCalendar 파일이 아닙니다",

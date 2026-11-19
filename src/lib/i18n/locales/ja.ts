@@ -1521,6 +1521,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "カレンダー名を入力してください",
   "flash.calendar.created": "カレンダーを作成しました",
   "flash.calendar.deleted": "カレンダーを削除しました",
+  "flash.calendar.invalidTimezone": "タイムゾーンが無効です。Asia/Shanghai のような IANA タイムゾーン名を使用してください",
+  "api.error.invalidTimezone": "タイムゾーン \"{tz}\" が無効です。Asia/Shanghai のような IANA タイムゾーン名を使用してください。",
   "flash.import.pickFile": ".ics ファイルを選択してください",
   "flash.import.fileTooLarge": "ファイルが大きすぎます（上限 {mb}MB）",
   "flash.import.notIcs": "有効な iCalendar ファイルではありません",

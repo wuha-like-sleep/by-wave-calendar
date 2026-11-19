@@ -31,7 +31,7 @@ import { createNotification, listNotifications, markAllNotificationsRead, markNo
 import { getClientRender, verifyCaptcha } from "../lib/captcha/index.js";
 import { validateInvite, type InviteValidation } from "../lib/signup_invite.js";
 import { provisionAccount, emailDomainAllowed, type ProvisionDenial } from "../lib/account_provisioning.js";
-import { listTimezones } from "../lib/timezones.js";
+import { listTimezones, normalizeCalendarTimeZone } from "../lib/timezones.js";
 import { isLocked, lockedRemainingMinutes, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
 import { invalidateCalDavAuthCache } from "../lib/caldav_auth.js";
 import { evictAllCredentials } from "../lib/user_state.js";
@@ -1142,7 +1142,18 @@ export async function webRoutes(app: FastifyInstance) {
     if (!body.success) {
       return redirectWith(reply, "/app", { error: tr(req, "flash.calendar.nameRequired") });
     }
-    await db.insert(schema.calendars).values({ ownerId: user.id, ...body.data });
+    // 时区与 API 同一关口（normalizeCalendarTimeZone）：合法归一化成规范
+    // 名再落库，非法回表单报错 —— 不能让网页这条路绕过 API 的校验存进
+    // 乱填的值，展开时静默回退 UTC 的坑就是那么来的。
+    let timezone = body.data.timezone;
+    if (timezone !== undefined) {
+      const normalized = normalizeCalendarTimeZone(timezone);
+      if (normalized === null) {
+        return redirectWith(reply, "/app", { error: tr(req, "flash.calendar.invalidTimezone") });
+      }
+      timezone = normalized;
+    }
+    await db.insert(schema.calendars).values({ ownerId: user.id, ...body.data, ...(timezone !== undefined ? { timezone } : {}) });
     return redirectWith(reply, "/app", { success: tr(req, "flash.calendar.created") });
   });
 

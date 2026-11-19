@@ -115,6 +115,63 @@ describe("parseNaturalLanguageEvent", () => {
       .toBe("2026-07-04T00:30:00");
   });
 
+  it("下班前 → 结束卡在 18:00，默认 1h 即 17:00 开始", () => {
+    expect(parseNaturalLanguageEvent("下班前 交报表", NOW)).toEqual({
+      summary: "交报表",
+      startsAt: "2026-07-03T17:00:00",
+      endsAt: "2026-07-03T18:00:00",
+    });
+  });
+
+  it("下班之前 同义；带时长时开始 = 18:00 − 时长", () => {
+    expect(parseNaturalLanguageEvent("下班之前 开会 2小时", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T16:00:00",
+      endsAt: "2026-07-03T18:00:00",
+    });
+  });
+
+  it("明天 下班前 → 明天的 17:00–18:00", () => {
+    expect(parseNaturalLanguageEvent("明天 下班前 交报表", NOW)).toEqual({
+      summary: "交报表",
+      startsAt: "2026-07-04T17:00:00",
+      endsAt: "2026-07-04T18:00:00",
+    });
+  });
+
+  it("明天下午下班前 → 边界压过时段默认，时段词不漏进标题", () => {
+    const parsed = parseNaturalLanguageEvent("明天下午下班前交报表", NOW);
+    expect(parsed?.startsAt).toBe("2026-07-04T17:00:00");
+    expect(parsed?.summary).toBe("交报表");
+  });
+
+  it("上班前 → 结束卡在 9:00；今天的开始已过则顺延明天", () => {
+    // NOW 是 10:00，今天的 8:00–9:00 已经过去 → 明天。
+    expect(parseNaturalLanguageEvent("上班前 晨跑", NOW)).toEqual({
+      summary: "晨跑",
+      startsAt: "2026-07-04T08:00:00",
+      endsAt: "2026-07-04T09:00:00",
+    });
+    expect(parseNaturalLanguageEvent("明天 上班前 晨跑", NOW)?.startsAt).toBe("2026-07-04T08:00:00");
+  });
+
+  it("下班后才说下班前 → 顺延明天（与裸时钟过期口径一致）", () => {
+    expect(parseNaturalLanguageEvent("下班前 交报表", "2026-07-03T19:00:00")?.startsAt)
+      .toBe("2026-07-04T17:00:00");
+  });
+
+  it("显式时钟压过边界：下班前 17点开会 就是 17 点", () => {
+    expect(parseNaturalLanguageEvent("下班前 17点 开会", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T17:00:00",
+      endsAt: "2026-07-03T18:00:00",
+    });
+  });
+
+  it("下班后 不是下班前：没有其他锚点时仍然解析失败", () => {
+    expect(parseNaturalLanguageEvent("下班后 聚餐", NOW)).toBeNull();
+  });
+
   it("in 30 minutes / in an hour / 2 hours from now", () => {
     expect(parseNaturalLanguageEvent("in 30 minutes standup", NOW)?.startsAt).toBe("2026-07-03T10:30:00");
     expect(parseNaturalLanguageEvent("call in an hour", NOW)?.startsAt).toBe("2026-07-03T11:00:00");

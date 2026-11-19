@@ -1,4 +1,4 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { and, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
@@ -8,6 +8,9 @@ import { env } from "../env.js";
 import { ok, okList, err } from "../lib/api_response.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
+import { normalizeCalendarTimeZone } from "../lib/timezones.js";
+import { resolveLocaleFromRequest, translatePlain } from "../lib/i18n.js";
+import { getSettings } from "../lib/site_settings.js";
 
 const createSchema = z.object({
   name: z.string().min(1).max(200),
@@ -40,6 +43,38 @@ function zodMessage(error: z.ZodError): string {
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * timezone 字段在场时的写入关口（POST / PATCH 共用）：合法则把 body 里
+ * 的值换成归一化后的规范名并返回 true；非法（乱填、空串）回 400
+ * invalid_timezone 并返回 false。字段不在场（undefined）不拦 —— 建日历
+ * 走数据库默认、改日历表示不动这一项。
+ *
+ * 错误文案自己按请求语言解析，不用 tForRequest：那个读 server.ts 全局
+ * 钩子写的 req.locale，能不能读到取决于钩子与路由的注册先后，读不到会
+ * 安静回落中文（devices.ts 的 appleT 踩过同一课）。这里有现成的 user，
+ * 口径与全站一致：?lang= → cookie → user.locale → 站点默认 → 请求头。
+ * message 用 translatePlain：它落在 JSON 里给客户端直接显示，不能带
+ * EJS 转义。
+ */
+async function applyCalendarTimeZone(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  user: { locale?: string | null },
+  body: { timezone?: string },
+): Promise<boolean> {
+  if (body.timezone === undefined) return true;
+  const tz = normalizeCalendarTimeZone(body.timezone);
+  if (tz !== null) {
+    body.timezone = tz;
+    return true;
+  }
+  const settings = await getSettings().catch(() => null);
+  const locale = resolveLocaleFromRequest(req, user.locale ?? null, settings?.defaultLocale);
+  const message = translatePlain(locale, "api.error.invalidTimezone", { tz: body.timezone });
+  err(req, reply, 400, "invalid_timezone", message);
+  return false;
+}
 
 /**
  * 日历换了时区：没有自己时区的定时重复事件（老数据、API 建的）展开跟着换。
@@ -105,6 +140,7 @@ export async function calendarRoutes(app: FastifyInstance) {
       return err(req, reply, 400, "invalid_body", zodMessage(parsedBody.error));
     }
     const body = parsedBody.data;
+    if (!(await applyCalendarTimeZone(req, reply, user, body))) return reply;
     const [row] = await db
       .insert(schema.calendars)
       .values({ ownerId: user.id, ...body })
@@ -126,6 +162,7 @@ export async function calendarRoutes(app: FastifyInstance) {
       return err(req, reply, 400, "invalid_body", zodMessage(parsedBody.error));
     }
     const body = parsedBody.data;
+    if (!(await applyCalendarTimeZone(req, reply, user, body))) return reply;
     const row = await db.transaction(async (tx) => {
       const [before] = await tx.select({ timezone: schema.calendars.timezone })
         .from(schema.calendars)

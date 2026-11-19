@@ -6,6 +6,7 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -48,7 +49,10 @@ fun eventFormDateTime(value: String, allDay: Boolean, zone: ZoneId = ZoneId.syst
 
 /** Remember both the original instant and its displayed clock value. A
  * no-op edit must not choose a different offset in a DST overlap or after
- * the device zone changes while the editor is open. */
+ * the device zone changes while the editor is open. An edit that moves
+ * the clock within the overlap keeps the original's offset side too —
+ * eventFormIso passes it to ZonedDateTime.ofLocal as the preferred
+ * offset, the same rule the desktop editor's draftInstant applies. */
 data class EventFormInstant(val iso: String, val displayed: LocalDateTime)
 
 fun eventFormIso(
@@ -62,7 +66,19 @@ fun eventFormIso(
     val zoned = if (allDay) {
         value.toLocalDate().atTime(if (isStart) LocalTime.MIDNIGHT else LocalTime.of(23, 59, 59))
             .atZone(ZoneOffset.UTC)
-    } else value.atZone(zone)
+    } else {
+        // DST 回拨重叠区：同一墙上时间有两个合法偏移。口径与桌面端
+        // draftInstant 一致 —— 偏移取原事件在该时区下的偏移（原来在
+        // 第二遍那一小时，改到重叠区内另一个分钟仍留在第二遍），不让
+        // 一次小改把事件悄悄挪前一小时。以前这里直接 atZone(zone)，
+        // java.time 对重叠区恒取较早偏移，与桌面端选出的瞬间能差一
+        // 小时。没有原事件（新建）时 preferred 为 null，ofLocal 退回
+        // 较早偏移，与 atZone 相同。preferred 对新墙上时间不合法时
+        // （不在重叠区）ofLocal 自己会忽略它。
+        val preferred = original?.let { runCatching { Instant.parse(it.iso) }.getOrNull() }
+            ?.atZone(zone)?.offset
+        ZonedDateTime.ofLocal(value, zone, preferred)
+    }
     return DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(zoned)
 }
 

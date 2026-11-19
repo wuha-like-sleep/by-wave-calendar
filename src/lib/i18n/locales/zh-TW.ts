@@ -1507,6 +1507,8 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "請填寫行事曆名稱",
   "flash.calendar.created": "行事曆已建立",
   "flash.calendar.deleted": "行事曆已刪除",
+  "flash.calendar.invalidTimezone": "時區不合法，請使用 IANA 時區名，例如 Asia/Shanghai",
+  "api.error.invalidTimezone": "時區 \"{tz}\" 不合法。請使用 IANA 時區名，例如 Asia/Shanghai。",
   "flash.import.pickFile": "請選擇 .ics 檔案",
   "flash.import.fileTooLarge": "檔案過大（上限 {mb}MB）",
   "flash.import.notIcs": "不是有效的 iCalendar 檔案",

@@ -1508,6 +1508,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "请填写日历名称",
   "flash.calendar.created": "日历已创建",
   "flash.calendar.deleted": "日历已删除",
+  "flash.calendar.invalidTimezone": "时区不合法，请使用 IANA 时区名，例如 Asia/Shanghai",
+  "api.error.invalidTimezone": "时区 \"{tz}\" 不合法。请使用 IANA 时区名，例如 Asia/Shanghai。",
   "flash.import.pickFile": "请选择 .ics 文件",
   "flash.import.fileTooLarge": "文件过大（上限 {mb}MB）",
   "flash.import.notIcs": "不是有效的 iCalendar 文件",

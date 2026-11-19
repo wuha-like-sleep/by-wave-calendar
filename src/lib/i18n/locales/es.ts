@@ -1521,6 +1521,8 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "flash.calendar.nameRequired": "Escribe un nombre para el calendario",
   "flash.calendar.created": "Calendario creado",
   "flash.calendar.deleted": "Calendario eliminado",
+  "flash.calendar.invalidTimezone": "Zona horaria no válida: usa un nombre de zona horaria IANA, por ejemplo Asia/Shanghai",
+  "api.error.invalidTimezone": "La zona horaria \"{tz}\" no es válida. Usa un nombre de zona horaria IANA, por ejemplo Asia/Shanghai.",
   "flash.import.pickFile": "Elige un archivo .ics",
   "flash.import.fileTooLarge": "El archivo es demasiado grande (máx. {mb} MB)",
   "flash.import.notIcs": "No es un archivo iCalendar válido",

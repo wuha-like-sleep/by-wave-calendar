@@ -1528,6 +1528,8 @@ export const en = {
   "flash.calendar.nameRequired": "Enter a calendar name",
   "flash.calendar.created": "Calendar created",
   "flash.calendar.deleted": "Calendar deleted",
+  "flash.calendar.invalidTimezone": "Invalid time zone — use an IANA time zone name, e.g. Asia/Shanghai",
+  "api.error.invalidTimezone": "Invalid time zone \"{tz}\". Use an IANA time zone name, e.g. Asia/Shanghai.",
   "flash.import.pickFile": "Choose an .ics file",
   "flash.import.fileTooLarge": "File is too large (max {mb}MB)",
   "flash.import.notIcs": "Not a valid iCalendar file",
