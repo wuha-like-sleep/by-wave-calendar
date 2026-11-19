@@ -192,6 +192,9 @@ fun MainScreen(
     // calendar's edit dialog up. Cleared whenever Settings is opened
     // the ordinary way (gear / shortcut) and when it closes.
     var settingsEditCalendarId by remember { mutableStateOf<String?>(null) }
+    // Same idea for creating: the sidebar's "new calendar" entry opens
+    // Settings on the Calendars tab with the create dialog up.
+    var settingsCreateCalendar by remember { mutableStateOf(false) }
     // Global search dialog visibility. Opened by the toolbar magnifier or
     // Cmd/Ctrl+F; Esc closes it (handled in the ShortcutAction.Escape arm).
     var showSearch by remember { mutableStateOf(false) }
@@ -265,7 +268,7 @@ fun MainScreen(
                             UpdateChecker.dismiss()
                         }
                         showSearch -> showSearch = false
-                        showSettings -> showSettings = false
+                        showSettings -> { showSettings = false; settingsEditCalendarId = null; settingsCreateCalendar = false }
                         else -> s.dismissAllModals()
                     }
                 }
@@ -280,7 +283,7 @@ fun MainScreen(
                     // give the user feedback via a small dialog.
                     showUpdateDialog = true
                 }
-                ShortcutAction.OpenSettings -> { settingsEditCalendarId = null; showSettings = true }
+                ShortcutAction.OpenSettings -> { settingsEditCalendarId = null; settingsCreateCalendar = false; showSettings = true }
                 ShortcutAction.ViewDay -> s.setMode(ViewMode.Day)
                 ShortcutAction.ViewWeek -> s.setMode(ViewMode.Week)
                 ShortcutAction.ViewMonth -> s.setMode(ViewMode.Month)
@@ -356,7 +359,7 @@ fun MainScreen(
                 // appearance / about controls. Previously the toolbar had
                 // its own Logout icon — removed in favor of the Settings
                 // path so a misclick can't drop the active profile.
-                onOpenSettings = { settingsEditCalendarId = null; showSettings = true },
+                onOpenSettings = { settingsEditCalendarId = null; settingsCreateCalendar = false; showSettings = true },
             )
             HorizontalDivider()
 
@@ -398,6 +401,12 @@ fun MainScreen(
                     onCalendarToggle = { id -> hiddenCalendars = if (id in hiddenCalendars) hiddenCalendars - id else hiddenCalendars + id },
                     onEditCalendar = { cal ->
                         settingsEditCalendarId = cal.id
+                        settingsCreateCalendar = false
+                        showSettings = true
+                    },
+                    onNewCalendar = {
+                        settingsEditCalendarId = null
+                        settingsCreateCalendar = true
                         showSettings = true
                     },
                 )
@@ -692,7 +701,7 @@ fun MainScreen(
                 profile = p,
                 profiles = profiles,
                 calendars = ui.calendars,
-                onClose = { showSettings = false; settingsEditCalendarId = null },
+                onClose = { showSettings = false; settingsEditCalendarId = null; settingsCreateCalendar = false },
                 onSignOut = {
                     showSettings = false
                     ProfileStore.clear()
@@ -718,6 +727,7 @@ fun MainScreen(
                 // views behind the overlay.
                 onCalendarsChanged = { state.load() },
                 initialCalendarsEditId = settingsEditCalendarId,
+                initialCalendarsCreate = settingsCreateCalendar,
             )
         }
     }
@@ -964,6 +974,7 @@ private fun Sidebar(
     hiddenCalendars: Set<String>,
     onCalendarToggle: (String) -> Unit,
     onEditCalendar: (cn.bywave.calendar.desktop.data.model.CalendarMeta) -> Unit,
+    onNewCalendar: () -> Unit,
 ) {
     // Observe locale so the section header + empty state re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -1044,6 +1055,33 @@ private fun Sidebar(
                     }
                 }
             }
+        }
+
+        // Direct "new calendar" entry under the calendar list — creating
+        // used to require gear → Settings → Calendars tab → "+ New
+        // calendar"; this lands on that same create dialog in one click,
+        // mirroring the per-row edit pencil above and the web sidebar's
+        // "+" menu. Shown even when the list is empty (first calendar).
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onNewCalendar() }
+                .padding(vertical = 6.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Add,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                t("settings.calendars.new"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
