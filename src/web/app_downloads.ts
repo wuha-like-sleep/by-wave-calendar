@@ -112,15 +112,41 @@ async function sendBinary(
  *  是根本不挂限流钩子。 */
 const DOWNLOAD_RATE = { max: 30, timeWindow: "1 minute" } as const;
 
+/** 灰度分桶要的两个查询参数。都可选：不给 deviceId = 分不了桶（按
+ *  不在灰度对象里处理，见 rollout.ts）；currentVersionCode 只用来判
+ *  召回豁免。解析口径宽松 —— 参数是客户端自愿上报的诊断信息，写错了
+ *  就当没给，绝不能因为一个脏参数让检查更新整条挂掉。 */
+function rolloutQuery(req: FastifyRequest): { deviceId: string | null; currentVersionCode: number | null } {
+  const q = (req.query ?? {}) as Record<string, unknown>;
+  const rawId = typeof q.deviceId === "string" ? q.deviceId.trim() : "";
+  const deviceId = rawId && rawId.length <= 128 ? rawId : null;
+  const rawVc = typeof q.currentVersionCode === "string" ? Number(q.currentVersionCode) : NaN;
+  const currentVersionCode = Number.isFinite(rawVc) && rawVc > 0 ? Math.floor(rawVc) : null;
+  return { deviceId, currentVersionCode };
+}
+
 export async function appDownloadRoutes(app: FastifyInstance) {
   const android = await import("../lib/android_release.js");
   const desktop = await import("../lib/desktop_release.js");
+  const rollout = await import("../lib/rollout.js");
 
   // ---- 安卓：有没有新版本 ----
   // App 回到前台时轮询(客户端 6 小时节流)。versionCode 比本地大就弹更新。
   app.get("/api/app/android/latest", { config: { rateLimit: false } }, async (req, reply) => {
     const rel = await android.getLatestRelease();
     if (!rel) return reply.code(404).send({ error: "no_release_published" });
+    // 灰度门：没轮到的设备回 404，和「这台服务器还没发布」同一个形状 ——
+    // 老客户端本来就把 404 当「这个源没有」去走下一条路（GitHub 清单），
+    // 新客户端认 rollout_not_included 这个码、且会在本地对 GitHub 清单
+    // 再分一次桶。分桶口径只此一份（rollout.ts）。
+    const { deviceId, currentVersionCode } = rolloutQuery(req);
+    if (!rollout.isInRollout({
+      deviceId, platform: "android", versionCode: rel.versionCode,
+      rolloutPercent: rel.rolloutPercent, currentVersionCode,
+      minSupportedVersionCode: rel.minSupportedVersionCode,
+    })) {
+      return reply.code(404).send({ error: "rollout_not_included" });
+    }
     // 「本站有这个包就本站优先」—— 口径收口在 resolveApkUrls,
     // /download 网页和这条接口共用同一份。
     // 走 req.protocol / req.hostname，不自己读转发头：那两个属性经过
@@ -135,9 +161,16 @@ export async function appDownloadRoutes(app: FastifyInstance) {
       // 已装机的用户就只能干等，尽管同一份包在 GitHub 上好好的。
       // 没有备选时是空串，客户端按「没给」处理。
       fallbackUrl,
+      // 第三级下载源（Gitee 镜像）。主备都失败时客户端才试。没有就是
+      // 空串，客户端按「没给」处理 —— 和 fallbackUrl 同一个约定。
+      mirrorUrl: rel.mirrorUrl,
       sha256: rel.sha256, sizeBytes: rel.sizeBytes, releasedAt: rel.releasedAt,
       notes: rel.notes, mandatory: rel.mandatory,
       minSupportedVersionCode: rel.minSupportedVersionCode,
+      // 灰度比例与强升宽限也一并下发：客户端在本地路径（GitHub 清单）
+      // 分桶、算宽限倒计时都要用同一组数。老客户端忽略未知字段。
+      rolloutPercent: rel.rolloutPercent,
+      graceDays: rel.graceDays,
     });
   });
 
@@ -177,20 +210,45 @@ export async function appDownloadRoutes(app: FastifyInstance) {
   app.get("/api/app/desktop/latest", { config: { rateLimit: false } }, async (req, reply) => {
     const rel = await desktop.getLatestRelease();
     if (!rel) return reply.code(404).send({ error: "no_release_published" });
+    // 灰度门，口径与安卓那条完全一致（rollout.ts 一份实现），只是桶以
+    // 「桌面」为平台键 —— 一台机器一个桶，不按四个资产各分一次。
+    const { deviceId, currentVersionCode } = rolloutQuery(req);
+    if (!rollout.isInRollout({
+      deviceId, platform: "desktop", versionCode: rel.versionCode,
+      rolloutPercent: rel.rolloutPercent, currentVersionCode,
+      minSupportedVersionCode: rel.minSupportedVersionCode,
+    })) {
+      return reply.code(404).send({ error: "rollout_not_included" });
+    }
     const origin = `${req.protocol}://${req.hostname}`;
-    const assets: Record<string, { url: string; fallbackUrl: string; sha256: string; sizeBytes: number }> = {};
+    const assets: Record<string, { url: string; fallbackUrl: string; mirrorUrl: string; sha256: string; sizeBytes: number }> = {};
     for (const [platform, a] of Object.entries(rel.assets)) {
       if (!a) continue;
       // 备选地址的理由同安卓那条：只给主地址，本站一断就没有第二条路。
       const [url, fallbackUrl] = await desktop.resolveAssetUrls(origin, a);
-      assets[platform] = { url, fallbackUrl, sha256: a.sha256, sizeBytes: a.sizeBytes };
+      assets[platform] = { url, fallbackUrl, mirrorUrl: a.mirrorUrl, sha256: a.sha256, sizeBytes: a.sizeBytes };
     }
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
       versionCode: rel.versionCode, versionName: rel.versionName,
       releasedAt: rel.releasedAt, notes: rel.notes, mandatory: rel.mandatory,
-      minSupportedVersionCode: rel.minSupportedVersionCode, assets,
+      minSupportedVersionCode: rel.minSupportedVersionCode,
+      rolloutPercent: rel.rolloutPercent, graceDays: rel.graceDays, assets,
     });
+  });
+
+  // ---- iOS：应用内公告 ----
+  // iOS 没有自更新通道，「商店里有新版」只能由服务端喊这一嗓子。
+  // 公告存 site_settings（管理员在 /admin/client-release 维护），
+  // 这里只读：没开 / 没填版本 / 标题正文全空 → 404，和上面两条 latest
+  // 的「没有可给的东西」同一个形状。判空口径在 ios_announcement.ts。
+  app.get("/api/app/ios/announcement", { config: { rateLimit: false } }, async (_req, reply) => {
+    const { getSettings } = await import("../lib/site_settings.js");
+    const { announcementFromSettings } = await import("../lib/ios_announcement.js");
+    const announcement = announcementFromSettings(await getSettings());
+    if (!announcement) return reply.code(404).send({ error: "no_announcement" });
+    reply.header("Cache-Control", "public, max-age=60");
+    return reply.send(announcement);
   });
 
   // ---- 桌面：发 DMG / MSI / DEB ----

@@ -24,6 +24,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { normalizeGraceDays, normalizeRolloutPercent } from "./rollout.js";
 
 export interface AndroidRelease {
   versionCode: number;
@@ -44,6 +45,14 @@ export interface AndroidRelease {
    *  latest release). Useful for retroactively flagging an old version as
    *  having a critical bug. */
   minSupportedVersionCode: number;
+  /** 灰度放量比例 0–100（见 rollout.ts）。缺失 = 100 = 不灰度。 */
+  rolloutPercent: number;
+  /** 强升宽限天数：被 mandatory / 最低版本线命中后，先只提醒这么多天，
+   *  过后才变成不可跳过的强升。缺失 = 7。口径见 rollout.ts。 */
+  graceDays: number;
+  /** 第三级下载源（Gitee 镜像）。主、备都失败时客户端才试它。
+   *  和 downloadUrl 同一个包，所以共用同一份 sha256 / sizeBytes。 */
+  mirrorUrl: string;
 }
 
 const COMMITTED_MANIFEST_PATH = path.join(process.cwd(), "apps", "android", "releases", "latest.json");
@@ -79,6 +88,9 @@ export function parseAndroidManifest(raw: unknown, fallbackReleasedAt: string): 
     notes: String(r.notes || ""),
     mandatory: r.mandatory === true,
     minSupportedVersionCode: Number(r.minSupportedVersionCode || 1),
+    rolloutPercent: normalizeRolloutPercent(r.rolloutPercent),
+    graceDays: normalizeGraceDays(r.graceDays),
+    mirrorUrl: String(r.mirrorUrl || ""),
   };
   // 两种投递方式一个都没有 —— App 无处可下。
   if (!release.downloadUrl && !release.filename) return null;
