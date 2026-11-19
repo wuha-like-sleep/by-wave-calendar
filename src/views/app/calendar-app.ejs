@@ -105,7 +105,10 @@
           <div class="grid grid-cols-7 gap-0.5 mb-1 text-slate-400">
             <span><%= t("app.weekday.mon") %></span><span><%= t("app.weekday.tue") %></span><span><%= t("app.weekday.wed") %></span><span><%= t("app.weekday.thu") %></span><span><%= t("app.weekday.fri") %></span><span><%= t("app.weekday.sat") %></span><span><%= t("app.weekday.sun") %></span>
           </div>
-          <div id="mini-month-grid" class="grid grid-cols-7 gap-0.5"></div>
+          <%# Reserve the rendered height (6 rows of aspect-square cells in
+              the 240px sidebar ≈ 185px) so the sidebar below does not jump
+              when the day cells are rendered on load. %>
+          <div id="mini-month-grid" class="grid grid-cols-7 gap-0.5 min-h-[185px]"></div>
         </div>
         <div id="mini-year-view" class="hidden grid grid-cols-3 gap-1 text-[11px]"></div>
       </div>
@@ -237,7 +240,7 @@
 
       <!-- Title (prominent) -->
       <input type="text" name="summary" required maxlength="500" placeholder="<%= t("app.event.titlePlaceholder") %>"
-             class="w-full text-lg font-medium rounded-lg border-0 border-b border-slate-200 px-0 py-2 focus:border-brand-500 focus:outline-none focus:ring-0" />
+             class="w-full text-lg font-medium rounded-lg border-0 border-b border-slate-200 bg-transparent px-0 py-2 focus:border-brand-500 focus:outline-none focus:ring-0" />
 
       <!-- All-day + Calendar + Category in a row -->
       <div class="flex flex-wrap items-center gap-3">
@@ -247,7 +250,7 @@
         </label>
         <div class="flex items-center gap-1.5 text-sm">
           <span class="text-slate-500"><%= t("nav.calendar") %></span>
-          <select name="calendarId" required class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+          <select name="calendarId" required class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
             <% calendars.forEach(function(cal){ %>
               <option value="<%= cal.id %>" data-color="<%= cal.color %>"><%= cal.name %></option>
             <% }) %>
@@ -255,7 +258,7 @@
         </div>
         <div class="flex items-center gap-1.5 text-sm">
           <span class="text-slate-500"><%= t("app.event.category") %></span>
-          <select name="category" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+          <select name="category" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
             <option value=""><%= t("app.event.none") %></option>
             <option value="work"><%= t("app.event.categoryWork") %></option>
             <option value="personal"><%= t("app.event.categoryPersonal") %></option>
@@ -271,7 +274,7 @@
       <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <div class="flex items-center gap-1.5">
           <span class="text-slate-500"><%= t("app.event.repeat") %></span>
-          <select name="rrule" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+          <select name="rrule" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
             <option value=""><%= t("app.event.repeatNone") %></option>
             <option value="FREQ=DAILY"><%= t("app.event.repeatDaily") %></option>
             <option value="FREQ=WEEKLY"><%= t("app.event.repeatWeekly") %></option>
@@ -293,7 +296,7 @@
               全天那一组锚的是「事件所在时区当天 00:00」，所以 PT9H 是当天 09:00、
               -PT15H 是前一天 09:00；不要套定时那组的「提前 N 分钟」，
               全天事件套上去中国用户会在前一天 23:45 收到提醒。 %>
-          <select name="reminder" class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
+          <select name="reminder" class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200">
             <option value="" data-group="both"><%= t("app.reminder.none") %></option>
             <option value="-PT0M" data-group="timed"><%= t("app.reminder.timed.atStart") %></option>
             <option value="-PT5M" data-group="timed"><%= t("app.reminder.timed.min5") %></option>
@@ -321,12 +324,12 @@
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.starts") %></label>
           <input type="datetime-local" name="startsAt" required step="300"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.ends") %></label>
           <input type="datetime-local" name="endsAt" required step="300"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
       <%# Timezone hint: shows the event's wall-clock in its stored zone
@@ -340,12 +343,12 @@
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.startDate") %></label>
           <input type="date" name="startsAtDate"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.endDate") %></label>
           <input type="date" name="endsAtDate"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
       </div>
 
@@ -393,7 +396,7 @@
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.link") %> <span class="text-slate-400"><%= t("app.event.linkHint") %></span></label>
         <input type="url" name="url" maxlength="2000" placeholder="https://…"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <%# Only shown when category = meeting (toggled by syncMeetingPasswordField). %>
       <div id="field-meeting-password" class="hidden">
@@ -431,7 +434,7 @@
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.calendar.name") %><span class="text-red-500 ml-0.5">*</span></label>
           <input type="text" name="name" required maxlength="200"
-                 class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.calendar.description") %></label>
@@ -566,18 +569,18 @@
       <div data-source-pane="url-once" class="hidden">
         <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.remoteUrl") %><span class="text-red-500 ml-0.5">*</span></label>
         <input type="url" name="url" placeholder="https:// / webcal://"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <p class="mt-1 text-xs text-slate-400"><%= t("app.import.urlOnceNote") %></p>
       </div>
       <div data-source-pane="sub" class="hidden space-y-2">
         <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.subUrl") %><span class="text-red-500 ml-0.5">*</span></label>
         <input type="url" name="url" placeholder="https:// / webcal://"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <div class="flex flex-col sm:flex-row gap-2">
           <input type="text" name="label" maxlength="60" placeholder="<%= t("app.import.labelPlaceholder") %>"
                  class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <select name="refreshMinutes"
-                  class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                  class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
             <option value="60"><%= t("app.import.refreshHourly") %></option>
             <option value="360" selected><%= t("app.import.refresh6h") %></option>
             <option value="720"><%= t("app.import.refresh12h") %></option>
@@ -589,7 +592,7 @@
       <div data-source-pane="paste" class="hidden">
         <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.import.icsText") %><span class="text-red-500 ml-0.5">*</span></label>
         <textarea name="text" rows="5" placeholder="BEGIN:VCALENDAR&#10;VERSION:2.0&#10;…"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       </div>
 
       <!-- Destination -->
@@ -615,7 +618,7 @@
             <input type="radio" name="destination" value="existing" class="mt-0.5 accent-brand-600" />
             <div class="flex-1">
               <div class="text-sm font-medium text-slate-900"><%= t("app.import.destExisting") %></div>
-              <select name="existingCalendarId" data-dest-pane="existing" class="hidden mt-2 w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+              <select name="existingCalendarId" data-dest-pane="existing" class="hidden mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
                 <% calendars.forEach(function(cal){ %>
                   <option value="<%= cal.id %>"><%= cal.name %></option>
                 <% }) %>
@@ -668,7 +671,7 @@
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calendar.name") %><span class="text-red-500 ml-0.5">*</span></label>
             <input type="text" name="name" required maxlength="200"
-                   class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                   class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calendar.description") %></label>

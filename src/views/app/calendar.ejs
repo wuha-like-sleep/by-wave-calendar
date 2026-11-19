@@ -39,7 +39,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="email" name="email" required maxlength="254" placeholder="<%= t('calendar.invite.emailPlaceholder') %>"
            class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    <select name="role" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+    <select name="role" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
       <option value="viewer"><%= t("calendar.invite.roleViewer") %></option>
       <option value="editor"><%= t("calendar.invite.roleEditor") %></option>
     </select>
@@ -200,7 +200,7 @@
         <input type="text" name="label" maxlength="60" placeholder="<%= t('calendar.import.subLabelPlaceholder') %>"
                class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <select name="refreshMinutes"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
           <option value="60"><%= t("calendar.import.refresh.hourly") %></option>
           <option value="360" selected><%= t("calendar.import.refresh.6h") %></option>
           <option value="720"><%= t("calendar.import.refresh.12h") %></option>

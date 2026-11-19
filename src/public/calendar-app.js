@@ -364,8 +364,12 @@
   // ---------- Toast UI Calendar setup ----------
   // Event text colour follows the calendar colour's luminance: white text
   // on a pale yellow/blue calendar colour is unreadable in BOTH modes, so
-  // bright colours get near-black text instead. (WCAG relative luminance,
-  // threshold picked so mid-tones like #22c55e keep white text.)
+  // bright colours get black text instead. (WCAG relative luminance. The
+  // switch point is the exact crossover where black and white give the
+  // same ratio — 4.58:1 — so every calendar colour, preset or custom,
+  // ends up with whichever of the two passes AA; a softer near-black
+  // like #1e293b leaves mid-luminance colours such as #3b82f6 and
+  // #6366f1 stranded below 4.5:1 with either choice.)
   function readableTextOn(hex) {
     const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
     if (!m) return "#ffffff";
@@ -375,7 +379,7 @@
       return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
     };
     const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-    return lum > 0.21 ? "#1e293b" : "#ffffff";
+    return lum > 0.179 ? "#000000" : "#ffffff";
   }
   const tuiCalendars = ctx.calendars.map((c) => ({
     id: c.id,
@@ -598,7 +602,7 @@
               backgroundColor: "#e2e8f0",
               borderColor: "#cbd5e1",
               dragBackgroundColor: "#cbd5e1",
-              color: "#64748b",
+              color: "#475569",
             }
         : {};
       return {
