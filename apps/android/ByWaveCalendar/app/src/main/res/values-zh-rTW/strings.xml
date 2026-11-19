@@ -232,6 +232,7 @@
     <string name="quickadd_cd">智慧識別</string>
     <string name="action_undo">撤銷</string>
     <string name="event_deleted">已刪除</string>
+    <string name="event_created_notice">已建立：%1$s</string>
     <string name="booking_schedule_timezone">排期時區：%1$s；預約時間依裝置時區顯示。</string>
     <string name="event_detail_display_timezone">顯示時區</string>
     <string name="event_detail_source_timezone">行程時區</string>

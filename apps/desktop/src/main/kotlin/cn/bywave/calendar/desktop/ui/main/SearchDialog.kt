@@ -16,13 +16,15 @@
 //     dialog offline ("连不上服务器，仅显示本地结果") instead of
 //     replacing them with an error.
 //   - Clicking a result jumps the calendar to that event's local date
-//     via CalendarState.jumpToDay() and closes the dialog.
+//     via CalendarState.jumpToDay() AND opens the event's detail dialog
+//     over it (CalendarState.openDetailFromSearch) — the day jump alone
+//     left the user hunting for the event in the day view. Local hits
+//     open their full DTO directly; server hits open a promoted stub
+//     that CalendarState hydrates from GET /events/{id}.
 //
-// The search response is a lighter shape than EventDTO (no rrule / allDay /
-// extra), which is fine here — we only need the date to jump to. Local
-// EventDTOs are converted into the same row shape for rendering. Tapping a
-// result navigates; the user opens the event from the day view if they want
-// detail (same as the calendar's own click behaviour).
+// The search response is a lighter shape than EventDTO (no description /
+// extra), which is fine here. Local EventDTOs are converted into the same
+// row shape for rendering, keeping the source DTO alongside for the tap.
 
 package cn.bywave.calendar.desktop.ui.main
 
@@ -77,6 +79,7 @@ import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.SearchResultDTO
+import cn.bywave.calendar.desktop.data.model.toEventDTO
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
@@ -108,6 +111,8 @@ private fun EventDTO.toSearchRow(calendars: List<CalendarMeta>): SearchResultDTO
         location = location,
         startsAt = startsAt,
         endsAt = endsAt,
+        allDay = allDay,
+        rrule = rrule,
     )
 }
 
@@ -126,8 +131,11 @@ private fun EventDTO.matchesLocal(needleLower: String): Boolean =
  * @param localEvents events the main window currently holds — the local
  *   search corpus (loaded window + restored snapshots).
  * @param calendars the account's calendars, for local rows' name/colour.
- * @param onJumpToDate called with the chosen result's local date — the
- *   caller wires this to CalendarState.jumpToDay() then closes the dialog.
+ * @param onOpenResult called with the chosen result promoted to an
+ *   EventDTO, its local date, and whether the DTO is a partial server
+ *   stub that still needs hydrating — the caller wires this to
+ *   CalendarState.jumpToDay() + openDetailFromSearch() then closes the
+ *   dialog.
  * @param onDismiss close without navigating.
  */
 @Composable
@@ -135,7 +143,7 @@ fun SearchDialog(
     profile: cn.bywave.calendar.desktop.data.model.Profile,
     localEvents: List<EventDTO> = emptyList(),
     calendars: List<CalendarMeta> = emptyList(),
-    onJumpToDate: (java.time.LocalDate) -> Unit,
+    onOpenResult: (event: EventDTO, day: java.time.LocalDate, needsHydration: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -157,6 +165,8 @@ fun SearchDialog(
     var jumpError by remember { mutableStateOf<String?>(null) }
 
     val trimmed = query.trim()
+    // Local hits keep their full EventDTO next to the row shape: a tap
+    // opens the detail with the real event, no promotion / hydration.
     val localResults = remember(trimmed, localEvents, calendars) {
         if (trimmed.isEmpty()) {
             emptyList()
@@ -164,28 +174,41 @@ fun SearchDialog(
             val needle = trimmed.lowercase()
             localEvents.filter { it.matchesLocal(needle) }
                 .sortedBy { it.startsAt }
-                .map { it.toSearchRow(calendars) }
+                .map { it.toSearchRow(calendars) to it }
         }
     }
-    val allResults = localResults + serverResults
+    val localRows = remember(localResults) { localResults.map { it.first } }
+    val allResults = localRows + serverResults
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
-    /** 跳到某条结果所在的那天。按结果行点击和输入框回车共用。 */
-    fun jumpTo(r: SearchResultDTO) {
+    /** 打开某条结果：跳到它所在的那天，并打开它的详情。结果行点击和
+     *  输入框回车共用。 */
+    fun openResult(r: SearchResultDTO, event: EventDTO, needsHydration: Boolean) {
         // 点了一条搜索结果，无论如何都得有反应。
         //
         // 以前这里是「解析失败就 return」：解析一旦失败，对话框不关、日历不动、
         // 屏幕上一个字都不多，用户只会以为鼠标没点着，反复点。现在解析走公用的
         // parseInstant（多认一种不带时区的写法），真解析不了就把话说出来。
-        val day = cn.bywave.calendar.desktop.ui.calendar.parseInstant(r.startsAt)
+        val day = cn.bywave.calendar.desktop.ui.calendar.parseInstant(event.startsAt)
             ?.atZone(displayZone)?.toLocalDate()
         if (day != null) {
-            onJumpToDate(day)
+            onOpenResult(event, day, needsHydration)
         } else {
             jumpError = cn.bywave.calendar.desktop.i18n.I18n.t("search.jumpFailed")
         }
+    }
+
+    /** 回车打开第一条结果（本地优先，与列表的视觉顺序一致）。 */
+    fun openFirst() {
+        val local = localResults.firstOrNull()
+        if (local != null) {
+            openResult(local.first, local.second, needsHydration = false)
+            return
+        }
+        val server = serverResults.firstOrNull() ?: return
+        openResult(server, server.toEventDTO(), needsHydration = true)
     }
 
     // Debounced server search. Re-runs whenever the (trimmed) query changes.
@@ -253,16 +276,15 @@ fun SearchDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(focusRequester)
-                        // 搜索框里敲回车 = 跳到第一条结果。这是所有搜索框
+                        // 搜索框里敲回车 = 打开第一条结果。这是所有搜索框
                         // 的默认预期,以前回车没反应,用户得手动去点那一行。
                         // 还在搜 / 没有结果时回车什么都不做,不要弹错。
                         .onPreviewKeyEvent { e ->
-                            val first = allResults.firstOrNull()
                             if (e.type == KeyEventType.KeyDown &&
                                 (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
-                                first != null
+                                allResults.isNotEmpty()
                             ) {
-                                jumpTo(first); true
+                                openFirst(); true
                             } else {
                                 false
                             }
@@ -303,8 +325,12 @@ fun SearchDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            localResults.forEach { r ->
-                                SearchResultRow(result = r, displayZone = displayZone, onClick = { jumpTo(r) })
+                            localResults.forEach { (r, event) ->
+                                SearchResultRow(
+                                    result = r,
+                                    displayZone = displayZone,
+                                    onClick = { openResult(r, event, needsHydration = false) },
+                                )
                             }
                             if (searching && serverResults.isEmpty()) {
                                 Row(
@@ -332,7 +358,11 @@ fun SearchDialog(
                                     modifier = Modifier.padding(top = if (localResults.isEmpty()) 0.dp else 6.dp),
                                 )
                                 serverResults.forEach { r ->
-                                    SearchResultRow(result = r, displayZone = displayZone, onClick = { jumpTo(r) })
+                                    SearchResultRow(
+                                        result = r,
+                                        displayZone = displayZone,
+                                        onClick = { openResult(r, r.toEventDTO(), needsHydration = true) },
+                                    )
                                 }
                             }
                             if (serverDone && !searching && allResults.isEmpty()) {
@@ -355,9 +385,9 @@ fun SearchDialog(
 }
 
 /** One result row — calendar color dot + summary + time + (optional)
- *  location + calendar name. Clicking it navigates the calendar to the
- *  event's day. Layout echoes the calendar views' EventRow so search feels
- *  like part of the same app. */
+ *  location + calendar name. Clicking it jumps the calendar to the
+ *  event's day and opens the event's detail. Layout echoes the calendar
+ *  views' EventRow so search feels like part of the same app. */
 @Composable
 private fun SearchResultRow(result: SearchResultDTO, displayZone: ZoneId, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
@@ -389,7 +419,8 @@ private fun SearchResultRow(result: SearchResultDTO, displayZone: ZoneId, onClic
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                resultTimeLabel(result.startsAt, displayZone),
+                // 重复事件显示下一次发生的时间，而不是可能已过去的系列开始。
+                resultTimeLabel(result.nextStartsAt ?: result.startsAt, displayZone),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

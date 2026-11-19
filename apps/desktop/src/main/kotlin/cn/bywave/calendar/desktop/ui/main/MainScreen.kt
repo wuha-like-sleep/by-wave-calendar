@@ -645,8 +645,9 @@ fun MainScreen(
             // unreachable — the Android search shape.
             localEvents = ui.events,
             calendars = ui.calendars,
-            onJumpToDate = { day ->
+            onOpenResult = { event, day, needsHydration ->
                 state.jumpToDay(day)
+                state.openDetailFromSearch(event, needsHydration)
                 showSearch = false
             },
             onDismiss = { showSearch = false },

@@ -336,9 +336,9 @@ private fun AppRoot(
             SearchScreen(
                 onBack = { nav.popBackStack() },
                 onEventClick = { ev ->
-                    // For v0.7 we drop back to calendar at the event's
-                    // day in Day mode. v0.8 will instead open
-                    // EventDetailSheet over the search list directly.
+                    // 点搜索结果 = 直接打开这个事件：先把日历跳到它那天，
+                    // 再让 CalendarScreen 弹出它的详情（detailRequest），
+                    // 不再只跳日期让用户自己在日视图里找。
                     val day = runCatching {
                         java.time.Instant.parse(ev.startsAt)
                             .atZone(java.time.ZoneId.systemDefault())
@@ -348,6 +348,7 @@ private fun AppRoot(
                         calVm.setMode(cn.bywave.calendar.ui.calendar.ViewMode.Day)
                         calVm.setAnchor(day)
                     }
+                    calVm.requestDetail(ev)
                     nav.popBackStack()
                 },
             )

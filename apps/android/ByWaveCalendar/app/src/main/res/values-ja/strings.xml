@@ -222,6 +222,7 @@
     <string name="quickadd_cd">解析</string>
     <string name="action_undo">取り消す</string>
     <string name="event_deleted">削除しました</string>
+    <string name="event_created_notice">作成しました：%1$s</string>
     <string name="booking_schedule_timezone">予約枠のタイムゾーン：%1$s。予約時刻は端末のタイムゾーンで表示します。</string>
     <string name="event_detail_display_timezone">表示タイムゾーン</string>
     <string name="event_detail_source_timezone">予定のタイムゾーン</string>

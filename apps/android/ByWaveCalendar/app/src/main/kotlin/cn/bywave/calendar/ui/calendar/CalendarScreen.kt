@@ -128,6 +128,14 @@ fun CalendarScreen(
     var pendingRecurringDelete by remember { mutableStateOf<EventDTO?>(null) }
     var showSwitcher by remember { mutableStateOf(false) }
 
+    // 外部请求打开某个事件的详情（搜索结果点开、快速添加后点「打开」）。
+    // selectedEvent 是本屏自己的状态，VM 只负责把请求递进来。
+    LaunchedEffect(state.detailRequest) {
+        val req = state.detailRequest ?: return@LaunchedEffect
+        selectedEvent = req
+        vm.clearDetailRequest()
+    }
+
     // Undo-delete snackbar (parity with web). deleteEvent sets undoDeleteId for
     // non-recurring deletes; act on it → restore, dismiss → clear the one-shot.
     val snackbarHostState = remember { SnackbarHostState() }
@@ -142,6 +150,20 @@ fun CalendarScreen(
             )
             if (result == SnackbarResult.ActionPerformed) vm.restoreLastDelete() else vm.clearUndo()
         }
+    }
+
+    // 一句话直接保存后的反馈：「已创建：标题 · 撤销」。撤销走 deleteEvent，
+    // 删完它自己还会再给一次恢复入口（和普通删除同一条链）。
+    val createdMsgTemplate = stringResource(R.string.event_created_notice)
+    LaunchedEffect(state.createdNotice) {
+        val notice = state.createdNotice ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            message = createdMsgTemplate.replace("%1\$s", notice.summary),
+            actionLabel = undoLabel,
+            duration = SnackbarDuration.Short,
+        )
+        if (result == SnackbarResult.ActionPerformed) vm.deleteEvent(notice.id)
+        vm.clearCreatedNotice()
     }
 
     Scaffold(

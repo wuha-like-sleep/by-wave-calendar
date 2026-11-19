@@ -338,6 +338,34 @@ class CalendarState(
         _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(event), formError = null)
     }
 
+    /** Open the detail for a SEARCH result. Local hits are full DTOs and
+     *  open as-is. Server hits are promoted stubs (no description / extra
+     *  — search never returns them), so after opening the stub we fetch
+     *  the full row via GET /events/{id} and swap it in, but only while
+     *  the sheet still shows that same stub (the user may have closed it
+     *  or opened something else meanwhile). The fetch returns the series
+     *  master for recurring events; a stub that was re-anchored onto an
+     *  occurrence keeps its occurrence start/end + isOccurrence, exactly
+     *  the shape the /events window expansion produces. A failed fetch
+     *  (offline, older server) leaves the stub — read-only detail still
+     *  works, and the editor's unloaded-extra guard keeps an edit from
+     *  clearing fields it never saw. */
+    fun openDetailFromSearch(event: EventDTO, needsHydration: Boolean) {
+        openDetail(event)
+        if (!needsHydration) return
+        scope.launch {
+            val full = runCatching { client.getEvent(event.id) }.getOrNull() ?: return@launch
+            val sheet = _ui.value.activeSheet as? ActiveSheet.Detail ?: return@launch
+            if (sheet.event.id != event.id || sheet.event.startsAt != event.startsAt) return@launch
+            val hydrated = if (full.rrule != null && full.startsAt != event.startsAt) {
+                full.copy(startsAt = event.startsAt, endsAt = event.endsAt, isOccurrence = true)
+            } else {
+                full
+            }
+            _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(hydrated))
+        }
+    }
+
     fun openCreate(seedStart: java.time.LocalDateTime? = null) {
         _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Create(seedStart), formError = null)
     }

@@ -222,6 +222,7 @@
     <string name="quickadd_cd">Erkennen</string>
     <string name="action_undo">Rückgängig</string>
     <string name="event_deleted">Gelöscht</string>
+    <string name="event_created_notice">Erstellt: %1$s</string>
     <string name="booking_schedule_timezone">Zeitzone der Verfügbarkeit: %1$s. Gebuchte Termine erscheinen in der Gerätezeitzone.</string>
     <string name="event_detail_display_timezone">Anzeigezeitzone</string>
     <string name="event_detail_source_timezone">Terminzeitzone</string>

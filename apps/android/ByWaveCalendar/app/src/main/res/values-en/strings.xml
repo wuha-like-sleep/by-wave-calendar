@@ -227,6 +227,7 @@ to match the development locale.
     <string name="quickadd_cd">Parse</string>
     <string name="action_undo">Undo</string>
     <string name="event_deleted">Deleted</string>
+    <string name="event_created_notice">Created: %1$s</string>
     <string name="booking_schedule_timezone">Scheduling zone: %1$s. Booked times use your device timezone.</string>
     <string name="event_detail_display_timezone">Display timezone</string>
     <string name="event_detail_source_timezone">Event timezone</string>

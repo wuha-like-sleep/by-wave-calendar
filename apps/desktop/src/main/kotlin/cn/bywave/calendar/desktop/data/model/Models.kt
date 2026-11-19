@@ -226,10 +226,13 @@ data class EventExtra(
 // GET /api/v1/search?q=<needle>&limit=<n>. The server matches the needle
 // (case-insensitive substring) against each event's summary / description
 // / location across every calendar the user can see (owned + shared), and
-// returns a lighter row shape than EventDTO — notably no rrule / allDay /
-// extra. We mirror iOS's SearchResult: decode into SearchResultDTO, then
-// promote to EventDTO on tap (missing fields default to nil/false; the
-// detail dialog re-fetches via /events if the user edits). Same client as
+// returns a lighter row shape than EventDTO — no description / extra (by
+// design: extra carries meeting passwords), but allDay / rrule DO ride
+// along, plus nextStartsAt for recurring series (their startsAt is the
+// series start, possibly long past). We mirror iOS's SearchResult: decode
+// into SearchResultDTO, then promote to EventDTO on tap via [toEventDTO];
+// CalendarState then hydrates the promoted stub from GET /events/{id} so
+// the detail / editor never act on invented defaults. Same client as
 // every other authed call, same { ok, data } envelope: the route uses a
 // bare reply.send({ events }), which the server's onSend hook wraps to
 // { ok: true, data: { events } } — so unwrap() decodes into SearchResponse.
@@ -244,7 +247,53 @@ data class SearchResultDTO(
     val location: String? = null,
     val startsAt: String,
     val endsAt: String,
+    // Optional: older self-hosted servers don't send these yet. Absent
+    // means "unknown", never a fabricated false / no-recurrence — the
+    // hydration fetch replaces the stub before it can be edited anyway.
+    val allDay: Boolean? = null,
+    val rrule: String? = null,
+    /** Recurring series only: the next occurrence's start (the row's own
+     *  startsAt stays the series start). Null for one-off events and for
+     *  series that have already ended. */
+    val nextStartsAt: String? = null,
 )
+
+/** Promote a search row to an EventDTO so the detail dialog can open it
+ *  immediately. Recurring hits are re-anchored onto their next occurrence
+ *  (whole event shifted, duration unchanged — the Android search row does
+ *  the same), because the series start may be a year in the past.
+ *  description / extra stay null ("never loaded", NOT "empty"): the
+ *  editor treats unloaded extra as not-mine-to-send, and CalendarState
+ *  swaps in the fully fetched event as soon as GET /events/{id} lands. */
+fun SearchResultDTO.toEventDTO(): EventDTO {
+    val next = nextStartsAt
+    if (next == null || next == startsAt) {
+        return EventDTO(
+            id = id, calendarId = calendarId, summary = summary,
+            location = location, startsAt = startsAt, endsAt = endsAt,
+            allDay = allDay ?: false, rrule = rrule,
+            isOccurrence = if (rrule != null) false else null,
+        )
+    }
+    val startMs = runCatching { java.time.Instant.parse(startsAt).toEpochMilli() }.getOrNull()
+    val endMs = runCatching { java.time.Instant.parse(endsAt).toEpochMilli() }.getOrNull()
+    val nextMs = runCatching { java.time.Instant.parse(next).toEpochMilli() }.getOrNull()
+    if (startMs == null || endMs == null || nextMs == null) {
+        return EventDTO(
+            id = id, calendarId = calendarId, summary = summary,
+            location = location, startsAt = startsAt, endsAt = endsAt,
+            allDay = allDay ?: false, rrule = rrule,
+        )
+    }
+    return EventDTO(
+        id = id, calendarId = calendarId, summary = summary,
+        location = location,
+        startsAt = next,
+        endsAt = java.time.Instant.ofEpochMilli(endMs + (nextMs - startMs)).toString(),
+        allDay = allDay ?: false, rrule = rrule,
+        isOccurrence = true,
+    )
+}
 
 /** GET /api/v1/search response (the `data` payload after the outer
  *  { ok, data } envelope is stripped). */

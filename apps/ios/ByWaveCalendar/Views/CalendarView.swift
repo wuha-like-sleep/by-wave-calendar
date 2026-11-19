@@ -281,11 +281,18 @@ struct CalendarView: View {
             }
             .accessibilityLabel(Text("切换账号"))
         }
+        // 搜索是独立顶栏按钮（和 Android 顶栏、桌面工具栏一致的一级入口），
+        // 不再埋在筛选菜单里 —— 之前用户得先点开筛选图标才找得到搜索。
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingSearch = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .accessibilityLabel(Text("搜索"))
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button {
-                    showingSearch = true
-                } label: { Label("搜索", systemImage: "magnifyingglass") }
                 Button {
                     showingFilter = true
                 } label: {
