@@ -1,0 +1,5 @@
+#!/bin/sh
+# Installed via `npm run prepare` (scripts/install-hooks.mjs sets
+# core.hooksPath to scripts/git-hooks). Blocks AI attribution in commit
+# messages; see scripts/check-commit-message.mjs for the rules.
+exec node "$(git rev-parse --show-toplevel)/scripts/check-commit-message.mjs" "$1"

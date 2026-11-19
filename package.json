@@ -30,7 +30,9 @@
     "typecheck": "npm run typecheck:src && npm run typecheck:test && npm run typecheck:test:backlog",
     "test": "vitest run",
     "test:int": "vitest run --config vitest.integration.config.ts",
-    "check": "npm run typecheck && npm test && npm run test:int && npm run i18n:check",
+    "prepare": "node scripts/install-hooks.mjs",
+    "check:traces": "node scripts/check-commit-message.mjs --range origin/main..HEAD",
+    "check": "npm run check:traces && npm run typecheck && npm test && npm run test:int && npm run i18n:check",
     "audit:prod": "npm audit --omit=dev",
     "build:nl": "node scripts/build-nl-bundle.mjs",
     "build:branding": "node scripts/gen-icons.mjs && node scripts/build-desktop-branding.mjs"
