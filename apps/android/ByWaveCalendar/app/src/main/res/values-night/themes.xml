@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+    Night variant of the launch (splash) theme in values/themes.xml.
+    Without it, a device in dark mode still got the light theme's white
+    windowBackground for the first frames — a white flash before the
+    Compose UI (which already follows the system via ByWaveTheme) took
+    over. Background matches SurfaceDark in Color.kt.
+    -->
+    <style name="Theme.ByWaveCalendar" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#111114</item>
+        <item name="android:statusBarColor">#111114</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>
