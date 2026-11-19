@@ -12,6 +12,7 @@ import { newInvitationToken } from "../lib/ids.js";
 import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
+import { notifyEventInvitation } from "../lib/invite_notify.js";
 import { calendarCtags, etagOf } from "../lib/calendar_ctag.js";
 import { exportTimeZone } from "../lib/event_zone.js";
 
@@ -976,6 +977,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
       const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
       for (const to of newRecipients) {
         const inviteToken = newInvitationToken();
+        let tokenStored = false;
         try {
           await db.insert(schema.eventInviteTokens).values({
             token: inviteToken,
@@ -983,8 +985,19 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
             recipientEmail: to,
             expiresAt: new Date(Date.now() + INVITE_TTL_MS),
           });
+          tokenStored = true;
         } catch (err) {
           req.log.warn({ err, to }, "caldav_invite_token_failed");
+        }
+        // 站内邀请只给「新」受邀者：已邀请的人在每次 PUT 更新时都会再收到
+        // 一封 re-REQUEST 邮件（既有行为），站内通知若跟着重发会变成轰炸。
+        if (tokenStored) {
+          void notifyEventInvitation({
+            event: stored,
+            organizer: { id: user.id, email: user.email, displayName: user.displayName },
+            inviteeEmail: to,
+            inviteToken,
+          }).catch(() => undefined);
         }
         sendMail(eventInviteMail(to, {
           organizerEmail: user.email,

@@ -11,6 +11,7 @@ import { eventInviteMail } from "../lib/email_templates.js";
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { cancelEvent, markEventBookingsCancelled, notifyEventCancellation } from "../lib/event_cancel.js";
 import { notifyEventUpdated } from "../lib/event_change_notify.js";
+import { notifyEventInvitation } from "../lib/invite_notify.js";
 import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
 import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
 import { activeSeriesOccurrence, planFutureSeries, truncateSeriesBefore, unchangedEventForWrite } from "../lib/scoped_series_edit.js";
@@ -271,7 +272,7 @@ function zodMessage(error: z.ZodError): string {
  *  所以**调用点必须自己挑准收件人**，别指望这里的失败能被谁看见。 */
 async function inviteAttendees(
   log: FastifyBaseLogger,
-  user: { email: string; displayName?: string | null },
+  user: { id: string; email: string; displayName?: string | null },
   row: {
     id: string; uid: string; summary: string; description: string | null;
     location: string | null; startsAt: Date; endsAt: Date; allDay: boolean;
@@ -299,9 +300,13 @@ async function inviteAttendees(
     method: "REQUEST",
   });
   const INVITE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+  // 站内邀请通知要完整的事件行（算展示时区要日历时区兜底）；拿不到就只
+  // 跳过站内这一份，邮件照发。
+  const [fullEvent] = await db.select().from(schema.events).where(eq(schema.events.id, row.id)).limit(1);
   for (const to of emails) {
     // 每人一个 token，好让邮件里那个「添加到我的日历」一键跳回来。
     const inviteToken = newInvitationToken();
+    let tokenStored = false;
     try {
       await db.insert(schema.eventInviteTokens).values({
         token: inviteToken,
@@ -309,8 +314,17 @@ async function inviteAttendees(
         recipientEmail: to,
         expiresAt: new Date(Date.now() + INVITE_TTL_MS),
       });
+      tokenStored = true;
     } catch (err) {
       log.warn({ err, to }, "event_invite_token_failed");
+    }
+    if (tokenStored && fullEvent) {
+      void notifyEventInvitation({
+        event: fullEvent,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName ?? null },
+        inviteeEmail: to,
+        inviteToken,
+      }).catch(() => undefined);
     }
     sendMail(eventInviteMail(to, {
       organizerEmail: user.email,
@@ -1067,6 +1081,12 @@ export async function eventRoutes(app: FastifyInstance) {
         recipientEmail: body.data.email,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
+      void notifyEventInvitation({
+        event,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName },
+        inviteeEmail: body.data.email,
+        inviteToken,
+      }).catch(() => undefined);
       const ics = invitationIcs({
         event: {
           uid: event.uid,

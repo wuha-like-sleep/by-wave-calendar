@@ -20,6 +20,7 @@ import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail,
 import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
+import { notifyEventInvitation, notifyOrganizerRsvp } from "../lib/invite_notify.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookingTimeZone, bookingTimeZoneFromCalendar, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, deleteBookingLink, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { canonicalTimeZone } from "../lib/zoned_time.js";
@@ -1692,6 +1693,12 @@ export async function webRoutes(app: FastifyInstance) {
         recipientEmail: inviteeEmail,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       });
+      void notifyEventInvitation({
+        event,
+        organizer: { id: user.id, email: user.email, displayName: user.displayName },
+        inviteeEmail,
+        inviteToken,
+      }).catch(() => undefined);
       const ics = invitationIcs({
         event: {
           uid: event.uid,
@@ -1980,6 +1987,11 @@ export async function webRoutes(app: FastifyInstance) {
       .update(schema.events)
       .set({ updatedAt: new Date() })
       .where(eq(schema.events.id, tok.sourceEventId));
+    // 组织者要能「实时看到回复」：站内通知（+推送）报一声是谁回了什么。
+    const [fullEvent] = await db.select().from(schema.events).where(eq(schema.events.id, tok.sourceEventId)).limit(1);
+    if (fullEvent) {
+      void notifyOrganizerRsvp({ event: fullEvent, inviteeEmail: tok.recipientEmail, status: body.data.status }).catch(() => undefined);
+    }
     const msg = body.data.status === "accepted" ? tr(req, "flash.rsvp.accepted")
               : body.data.status === "declined" ? tr(req, "flash.rsvp.declined")
               :                                   tr(req, "flash.rsvp.tentative");
