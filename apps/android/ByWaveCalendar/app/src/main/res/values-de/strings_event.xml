@@ -110,4 +110,14 @@
     <string name="rrule_passthrough_note">Erweiterte Wiederholungsregel — bleibt unverändert</string>
     <string name="exdates_title">Gelöschte Termine</string>
     <string name="exdates_restore">Wiederherstellen</string>
+
+    <!-- RSVP 状态与时间提议 -->
+    <string name="attendees_status_accepted">Angenommen</string>
+    <string name="attendees_status_declined">Abgelehnt</string>
+    <string name="attendees_status_tentative">Vielleicht</string>
+    <string name="attendees_status_pending">Antwort ausstehend</string>
+    <string name="attendees_proposals_title">Zeitvorschläge</string>
+    <string name="attendees_proposal_accept">Annehmen &amp; verschieben</string>
+    <string name="attendees_proposal_decline">Ablehnen</string>
+    <string name="attendees_proposal_superseded">Ersetzt</string>
 </resources>

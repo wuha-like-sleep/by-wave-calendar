@@ -386,7 +386,31 @@ data class DesktopPairApproveRequest(val code: String)
 @Serializable
 data class AttendeesResponse(
     val attendees: List<String>,
+    val tokens: List<AttendeeToken> = emptyList(),
+    val proposals: List<TimeProposal> = emptyList(),
 )
+
+@Serializable
+data class AttendeeToken(
+    val recipientEmail: String,
+    val responseStatus: String = "pending",
+    val respondedAt: String? = null,
+    val acceptedAt: String? = null,
+)
+
+/** 受邀者的「提议新时间」。status: pending / accepted / declined / superseded。 */
+@Serializable
+data class TimeProposal(
+    val id: String,
+    val proposerEmail: String,
+    val proposedStartsAt: String,
+    val proposedEndsAt: String,
+    val note: String? = null,
+    val status: String,
+)
+
+@Serializable
+data class ProposalDecisionResponse(val ok: Boolean, val status: String)
 
 @Serializable
 data class AttendeeInviteRequest(val email: String)

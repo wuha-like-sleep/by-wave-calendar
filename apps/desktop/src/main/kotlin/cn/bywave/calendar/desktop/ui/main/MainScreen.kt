@@ -487,6 +487,8 @@ fun MainScreen(
         is ActiveSheet.Detail -> EventDetailDialog(
             event = sheet.event,
             calendars = ui.calendars,
+            attendees = ui.detailAttendees?.takeIf { ui.detailAttendeesFor == sheet.event.id },
+            onDecideProposal = { proposal, accept -> state.decideProposal(proposal, accept) },
             onDismiss = { state.closeSheet() },
             onEdit = { state.openEdit(it) },
             onRefresh = { state.refreshIfIdle() },

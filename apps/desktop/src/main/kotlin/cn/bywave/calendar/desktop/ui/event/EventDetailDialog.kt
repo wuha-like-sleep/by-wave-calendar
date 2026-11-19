@@ -55,6 +55,10 @@ fun EventDetailDialog(
     onEdit: (EventDTO) -> Unit = {},
     onDelete: (EventDTO) -> Unit = {},
     onRefresh: () -> Unit = {},
+    /** 组织者视角的参与者数据（RSVP 状态 + 时间提议）；拉不到时为 null，
+     *  名单回落到 extra 里的纯邮箱列表。 */
+    attendees: cn.bywave.calendar.desktop.data.model.AttendeesResponse? = null,
+    onDecideProposal: (cn.bywave.calendar.desktop.data.model.TimeProposal, Boolean) -> Unit = { _, _ -> },
 ) {
     // Observe locale so all labels + formatted strings re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -132,8 +136,65 @@ fun EventDetailDialog(
                 // the read-only detail view skipped them entirely, so a
                 // shared event looked unshared. The data is already on
                 // the event (extra.attendees); one row per guest.
-                event.extra?.attendees?.takeIf { it.isNotEmpty() }?.let { attendees ->
-                    MetaRow(label = t("event.edit.attendees"), value = attendees.joinToString("\n"))
+                // 组织者能拉到参与者视图时逐人带上 RSVP 状态；拉不到
+                // （共享查看者/离线）就还是纯邮箱名单。
+                val attendeeInfo = attendees
+                if (attendeeInfo != null && attendeeInfo.attendees.isNotEmpty()) {
+                    val statusByEmail = attendeeInfo.tokens.associate { it.recipientEmail to it.responseStatus }
+                    MetaRow(
+                        label = t("event.edit.attendees"),
+                        value = attendeeInfo.attendees.joinToString("\n") { email ->
+                            val status = statusByEmail[email]
+                            if (status == null) email else "$email · ${t("attendees.status.$status")}"
+                        },
+                    )
+                } else {
+                    event.extra?.attendees?.takeIf { it.isNotEmpty() }?.let { list ->
+                        MetaRow(label = t("event.edit.attendees"), value = list.joinToString("\n"))
+                    }
+                }
+                // 时间提议：待处理的给组织者接受/拒绝，处理过的只留一行记录。
+                attendeeInfo?.proposals?.takeIf { it.isNotEmpty() }?.let { proposals ->
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            t("attendees.proposals"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        proposals.forEach { proposal ->
+                            Column {
+                                Text(
+                                    "${proposal.proposerEmail}\n${formatProposalInstant(proposal.proposedStartsAt, deviceZone)} → ${formatProposalInstant(proposal.proposedEndsAt, deviceZone)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                proposal.note?.takeIf { it.isNotBlank() }?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (proposal.status == "pending") {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        TextButton(onClick = { onDecideProposal(proposal, true) }) {
+                                            Text(t("attendees.proposal.accept"))
+                                        }
+                                        TextButton(onClick = { onDecideProposal(proposal, false) }) {
+                                            Text(t("attendees.proposal.decline"))
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        t(
+                                            when (proposal.status) {
+                                                "accepted" -> "attendees.status.accepted"
+                                                "declined" -> "attendees.status.declined"
+                                                else -> "attendees.proposal.superseded"
+                                            },
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
                 if (event.rrule != null) {
                     MetaRow(label = t("event.detail.recurrence"), value = formatRrule(event.rrule))
@@ -264,4 +325,11 @@ private fun formatRrule(rrule: String): String {
         count != null -> t("event.rrule.count", mapOf("base" to base, "n" to count))
         else -> base
     }
+}
+
+/** 提议时间是服务端给的 ISO 时刻，按当前显示时区渲染成 MM-dd HH:mm。 */
+private fun formatProposalInstant(iso: String, zone: ZoneId): String = try {
+    DateTimeFormatter.ofPattern("MM-dd HH:mm").withZone(zone).format(Instant.parse(iso))
+} catch (e: Exception) {
+    iso
 }

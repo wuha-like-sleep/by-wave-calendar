@@ -20,6 +20,7 @@ struct AttendeesPage: View {
 
     @State private var attendees: [String] = []
     @State private var tokens: [AttendeeToken] = []
+    @State private var proposals: [TimeProposal] = []
     @State private var newEmail: String = ""
     @State private var loading = true
     @State private var inviting = false
@@ -36,6 +37,20 @@ struct AttendeesPage: View {
         let createdAt: String
         let expiresAt: String
         let acceptedAt: String?
+        // RSVP 回复状态。老版本服务端不返回这两个字段，所以是 Optional，
+        // 缺失时回落到「已邀请 · 等待回复」的旧显示。
+        let responseStatus: String?
+        let respondedAt: String?
+    }
+
+    /// 受邀者的「提议新时间」。status: pending / accepted / declined / superseded。
+    struct TimeProposal: Decodable, Identifiable {
+        let id: String
+        let proposerEmail: String
+        let proposedStartsAt: String
+        let proposedEndsAt: String
+        let note: String?
+        let status: String
     }
 
     var body: some View {
@@ -106,6 +121,41 @@ struct AttendeesPage: View {
                 Text("当前参与者 (%lld)".locFormat(attendees.count))
             }
 
+            // Time proposals — pending ones need the organizer's decision.
+            if !proposals.isEmpty {
+                Section("时间提议") {
+                    ForEach(proposals) { proposal in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(proposal.proposerEmail).font(.callout)
+                            Text("%@ → %@".locFormat(shortDate(proposal.proposedStartsAt), shortDate(proposal.proposedEndsAt)))
+                                .font(.caption).foregroundStyle(.secondary)
+                            if let note = proposal.note, !note.isEmpty {
+                                Text(note).font(.caption).foregroundStyle(.secondary)
+                            }
+                            if proposal.status == "pending" {
+                                HStack {
+                                    Button("接受并改时间") {
+                                        Task { await decide(proposal: proposal, accept: true) }
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                    Button("拒绝提议", role: .destructive) {
+                                        Task { await decide(proposal: proposal, accept: false) }
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+                            } else {
+                                Text(proposal.status == "accepted" ? "已接受参加".loc
+                                     : proposal.status == "declined" ? "已拒绝参加".loc
+                                     : "已被取代".loc)
+                                    .font(.caption2).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                }
+            }
+
             // History — all tokens ever issued for this event.
             if !tokens.isEmpty {
                 Section("所有邀请记录") {
@@ -159,10 +209,12 @@ struct AttendeesPage: View {
             struct Resp: Decodable {
                 let attendees: [String]
                 let tokens: [AttendeeToken]
+                let proposals: [TimeProposal]?
             }
             let resp: Resp = try await APIClient(state: state).get("/events/\(eventId)/attendees")
             attendees = resp.attendees
             tokens = resp.tokens
+            proposals = resp.proposals ?? []
         } catch let e as APIError {
             errorMessage = e.localizedDescription
         } catch {
@@ -237,10 +289,36 @@ struct AttendeesPage: View {
     }
 
     private func statusLabel(for tok: AttendeeToken) -> String {
+        // RSVP 状态优先（参加/拒绝/可能），acceptedAt（已加进自己日历）
+        // 是另一回事，只在没有回复状态的老数据上才用它兜底。
+        switch tok.responseStatus {
+        case "accepted": return "已接受参加".loc
+        case "declined": return "已拒绝参加".loc
+        case "tentative": return "可能参加".loc
+        case "pending": return "已邀请 · 等待回复".loc
+        default: break
+        }
         if let acceptedAt = tok.acceptedAt {
             return "已接受 · %@".locFormat(shortDate(acceptedAt))
         }
         return "已邀请 · 等待回复".loc
+    }
+
+    private func decide(proposal: TimeProposal, accept: Bool) async {
+        errorMessage = nil
+        do {
+            struct Empty: Encodable {}
+            struct Resp: Decodable { let ok: Bool? }
+            let _: Resp = try await APIClient(state: state).post(
+                "/events/\(eventId)/proposals/\(proposal.id)/\(accept ? "accept" : "decline")",
+                body: Empty(),
+            )
+            await load()
+        } catch let e as APIError {
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func shortDate(_ iso: String) -> String {

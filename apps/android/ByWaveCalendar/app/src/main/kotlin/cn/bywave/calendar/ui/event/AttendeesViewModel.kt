@@ -17,6 +17,7 @@ import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
+import cn.bywave.calendar.data.model.TimeProposal
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,6 +26,10 @@ import kotlinx.coroutines.launch
 
 data class AttendeesUiState(
     val attendees: List<String> = emptyList(),
+    /** 每位参与者的 RSVP 状态（pending/accepted/declined/tentative），按邮箱索引。 */
+    val statusByEmail: Map<String, String> = emptyMap(),
+    /** 受邀者的「提议新时间」，待处理的排前面由 UI 分组展示。 */
+    val proposals: List<TimeProposal> = emptyList(),
     val loading: Boolean = false,
     val sending: Boolean = false,
     val emailInput: String = "",
@@ -90,6 +95,22 @@ class AttendeesViewModel : ViewModel() {
         }
     }
 
+    /** 组织者裁决一条时间提议：接受 = 事件改到提议时间（服务端事务处理）。 */
+    fun decideProposal(proposal: TimeProposal, accept: Boolean) {
+        viewModelScope.launch {
+            try {
+                val client = client() ?: return@launch
+                if (accept) client.api.acceptProposal(eventId, proposal.id)
+                else client.api.declineProposal(eventId, proposal.id)
+                load()
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(errorMessage = e.localizedMessage ?: app.getString(R.string.attendees_err_load_failed))
+                }
+            }
+        }
+    }
+
     private fun load() {
         _state.update { it.copy(loading = true) }
         viewModelScope.launch {
@@ -97,7 +118,12 @@ class AttendeesViewModel : ViewModel() {
                 val client = client() ?: return@launch
                 val resp = client.api.attendees(eventId)
                 _state.update {
-                    it.copy(loading = false, attendees = resp.attendees)
+                    it.copy(
+                        loading = false,
+                        attendees = resp.attendees,
+                        statusByEmail = resp.tokens.associate { t -> t.recipientEmail to t.responseStatus },
+                        proposals = resp.proposals,
+                    )
                 }
             } catch (e: Exception) {
                 _state.update {

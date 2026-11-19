@@ -221,6 +221,38 @@ data class EventExtra(
     val alarms: EventAlarmsField? = null,
 )
 
+// ---- Event attendees (organizer view) ----
+//
+// GET /api/v1/events/{id}/attendees — invitee emails, per-invitee RSVP
+// status (from the invite tokens, the RSVP source of truth) and time
+// proposals. Owner-only on the server; viewers of a shared calendar
+// get a 404 and the detail dialog falls back to the plain email list.
+
+@Serializable
+data class AttendeesResponse(
+    val attendees: List<String>,
+    val tokens: List<AttendeeToken> = emptyList(),
+    val proposals: List<TimeProposal> = emptyList(),
+)
+
+@Serializable
+data class AttendeeToken(
+    val recipientEmail: String,
+    val responseStatus: String = "pending",
+    val respondedAt: String? = null,
+    val acceptedAt: String? = null,
+)
+
+@Serializable
+data class TimeProposal(
+    val id: String,
+    val proposerEmail: String,
+    val proposedStartsAt: String,
+    val proposedEndsAt: String,
+    val note: String? = null,
+    val status: String,
+)
+
 // ---- Global search ----
 //
 // GET /api/v1/search?q=<needle>&limit=<n>. The server matches the needle

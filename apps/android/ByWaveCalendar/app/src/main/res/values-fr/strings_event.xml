@@ -110,4 +110,14 @@
     <string name="rrule_passthrough_note">Règle de répétition avancée conservée telle quelle</string>
     <string name="exdates_title">Occurrences supprimées</string>
     <string name="exdates_restore">Restaurer</string>
+
+    <!-- RSVP 状态与时间提议 -->
+    <string name="attendees_status_accepted">Accepté</string>
+    <string name="attendees_status_declined">Refusé</string>
+    <string name="attendees_status_tentative">Peut-être</string>
+    <string name="attendees_status_pending">En attente de réponse</string>
+    <string name="attendees_proposals_title">Propositions d'horaire</string>
+    <string name="attendees_proposal_accept">Accepter et déplacer</string>
+    <string name="attendees_proposal_decline">Refuser</string>
+    <string name="attendees_proposal_superseded">Remplacée</string>
 </resources>

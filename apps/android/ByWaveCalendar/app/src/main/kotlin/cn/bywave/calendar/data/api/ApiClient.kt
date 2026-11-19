@@ -12,6 +12,7 @@ import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
+import cn.bywave.calendar.data.model.ProposalDecisionResponse
 import cn.bywave.calendar.data.model.Booking
 import cn.bywave.calendar.data.model.BookingLink
 import cn.bywave.calendar.data.model.BookingLinkCreateRequest
@@ -285,6 +286,18 @@ interface BywaveApi {
         @Path("id") id: String,
         @Body body: AttendeeRevokeRequest,
     )
+
+    @POST("api/v1/events/{id}/proposals/{pid}/accept")
+    suspend fun acceptProposal(
+        @Path("id") id: String,
+        @Path("pid") pid: String,
+    ): ProposalDecisionResponse
+
+    @POST("api/v1/events/{id}/proposals/{pid}/decline")
+    suspend fun declineProposal(
+        @Path("id") id: String,
+        @Path("pid") pid: String,
+    ): ProposalDecisionResponse
 
     // ---- Native account management ----
     //
