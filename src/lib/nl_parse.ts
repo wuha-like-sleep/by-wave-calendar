@@ -524,6 +524,10 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   let hours: number | null = null;
   let mins = 0;
   let durationFromRange: number | null = null;
+  // Set by step 2b2 ("下班前" / "before work"): a work-boundary DEADLINE
+  // in minutes since midnight. The event must END by this boundary;
+  // step 4 turns it into start = boundary − duration.
+  let workEndBoundaryMin: number | null = null;
 
   // A clock time in any supported shape. Captures:
   //   1 period-before, 2 hour, 3 minutes-with-colon, 4 minutes-adjacent,
@@ -622,14 +626,45 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     }
   }
 
+  // 2b2. Work-boundary deadlines: "下班前 / 上班前 / 上班之前 / 下班之前 /
+  //      before work / before (the) end of (the) workday / before the
+  //      workday ends". These name a DEADLINE, not a start: the event must
+  //      END by the boundary, so step 4 anchors the end and derives the
+  //      start from the duration. The boundary hours are this parser's own
+  //      day shape — PERIOD_DEFAULT_HOUR already puts 早上 at 9 and 傍晚
+  //      at 18, and a date with no time starts at 09:00 — and match the
+  //      common Chinese office day 9:00–18:00 (statutory 8 working hours
+  //      plus lunch). Outlook's default work hours are 8:00–17:00; the
+  //      English forms deliberately share the same anchors instead of
+  //      forking the table per language.
+  //      The phrase is always consumed (it must not leak into the
+  //      summary), but it only anchors when no explicit clock time was
+  //      found — "下班前 17点开会" is a 17:00 meeting. "下班后" is a
+  //      different phrase and must NOT match: the regex requires 前/之前.
+  {
+    const m = remaining.match(
+      /(上班|下班)(?:之前|前)|\bbefore\s+(?:the\s+)?end\s+of\s+(?:the\s+)?workday\b|\bbefore\s+the\s+workday\s+ends\b|\bbefore\s+work\b/i,
+    );
+    if (m) {
+      workEndBoundaryMin = /下班|workday/.test(m[0]) ? 18 * 60 : 9 * 60;
+      remaining = remaining.replace(m[0], " ");
+    }
+  }
+
   // 2c. Period word with no explicit hour — "明天下午开会" / "tomorrow
   //     evening" should land on a sensible colloquial default, not 09:00.
   if (hours === null) {
     for (const [pattern, period] of PERIODS) {
       const r = re(alt([pattern]));
       if (r.test(remaining)) {
-        hours = PERIOD_DEFAULT_HOUR[period];
-        mins = 0;
+        // A work-boundary deadline ("明天下午下班前交报表") is more
+        // specific than the period's default hour: still consume the
+        // period word so it can't leak into the summary, but let the
+        // boundary do the anchoring in step 4.
+        if (workEndBoundaryMin === null) {
+          hours = PERIOD_DEFAULT_HOUR[period];
+          mins = 0;
+        }
         remaining = remaining.replace(r, " ");
         break;
       }
@@ -645,8 +680,9 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
 
   // Need at least a date OR time to count this as a successful parse.
   // An all-day marker also anchors ("全天开会" = today, all day), and
-  // so does a relative offset from step 1i ("半小时后开会").
-  if (dateOffset === null && hours === null && !allDay && relativeStart === null) return null;
+  // so does a relative offset from step 1i ("半小时后开会") and a
+  // work-boundary deadline from step 2b2 ("下班前交报表").
+  if (dateOffset === null && hours === null && !allDay && relativeStart === null && workEndBoundaryMin === null) return null;
 
   // ── Step 3: duration ────────────────────────────────────────────────────
   let durationMin = 60;
@@ -719,6 +755,16 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     // applies to the end; any date/clock tokens are not consulted
     // (the offset already fixed the day, including past midnight).
     startsAt.setTime(relativeStart.getTime());
+    endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
+  } else if (hours === null && workEndBoundaryMin !== null) {
+    // "下班前 / 上班前" & friends: the END sits on the boundary, the
+    // start is boundary − duration ("下班前开会 2小时" = 16:00–18:00).
+    // No date given and that start is already past (said at 19:00 about
+    // today's 下班前） → tomorrow, the same rule a bare clock time gets.
+    startsAt.setTime(startsAt.getTime() + (workEndBoundaryMin - durationMin) * 60_000);
+    if (dateOffset === null && startsAt.getTime() < nowAnchor.getTime()) {
+      startsAt.setUTCDate(startsAt.getUTCDate() + 1);
+    }
     endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   } else if (hours === null) {
     startsAt.setUTCHours(9, 0, 0, 0); // date but no time → 09:00, 1h

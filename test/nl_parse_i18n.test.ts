@@ -66,6 +66,13 @@ describe("English", () => {
   it("'next' alone never sets a date — too common in titles", () => {
     expect(parse("sprint review next quarter", NOW)).toBeNull();
   });
+  it("work-boundary deadlines: the event ENDS at the boundary", () => {
+    // Same 9:00 / 18:00 anchors as the Chinese forms — the parser does
+    // not fork its day shape per language.
+    expectParse("submit report before end of workday", "2026-07-03T17:00:00", "2026-07-03T18:00:00", "submit report");
+    expectParse("submit report before the workday ends", "2026-07-03T17:00:00", "2026-07-03T18:00:00", "submit report");
+    expectParse("gym before work tomorrow", "2026-07-04T08:00:00", "2026-07-04T09:00:00", "gym");
+  });
 });
 
 describe("Japanese", () => {
@@ -171,6 +178,9 @@ describe("Traditional Chinese", () => {
   });
   it("週五 + 小時", () => {
     expectParse("週五 10點 2小時 團建", "2026-07-10T10:00:00", "2026-07-10T12:00:00", "團建");
+  });
+  it("下班前（繁簡同形）", () => {
+    expectParse("下班前交報告", "2026-07-03T17:00:00", "2026-07-03T18:00:00", "交報告");
   });
 });
 
