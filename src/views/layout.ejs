@@ -5,6 +5,15 @@
       data-mode-pref="<%= typeof themeMode !== 'undefined' ? themeMode : 'system' %>"
       data-app-version="<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>">
   <head>
+    <meta charset="utf-8" />
+    <%# theme-color sits BEFORE the mode script on purpose: the script
+        re-tints this meta to the resolved colour mode, and it can only
+        find the element if it is already parsed. Static value is the
+        light surface; the script corrects it before first paint (and,
+        unlike a media-attribute pair of metas, also follows a manual
+        light/dark preference). %>
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <%# Colour mode resolution — MUST run before the stylesheets below are
         applied, or a dark-mode user gets a white flash on every navigation.
         The server renders the saved preference into data-mode-pref (cookie
@@ -32,13 +41,6 @@
         else if (mq.addListener) mq.addListener(apply);
       })();
     </script>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <%# Static value is the light surface; the head script above re-tints
-        this meta to the resolved colour mode before first paint (it also
-        follows manual light/dark preferences, which a media-attribute
-        pair of theme-color metas cannot). %>
-    <meta name="theme-color" content="#f8fafc" />
     <meta name="csrf-token" content="<%= csrfToken %>" />
     <title><%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></title>
     <%# SEO / 分享卡片：公开页（首页、下载、支持、法律页）靠这几行在搜索
