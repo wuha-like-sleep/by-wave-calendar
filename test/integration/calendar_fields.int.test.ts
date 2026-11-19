@@ -24,7 +24,7 @@ import {
 } from "./harness.js";
 
 process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
-process.env.DATABASE_URL ??= <redacted>
+process.env.DATABASE_URL ??= "postgres://u:p@localhost:5432/db";
 process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 const { calendarRoutes } = await import("../../src/routes/calendars.js");
 const { createApiToken } = await import("../../src/lib/api_token.js");
