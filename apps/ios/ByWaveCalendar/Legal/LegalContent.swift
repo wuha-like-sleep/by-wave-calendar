@@ -16,8 +16,10 @@
 // APP itself does (cache events on disk, sync to EventKit, etc.) which
 // is identical across every deployment.
 //
-// v1.3.3 — APNs push registration removed; APP currently does not
-// subscribe to Apple Push. Privacy text reflects this.
+// Push history: v1.3.3 removed the APNs entitlement while the
+// server had no APNs key configured, and the text below said so.
+// Push has since been restored end-to-end (entitlement, server key,
+// and this text) — the APP does register for APNs again.
 //
 // 2026-05-31 — text refresh + added a Data Processing policy
 // (LegalContent.dataProcessing) to mirror the server's three-document
@@ -29,7 +31,7 @@ import Foundation
 enum LegalContent {
     /// One source of truth — bump on every meaningful change so the
     /// version line at the bottom of each page nudges users to re-read.
-    static let lastUpdated = "2026-05-31"
+    static let lastUpdated = "2026-11-20"
 
     static let privacy: String = """
     # 隐私政策
@@ -51,9 +53,9 @@ enum LegalContent {
     - 把最近一次拉取的日历事件缓存在 APP 的 Documents 目录下，方便离线查看
     - 如果你开启「同步到系统日历」，会把事件镜像到 iOS「日历」APP 的一个子日历里
     - 如果你开启「事件开始前提醒」，会在本机排好 iOS 本地通知队列
-    - 通过定期后台轮询和应用前台刷新从你绑定的服务器拉取最新事件 \
-      （当前发布版本未声明 Apple Push / APNs 能力，不会获取或上传推送 token；\
-      后续若启用推送，会在升级说明里另行公告）
+    - 通过定期后台轮询和应用前台刷新从你绑定的服务器拉取最新事件
+    - 为事件变更推送注册 Apple Push（APNs），并把 APNs token 上传到你绑定的服务器，\
+      以便事件变更及时推送到你的设备（推送为静默后台唤醒，不弹横幅）
 
     APP 不会把以上任何数据发送给 ByWave Calendar 项目的开发者或任何其它第三方，\
     也不含任何广告、行为追踪或第三方分析 SDK。\
@@ -63,7 +65,8 @@ enum LegalContent {
 
     - **相机**：仅用于扫描登录二维码；不录像、不保存照片
     - **日历**：仅当你开启「同步到系统日历」时申请；APP 不会读取你 iOS 日历里已有的事件，只写入
-    - **通知**：仅当你开启「事件开始前提醒」时申请（本机定时本地通知，不走 Apple Push）
+    - **通知**：仅当你开启「事件开始前提醒」时申请（这是本机定时提醒用的本地通知；\
+      事件变更的 APNs 静默推送不需要此权限）
 
     所有权限都可以在 iOS 系统设置 → ByWave Calendar 里随时关闭。关闭后 APP 仍能正常使用，\
     只是相应功能（扫码登录 / 系统日历同步 / 提醒）不可用。
@@ -127,7 +130,7 @@ enum LegalContent {
 
     ## 3. 服务器侧处理（由运营者负责）
 
-    你的账号、日历、事件、邀请、设备配对信息、推送订阅 token、可选 SSO 身份、\
+    你的账号、日历、事件、邀请、设备配对信息、推送订阅 token、站内通知记录、可选 SSO 身份、\
     审计日志等存储在**运营者的服务器**（通常是 PostgreSQL）上，不经第三方 SaaS。\
     具体的收集范围、目的、保存期限、安全措施、子处理者与跨境安排，\
     以**该服务器的《数据处理政策》**为准（多数服务器在网页 /data-processing 提供）。
@@ -138,11 +141,12 @@ enum LegalContent {
     推送用的 APNs / FCM、登录用的 SSO 提供方。传输全程强制 HTTPS。\
     **不含任何分析、广告或追踪服务**；APP 也不内置任何此类 SDK。
 
-    ## 5. 当前发布版本关于推送的说明
+    ## 5. 关于推送的说明
 
-    当前发布的 iOS APP **未声明 Apple Push / APNs 能力**，不会获取或上传推送 token，\
-    仅通过前台刷新与后台轮询同步事件。后续若启用推送，会在升级说明中另行公告，\
-    届时设备的推送 token 会被服务器存储以便向你投递通知。
+    iOS APP 会为事件变更推送注册 Apple Push（APNs），并将 APNs token 上传到你绑定的服务器；\
+    服务器把 token 存在你的设备记录上，以便事件变更时向你的设备投递静默推送。\
+    APP 同时也会使用前台刷新与后台轮询同步事件。\
+    退出登录时，APP 会请服务器清掉本设备会话的推送 token。
 
     ## 6. 你的权利与行使方式
 
