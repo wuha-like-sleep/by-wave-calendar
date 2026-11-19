@@ -42,11 +42,16 @@ export async function exportRoutes(app: FastifyInstance) {
         .orderBy(asc(schema.events.startsAt));
       const body = buildIcsFeed(cal, events);
       // 文件名清洗与网页导出同规则：非字母数字/中文/连字符一律换下划线。
-      const safeName = cal.name.replace(/[^a-zA-Z0-9一-鿿-]+/g, "_").slice(0, 50) || "calendar";
+      // 但清洗后的名字仍可能含中文，直接塞进 filename= 会让 Node 以
+      // ERR_INVALID_CHAR 拒绝整个响应头（导出 500）——所以 filename= 只放
+      // ASCII 回退名，完整名字走 RFC 5987 的 filename*。
+      const cleaned = cal.name.replace(/[^a-zA-Z0-9一-鿿-]+/g, "_").slice(0, 50) || "calendar";
+      const asciiName = cleaned.replace(/[^\x20-\x7e]/g, "_");
+      const encoded = encodeURIComponent(`${cleaned}.ics`).replace(/'/g, "%27");
       reply
         .header("Content-Type", "text/calendar; charset=utf-8")
         .header("Cache-Control", "no-store")
-        .header("Content-Disposition", `attachment; filename="${safeName}.ics"`);
+        .header("Content-Disposition", `attachment; filename="${asciiName}.ics"; filename*=UTF-8''${encoded}`);
       return reply.send(body);
     },
   );

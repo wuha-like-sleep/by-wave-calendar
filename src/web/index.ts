@@ -1195,11 +1195,16 @@ export async function webRoutes(app: FastifyInstance) {
       .orderBy(asc(schema.events.startsAt));
     const body = buildIcsFeed(cal, events);
     // Slug the filename so e.g. "工作 / Work" doesn't blow up downloads.
-    const safeName = cal.name.replace(/[^a-zA-Z0-9一-鿿-]+/g, "_").slice(0, 50) || "calendar";
+    // The slug can still contain CJK characters, which Node rejects in a
+    // plain filename= header (ERR_INVALID_CHAR) — so filename= carries an
+    // ASCII fallback and the full name rides in RFC 5987 filename*.
+    const cleaned = cal.name.replace(/[^a-zA-Z0-9一-鿿-]+/g, "_").slice(0, 50) || "calendar";
+    const asciiName = cleaned.replace(/[^\x20-\x7e]/g, "_");
+    const encoded = encodeURIComponent(`${cleaned}.ics`).replace(/'/g, "%27");
     reply
       .header("Content-Type", "text/calendar; charset=utf-8")
       .header("Cache-Control", "no-store")
-      .header("Content-Disposition", `attachment; filename="${safeName}.ics"`)
+      .header("Content-Disposition", `attachment; filename="${asciiName}.ics"; filename*=UTF-8''${encoded}`)
       .send(body);
   });
 
