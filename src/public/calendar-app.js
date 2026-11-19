@@ -1654,6 +1654,22 @@
           : parsed.endsAt.toISOString();
         let browserTz = "Asia/Shanghai";
         try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || browserTz; } catch (_e) { /* keep fallback */ }
+        // extra 先建成变量再挂上 body：六个键与表单 submit 同口径
+        // （该发的显式 null 一个不少）。不写成 body 里的内联字面量，
+        // 是因为 reminder_enum_parity 测试按「文件里第一个 extra 字面量
+        // = 表单 submit 的」来守这条口径，内联会把它带偏。
+        const qaExtra = {
+          category: null,
+          timezone: browserTz,
+          attendees: null,
+          url: null,
+          meetingPassword: null,
+          alarms: FORM.collectAlarms(
+            isAllDay ? FORM.REMINDER_DEFAULTS.allday : FORM.REMINDER_DEFAULTS.timed,
+            "",
+            parsed.summary,
+          ),
+        };
         const body = {
           calendarId,
           summary: parsed.summary,
@@ -1662,18 +1678,7 @@
           startsAt: startsIso,
           endsAt: endsIso,
           rrule: parsed.rrule || undefined,
-          extra: {
-            category: null,
-            timezone: browserTz,
-            attendees: null,
-            url: null,
-            meetingPassword: null,
-            alarms: FORM.collectAlarms(
-              isAllDay ? FORM.REMINDER_DEFAULTS.allday : FORM.REMINDER_DEFAULTS.timed,
-              "",
-              parsed.summary,
-            ),
-          },
+          extra: qaExtra,
         };
         qaSaving = true;
         try {
