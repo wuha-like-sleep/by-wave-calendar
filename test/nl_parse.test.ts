@@ -83,6 +83,45 @@ describe("parseNaturalLanguageEvent", () => {
     expect(parseNaturalLanguageEvent("三天后 交报告", NOW)?.startsAt).toBe("2026-07-06T09:00:00");
   });
 
+  it("半小时后 → now + 30min, default 1h duration", () => {
+    expect(parseNaturalLanguageEvent("半小时后 开会", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T10:30:00",
+      endsAt: "2026-07-03T11:30:00",
+    });
+  });
+
+  it("30分钟后 / 一小时后 / 两小时后 → now + offset", () => {
+    expect(parseNaturalLanguageEvent("30分钟后 站会", NOW)?.startsAt).toBe("2026-07-03T10:30:00");
+    expect(parseNaturalLanguageEvent("一小时后 牙医", NOW)?.startsAt).toBe("2026-07-03T11:00:00");
+    expect(parseNaturalLanguageEvent("两小时后 出发", NOW)?.startsAt).toBe("2026-07-03T12:00:00");
+    expect(parseNaturalLanguageEvent("45分后 提醒", NOW)?.startsAt).toBe("2026-07-03T10:45:00");
+  });
+
+  it("一个半小时后 → now + 90min (not a 1.5h duration with no anchor)", () => {
+    expect(parseNaturalLanguageEvent("一个半小时后 复盘", NOW)?.startsAt).toBe("2026-07-03T11:30:00");
+  });
+
+  it("相对时间 + 时长：时长落在结束时间上", () => {
+    expect(parseNaturalLanguageEvent("半小时后 开会 2小时", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T10:30:00",
+      endsAt: "2026-07-03T12:30:00",
+    });
+  });
+
+  it("相对时间跨午夜 → 落到第二天", () => {
+    expect(parseNaturalLanguageEvent("一小时后 夜宵", "2026-07-03T23:30:00")?.startsAt)
+      .toBe("2026-07-04T00:30:00");
+  });
+
+  it("in 30 minutes / in an hour / 2 hours from now", () => {
+    expect(parseNaturalLanguageEvent("in 30 minutes standup", NOW)?.startsAt).toBe("2026-07-03T10:30:00");
+    expect(parseNaturalLanguageEvent("call in an hour", NOW)?.startsAt).toBe("2026-07-03T11:00:00");
+    expect(parseNaturalLanguageEvent("leave in half an hour", NOW)?.startsAt).toBe("2026-07-03T10:30:00");
+    expect(parseNaturalLanguageEvent("flight 2 hours from now", NOW)?.startsAt).toBe("2026-07-03T12:00:00");
+  });
+
   it("下周 alone → next week's Monday", () => {
     expect(parseNaturalLanguageEvent("下周 述职", NOW)?.startsAt).toBe("2026-07-06T09:00:00");
   });

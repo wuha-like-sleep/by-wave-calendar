@@ -55,6 +55,8 @@
     <string name="eventedit_keep_editing">編集を続ける</string>
     <string name="eventedit_need_calendar">カレンダー一覧がまだ読み込まれていないため保存できません。オンラインになると自動で読み込まれます。</string>
     <string name="eventedit_retry">再試行</string>
+    <string name="eventedit_timezone_search_hint">タイムゾーンを検索</string>
+    <string name="eventedit_timezone_change">変更</string>
     <string name="eventedit_need_title">タイトルを入力すると保存できます。</string>
     <!-- Event reminders / conflict prompt -->
     <string name="event_reminder_label">リマインダー</string>

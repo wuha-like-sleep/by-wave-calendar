@@ -35,9 +35,12 @@ describe("English", () => {
     expectParse("standup monday 9:30 30 minutes", "2026-07-06T09:30:00", "2026-07-06T10:00:00", "standup");
   });
   it("'next <weekday>' adds a week on top of the upcoming one", () => {
-    // Friday → upcoming Friday is the 10th; "next friday" is the 17th.
+    // Friday → upcoming Friday is the 10th; "next friday" names the
+    // Friday of the next calendar week — which is also the 10th here.
+    // (Calendar-week semantics, same as 下周五; this expectation used to
+    // say the 17th from the old "upcoming + 7" rule.)
     expect(parse("retro friday", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
-    expect(parse("retro next friday", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
+    expect(parse("retro next friday", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
   });
   it("a range where only the END carries am/pm — the start inherits it", () => {
     expectParse("workshop tomorrow 2-4pm", "2026-07-04T14:00:00", "2026-07-04T16:00:00", "workshop");
@@ -73,7 +76,7 @@ describe("Japanese", () => {
     expectParse("あさって 19時 2時間 飲み会", "2026-07-05T19:00:00", "2026-07-05T21:00:00", "飲み会");
   });
   it("来週金曜日 + 時分", () => {
-    expectParse("会議 来週金曜日 10時30分", "2026-07-17T10:30:00", "2026-07-17T11:30:00", "会議");
+    expectParse("会議 来週金曜日 10時30分", "2026-07-10T10:30:00", "2026-07-10T11:30:00", "会議");
   });
   it("時間半 → 90 minutes", () => {
     expect(parse("明日 10時 1時間半 研修", NOW)?.endsAt).toBe("2026-07-04T11:30:00");
@@ -88,7 +91,7 @@ describe("Korean", () => {
     expectParse("모레 저녁 7시 2시간 회식", "2026-07-05T19:00:00", "2026-07-05T21:00:00", "회식");
   });
   it("spaced minutes '10시 30분' are clock minutes, not a duration", () => {
-    expectParse("회의 다음 주 금요일 10시 30분", "2026-07-17T10:30:00", "2026-07-17T11:30:00", "회의");
+    expectParse("회의 다음 주 금요일 10시 30분", "2026-07-10T10:30:00", "2026-07-10T11:30:00", "회의");
   });
 });
 

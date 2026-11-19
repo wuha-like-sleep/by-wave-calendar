@@ -55,6 +55,8 @@
     <string name="eventedit_keep_editing">Weiter bearbeiten</string>
     <string name="eventedit_need_calendar">Deine Kalenderliste ist noch nicht geladen, deshalb kann nicht gespeichert werden. Sie wird geladen, sobald du online bist.</string>
     <string name="eventedit_retry">Erneut versuchen</string>
+    <string name="eventedit_timezone_search_hint">Zeitzone suchen</string>
+    <string name="eventedit_timezone_change">Ändern</string>
     <string name="eventedit_need_title">Gib einen Titel ein, dann kannst du speichern.</string>
     <!-- Event reminders / conflict prompt -->
     <string name="event_reminder_label">Erinnerung</string>

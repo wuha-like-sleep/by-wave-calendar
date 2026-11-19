@@ -1620,7 +1620,16 @@
   }
 
   // Both the desktop toolbar button and the mobile FAB share this handler.
-  const openNewEvent = () => openEventModal({ startsAt: new Date(), endsAt: new Date(Date.now() + 3600_000) });
+  // Default start = next half hour, matching the three apps (and the web
+  // quick-add): a raw `new Date()` would prefill e.g. 21:47–22:47, a slot
+  // nobody means. End keeps the 1h default duration from the rounded start.
+  const openNewEvent = () => {
+    const start = new Date();
+    start.setSeconds(0, 0);
+    if (start.getMinutes() < 30) start.setMinutes(30);
+    else { start.setMinutes(0); start.setHours(start.getHours() + 1); }
+    openEventModal({ startsAt: start, endsAt: new Date(start.getTime() + 3600_000) });
+  };
   $("#btn-new-event").addEventListener("click", openNewEvent);
   $("#btn-new-event-fab")?.addEventListener("click", openNewEvent);
   // Empty-state nudge buttons reuse the same handlers.
@@ -2024,6 +2033,21 @@
     const form = $("#form-calendar");
     form.reset();
     buildColorPicker(form.querySelector('[data-color-picker="form-calendar"]'), "color", "#6366f1");
+    // form.reset() restores the hidden timezone input to its HTML default
+    // (Asia/Shanghai). A NEW calendar should start from the browser-detected
+    // zone — the same rule the event form and the import flow already use —
+    // otherwise everyone outside China silently gets a Shanghai calendar
+    // and every recurring event in it expands against the wrong wall clock.
+    const calTzInput = form.querySelector('[name="timezone"]');
+    if (calTzInput) {
+      let detectedTz = "Asia/Shanghai";
+      try { detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || detectedTz; } catch (_e) { /* keep fallback */ }
+      calTzInput.value = detectedTz;
+      const calTzPicker = calTzInput.closest("[data-tz-picker]");
+      if (calTzPicker && typeof window.bwcSyncTzPicker === "function") {
+        window.bwcSyncTzPicker(calTzPicker);
+      }
+    }
     // Reset to General tab
     form.querySelectorAll(".cal-tab").forEach((t) => {
       const active = t.dataset.calTab === "general";

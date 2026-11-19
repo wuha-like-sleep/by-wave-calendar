@@ -81,6 +81,20 @@ data class EventEditUiState(
      *  when scope is "instance" or "future" so it knows WHICH occurrence
      *  the user is editing. */
     val sourceStartsAt: String? = null,
+    /** The event's anchor timezone (extra.timezone) as chosen in the
+     *  form. Resolved once at bootstrap — the event's own stored zone,
+     *  else the selected calendar's zone, else the device zone — and
+     *  following the calendar picker until the user picks a zone
+     *  themselves (see withCalendarSelection). Like iOS, this field is
+     *  metadata for the server's recurrence expansion / export: the
+     *  form's wall clock stays in the device zone and changing the zone
+     *  never reinterprets the typed times. Blank only in hand-built
+     *  states (unit tests); buildExtra then keeps the legacy fallback. */
+    val zoneId: String = "",
+    /** True once the user picked a zone in the form. Before that, the
+     *  zone follows the calendar picker (a not-yet-explicit zone is
+     *  inherited, so it should track the calendar it is inherited from). */
+    val zoneTouched: Boolean = false,
     val sourceExtra: EventExtraDTO? = null,
     val originalStart: EventFormInstant? = null,
     val originalEnd: EventFormInstant? = null,
@@ -139,7 +153,7 @@ data class EventEditUiState(
             calendarId, summary, location, description, url, meetingPassword,
             start.toString(), end.toString(), allDay.toString(), reminder,
             category, rruleState.effectiveRrule().orEmpty(),
-            exdates.joinToString(","),
+            exdates.joinToString(","), zoneId,
         ).joinToString("\u0000")
 
     /** 有未保存的改动。退出前要拦一下：新建/编辑事件里填了一半的内容
@@ -155,15 +169,69 @@ data class EventEditUiState(
 internal fun EventEditUiState.withCalendars(calendars: List<CalendarMeta>): EventEditUiState {
     if (this.calendars == calendars) return this
     val nextId = if (calendarId.isBlank()) calendars.firstOrNull()?.id.orEmpty() else calendarId
-    val updated = copy(calendars = calendars, calendarId = nextId)
+    var updated = copy(calendars = calendars, calendarId = nextId)
+    // 时区若是从日历继承来的（事件自己没有、用户也没挑过），日历后到 /
+    // 刷新时要跟着定：bootstrap 时可能还没有日历可继承，只能先用设备
+    // 时区占位。事件自带时区或用户挑过的，一律不许动。
+    if (!zoneTouched && sourceExtra?.timezone.isNullOrBlank()) {
+        updated = updated.copy(
+            zoneId = resolveEventZoneId(null, calendars.firstOrNull { it.id == nextId }?.timezone),
+        )
+    }
     // 用户还没动过表单的话，基准指纹要跟着挪，否则「日历后到」会被当成
     // 用户的改动，一按返回就凭空弹出「放弃修改？」。
     return if (fingerprint == pristine) updated.copy(pristine = updated.fingerprint) else updated
 }
 
+/** First usable IANA zone of: the event's own stored zone, the
+ *  calendar's zone, the device zone. Stored strings come from other
+ *  clients and old versions, so anything ZoneId can't parse is skipped
+ *  instead of crashing the editor (or being sent back to the server). */
+internal fun resolveEventZoneId(
+    explicit: String?,
+    calendarTimeZone: String?,
+    device: ZoneId = ZoneId.systemDefault(),
+): String {
+    for (candidate in listOf(explicit, calendarTimeZone)) {
+        val id = candidate?.trim().orEmpty()
+        if (id.isNotEmpty() && runCatching { ZoneId.of(id) }.isSuccess) return id
+    }
+    return device.id
+}
+
+/** Calendar-picker change. A zone the user never explicitly picked is
+ *  inherited from the calendar, so it follows the picker; a zone that
+ *  came from the event itself (or was picked by hand) stays put —
+ *  moving an event between calendars must not silently re-anchor it. */
+internal fun EventEditUiState.withCalendarSelection(id: String): EventEditUiState {
+    val followsCalendar = !zoneTouched &&
+        sourceExtra?.timezone.isNullOrBlank() &&
+        (zoneId.isBlank() || zoneId == calendars.firstOrNull { it.id == calendarId }?.timezone)
+    return copy(
+        calendarId = id,
+        zoneId = if (followsCalendar) {
+            resolveEventZoneId(null, calendars.firstOrNull { it.id == id }?.timezone)
+        } else zoneId,
+    )
+}
+
+/** Zone-picker change: from now on the zone is the user's own choice
+ *  and stops following the calendar picker. */
+internal fun EventEditUiState.withZoneSelection(id: String): EventEditUiState =
+    copy(zoneId = id, zoneTouched = true)
 
 internal fun EventEditUiState.buildExtra(zone: ZoneId): EventExtra = EventExtra(
-    timezone = sourceExtra?.timezone ?: if (!isEdit && !allDay) zone.id else null,
+    // The form's zone wins over the stored one — that is the picker's
+    // whole point. All-day events keep the stored zone untouched (the
+    // form offers no picker for them, same as iOS: the field is "not
+    // managed here", and the server's all-day reminders read it).
+    // zoneId blank only happens in hand-built states (unit tests);
+    // there the legacy rule applies (stored zone, else device on create).
+    timezone = when {
+        allDay -> sourceExtra?.timezone
+        zoneId.isNotBlank() -> zoneId
+        else -> sourceExtra?.timezone ?: if (!isEdit) zone.id else null
+    },
     attendees = if (isEdit) null else sourceExtra?.attendees,
     // Category used to be create-only passthrough; the form manages it
     // now, so — exactly like url — the CURRENT selection is sent, and
@@ -310,21 +378,27 @@ class EventEditViewModel : ViewModel() {
         when (mode) {
             is EventEditMode.Create -> {
                 val start = mode.seedStart ?: nextHalfHour()
+                // Default to the calendar the user last saved an
+                // event into (the web editor does the same via its
+                // lastCalendarId memory); before this, every create
+                // silently reset to the server's first calendar and
+                // events kept landing in the wrong one. Falls back
+                // to the first calendar when the remembered one is
+                // gone (deleted / other account).
+                val defaultCalendar = calendars.firstOrNull { it.id == lastUsedCalendarId() }
+                    ?: calendars.firstOrNull()
                 _state.value = EventEditUiState(
                     isEdit = false,
                     // Stable idempotency key — generated here, ONCE per
                     // editor open, so retried saves reuse it (no dupes).
                     clientUid = newClientUid(),
                     calendars = calendars,
-                    // Default to the calendar the user last saved an
-                    // event into (the web editor does the same via its
-                    // lastCalendarId memory); before this, every create
-                    // silently reset to the server's first calendar and
-                    // events kept landing in the wrong one. Falls back
-                    // to the first calendar when the remembered one is
-                    // gone (deleted / other account).
-                    calendarId = calendars.firstOrNull { it.id == lastUsedCalendarId() }?.id
-                        ?: calendars.firstOrNull()?.id.orEmpty(),
+                    calendarId = defaultCalendar?.id.orEmpty(),
+                    // New events inherit the calendar's zone (the
+                    // server's own fallback order); device zone when
+                    // the calendar has none or hasn't loaded yet —
+                    // withCalendars re-resolves when it arrives.
+                    zoneId = resolveEventZoneId(null, defaultCalendar?.timezone),
                     summary = mode.seedSummary.orEmpty(),
                     start = start,
                     end = mode.seedEnd ?: start.plusHours(1),
@@ -345,6 +419,10 @@ class EventEditViewModel : ViewModel() {
                     originalEnd = sourceEnd?.takeIf { !s.allDay }?.let { EventFormInstant(s.endsAt, it) },
                     calendars = calendars,
                     calendarId = s.calendarId,
+                    zoneId = resolveEventZoneId(
+                        s.extra?.timezone,
+                        calendars.firstOrNull { it.id == s.calendarId }?.timezone,
+                    ),
                     summary = s.summary,
                     location = s.location.orEmpty(),
                     description = s.description.orEmpty(),
@@ -375,6 +453,10 @@ class EventEditViewModel : ViewModel() {
                     sourceExtra = s.extra,
                     calendars = calendars,
                     calendarId = s.calendarId,
+                    zoneId = resolveEventZoneId(
+                        s.extra?.timezone,
+                        calendars.firstOrNull { it.id == s.calendarId }?.timezone,
+                    ),
                     summary = s.summary,
                     location = s.location.orEmpty(),
                     description = s.description.orEmpty(),
@@ -466,7 +548,8 @@ class EventEditViewModel : ViewModel() {
             }
         }
     }
-    fun onCalendar(id: String) = _state.update { it.copy(calendarId = id) }
+    fun onCalendar(id: String) = _state.update { it.withCalendarSelection(id) }
+    fun onZoneChange(id: String) = _state.update { it.withZoneSelection(id) }
     fun onReminder(v: String) = _state.update { it.copy(reminder = v) }
     fun onCategory(v: String) = _state.update { it.copy(category = v) }
     fun onRruleChange(v: RruleFormState) = _state.update {

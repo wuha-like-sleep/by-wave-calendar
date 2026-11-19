@@ -280,6 +280,9 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
 
   // ── Step 1: date ────────────────────────────────────────────────────────
   let dateOffset: number | null = null;
+  // Set by step 1i ("半小时后" / "in 30 minutes"): an absolute start
+  // anchored on now + offset, instead of a calendar date + clock time.
+  let relativeStart: Date | null = null;
 
   // 1a. Relative day words. REL_DAYS is ordered longest-first so
   //     "day after tomorrow" wins over "tomorrow".
@@ -468,6 +471,55 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     }
   }
 
+  // 1i. Relative clock offsets: "半小时后 / 30分钟后 / 一小时后 /
+  //     一个半小时后 / in 30 minutes / in an hour / 2 hours from now".
+  //     Unlike 1d (whole days), these anchor on the current time of
+  //     day: the start is now + offset (step 4). This must run before
+  //     the duration step (step 3) — otherwise "一小时" is eaten as a
+  //     duration, the phrase is left with no anchor at all, and every
+  //     one of these used to return null.
+  if (relativeStart === null) {
+    const HOUR_UNIT = "(?:小時|小时|時間|시간)";
+    const MIN_UNIT = "(?:分鐘|分钟|분|分)";
+    const AFTER = "(?:後|后|후)";
+    const latinUnit = (m: RegExpMatchArray): number => {
+      const n = /^(?:a|an)$/i.test(m[1]!) ? 1 : readNumber(m[1]!);
+      return /^h/i.test(m[2]!) ? n * 60 : n;
+    };
+    const relForms: [RegExp, (m: RegExpMatchArray) => number][] = [
+      // "一个半小时后" — numeral + 半 + hour unit.
+      [re(`(${NUMERAL})\\s*(?:個|个)?\\s*半\\s*(?:個|个)?\\s*${HOUR_UNIT}\\s*${AFTER}`),
+        (m) => (readNumber(m[1]!) + 0.5) * 60],
+      // "半小时后" / "半個小時後" — bare 半 + hour unit = 30 minutes.
+      [re(`半\\s*(?:個|个)?\\s*${HOUR_UNIT}\\s*${AFTER}`), () => 30],
+      // "一小时后" / "2時間後" / "3시간 후".
+      [re(`(${NUMERAL})\\s*(?:個|个)?\\s*${HOUR_UNIT}\\s*${AFTER}`),
+        (m) => readNumber(m[1]!) * 60],
+      // "30分钟后" / "45分後" / "30분 후".
+      [re(`(${NUMERAL})\\s*${MIN_UNIT}\\s*${AFTER}`),
+        (m) => readNumber(m[1]!)],
+      // "in 30 minutes" / "in an hour" / "in 2 hours".
+      [re(`\\bin\\s+(${NUMERAL}|an?)\\s+(minutes?|mins?|hours?|hrs?)\\b`), latinUnit],
+      [re(`\\bin\\s+half\\s+an?\\s+hour\\b`), () => 30],
+      // "30 minutes from now" / "2 hours later".
+      [re(`(${NUMERAL})\\s+(minutes?|mins?|hours?|hrs?)\\s+(?:from\\s+now|later)\\b`), latinUnit],
+      [re(`half\\s+an?\\s+hour\\s+(?:from\\s+now|later)\\b`), () => 30],
+    ];
+    for (const [pattern, toMinutes] of relForms) {
+      const m = remaining.match(pattern);
+      if (!m) continue;
+      const mins = toMinutes(m);
+      // Beyond a week this is a date phrase wearing a relative
+      // costume; leave it for the calendar-date steps / summary.
+      if (isNaN(mins) || mins <= 0 || mins > 7 * 24 * 60) continue;
+      const t = new Date(nowAnchor.getTime() + Math.round(mins) * 60_000);
+      t.setUTCSeconds(0, 0);
+      relativeStart = t;
+      remaining = remaining.replace(pattern, " ");
+      break;
+    }
+  }
+
   // ── Step 2: time ────────────────────────────────────────────────────────
   let hours: number | null = null;
   let mins = 0;
@@ -592,8 +644,9 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   }
 
   // Need at least a date OR time to count this as a successful parse.
-  // An all-day marker also anchors ("全天开会" = today, all day).
-  if (dateOffset === null && hours === null && !allDay) return null;
+  // An all-day marker also anchors ("全天开会" = today, all day), and
+  // so does a relative offset from step 1i ("半小时后开会").
+  if (dateOffset === null && hours === null && !allDay && relativeStart === null) return null;
 
   // ── Step 3: duration ────────────────────────────────────────────────────
   let durationMin = 60;
@@ -660,6 +713,13 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     startsAt.setUTCHours(0, 0, 0, 0);
     endsAt = new Date(startsAt.getTime());
     endsAt.setUTCHours(23, 59, 59, 0);
+  } else if (relativeStart !== null) {
+    // "半小时后" & friends: the anchor is now + offset, already an
+    // absolute wall-clock moment. A duration parsed in step 3 still
+    // applies to the end; any date/clock tokens are not consulted
+    // (the offset already fixed the day, including past midnight).
+    startsAt.setTime(relativeStart.getTime());
+    endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   } else if (hours === null) {
     startsAt.setUTCHours(9, 0, 0, 0); // date but no time → 09:00, 1h
     endsAt = new Date(startsAt.getTime() + durationMin * 60_000);

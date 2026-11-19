@@ -423,7 +423,7 @@ struct EventEditView: View {
                     // spec, so the field would be misleading.
                     LabeledContent("显示时区", value: displayTimeZone.identifier)
                     Picker("日程时区", selection: $timezone) {
-                        ForEach(EventEditView.commonTimezones, id: \.self) { tz in
+                        ForEach(pickerTimezones, id: \.self) { tz in
                             Text(tz).tag(tz)
                         }
                     }
@@ -1121,6 +1121,22 @@ struct EventEditView: View {
         }
         combined.append(contentsOf: preserved)
         return combined.isEmpty ? .cleared : .value(combined)
+    }
+
+    /// Picker options for THIS event: the common shortlist plus the
+    /// event's own zone when it isn't in the shortlist, so the Picker
+    /// can always represent the current value faithfully. Without
+    /// this, an event anchored outside the 20-zone shortlist (e.g.
+    /// America/Denver, set on the web) rendered a blank selection —
+    /// the same silent-substitution bug EditCalendarView already
+    /// fixed for calendars. The zone only changes when the user
+    /// actually picks another row.
+    private var pickerTimezones: [String] {
+        var list = Self.commonTimezones
+        if !timezone.isEmpty && !list.contains(timezone) {
+            list.append(timezone)
+        }
+        return list
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is
