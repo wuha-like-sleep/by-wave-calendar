@@ -20,6 +20,7 @@
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { normalizeGraceDays, normalizeRolloutPercent } from "./rollout.js";
 
 export type DesktopPlatform = "mac" | "macIntel" | "win" | "linux";
 
@@ -30,6 +31,9 @@ export interface DesktopReleaseAsset {
   /** Absolute URL — typically a GitHub Releases asset URL. When set,
    *  the API returns this directly; no local binary copy needed. */
   downloadUrl: string;
+  /** 第三级下载源（Gitee 镜像）—— 主、备都失败时客户端才试它。
+   *  和 downloadUrl 是同一个包，共用同一份 sha256 / sizeBytes。 */
+  mirrorUrl: string;
   sha256: string;
   sizeBytes: number;
 }
@@ -45,6 +49,12 @@ export interface DesktopRelease {
    *  这个字段：安卓能事后强制召回某个坏版本，桌面只能等下一版把
    *  mandatory 打开，已经装了坏版本的用户在那之前不会被拦。 */
   minSupportedVersionCode: number;
+  /** 灰度放量比例 0–100（见 rollout.ts）。缺失 = 100 = 不灰度。
+   *  桌面四平台共用一份桶 —— 一台机器就是一个灰度对象，不按资产拆。 */
+  rolloutPercent: number;
+  /** 强升宽限天数，语义与安卓清单同名字段完全一致（见 rollout.ts）。
+   *  以前两端的强升只有「立刻不可跳过」一档，没有宽限这一层。 */
+  graceDays: number;
   /** Per-platform assets. Any platform missing → "not yet released for
    *  that OS" branch in the download page + in-app updater. */
   assets: Partial<Record<DesktopPlatform, DesktopReleaseAsset>>;
@@ -80,6 +90,7 @@ export function parseDesktopManifest(raw: unknown, fallbackReleasedAt: string): 
     if (!filename && !downloadUrl) continue;
     assets[platform] = {
       filename, downloadUrl,
+      mirrorUrl: String(a.mirrorUrl || ""),
       sha256: String(a.sha256 || "").toLowerCase(),
       sizeBytes: Number(a.sizeBytes || 0),
     };
@@ -92,6 +103,8 @@ export function parseDesktopManifest(raw: unknown, fallbackReleasedAt: string): 
     notes: String(r.notes || ""),
     mandatory: r.mandatory === true,
     minSupportedVersionCode: Number(r.minSupportedVersionCode || 1),
+    rolloutPercent: normalizeRolloutPercent(r.rolloutPercent),
+    graceDays: normalizeGraceDays(r.graceDays),
     assets,
   };
 }

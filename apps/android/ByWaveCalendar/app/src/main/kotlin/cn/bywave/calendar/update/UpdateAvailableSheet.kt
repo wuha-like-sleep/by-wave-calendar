@@ -64,15 +64,21 @@ fun UpdateAvailableSheet(
     release: AndroidReleaseDto,
     mandatory: Boolean,
     onDismiss: () -> Unit,
+    graceDeadlineMillis: Long? = null,
 ) {
-    key(release.versionCode, release.sha256, release.url, release.fallbackUrl) {
-        ReleaseSheetContent(release, mandatory, onDismiss)
+    key(release.versionCode, release.sha256, release.url, release.fallbackUrl, release.mirrorUrl) {
+        ReleaseSheetContent(release, mandatory, onDismiss, graceDeadlineMillis)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReleaseSheetContent(release: AndroidReleaseDto, mandatory: Boolean, onDismiss: () -> Unit) {
+private fun ReleaseSheetContent(
+    release: AndroidReleaseDto,
+    mandatory: Boolean,
+    onDismiss: () -> Unit,
+    graceDeadlineMillis: Long? = null,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(
@@ -156,6 +162,21 @@ private fun ReleaseSheetContent(release: AndroidReleaseDto, mandatory: Boolean, 
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = stringResource(R.string.update_mandatory_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            // 宽限中：这次更新最终是必须的，但期限之前还能「稍后」。
+            // 把截止日期摆明，用户才知道「稍后」的边界在哪 —— 只说
+            // 「请尽快更新」等于没说。
+            if (!mandatory && graceDeadlineMillis != null) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(
+                        R.string.update_grace_note,
+                        java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+                            .format(java.util.Date(graceDeadlineMillis)),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

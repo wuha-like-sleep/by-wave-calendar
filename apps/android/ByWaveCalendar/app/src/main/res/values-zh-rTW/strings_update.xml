@@ -18,4 +18,9 @@
     <string name="update_err_checksum">下載的安裝檔校驗沒通過，請稍後再試</string>
     <string name="update_err_server">伺服器暫時沒有回應，請稍後再試</string>
     <string name="update_err_network">網路連不上，請檢查網路後重試</string>
+    <string name="update_grace_note">這次更新最終必須完成，%1$s 之前可以先稍後。</string>
+    <string name="update_notify_title">新版本已下載好</string>
+    <string name="update_notify_body">%1$s 已下載完成，點按即可安裝。</string>
+    <string name="update_channel_name">應用更新</string>
+    <string name="update_channel_desc">新版本下載完成、可以安裝時提醒</string>
 </resources>

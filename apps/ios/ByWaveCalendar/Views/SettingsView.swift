@@ -118,8 +118,11 @@ struct SettingsView: View {
                     NavigationLink {
                         AppUpdateView()
                     } label: {
+                        // 有服务端公告在播时，副标题直接摆出目标版本 ——
+                        // 用户在设置里就能看见「有新版」，不用先点进去查。
                         navRow(icon: "arrow.down.circle.fill", title: "appUpdate.title".loc,
-                               subtitle: "appUpdate.check".loc, tint: .indigo)
+                               subtitle: state.pendingAnnouncement.map { "announcement.newVersion".locFormat($0.version) } ?? "appUpdate.check".loc,
+                               tint: .indigo)
                     }
                     NavigationLink {
                         AboutSettingsPage(webURL: $webURL)
@@ -134,6 +137,9 @@ struct SettingsView: View {
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
+            // 打开设置时再拉一次服务端公告：启动时拉的那次可能已经是
+            // 几小时前，管理员刚发的公告不该等下一次冷启动才出现。
+            .task { await state.refreshAnnouncement() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("完成") { dismiss() }

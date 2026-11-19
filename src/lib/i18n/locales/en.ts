@@ -1439,6 +1439,7 @@ export const en = {
   "download.ios.inReview": "In App Store review",
   "download.mirror.prefix": "Slow? Try",
   "download.mirror.github": "GitHub",
+  "download.mirror.gitee": "Gitee",
   "download.etaPrefix": "ETA {eta}",
   "download.android.feature1": "Android 8.0+ · native Kotlin Compose",
   "download.android.feature2": "In-app updates · not on app stores",

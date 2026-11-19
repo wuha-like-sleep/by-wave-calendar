@@ -18,4 +18,9 @@
     <string name="update_err_checksum">La descarga no se pudo verificar. Inténtalo más tarde.</string>
     <string name="update_err_server">El servidor no responde. Inténtalo más tarde.</string>
     <string name="update_err_network">Sin conexión. Revisa tu red e inténtalo de nuevo.</string>
+    <string name="update_grace_note">Esta actualización será obligatoria; puedes posponerla hasta el %1$s.</string>
+    <string name="update_notify_title">Actualización descargada</string>
+    <string name="update_notify_body">%1$s se ha descargado y está listo para instalar.</string>
+    <string name="update_channel_name">Actualizaciones de la app</string>
+    <string name="update_channel_desc">Avisa cuando una actualización se ha descargado y está lista para instalar</string>
 </resources>

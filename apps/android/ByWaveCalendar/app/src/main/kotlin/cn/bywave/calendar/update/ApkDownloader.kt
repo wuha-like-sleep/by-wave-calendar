@@ -64,14 +64,21 @@ object ApkDownloader {
         // from a different release can never be resumed into this one;
         // the final sha256 check still has the last word.
         val partial = File(target.parentFile ?: context.cacheDir, target.name + ".part")
-        // Primary first, then the fallback source for the same APK.
-        // A fallback that isn't a usable https URL is dropped here —
-        // a broken fallback must never break the primary path.
+        // Primary first, then the fallback source for the same APK,
+        // then the mirror (third level, e.g. Gitee) — tried only when
+        // both earlier sources failed. A source that isn't a usable
+        // https URL is dropped here — a broken extra source must never
+        // break the primary path. Duplicates are dropped too: retrying
+        // the exact URL that just failed only burns the user's time.
         val urls = buildList {
             add(release.url)
             if (release.fallbackUrl.isNotBlank() && release.fallbackUrl != release.url &&
                 isUsableDownloadUrl(release.fallbackUrl)
             ) add(release.fallbackUrl)
+            if (release.mirrorUrl.isNotBlank() && release.mirrorUrl != release.url &&
+                release.mirrorUrl != release.fallbackUrl &&
+                isUsableDownloadUrl(release.mirrorUrl)
+            ) add(release.mirrorUrl)
         }
         for (url in urls) {
             try {

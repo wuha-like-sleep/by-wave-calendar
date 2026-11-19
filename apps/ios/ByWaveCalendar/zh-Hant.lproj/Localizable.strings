@@ -498,6 +498,9 @@
 
 // App updates
 "appUpdate.title" = "應用程式更新";
+"announcement.defaultTitle" = "新版本已發布";
+"announcement.updateNow" = "去更新";
+"announcement.newVersion" = "版本 %@ 已發布";
 "appUpdate.check" = "檢查更新";
 "appUpdate.checking" = "正在檢查更新…";
 "appUpdate.available" = "有新版本可用";

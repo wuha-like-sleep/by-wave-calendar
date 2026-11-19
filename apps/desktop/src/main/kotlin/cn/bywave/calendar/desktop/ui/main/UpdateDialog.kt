@@ -123,6 +123,22 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                     }
                 }
 
+                // 宽限中：这次更新最终必须完成，但期限之前「稍后」还在。
+                // 把截止日期摆明，用户才知道「稍后」的边界在哪。
+                if (!info.mandatory && info.graceDeadlineMillis != null) {
+                    Text(
+                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                            "update.grace.note",
+                            mapOf(
+                                "date" to java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+                                    .format(java.util.Date(info.graceDeadlineMillis)),
+                            ),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 if (info.notes.isNotBlank()) {
                     Text(t("update.releaseNotes"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
                     Text(
@@ -239,7 +255,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         // v0.7.7: download() — no implicit Finder open.
                         // The LaunchedEffect(download) collector above
                         // chains to UpdateInstaller.install() on Done.
-                        UpdateDownloader.download(asset!!.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl)
+                        UpdateDownloader.download(asset!!.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl, asset.mirrorUrl)
                     }
                 }) {
                     Text(when {

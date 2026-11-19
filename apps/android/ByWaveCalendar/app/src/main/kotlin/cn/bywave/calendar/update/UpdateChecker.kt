@@ -13,6 +13,7 @@ package cn.bywave.calendar.update
 
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -24,7 +25,17 @@ import kotlinx.coroutines.flow.asStateFlow
 
 sealed class UpdateState {
     object Idle : UpdateState()
-    data class Available(val release: AndroidReleaseDto, val mandatory: Boolean) : UpdateState()
+    /** mandatory=true means the sheet is non-dismissible RIGHT NOW.
+     *  A forced upgrade still inside its grace window arrives with
+     *  mandatory=false plus a non-null graceDeadlineMillis: the sheet
+     *  stays dismissible but shows the deadline after which it turns
+     *  mandatory. Keeping the two apart is what lets one state drive
+     *  both the "remind me later" and the "no way out" UI. */
+    data class Available(
+        val release: AndroidReleaseDto,
+        val mandatory: Boolean,
+        val graceDeadlineMillis: Long? = null,
+    ) : UpdateState()
     /** User dismissed the prompt. Don't re-show until the next cold
      *  launch or until a NEW versionCode arrives. */
     data class Dismissed(val versionCode: Int) : UpdateState()
@@ -48,6 +59,15 @@ object UpdateChecker {
 
     private val lookup = ReleaseLookup<AndroidReleaseDto>({ it.versionCode }, ::validReleaseDownload)
     private var forceNext = false
+
+    /** Background auto-downloads live here, not in the sheet's scope:
+     *  the whole point is the APK lands while the user is elsewhere.
+     *  One download per versionCode per process — the disk cache makes
+     *  repeats pointless anyway. */
+    private val downloadScope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO,
+    )
+    @Volatile private var autoDownloadStartedFor = -1
 
     /** Canonical manifest on GitHub raw. Fallback when the user's own
      *  server returns nothing newer (or is unreachable) — a server that
@@ -98,14 +118,31 @@ object UpdateChecker {
             ?: return false
         val api = UpdateApiFactory.create(baseUrl)
         val localVersionCode = localVersionCode(context)
+        val deviceId = cn.bywave.calendar.util.ClientDeviceId.get(context)
 
         val result = lookup.check(baseUrl, force, listOf(
-            { api.latest() }, { api.fetchManifest(GITHUB_MANIFEST_URL) },
+            { api.latest(deviceId, localVersionCode) }, { api.fetchManifest(GITHUB_MANIFEST_URL) },
         ))
         kotlinx.coroutines.currentCoroutineContext().ensureActive()
         if (BywaveApp.instance.profiles.active()?.serverUrl != baseUrl) throw CancellationException("Profile changed")
         // A 404 combined with an unreachable mirror is not proof that we are current.
         val rel = result.release ?: throw java.io.IOException("No valid update manifest")
+
+        // Staged rollout, applied locally with the SAME rule the server
+        // uses (shared Rollout): the server gate only covers the server
+        // source — the GitHub manifest merged in above never passed
+        // through it. Not in the rollout = this release does not exist
+        // for this device yet.
+        if (!Rollout.isInRollout(
+                deviceId = deviceId, platform = "android",
+                versionCode = rel.versionCode, rolloutPercent = rel.rolloutPercent,
+                currentVersionCode = localVersionCode,
+                minSupportedVersionCode = rel.minSupportedVersionCode,
+            )
+        ) {
+            _state.value = UpdateState.Idle
+            return false
+        }
 
         // Determine if update is needed.
         val newer = rel.versionCode > localVersionCode
@@ -117,17 +154,50 @@ object UpdateChecker {
 
         // Treat "below minSupported" as a forced upgrade even if the
         // release manifest itself isn't mandatory — that's the whole
-        // point of having a min supported version.
-        val mandatory = rel.mandatory || unsupported
+        // point of having a min supported version. "Forced" then splits
+        // by the grace window (shared Rollout.forceState, same rule as
+        // desktop): inside grace the prompt is dismissible and carries
+        // a deadline; past it, it is mandatory right now.
+        val hitForce = rel.mandatory || unsupported
+        val firstSeen = UpdateStateStore.firstSeenMillis(context, rel.versionCode)
+        val forceState = Rollout.forceState(
+            hitForce = hitForce, firstSeenMillis = firstSeen,
+            graceDays = rel.graceDays, nowMillis = System.currentTimeMillis(),
+        )
+        val mandatoryNow = forceState == Rollout.ForceState.FORCED
+        val graceDeadline = if (forceState == Rollout.ForceState.IN_GRACE) {
+            Rollout.graceDeadlineMillis(firstSeen, rel.graceDays)
+        } else null
 
-        // Respect the user's "稍后" choice — UNLESS this is mandatory,
-        // in which case we always re-surface.
+        // Respect the user's "稍后" choice — UNLESS this is mandatory
+        // right now, in which case we always re-surface. (Grace counts
+        // as not-mandatory here on purpose: postponing is the point.)
         val current = _state.value
-        if (!force && !mandatory && current is UpdateState.Dismissed && current.versionCode == rel.versionCode) {
+        if (!force && !mandatoryNow && current is UpdateState.Dismissed && current.versionCode == rel.versionCode) {
             return false
         }
-        _state.value = UpdateState.Available(rel, mandatory)
+        _state.value = UpdateState.Available(rel, mandatoryNow, graceDeadline)
+        startAutoDownload(context, rel)
         return true
+    }
+
+    /** Desktop parity: download in the background as soon as an update
+     *  is known, so the install prompt is instant when the user acts.
+     *  Android cannot take the last step silently — the system
+     *  installer always needs the user's tap — so when the APK is
+     *  verified-ready we post a notification instead (UpdateNotifier);
+     *  tapping it lands on the sheet, which finds the verified cache
+     *  and offers "立即安装" directly. A failed auto-download is
+     *  silent: the sheet's manual download path is unchanged. */
+    private fun startAutoDownload(context: Context, rel: AndroidReleaseDto) {
+        if (autoDownloadStartedFor == rel.versionCode) return
+        autoDownloadStartedFor = rel.versionCode
+        val appContext = context.applicationContext
+        downloadScope.launch {
+            ApkDownloader.download(appContext, rel).collect { p ->
+                if (p is DownloadProgress.Done) UpdateNotifier.notifyReady(appContext, rel)
+            }
+        }
     }
 
     fun onUserDismissed() {

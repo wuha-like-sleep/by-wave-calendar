@@ -277,6 +277,19 @@ export const siteSettings = pgTable("site_settings", {
   // 放在 site_settings 而不是单独一张表：恢复一份升级前导出的备份时，这一列跟着
   // 回到空串，开机会对恢复回来的老数据再跑一遍 —— 老数据正需要它。
   dataMigrationsDone: text("data_migrations_done").notNull().default(""),
+  // ---- iOS 应用内公告 ----
+  // iOS 没有自更新通道（版本只走 App Store），所以「商店里有新版了」
+  // 这件事只能由服务端喊一嗓子：管理员在这里发一条公告，iOS 客户端
+  // 启动时拉 /api/app/ios/announcement，比自己版本新且没被关掉过就弹
+  // 一次。关闭（enabled=false）或版本号为空 = 没有公告，接口回 404。
+  // 公告的「版本」既是目标 App 版本，也是客户端那侧的去重键：同一版本
+  // 关掉过就不再弹；管理员改内容想再弹一次，就得动版本号或发布时间。
+  iosAnnouncementEnabled: boolean("ios_announcement_enabled").notNull().default(false),
+  iosAnnouncementVersion: text("ios_announcement_version"),
+  iosAnnouncementTitle: text("ios_announcement_title"),
+  iosAnnouncementBody: text("ios_announcement_body"),
+  iosAnnouncementStoreUrl: text("ios_announcement_store_url"),
+  iosAnnouncementPublishedAt: timestamp("ios_announcement_published_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

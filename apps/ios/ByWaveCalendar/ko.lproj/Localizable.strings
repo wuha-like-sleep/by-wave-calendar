@@ -497,6 +497,9 @@
 
 // App updates
 "appUpdate.title" = "앱 업데이트";
+"announcement.defaultTitle" = "새 버전이 있습니다";
+"announcement.updateNow" = "지금 업데이트";
+"announcement.newVersion" = "버전 %@ 사용 가능";
 "appUpdate.check" = "업데이트 확인";
 "appUpdate.checking" = "확인 중…";
 "appUpdate.available" = "새 버전이 있습니다";

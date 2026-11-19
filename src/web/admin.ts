@@ -3378,18 +3378,18 @@ export async function adminRoutes(app: FastifyInstance) {
     // 用户反馈「更新下不动」才知道本地包没生效。口径和 /download、
     // /api/app/*/latest 共用 resolve*Urls，不在这里另算一份。
     const origin = env.PUBLIC_BASE_URL.replace(/\/$/, "");
-    let clientAssets: Array<{ platform: string; url: string; fallbackUrl: string }> = [];
+    let clientAssets: Array<{ platform: string; url: string; fallbackUrl: string; mirrorUrl: string }> = [];
     if (live && platform === "android") {
       const android = await import("../lib/android_release.js");
       const [url, fallbackUrl] = await android.resolveApkUrls(origin, live as { downloadUrl?: string; filename?: string });
-      if (url) clientAssets = [{ platform: "android", url, fallbackUrl }];
+      if (url) clientAssets = [{ platform: "android", url, fallbackUrl, mirrorUrl: (live as { mirrorUrl?: string }).mirrorUrl ?? "" }];
     } else if (live) {
       const desktop = await import("../lib/desktop_release.js");
-      const assets = (live as { assets: Record<string, { downloadUrl?: string; filename?: string } | undefined> }).assets;
+      const assets = (live as { assets: Record<string, { downloadUrl?: string; filename?: string; mirrorUrl?: string } | undefined> }).assets;
       for (const [plat, a] of Object.entries(assets)) {
         if (!a) continue;
         const [url, fallbackUrl] = await desktop.resolveAssetUrls(origin, a);
-        if (url) clientAssets.push({ platform: plat, url, fallbackUrl });
+        if (url) clientAssets.push({ platform: plat, url, fallbackUrl, mirrorUrl: a.mirrorUrl ?? "" });
       }
     }
     return {
@@ -3400,6 +3400,11 @@ export async function adminRoutes(app: FastifyInstance) {
       versionName: live?.versionName ?? null,
       versionCode: live?.versionCode ?? null,
       releasedAt: live?.releasedAt ?? null,
+      // 策略字段也摆出来：灰度比例和宽限是站长自己填进清单的，
+      // 保存之后他要能在这页确认「接口实际吃到的就是这个数」，
+      // 而不是只能去打一次接口才知道。
+      rolloutPercent: (live as { rolloutPercent?: number } | null)?.rolloutPercent ?? 100,
+      graceDays: (live as { graceDays?: number } | null)?.graceDays ?? 7,
       source: overrideRaw ? "override" : committedExists ? "committed" : "none",
       overrideRaw,
       committedExists,
@@ -3410,6 +3415,8 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get("/admin/client-release", async (req, reply) => {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
+    const settings = await getSettings();
+    const { announcementFromSettings } = await import("../lib/ios_announcement.js");
     return reply.view("admin/client-release", {
       title: "客户端更新 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
@@ -3421,7 +3428,69 @@ export async function adminRoutes(app: FastifyInstance) {
       },
       disk: await diskFree(process.cwd()),
       maxBinaryBytes: MAX_BINARY_BYTES,
+      // iOS 公告：表单回填用原始设置值，自检区用「接口实际会返回的那份」
+      // —— 两者不一致时（比如版本号写错形态），自检区会明确显示「没有
+      // 在播」，而不是让站长对着「已保存」三个字以为发出去了。
+      iosAnnouncement: {
+        enabled: settings.iosAnnouncementEnabled,
+        version: settings.iosAnnouncementVersion ?? "",
+        title: settings.iosAnnouncementTitle ?? "",
+        body: settings.iosAnnouncementBody ?? "",
+        storeUrl: settings.iosAnnouncementStoreUrl ?? "",
+        live: announcementFromSettings(settings),
+      },
     });
+  });
+
+  // iOS 公告的保存。和清单覆盖分开一条路由：公告是「喊一嗓子」，
+  // 存 site_settings 不存文件，校验口径也不一样（版本号形态 + 商店
+  // 链接 https），硬塞进清单那条路由只会让两边的校验互相污染。
+  app.post("/admin/client-release/ios-announcement", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const back = (msg: string, ok = false) =>
+      redirectWithFlash(reply, "/admin/client-release?" + (ok ? "success=" : "error=") + encodeURIComponent(msg));
+    const body = z.object({
+      enabled: z.string().optional(),
+      version: z.string().max(32).optional(),
+      title: z.string().max(200).optional(),
+      body: z.string().max(2000).optional(),
+      storeUrl: z.string().max(500).optional(),
+    }).safeParse(req.body);
+    if (!body.success) return back("公告内容太长了 —— 没有保存");
+    const enabled = body.data.enabled === "on";
+    const version = (body.data.version ?? "").trim();
+    const title = (body.data.title ?? "").trim();
+    const text = (body.data.body ?? "").trim();
+    const storeUrl = (body.data.storeUrl ?? "").trim();
+    if (enabled) {
+      const { isPlausibleAppVersion } = await import("../lib/ios_announcement.js");
+      if (!isPlausibleAppVersion(version)) {
+        return back("版本号要写成 1.8.0 这种数字点分形态，客户端才比得出大小 —— 没有保存");
+      }
+      if (!title && !text) return back("标题和正文至少填一个 —— 没有保存");
+      if (storeUrl && !storeUrl.startsWith("https://")) {
+        return back("商店链接必须是 https:// —— 没有保存");
+      }
+    }
+    await updateSettings({
+      iosAnnouncementEnabled: enabled,
+      iosAnnouncementVersion: version || null,
+      iosAnnouncementTitle: title || null,
+      iosAnnouncementBody: text || null,
+      iosAnnouncementStoreUrl: storeUrl || null,
+      // 发布时间每次保存都刷新：客户端那边「同版本不重复弹」的去重
+      // 键是版本 + 发布时间，改了内容想再弹一次，靠的就是这个时间变了。
+      iosAnnouncementPublishedAt: new Date(),
+    });
+    await audit(req, u.id, "ios_announcement.saved", {
+      targetType: "client_release", targetId: "ios",
+      details: { enabled, version },
+    });
+    return back(enabled ? `iOS 公告已发布：${version}` : "iOS 公告已关闭", true);
   });
 
   app.post<{ Params: { platform: string } }>("/admin/client-release/:platform", {
@@ -3456,9 +3525,12 @@ export async function adminRoutes(app: FastifyInstance) {
     // 下载地址只许 https。这个地址会被推给所有装了本站 App 的用户 ——
     // 管理员会话一旦被盗,这就是一条「向全站用户推送任意下载地址」的路。
     // 安卓那边还有系统的安装包签名校验兜底,桌面端 DMG/MSI 没有等价闸门。
+    // 镜像地址（mirrorUrl）同理：它排第三位不等于它不要紧 —— 主备都挂
+    // 的时候全体用户就指着它了。
     const urls = p.data === "android"
-      ? [(ok as { downloadUrl: string }).downloadUrl]
-      : Object.values((ok as { assets: Record<string, { downloadUrl: string }> }).assets).map((a) => a.downloadUrl);
+      ? [(ok as { downloadUrl: string }).downloadUrl, (ok as { mirrorUrl: string }).mirrorUrl]
+      : Object.values((ok as { assets: Record<string, { downloadUrl: string; mirrorUrl: string }> }).assets)
+          .flatMap((a) => [a.downloadUrl, a.mirrorUrl]);
     const bad = urls.filter((x) => x && !x.startsWith("https://"));
     if (bad.length) return back("下载地址必须是 https:// —— 没有保存：" + bad.join("、"));
 
@@ -3471,6 +3543,49 @@ export async function adminRoutes(app: FastifyInstance) {
       details: { versionCode: ok.versionCode, versionName: ok.versionName },
     });
     return back(`已保存${p.data === "android" ? "安卓" : "桌面端"}清单：${ok.versionName}（${ok.versionCode}）`, true);
+  });
+
+  // 灰度比例的快捷设置（含「一键全量」= 设成 100）。放量是发布现场的
+  // 高频动作，让站长为了改一个数字去重贴整份 JSON，既慢又容易顺手
+  // 改坏别的字段。这里只动 rolloutPercent 一个字段：取当前生效的那
+  // 份（覆盖优先、否则随代码那份），改完照样过读取侧的 parse、照样
+  // 存规范化结果 —— 和整份保存同一条路，不另开后门。
+  app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/rollout", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const back = (msg: string, ok = false) =>
+      redirectWithFlash(reply, "/admin/client-release?" + (ok ? "success=" : "error=") + encodeURIComponent(msg));
+    const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+    if (!p.success) return reply.code(400).send("bad_platform");
+    const body = z.object({ percent: z.coerce.number().int().min(0).max(100) }).safeParse(req.body);
+    if (!body.success) return back("灰度比例要是 0–100 的整数 —— 没有保存");
+    const lib = p.data === "android"
+      ? await import("../lib/android_release.js")
+      : await import("../lib/desktop_release.js");
+    const current = await lib.getLatestRelease();
+    if (!current) return back("还没有可放量的清单 —— 先发布一份再设灰度");
+    const now = new Date().toISOString();
+    const ok = p.data === "android"
+      ? (lib as typeof import("../lib/android_release.js")).parseAndroidManifest(
+          { ...current, rolloutPercent: body.data.percent }, now)
+      : (lib as typeof import("../lib/desktop_release.js")).parseDesktopManifest(
+          { ...current, rolloutPercent: body.data.percent }, now);
+    if (!ok) return back("当前清单读取侧认不出来 —— 没有保存");
+    await mkdir(path.dirname(CLIENT_MANIFEST_RUNTIME[p.data]), { recursive: true });
+    await writeFile(CLIENT_MANIFEST_RUNTIME[p.data], JSON.stringify(ok, null, 2) + "\n", "utf8");
+    await audit(req, u.id, "app_manifest.rollout_set", {
+      targetType: "client_release", targetId: p.data,
+      details: { rolloutPercent: body.data.percent, versionCode: ok.versionCode },
+    });
+    return back(
+      body.data.percent >= 100
+        ? `${p.data === "android" ? "安卓" : "桌面端"}已全量发布（100%）`
+        : `${p.data === "android" ? "安卓" : "桌面端"}灰度已设为 ${body.data.percent}%`,
+      true,
+    );
   });
 
   app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/clear", {

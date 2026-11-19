@@ -391,6 +391,9 @@ export async function webRoutes(app: FastifyInstance) {
       androidVersion: rel?.versionName || "0.13.2",
       androidApkUrl: apkUrl,
       androidApkAltUrl: apkAltUrl,
+      // 镜像（Gitee）直达链接 —— 清单里 mirrorUrl 有才展示。这里只管
+      // 展示：App 内更新的「主→备→镜像」尝试顺序在客户端，不受这页影响。
+      androidMirrorUrl: rel?.mirrorUrl || "",
       androidApkSize: apkSize,
       androidApkSha256: rel?.sha256 || "",
       androidNotes: rel?.notes || "",
@@ -420,6 +423,11 @@ export async function webRoutes(app: FastifyInstance) {
       // 备选（上游）链接。只在「本站真的有这个文件」时才非空 ——
       // 也就是说它出现 = 主链接走的是本站，这一条是给下不动本站的人兜底。
       desktopMacAltUrl, desktopWinAltUrl, desktopLinuxAltUrl,
+      // 镜像（Gitee）直达链接，口径同安卓：清单里有才展示，只展示。
+      desktopMacMirrorUrl: desktop?.assets.mac?.mirrorUrl || "",
+      desktopMacIntelMirrorUrl: desktop?.assets.macIntel?.mirrorUrl || "",
+      desktopWinMirrorUrl: desktop?.assets.win?.mirrorUrl || "",
+      desktopLinuxMirrorUrl: desktop?.assets.linux?.mirrorUrl || "",
       desktopGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       desktopGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
       desktopEtaWeek: tr(req, "download.eta.thisMonth"),

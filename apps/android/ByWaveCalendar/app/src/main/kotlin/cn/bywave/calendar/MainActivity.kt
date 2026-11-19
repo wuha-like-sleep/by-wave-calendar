@@ -238,6 +238,7 @@ private fun AppRoot(
         UpdateAvailableSheet(
             release = avail.release,
             mandatory = avail.mandatory,
+            graceDeadlineMillis = avail.graceDeadlineMillis,
             onDismiss = { /* state already updated by sheet's onUserDismissed call */ },
         )
     }

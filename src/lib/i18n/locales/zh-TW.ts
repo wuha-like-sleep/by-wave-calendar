@@ -1418,6 +1418,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "download.ios.inReview": "App Store 審核中",
   "download.mirror.prefix": "下載慢？換",
   "download.mirror.github": "GitHub",
+  "download.mirror.gitee": "Gitee",
   "download.etaPrefix": "預計 {eta}",
   "download.android.feature1": "Android 8.0+ · Kotlin Compose 原生",
   "download.android.feature2": "APP 內自動更新 · 不上應用商店",

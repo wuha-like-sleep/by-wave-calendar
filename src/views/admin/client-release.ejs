@@ -74,7 +74,45 @@
           <% } else { %>—<% } %>
         </dd>
       </div>
+      <div>
+        <dt class="text-xs text-slate-500 mb-0.5">灰度放量</dt>
+        <dd class="font-medium text-slate-900"><%= p.rolloutPercent %>%</dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500 mb-0.5">强升宽限</dt>
+        <dd class="font-medium text-slate-900"><%= p.graceDays %> 天</dd>
+      </div>
     </dl>
+    <p class="text-xs text-slate-500 mb-3 -mt-3">
+      灰度与宽限都写在清单里（<code class="bg-slate-100 px-1 rounded">rolloutPercent</code> /
+      <code class="bg-slate-100 px-1 rounded">graceDays</code>）：灰度按设备分桶，没轮到的设备暂时看不到新版；
+      宽限是被强制更新命中后先只提醒、过后才强升的天数。镜像下载地址写清单里的
+      <code class="bg-slate-100 px-1 rounded">mirrorUrl</code>（桌面端写在每个资产里），主备都失败时客户端才会去试它。
+    </p>
+    <%# 改比例是发布现场的高频动作，单独给一个小表单：只动 rolloutPercent，
+        不用为了一个数字重贴整份 JSON（顺手改坏别的字段的风险也随之消失）。 %>
+    <div class="flex flex-wrap items-end gap-2 mb-5">
+      <form method="post" action="/admin/client-release/<%= p.platform %>/rollout" class="flex items-end gap-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <label class="block">
+          <span class="text-xs text-slate-500">灰度比例（%）</span>
+          <input type="number" name="percent" min="0" max="100" step="1" value="<%= p.rolloutPercent %>"
+                 class="mt-1 w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+        </label>
+        <button type="submit"
+                class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          设置灰度
+        </button>
+      </form>
+      <form method="post" action="/admin/client-release/<%= p.platform %>/rollout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="percent" value="100" />
+        <button type="submit"
+                class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+          一键全量
+        </button>
+      </form>
+    </div>
 
     <%# 发布后自检：版本号对不等于链路通。地址是按「本站有没有这个文件」
         解析出来的，站长在这里亲眼看到 App 会被送去哪儿，就不用等用户
@@ -87,6 +125,7 @@
           <% if (p.platform === 'desktop') { %><span class="font-medium"><%= a.platform %></span> · <% } %>
           主：<a class="text-brand-700 hover:underline" href="<%= a.url %>" rel="noopener" target="_blank"><%= a.url %></a>
           <% if (a.fallbackUrl) { %><br />备：<a class="text-brand-700 hover:underline" href="<%= a.fallbackUrl %>" rel="noopener" target="_blank"><%= a.fallbackUrl %></a><% } %>
+          <% if (a.mirrorUrl) { %><br />镜像：<a class="text-brand-700 hover:underline" href="<%= a.mirrorUrl %>" rel="noopener" target="_blank"><%= a.mirrorUrl %></a><% } %>
         </p>
       <% }); %>
     </div>
@@ -202,6 +241,72 @@
   </section>
 <% }); %>
 </div>
+
+<%# iOS 公告。iOS 没有清单这回事 —— 它的版本只走 App Store，这里发的是
+    「商店里有新版了」的一条广播，存在站点设置里，客户端启动时自己来拉。 %>
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mt-6">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <h2 class="text-lg font-semibold text-slate-900">iOS 公告</h2>
+    <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium <%= iosAnnouncement.live ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200' %>">
+      当前状态：<%= iosAnnouncement.live ? '正在播' : '没有在播' %>
+    </span>
+  </div>
+  <p class="text-sm text-slate-500 mb-4">
+    iOS 版本只走 App Store，App 自己不知道商店里有没有新版 —— 开了这条公告之后，
+    还在旧版上的 iOS 用户启动 App 时会看到一次提示（点过「稍后」后，同一版本不再弹；
+    改了内容再保存一次会刷新发布时间，想再弹一次也是保存一次的事）。
+  </p>
+
+  <%# 自检：接口实际会返回的那一份。表单里填了 ≠ 在播 —— 版本号形态不对
+      这类问题在这里直接现形。 %>
+  <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-1">
+    <p class="font-medium text-slate-700">App 实际会拿到的公告（GET /api/app/ios/announcement）</p>
+    <% if (iosAnnouncement.live) { %>
+      <p class="break-all">
+        版本 <%= iosAnnouncement.live.version %> · <%= iosAnnouncement.live.title || '（无标题）' %>
+        <% if (iosAnnouncement.live.storeUrl) { %><br />商店链接：<a class="text-brand-700 hover:underline" href="<%= iosAnnouncement.live.storeUrl %>" rel="noopener" target="_blank"><%= iosAnnouncement.live.storeUrl %></a><% } %>
+      </p>
+    <% } else { %>
+      <p>没有在播 —— 接口现在回的是 404。常见原因：没勾启用、版本号没填或形态不对、标题正文全空。</p>
+    <% } %>
+  </div>
+
+  <form method="post" action="/admin/client-release/ios-announcement" class="space-y-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+      <input type="checkbox" name="enabled" <%= iosAnnouncement.enabled ? 'checked' : '' %>
+             class="rounded border-slate-300" />
+      启用这条公告
+    </label>
+    <div class="grid sm:grid-cols-2 gap-3">
+      <label class="block">
+        <span class="text-sm font-medium text-slate-700">目标版本（App Store 在架版本）</span>
+        <input type="text" name="version" value="<%= iosAnnouncement.version %>" placeholder="1.8.0"
+               class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </label>
+      <label class="block">
+        <span class="text-sm font-medium text-slate-700">商店链接</span>
+        <input type="text" name="storeUrl" value="<%= iosAnnouncement.storeUrl %>" placeholder="https://apps.apple.com/…"
+               class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+      </label>
+    </div>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">标题</span>
+      <input type="text" name="title" value="<%= iosAnnouncement.title %>" placeholder="新版本 1.8.0 已发布"
+             class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+    </label>
+    <label class="block">
+      <span class="text-sm font-medium text-slate-700">正文</span>
+      <textarea name="body" rows="3"
+                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                placeholder="这一版修了什么、为什么值得更新"><%= iosAnnouncement.body %></textarea>
+    </label>
+    <button type="submit"
+            class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
+      保存公告
+    </button>
+  </form>
+</section>
 
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function () {

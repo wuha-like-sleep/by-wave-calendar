@@ -158,6 +158,12 @@ final class AppState: ObservableObject {
     /// it. Same wait-for-sign-in shape as the Android handover.
     @Published var pendingImportURL: URL?
 
+    /// 服务端公告（见 IosAnnouncement.swift）：比本机新、且这一轮发布
+    /// 没被关掉过的那一条。CalendarView 顶部横幅展示，设置页的
+    /// 「应用更新」行也读它。拉不到 / 没有公告时为 nil —— 公告是
+    /// 锦上添花，失败必须静默，不能挡启动。
+    @Published var pendingAnnouncement: IosAnnouncement?
+
     func noteEventDeleted(id: String, summary: String) {
         pendingUndoDelete = PendingUndoDelete(eventId: id, summary: summary, token: UUID())
     }
@@ -324,6 +330,36 @@ final class AppState: ObservableObject {
         if isSignedIn { PushService.shared?.reregister() }
         // Fire-and-forget theme fetch for the active profile.
         Task { await self.refreshThemeFromServer() }
+        // 服务端公告同样是启动时顺手拉，不挡 bootstrap 收尾。
+        Task { await self.refreshAnnouncement() }
+    }
+
+    /// 拉一次服务端公告。无鉴权（接口本身公开），口径与
+    /// refreshThemeFromServer 一致：普通 URLSession、短超时、失败
+    /// 静默。404 = 没有公告在播，把已有的也清掉（管理员可能刚关）。
+    func refreshAnnouncement() async {
+        guard let serverURL else { return }
+        let base = serverURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: base + "/api/app/ios/announcement") else { return }
+        var req = URLRequest(url: url)
+        req.timeoutInterval = 8
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse else { return }
+        if http.statusCode == 404 {
+            if pendingAnnouncement != nil { pendingAnnouncement = nil }
+            return
+        }
+        guard (200..<300).contains(http.statusCode),
+              let announcement = try? JSONDecoder().decode(IosAnnouncement.self, from: data)
+        else { return }
+        pendingAnnouncement = announcement.shouldShow ? announcement : nil
+    }
+
+    /// 用户关掉了公告横幅：记下去重戳（版本 + 发布时间），这一轮
+    /// 不再弹。管理员改内容重新保存会刷新发布时间，那时再弹一次。
+    func dismissAnnouncement() {
+        pendingAnnouncement?.markDismissed()
+        pendingAnnouncement = nil
     }
 
     /// Pull /api/v1/health/app and update the active profile's theme

@@ -18,4 +18,9 @@
     <string name="update_err_checksum">Le téléchargement n’a pas pu être vérifié. Réessayez plus tard.</string>
     <string name="update_err_server">Le serveur ne répond pas. Réessayez plus tard.</string>
     <string name="update_err_network">Réseau inaccessible. Vérifiez votre connexion et réessayez.</string>
+    <string name="update_grace_note">Cette mise à jour deviendra obligatoire — vous pouvez la reporter jusqu’au %1$s.</string>
+    <string name="update_notify_title">Mise à jour téléchargée</string>
+    <string name="update_notify_body">%1$s est téléchargé et prêt à installer.</string>
+    <string name="update_channel_name">Mises à jour de l’app</string>
+    <string name="update_channel_desc">Alerte quand une mise à jour est téléchargée et prête à installer</string>
 </resources>

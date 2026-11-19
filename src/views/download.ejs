@@ -114,6 +114,15 @@
                class="underline hover:text-slate-600"><%= t("download.mirror.github") %></a>
           </p>
         <% } %>
+        <%# 镜像直达（Gitee）：清单里填了 mirrorUrl 才出现。和备选的区别是
+            它不依赖本站有没有文件 —— 它是发布时就钉好的第三个来源。 %>
+        <% if (typeof androidMirrorUrl !== 'undefined' && androidMirrorUrl) { %>
+          <p class="text-center text-[11px] text-slate-400 pt-0.5">
+            <%= t("download.mirror.prefix") %>
+            <a href="<%= androidMirrorUrl %>" target="_blank" rel="noopener"
+               class="underline hover:text-slate-600"><%= t("download.mirror.gitee") %></a>
+          </p>
+        <% } %>
         <% if (typeof androidApkSha256 !== 'undefined' && androidApkSha256) { %>
           <p class="text-[11px] text-slate-400 pt-1 text-left">
             <%= t("download.checksum") %>
@@ -199,9 +208,20 @@
         </p>
       <% } %>
 
+      <%# 桌面端的镜像直达（Gitee），逐资产独立，口径同安卓那条。 %>
+      <% if (desktopMacMirrorUrl || desktopWinMirrorUrl || desktopLinuxMirrorUrl) { %>
+        <p class="text-center text-[11px] text-slate-400 pt-0.5">
+          <%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %>：
+          <% if (desktopMacMirrorUrl) { %><a href="<%= desktopMacMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">macOS</a><% } %><%
+          %><% if (desktopWinMirrorUrl) { %><%= desktopMacMirrorUrl ? ' · ' : '' %><a href="<%= desktopWinMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Windows</a><% } %><%
+          %><% if (desktopLinuxMirrorUrl) { %><%= (desktopMacMirrorUrl || desktopWinMirrorUrl) ? ' · ' : '' %><a href="<%= desktopLinuxMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Linux</a><% } %>
+        </p>
+      <% } %>
+
       <% if (desktopMacIntelUrl) { %>
         <a href="<%= desktopMacIntelUrl %>" class="block text-center text-sm py-2 rounded-lg border border-slate-200 hover:bg-slate-50">macOS · Intel</a>
         <% if (desktopMacIntelAltUrl) { %><a href="<%= desktopMacIntelAltUrl %>" class="block text-center text-xs underline"><%= t("download.mirror.prefix") %> macOS · Intel</a><% } %>
+        <% if (desktopMacIntelMirrorUrl) { %><a href="<%= desktopMacIntelMirrorUrl %>" class="block text-center text-xs underline"><%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %> · macOS · Intel</a><% } %>
       <% } %>
       <!-- Platform downloads -->
       <div class="grid grid-cols-3 gap-1.5 pt-1">

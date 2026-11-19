@@ -71,7 +71,7 @@ object UpdateDownloader {
      * the next attempt continues with a Range request instead of
      * restarting a 100MB+ installer — and [fallbackUrl], when the
      * checker supplied one, is tried before giving up. */
-    suspend fun download(url: String, expectedSha256: String? = null, expectedSizeBytes: Long = 0, fallbackUrl: String? = null) = withContext(Dispatchers.IO) { downloadLock.withLock {
+    suspend fun download(url: String, expectedSha256: String? = null, expectedSizeBytes: Long = 0, fallbackUrl: String? = null, mirrorUrl: String? = null) = withContext(Dispatchers.IO) { downloadLock.withLock {
         try {
             if (expectedSha256 == null || !expectedSha256.matches(Regex("[a-fA-F0-9]{64}"))) {
                 _state.value = DownloadState.Failed(cn.bywave.calendar.desktop.i18n.I18n.t("update.download.checksumFailed"))
@@ -91,9 +91,14 @@ object UpdateDownloader {
                 _state.value = DownloadState.Done(target)
                 return@withLock
             }
+            // Primary → fallback → mirror (third level, e.g. Gitee),
+            // tried only when the earlier sources failed. Duplicates
+            // are dropped — retrying the URL that just failed only
+            // burns time on a ~100MB installer.
             val urls = buildList {
                 add(url)
                 if (!fallbackUrl.isNullOrBlank() && fallbackUrl != url) add(fallbackUrl)
+                if (!mirrorUrl.isNullOrBlank() && mirrorUrl != url && mirrorUrl != fallbackUrl) add(mirrorUrl)
             }
             var failure: DownloadState.Failed? = null
             for (u in urls) {

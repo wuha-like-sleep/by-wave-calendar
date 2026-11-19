@@ -18,4 +18,9 @@
     <string name="update_err_checksum">The download didn’t verify. Please try again later.</string>
     <string name="update_err_server">The server isn’t responding. Please try again later.</string>
     <string name="update_err_network">Can’t reach the network. Check your connection and try again.</string>
+    <string name="update_grace_note">This update is required eventually — you can postpone until %1$s.</string>
+    <string name="update_notify_title">Update downloaded</string>
+    <string name="update_notify_body">%1$s has downloaded and is ready to install.</string>
+    <string name="update_channel_name">App updates</string>
+    <string name="update_channel_desc">Alerts when an update has downloaded and is ready to install</string>
 </resources>

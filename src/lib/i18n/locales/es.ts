@@ -1432,6 +1432,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "download.ios.inReview": "En revisión del App Store",
   "download.mirror.prefix": "¿Lento? Prueba",
   "download.mirror.github": "GitHub",
+  "download.mirror.gitee": "Gitee",
   "download.etaPrefix": "Previsto {eta}",
   "download.android.feature1": "Android 8.0+ · nativo con Kotlin Compose",
   "download.android.feature2": "Actualizaciones dentro de la app · no está en tiendas",

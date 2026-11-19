@@ -1432,6 +1432,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "download.ios.inReview": "App Store 審査中",
   "download.mirror.prefix": "遅いときは",
   "download.mirror.github": "GitHub",
+  "download.mirror.gitee": "Gitee",
   "download.etaPrefix": "公開予定 {eta}",
   "download.android.feature1": "Android 8.0+ · Kotlin Compose ネイティブ",
   "download.android.feature2": "アプリ内自動更新 · ストア非公開",

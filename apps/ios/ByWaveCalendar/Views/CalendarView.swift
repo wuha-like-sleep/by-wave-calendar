@@ -70,6 +70,14 @@ struct CalendarView: View {
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                // 服务端公告（新版本在商店里）：样式与账号提示条一脉，
+                // 多一个「去更新」。关掉后同一轮发布不再弹（AppState 记戳）。
+                if let announcement = state.pendingAnnouncement {
+                    AnnouncementBanner(announcement: announcement) {
+                        withAnimation(.snappy) { state.dismissAnnouncement() }
+                    }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 navBar
                 ZStack(alignment: .top) {
                     contentForMode
@@ -94,6 +102,7 @@ struct CalendarView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .animation(.snappy, value: state.accountNotice)
+            .animation(.snappy, value: state.pendingAnnouncement)
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
             // 所有按钮都声明「有竖栏就放竖栏」：iPhone Duo 外屏右边（横拿时左边）那条
@@ -974,6 +983,65 @@ private struct AccountNoticeBanner: View {
         let now = current.displayLabel
         guard gone == now else { return (gone, now) }
         return ("\(gone) · \(notice.accountHost)", "\(now) · \(current.displaySubtitle)")
+    }
+}
+
+/// 服务端公告的横幅。标题 / 正文是管理员在后台写的原文（跟着后台的
+/// 语言走，不走本地化）；本地只提供「去更新」和关闭。标题为空时用
+/// 本地化的默认标题兜底，正文为空就只显示标题一行。
+private struct AnnouncementBanner: View {
+    let announcement: IosAnnouncement
+    let onDismiss: () -> Void
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(Theme.brandStart)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(announcement.title.isEmpty ? "announcement.defaultTitle".loc : announcement.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                if !announcement.body.isEmpty {
+                    Text(announcement.body)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Button {
+                    openURL(announcement.effectiveStoreURL)
+                } label: {
+                    Text("announcement.updateNow".loc)
+                        .font(.footnote.weight(.semibold))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 4)
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("关闭"))
+        }
+        .padding(12)
+        .background(Theme.brandStart.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Theme.brandStart.opacity(0.35), lineWidth: 0.5),
+        )
+        .frame(maxWidth: 560)
+        .padding(.horizontal, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+        .background(Color(.systemBackground))
     }
 }
 

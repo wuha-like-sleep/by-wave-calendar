@@ -179,7 +179,7 @@ fun MainScreen(
     // same 6h window are no-ops. We do call once per session boot
     // though, so a fresh launch on day 2 always re-checks.
     LaunchedEffect(p?.serverUrl) {
-        p?.serverUrl?.let { UpdateChecker.check(it) }
+        p?.let { UpdateChecker.check(it.serverUrl, it.deviceId) }
     }
     val updateInfo by UpdateChecker.available.collectAsState()
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -225,7 +225,7 @@ fun MainScreen(
         if ((dl is DownloadState.Idle || dl is DownloadState.Failed) &&
             UpdateInstaller.staged.value == null
         ) {
-            scope.launch { UpdateDownloader.download(asset.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl) }
+            scope.launch { UpdateDownloader.download(asset.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl, asset.mirrorUrl) }
         }
     }
     // When the background download finishes, stage the file so it applies
@@ -276,7 +276,7 @@ fun MainScreen(
                 ShortcutAction.OpenImport -> { pickIcsFile()?.let { importFile = it } }
                 ShortcutAction.CheckUpdate -> {
                     val url = p?.serverUrl ?: return@collect
-                    UpdateChecker.forceCheck(url)
+                    UpdateChecker.forceCheck(url, p?.deviceId)
                     // Open the dialog regardless of outcome — if update
                     // was found the LaunchedEffect already flipped
                     // showUpdateDialog=true; if not, we still want to
@@ -714,7 +714,7 @@ fun MainScreen(
                 },
                 onCheckUpdate = {
                     val url = p.serverUrl
-                    scope.launch { UpdateChecker.forceCheck(url) }
+                    scope.launch { UpdateChecker.forceCheck(url, p.deviceId) }
                     // Don't close Settings — the dialog will float on top
                     // when the manifest comes back. If "up to date," the
                     // showUpdateDialog branch shows a slim confirmation.

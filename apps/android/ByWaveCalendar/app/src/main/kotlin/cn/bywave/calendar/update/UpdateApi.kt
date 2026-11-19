@@ -45,11 +45,34 @@ data class AndroidReleaseDto(
      *  positionally, and a mid-list insertion would silently rebind
      *  their arguments. */
     @SerialName("fallbackUrl") val fallbackUrl: String = "",
+    /** Third source (mirror, e.g. Gitee), tried only after BOTH the
+     *  primary and the fallback fail. Same contract as fallbackUrl:
+     *  "" = none, unusable values are skipped by the downloader, and
+     *  the sha256/size gate applies unchanged. Also appended last. */
+    @SerialName("mirrorUrl") val mirrorUrl: String = "",
+    /** Staged-rollout percentage for this release (0–100). Absent in
+     *  older manifests → 100 = everyone. UpdateChecker applies the
+     *  shared Rollout bucket rule locally, because the GitHub-manifest
+     *  path never passes through the server's gate. */
+    @SerialName("rolloutPercent") val rolloutPercent: Int = 100,
+    /** Days of grace before a forced upgrade turns hard: within the
+     *  grace window the prompt stays dismissible, after it the sheet
+     *  becomes non-dismissible. Absent → 7. Same field, same meaning
+     *  as the desktop client — one definition in shared Rollout. */
+    @SerialName("graceDays") val graceDays: Int = 7,
 )
 
 interface UpdateApi {
+    /** deviceId + currentVersionCode let the server apply the staged
+     *  rollout gate (and its recall exemption for installs below the
+     *  minimum supported version). Both are optional server-side: an
+     *  old server ignores unknown query params, a missing deviceId is
+     *  treated as "not a rollout subject". */
     @GET("api/app/android/latest")
-    suspend fun latest(): AndroidReleaseDto
+    suspend fun latest(
+        @retrofit2.http.Query("deviceId") deviceId: String,
+        @retrofit2.http.Query("currentVersionCode") currentVersionCode: Int,
+    ): AndroidReleaseDto
 
     /** Fetch a manifest from an absolute URL (overrides baseUrl). Used for
      *  the canonical GitHub-raw fallback so a user whose own server hasn't
