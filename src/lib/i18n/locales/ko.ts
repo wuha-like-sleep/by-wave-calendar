@@ -558,6 +558,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "<strong>{host}</strong>님과 함께 · {minutes}분",
   "booking.public.duration": "{minutes}분",
+  "bookingLinks.createdBanner": "링크가 만들어졌습니다. 복사해서 공유하세요:",
+  "bookingLinks.copyLink": "링크 복사",
   "booking.public.noSlots": "지금 예약 가능한 시간이 없습니다. 주최자에게 시간을 더 열어달라고 요청하거나 나중에 다시 시도하세요.",
   "booking.public.pickTime": "시간 선택",
   "booking.public.slotCount": "{count}개 시간대",
@@ -1070,6 +1072,10 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "시작 {n}분 전",
   "app.event.reminder1Hour": "시작 1시간 전",
   "app.event.reminder2Hours": "시작 2시간 전",
+  "app.event.duration30m": "30분",
+  "app.event.duration1h": "1시간",
+  "app.event.duration2h": "2시간",
+  "app.event.duration": "기간",
   "app.event.reminder1Day": "시작 1일 전",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1183,6 +1189,11 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "아직 아무도 초대하지 않았습니다",
   "app.js.nl.noTime": "시간을 인식하지 못했습니다. \"15:30 회의\"처럼 입력해 보세요",
   "app.js.nl.untitled": "제목 없음",
+  "app.js.quickadd.saveDirectly": "바로 저장",
+  "app.js.quickadd.openForm": "폼에서 확인",
+  "app.js.quickadd.added": "추가됨: {title}",
+  "app.js.quickadd.open": "열기",
+  "app.js.quickadd.undone": "추가를 취소했습니다",
   "app.js.saving": "저장 중…",
   "app.js.conflict.title": "시간 겹침",
   "app.js.conflict.message": "기존 일정과 시간이 겹칩니다:",

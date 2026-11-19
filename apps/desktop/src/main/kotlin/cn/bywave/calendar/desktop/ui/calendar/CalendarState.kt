@@ -149,6 +149,14 @@ data class UndoDelete(
     val token: Long,
 )
 
+/** 一句话「直接保存」成功后的反馈条数据：拿着刚建好的事件本体，
+ *  让反馈条能「打开」它、也能「撤销」这次创建。token 守卫自动消失
+ *  计时（与 UndoDelete 同一套路）。 */
+data class CreatedNotice(
+    val event: EventDTO,
+    val token: Long,
+)
+
 data class CalendarUiState(
     val mode: ViewMode = ViewMode.Week,
     val anchor: LocalDate = LocalDate.now(),
@@ -168,6 +176,8 @@ data class CalendarUiState(
      *  delete always asks first. */
     val pendingConfirmDelete: PendingDelete? = null,
     val undoDelete: UndoDelete? = null,
+    /** 一句话直接保存成功后的「已创建」反馈条（打开 / 撤销）。 */
+    val createdNotice: CreatedNotice? = null,
     /** 弹窗外的操作（删除、拖动改时间、撤销删除）失败时给用户看的那句话，
      *  主界面顶部提示条显示，用户点 × 关掉。和 [formError] 分开：那个只在
      *  编辑弹窗里渲染，弹窗外的失败写进去等于没写。 */
@@ -338,6 +348,34 @@ class CalendarState(
         _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(event), formError = null)
     }
 
+    /** Open the detail for a SEARCH result. Local hits are full DTOs and
+     *  open as-is. Server hits are promoted stubs (no description / extra
+     *  — search never returns them), so after opening the stub we fetch
+     *  the full row via GET /events/{id} and swap it in, but only while
+     *  the sheet still shows that same stub (the user may have closed it
+     *  or opened something else meanwhile). The fetch returns the series
+     *  master for recurring events; a stub that was re-anchored onto an
+     *  occurrence keeps its occurrence start/end + isOccurrence, exactly
+     *  the shape the /events window expansion produces. A failed fetch
+     *  (offline, older server) leaves the stub — read-only detail still
+     *  works, and the editor's unloaded-extra guard keeps an edit from
+     *  clearing fields it never saw. */
+    fun openDetailFromSearch(event: EventDTO, needsHydration: Boolean) {
+        openDetail(event)
+        if (!needsHydration) return
+        scope.launch {
+            val full = runCatching { client.getEvent(event.id) }.getOrNull() ?: return@launch
+            val sheet = _ui.value.activeSheet as? ActiveSheet.Detail ?: return@launch
+            if (sheet.event.id != event.id || sheet.event.startsAt != event.startsAt) return@launch
+            val hydrated = if (full.rrule != null && full.startsAt != event.startsAt) {
+                full.copy(startsAt = event.startsAt, endsAt = event.endsAt, isOccurrence = true)
+            } else {
+                full
+            }
+            _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Detail(hydrated))
+        }
+    }
+
     fun openCreate(seedStart: java.time.LocalDateTime? = null) {
         _ui.value = _ui.value.copy(activeSheet = ActiveSheet.Create(seedStart), formError = null)
     }
@@ -365,6 +403,8 @@ class CalendarState(
      *  清 pending 等价于用户点了取消:resolveScope*(null) 也只是把它置空、
      *  不发请求。 */
     fun dismissAllModals() {
+        // 表单没保存就关掉：一句话直接保存的打标一并清掉，别串到下一次新建。
+        quickSaveArmed = false
         _ui.value = _ui.value.copy(
             activeSheet = null,
             formError = null,
@@ -383,6 +423,16 @@ class CalendarState(
      *  reuses the same uid and the server collapses the retry onto the
      *  first row instead of duplicating. Falls back to a fresh uid only if
      *  no create sheet is somehow open (defensive; shouldn't happen). */
+    /** 一句话「直接保存」按钮在真正提交前调用：给下一次 create 打标，
+     *  成功后把建好的事件挂到 createdNotice 上弹反馈条。普通保存不打标，
+     *  不弹条。打标只管紧接着的这一次 create：保存失败、或表单被关掉
+     *  （dismissAllModals）都会清掉，不会串到下一次无关的新建上。 */
+    private var quickSaveArmed = false
+
+    fun armQuickSaveNotice() {
+        quickSaveArmed = true
+    }
+
     fun create(body: EventCreateInput) {
         val clientUid = when (val sheet = _ui.value.activeSheet) {
             is ActiveSheet.Create -> sheet.clientUid
@@ -393,9 +443,15 @@ class CalendarState(
             // 新的一次操作开始，上一次的失败提示就过时了（见 dismissActionError 的说明）。
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
-                client.createEvent(body, clientUid = clientUid)
+                val created = client.createEvent(body, clientUid = clientUid)
                 client.profileId?.let { EventCache.clear(it) }
-                _ui.value = _ui.value.copy(saving = false, activeSheet = null)
+                val notice = if (quickSaveArmed) {
+                    CreatedNotice(event = created, token = System.nanoTime())
+                } else {
+                    null
+                }
+                quickSaveArmed = false
+                _ui.value = _ui.value.copy(saving = false, activeSheet = null, createdNotice = notice)
                 load(useCache = false)
                 // 提醒有自己的一份数据（ReminderFeed），跟这里的 load() 不是同一份。
                 // 本机刚建的会要立刻进那一份，否则最坏要等到它下一个刷新间隔——
@@ -404,8 +460,31 @@ class CalendarState(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                quickSaveArmed = false
                 reportFormFailure(e)
             }
+        }
+    }
+
+    /** 「已创建」反馈条的「打开」：直接弹这个事件的详情。 */
+    fun openCreatedNotice() {
+        val notice = _ui.value.createdNotice ?: return
+        _ui.value = _ui.value.copy(createdNotice = null)
+        openDetail(notice.event)
+    }
+
+    /** 「已创建」反馈条的「撤销」：把刚建的事件删掉。走整事件删除，
+     *  删除本身还会再给一条可恢复的撤销条（sendDelete 的既有行为）。 */
+    fun undoQuickSave() {
+        val notice = _ui.value.createdNotice ?: return
+        _ui.value = _ui.value.copy(createdNotice = null)
+        sendDelete(notice.event.id, scope = null, recurrenceId = null, summary = notice.event.summary)
+    }
+
+    /** 反馈条自动消失（token 守卫，旧计时器关不掉新条）。 */
+    fun dismissCreatedNotice(token: Long) {
+        if (_ui.value.createdNotice?.token == token) {
+            _ui.value = _ui.value.copy(createdNotice = null)
         }
     }
 

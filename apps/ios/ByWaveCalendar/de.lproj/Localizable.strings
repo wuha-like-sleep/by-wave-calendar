@@ -111,6 +111,9 @@
 "10 分钟" = "10 Minuten";
 "15 分钟" = "15 Minuten";
 "30 分钟" = "30 Minuten";
+"30分钟" = "30 Min.";
+"1小时" = "1 Std.";
+"2小时" = "2 Std.";
 "1 小时" = "1 Stunde";
 "2 小时" = "2 Stunden";
 "没有日历权限。打开 设置 → 隐私 → 日历 → ByWaveCalendar 开启。" = "Kalenderzugriff erforderlich. Öffne Einstellungen → Datenschutz → Kalender → ByWaveCalendar.";
@@ -247,6 +250,7 @@
 "状态与通知" = "Status & Mitteilungen";
 "公开链接" = "Öffentlicher Link";
 "复制链接" = "Link kopieren";
+"链接已创建" = "Link erstellt";
 "在浏览器中打开" = "Im Browser öffnen";
 
 // MARK: - v1.4.1 i18n pass — newly-keyed hardcoded UI strings
@@ -390,6 +394,9 @@
 "已删除「%@」" = "„%@“ gelöscht";
 "撤销删除" = "Rückgängig";
 "快速新建" = "Schnellerfassung";
+"直接保存" = "Direkt speichern";
+"重复规则未复制，已按单次事件复制；如需重复请在下方重新设置。" = "Die Wiederholungsregel wurde nicht kopiert – dies ist ein Einzeltermin. Bei Bedarf unten eine Regel einstellen.";
+"已创建「%@」" = "„%@“ erstellt";
 "quickadd.rrule.daily" = "Jeden Tag";
 "quickadd.rrule.weekly" = "Jede Woche";
 "quickadd.rrule.weeklyDay" = "Jeden %@";

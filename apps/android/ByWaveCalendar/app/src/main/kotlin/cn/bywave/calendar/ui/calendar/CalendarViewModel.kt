@@ -41,6 +41,14 @@ data class CalendarUiState(
     /** Set right after a NON-recurring delete succeeds → drives the "已删除 ·
      *  撤销" snackbar. One-shot: cleared when the snackbar is acted on/dismissed. */
     val undoDeleteId: String? = null,
+    /** One-shot request to open an event's detail sheet, issued from
+     *  outside CalendarScreen (search result tap, quick-add "已创建"
+     *  feedback). CalendarScreen consumes it into its selectedEvent
+     *  state and calls [CalendarViewModel.clearDetailRequest]. */
+    val detailRequest: EventDTO? = null,
+    /** Set right after a quick-add direct save succeeds → drives the
+     *  "已创建 · 撤销" snackbar on CalendarScreen. One-shot. */
+    val createdNotice: EventDTO? = null,
     val lastSyncedAt: Instant? = null,
     val fetchedFrom: LocalDate? = null,
     val fetchedTo: LocalDate? = null,
@@ -76,7 +84,8 @@ class CalendarViewModel : ViewModel() {
             .onEach { id ->
                 loadJob?.cancel()
                 undoProfileId = null
-                _state.update { it.copy(undoDeleteId = null, errorMessage = null, loading = false,
+                _state.update { it.copy(undoDeleteId = null, detailRequest = null, createdNotice = null,
+                    errorMessage = null, loading = false,
                     fetchedFrom = null, fetchedTo = null, lastSyncedAt = null) }
                 if (id != null) load()
             }
@@ -105,6 +114,35 @@ class CalendarViewModel : ViewModel() {
     fun goToday() = setAnchor(LocalDate.now())
 
     fun reload() = load()
+
+    /** Ask CalendarScreen to open [event]'s detail sheet. Used by the
+     *  search screen (result tap opens the event, not just its day) and
+     *  by the quick-add created-notice's "打开" affordance. */
+    fun requestDetail(event: EventDTO) {
+        _state.update { it.copy(detailRequest = event) }
+    }
+
+    fun clearDetailRequest() {
+        _state.update { it.copy(detailRequest = null) }
+    }
+
+    /** Show the "已创建" snackbar for a quick-add direct save, and move
+     *  the calendar onto the event's day so the created event is right
+     *  there once the snackbar is gone. */
+    fun showCreatedNotice(event: EventDTO) {
+        val day = runCatching {
+            Instant.parse(event.startsAt).atZone(ZoneId.systemDefault()).toLocalDate()
+        }.getOrNull()
+        _state.update { it.copy(createdNotice = event) }
+        if (day != null) {
+            setMode(ViewMode.Day)
+            setAnchor(day)
+        }
+    }
+
+    fun clearCreatedNotice() {
+        _state.update { it.copy(createdNotice = null) }
+    }
 
     /** Delete an event by id. For non-recurring events the extra args
      *  stay null. For recurring events the caller MUST pop the

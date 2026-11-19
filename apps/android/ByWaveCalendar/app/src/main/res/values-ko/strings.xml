@@ -58,6 +58,10 @@
     <string name="event_allday">종일</string>
     <string name="event_start">시작</string>
     <string name="event_end">종료</string>
+    <string name="eventedit_duration">기간</string>
+    <string name="eventedit_duration_30m">30분</string>
+    <string name="eventedit_duration_1h">1시간</string>
+    <string name="eventedit_duration_2h">2시간</string>
     <string name="event_location">위치</string>
     <string name="event_location_hint">선택 사항 — 예: 상하이 / Zoom</string>
     <string name="event_link">링크</string>
@@ -220,8 +224,11 @@
     <string name="quickadd_recurrence_label">반복</string>
     <string name="quickadd_recurrence_remove">제거</string>
     <string name="quickadd_cd">인식</string>
+    <string name="quickadd_save_directly">바로 저장</string>
+    <string name="eventedit_duplicate_rrule_copied">반복 규칙도 함께 복사했습니다. 아래 반복 섹션에서 수정하거나 제거할 수 있습니다</string>
     <string name="action_undo">실행 취소</string>
     <string name="event_deleted">삭제됨</string>
+    <string name="event_created_notice">만들었습니다: %1$s</string>
     <string name="booking_schedule_timezone">예약 가능 시간대: %1$s. 예약된 시간은 기기 시간대로 표시됩니다.</string>
     <string name="event_detail_display_timezone">표시 시간대</string>
     <string name="event_detail_source_timezone">일정 시간대</string>

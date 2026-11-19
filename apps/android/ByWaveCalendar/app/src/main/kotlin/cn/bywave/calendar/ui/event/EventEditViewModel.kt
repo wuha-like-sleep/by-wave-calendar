@@ -139,6 +139,15 @@ data class EventEditUiState(
     val deleting: Boolean = false,
     val errorMessage: String? = null,
     val finished: Boolean = false,
+    /** 一句话解析刚成功回填过、且关键字段没再被手改过：编辑器据此
+     *  显示「直接保存」。标题/时间/全天任一被手改就清掉——那时存的
+     *  已经不是解析结果了，要存走普通保存按钮。 */
+    val quickParsed: Boolean = false,
+    /** 直接保存（新建）成功后建好的事件本体，随 finished 一起交给
+     *  界面层弹「已创建」反馈。普通保存/编辑保存为 null。 */
+    val savedEvent: EventDTO? = null,
+    /** 这次 finished 是不是由「直接保存」发起的。 */
+    val savedViaQuick: Boolean = false,
     /** 打开编辑器那一刻所有可编辑字段的指纹。bootstrap 里写入一次，
      *  之后不再变，用来判断「用户到底改过东西没有」。 */
     val pristine: String = "",
@@ -495,7 +504,7 @@ class EventEditViewModel : ViewModel() {
         _state.update { it.withCalendars(calendars) }
     }
 
-    fun onSummary(v: String) = _state.update { it.copy(summary = v, errorMessage = null) }
+    fun onSummary(v: String) = _state.update { it.copy(summary = v, errorMessage = null, quickParsed = false) }
     fun onLocation(v: String) = _state.update { it.copy(location = v) }
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
     fun onUrl(v: String) = _state.update { it.copy(url = v) }
@@ -539,6 +548,9 @@ class EventEditViewModel : ViewModel() {
                         end = end,
                         parsing = false,
                         errorMessage = null,
+                        // 标题解析出来了才算完整、才给「直接保存」：
+                        // 只有时间没标题的句子存下去是个无名事件。
+                        quickParsed = r.summary.isNotBlank(),
                     )
                 }
             } catch (e: CancellationException) {
@@ -581,24 +593,32 @@ class EventEditViewModel : ViewModel() {
             reminder = keptReminder,
             start = it.start.toLocalDate().atStartOfDay(),
             end = maxOf(it.start.toLocalDate(), it.end.toLocalDate()).atTime(23, 59),
+            quickParsed = false,
         ) else it.copy(
             allDay = false,
             reminder = keptReminder,
             start = it.start,
             end = it.start.plusHours(1),
+            quickParsed = false,
         )
     }
     fun onStart(date: LocalDate, time: LocalTime) = _state.update {
         val newStart = LocalDateTime.of(date, time)
         // Keep duration: shift end by the same delta as start.
         val durationMinutes = java.time.Duration.between(it.start, it.end).toMinutes()
-        it.copy(start = newStart, end = newStart.plusMinutes(durationMinutes.coerceAtLeast(15L)))
+        it.copy(start = newStart, end = newStart.plusMinutes(durationMinutes.coerceAtLeast(15L)), quickParsed = false)
     }
     fun onEnd(date: LocalDate, time: LocalTime) = _state.update {
         var newEnd = LocalDateTime.of(date, time)
         // End must be >= start; clamp.
         if (!newEnd.isAfter(it.start)) newEnd = it.start.plusMinutes(15)
-        it.copy(end = newEnd)
+        it.copy(end = newEnd, quickParsed = false)
+    }
+
+    /** 时长快捷片：结束 = 开始 + 片上时长。直接写 end（不走 onEnd 的
+     *  日期/时间拆分），片上时长都 ≥30 分钟，不会触发 15 分钟下限。 */
+    fun onDurationMinutes(minutes: Long) = _state.update {
+        it.copy(end = it.start.plusMinutes(minutes), quickParsed = false)
     }
 
     /** Save the in-progress edit. For recurring events (state.sourceRrule
@@ -651,6 +671,7 @@ class EventEditViewModel : ViewModel() {
     fun dismissConflicts() {
         conflictScope = null
         conflictRecurrenceId = null
+        saveViaQuick = false
         _state.update { it.copy(pendingConflicts = emptyList()) }
     }
 
@@ -680,6 +701,18 @@ class EventEditViewModel : ViewModel() {
         ).conflicts
     }
 
+    /** 这次保存是不是由「直接保存」发起的（决定 finished 后走不走
+     *  「已创建」反馈）。普通保存按钮不置位。 */
+    private var saveViaQuick = false
+
+    /** 一句话「直接保存」：和普通保存同一条路（冲突检查、幂等键都
+     *  一样），只是给这次保存打标，成功后界面层弹「已创建 · 撤销」。 */
+    fun saveDirectly() {
+        if (_state.value.isEdit) return
+        saveViaQuick = true
+        save()
+    }
+
     private suspend fun doSave(s: EventEditUiState, scope: String?, recurrenceId: String?) {
         try {
             val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
@@ -687,6 +720,7 @@ class EventEditViewModel : ViewModel() {
 
             val zone = ZoneId.systemDefault()
 
+            var created: EventDTO? = null
             if (s.isEdit) {
                 val body = s.buildUpdateInput(scope, recurrenceId, zone)
                 client.api.updateEvent(s.sourceId!!, body)
@@ -694,16 +728,26 @@ class EventEditViewModel : ViewModel() {
                 // buildCreateInput carries the once-per-open clientUid
                 // (retried saves collapse onto the first server row)
                 // and the recurrence rule — duplicates keep repeating.
-                client.api.createEvent(s.buildCreateInput(zone))
+                created = client.api.createEvent(s.buildCreateInput(zone))
             }
             // Feed the create-default memory: the next new event
             // starts on the calendar this save just used (for an
             // edit that moved the event, that's the target one).
             rememberCalendarId(s.calendarId)
-            _state.update { it.copy(saving = false, finished = true) }
+            val viaQuick = saveViaQuick && !s.isEdit
+            saveViaQuick = false
+            _state.update {
+                it.copy(
+                    saving = false,
+                    finished = true,
+                    savedEvent = if (viaQuick) created else null,
+                    savedViaQuick = viaQuick,
+                )
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            saveViaQuick = false
             _state.update {
                 it.copy(saving = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_save_failed))
             }

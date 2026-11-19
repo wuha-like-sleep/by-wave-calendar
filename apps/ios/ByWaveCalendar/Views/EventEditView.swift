@@ -345,6 +345,13 @@ struct EventEditView: View {
     @State private var quickText = ""
     @State private var quickParsing = false
     @State private var quickError: String?
+    /// 解析成功回填过一次、且解析出了标题：快速新建区多一个「直接保存」。
+    /// 改动一句话原文即清掉（与桌面端同一口径）。
+    @State private var quickFilled = false
+    /// 这次 save() 是不是由「直接保存」发起的：成功后给 AppState 记一笔，
+    /// 日历页弹「已创建 · 打开 / 撤销」条。冲突框里选「仍要保存」会再走
+    /// 一次 save()，标记保留；保存失败则清掉，别串到下一次普通保存。
+    @State private var saveViaQuick = false
     var body: some View {
         Form {
             if mode.isCreate {
@@ -352,6 +359,7 @@ struct EventEditView: View {
                     HStack(spacing: 8) {
                         TextField("试试：明天下午3点和老王开会", text: $quickText)
                             .autocorrectionDisabled(true)
+                            .onChange(of: quickText) { _, _ in quickFilled = false }
                             .onSubmit { Task { await parseQuick() } }
                         Button {
                             Task { await parseQuick() }
@@ -369,6 +377,21 @@ struct EventEditView: View {
                         Text(quickError)
                             .font(.footnote)
                             .foregroundStyle(.red)
+                    }
+                    // 直接保存：解析完整后出现，走的就是 save() 本身
+                    // （冲突软检查在内），成功后日历页弹「已创建」条。
+                    if quickFilled && !summary.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button {
+                            saveViaQuick = true
+                            Task { await save() }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("直接保存").font(.callout.weight(.medium))
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(saving)
                     }
                 } header: {
                     Text("快速新建")
@@ -418,6 +441,22 @@ struct EventEditView: View {
                         .onChange(of: endsAt) { _, _ in
                             endLinkedToStart = false
                         }
+                    // 时长快捷片：点一下把结束设成开始 + 片上时长。
+                    // 设完即解除「结束跟随开始」的联动（用户已显式定过
+                    // 结束时间，再拖开始不该把它冲掉）。
+                    HStack(spacing: 8) {
+                        Text("时长")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        ForEach([30, 60, 120], id: \.self) { minutes in
+                            Button(durationChipLabel(minutes)) {
+                                endsAt = startsAt.addingTimeInterval(TimeInterval(minutes * 60))
+                                endLinkedToStart = false
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
                     // Timezone picker — only meaningful for timed events.
                     // All-day events span the calendar's local day per ICS
                     // spec, so the field would be misleading.
@@ -428,6 +467,17 @@ struct EventEditView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                }
+            }
+
+            // 复制带重复规则的事件时把话说在前面：复制按设计不带重复
+            // 规则（避免误开一条平行系列），但以前是静默丢掉，用户存
+            // 完才发现新事件只出现一次。
+            if case .duplicateOf(let source) = mode, let rule = source.rrule, !rule.isEmpty {
+                Section {
+                    Label("重复规则未复制，已按单次事件复制；如需重复请在下方重新设置。", systemImage: "info.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -751,6 +801,16 @@ struct EventEditView: View {
 
     /// One exdate row's label: the stored ISO string as a readable
     /// date (time shown for timed events, hidden for all-day ones).
+    /// 时长快捷片的文案。用无空格的键：带空格的「30 分钟」等键与提醒
+    /// 档位共用，日/韩译文带「前/전」后缀（提醒语境），拿来当时长是错的。
+    private func durationChipLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 30: return "30分钟".loc
+        case 60: return "1小时".loc
+        default: return "2小时".loc
+        }
+    }
+
     private func exdateLabel(_ iso: String) -> String {
         let withFrac = ISO8601DateFormatter()
         withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -866,6 +926,8 @@ struct EventEditView: View {
             endLinkedToStart = false
             oldStartValue = fill.start
         }
+        // 标题解析出来了才算完整：只有时间没标题不给直接保存。
+        quickFilled = !fill.summary.trimmingCharacters(in: .whitespaces).isEmpty
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
@@ -1008,13 +1070,21 @@ struct EventEditView: View {
             // save just used.
             UserDefaults.standard.set(calendarId, forKey: "lastUsedCalendarId")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // 一句话直接保存：记到 AppState，日历页弹「已创建」条
+            // （打开 / 撤销）。普通保存不记。
+            if saveViaQuick {
+                saveViaQuick = false
+                state.noteQuickCreated(saved)
+            }
             onSaved(saved)
         } catch let e as APIError {
             // 保存没成：下次再点保存要重新查冲突（用户多半会改时间）。
             conflictCheckPassed = false
+            saveViaQuick = false
             errorMessage = e.localizedDescription
         } catch {
             conflictCheckPassed = false
+            saveViaQuick = false
             errorMessage = error.localizedDescription
         }
     }

@@ -58,6 +58,10 @@
     <string name="event_allday">Ganztägig</string>
     <string name="event_start">Beginnt</string>
     <string name="event_end">Endet</string>
+    <string name="eventedit_duration">Dauer</string>
+    <string name="eventedit_duration_30m">30 Min.</string>
+    <string name="eventedit_duration_1h">1 Std.</string>
+    <string name="eventedit_duration_2h">2 Std.</string>
     <string name="event_location">Ort</string>
     <string name="event_location_hint">Optional — z. B. Shanghai / Zoom</string>
     <string name="event_link">Link</string>
@@ -220,8 +224,11 @@
     <string name="quickadd_recurrence_label">Wiederholung</string>
     <string name="quickadd_recurrence_remove">Entfernen</string>
     <string name="quickadd_cd">Erkennen</string>
+    <string name="quickadd_save_directly">Direkt speichern</string>
+    <string name="eventedit_duplicate_rrule_copied">Die Wiederholungsregel wurde mitkopiert – unten im Abschnitt Wiederholung änderbar oder entfernbar</string>
     <string name="action_undo">Rückgängig</string>
     <string name="event_deleted">Gelöscht</string>
+    <string name="event_created_notice">Erstellt: %1$s</string>
     <string name="booking_schedule_timezone">Zeitzone der Verfügbarkeit: %1$s. Gebuchte Termine erscheinen in der Gerätezeitzone.</string>
     <string name="event_detail_display_timezone">Anzeigezeitzone</string>
     <string name="event_detail_source_timezone">Terminzeitzone</string>

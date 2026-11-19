@@ -1,6 +1,19 @@
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">预约链接</h1>
 <p class="text-sm text-slate-500 mb-6">生成一个公开 URL，外部访问者按你设的可用时段在你日历里预约一个会议时段 —— 类似 Calendly。访问者不需要 ByWave 账号。</p>
 
+<% if (flash && flash.createdBookingUrl) { %>
+  <%# 刚创建成功的那一条：把链接直接摆到眼前并给复制按钮，省得用户
+      回到下面的列表里再找。flash 一次性，刷新即消失。 %>
+  <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 mb-6">
+    <div class="text-sm font-medium text-emerald-900 mb-2"><%= t("bookingLinks.createdBanner") %></div>
+    <div class="flex items-center gap-2">
+      <code class="text-xs text-emerald-900 truncate flex-1 bg-white/70 px-2 py-1.5 rounded"><%= flash.createdBookingUrl %></code>
+      <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              data-bwc-copy="<%= flash.createdBookingUrl %>"><%= t("bookingLinks.copyLink") %></button>
+    </div>
+  </div>
+<% } %>
+
 <% if (calendars.length === 0) { %>
   <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
     需要至少有一本日历才能创建预约链接。<a href="/app" class="underline">先去主日历建一本</a>。

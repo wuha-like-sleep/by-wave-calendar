@@ -24,6 +24,9 @@ struct BookingLinksView: View {
     @State private var errorMessage: String?
     @State private var showingCreate = false
     @State private var copiedId: String?
+    /// 刚创建好的那条：创建成功后弹一个带「复制链接」的确认框，
+    /// 不让用户回列表里再找那一行。
+    @State private var justCreated: BookingLink?
 
     var body: some View {
         Group {
@@ -86,14 +89,29 @@ struct BookingLinksView: View {
             NavigationStack {
                 CreateBookingLinkView(
                     calendars: calendars,
-                    onCreated: {
+                    onCreated: { created in
                         showingCreate = false
+                        justCreated = created
                         Task { await reload() }
                     },
                     onCancel: { showingCreate = false },
                 )
                 .environmentObject(state)
             }
+        }
+        .alert("链接已创建", isPresented: Binding(
+            get: { justCreated != nil },
+            set: { if !$0 { justCreated = nil } },
+        )) {
+            Button("复制链接") {
+                if let url = justCreated?.publicUrl {
+                    UIPasteboard.general.string = url
+                }
+                justCreated = nil
+            }
+            Button("完成", role: .cancel) { justCreated = nil }
+        } message: {
+            Text(justCreated?.publicUrl ?? "")
         }
         .alert("出错了", isPresented: Binding(
             get: { errorMessage != nil },
@@ -243,7 +261,8 @@ struct BookingLinksView: View {
 /// client-side so a stray space / capital doesn't bounce off the server.
 struct CreateBookingLinkView: View {
     let calendars: [CalendarMeta]
-    let onCreated: () -> Void
+    /// 创建成功时带回新建的那条（父视图据此弹「复制链接」确认）。
+    let onCreated: (BookingLink) -> Void
     let onCancel: () -> Void
     @EnvironmentObject var state: AppState
 
@@ -366,7 +385,7 @@ struct CreateBookingLinkView: View {
         do {
             let client = APIClient(state: state)
             let trimmedDesc = description.trimmingCharacters(in: .whitespacesAndNewlines)
-            let _: BookingLink = try await client.createBookingLink(BookingLinkCreateInput(
+            let created: BookingLink = try await client.createBookingLink(BookingLinkCreateInput(
                 slug: normalizedSlug,
                 title: title.trimmingCharacters(in: .whitespaces),
                 description: trimmedDesc.isEmpty ? nil : trimmedDesc,
@@ -378,7 +397,7 @@ struct CreateBookingLinkView: View {
                 bufferAfterMin: bufferAfterMin,
                 notifyEmail: notifyEmail,
             ))
-            onCreated()
+            onCreated(created)
         } catch let e as APIError {
             errorMessage = e.localizedDescription
         } catch {

@@ -558,6 +558,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "<strong>{host}</strong> と · {minutes} 分",
   "booking.public.duration": "{minutes} 分",
+  "bookingLinks.createdBanner": "リンクを作成しました。コピーして共有：",
+  "bookingLinks.copyLink": "リンクをコピー",
   "booking.public.noSlots": "現在、予約可能な枠はありません。ホストにもっと時間を開けてもらうか、後でもう一度お試しください。",
   "booking.public.pickTime": "時間を選択",
   "booking.public.slotCount": "{count} 枠",
@@ -1070,6 +1072,10 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "開始 {n} 分前",
   "app.event.reminder1Hour": "開始 1 時間前",
   "app.event.reminder2Hours": "開始 2 時間前",
+  "app.event.duration30m": "30分",
+  "app.event.duration1h": "1時間",
+  "app.event.duration2h": "2時間",
+  "app.event.duration": "所要時間",
   "app.event.reminder1Day": "開始 1 日前",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1183,6 +1189,11 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "まだ誰も招待していません",
   "app.js.nl.noTime": "時間を読み取れませんでした。「15:30 会議」のように入力してください",
   "app.js.nl.untitled": "無題",
+  "app.js.quickadd.saveDirectly": "そのまま保存",
+  "app.js.quickadd.openForm": "フォームで確認",
+  "app.js.quickadd.added": "追加しました：{title}",
+  "app.js.quickadd.open": "開く",
+  "app.js.quickadd.undone": "追加を取り消しました",
   "app.js.saving": "保存中…",
   "app.js.conflict.title": "時間の重複",
   "app.js.conflict.message": "既存のイベントと時間が重なっています:",

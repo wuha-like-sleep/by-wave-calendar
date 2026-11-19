@@ -468,6 +468,15 @@ fun MainScreen(
                             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
                         )
                     }
+                    ui.createdNotice?.let { notice ->
+                        CreatedNoticeSnackbar(
+                            notice = notice,
+                            onOpen = { state.openCreatedNotice() },
+                            onUndo = { state.undoQuickSave() },
+                            onTimeout = { state.dismissCreatedNotice(notice.token) },
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                        )
+                    }
                 }
             }
         }
@@ -496,6 +505,7 @@ fun MainScreen(
             },
             onDismiss = { state.closeSheet() },
             onQuickParse = { state.parseEvent(it) },
+            onQuickSaveDispatched = { state.armQuickSaveNotice() },
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -645,8 +655,9 @@ fun MainScreen(
             // unreachable — the Android search shape.
             localEvents = ui.events,
             calendars = ui.calendars,
-            onJumpToDate = { day ->
+            onOpenResult = { event, day, needsHydration ->
                 state.jumpToDay(day)
+                state.openDetailFromSearch(event, needsHydration)
                 showSearch = false
             },
             onDismiss = { showSearch = false },
@@ -1208,6 +1219,49 @@ private fun UndoDeleteSnackbar(
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.width(12.dp))
+            TextButton(onClick = onUndo) {
+                Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("undo.action") })
+            }
+        }
+    }
+}
+
+/** 「已创建：X」反馈条 — 一句话直接保存成功后出现，5 秒自动消失。
+ *  「打开」弹这个事件的详情，「撤销」把它删掉（删除本身再给一条
+ *  可恢复的撤销条）。与 UndoDeleteSnackbar 同一形状。 */
+@Composable
+private fun CreatedNoticeSnackbar(
+    notice: cn.bywave.calendar.desktop.ui.calendar.CreatedNotice,
+    onOpen: () -> Unit,
+    onUndo: () -> Unit,
+    onTimeout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    LaunchedEffect(notice.token) {
+        kotlinx.coroutines.delay(5_000)
+        onTimeout()
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(10.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                remember(locale, notice) {
+                    cn.bywave.calendar.desktop.i18n.I18n.t("created.notice", mapOf("name" to notice.event.summary))
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.width(12.dp))
+            TextButton(onClick = onOpen) {
+                Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("created.open") })
+            }
             TextButton(onClick = onUndo) {
                 Text(remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("undo.action") })
             }

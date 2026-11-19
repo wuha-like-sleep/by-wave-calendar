@@ -58,6 +58,10 @@
     <string name="event_allday">Toute la journée</string>
     <string name="event_start">Début</string>
     <string name="event_end">Fin</string>
+    <string name="eventedit_duration">Durée</string>
+    <string name="eventedit_duration_30m">30 min</string>
+    <string name="eventedit_duration_1h">1 h</string>
+    <string name="eventedit_duration_2h">2 h</string>
     <string name="event_location">Lieu</string>
     <string name="event_location_hint">Facultatif — p. ex. Shanghai / Zoom</string>
     <string name="event_link">Lien</string>
@@ -220,8 +224,11 @@
     <string name="quickadd_recurrence_label">Récurrence</string>
     <string name="quickadd_recurrence_remove">Supprimer</string>
     <string name="quickadd_cd">Analyser</string>
+    <string name="quickadd_save_directly">Enregistrer directement</string>
+    <string name="eventedit_duplicate_rrule_copied">La règle de répétition a aussi été copiée ; modifiez-la ou retirez-la dans la section répétition ci-dessous</string>
     <string name="action_undo">Annuler</string>
     <string name="event_deleted">Supprimé</string>
+    <string name="event_created_notice">Créé : %1$s</string>
     <string name="booking_schedule_timezone">Fuseau des disponibilités : %1$s. Les réservations utilisent le fuseau de votre appareil.</string>
     <string name="event_detail_display_timezone">Fuseau affiché</string>
     <string name="event_detail_source_timezone">Fuseau de l’événement</string>

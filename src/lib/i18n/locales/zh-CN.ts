@@ -546,6 +546,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "与 <strong>{host}</strong> · {minutes} 分钟",
   "booking.public.duration": "{minutes} 分钟",
+  "bookingLinks.createdBanner": "链接已创建，复制后发给对方：",
+  "bookingLinks.copyLink": "复制链接",
   "booking.public.noSlots": "最近没有可预约时段。请联系发布方调整可用时段，或晚些再试。",
   "booking.public.pickTime": "选个时间",
   "booking.public.slotCount": "{count} 个时段",
@@ -1057,6 +1059,10 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "开始前 {n} 分钟",
   "app.event.reminder1Hour": "开始前 1 小时",
   "app.event.reminder2Hours": "开始前 2 小时",
+  "app.event.duration30m": "30 分钟",
+  "app.event.duration1h": "1 小时",
+  "app.event.duration2h": "2 小时",
+  "app.event.duration": "时长",
   "app.event.reminder1Day": "开始前 1 天",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1170,6 +1176,11 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "尚未邀请任何人",
   "app.js.nl.noTime": "没看懂时间，试试「明天下午三点 开会」",
   "app.js.nl.untitled": "无标题",
+  "app.js.quickadd.saveDirectly": "直接保存",
+  "app.js.quickadd.openForm": "打开表单核对",
+  "app.js.quickadd.added": "已添加：{title}",
+  "app.js.quickadd.open": "打开",
+  "app.js.quickadd.undone": "已撤销添加",
   "app.js.saving": "保存中…",
   "app.js.conflict.title": "时间冲突",
   "app.js.conflict.message": "和现有事件时间冲突：",

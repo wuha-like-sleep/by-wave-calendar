@@ -558,6 +558,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "Avec <strong>{host}</strong> · {minutes} min",
   "booking.public.duration": "{minutes} minutes",
+  "bookingLinks.createdBanner": "Lien créé — copiez-le pour le partager :",
+  "bookingLinks.copyLink": "Copier le lien",
   "booking.public.noSlots": "Aucun créneau réservable pour le moment. Demandez à l'hôte d'ouvrir plus de temps, ou réessayez plus tard.",
   "booking.public.pickTime": "Choisir une heure",
   "booking.public.slotCount": "{count} créneaux",
@@ -1070,6 +1072,10 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "{n} minutes avant",
   "app.event.reminder1Hour": "1 heure avant",
   "app.event.reminder2Hours": "2 heures avant",
+  "app.event.duration30m": "30 min",
+  "app.event.duration1h": "1 h",
+  "app.event.duration2h": "2 h",
+  "app.event.duration": "Durée",
   "app.event.reminder1Day": "1 jour avant",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1183,6 +1189,11 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "Personne n'est encore invité",
   "app.js.nl.noTime": "Heure non comprise — essayez « 15:30 réunion »",
   "app.js.nl.untitled": "Sans titre",
+  "app.js.quickadd.saveDirectly": "Enregistrer directement",
+  "app.js.quickadd.openForm": "Vérifier dans le formulaire",
+  "app.js.quickadd.added": "Ajouté : {title}",
+  "app.js.quickadd.open": "Ouvrir",
+  "app.js.quickadd.undone": "Ajout annulé",
   "app.js.saving": "Enregistrement…",
   "app.js.conflict.title": "Conflit d'horaire",
   "app.js.conflict.message": "Chevauche des événements existants :",

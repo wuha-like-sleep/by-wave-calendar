@@ -248,8 +248,22 @@ struct CalendarView: View {
         // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
         // 根视图才出现。5 秒自动消失。
         .overlay(alignment: .bottom) {
-            undoDeleteBar
-                .animation(.snappy, value: state.pendingUndoDelete)
+            VStack(spacing: 8) {
+                undoDeleteBar
+                createdBar
+            }
+            .animation(.snappy, value: state.pendingUndoDelete)
+            .animation(.snappy, value: state.pendingQuickCreated)
+        }
+        .sheet(item: $createdDetailEvent) { ev in
+            NavigationStack {
+                EventDetailView(
+                    event: ev,
+                    calendar: calendars.first { $0.id == ev.calendarId },
+                    allCalendars: calendars,
+                    onChanged: { Task { await load(force: true) } },
+                )
+            }
         }
     }
 
@@ -281,11 +295,18 @@ struct CalendarView: View {
             }
             .accessibilityLabel(Text("切换账号"))
         }
+        // 搜索是独立顶栏按钮（和 Android 顶栏、桌面工具栏一致的一级入口），
+        // 不再埋在筛选菜单里 —— 之前用户得先点开筛选图标才找得到搜索。
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                showingSearch = true
+            } label: {
+                Image(systemName: "magnifyingglass")
+            }
+            .accessibilityLabel(Text("搜索"))
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button {
-                    showingSearch = true
-                } label: { Label("搜索", systemImage: "magnifyingglass") }
                 Button {
                     showingFilter = true
                 } label: {
@@ -609,6 +630,69 @@ struct CalendarView: View {
     // MARK: - 撤销删除 (v1.6.2)
 
     @State private var restoringDeleted = false
+
+    /// 「已创建」条里点「打开」时要展示详情的事件。
+    @State private var createdDetailEvent: EventDTO?
+    @State private var undoingCreated = false
+
+    /// 一句话直接保存后的「已创建「X」」条：打开看详情，或撤销这次
+    /// 创建。撤销走整事件删除，删完由 undoDeleteBar 接力给恢复入口
+    /// （同一条既有链）。5 秒自动消失，token 守卫同 undoDeleteBar。
+    @ViewBuilder
+    private var createdBar: some View {
+        if let pending = state.pendingQuickCreated {
+            HStack(spacing: 12) {
+                Text("已创建「%@」".locFormat(pending.event.summary))
+                    .font(.subheadline)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Button {
+                    createdDetailEvent = pending.event
+                    withAnimation { state.clearQuickCreated() }
+                } label: {
+                    Text("打开").font(.subheadline.weight(.semibold))
+                }
+                Button {
+                    Task { await undoCreated(pending) }
+                } label: {
+                    if undoingCreated {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("撤销").font(.subheadline.weight(.semibold))
+                    }
+                }
+                .disabled(undoingCreated)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .task(id: pending.token) {
+                do { try await Task.sleep(nanoseconds: 5_000_000_000) } catch { return }
+                if state.pendingQuickCreated?.token == pending.token {
+                    withAnimation { state.clearQuickCreated() }
+                }
+            }
+        }
+    }
+
+    private func undoCreated(_ pending: AppState.PendingQuickCreated) async {
+        undoingCreated = true
+        defer { undoingCreated = false }
+        do {
+            try await APIClient(state: state).delete("/events/\(pending.event.id)")
+            withAnimation { state.clearQuickCreated() }
+            // 删除成功 → 既有撤销删除条接力（可恢复）。
+            state.noteEventDeleted(id: pending.event.id, summary: pending.event.summary)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            await load(force: true)
+        } catch {
+            errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
+        }
+    }
 
     @ViewBuilder
     private var undoDeleteBar: some View {

@@ -16,6 +16,7 @@
 package cn.bywave.calendar.desktop.ui.event
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -144,6 +148,14 @@ internal data class FormState(
     val displayZone: ZoneId = ZoneId.systemDefault(),
     // Display changes must not redefine a newly drafted recurrence's zone.
     val creationZone: ZoneId = displayZone,
+    /** 事件的锚定时区（保存时写进 extra.timezone，服务端按它展开重复 /
+     *  导出）。表单上的墙上时钟永远按 displayZone 显示，这个字段只决定
+     *  「这件事算哪个时区的事」。解析顺序 event → calendar → device，
+     *  与 Android / iOS 编辑器一致（见 resolveEventZoneId）。 */
+    val eventZone: ZoneId = displayZone,
+    /** eventZone 是否已被「定死」：来自事件自带时区，或用户在选择器里
+     *  亲手选过。定死后切换日历不再让时区跟着日历走。 */
+    val zoneTouched: Boolean = false,
 ) {
     val canSubmit: Boolean
         get() = summary.isNotBlank() && calendarId.isNotBlank()
@@ -180,6 +192,10 @@ fun EventEditDialog(
         endsAt: String,
         excludeId: String?,
     ) -> List<ConflictDTO>)? = null,
+    /** 一句话「直接保存」按钮真正提交前调用一次（调用方据此给这次
+     *  创建打标，成功后弹「已创建 · 打开 / 撤销」反馈条）。普通保存
+     *  不调用。 */
+    onQuickSaveDispatched: (() -> Unit)? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -206,6 +222,8 @@ fun EventEditDialog(
     }
     LaunchedEffect(displayZone) { form = form.withDisplayZone(displayZone) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    // 时区选择器（可搜索 IANA 全表）的开关。
+    var showTzPicker by remember { mutableStateOf(false) }
     val hasUnsavedChanges: Boolean
         get() = buildBodies(form) != buildBodies(pristine)
 
@@ -294,6 +312,11 @@ fun EventEditDialog(
                     val qScope = rememberCoroutineScope()
                     var quickText by remember { mutableStateOf("") }
                     var parsing by remember { mutableStateOf(false) }
+                    // 解析成功过一次后置 true：下面多一个「直接保存」按钮，
+                    // 不关表单直接提交当前表单内容（解析后又手改过也以
+                    // 眼前表单为准）。改动一句话原文即清掉，免得拿着旧
+                    // 解析结果误导。
+                    var quickFilled by remember { mutableStateOf(false) }
                     // 解析失败时贴在输入框底下的一行说明。以前失败是「什么都不发生」:
                     // 用户输入一句话、点解析、转一下、表单一动不动,也没有任何提示。
                     var quickError by remember { mutableStateOf<String?>(null) }
@@ -330,6 +353,10 @@ fun EventEditDialog(
                                             start = first.value, end = last.value,
                                             originalStart = first.original, originalEnd = last.original,
                                         )
+                                        // 标题是解析出来的才算「完整」：只有时间
+                                        // 没有标题的句子不给直接保存（存下去是
+                                        // 个无名事件）。canSubmit 还会再把一道关。
+                                        quickFilled = parsed.summary.isNotBlank()
                                     }
                                 }.onFailure { e ->
                                     // 老服务端没有这个接口(404)。这时候说「没识别出来」是骗人的,
@@ -347,7 +374,7 @@ fun EventEditDialog(
                     }
                     OutlinedTextField(
                         value = quickText,
-                        onValueChange = { quickText = it },
+                        onValueChange = { quickText = it; quickFilled = false },
                         label = { Text(t("event.edit.quickadd")) },
                         singleLine = true,
                         modifier = Modifier
@@ -383,6 +410,23 @@ fun EventEditDialog(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                    // 直接保存：解析完整后出现。走的还是 submit() 这条路
+                    // （冲突检查、clientUid 幂等都一样），只是提交前通知
+                    // 调用方打标，成功后主界面弹「已创建」反馈条；有冲突
+                    // 时 submit() 自己会弹冲突确认框，不会硬存。
+                    if (quickFilled && form.canSubmit && !saving) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = {
+                                onQuickSaveDispatched?.invoke()
+                                submit()
+                            }) {
+                                Text(t("event.edit.quickadd.saveDirectly"))
+                            }
+                        }
+                    }
                 }
 
                 OutlinedTextField(
@@ -407,7 +451,7 @@ fun EventEditDialog(
                 CalendarPicker(
                     calendars = calendars,
                     selectedId = form.calendarId,
-                    onSelect = { form = form.copy(calendarId = it) },
+                    onSelect = { form = form.withCalendarSelection(it, calendars) },
                 )
 
                 CategoryPicker(
@@ -455,10 +499,62 @@ fun EventEditDialog(
                     onChange = { newEnd, selected -> form = form.withEnd(newEnd, selected) },
                 )
 
+                // 时长快捷片：点一下把结束设成开始 + 片上时长，省得在结束
+                // 时间里手算。全天事件没有「时长」概念，不显示。
                 if (!form.allDay) {
-                    Text(t("event.detail.displayTimezone") + ": " + form.displayZone.id,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            t("event.edit.duration"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        listOf(30L to "event.edit.duration30m", 60L to "event.edit.duration1h", 120L to "event.edit.duration2h")
+                            .forEach { (minutes, labelKey) ->
+                                OutlinedButton(onClick = {
+                                    val startInstant = draftInstant(form.start, form.displayZone, form.originalStart)
+                                    val newEnd = startInstant.plus(java.time.Duration.ofMinutes(minutes))
+                                        .atZone(form.displayZone).toLocalDateTime()
+                                    form = form.withEnd(newEnd)
+                                }) { Text(t(labelKey)) }
+                            }
+                    }
+                }
+
+                // 日程时区行（仅定时事件）：表单墙上时钟永远按设备时区
+                // 显示，这里选的是事件的锚定时区——服务端按它展开重复、
+                // 导出。与设备时区不同时把设备时区写在下面，免得把上面
+                // 的时间误读成日程时区的时间。口径与 Android 的
+                // TimezoneRow 一致；此前桌面端完全没有这个入口，事件的
+                // 时区只能原样保留、永远改不了。
+                if (!form.allDay) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                t("event.detail.sourceTimezone"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                form.eventZone.id,
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            )
+                            if (form.eventZone != form.displayZone) {
+                                Text(
+                                    t("event.detail.displayTimezone") + ": " + form.displayZone.id,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        TextButton(onClick = { showTzPicker = true }) {
+                            Text(t("event.edit.timezoneChange"))
+                        }
+                    }
                 }
 
                 ReminderPicker(
@@ -509,6 +605,17 @@ fun EventEditDialog(
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                // 复制带重复规则的事件时把话说在前面：桌面端的复制按
+                // 设计不带重复规则（避免误开一条平行系列），但以前是
+                // 静默丢掉，用户存完才发现新事件只出现一次。
+                if (mode is EventEditMode.Duplicate && !mode.source.rrule.isNullOrBlank()) {
+                    Text(
+                        t("event.edit.duplicateRruleDropped"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
                 RruleEditor(state = form.rrule, onChange = { form = form.copy(rrule = it) })
 
@@ -577,6 +684,18 @@ fun EventEditDialog(
             TextButton(onClick = { requestClose() }, enabled = !saving) { Text(t("event.edit.cancel")) }
         },
     )
+
+    if (showTzPicker) {
+        TimezonePickerDialog(
+            current = form.eventZone,
+            deviceZone = form.displayZone,
+            onPick = { zone ->
+                form = form.withZoneSelection(zone)
+                showTzPicker = false
+            },
+            onDismiss = { showTzPicker = false },
+        )
+    }
 
     if (showDiscardConfirm) {
         AlertDialog(
@@ -984,8 +1103,19 @@ internal fun formatExdate(iso: String, allDay: Boolean, zone: ZoneId): String {
     }
 }
 
-internal fun FormState.withCalendars(calendars: List<CalendarMeta>): FormState =
-    if (calendarId.isBlank() && calendars.isNotEmpty()) copy(calendarId = calendars.first().id) else this
+internal fun FormState.withCalendars(calendars: List<CalendarMeta>): FormState {
+    val filled = if (calendarId.isBlank() && calendars.isNotEmpty()) {
+        copy(calendarId = calendars.first().id)
+    } else {
+        this
+    }
+    // 日历列表是后到的（对话框打开时可能还没加载完）：时区没被定死时，
+    // 按填好的日历重新解析一次，不然新建事件会一直用设备时区，
+    // 错过它所在日历的时区。
+    if (filled.zoneTouched || calendars.isEmpty()) return filled
+    val calTz = calendars.firstOrNull { it.id == filled.calendarId }?.timezone
+    return filled.copy(eventZone = resolveEventZoneId(null, calTz, filled.displayZone))
+}
 
 internal fun initialState(
     mode: EventEditMode,
@@ -1003,13 +1133,16 @@ internal fun initialState(
         is EventEditMode.Create -> {
             val first = initialInstant(mode.seedStart ?: nextHalfHour(displayZone, now))
             val last = first.plusSeconds(3600)
+            val initialCalendar = calendars.firstOrNull { it.id == lastCalendarId }
+                ?: calendars.firstOrNull()
             FormState(
                 isEdit = false,
                 sourceId = null,
                 sourceRrule = null,
                 sourceStartsAt = null,
-                calendarId = calendars.firstOrNull { it.id == lastCalendarId }?.id
-                    ?: calendars.firstOrNull()?.id.orEmpty(),
+                calendarId = initialCalendar?.id.orEmpty(),
+                // 新事件的时区：初始日历的时区，没有就设备时区。
+                eventZone = resolveEventZoneId(null, initialCalendar?.timezone, displayZone),
                 summary = "",
                 location = "",
                 description = "",
@@ -1035,6 +1168,16 @@ internal fun initialState(
                 sourceRrule = s.rrule,
                 sourceStartsAt = s.startsAt,
                 calendarId = s.calendarId,
+                // 事件自带时区优先，其次日历、最后设备；事件自带时视为
+                // 已定死（zoneTouched），切换日历不许把它冲掉。
+                eventZone = resolveEventZoneId(
+                    s.extra?.timezone,
+                    calendars.firstOrNull { it.id == s.calendarId }?.timezone,
+                    displayZone,
+                ),
+                zoneTouched = s.extra?.timezone?.let {
+                    runCatching { ZoneId.of(it) }.isSuccess
+                } ?: false,
                 summary = s.summary,
                 location = s.location.orEmpty(),
                 description = s.description.orEmpty(),
@@ -1070,6 +1213,16 @@ internal fun initialState(
                 sourceRrule = null,                   // duplicate dropped recurrence
                 sourceStartsAt = null,
                 calendarId = s.calendarId,
+                // 复制带上原事件的时区口径（解析顺序同编辑）：复制的是
+                // 同一件事的新副本，换时区才是意外。
+                eventZone = resolveEventZoneId(
+                    s.extra?.timezone,
+                    calendars.firstOrNull { it.id == s.calendarId }?.timezone,
+                    displayZone,
+                ),
+                zoneTouched = s.extra?.timezone?.let {
+                    runCatching { ZoneId.of(it) }.isSuccess
+                } ?: false,
                 summary = s.summary,
                 location = s.location.orEmpty(),
                 description = s.description.orEmpty(),
@@ -1129,9 +1282,19 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
     }
     val extra = run {
         val merged = EventExtra(
-            // Timed events: keep the event's own zone; fall back to the
-            // desktop zone only when the event never had one (create).
-            timezone = src?.timezone ?: if (!form.isEdit && !form.allDay) form.creationZone.id else null,
+            // 事件时区（extra.timezone）：表单解析出的 eventZone，口径与
+            // Android / iOS 一致（event → calendar → device）。两个例外：
+            //  · 全天事件保持旧口径：事件自己的时区原样保留、新建不写
+            //    （全天按日历日走，锚定时区在全天语义里不参与展开）；
+            //  · 编辑一个 extra 没加载进来的事件（如搜索提升桩）且用户
+            //    没亲手改过时区时，一个字都不发——解析出的时区只是
+            //    猜测，发出去会覆盖事件真正存着的时区，和 alarms 的
+            //    未加载保护同一条规矩。
+            timezone = when {
+                form.allDay -> src?.timezone
+                form.isEdit && src == null && !form.zoneTouched -> null
+                else -> form.eventZone.id
+            },
             attendees = attendees,
             category = eventStringField(form.category, clearWhenEmpty = form.isEdit && src != null),
             url = eventStringField(urlTrim, clearWhenEmpty = form.isEdit && src != null),
@@ -1176,6 +1339,95 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
             extra = extra,
         ) to null
     }
+}
+
+/** 可搜索的 IANA 全表时区选择器，与 Android 的 TimezonePickerDialog
+ *  同一形状：搜索按 id 子串匹配（下划线也当空格），每行带当前 UTC
+ *  偏移，设备时区额外标注，当前时区打勾。只提交真实存在的 ZoneId —
+ *  野值会被服务端静默回落，绝不能让用户「选」出一个野值来。 */
+@Composable
+private fun TimezonePickerDialog(
+    current: ZoneId,
+    deviceZone: ZoneId,
+    onPick: (ZoneId) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    var query by remember { mutableStateOf("") }
+    val allZones = remember { ZoneId.getAvailableZoneIds().sorted() }
+    val filtered = remember(query, allZones) {
+        val q = query.trim().lowercase()
+        if (q.isEmpty()) {
+            allZones
+        } else {
+            allZones.filter { it.lowercase().contains(q) || it.lowercase().replace('_', ' ').contains(q) }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("event.detail.sourceTimezone")) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text(t("event.edit.timezoneSearch")) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
+                    items(filtered, key = { it }) { id ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    runCatching { ZoneId.of(id) }.getOrNull()?.let(onPick)
+                                }
+                                .padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(id, style = MaterialTheme.typography.bodyLarge)
+                                val offset = zoneOffsetLabel(id)
+                                val caption = when {
+                                    id == deviceZone.id && offset.isNotEmpty() ->
+                                        offset + " · " + t("event.detail.displayTimezone")
+                                    else -> offset
+                                }
+                                if (caption.isNotEmpty()) {
+                                    Text(
+                                        caption,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (id == current.id) {
+                                Text("✓", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(t("common.cancel")) }
+        },
+    )
+}
+
+/** "UTC+10:00" 形式的当前偏移标注（与 Android zoneOffsetLabel 同口径）。 */
+private fun zoneOffsetLabel(id: String): String {
+    val offset = runCatching { ZoneId.of(id).rules.getOffset(Instant.now()) }.getOrNull() ?: return ""
+    val total = offset.totalSeconds
+    val sign = if (total < 0) "-" else "+"
+    val absTotal = kotlin.math.abs(total)
+    val hh = (absTotal / 3600).toString().padStart(2, '0')
+    val mm = ((absTotal % 3600) / 60).toString().padStart(2, '0')
+    return "UTC$sign$hh:$mm"
 }
 
 /** Round current time up to the next :00 or :30. Sane default for

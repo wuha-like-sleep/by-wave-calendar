@@ -1517,14 +1517,20 @@ private fun CalendarEditDialog(
                         val desc = description.trim().ifBlank { null }
                         runCatching {
                             if (isEdit) {
-                                // PATCH: only send what could have changed.
+                                // PATCH 口径与 Android / 服务端对齐：只发与原值
+                                // 不同的字段。description 尤其不能走 desc——
+                                // 清空时 desc 是 null，而本端 JSON 配置
+                                // explicitNulls=false 会把 null 字段整个省掉，
+                                // 服务端收到「没这个字段」= 不改，旧描述永远
+                                // 清不掉。改后：清空时照发空串，服务端存为空。
                                 api.updateCalendar(
                                     id = existing!!.id,
                                     body = CalendarUpdateInput(
-                                        name = name.trim(),
-                                        description = desc,
-                                        color = color,
-                                        timezone = tz,
+                                        name = name.trim().takeIf { it != existing.name },
+                                        description = description.takeIf { it != existing.description.orEmpty() },
+                                        color = color.takeIf { it != existing.color },
+                                        // 时区没有「清空」的概念：空值仍旧不发。
+                                        timezone = tz?.takeIf { it != existing.timezone },
                                     ),
                                 )
                             } else {
@@ -1711,6 +1717,9 @@ private fun BookingSection(
     // The id the user just copied — drives a transient "已复制" hint.
     var copied by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }            // create dialog open
+    // 刚创建好的那条 — 列表上方渲染一条带「复制链接」的横幅，直到
+    // 用户关掉或又建了新的一条。
+    var justCreated by remember { mutableStateOf<BookingLink?>(null) }
     var editing by remember { mutableStateOf<BookingLink?>(null) }  // edit dialog target
     var deleting by remember { mutableStateOf<BookingLink?>(null) } // delete confirm target
     // Bump to force a reload after create / toggle / delete.
@@ -1743,6 +1752,47 @@ private fun BookingSection(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 12.dp),
     )
+
+    // 创建成功的第一时间把链接摆出来给复制动作，不让用户回列表里找那一行。
+    justCreated?.let { created ->
+        val url = created.publicUrl ?: created.slug
+        var bannerCopied by remember(created.id) { mutableStateOf(false) }
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        t("booking.createdBanner", mapOf("name" to created.title)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = {
+                    copyToClipboard(url)
+                    bannerCopied = true
+                }) {
+                    Text(if (bannerCopied) t("booking.copied") else t("booking.copyLink"))
+                }
+                TextButton(onClick = { justCreated = null }) {
+                    Text(t("common.close"))
+                }
+            }
+        }
+    }
 
     SectionCard {
         when {
@@ -1897,8 +1947,9 @@ private fun BookingSection(
             profile = profile,
             calendars = calendars,
             onDismiss = { creating = false },
-            onCreated = {
+            onCreated = { created ->
                 creating = false
+                justCreated = created
                 reloadKey++
             },
         )
@@ -1943,7 +1994,9 @@ private fun BookingCreateDialog(
     calendars: List<CalendarMeta>,
     existing: BookingLink? = null,
     onDismiss: () -> Unit,
-    onCreated: () -> Unit,
+    /** 创建成功时带回新建的那条（父区据此渲染带「复制链接」的横幅）；
+     *  编辑成功时传 null。 */
+    onCreated: (created: BookingLink?) -> Unit,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -2145,7 +2198,11 @@ private fun BookingCreateDialog(
                                     BookingLinkUpdateInput(
                                         slug = slug.trim(),
                                         title = title.trim(),
-                                        description = description.trim().ifBlank { null },
+                                        // 与原值不同才发：清空时照发空串。
+                                        // 以前 ifBlank{null} + explicitNulls=false
+                                        // 会把清空吞掉，旧描述清不掉（与日历
+                                        // 描述同一个坑）；服务端 PATCH 收 ""。
+                                        description = description.trim().takeIf { it != (existing.description ?: "") },
                                         calendarId = calendarId,
                                         durationMinutes = durationInt!!,
                                         minNoticeHours = minNoticeInt!!,
@@ -2171,10 +2228,12 @@ private fun BookingCreateDialog(
                                     ),
                                 )
                             }
-                        }.onSuccess {
+                        }.onSuccess { saved ->
                             api.close()
                             saving = false
-                            onCreated()
+                            // runCatching 的值就是 API 返回的那条：新建时
+                            // 带回去给父区弹复制横幅，编辑时传 null。
+                            onCreated(if (existing == null) saved else null)
                         }.onFailure {
                             api.close()
                             saving = false

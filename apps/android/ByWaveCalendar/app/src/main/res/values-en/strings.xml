@@ -63,6 +63,10 @@ to match the development locale.
     <string name="event_allday">All day</string>
     <string name="event_start">Starts</string>
     <string name="event_end">Ends</string>
+    <string name="eventedit_duration">Duration</string>
+    <string name="eventedit_duration_30m">30 min</string>
+    <string name="eventedit_duration_1h">1 hour</string>
+    <string name="eventedit_duration_2h">2 hours</string>
     <string name="event_location">Location</string>
     <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
     <string name="event_link">Link</string>
@@ -225,8 +229,11 @@ to match the development locale.
     <string name="quickadd_recurrence_label">Recurrence</string>
     <string name="quickadd_recurrence_remove">Remove</string>
     <string name="quickadd_cd">Parse</string>
+    <string name="quickadd_save_directly">Save directly</string>
+    <string name="eventedit_duplicate_rrule_copied">The recurrence rule was copied too — edit or remove it in the recurrence section below</string>
     <string name="action_undo">Undo</string>
     <string name="event_deleted">Deleted</string>
+    <string name="event_created_notice">Created: %1$s</string>
     <string name="booking_schedule_timezone">Scheduling zone: %1$s. Booked times use your device timezone.</string>
     <string name="event_detail_display_timezone">Display timezone</string>
     <string name="event_detail_source_timezone">Event timezone</string>

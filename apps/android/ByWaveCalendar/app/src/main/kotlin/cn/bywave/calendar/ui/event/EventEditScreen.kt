@@ -56,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -100,6 +101,9 @@ fun EventEditScreen(
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
+    /** 一句话「直接保存」成功时改走这里（带回建好的事件），由调用方
+     *  弹「已创建 · 撤销」反馈。null = 当普通保存处理。 */
+    onQuickSaved: ((cn.bywave.calendar.data.model.EventDTO) -> Unit)? = null,
     /** 日历列表没拿到时，给用户一条能自己重试的路。null = 不显示重试。 */
     onRetryCalendars: (() -> Unit)? = null,
     vm: EventEditViewModel = viewModel(),
@@ -119,7 +123,15 @@ fun EventEditScreen(
     // 填了一半的内容会被冲掉）。所以日历后到这件事单独接一下：只补列表和
     // 还没选中时的默认日历。
     LaunchedEffect(calendars) { vm.onCalendarsChanged(calendars) }
-    LaunchedEffect(state.finished) { if (state.finished) onSaved() }
+    LaunchedEffect(state.finished) {
+        if (!state.finished) return@LaunchedEffect
+        val created = state.savedEvent
+        if (state.savedViaQuick && created != null && onQuickSaved != null) {
+            onQuickSaved(created)
+        } else {
+            onSaved()
+        }
+    }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     // 「填了一半按返回」原来是直接丢弃，一点提示都没有。用户分不清是
@@ -240,6 +252,19 @@ fun EventEditScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { vm.quickParse(quickText) }),
                 )
+                // 直接保存：解析完整（标题/时间都解析出来、关键字段没再
+                // 被手改）时出现，不必再点一次普通保存。和普通保存走
+                // 同一条路（冲突检查在内），成功后由调用方弹「已创建」。
+                if (state.quickParsed && state.canSubmit) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { vm.saveDirectly() }) {
+                            Text(stringResource(R.string.quickadd_save_directly))
+                        }
+                    }
+                }
             }
 
             // Title
@@ -291,6 +316,37 @@ fun EventEditScreen(
                 onChange = { date, time -> vm.onEnd(date, time) },
             )
 
+            // 时长快捷片：点一下把结束设成开始 + 片上时长。全天事件
+            // 没有「时长」概念，不显示（与时区行同一显隐口径）。
+            if (!state.allDay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.eventedit_duration),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(30) },
+                        label = { Text(stringResource(R.string.eventedit_duration_30m)) },
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(60) },
+                        label = { Text(stringResource(R.string.eventedit_duration_1h)) },
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(120) },
+                        label = { Text(stringResource(R.string.eventedit_duration_2h)) },
+                    )
+                }
+            }
+
             // Timezone (timed events only, same as iOS — for all-day
             // events the field would be misleading). The wall clock
             // above stays in the device zone; this is the event's
@@ -314,6 +370,20 @@ fun EventEditScreen(
                 selected = state.reminder,
                 onSelected = vm::onReminder,
             )
+
+            // 复制事件时把重复规则的去向说在前面：Android 的复制是连
+            // 重复一起复制的（修「复制丢重复」的老 bug 时定的），规则
+            // 虽然就在下面编辑器里摆着，还是明说一句，免得用户以为
+            // 复制出来的只是单次。
+            if (initialMode is EventEditMode.Duplicate &&
+                !initialMode.source.rrule.isNullOrBlank()
+            ) {
+                Text(
+                    stringResource(R.string.eventedit_duplicate_rrule_copied),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             // Recurrence — RRULE editor (freq / interval / end / BYDAY).
             // A quick-add parse lands here too (the ViewModel seeds

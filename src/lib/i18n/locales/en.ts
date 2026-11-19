@@ -565,6 +565,8 @@ export const en = {
   // booking.public
   "booking.public.withHost": "With <strong>{host}</strong> · {minutes} min",
   "booking.public.duration": "{minutes} minutes",
+  "bookingLinks.createdBanner": "Link created — copy it and share:",
+  "bookingLinks.copyLink": "Copy link",
   "booking.public.noSlots": "No bookable slots right now. Ask the host to open more time, or try again later.",
   "booking.public.pickTime": "Pick a time",
   "booking.public.slotCount": "{count} slots",
@@ -1077,6 +1079,10 @@ export const en = {
   "app.event.reminderMinutes": "{n} minutes before",
   "app.event.reminder1Hour": "1 hour before",
   "app.event.reminder2Hours": "2 hours before",
+  "app.event.duration30m": "30 min",
+  "app.event.duration1h": "1 hour",
+  "app.event.duration2h": "2 hours",
+  "app.event.duration": "Duration",
   "app.event.reminder1Day": "1 day before",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1190,6 +1196,11 @@ export const en = {
   "app.js.attendees.none": "No one invited yet",
   "app.js.nl.noTime": "Couldn't find a time — try \"15:30 team meeting\"",
   "app.js.nl.untitled": "Untitled",
+  "app.js.quickadd.saveDirectly": "Save directly",
+  "app.js.quickadd.openForm": "Review in form",
+  "app.js.quickadd.added": "Added: {title}",
+  "app.js.quickadd.open": "Open",
+  "app.js.quickadd.undone": "Add undone",
   "app.js.saving": "Saving…",
   "app.js.conflict.title": "Time conflict",
   "app.js.conflict.message": "This overlaps with existing events:",

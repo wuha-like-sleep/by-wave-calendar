@@ -65,6 +65,10 @@
     <string name="event_allday">全天</string>
     <string name="event_start">開始</string>
     <string name="event_end">結束</string>
+    <string name="eventedit_duration">時長</string>
+    <string name="eventedit_duration_30m">30 分鐘</string>
+    <string name="eventedit_duration_1h">1 小時</string>
+    <string name="eventedit_duration_2h">2 小時</string>
     <string name="event_location">地點</string>
     <string name="event_location_hint">選填 — 例如 上海 / Zoom 會議室</string>
     <string name="event_link">連結</string>
@@ -230,8 +234,11 @@
     <string name="quickadd_recurrence_label">重複規則</string>
     <string name="quickadd_recurrence_remove">移除重複</string>
     <string name="quickadd_cd">智慧識別</string>
+    <string name="quickadd_save_directly">直接儲存</string>
+    <string name="eventedit_duplicate_rrule_copied">重複規則已一併複製，可在下方重複區修改或移除</string>
     <string name="action_undo">撤銷</string>
     <string name="event_deleted">已刪除</string>
+    <string name="event_created_notice">已建立：%1$s</string>
     <string name="booking_schedule_timezone">排期時區：%1$s；預約時間依裝置時區顯示。</string>
     <string name="event_detail_display_timezone">顯示時區</string>
     <string name="event_detail_source_timezone">行程時區</string>

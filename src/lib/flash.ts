@@ -12,6 +12,9 @@ const flashSchema = z.object({
   error: z.string().optional(), success: z.string().optional(),
   newAppPassword: z.string().max(256).optional(), newAppLabel: z.string().max(60).optional(),
   issuedToken: z.string().max(256).optional(), issuedLabel: z.string().max(200).optional(),
+  // 刚创建好的预约链接的公开 URL：创建成功跳回列表页时带上它，
+  // 页面据此渲染一条带「复制链接」的高亮横幅（一次性的，读完即弃）。
+  createdBookingUrl: z.string().max(512).optional(),
 });
 export type Flash = z.infer<typeof flashSchema>;
 const envelopeSchema = z.object({

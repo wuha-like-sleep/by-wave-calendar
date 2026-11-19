@@ -558,6 +558,8 @@ export const es: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "Con <strong>{host}</strong> · {minutes} min",
   "booking.public.duration": "{minutes} minutos",
+  "bookingLinks.createdBanner": "Enlace creado: cópialo y compártelo:",
+  "bookingLinks.copyLink": "Copiar enlace",
   "booking.public.noSlots": "No hay horarios disponibles ahora mismo. Pida al anfitrión que abra más tiempo, o inténtelo más tarde.",
   "booking.public.pickTime": "Elija una hora",
   "booking.public.slotCount": "{count} horarios",
@@ -1070,6 +1072,10 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "{n} minutos antes",
   "app.event.reminder1Hour": "1 hora antes",
   "app.event.reminder2Hours": "2 horas antes",
+  "app.event.duration30m": "30 min",
+  "app.event.duration1h": "1 hora",
+  "app.event.duration2h": "2 horas",
+  "app.event.duration": "Duración",
   "app.event.reminder1Day": "1 día antes",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1183,6 +1189,11 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "Aún no hay invitados",
   "app.js.nl.noTime": "No se entendió la hora; prueba \"15:30 reunión\"",
   "app.js.nl.untitled": "Sin título",
+  "app.js.quickadd.saveDirectly": "Guardar directamente",
+  "app.js.quickadd.openForm": "Revisar en el formulario",
+  "app.js.quickadd.added": "Añadido: {title}",
+  "app.js.quickadd.open": "Abrir",
+  "app.js.quickadd.undone": "Adición deshecha",
   "app.js.saving": "Guardando…",
   "app.js.conflict.title": "Conflicto de horario",
   "app.js.conflict.message": "Se solapa con eventos existentes:",

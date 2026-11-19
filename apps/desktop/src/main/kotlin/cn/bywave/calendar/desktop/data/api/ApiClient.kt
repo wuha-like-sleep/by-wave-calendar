@@ -299,6 +299,17 @@ class ApiClient(
         }
     }
 
+    /** GET /api/v1/events/{id} — the full master row for one event, in
+     *  the same shape the /events list returns. Search results are
+     *  deliberately partial (no description / extra), so opening one
+     *  hydrates through here before the stub can be edited; the route
+     *  404s (never 403) for events outside the caller's owned + shared
+     *  calendars. Recurring ids return the series master — occurrence
+     *  re-anchoring is the caller's job (see CalendarState). */
+    suspend fun getEvent(id: String): EventDTO {
+        return getAuthed("/api/v1/events/$id", EventDTO.serializer())
+    }
+
     /** POST /api/v1/calendars/{id}/import/preview — counts only, the
      *  server writes nothing. Same judgement (and sourceTag) as the
      *  real import, mirroring the web import dialog's first step. */

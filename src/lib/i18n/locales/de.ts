@@ -558,6 +558,8 @@ export const de: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "Mit <strong>{host}</strong> · {minutes} Min.",
   "booking.public.duration": "{minutes} Minuten",
+  "bookingLinks.createdBanner": "Link erstellt – kopieren und teilen:",
+  "bookingLinks.copyLink": "Link kopieren",
   "booking.public.noSlots": "Derzeit keine buchbaren Zeitfenster. Bitten Sie den Gastgeber, mehr Zeit freizugeben, oder versuchen Sie es später erneut.",
   "booking.public.pickTime": "Eine Zeit wählen",
   "booking.public.slotCount": "{count} Zeitfenster",
@@ -1070,6 +1072,10 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "{n} Minuten vorher",
   "app.event.reminder1Hour": "1 Stunde vorher",
   "app.event.reminder2Hours": "2 Stunden vorher",
+  "app.event.duration30m": "30 Min.",
+  "app.event.duration1h": "1 Std.",
+  "app.event.duration2h": "2 Std.",
+  "app.event.duration": "Dauer",
   "app.event.reminder1Day": "1 Tag vorher",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；
@@ -1183,6 +1189,11 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "app.js.attendees.none": "Noch niemand eingeladen",
   "app.js.nl.noTime": "Zeit nicht erkannt — versuche „15:30 Besprechung“",
   "app.js.nl.untitled": "Ohne Titel",
+  "app.js.quickadd.saveDirectly": "Direkt speichern",
+  "app.js.quickadd.openForm": "Im Formular prüfen",
+  "app.js.quickadd.added": "Hinzugefügt: {title}",
+  "app.js.quickadd.open": "Öffnen",
+  "app.js.quickadd.undone": "Hinzufügen rückgängig gemacht",
   "app.js.saving": "Wird gespeichert…",
   "app.js.conflict.title": "Terminüberschneidung",
   "app.js.conflict.message": "Überschneidet sich mit bestehenden Terminen:",
