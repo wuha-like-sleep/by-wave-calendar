@@ -272,9 +272,9 @@ fun main() {
                     ))
                 }
             }
-            // 外观由用户在「设置 → 外观」选:浅色(默认)/ 深色 / 跟随系统。
-            // 1.0.15 曾直接跟随系统,把深色用户丢进未经验证的暗色配色里,
-            // 1.0.17 改回默认浅色 + 显式开关(见 AppearancePrefs 的注释)。
+            // 外观由用户在「设置 → 外观」选:跟随系统(默认)/ 浅色 / 深色。
+            // 默认值的来历见 AppearancePrefs 的注释;在设置里选过的人以
+            // 保存下来的选择为准,不受默认影响。
             val appearance by cn.bywave.calendar.desktop.data.AppearancePrefs.mode.collectAsState()
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val dark = when (appearance) {
