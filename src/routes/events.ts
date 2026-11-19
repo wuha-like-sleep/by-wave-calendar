@@ -10,6 +10,7 @@ import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { cancelEvent, markEventBookingsCancelled, notifyEventCancellation } from "../lib/event_cancel.js";
+import { notifyEventUpdated } from "../lib/event_change_notify.js";
 import { expandEvent, seriesStartsBetween } from "../lib/rrule_expand.js";
 import { planSeriesEdit, type SeriesEditPlan } from "../lib/series_edit.js";
 import { activeSeriesOccurrence, planFutureSeries, truncateSeriesBefore, unchangedEventForWrite } from "../lib/scoped_series_edit.js";
@@ -905,6 +906,10 @@ export async function eventRoutes(app: FastifyInstance) {
         await requestCalendarSync(calendarId).catch(() => undefined);
       }
       void pushEventChanged(user.id, row.id, "event.updated").catch(() => undefined);
+      // 站内通知：共享成员与已注册参与者要知道这条日程变了（仅有意义的
+      // 变更、30 分钟内合并，判据与节流都在 event_change_notify 里）。
+      // target 是改前快照、row 是改后行，正好一对。旁路，失败不影响响应。
+      void notifyEventUpdated(target, row, user).catch(() => undefined);
     }
     return reply.send(row ? forClient(row) : row);
   });

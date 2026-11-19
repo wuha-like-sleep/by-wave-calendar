@@ -345,6 +345,8 @@ async function notifyBookingCreated(
     }),
     // 深链接直达这条预约生成的事件（日历应用会按参数打开它）。
     url: `/app?event=${created.event.id}&cal=${input.link.calendarId}`,
+    // 有人约了你的时间 —— 值得推（收件人可在设置里关 notify_inbox_push）。
+    push: { actionLabel: translate(locale, "notif.push.view") },
   });
 }
 
@@ -368,6 +370,7 @@ async function notifyBookingCancelled(ownerId: string, linkTitle: string, guestN
     }),
     // 事件已经删了，深链接指过去只会扑空；落到预约管理页。
     url: "/app/booking-links",
+    push: { actionLabel: translate(locale, "notif.push.view") },
   });
 }
 

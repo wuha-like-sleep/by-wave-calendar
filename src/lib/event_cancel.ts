@@ -6,6 +6,7 @@ import { eventCancelMail } from "./email_templates.js";
 import { requestCalendarSync } from "./calendar_sync/queue.js";
 import { pushEventChanged } from "./apns.js";
 import { canonicalTimeZone } from "./zoned_time.js";
+import { notifyEventCancelled } from "./event_change_notify.js";
 
 /** Use within the event-deletion transaction, after locking the event row. */
 export async function markEventBookingsCancelled(tx: Pick<DB, "update">, eventId: string, cancelledAt: Date): Promise<void> {
@@ -36,6 +37,10 @@ export async function cancelEvent(eventId: string, deletedBy: { id: string; emai
 export async function notifyEventCancellation(event: schema.Event, deletedBy: { id: string; email: string; displayName: string | null }): Promise<{ ok: boolean; cancelledNotices: number }> {
   const eventId = event.id;
   void pushEventChanged(deletedBy.id, eventId, "event.deleted").catch(() => undefined);
+  // 站内通知：共享成员与已注册参与者在收件箱里也要看到这次取消（外部
+  // 访客只有下面的邮件一条路）。所有删除入口（API/网页/CalDAV/预约取消）
+  // 都汇到这里，一处挂钩全覆盖。旁路，失败不影响取消本身。
+  await notifyEventCancelled(event, deletedBy).catch(() => undefined);
   // Public bookings send confirmation directly and have no invite-token row.
   // Include their guests so deleting the event actually notifies them too.
   const [tokens, bookings] = await Promise.all([

@@ -25,6 +25,7 @@ import {
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
+import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { setModeCookie, setThemeCookies } from "../lib/user_theme.js";
@@ -173,6 +174,7 @@ export async function mfaRoutes(app: FastifyInstance) {
 
     void sendMail(securityChangeMail(s.user.email, { kind: "mfa_enabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_enable_mail_failed"));
+    void notifySecurityEvent(s.user.id, "mfa_enabled").catch(() => undefined);
 
     return reply.view("app/mfa-enabled", {
       title: tr(req, "page.mfaEnabled"),
@@ -203,6 +205,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, s.user.id));
     void sendMail(securityChangeMail(s.user.email, { kind: "mfa_disabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
+    void notifySecurityEvent(s.user.id, "mfa_disabled").catch(() => undefined);
     return redirectWithFlash(reply, "/app/settings?success=" + encodeURIComponent(tr(req, "flash.mfa.disabled")));
   });
 
