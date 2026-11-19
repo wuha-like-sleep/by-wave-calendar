@@ -65,7 +65,7 @@ fun UpdateAvailableSheet(
     mandatory: Boolean,
     onDismiss: () -> Unit,
 ) {
-    key(release.versionCode, release.sha256, release.url) {
+    key(release.versionCode, release.sha256, release.url, release.fallbackUrl) {
         ReleaseSheetContent(release, mandatory, onDismiss)
     }
 }
