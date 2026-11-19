@@ -702,6 +702,27 @@ export const eventInviteTokens = pgTable("event_invite_tokens", {
   emailIdx: index("event_invite_tokens_email_idx").on(t.recipientEmail),
 }));
 
+// 受邀者「提议新时间」的台账：一行 = 一次提议。提议人凭 invite_token 定位
+// （外部邮箱与站内账号同一条路），proposerEmail 是跨身份的稳定键，
+// proposerUserId 只在提议人当时处于登录状态时回填。
+// status: pending / accepted / declined / superseded。
+export const eventTimeProposals = pgTable("event_time_proposals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceEventId: uuid("source_event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  inviteToken: text("invite_token").notNull(),
+  proposerEmail: text("proposer_email").notNull(),
+  proposerUserId: uuid("proposer_user_id").references(() => users.id, { onDelete: "set null" }),
+  proposedStartsAt: timestamp("proposed_starts_at", { withTimezone: true }).notNull(),
+  proposedEndsAt: timestamp("proposed_ends_at", { withTimezone: true }).notNull(),
+  note: text("note"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+}, (t) => ({
+  evIdx: index("event_time_proposals_event_idx").on(t.sourceEventId, t.status),
+  emailIdx: index("event_time_proposals_email_idx").on(t.proposerEmail),
+}));
+
 // User-registration invites — used when site_settings.registration_mode =
 // "invite". An admin generates a token; the invitee registers via
 // /register?invite=<token>. Single-use by default (max_uses = 1); `email`
