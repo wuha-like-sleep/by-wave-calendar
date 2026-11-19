@@ -582,19 +582,57 @@ export function calendarInviteMail(
 }
 
 // ---------- Security alert: 2FA / Passkey enabled ----------
-export function securityChangeMail(to: string, ctx: { kind: "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"; deviceName?: string | null }): SendArgs {
+export type SecurityChangeKind =
+  | "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"
+  | "api_token_created" | "api_token_revoked";
+
+/** API Token 变更通知里允许出现的信息：只有 prefix（公开标识，本来就印在
+ *  设置页和后台列表里）、标签、权限和到期。**明文绝不能进邮件** —— 明文
+ *  只在创建那一刻的页面上显示一次，邮件是长期留存物，进了邮件就等于
+ *  把长期凭据写进了邮箱。 */
+export type SecurityTokenInfo = {
+  label: string;
+  prefix: string;
+  scope: "read" | "write";
+  expiresAt: Date | null;
+  via: "self_service" | "admin";
+};
+
+export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; deviceName?: string | null; token?: SecurityTokenInfo }): SendArgs {
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
   const label = ctx.kind === "passkey_added" ? "Passkey 已添加"
               : ctx.kind === "mfa_enabled"   ? "二次验证 (TOTP) 已启用"
               : ctx.kind === "mfa_disabled"  ? "二次验证 (TOTP) 已关闭"
+              : ctx.kind === "api_token_created" ? "API Token 已创建"
+              : ctx.kind === "api_token_revoked" ? "API Token 已撤销"
               :                                "密码已修改";
   const emoji = ctx.kind === "passkey_added" ? "🔐"
               : ctx.kind === "mfa_enabled"   ? "🛡️"
               : ctx.kind === "mfa_disabled"  ? "⚠️"
+              : ctx.kind === "api_token_created" ? "🗝️"
+              : ctx.kind === "api_token_revoked" ? "⚠️"
               :                                "🔑";
+  const tokenDescription = (): string => {
+    if (!ctx.token) return "";
+    const masked = `bwc_${ctx.token.prefix}_…`;
+    const scopeLabel = ctx.token.scope === "read" ? "只读" : "可读写";
+    const expiry = ctx.token.expiresAt
+      ? `到期时间 ${ctx.token.expiresAt.toLocaleString("zh-CN", { hour12: false })}`
+      : "永不过期";
+    const what = `API Token「${ctx.token.label}」（${masked}，权限：${scopeLabel}，${expiry}）`;
+    if (ctx.kind === "api_token_created") {
+      return ctx.token.via === "admin"
+        ? `管理员刚刚为你的账号新建了一个${what}。持有这个 Token 即可绕过登录直接调用你账号的 API。如果这不是你申请的，请立即在设置页撤销它并联系管理员。`
+        : `你刚刚在设置页新建了一个${what}。持有这个 Token 即可绕过登录直接调用你账号的 API。如果不是你本人操作，说明你的登录会话可能已被盗用 —— 请立即撤销这个 Token 并修改密码。`;
+    }
+    return ctx.token.via === "admin"
+      ? `管理员刚刚撤销了你账号的${what}。持有旧 Token 的集成已即刻失效；如果是误撤，重新创建一个即可。`
+      : `你账号的${what}刚刚被撤销，持有旧 Token 的集成已即刻失效。如果不是你本人操作，说明你的登录会话可能已被盗用 —— 请立即修改密码。`;
+  };
   const description = ctx.kind === "passkey_added" ? `你刚刚为账号添加了一把新的 Passkey${ctx.deviceName ? `「${ctx.deviceName}」` : ""}。今后登录时即可用指纹 / Face ID / 设备锁直接通过。`
               : ctx.kind === "mfa_enabled"   ? "你刚刚启用了 TOTP 二次验证。今后登录需要密码 + 认证器 6 位验证码（除非使用 Passkey）。请把备用码妥善保存到密码管理器。"
               : ctx.kind === "mfa_disabled"  ? "你刚刚关闭了 TOTP 二次验证 —— 登录从此只需密码（或 Passkey）。如果不是你本人操作，立即修改密码！"
+              : ctx.kind === "api_token_created" || ctx.kind === "api_token_revoked" ? tokenDescription()
               :                                "你刚刚修改了账号密码 —— 所有已登录设备都已被强制下线，需要使用新密码重新登录。";
   const isWarning = ctx.kind === "mfa_disabled";
   const text = `${label}\n\n${description}\n\n如果不是你本人操作，立即前往 ${baseUrl}/app/settings 检查账号安全。`;
@@ -706,6 +744,13 @@ export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
     }),
   },
   { key: "securityChange", label: "安全变更（启用 MFA）", build: (to) => securityChangeMail(to, { kind: "mfa_enabled" }) },
+  {
+    key: "securityChangeToken", label: "安全变更（API Token 创建）",
+    build: (to) => securityChangeMail(to, {
+      kind: "api_token_created",
+      token: { label: "n8n 同步", prefix: "Ab3dEf7h", scope: "read", expiresAt: null, via: "self_service" },
+    }),
+  },
   {
     key: "calendarInvite", label: "日历协作邀请",
     build: (to) => calendarInviteMail(to, {

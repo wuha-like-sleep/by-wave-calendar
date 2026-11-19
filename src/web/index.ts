@@ -2441,6 +2441,17 @@ export async function webRoutes(app: FastifyInstance) {
       // Prefix only — the audit log must never carry the plain token.
       details: { label: body.data.label, scope: body.data.scope, expiresInDays: body.data.expiresInDays, prefix: issued.prefix, via: "self_service" },
     });
+    // 安全变更通知：新建 Token 必须让账号本人知道 —— 否则会话被借用的人
+    // 偷偷建一个长期 Token，本人永远收不到任何信号。邮件只带 prefix /
+    // 权限 / 到期，**绝不带明文**（明文只在下面这次页面响应里出现一次）。
+    void sendMail(securityChangeMail(user.email, {
+      kind: "api_token_created",
+      token: {
+        label: body.data.label, prefix: issued.prefix, scope: body.data.scope,
+        expiresAt: body.data.expiresInDays > 0 ? new Date(Date.now() + body.data.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        via: "self_service",
+      },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
     return redirectWith(reply, "/app/settings/devices#api-tokens", {
       success: tr(req, "flash.apiToken.created"),
       issuedToken: issued.plain,
@@ -2463,6 +2474,12 @@ export async function webRoutes(app: FastifyInstance) {
         targetType: "api_token", targetId: id.data,
         details: { prefix: own?.prefix ?? null, via: "self_service" },
       });
+      if (own) {
+        void sendMail(securityChangeMail(user.email, {
+          kind: "api_token_revoked",
+          token: { label: own.label, prefix: own.prefix, scope: own.scope === "read" ? "read" : "write", expiresAt: own.expiresAt, via: "self_service" },
+        })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+      }
     }
     return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
   });
