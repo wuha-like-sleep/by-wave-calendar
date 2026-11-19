@@ -58,9 +58,13 @@ struct EventDetailView: View {
                         .frame(width: 12, height: 12)
                         .padding(.top, 5)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(current.summary).font(.title3.weight(.semibold))
+                        // Generous caps, not tight ones: the detail list
+                        // scrolls, but an unbounded pasted title/location
+                        // could push the time section screens away. The
+                        // full text stays one tap away in the editor.
+                        Text(current.summary).font(.title3.weight(.semibold)).lineLimit(4)
                         if let cal = calendar {
-                            Text(cal.name).font(.caption).foregroundStyle(.secondary)
+                            Text(cal.name).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
                     Spacer()
@@ -101,6 +105,7 @@ struct EventDetailView: View {
             if let location = current.location, !location.isEmpty {
                 Section("地点") {
                     Text(location)
+                        .lineLimit(3)
                         .textSelection(.enabled)
                 }
             }

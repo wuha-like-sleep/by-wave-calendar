@@ -105,6 +105,8 @@ struct EditCalendarView: View {
     @State private var description: String = ""
     @State private var saving = false
     @State private var errorMessage: String?
+    @State private var showDeleteConfirm = false
+    @State private var deleting = false
 
     // Curated palette — same hex values as CalendarCreateView so the
     // two flows share a color vocabulary.
@@ -160,6 +162,32 @@ struct EditCalendarView: View {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
                 }
             }
+            // Calendar deletion existed on the web and the other clients
+            // but was missing here — the server route was there all
+            // along. Destructive section sits at the bottom, behind a
+            // confirmation dialog, mirroring DeleteAccountPage's stance.
+            Section {
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    HStack {
+                        Text("删除日历")
+                        if deleting {
+                            Spacer()
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(deleting || saving)
+            }
+        }
+        .confirmationDialog("删除日历", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                Task { await deleteCalendar() }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("确定要删除这个日历吗？其中的所有事件将一并删除，此操作无法撤销。")
         }
         .navigationTitle(calendar.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -218,6 +246,22 @@ struct EditCalendarView: View {
             color != calendar.color ||
             timezone != (calendar.timezone ?? TimeZone.current.identifier) ||
             description != (calendar.description ?? "")
+    }
+
+    private func deleteCalendar() async {
+        deleting = true
+        errorMessage = nil
+        defer { deleting = false }
+        do {
+            let client = APIClient(state: state)
+            try await client.delete("/calendars/\(calendar.id)")
+            onSaved()
+            dismiss()
+        } catch let e as APIError {
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func save() async {

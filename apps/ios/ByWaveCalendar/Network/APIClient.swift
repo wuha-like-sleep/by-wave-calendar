@@ -331,10 +331,17 @@ struct EmptyJSONBody: Encodable {}
 /// wall-clock strings ("YYYY-MM-DDTHH:mm:ss") — deliberately not ISO
 /// with offset, so decode them with a local-zone DateFormatter, never
 /// JSONDecoder.iso().
+/// location / rrule / allDay mirror the web parser's optional fields
+/// (src/lib/nl_parse.ts ParsedEvent): the server only sends them when
+/// the phrase carries them, so all three stay optional here. Older
+/// servers omit them entirely, which decodes as nil.
 struct QuickParsedEvent: Decodable {
     let summary: String
     let startsAt: String
     let endsAt: String
+    let location: String?
+    let rrule: String?
+    let allDay: Bool?
 
     /// Map a naive wall-clock string into a Date in the given zone
     /// (defaults to the device zone — same interpretation the web
@@ -345,6 +352,119 @@ struct QuickParsedEvent: Decodable {
         f.timeZone = zone
         f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         return f.date(from: s)
+    }
+
+    /// Strictly validate an RRULE string produced by the on-device
+    /// model before it may reach the create form. Only the subset the
+    /// shared parser itself emits is accepted — FREQ=DAILY/WEEKLY/
+    /// MONTHLY/YEARLY with an optional INTERVAL and an optional BYDAY
+    /// list (ordinal BYDAY like 1MO only for MONTHLY) — normalized to
+    /// the canonical FREQ;INTERVAL;BYDAY order in upper case. Anything
+    /// else (extra keys like COUNT/UNTIL, malformed values) returns
+    /// nil: an unvalidated model guess must never become a stored
+    /// recurrence.
+    static func validatedRrule(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleaned.isEmpty else { return nil }
+        let freqs: Set<String> = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]
+        let dayCodes: Set<String> = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+        // Collect the parts first (rejecting unknown or duplicated
+        // keys) so validation below doesn't depend on part order —
+        // BYDAY may legitimately precede FREQ in the model's output.
+        var parts: [String: String] = [:]
+        for part in cleaned.split(separator: ";") {
+            let kv = part.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2 else { return nil }
+            let key = String(kv[0]), value = String(kv[1])
+            guard key == "FREQ" || key == "INTERVAL" || key == "BYDAY",
+                  parts[key] == nil
+            else { return nil }
+            parts[key] = value
+        }
+        guard let freq = parts["FREQ"], freqs.contains(freq) else { return nil }
+        var interval: String?
+        if let value = parts["INTERVAL"] {
+            guard value.range(of: #"^[1-9][0-9]{0,2}$"#, options: .regularExpression) != nil
+            else { return nil }
+            interval = value
+        }
+        var byday: String?
+        if let value = parts["BYDAY"] {
+            for token in value.split(separator: ",") {
+                let t = String(token)
+                let code = String(t.suffix(2))
+                let ordinal = String(t.dropLast(2))
+                guard dayCodes.contains(code) else { return nil }
+                if !ordinal.isEmpty {
+                    // Ordinal BYDAY (1MO, -1FR) is only meaningful
+                    // — and only accepted — for monthly rules.
+                    guard freq == "MONTHLY",
+                          ordinal.range(of: #"^-?[1-5]$"#, options: .regularExpression) != nil
+                    else { return nil }
+                }
+            }
+            byday = value
+        }
+        var out = "FREQ=\(freq)"
+        if let interval { out += ";INTERVAL=\(interval)" }
+        if let byday { out += ";BYDAY=\(byday)" }
+        return out
+    }
+
+    /// Short human-readable rendering of an RRULE from the shared
+    /// parser's closed subset, for the create form's read-only row.
+    /// Anything outside the subset falls back to the raw string — the
+    /// same thing EventDetailView shows — rather than a wrong paraphrase.
+    static func humanRrule(_ rrule: String) -> String {
+        var freq: String?
+        var interval: Int?
+        var byday: [String] = []
+        for part in rrule.uppercased().split(separator: ";") {
+            let kv = part.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2 else { return rrule }
+            switch String(kv[0]) {
+            case "FREQ": freq = String(kv[1])
+            case "INTERVAL": interval = Int(kv[1])
+            case "BYDAY": byday = kv[1].split(separator: ",").map(String.init)
+            default: return rrule
+        }
+        }
+        switch (freq, interval, byday) {
+        case ("DAILY", nil, []):
+            return "quickadd.rrule.daily".loc
+        case ("WEEKLY", 2, []):
+            return "quickadd.rrule.biweekly".loc
+        case ("WEEKLY", nil, ["MO", "TU", "WE", "TH", "FR"]):
+            return "quickadd.rrule.workdays".loc
+        case ("WEEKLY", nil, let days) where days.count == 1:
+            return "quickadd.rrule.weeklyDay".locFormat(weekdayName(days[0]))
+        case ("WEEKLY", nil, []):
+            return "quickadd.rrule.weekly".loc
+        case ("MONTHLY", nil, []):
+            return "quickadd.rrule.monthly".loc
+        case ("YEARLY", nil, []):
+            return "quickadd.rrule.yearly".loc
+        default:
+            return rrule
+        }
+    }
+
+    /// Localized weekday name ("星期五" / "Friday" / …) for a BYDAY
+    /// code, via a known reference week (2024-01-07 was a Sunday).
+    private static func weekdayName(_ code: String) -> String {
+        let offsets = ["SU": 0, "MO": 1, "TU": 2, "WE": 3, "TH": 4, "FR": 5, "SA": 6]
+        guard let offset = offsets[code] else { return code }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let base = DateComponents(year: 2024, month: 1, day: 7)
+        guard let date = cal.date(from: base)?.addingTimeInterval(TimeInterval(offset * 86_400))
+        else { return code }
+        let f = DateFormatter()
+        f.locale = .current
+        f.timeZone = cal.timeZone
+        f.dateFormat = "EEEE"
+        return f.string(from: date)
     }
 }
 

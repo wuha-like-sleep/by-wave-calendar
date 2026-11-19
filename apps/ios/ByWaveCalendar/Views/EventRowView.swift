@@ -95,7 +95,7 @@ struct EventRowView: View {
                     }
                 }
                 if let cal = calendar {
-                    Text(cal.name).font(.caption2).foregroundStyle(.tertiary)
+                    Text(cal.name).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
             Spacer(minLength: 0)

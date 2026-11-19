@@ -48,7 +48,11 @@ struct RecurringScopePicker: View {
             Button("取消", role: .cancel) { onCancel() }
                 .padding(.bottom, 20)
         }
-        .presentationDetents([.height(380)])
+        // 380pt fits the default text size; at accessibility Dynamic Type
+        // sizes (or with long German/French labels) the three two-line
+        // options plus the cancel button exceed it and the cancel button
+        // was clipped away — offer the large detent as an escape.
+        .presentationDetents([.height(380), .large])
         .presentationDragIndicator(.visible)
     }
 

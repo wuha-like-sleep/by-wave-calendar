@@ -119,7 +119,11 @@ struct YearView: View {
     /// 卡片内边距与标题行高度。算点阵尺寸时要减掉它们，抽成常量
     /// 是为了「这里改了那里忘改」不会静默把最后一行点挤出卡片。
     fileprivate static let cardPadding: CGFloat = 10
-    fileprivate static let titleHeight: CGFloat = 22
+    // The month title is a Dynamic Type subheadline; 22pt clipped it at
+    // larger text sizes. 28pt covers the common range, and the card
+    // height math below reads this same constant so the dot grid stays
+    // aligned with the taller title row.
+    fileprivate static let titleHeight: CGFloat = 28
 }
 
 private struct MonthCard: View {

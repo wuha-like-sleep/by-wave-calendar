@@ -20,6 +20,12 @@ struct AIQuickEvent {
     var startsAt: String
     @Guide(description: "结束时间,同格式;输入未提及时长时取开始时间加一小时")
     var endsAt: String
+    @Guide(description: "地点,只在用户明确说出地点时才填(如「在星巴克开会」「meeting at the office」),没提地点留空字符串,不要编造")
+    var location: String
+    @Guide(description: "是否全天:用户明确说全天/整天/all day 时为 true,否则 false")
+    var allDay: Bool
+    @Guide(description: "重复规则,仅当用户明确说重复时才填,只用这个格式:FREQ=DAILY 或 FREQ=WEEKLY 或 FREQ=MONTHLY 或 FREQ=YEARLY,可再跟 ;INTERVAL=数字 或 ;BYDAY=星期代码(如每周五是 FREQ=WEEKLY;BYDAY=FR,每两周是 FREQ=WEEKLY;INTERVAL=2,每个工作日是 FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR);没提重复留空字符串")
+    var rrule: String
 }
 #endif
 
@@ -185,6 +191,12 @@ struct EventEditView: View {
     @State private var quickText = ""
     @State private var quickParsing = false
     @State private var quickError: String?
+    // Recurrence produced by the quick-add parse (create modes only).
+    // The editor has no recurrence picker of its own, so the parsed
+    // rule is carried here, shown read-only in the form, and sent on
+    // create. It is NOT seeded from a duplicated event — only an
+    // explicit recurrence phrase in this session sets it.
+    @State private var quickRrule: String?
 
     var body: some View {
         Form {
@@ -269,6 +281,19 @@ struct EventEditView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                }
+            }
+
+            // Parsed recurrence from the quick-add phrase (create modes
+            // only) — read-only display plus a way out: the editor has
+            // no recurrence picker, so without the remove button a
+            // mis-parsed 每周 would silently mint a series on save.
+            if let quickRrule {
+                Section("重复规则") {
+                    Text(QuickParsedEvent.humanRrule(quickRrule))
+                    Button("quickadd.rrule.remove", role: .destructive) {
+                        self.quickRrule = nil
+                    }
                 }
             }
 
@@ -374,6 +399,19 @@ struct EventEditView: View {
     // shift end accordingly. Tracks the value seen at the previous frame.
     @State private var oldStartValue: Date?
 
+    /// One parsed quick-add phrase, normalized across both parse paths
+    /// (on-device model / server parser) so the fill logic is shared.
+    /// Mirrors the web parser's ParsedEvent: location and rrule are
+    /// only non-nil when the phrase actually carries them.
+    private struct QuickFill {
+        var summary: String
+        var start: Date
+        var end: Date
+        var location: String?
+        var rrule: String?
+        var allDay: Bool
+    }
+
     /// Quick-add parse. Tries the on-device Apple Intelligence model first
     /// (iOS 26+, eligible device — handles any language, nothing leaves the
     /// phone), then falls back to the server-shared /parse-event endpoint
@@ -385,8 +423,8 @@ struct EventEditView: View {
         quickError = nil
         defer { quickParsing = false }
 
-        if let (aiSummary, aiStart, aiEnd) = await parseQuickWithAppleAI(text: text) {
-            applyParsed(summary: aiSummary, start: aiStart, end: aiEnd)
+        if let fill = await parseQuickWithAppleAI(text: text) {
+            applyParsed(fill)
             return
         }
 
@@ -405,7 +443,14 @@ struct EventEditView: View {
                 quickError = "没看懂，换个说法试试".loc
                 return
             }
-            applyParsed(summary: parsed.summary, start: s, end: e)
+            applyParsed(QuickFill(
+                summary: parsed.summary,
+                start: s,
+                end: e,
+                location: parsed.location,
+                rrule: parsed.rrule,
+                allDay: parsed.allDay ?? false,
+            ))
         } catch let err as APIError {
             if case .server(let status, _) = err, status == 422 {
                 quickError = "没看懂，换个说法试试".loc
@@ -417,17 +462,26 @@ struct EventEditView: View {
         }
     }
 
-    private func applyParsed(summary parsedSummary: String, start s: Date, end e: Date) {
+    private func applyParsed(_ fill: QuickFill) {
         withAnimation {
-            let trimmed = parsedSummary.trimmingCharacters(in: .whitespaces)
+            let trimmed = fill.summary.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty { summary = trimmed }
-            allDay = false
-            startsAt = s
-            endsAt = max(e, s.addingTimeInterval(60))
+            // Location: only a phrase that actually named a place
+            // overwrites the field — a place-less re-parse must not
+            // wipe a location the user typed by hand.
+            if let loc = fill.location?.trimmingCharacters(in: .whitespaces), !loc.isEmpty {
+                location = loc
+            }
+            allDay = fill.allDay
+            startsAt = fill.start
+            endsAt = max(fill.end, fill.start.addingTimeInterval(60))
+            // A fresh parse replaces the recurrence wholesale: a new
+            // phrase without 每周 clears a previously parsed rule.
+            quickRrule = fill.rrule
             // The user got an explicit end from the parser — break the
             // start→end linkage so tweaking start won't shift it again.
             endLinkedToStart = false
-            oldStartValue = s
+            oldStartValue = fill.start
         }
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
@@ -436,7 +490,7 @@ struct EventEditView: View {
     /// Intelligence). Returns nil whenever anything is off — old OS, model
     /// unavailable/not downloaded, hallucinated dates, past-dated result —
     /// so the caller silently falls back to the server parser.
-    private func parseQuickWithAppleAI(text: String) async -> (String, Date, Date)? {
+    private func parseQuickWithAppleAI(text: String) async -> QuickFill? {
         #if canImport(FoundationModels)
         guard #available(iOS 26.0, *) else { return nil }
         guard SystemLanguageModel.default.availability == .available else { return nil }
@@ -463,7 +517,20 @@ struct EventEditView: View {
                   // Sanity: reject hallucinated past dates (>1 day behind now).
                   s > now.addingTimeInterval(-86_400)
             else { return nil }
-            return (r.content.summary, s, max(e, s.addingTimeInterval(60)))
+            let aiLocation = r.content.location.trimmingCharacters(in: .whitespaces)
+            return QuickFill(
+                summary: r.content.summary,
+                start: s,
+                end: max(e, s.addingTimeInterval(60)),
+                // The model's location/rrule are only trusted through
+                // the same conservative gates as the shared parser:
+                // location must be non-empty (the guide forbids
+                // inventing one), and the RRULE must survive strict
+                // validation — an invalid rule is dropped, not stored.
+                location: aiLocation.isEmpty ? nil : aiLocation,
+                rrule: QuickParsedEvent.validatedRrule(r.content.rrule),
+                allDay: r.content.allDay,
+            )
         } catch {
             return nil
         }
@@ -489,7 +556,9 @@ struct EventEditView: View {
                 // Both paths POST a new event. Duplicate doesn't inherit
                 // the source's rrule — we intentionally clear it so the
                 // user doesn't accidentally spawn a parallel recurring
-                // series. They can add recurrence back in a later edit.
+                // series. The only rrule a create can carry is one the
+                // user just dictated through the quick-add phrase
+                // (quickRrule, shown read-only in the form above).
                 saved = try await client.post("/events", body: EventCreateInput(
                     calendarId: calendarId,
                     summary: summary.trimmingCharacters(in: .whitespaces),
@@ -498,7 +567,7 @@ struct EventEditView: View {
                     startsAt: isoStart,
                     endsAt: isoEnd,
                     allDay: allDay,
-                    rrule: nil,
+                    rrule: quickRrule,
                     extra: extra,
                     // Stable across retries within this editor session (see
                     // the clientUid @State). Always set in create/duplicate
