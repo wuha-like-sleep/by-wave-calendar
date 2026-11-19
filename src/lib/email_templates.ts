@@ -656,6 +656,44 @@ export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; 
   return { to, subject: `【${brand}】${label}`, html, text };
 }
 
+// ---------- API Token idle reminder ----------
+/** 长期未使用的 API Token 提醒：闲置的长期凭据是账号被盗后最容易被忽略的
+ *  攻击面 —— 建的时候热闹，忘了撤就一直有效。只带 prefix（公开标识）、
+ *  标签、权限和闲置起点，绝不带明文。 */
+export function tokenIdleReminderMail(to: string, ctx: { label: string; prefix: string; scope: "read" | "write"; idleSince: Date }): SendArgs {
+  const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+  const masked = `bwc_${ctx.prefix}_…`;
+  const scopeLabel = ctx.scope === "read" ? "只读" : "可读写";
+  const idleDate = ctx.idleSince.toLocaleDateString("zh-CN");
+  const settingsUrl = `${baseUrl}/app/settings/devices#api-tokens`;
+  const title = "有个 API Token 已经 90 天没用过了";
+  const subject = `【${brand}】${title}`;
+  const text = [
+    `你好，`,
+    ``,
+    `你账号里的 API Token「${ctx.label}」（${masked}，权限：${scopeLabel}）自 ${idleDate} 起就没有被使用过，至今已超过 90 天。`,
+    ``,
+    `长期闲置的 Token 是最容易被遗忘的长期凭据：如果它对应的集成已经停用，建议直接撤销，需要时再新建一个只要几秒钟。`,
+    ``,
+    `管理 Token：${settingsUrl}`,
+    ``,
+    `如果你还在使用这个 Token（比如低频的备份脚本），忽略这封邮件即可，我们 30 天内不会就同一个 Token 再提醒。`,
+  ].join("\n");
+  const html = baseLayout({
+    title,
+    preheader: `Token「${ctx.label}」已闲置超过 90 天`,
+    body: `
+      <h1 style="margin:0 0 8px;font-size:20px;color:#0f172a;font-weight:600;">🗝️ API Token 闲置提醒</h1>
+      <p style="margin:0 0 12px;color:#475569;line-height:1.6;font-size:14px;">你账号里的 API Token「${escape(ctx.label)}」（<code>${escape(masked)}</code>，权限：${scopeLabel}）自 ${idleDate} 起就没有被使用过，至今已超过 <strong>90 天</strong>。</p>
+      <p style="margin:0 0 12px;color:#475569;line-height:1.6;font-size:14px;">长期闲置的 Token 是最容易被遗忘的长期凭据：如果它对应的集成已经停用，建议直接撤销，需要时再新建一个只要几秒钟。</p>
+      <p style="margin:24px 0;">
+        <a href="${settingsUrl}" style="display:inline-block;background:${brandColor};color:#ffffff;padding:12px 24px;border-radius:10px;text-decoration:none;font-size:14px;font-weight:600;">管理我的 API Token</a>
+      </p>
+      <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;line-height:1.6;">如果你还在使用这个 Token（比如低频的备份脚本），忽略这封邮件即可，我们 30 天内不会就同一个 Token 再提醒。</p>`,
+  });
+  return { to, subject, text, html };
+}
+
 // ---------- Welcome email after register ----------
 export function welcomeMail(to: string, displayName: string | null): SendArgs {
   const name = displayName || to.split("@")[0] || to;
@@ -744,6 +782,10 @@ export const EMAIL_PREVIEW_TEMPLATES: ReadonlyArray<EmailPreviewTemplate> = [
     }),
   },
   { key: "securityChange", label: "安全变更（启用 MFA）", build: (to) => securityChangeMail(to, { kind: "mfa_enabled" }) },
+  {
+    key: "tokenIdleReminder", label: "API Token 闲置提醒",
+    build: (to) => tokenIdleReminderMail(to, { label: "n8n 同步", prefix: "Ab3dEf7h", scope: "read", idleSince: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) }),
+  },
   {
     key: "securityChangeToken", label: "安全变更（API Token 创建）",
     build: (to) => securityChangeMail(to, {
