@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="/static/lib/toastui-calendar.min.css" />
+<link rel="stylesheet" href="/static/lib/toastui-calendar.min.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" />
 
 <div id="calendar-app" class="flex-1 min-h-0 flex flex-col">
   <!-- Top toolbar -->
@@ -747,14 +747,14 @@
 <!-- Load first: toastui-calendar embeds DOMPurify 2.3.8 but defers to an
      existing window.DOMPurify, so this replaces the vulnerable copy.
      Both are deferred, so they still execute in document order. -->
-<script src="/static/lib/purify.min.js" defer></script>
-<script src="/static/lib/toastui-calendar.min.js" defer></script>
+<script src="/static/lib/purify.min.js?v=<%= calV %>" defer></script>
+<script src="/static/lib/toastui-calendar.min.js?v=<%= calV %>" defer></script>
 <!-- Natural-language quick-add parser, compiled from src/lib/nl_parse.ts —
      the SAME code the server and the native apps run. Must load before
      calendar-app.js, which calls window.BWC_NL.parse() for the live preview.
      If it ever fails to load the preview just stays silent; submitting still
      works, because the server re-parses server-side. -->
-<script src="/static/lib/nl-parse.js" defer></script>
+<script src="/static/lib/nl-parse.js?v=<%= calV %>" defer></script>
 <!-- Offline event store (IndexedDB cache + outbox queue) must load BEFORE
      calendar-app.js so window.bwcStore exists when loadEvents() runs. -->
 <script src="<%= calJs %>/event-store.js?v=<%= calV %>" defer></script>

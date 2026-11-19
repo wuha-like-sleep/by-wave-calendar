@@ -880,7 +880,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   </details>
 </section>
 
-<script src="/static/lib/simplewebauthn.umd.min.js"></script>
+<script src="/static/lib/simplewebauthn.umd.min.js?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>"></script>
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 (function(){
   // Highlight the visible section in the sticky tab bar as the user scrolls.
