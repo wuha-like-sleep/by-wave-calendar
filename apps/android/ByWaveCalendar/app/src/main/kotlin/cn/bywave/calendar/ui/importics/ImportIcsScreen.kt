@@ -8,6 +8,8 @@ package cn.bywave.calendar.ui.importics
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.R
@@ -143,6 +147,8 @@ private fun ImportForm(state: ImportUiState, vm: ImportIcsViewModel) {
                 text = state.filename!!,
                 style = MaterialTheme.typography.bodyMedium,
                 color = mutedTextColor(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(12.dp))
         }
@@ -183,6 +189,8 @@ private fun ImportForm(state: ImportUiState, vm: ImportIcsViewModel) {
                             text = cal.name,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier.padding(start = 10.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -206,12 +214,22 @@ private fun ImportForm(state: ImportUiState, vm: ImportIcsViewModel) {
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
-                for (reason in preview.invalidReasons) {
-                    Text(
-                        text = reason,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = mutedTextColor(),
-                    )
+                // The reason list is server-driven and unbounded; left
+                // flat it grows until the confirm button is pushed off
+                // short (landscape / split-screen) screens. Cap the block
+                // and scroll inside it instead.
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 96.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    for (reason in preview.invalidReasons) {
+                        Text(
+                            text = reason,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = mutedTextColor(),
+                        )
+                    }
                 }
             }
         }

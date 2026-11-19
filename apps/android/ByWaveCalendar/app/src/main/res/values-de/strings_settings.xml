@@ -23,6 +23,7 @@
     <string name="callist_title">Kalender verwalten</string>
     <string name="callist_empty">Noch keine Kalender</string>
     <string name="callist_edit">Bearbeiten</string>
+    <string name="callist_import_file">.ics aus Datei importieren</string>
     <string name="callist_edit_title">Kalender bearbeiten</string>
     <string name="callist_saved">Gespeichert</string>
     <string name="callist_save_failed">Speichern fehlgeschlagen</string>

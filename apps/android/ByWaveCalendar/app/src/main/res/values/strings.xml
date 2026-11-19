@@ -108,6 +108,10 @@
     <string name="settings_language_title">APP 显示语言</string>
     <string name="settings_language_desc">选择 APP 内界面语言，覆盖系统语言。</string>
     <string name="settings_language_follow_system">跟随系统</string>
+    <string name="settings_appearance_section">外观</string>
+    <string name="settings_theme_title">主题</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
 
@@ -180,6 +184,10 @@
     <string name="booking_create_title">新建预约链接</string>
     <string name="booking_created">已创建预约链接</string>
     <string name="booking_create_failed">创建预约链接失败</string>
+    <string name="booking_edit">编辑</string>
+    <string name="booking_edit_title">编辑预约链接</string>
+    <string name="booking_save">保存</string>
+    <string name="booking_saved">已保存预约链接</string>
     <string name="booking_slug">短链标识</string>
     <string name="booking_slug_hint">公开地址的后缀，例如 book/你的标识；只能用小写字母、数字和连字符</string>
     <string name="booking_slug_invalid">只能用小写字母、数字和连字符，需以字母或数字开头，最长 31 个字符</string>
@@ -219,6 +227,8 @@
     <string name="copied_to_clipboard">已复制</string>
     <string name="quickadd_hint">试试：明天 下午3点 牙医</string>
     <string name="quickadd_failed">没识别出来，请手动填写</string>
+    <string name="quickadd_recurrence_label">重复规则</string>
+    <string name="quickadd_recurrence_remove">移除重复</string>
     <string name="quickadd_cd">智能识别</string>
     <string name="action_undo">撤销</string>
     <string name="event_deleted">已删除</string>

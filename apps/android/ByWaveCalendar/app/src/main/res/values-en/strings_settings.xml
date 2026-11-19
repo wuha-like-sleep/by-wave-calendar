@@ -23,6 +23,7 @@
     <string name="callist_title">Manage calendars</string>
     <string name="callist_empty">No calendars yet</string>
     <string name="callist_edit">Edit</string>
+    <string name="callist_import_file">Import .ics from file</string>
     <string name="callist_edit_title">Edit calendar</string>
     <string name="callist_saved">Saved</string>
     <string name="callist_save_failed">Save failed</string>

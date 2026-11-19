@@ -76,6 +76,12 @@ data class EventEditUiState(
      *  when scope is "instance" or "future" so it knows WHICH occurrence
      *  the user is editing. */
     val sourceStartsAt: String? = null,
+    /** Recurrence produced by the quick-add parse (create modes only).
+     *  The editor has no recurrence picker, so the parsed rule is
+     *  carried here, shown read-only in the form, and sent on create.
+     *  Never seeded from a duplicated event — only an explicit
+     *  recurrence phrase in this session sets it. */
+    val quickRrule: String? = null,
     val sourceExtra: EventExtraDTO? = null,
     val originalStart: EventFormInstant? = null,
     val originalEnd: EventFormInstant? = null,
@@ -106,7 +112,7 @@ data class EventEditUiState(
     val fingerprint: String
         get() = listOf(
             calendarId, summary, location, description, url, meetingPassword,
-            start.toString(), end.toString(), allDay.toString(),
+            start.toString(), end.toString(), allDay.toString(), quickRrule ?: "",
         ).joinToString("\u0000")
 
     /** 有未保存的改动。退出前要拦一下：新建/编辑事件里填了一半的内容
@@ -276,6 +282,16 @@ class EventEditViewModel : ViewModel() {
                 _state.update {
                     it.copy(
                         summary = if (r.summary.isNotBlank()) r.summary else it.summary,
+                        // Same fill rules as web/iOS/desktop: a field
+                        // the phrase didn't mention never wipes what
+                        // the user already typed (location), while
+                        // all-day and recurrence are properties of the
+                        // phrase itself — a fresh parse replaces them
+                        // wholesale (no 全天 / no 每周 in the new phrase
+                        // clears the old parse's flags).
+                        location = if (!r.location.isNullOrBlank()) r.location else it.location,
+                        allDay = r.allDay ?: false,
+                        quickRrule = r.rrule,
                         start = start,
                         end = end,
                         parsing = false,
@@ -289,6 +305,10 @@ class EventEditViewModel : ViewModel() {
             }
         }
     }
+    /** User removed the parsed recurrence in the form — the event
+     *  will be created as a one-off. */
+    fun onQuickRruleCleared() = _state.update { it.copy(quickRrule = null) }
+
     fun onCalendar(id: String) = _state.update { it.copy(calendarId = id) }
     fun onAllDay(v: Boolean) = _state.update {
         // When toggling to all-day, snap to date boundaries; when
@@ -349,6 +369,7 @@ class EventEditViewModel : ViewModel() {
                         startsAt = startIso,
                         endsAt = endIso,
                         allDay = if (s.allDay) true else null,
+                        rrule = s.quickRrule,
                         extra = extra,
                         // Reuse the once-per-open key so a retried save
                         // (timeout → tap again) hits the same server uid

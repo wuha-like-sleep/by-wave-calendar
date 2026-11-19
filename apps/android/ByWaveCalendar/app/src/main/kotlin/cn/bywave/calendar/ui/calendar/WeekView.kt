@@ -195,7 +195,7 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
 
 @Composable
 private fun HourLines() {
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)
     // 左侧刻度原本写死成 "%02d:00"，把手机设成 12 小时制也还是 00:00–23:00。
     // 走同一套格式器，和事件详情页、日视图里的时间保持一致。
     val formats = rememberCalendarFormats()
@@ -227,7 +227,7 @@ private fun HourLines() {
 
 @Composable
 private fun ColumnSeparators(columnWidth: Dp) {
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f)
     Row(modifier = Modifier.fillMaxSize()) {
         Spacer(Modifier.width(TIME_GUTTER))
         for (i in 0 until 7) {
@@ -296,7 +296,12 @@ private fun EventChip(
     val startMin = sLocal.hour * 60 + sLocal.minute
     val durMin = ((eLocal.hour * 60 + eLocal.minute) - startMin).coerceAtLeast(15)
     val y = HOUR_HEIGHT * (startMin / 60f)
-    val h = HOUR_HEIGHT * (durMin / 60f) - 2.dp
+    // Floor the chip height at one full text line + its vertical padding:
+    // at the raw duration height a 15-minute event gets 12dp, of which the
+    // padding eats 6dp, so the title was always clipped away. The floor
+    // lets short chips overlap the next hour line slightly — the same
+    // tradeoff the desktop week view documents.
+    val h = (HOUR_HEIGHT * (durMin / 60f) - 2.dp).coerceAtLeast(22.dp)
     val x = TIME_GUTTER + columnWidth * dayIdx + slotWidth * idxInCluster
     val w = slotWidth - 2.dp
 
@@ -322,7 +327,7 @@ private fun EventChip(
         Text(
             text = event.summary,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            color = onCalendarColor(color),
             fontWeight = FontWeight.SemiBold,
             maxLines = if (h > 36.dp) 2 else 1,
             overflow = TextOverflow.Ellipsis,

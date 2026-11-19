@@ -20,6 +20,9 @@
 
 package cn.bywave.calendar.ui.settings
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +85,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
@@ -117,6 +121,7 @@ private val CALENDAR_COLOR_SWATCHES = listOf(
 @Composable
 fun CalendarListScreen(
     onBack: () -> Unit,
+    onImportFile: (Uri) -> Unit = {},
     vm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -178,6 +183,8 @@ fun CalendarListScreen(
                                 text = c.name,
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             val sub = listOfNotNull(c.timezone).joinToString(" · ")
                             if (sub.isNotBlank()) {
@@ -192,6 +199,24 @@ fun CalendarListScreen(
                     }
                     if (i < state.calendars.size - 1) HorizontalDivider()
                 }
+            }
+
+            // In-app .ics import entry. Until now the import screen was
+            // only reachable when another app handed a file over via
+            // intent; picking a file from inside the app reuses the same
+            // screen and flow (the host parks the Uri and navigates).
+            val pickIcs = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> if (uri != null) onImportFile(uri) }
+            OutlinedButton(
+                onClick = {
+                    pickIcs.launch(arrayOf("text/calendar", "text/plain", "application/octet-stream"))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+            ) {
+                Text(stringResource(R.string.callist_import_file))
             }
         }
     }
@@ -679,6 +704,8 @@ private fun ShareLinksSection(
                         text = t.url ?: t.token,
                         style = MaterialTheme.typography.bodySmall,
                         color = mutedTextColor(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(

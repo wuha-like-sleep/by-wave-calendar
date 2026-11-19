@@ -274,6 +274,29 @@ fun EventEditScreen(
                 onChange = { date, time -> vm.onEnd(date, time) },
             )
 
+            // Parsed recurrence (quick-add only) — read-only display
+            // plus a way out: the editor has no recurrence picker, so
+            // without this row a mis-parsed 每周 would silently mint a
+            // series on save.
+            if (state.quickRrule != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.quickadd_recurrence_label),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(state.quickRrule!!, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    TextButton(onClick = vm::onQuickRruleCleared) {
+                        Text(stringResource(R.string.quickadd_recurrence_remove))
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = state.location,
                 onValueChange = vm::onLocation,
