@@ -444,6 +444,13 @@ private fun AppRoot(
                     nav.popBackStack()
                     calVm.reload()
                 },
+                // 一句话直接保存：回日历并弹「已创建 · 撤销」反馈
+                // （showCreatedNotice 同时把日历跳到事件那天）。
+                onQuickSaved = { created ->
+                    nav.popBackStack()
+                    calVm.reload()
+                    calVm.showCreatedNotice(created)
+                },
                 // 日历列表没拿到时（冷启动头两秒 / 离线首启），编辑器里
                 // 那条提示旁边的「重试」就是再拉一次。
                 onRetryCalendars = { calVm.reload() },

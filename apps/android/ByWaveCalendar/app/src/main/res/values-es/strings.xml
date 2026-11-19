@@ -224,6 +224,7 @@
     <string name="quickadd_recurrence_label">Repetición</string>
     <string name="quickadd_recurrence_remove">Eliminar</string>
     <string name="quickadd_cd">Interpretar</string>
+    <string name="quickadd_save_directly">Guardar directamente</string>
     <string name="action_undo">Deshacer</string>
     <string name="event_deleted">Eliminado</string>
     <string name="event_created_notice">Creado: %1$s</string>

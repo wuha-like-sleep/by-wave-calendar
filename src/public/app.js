@@ -29,16 +29,30 @@
       setTimeout(() => el.remove(), 220);
     };
     let durationMs = 2200;
+    // 动作按钮：单个走 actionLabel/onAction（既有调用方），多个走
+    // opts.actions = [{ label, onAction }]（如一句话直接保存后的
+    // 「打开 / 撤销」）。两者可同时给，actions 在前。
+    const actions = [];
+    if (opts && Array.isArray(opts.actions)) {
+      for (const a of opts.actions) {
+        if (a && a.label && typeof a.onAction === "function") actions.push(a);
+      }
+    }
     if (opts && opts.actionLabel && typeof opts.onAction === "function") {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "rounded-md bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs font-medium";
-      btn.textContent = opts.actionLabel;
-      btn.addEventListener("click", () => {
-        try { opts.onAction(); } catch (_e) { /* swallow */ }
-        dismiss();
-      });
-      el.appendChild(btn);
+      actions.push({ label: opts.actionLabel, onAction: opts.onAction });
+    }
+    if (actions.length) {
+      for (const a of actions) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "rounded-md bg-white/15 hover:bg-white/25 px-2 py-0.5 text-xs font-medium";
+        btn.textContent = a.label;
+        btn.addEventListener("click", () => {
+          try { a.onAction(); } catch (_e) { /* swallow */ }
+          dismiss();
+        });
+        el.appendChild(btn);
+      }
       durationMs = opts.durationMs || 6000;
     } else if (opts && opts.durationMs) {
       durationMs = opts.durationMs;

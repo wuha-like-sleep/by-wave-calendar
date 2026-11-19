@@ -393,6 +393,8 @@
 "已删除「%@」" = "Deleted “%@”";
 "撤销删除" = "Undo";
 "快速新建" = "Quick add";
+"直接保存" = "Save directly";
+"已创建「%@」" = "Created “%@”";
 "quickadd.rrule.daily" = "Every day";
 "quickadd.rrule.weekly" = "Every week";
 "quickadd.rrule.weeklyDay" = "Every %@";

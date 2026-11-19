@@ -101,6 +101,9 @@ fun EventEditScreen(
     calendars: List<CalendarMeta>,
     onDismiss: () -> Unit,
     onSaved: () -> Unit,
+    /** 一句话「直接保存」成功时改走这里（带回建好的事件），由调用方
+     *  弹「已创建 · 撤销」反馈。null = 当普通保存处理。 */
+    onQuickSaved: ((cn.bywave.calendar.data.model.EventDTO) -> Unit)? = null,
     /** 日历列表没拿到时，给用户一条能自己重试的路。null = 不显示重试。 */
     onRetryCalendars: (() -> Unit)? = null,
     vm: EventEditViewModel = viewModel(),
@@ -120,7 +123,15 @@ fun EventEditScreen(
     // 填了一半的内容会被冲掉）。所以日历后到这件事单独接一下：只补列表和
     // 还没选中时的默认日历。
     LaunchedEffect(calendars) { vm.onCalendarsChanged(calendars) }
-    LaunchedEffect(state.finished) { if (state.finished) onSaved() }
+    LaunchedEffect(state.finished) {
+        if (!state.finished) return@LaunchedEffect
+        val created = state.savedEvent
+        if (state.savedViaQuick && created != null && onQuickSaved != null) {
+            onQuickSaved(created)
+        } else {
+            onSaved()
+        }
+    }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     // 「填了一半按返回」原来是直接丢弃，一点提示都没有。用户分不清是
@@ -241,6 +252,19 @@ fun EventEditScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { vm.quickParse(quickText) }),
                 )
+                // 直接保存：解析完整（标题/时间都解析出来、关键字段没再
+                // 被手改）时出现，不必再点一次普通保存。和普通保存走
+                // 同一条路（冲突检查在内），成功后由调用方弹「已创建」。
+                if (state.quickParsed && state.canSubmit) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { vm.saveDirectly() }) {
+                            Text(stringResource(R.string.quickadd_save_directly))
+                        }
+                    }
+                }
             }
 
             // Title

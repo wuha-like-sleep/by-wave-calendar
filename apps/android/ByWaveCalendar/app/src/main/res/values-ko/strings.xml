@@ -224,6 +224,7 @@
     <string name="quickadd_recurrence_label">반복</string>
     <string name="quickadd_recurrence_remove">제거</string>
     <string name="quickadd_cd">인식</string>
+    <string name="quickadd_save_directly">바로 저장</string>
     <string name="action_undo">실행 취소</string>
     <string name="event_deleted">삭제됨</string>
     <string name="event_created_notice">만들었습니다: %1$s</string>

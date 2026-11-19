@@ -234,6 +234,7 @@
     <string name="quickadd_recurrence_label">重複規則</string>
     <string name="quickadd_recurrence_remove">移除重複</string>
     <string name="quickadd_cd">智慧識別</string>
+    <string name="quickadd_save_directly">直接儲存</string>
     <string name="action_undo">撤銷</string>
     <string name="event_deleted">已刪除</string>
     <string name="event_created_notice">已建立：%1$s</string>

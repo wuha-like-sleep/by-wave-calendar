@@ -345,6 +345,13 @@ struct EventEditView: View {
     @State private var quickText = ""
     @State private var quickParsing = false
     @State private var quickError: String?
+    /// 解析成功回填过一次、且解析出了标题：快速新建区多一个「直接保存」。
+    /// 改动一句话原文即清掉（与桌面端同一口径）。
+    @State private var quickFilled = false
+    /// 这次 save() 是不是由「直接保存」发起的：成功后给 AppState 记一笔，
+    /// 日历页弹「已创建 · 打开 / 撤销」条。冲突框里选「仍要保存」会再走
+    /// 一次 save()，标记保留；保存失败则清掉，别串到下一次普通保存。
+    @State private var saveViaQuick = false
     var body: some View {
         Form {
             if mode.isCreate {
@@ -352,6 +359,7 @@ struct EventEditView: View {
                     HStack(spacing: 8) {
                         TextField("试试：明天下午3点和老王开会", text: $quickText)
                             .autocorrectionDisabled(true)
+                            .onChange(of: quickText) { _, _ in quickFilled = false }
                             .onSubmit { Task { await parseQuick() } }
                         Button {
                             Task { await parseQuick() }
@@ -369,6 +377,21 @@ struct EventEditView: View {
                         Text(quickError)
                             .font(.footnote)
                             .foregroundStyle(.red)
+                    }
+                    // 直接保存：解析完整后出现，走的就是 save() 本身
+                    // （冲突软检查在内），成功后日历页弹「已创建」条。
+                    if quickFilled && !summary.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Button {
+                            saveViaQuick = true
+                            Task { await save() }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Text("直接保存").font(.callout.weight(.medium))
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(saving)
                     }
                 } header: {
                     Text("快速新建")
@@ -892,6 +915,8 @@ struct EventEditView: View {
             endLinkedToStart = false
             oldStartValue = fill.start
         }
+        // 标题解析出来了才算完整：只有时间没标题不给直接保存。
+        quickFilled = !fill.summary.trimmingCharacters(in: .whitespaces).isEmpty
         UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
@@ -1034,13 +1059,21 @@ struct EventEditView: View {
             // save just used.
             UserDefaults.standard.set(calendarId, forKey: "lastUsedCalendarId")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // 一句话直接保存：记到 AppState，日历页弹「已创建」条
+            // （打开 / 撤销）。普通保存不记。
+            if saveViaQuick {
+                saveViaQuick = false
+                state.noteQuickCreated(saved)
+            }
             onSaved(saved)
         } catch let e as APIError {
             // 保存没成：下次再点保存要重新查冲突（用户多半会改时间）。
             conflictCheckPassed = false
+            saveViaQuick = false
             errorMessage = e.localizedDescription
         } catch {
             conflictCheckPassed = false
+            saveViaQuick = false
             errorMessage = error.localizedDescription
         }
     }

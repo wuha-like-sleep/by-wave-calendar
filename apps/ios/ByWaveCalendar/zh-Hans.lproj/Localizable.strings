@@ -399,6 +399,8 @@
 "已删除「%@」" = "已删除「%@」";
 "撤销删除" = "撤销";
 "快速新建" = "快速新建";
+"直接保存" = "直接保存";
+"已创建「%@」" = "已创建「%@」";
 "quickadd.rrule.daily" = "每天";
 "quickadd.rrule.weekly" = "每周";
 "quickadd.rrule.weeklyDay" = "每周%@";

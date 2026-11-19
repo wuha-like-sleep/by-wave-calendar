@@ -130,6 +130,26 @@ final class AppState: ObservableObject {
     /// undo an exdate/UNTIL edit, only a soft-delete.
     @Published var pendingUndoDelete: PendingUndoDelete?
 
+    /// Set right after a quick-add DIRECT save creates an event;
+    /// CalendarView overlays the "已创建" bar （打开 / 撤销） while
+    /// non-nil. Token guards the auto-dismiss timer, same as
+    /// PendingUndoDelete.
+    struct PendingQuickCreated: Identifiable {
+        let event: EventDTO
+        let token: UUID
+        var id: UUID { token }
+    }
+
+    @Published var pendingQuickCreated: PendingQuickCreated?
+
+    func noteQuickCreated(_ event: EventDTO) {
+        pendingQuickCreated = PendingQuickCreated(event: event, token: UUID())
+    }
+
+    func clearQuickCreated() {
+        pendingQuickCreated = nil
+    }
+
     /// A .ics file handed to the app by the system ("Open in ByWave"
     /// from Files / Mail / the share sheet — see CFBundleDocumentTypes
     /// in Info.plist). RootView's onOpenURL stores it here;
@@ -559,6 +579,8 @@ final class AppState: ObservableObject {
         // 「撤销删除」是对上一个账号的服务器发的；换了账号再点，只会拿着新账号的
         // 令牌去恢复一个不属于它的事件。
         pendingUndoDelete = nil
+        // 「已创建」条同理：里面的事件属于上一个账号。
+        pendingQuickCreated = nil
     }
 
     /// 本机还登录着的账号里最近用过的那个（有 refresh token 才算登录着）。

@@ -1601,26 +1601,22 @@
     }
 
     // 主界面常驻快速添加框（#quick-add-input）：和弹窗里那个输入框共用同一个
-    // 解析器和同一套回填（showParsed 的 commit 分支），不另起保存逻辑。
-    // 输入时只预览；回车才打开新建表单并回填。解析不出来时也打开表单，
-    // 原文放进标题和弹窗的 NL 输入框，用户接着手改即可，不丢字。
+    // 解析器和同一套回填（showParsed 的 commit 分支）。
+    // 输入时只预览；回车打开新建表单并回填（解析不出来时也打开表单，
+    // 原文放进标题和弹窗的 NL 输入框，用户接着手改即可，不丢字）。
+    // 解析完整（有时间 + 有标题）时预览行里多两个动作：「直接保存」
+    // 不弹窗直接建事件，保存后 toast 带「打开 / 撤销」；「打开表单
+    // 核对」就是原来的回车路径。解析不完整仍只有回车开表单一条路。
     const qaInput = $("#quick-add-input");
     const qaHint = $("#quick-add-hint");
     if (qaInput && qaHint) {
       let qaDebounce;
-      const showQa = (parsed) => {
-        if (!parsed) { qaHint.classList.add("hidden"); qaHint.textContent = ""; return; }
-        qaHint.classList.remove("hidden");
-        qaHint.textContent = fmtParsed(parsed);
-      };
-      qaInput.addEventListener("input", () => {
-        clearTimeout(qaDebounce);
-        qaDebounce = setTimeout(() => showQa(parseNaturalLanguageEvent(qaInput.value)), 200);
-      });
-      qaInput.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        clearTimeout(qaDebounce);
+      let qaSaving = false;
+      // 最近一次「完整」解析（标题非空才算完整：只有时间没有标题的
+      // 句子存下去是个无名事件，不给直接保存）。
+      let qaParsed = null;
+      const qaComplete = (p) => !!(p && p.summary && p.summary.trim());
+      const openQaForm = () => {
         const text = qaInput.value.trim();
         if (!text) return;
         const parsed = parseNaturalLanguageEvent(text);
@@ -1636,6 +1632,132 @@
         }
         qaInput.value = "";
         showQa(null);
+      };
+      // 直接保存：请求体与表单新建分支同口径（日历取表单下拉的第一项
+      // ——也就是回车开表单时 reset 后的默认值；时区取浏览器时区，与
+      // openEventModal 给新事件预填的一致；提醒取新建默认档，和表单
+      // 打开时的下拉默认值一致）。先走一遍软冲突检查：有冲突就不直存，
+      // 改开表单，让用户在既有的冲突确认框里决定。
+      const directSaveQa = async () => {
+        const parsed = qaParsed;
+        if (!parsed || qaSaving) return;
+        const form = $("#form-event");
+        const calSel = form?.querySelector('[name="calendarId"]');
+        const calendarId = calSel?.options?.[0]?.value || "";
+        if (!calendarId) { openQaForm(); return; }
+        const isAllDay = !!parsed.allDay;
+        const startsIso = isAllDay
+          ? toLocalDateValue(parsed.startsAt) + "T00:00:00.000Z"
+          : parsed.startsAt.toISOString();
+        const endsIso = isAllDay
+          ? toLocalDateValue(parsed.endsAt) + "T23:59:59.999Z"
+          : parsed.endsAt.toISOString();
+        let browserTz = "Asia/Shanghai";
+        try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || browserTz; } catch (_e) { /* keep fallback */ }
+        const body = {
+          calendarId,
+          summary: parsed.summary,
+          location: parsed.location || undefined,
+          allDay: isAllDay,
+          startsAt: startsIso,
+          endsAt: endsIso,
+          rrule: parsed.rrule || undefined,
+          extra: {
+            category: null,
+            timezone: browserTz,
+            attendees: null,
+            url: null,
+            meetingPassword: null,
+            alarms: FORM.collectAlarms(
+              isAllDay ? FORM.REMINDER_DEFAULTS.allday : FORM.REMINDER_DEFAULTS.timed,
+              "",
+              parsed.summary,
+            ),
+          },
+        };
+        qaSaving = true;
+        try {
+          try {
+            const cResp = await fetch("/api/events/conflicts", fetchOpts({
+              method: "POST",
+              body: JSON.stringify({ calendarId, startsAt: startsIso, endsAt: endsIso }),
+            }));
+            if (cResp.ok) {
+              const { conflicts } = await cResp.json();
+              if (Array.isArray(conflicts) && conflicts.length > 0) { openQaForm(); return; }
+            }
+          } catch (_e) { /* 软检查失败不挡保存，与表单口径一致 */ }
+          const resp = await fetch("/api/events", fetchOpts({ method: "POST", body: JSON.stringify(body) }));
+          if (!resp.ok) throw new Error(await resp.text());
+          const created = await resp.json().catch(() => null);
+          qaInput.value = "";
+          showQa(null);
+          await loadEvents();
+          const createdId = created && created.id;
+          window.bwc && window.bwc.toast(
+            T("app.js.quickadd.added", { title: parsed.summary }),
+            "success",
+            createdId ? {
+              actions: [
+                { label: T("app.js.quickadd.open"), onAction: () => { void openExistingEvent(calendarId, createdId, null, null); } },
+                {
+                  label: T("app.js.toast.undo"),
+                  onAction: async () => {
+                    try {
+                      const dResp = await fetch(`/api/events/${createdId}`, fetchOpts({ method: "DELETE" }));
+                      if (!dResp.ok) throw new Error(await dResp.text());
+                      await loadEvents();
+                      window.bwc && window.bwc.toast(T("app.js.quickadd.undone"), "success");
+                    } catch (_e) {
+                      window.bwc && window.bwc.toast(T("app.js.toast.deleteFailed"), "error");
+                    }
+                  },
+                },
+              ],
+            } : undefined,
+          );
+        } catch (err) {
+          console.error(err);
+          const reason = describeSaveError(err);
+          window.bwc && window.bwc.toast(
+            reason ? T("app.js.toast.saveFailedReason", { reason }) : T("app.js.toast.saveFailed"),
+            "error",
+            { durationMs: 6000 },
+          );
+        } finally {
+          qaSaving = false;
+        }
+      };
+      const showQa = (parsed) => {
+        qaParsed = qaComplete(parsed) ? parsed : null;
+        if (!parsed) { qaHint.classList.add("hidden"); qaHint.textContent = ""; return; }
+        qaHint.classList.remove("hidden");
+        qaHint.textContent = "";
+        const span = document.createElement("span");
+        span.textContent = fmtParsed(parsed);
+        qaHint.appendChild(span);
+        if (qaParsed) {
+          const mkBtn = (label, onClick) => {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "ml-2 rounded-full border border-brand-300 bg-white px-2 py-0.5 font-medium text-brand-700 hover:bg-brand-50";
+            b.textContent = label;
+            b.addEventListener("click", onClick);
+            return b;
+          };
+          qaHint.appendChild(mkBtn(T("app.js.quickadd.saveDirectly"), () => { void directSaveQa(); }));
+          qaHint.appendChild(mkBtn(T("app.js.quickadd.openForm"), openQaForm));
+        }
+      };
+      qaInput.addEventListener("input", () => {
+        clearTimeout(qaDebounce);
+        qaDebounce = setTimeout(() => showQa(parseNaturalLanguageEvent(qaInput.value)), 200);
+      });
+      qaInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        clearTimeout(qaDebounce);
+        openQaForm();
       });
     }
   }

@@ -192,6 +192,10 @@ fun EventEditDialog(
         endsAt: String,
         excludeId: String?,
     ) -> List<ConflictDTO>)? = null,
+    /** 一句话「直接保存」按钮真正提交前调用一次（调用方据此给这次
+     *  创建打标，成功后弹「已创建 · 打开 / 撤销」反馈条）。普通保存
+     *  不调用。 */
+    onQuickSaveDispatched: (() -> Unit)? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -308,6 +312,11 @@ fun EventEditDialog(
                     val qScope = rememberCoroutineScope()
                     var quickText by remember { mutableStateOf("") }
                     var parsing by remember { mutableStateOf(false) }
+                    // 解析成功过一次后置 true：下面多一个「直接保存」按钮，
+                    // 不关表单直接提交当前表单内容（解析后又手改过也以
+                    // 眼前表单为准）。改动一句话原文即清掉，免得拿着旧
+                    // 解析结果误导。
+                    var quickFilled by remember { mutableStateOf(false) }
                     // 解析失败时贴在输入框底下的一行说明。以前失败是「什么都不发生」:
                     // 用户输入一句话、点解析、转一下、表单一动不动,也没有任何提示。
                     var quickError by remember { mutableStateOf<String?>(null) }
@@ -344,6 +353,10 @@ fun EventEditDialog(
                                             start = first.value, end = last.value,
                                             originalStart = first.original, originalEnd = last.original,
                                         )
+                                        // 标题是解析出来的才算「完整」：只有时间
+                                        // 没有标题的句子不给直接保存（存下去是
+                                        // 个无名事件）。canSubmit 还会再把一道关。
+                                        quickFilled = parsed.summary.isNotBlank()
                                     }
                                 }.onFailure { e ->
                                     // 老服务端没有这个接口(404)。这时候说「没识别出来」是骗人的,
@@ -361,7 +374,7 @@ fun EventEditDialog(
                     }
                     OutlinedTextField(
                         value = quickText,
-                        onValueChange = { quickText = it },
+                        onValueChange = { quickText = it; quickFilled = false },
                         label = { Text(t("event.edit.quickadd")) },
                         singleLine = true,
                         modifier = Modifier
@@ -396,6 +409,23 @@ fun EventEditDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
+                    }
+                    // 直接保存：解析完整后出现。走的还是 submit() 这条路
+                    // （冲突检查、clientUid 幂等都一样），只是提交前通知
+                    // 调用方打标，成功后主界面弹「已创建」反馈条；有冲突
+                    // 时 submit() 自己会弹冲突确认框，不会硬存。
+                    if (quickFilled && form.canSubmit && !saving) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = {
+                                onQuickSaveDispatched?.invoke()
+                                submit()
+                            }) {
+                                Text(t("event.edit.quickadd.saveDirectly"))
+                            }
+                        }
                     }
                 }
 

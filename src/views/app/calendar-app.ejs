@@ -168,8 +168,9 @@
     <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
       <%# 一句话快速添加：主界面常驻，和新建弹窗里的 #nl-input 是同一个
           解析器、同一套回填逻辑（calendar-app.js 的 NL 区块接线）。
-          输入时在下方实时预览解析结果，回车打开新建表单并回填，
-          保存仍走表单原来的流程。 %>
+          输入时在下方实时预览解析结果，回车打开新建表单并回填；
+          解析完整（有时间有标题）时预览行另有「直接保存」——不弹窗
+          直接建事件，保存后 toast 可打开/撤销；有冲突时自动改开表单。 %>
       <div class="mx-3 sm:mx-5 mt-2 flex items-center gap-2 rounded-lg border border-brand-100 bg-gradient-to-r from-brand-50 to-violet-50 px-3 py-1.5">
         <span class="text-base">🪄</span>
         <input type="text" id="quick-add-input" placeholder="<%= t("app.event.nlPlaceholder") %>"
