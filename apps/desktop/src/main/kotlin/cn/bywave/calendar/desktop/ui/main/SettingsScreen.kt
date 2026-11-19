@@ -127,8 +127,19 @@ fun SettingsScreen(
      *  deleted calendar propagates back into this list AND into the
      *  calendar views behind the Settings overlay. */
     onCalendarsChanged: () -> Unit,
+    /** When non-null, Settings opens directly on the Calendars tab with
+     *  that calendar's edit dialog already open — the sidebar's
+     *  per-calendar edit button uses this so "edit this calendar" is
+     *  one click from the main window instead of gear → tab → row →
+     *  pencil (the path the web app's sidebar calendar menu gives in
+     *  one step). Null → the usual Account tab landing. */
+    initialCalendarsEditId: String? = null,
 ) {
-    var tab by remember { mutableStateOf(SettingsTab.Account) }
+    var tab by remember {
+        mutableStateOf(
+            if (initialCalendarsEditId != null) SettingsTab.Calendars else SettingsTab.Account,
+        )
+    }
     val contentScroll = remember(tab, profile.deviceId) { ScrollState(0) }
     val navScroll = rememberScrollState()
     // Observe locale so the header + close button re-render on switch.
@@ -212,6 +223,7 @@ fun SettingsScreen(
                                 calendars = calendars,
                                 profile = profile,
                                 onChanged = onCalendarsChanged,
+                                initialEditId = initialCalendarsEditId,
                             )
                             SettingsTab.Booking -> BookingSection(
                                 calendars = calendars,
@@ -442,25 +454,29 @@ private fun DangerConfirmDialog(
 // the reload is what surfaces the new/edited/deleted calendar both here
 // and in the calendar views behind the Settings overlay.
 
-/** Brand swatch palette — mirrors the web app's calendar colors so a
- *  calendar created on desktop matches one created on web. Plain preset
- *  swatches (no full color wheel) keeps the picker simple. */
+/** Preset swatch palette — the same 17 colors, in the same order, as
+ *  the web app's COLOR_PALETTE (calendar-app.js) so a calendar offered
+ *  on one platform can be picked identically on every other. (This list
+ *  used to be a divergent 8-color subset despite this comment claiming
+ *  parity; Android / iOS carried two further, different sets.) Plain
+ *  preset swatches (no full color wheel) keeps the picker simple. */
 private val CALENDAR_COLOR_PRESETS: List<String> = listOf(
-    "#6366f1", // indigo
-    "#059669", // emerald
-    "#E11D48", // rose
-    "#0284C7", // sky
-    "#D97706", // amber
-    "#7C3AED", // violet
-    "#DC2626", // red
-    "#64748b", // slate
+    "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+    "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
+    "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+    "#ec4899", "#64748b",
 )
+
+/** New-calendar default color — the web create dialog's default
+ *  (#6366f1 indigo), NOT the first palette entry (which is red). */
+private const val DEFAULT_CALENDAR_COLOR = "#6366f1"
 
 @Composable
 private fun CalendarsSection(
     calendars: List<CalendarMeta>,
     profile: Profile,
     onChanged: () -> Unit,
+    initialEditId: String? = null,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -473,6 +489,20 @@ private fun CalendarsSection(
     var deleting by remember { mutableStateOf<CalendarMeta?>(null) }  // delete confirm target
     var creating by remember { mutableStateOf(false) }               // create dialog open
     var sharing by remember { mutableStateOf<CalendarMeta?>(null) }   // share-links dialog target
+
+    // Deep-link from the sidebar's per-calendar edit button: open the
+    // requested calendar's edit dialog once, as soon as the list
+    // contains it. Consumed-flag so later list reloads (e.g. after an
+    // unrelated save) don't resurrect the dialog.
+    var initialEditConsumed by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(initialEditId, calendars) {
+        if (!initialEditConsumed && initialEditId != null) {
+            calendars.firstOrNull { it.id == initialEditId }?.let {
+                editing = it
+                initialEditConsumed = true
+            }
+        }
+    }
 
     SectionTitle(t("settings.calendars.title"))
     Text(
@@ -896,9 +926,9 @@ private fun CalendarEditDialog(
 
     val isEdit = existing != null
     var name by remember { mutableStateOf(existing?.name.orEmpty()) }
-    // Default new calendars to the first brand swatch; pre-select the
+    // Default new calendars to the shared default swatch; pre-select the
     // existing color on edit (parseHex tolerates any case / missing #).
-    var color by remember { mutableStateOf(existing?.color ?: CALENDAR_COLOR_PRESETS.first()) }
+    var color by remember { mutableStateOf(existing?.color ?: DEFAULT_CALENDAR_COLOR) }
     // Default new-calendar timezone to the system zone so the field is
     // never empty on create (the server otherwise infers one, but
     // showing the user's tz up front is clearer).
@@ -1119,28 +1149,34 @@ private fun CalendarDeleteDialog(
     )
 }
 
-/** Wrapping row of preset color swatches. The selected swatch gets a
- *  thicker outline ring so the current choice is obvious at a glance. */
+/** Preset color swatches in rows of nine (17 presets = two rows, which
+ *  fits the 420dp dialog; a single Row overflowed once the palette grew
+ *  to the shared 17). The selected swatch gets a thicker outline ring
+ *  so the current choice is obvious at a glance. */
 @Composable
 private fun ColorSwatchRow(selected: String, onSelect: (String) -> Unit) {
     // Normalize for comparison — server may echo back lower/upper case.
     val sel = selected.removePrefix("#").lowercase()
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        CALENDAR_COLOR_PRESETS.forEach { hex ->
-            val isSel = hex.removePrefix("#").lowercase() == sel
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(parseHex(hex))
-                    .border(
-                        width = if (isSel) 3.dp else 1.dp,
-                        color = if (isSel) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                        shape = CircleShape,
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        CALENDAR_COLOR_PRESETS.chunked(9).forEach { rowColors ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowColors.forEach { hex ->
+                    val isSel = hex.removePrefix("#").lowercase() == sel
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(parseHex(hex))
+                            .border(
+                                width = if (isSel) 3.dp else 1.dp,
+                                color = if (isSel) MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                shape = CircleShape,
+                            )
+                            .clickable { onSelect(hex) },
                     )
-                    .clickable { onSelect(hex) },
-            )
+                }
+            }
         }
     }
 }

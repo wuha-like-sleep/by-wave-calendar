@@ -21,6 +21,7 @@ struct ManageCalendarsView: View {
     @State private var calendars: [CalendarMeta] = []
     @State private var loading = false
     @State private var errorMessage: String?
+    @State private var showingCreate = false
 
     var body: some View {
         Group {
@@ -60,6 +61,34 @@ struct ManageCalendarsView: View {
         }
         .navigationTitle("管理日历")
         .navigationBarTitleDisplayMode(.inline)
+        // Create entry on the manage page itself. Creating a calendar
+        // used to live ONLY inside the "筛选日历" sheet, while this
+        // page — the one named "manage" — had no create button at all;
+        // with zero calendars its empty state told users to create one
+        // "在 APP 上" with no way to do it here, and the new-event +
+        // and ICS import were both disabled at the same time: a dead
+        // end for first-run users. Reuses CalendarCreateView as-is.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showingCreate = true
+                } label: {
+                    Label("新建日历", systemImage: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingCreate) {
+            NavigationStack {
+                CalendarCreateView(
+                    onCreated: {
+                        showingCreate = false
+                        Task { await reload() }
+                    },
+                    onCancel: { showingCreate = false },
+                )
+                .environmentObject(state)
+            }
+        }
         .task { await reload() }
         .alert("出错了", isPresented: Binding(
             get: { errorMessage != nil },
@@ -138,7 +167,7 @@ struct EditCalendarView: View {
             // be inferred"). Use the full header-closure form instead.
             Section {
                 Picker("时区", selection: $timezone) {
-                    ForEach(EventEditView.commonTimezones, id: \.self) { tz in
+                    ForEach(pickerTimezones, id: \.self) { tz in
                         Text(tz).tag(tz)
                     }
                 }
@@ -181,17 +210,35 @@ struct EditCalendarView: View {
             // until the view initializes.
             name = calendar.name
             color = calendar.color
-            timezone = calendar.timezone ?? ""
+            timezone = originalTimezone
             description = calendar.description ?? ""
-            // If the calendar's timezone isn't one of the picker's
-            // common values, fall back to the system tz so the Picker
-            // isn't stuck on an invalid selection. (The PATCH only
-            // sends the value if the user changed it, so a server-side
-            // exotic tz still survives a "no-op save".)
-            if !EventEditView.commonTimezones.contains(timezone) {
-                timezone = TimeZone.current.identifier
-            }
         }
+    }
+
+    /// The timezone this form treats as "unchanged": the calendar's own
+    /// zone, or the system zone for rows without one. BOTH the dirty
+    /// check and the save payload compare against this single value.
+    /// They used to compare against different fallbacks (current zone
+    /// in canSave, "" in save) while onAppear substituted the system
+    /// zone for any zone missing from the common shortlist — so opening
+    /// a calendar whose zone was set on the web to something outside
+    /// the shortlist (e.g. America/Denver) enabled Save with no edits,
+    /// and a rename-only save silently rewrote its timezone to the
+    /// system zone.
+    private var originalTimezone: String {
+        calendar.timezone ?? TimeZone.current.identifier
+    }
+
+    /// Picker options: the common shortlist plus this calendar's own
+    /// zone when it isn't in the shortlist, so the Picker can always
+    /// represent the current value faithfully instead of substituting
+    /// the system zone for it.
+    private var pickerTimezones: [String] {
+        var list = EventEditView.commonTimezones
+        if let own = calendar.timezone, !own.isEmpty, !list.contains(own) {
+            list.append(own)
+        }
+        return list
     }
 
     /// One color swatch. Extracted from the LazyVGrid body so the
@@ -216,7 +263,7 @@ struct EditCalendarView: View {
         guard !trimmed.isEmpty else { return false }
         return trimmed != calendar.name ||
             color != calendar.color ||
-            timezone != (calendar.timezone ?? TimeZone.current.identifier) ||
+            timezone != originalTimezone ||
             description != (calendar.description ?? "")
     }
 
@@ -233,7 +280,7 @@ struct EditCalendarView: View {
                 name: trimmedName != calendar.name ? trimmedName : nil,
                 description: description != (calendar.description ?? "") ? description : nil,
                 color: color != calendar.color ? color : nil,
-                timezone: timezone != (calendar.timezone ?? "") ? timezone : nil,
+                timezone: timezone != originalTimezone ? timezone : nil,
             )
             let _: CalendarMeta = try await client.patch("/calendars/\(calendar.id)", body: body)
             onSaved()
