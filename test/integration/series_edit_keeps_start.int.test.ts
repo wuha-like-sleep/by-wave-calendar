@@ -257,7 +257,9 @@ describe("日历接口的响应", () => {
     expect(first.statusCode).toBe(200);
     const tag = first.headers.etag as string;
     expect(tag).toBeTruthy();
-    expect(first.headers["cache-control"]).toBe("no-store");
+    // 协商缓存：private, no-cache（原为 no-store，浏览器连协商的机会
+    // 都没有；ETag 语义不变，见 events_cache_negotiation 测试）。
+    expect(first.headers["cache-control"]).toBe("private, no-cache");
     const second = await get({ "if-none-match": tag });
     expect(second.statusCode).toBe(304);
     expect(second.body).toBe("");
