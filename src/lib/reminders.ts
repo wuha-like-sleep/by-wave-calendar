@@ -110,6 +110,8 @@ type CandidateEventRow = {
    * 可选：测试里的假 store 不写就是 false。
    */
   rawStartIsUtc?: boolean | null;
+  /** 只给展开缓存做键用（rrule_expand.ts）。可选：假 store 不写也不算错。 */
+  updatedAt?: Date | null;
 };
 
 type CalendarRow = { id: string; ownerId: string; timezone: string | null; name: string };
@@ -191,6 +193,7 @@ const dbStore: ReminderStore = {
         endsAt: schema.events.endsAt, location: schema.events.location, extra: schema.events.extra,
         calendarId: schema.events.calendarId, rrule: schema.events.rrule,
         exdates: schema.events.exdates, allDay: schema.events.allDay,
+        updatedAt: schema.events.updatedAt,
         // 和 rawIcsStartIsUtc() 同一个正则源、同一个「得有 VEVENT」的前提。
         rawStartIsUtc: sql<boolean>`(strpos(coalesce(${schema.events.rawIcs}, ''), 'BEGIN:VEVENT') > 0
           AND ${schema.events.rawIcs} ~* ${RAW_START_IS_UTC_PATTERN})`,
@@ -380,6 +383,7 @@ export async function dispatchDueReminders(
         rrule: ev.rrule ?? null,
         exdates: (ev.exdates as string[] | null) ?? null,
         allDay: ev.allDay,
+        updatedAt: ev.updatedAt ?? null,
         timeZone: expansionTimeZone({
           allDay: ev.allDay, extra: ev.extra, calendarTimezone: calTz, rawStartIsUtc: !!ev.rawStartIsUtc,
         }),

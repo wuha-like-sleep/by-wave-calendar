@@ -23,6 +23,7 @@ drizzle/migrations/meta/_journal.json.bak
 src/public/lib/
 src/public/css/styles.css
 src/public/_built/
+asset-version.txt
 
 # User-uploaded files
 src/public/uploads/

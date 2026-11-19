@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">搜尋範圍涵蓋標題、備註和地點</string>
     <string name="search2_no_results_title">沒有符合的事件</string>
     <string name="search2_no_results_subtitle">換個關鍵字再試試</string>
+    <string name="search2_server_section">全部歷史（伺服器）</string>
+    <string name="search2_server_more">在全部歷史中搜尋</string>
+    <string name="search2_server_searching">正在搜尋全部歷史…</string>
+    <string name="search2_offline_hint">目前離線，僅顯示本地結果</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

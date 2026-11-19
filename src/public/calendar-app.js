@@ -1472,10 +1472,15 @@
     // showParsed() below wants Date objects (it calls toDateString/getHours).
     // A date-time string with no zone is parsed as LOCAL by spec, which is
     // exactly the wall-clock reading we want — no timezone shift here.
+    // location / rrule / allDay ride along when the parser found them
+    // (older bundles simply leave them undefined).
     return {
       summary: r.summary,
       startsAt: new Date(r.startsAt),
       endsAt: new Date(r.endsAt),
+      location: r.location || null,
+      rrule: r.rrule || null,
+      allDay: !!r.allDay,
     };
   }
 
@@ -1490,6 +1495,18 @@
     // Localized "Aug 6"-style date (zh-CN renders as 8月6日 via Intl).
     const fmtDate = (d) => new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric" }).format(d);
     const fmtTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    // "7月4日 15:00–16:30 · 开会 · 星巴克" — collapse the end to just a time
+    // when it's the same calendar day, so the duration reads at a glance.
+    // All-day parses show just the date (00:00–23:59 would be noise).
+    // Shared by the modal preview and the main-screen quick-add preview.
+    function fmtParsed(parsed) {
+      const title = parsed.summary || T("app.js.nl.untitled");
+      const place = parsed.location ? ` · ${parsed.location}` : "";
+      if (parsed.allDay) return `✓ ${fmtDate(parsed.startsAt)} · ${title}${place}`;
+      const sameDay = parsed.startsAt.toDateString() === parsed.endsAt.toDateString();
+      const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
+      return `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${title}${place}`;
+    }
     function showParsed(parsed, commit) {
       if (!nlInput || !nlHint) return;
       if (!parsed) {
@@ -1508,14 +1525,20 @@
         if (parsed.summary) form.querySelector('[name="summary"]').value = parsed.summary;
         form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(parsed.startsAt);
         form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(parsed.endsAt);
+        // 地点 / 重复 / 全天：解析器给得出才填，给不出就不动表单现有的值。
+        if (parsed.location) form.querySelector('[name="location"]').value = parsed.location;
+        if (parsed.rrule) setRepeatValue(parsed.rrule);
+        if (parsed.allDay) {
+          form.querySelector('[name="allDay"]').checked = true;
+          form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(parsed.startsAt);
+          form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(parsed.endsAt);
+          syncAllDayUI();
+          switchReminderGroup(true);
+        }
       }
-      // "7月4日 15:00–16:30 · 开会" — collapse the end to just a time when it's
-      // the same calendar day, so the duration reads at a glance.
-      const sameDay = parsed.startsAt.toDateString() === parsed.endsAt.toDateString();
-      const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
       nlHint.classList.remove("hidden");
       nlHint.style.color = "rgb(67 56 202)"; // brand-700
-      nlHint.textContent = `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${parsed.summary || T("app.js.nl.untitled")}`;
+      nlHint.textContent = fmtParsed(parsed);
     }
     function applyNl(commit) {
       if (!nlInput) return;
@@ -1531,6 +1554,45 @@
         if (e.key === "Enter") { e.preventDefault(); clearTimeout(debounce); applyNl(true); }
       });
       nlInput.addEventListener("blur", () => { clearTimeout(debounce); if (nlInput.value.trim()) applyNl(true); });
+    }
+
+    // 主界面常驻快速添加框（#quick-add-input）：和弹窗里那个输入框共用同一个
+    // 解析器和同一套回填（showParsed 的 commit 分支），不另起保存逻辑。
+    // 输入时只预览；回车才打开新建表单并回填。解析不出来时也打开表单，
+    // 原文放进标题和弹窗的 NL 输入框，用户接着手改即可，不丢字。
+    const qaInput = $("#quick-add-input");
+    const qaHint = $("#quick-add-hint");
+    if (qaInput && qaHint) {
+      let qaDebounce;
+      const showQa = (parsed) => {
+        if (!parsed) { qaHint.classList.add("hidden"); qaHint.textContent = ""; return; }
+        qaHint.classList.remove("hidden");
+        qaHint.textContent = fmtParsed(parsed);
+      };
+      qaInput.addEventListener("input", () => {
+        clearTimeout(qaDebounce);
+        qaDebounce = setTimeout(() => showQa(parseNaturalLanguageEvent(qaInput.value)), 200);
+      });
+      qaInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        clearTimeout(qaDebounce);
+        const text = qaInput.value.trim();
+        if (!text) return;
+        const parsed = parseNaturalLanguageEvent(text);
+        openNewEvent();
+        // openEventModal 会清掉弹窗 NL 输入框，所以原文要在打开之后再放回去。
+        if (nlInput) nlInput.value = text;
+        if (parsed) {
+          showParsed(parsed, true);
+        } else {
+          const form = $("#form-event");
+          if (form) form.querySelector('[name="summary"]').value = text;
+          showParsed(null, true);
+        }
+        qaInput.value = "";
+        showQa(null);
+      });
     }
   }
 
@@ -1985,9 +2047,65 @@
   // 再点不能再建一个新日历，不然每失败一次就多一个空日历。重新打开弹窗时清掉。
   let importCreatedCalendarId = null;
 
+  // 两步导入（文件 / 粘贴）：第一次点「导入」先预览（只解析判定、不落库），
+  // 用户看过数字点「确认导入」才真的写。状态记的是「预览看的内容 + 目标日历」
+  // 的指纹 —— 内容或目标变了必须重新预览，不许拿旧数字去导另一份东西。
+  let importPreviewState = null; // { key, calendarId }
+
+  function resetImportPreview() {
+    importPreviewState = null;
+    const panel = $("#import-preview");
+    if (panel) panel.classList.add("hidden");
+    const form = $("#form-import");
+    const btn = form && form.querySelector('button[type="submit"]');
+    if (btn && !btn.disabled) btn.textContent = T("app.js.import.submit");
+  }
+
+  function showImportPreview(preview) {
+    const panel = $("#import-preview");
+    const summary = $("#import-preview-summary");
+    const reasons = $("#import-preview-reasons");
+    if (!panel || !summary || !reasons) return;
+    summary.textContent = T("app.js.import.previewSummary", {
+      total: preview.total, inserted: preview.inserted, updated: preview.updated,
+      duplicates: preview.duplicates, invalid: preview.invalid,
+    });
+    reasons.innerHTML = "";
+    (preview.invalidReasons || []).forEach((r) => {
+      const li = document.createElement("li");
+      li.textContent = r;
+      reasons.appendChild(li);
+    });
+    reasons.classList.toggle("hidden", !(preview.invalidReasons || []).length);
+    panel.classList.remove("hidden");
+  }
+
+  // 预览接口只回 JSON。判成功口径和导入一致（见 bwcImportResult 的注释）：
+  // 只有服务端明说 ok: true 且带 preview 才算数，其余一律按失败处理。
+  async function postImportPreview(url, body) {
+    const resp = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      body,
+    });
+    let data = null;
+    try { data = await resp.json(); } catch (_e) { data = null; }
+    if (data && data.ok === true && data.preview) return data.preview;
+    if (data && data.ok === false && typeof data.message === "string" && data.message) {
+      const e = new Error(data.message);
+      e.userFacing = true;
+      throw e;
+    }
+    const e = new Error(T("app.js.import.reloadAndRetry"));
+    e.userFacing = true;
+    throw e;
+  }
+
   function openImportCalendar() {
     const form = $("#form-import");
     importCreatedCalendarId = null;
+    resetImportPreview();
     form.reset();
     buildColorPicker(form.querySelector('[data-color-picker="form-import"]'), "newColor", "#6366f1");
     // Reset source pane to file
@@ -2011,13 +2129,20 @@
       const v = importForm.querySelector('input[name="source"]:checked').value;
       importForm.querySelectorAll("[data-source-pane]").forEach((p) => p.classList.toggle("hidden", p.dataset.sourcePane !== v));
       if (sourceHint) sourceHint.textContent = hints[v] || "";
+      resetImportPreview();
     }));
 
     importForm.querySelectorAll('input[name="destination"]').forEach((r) => r.addEventListener("change", () => {
       const v = importForm.querySelector('input[name="destination"]:checked').value;
       importForm.querySelector('[data-dest-pane="new"]').classList.toggle("hidden", v !== "new");
       importForm.querySelector('[data-dest-pane="existing"]').classList.toggle("hidden", v !== "existing");
+      resetImportPreview();
     }));
+
+    // 预览看的内容或目标只要动了，预览就作废（指纹对不上了，见提交处理里的 Step 2.5）。
+    importForm.querySelector('[data-source-pane="file"] input[type="file"]')?.addEventListener("change", resetImportPreview);
+    importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]')?.addEventListener("input", resetImportPreview);
+    importForm.querySelector('[data-dest-pane="existing"]')?.addEventListener("change", resetImportPreview);
 
     importForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -2029,14 +2154,18 @@
       try {
         // Step 1: 先把要发的内容备好、在本地能查的先查掉 —— 文件没选、URL 没填就别先建一个新日历。
         // **_csrf 排在 file 前面**：服务端拿到文件那一刻只解析过它前面的字段（verifyMultipartCsrf）。
+        // previewKey 是这份内容的指纹，Step 2.5 拿它判「预览看的是不是这一份」。
         let path;
         let body;
+        let previewKey = null;
         if (source === "file") {
           const fileInput = importForm.querySelector('[data-source-pane="file"] input[type="file"]');
           if (!fileInput.files || !fileInput.files[0]) throw new Error(T("app.js.import.selectFile"));
+          const f = fileInput.files[0];
+          previewKey = `file:${f.name}:${f.size}:${f.lastModified}`;
           body = new FormData();
           body.append("_csrf", ctx.csrfToken);
-          body.append("file", fileInput.files[0]);
+          body.append("file", f);
           path = "import/file";
         } else if (source === "url-once") {
           const url = importForm.querySelector('[data-source-pane="url-once"] input[name="url"]').value.trim();
@@ -2053,6 +2182,9 @@
         } else {
           const text = importForm.querySelector('[data-source-pane="paste"] textarea[name="text"]').value;
           if (!text || text.length < 20) throw new Error(T("app.js.import.pasteIcs"));
+          let h = 0;
+          for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+          previewKey = `paste:${text.length}:${h}`;
           body = formBody({ text });
           path = "import/text";
         }
@@ -2083,6 +2215,21 @@
           importCreatedCalendarId = calendarId;
         }
 
+        // Step 2.5: 文件 / 粘贴先预览 —— 同一份内容、同一个目标日历只预览一次；
+        // 预览过且指纹没变，再点就是真的导入。URL / 订阅一步到位不在这一版
+        // （预览它们要先抓远程 / 先建订阅，口径完全不同，见服务端路由侧注释）。
+        if ((source === "file" || source === "paste") &&
+            (!importPreviewState || importPreviewState.key !== previewKey || importPreviewState.calendarId !== calendarId)) {
+          submitBtn.textContent = T("app.js.import.previewing");
+          const previewPath = source === "file" ? "import/preview/file" : "import/preview/text";
+          const preview = await postImportPreview(`/app/calendars/${calendarId}/${previewPath}`, body);
+          importPreviewState = { key: previewKey, calendarId };
+          showImportPreview(preview);
+          submitBtn.disabled = false;
+          submitBtn.textContent = T("app.js.import.confirmSubmit");
+          return;
+        }
+
         // Step 3: send the import to that calendar —— 只有服务端回 ok: true 才往下走。
         const result = await postImport(`/app/calendars/${calendarId}/${path}`, body);
         if (result.partial) {
@@ -2098,7 +2245,8 @@
         const msg = err && err.userFacing ? err.message : T("app.js.import.failed", { error: (err && err.message) || err });
         window.bwc && window.bwc.toast(msg, "error", { durationMs: 6000 });
         submitBtn.disabled = false;
-        submitBtn.textContent = T("app.js.import.submit");
+        // 预览已经看过的话按钮回到「确认导入」，没看过回到「导入」。
+        submitBtn.textContent = importPreviewState ? T("app.js.import.confirmSubmit") : T("app.js.import.submit");
       }
     });
   }

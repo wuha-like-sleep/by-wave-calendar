@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
 import { safeFetch, SsrfBlockedError } from "./ssrf_guard.js";
@@ -171,51 +171,118 @@ async function calendarTimezoneOf(calendarId: string): Promise<string | null> {
   return cal?.timezone ?? null;
 }
 
-async function upsertEvents(
+type EventRow = typeof schema.events.$inferSelect;
+
+/** 预查现有行时每条 IN 查询带多少个 uid。 */
+const PREFETCH_UID_CHUNK = 500;
+/** 落库时每条多行 upsert 带多少行（每行约 12 个参数，离 PG 的参数上限还很远）。 */
+const UPSERT_ROW_CHUNK = 200;
+
+/**
+ * 一次导入里某个 uid 最终要落库的样子。同一文件里同 uid 出现多次时按顺序合并：
+ * 最后一个版本的内容字段胜出；exdates 只有被时区重映射改过才动，没改的那一版
+ * 不许把先前那一版的重映射冲掉（和逐条写时「没重映射就不碰 exdates 列」一致）。
+ */
+type PendingWrite = {
+  uid: string;
+  summary: string;
+  description: string | null;
+  location: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  allDay: boolean;
+  rrule: string | null;
+  extra: Record<string, unknown> | null;
+  remappedExdates: string[] | undefined;
+};
+
+/**
+ * 一次导入的「判定结果」：哪些新增、哪些更新、哪些跳过、要写哪些行。
+ * 真实导入（upsertEvents）和导入预览（previewIcsText）共用这一份判定 ——
+ * 预览说新增 X、导入就必须是新增 X，两边各写一套迟早对不上。
+ * 这里只读库（预查现有行、日历时区），一个字都不写。
+ */
+type ImportPlan = {
+  inserted: number;
+  updated: number;
+  /** 重复跳过：内容和库里一模一样 + 已软删不复活。真实导入里算 skipped。 */
+  duplicates: number;
+  /** 无效：解析出来了但缺 uid / 标题。真实导入里算 skipped。 */
+  invalid: number;
+  invalidReasons: string[];
+  pending: PendingWrite[];
+};
+
+async function planImport(
   calendarId: string,
   parsed: IcalEvent[],
   sourceTag: string | null,
-): Promise<ImportResult> {
+): Promise<ImportPlan> {
   let inserted = 0;
   let updated = 0;
-  let skipped = 0;
+  let duplicates = 0;
+  let invalid = 0;
+  const invalidReasons: string[] = [];
   let calendarTimezone: string | null | undefined;
 
+  // ---- 第一步：按原顺序把 uid 定下来（短 uid 合成规则和以前一字不差） ----
+  //
+  // Stable synthetic uid for suspiciously-short source uids.
+  //
+  // BUG (fixed here): this used to be `${ev.uid}-${newEventUid()}` — a
+  // RANDOM suffix minted fresh on every call. That broke idempotency:
+  // the (calendarId, uid) conflict target never matched on re-import, so
+  // every manual re-import AND every 5-minute subscription refresh
+  // INSERTED a brand-new row → the "one event became several copies"
+  // duplication. Derive the suffix DETERMINISTICALLY from the event's
+  // identity instead, so the same source event maps to the same row
+  // across imports, while two genuinely-distinct events that happen to
+  // share a short source uid still resolve to different uids.
+  const items: { ev: IcalEvent; uid: string }[] = [];
   for (const ev of parsed) {
-    if (!ev.uid || !ev.summary) { skipped++; continue; }
-    // Stable synthetic uid for suspiciously-short source uids.
-    //
-    // BUG (fixed here): this used to be `${ev.uid}-${newEventUid()}` — a
-    // RANDOM suffix minted fresh on every call. That broke idempotency:
-    // the (calendarId, uid) conflict target never matched on re-import, so
-    // every manual re-import AND every 5-minute subscription refresh
-    // INSERTED a brand-new row → the "one event became several copies"
-    // duplication. Derive the suffix DETERMINISTICALLY from the event's
-    // identity instead, so the same source event maps to the same row
-    // across imports, while two genuinely-distinct events that happen to
-    // share a short source uid still resolve to different uids.
+    if (!ev.uid || !ev.summary) {
+      invalid++;
+      if (invalidReasons.length < 5) invalidReasons.push("有一条事件缺少 UID 或标题");
+      continue;
+    }
     const uid = ev.uid.length >= 8
       ? ev.uid
       : `${ev.uid}-${createHash("sha1")
           .update(`${ev.uid}|${ev.summary}|${ev.startsAt.toISOString()}|${ev.endsAt.toISOString()}`)
           .digest("hex")
           .slice(0, 12)}`;
+    items.push({ ev, uid });
+  }
 
+  // ---- 第二步：现有行按 uid 一次预查（分块 IN），不再逐条 SELECT ----
+  //
+  // 为什么要先查：为了 SKIP 无变化的写。每次刷新都重写 updatedAt —— 哪怕内容
+  // 没变 —— 会让 CalDAV 的 etag（etag = etagOf(updatedAt)）一直动。Apple 日历
+  // 缓存 etag，etag 老在动，它的 If-Match PUT 就 412 → 用户看到「无法更新
+  // 日历 / The calendar could not be updated」。只有用户可见字段真的变了才写。
+  const byUid = new Map<string, EventRow>();
+  const distinctUids = [...new Set(items.map((i) => i.uid))];
+  for (let i = 0; i < distinctUids.length; i += PREFETCH_UID_CHUNK) {
+    const chunk = distinctUids.slice(i, i + PREFETCH_UID_CHUNK);
+    const rows = await db
+      .select()
+      .from(schema.events)
+      .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uid, chunk)));
+    for (const r of rows) byUid.set(r.uid, r);
+  }
+
+  // ---- 第三步：按原顺序逐条判定（纯内存），要写的先攒着 ----
+  //
+  // 判定规则和逐条版完全一致，差别只在「现有行」来自预查的 Map。每判定出一笔
+  // 写，就立刻把 Map 里那行换成写完之后的样子 —— 这样同一文件里同 uid 第二次
+  // 出现时，比较对象和逐条版从库里现查到的一样，后者覆盖前者的语义不变。
+  const pending = new Map<string, PendingWrite>();
+
+  for (const { ev, uid } of items) {
     const desc = ev.description ?? null;
     const loc = ev.location ?? null;
     const rrule = ev.rrule ?? null;
-
-    // Look up the current row so we can SKIP no-op writes. Re-writing
-    // updatedAt on every refresh — even when nothing changed — churns the
-    // CalDAV etag (etag = etagOf(updatedAt)). Apple Calendar caches etags;
-    // a perpetually-moving etag makes its If-Match PUTs fail with 412 →
-    // it surfaces "无法更新日历 / The calendar could not be updated". Only
-    // touch the row when a user-visible field actually differs.
-    const [existing] = await db
-      .select()
-      .from(schema.events)
-      .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uid, uid)))
-      .limit(1);
+    const existing = byUid.get(uid);
 
     const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null, importTimeZone(ev));
     // 这次刷新 / 重新导入把展开时区换了（升级后第一次刷新补上源时区就是这样）：用户在我们这边
@@ -235,7 +302,7 @@ async function upsertEvents(
     if (existing) {
       // Leave soft-deleted rows alone: don't resurrect something the user
       // (or the dedupe script) removed, and don't churn its updatedAt.
-      if (existing.deletedAt != null) { skipped++; continue; }
+      if (existing.deletedAt != null) { duplicates++; continue; }
       const unchanged =
         existing.summary === ev.summary &&
         (existing.description ?? null) === desc &&
@@ -249,46 +316,207 @@ async function upsertEvents(
         // extraVal 已经算好了，只是没人写进去，症状是「上游改了但我们这边没反应」。
         stableJson(extraVal) === stableJson(existing.extra ?? null) &&
         !remappedExdates;
-      if (unchanged) { skipped++; continue; }
+      if (unchanged) { duplicates++; continue; }
+      updated++;
+    } else {
+      inserted++;
     }
 
-    const result = await db
-      .insert(schema.events)
-      .values({
-        calendarId,
-        uid,
-        summary: ev.summary,
-        description: desc,
-        location: loc,
-        startsAt: ev.startsAt,
-        endsAt: ev.endsAt,
-        allDay: ev.allDay,
-        rrule,
-        extra: extraVal,
-        updatedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [schema.events.calendarId, schema.events.uid],
-        set: {
-          summary: ev.summary,
-          description: desc,
-          location: loc,
-          startsAt: ev.startsAt,
-          endsAt: ev.endsAt,
-          allDay: ev.allDay,
-          rrule,
-          extra: extraVal,
-          ...(remappedExdates ? { exdates: remappedExdates } : {}),
-          updatedAt: new Date(),
-        },
-      })
-      .returning({ id: schema.events.id, inserted: sql<boolean>`(xmax = 0)` });
-    const row = result[0];
-    if (!row) { skipped++; continue; }
-    if (row.inserted) inserted++; else updated++;
+    const prev = pending.get(uid);
+    const write: PendingWrite = {
+      uid,
+      summary: ev.summary,
+      description: desc,
+      location: loc,
+      startsAt: ev.startsAt,
+      endsAt: ev.endsAt,
+      allDay: ev.allDay,
+      rrule,
+      extra: extraVal,
+      remappedExdates: remappedExdates ?? prev?.remappedExdates,
+    };
+    pending.set(uid, write);
+
+    // 把 Map 里那行换成写完之后的样子（见第三步开头的说明）。新行里导入不碰的
+    // 字段（rawIcs 等）按落库后的实际值给：插入时它们就是默认值 null。
+    byUid.set(uid, {
+      id: existing?.id ?? "",
+      calendarId,
+      uid,
+      summary: write.summary,
+      description: write.description,
+      location: write.location,
+      startsAt: write.startsAt,
+      endsAt: write.endsAt,
+      allDay: write.allDay,
+      rrule: write.rrule,
+      exdates: write.remappedExdates ?? existing?.exdates ?? null,
+      extra: write.extra,
+      rawIcs: existing?.rawIcs ?? null,
+      deletedAt: null,
+      createdAt: existing?.createdAt ?? write.startsAt,
+      updatedAt: existing?.updatedAt ?? write.startsAt,
+    });
   }
 
-  return { inserted, updated, skipped, total: parsed.length };
+  return {
+    inserted,
+    updated,
+    duplicates,
+    invalid,
+    invalidReasons,
+    pending: [...pending.values()],
+  };
+}
+
+async function upsertEvents(
+  calendarId: string,
+  parsed: IcalEvent[],
+  sourceTag: string | null,
+): Promise<ImportResult> {
+  const plan = await planImport(calendarId, parsed, sourceTag);
+
+  // ---- 落库：攒下的写分块，一块一条多行 upsert、一个事务 ----
+  //
+  // 分两组是因为 SET 子句一条语句里只能有一套：改过 exdates 的行要连 exdates
+  // 一起写；没改过的行 SET 里不带 exdates —— 和逐条版一样不碰那一列（预查之后
+  // 用户刚删掉的某一次出现，不会被导入拿旧快照盖回去）。
+  const plainWrites = plan.pending.filter((w) => !w.remappedExdates);
+  const exdateWrites = plan.pending.filter((w) => w.remappedExdates);
+  await flushUpsertChunk(calendarId, plainWrites, false);
+  await flushUpsertChunk(calendarId, exdateWrites, true);
+
+  return {
+    inserted: plan.inserted,
+    updated: plan.updated,
+    skipped: plan.duplicates + plan.invalid,
+    total: parsed.length,
+  };
+}
+
+// ---------- 导入预览（只判定，不落库） ----------
+
+export type ImportPreview = {
+  /** 文件里的 VEVENT 块总数（含解析不出来的那些）。 */
+  total: number;
+  /** 预计新增。 */
+  inserted: number;
+  /** 预计更新（库里已有、内容变了的）。 */
+  updated: number;
+  /** 重复跳过：内容和库里一模一样 + 已删掉不复活的。 */
+  duplicates: number;
+  /** 无效：解析不出来 + 缺 uid/标题。 */
+  invalid: number;
+  /** 无效原因摘要，最多 5 条。 */
+  invalidReasons: string[];
+};
+
+/**
+ * 数一遍文本里的 VEVENT 块、并给解析不出来的块找原因（缺哪几个必填字段）。
+ * parseEvent 丢弃一个块只有两种情况：块本身不完整（没有 END:VEVENT）、
+ * 或者缺 UID / SUMMARY / DTSTART / DTEND 之一（见 ical.ts）。这里按同一套
+ * 展开规则走一遍块，只用来给用户解释，不参与导入判定（判定在 planImport）。
+ */
+function droppedBlockReasons(text: string): { blocks: number; reasons: string[] } {
+  const unfolded = text.replace(/\r?\n[\t ]/g, "");
+  const lines = unfolded.split(/\r?\n/);
+  const reasons: string[] = [];
+  let blocks = 0;
+  let i = 0;
+  while (i < lines.length) {
+    if ((lines[i] ?? "").toUpperCase() === "BEGIN:VEVENT") {
+      blocks++;
+      let j = i + 1;
+      while (j < lines.length && (lines[j] ?? "").toUpperCase() !== "END:VEVENT") j++;
+      if (j >= lines.length) {
+        if (reasons.length < 5) reasons.push(`第 ${blocks} 条事件不完整（缺少 END:VEVENT）`);
+        break;
+      }
+      const present = new Set<string>();
+      for (let k = i + 1; k < j; k++) {
+        const m = /^([A-Za-z0-9-]+)[;:]/u.exec(lines[k] ?? "");
+        if (m) present.add(m[1]!.toUpperCase());
+      }
+      const missing = ["UID", "SUMMARY", "DTSTART", "DTEND"].filter((p) => !present.has(p));
+      if (missing.length && reasons.length < 5) {
+        reasons.push(`第 ${blocks} 条事件缺少 ${missing.join("、")}`);
+      }
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return { blocks, reasons };
+}
+
+/**
+ * 预览一次导入：解析 + 判定，**不落库、不留任何临时数据**。
+ * 判定走 planImport，和真实导入同一份代码、同一个 sourceTag 口径 ——
+ * 调用方必须传和随后真实导入一样的 sourceTag（它参与 extra 合并、
+ * 影响「内容有没有变」的判定），否则预览和导入会对不上。
+ */
+export async function previewIcsText(
+  calendarId: string,
+  text: string,
+  opts: { sourceTag?: string | null } = {},
+): Promise<ImportPreview> {
+  const parsed = parseEvents(text);
+  const plan = await planImport(calendarId, parsed, opts.sourceTag ?? null);
+  const { blocks, reasons } = droppedBlockReasons(text);
+  const unparsed = Math.max(0, blocks - parsed.length);
+  return {
+    total: parsed.length + unparsed,
+    inserted: plan.inserted,
+    updated: plan.updated,
+    duplicates: plan.duplicates,
+    invalid: plan.invalid + unparsed,
+    invalidReasons: [...reasons, ...plan.invalidReasons].slice(0, 5),
+  };
+}
+
+async function flushUpsertChunk(
+  calendarId: string,
+  writes: PendingWrite[],
+  withExdates: boolean,
+): Promise<void> {
+  for (let i = 0; i < writes.length; i += UPSERT_ROW_CHUNK) {
+    const chunk = writes.slice(i, i + UPSERT_ROW_CHUNK);
+    const now = new Date();
+    const values = chunk.map((w) => ({
+      calendarId,
+      uid: w.uid,
+      summary: w.summary,
+      description: w.description,
+      location: w.location,
+      startsAt: w.startsAt,
+      endsAt: w.endsAt,
+      allDay: w.allDay,
+      rrule: w.rrule,
+      extra: w.extra,
+      ...(withExdates ? { exdates: w.remappedExdates ?? null } : {}),
+      updatedAt: now,
+    }));
+    await db.transaction(async (tx) => {
+      await tx
+        .insert(schema.events)
+        .values(values)
+        .onConflictDoUpdate({
+          target: [schema.events.calendarId, schema.events.uid],
+          set: {
+            summary: sql`excluded.summary`,
+            description: sql`excluded.description`,
+            location: sql`excluded.location`,
+            startsAt: sql`excluded.starts_at`,
+            endsAt: sql`excluded.ends_at`,
+            allDay: sql`excluded.all_day`,
+            rrule: sql`excluded.rrule`,
+            extra: sql`excluded.extra`,
+            ...(withExdates ? { exdates: sql`excluded.exdates` } : {}),
+            updatedAt: sql`excluded.updated_at`,
+          },
+        });
+    });
+  }
 }
 
 // ---------- Subscription refresh ----------

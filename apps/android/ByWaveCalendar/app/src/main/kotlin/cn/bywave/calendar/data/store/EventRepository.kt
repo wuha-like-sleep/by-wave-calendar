@@ -66,6 +66,18 @@ class EventRepository(
     }
 
     /**
+     * Server-side full-history search for the active profile. The local
+     * cache only covers a ~15-month window; anything older lives only on
+     * the server. Errors bubble (network failures included) so the
+     * caller can fall back to local-only results and say so.
+     */
+    suspend fun searchServer(query: String, limit: Int = 100): cn.bywave.calendar.data.model.SearchResponse {
+        val profile = profiles.active() ?: error("not signed in")
+        val client = ApiClient.forProfile(profile, profiles)
+        return client.api.search(query, limit)
+    }
+
+    /**
      * Fetch a window from the server and replace the active profile's
      * cache. Errors bubble so the ViewModel can surface a banner
      * without blocking the existing cached UI.

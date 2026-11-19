@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">제목, 메모, 위치를 검색합니다</string>
     <string name="search2_no_results_title">일치하는 일정이 없습니다</string>
     <string name="search2_no_results_subtitle">다른 키워드로 다시 시도하세요</string>
+    <string name="search2_server_section">전체 기록(서버)</string>
+    <string name="search2_server_more">전체 기록에서 검색</string>
+    <string name="search2_server_searching">전체 기록 검색 중…</string>
+    <string name="search2_offline_hint">오프라인 상태로 로컬 결과만 표시합니다</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

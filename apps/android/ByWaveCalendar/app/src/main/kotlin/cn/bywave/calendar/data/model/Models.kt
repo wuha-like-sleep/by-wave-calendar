@@ -32,6 +32,10 @@ data class EventDTO(
     val isOccurrence: Boolean? = null,
     /** Server's JSONB `extra` column — timezone, attendees, link. */
     val extra: EventExtraDTO? = null,
+    /** Only on /search results for recurring events: the next occurrence's
+     *  start (the row's own startsAt stays the series start). Null when the
+     *  series has ended or the event does not repeat. */
+    val nextStartsAt: String? = null,
 )
 
 @Serializable
@@ -50,6 +54,34 @@ data class EventExtraDTO(
 data class EventsResponse(
     val calendars: List<CalendarMeta>,
     val events: List<EventDTO>,
+)
+
+/** GET /api/v1/search response (after the envelope is unwrapped).
+ *  Events carry two extra fields over the wire (calendarName /
+ *  calendarColor) that EventDTO does not model — the Json config ignores
+ *  unknown keys, and the names/colors come from `calendars` below. */
+@Serializable
+data class SearchResponse(
+    val events: List<EventDTO> = emptyList(),
+    val calendars: List<SearchCalendarHit> = emptyList(),
+    val bookingLinks: List<SearchBookingLinkHit> = emptyList(),
+)
+
+@Serializable
+data class SearchCalendarHit(
+    val id: String,
+    val name: String,
+    val color: String? = null,
+    val url: String? = null,
+)
+
+@Serializable
+data class SearchBookingLinkHit(
+    val id: String,
+    val title: String,
+    val slug: String,
+    val enabled: Boolean = true,
+    val url: String? = null,
 )
 
 @Serializable

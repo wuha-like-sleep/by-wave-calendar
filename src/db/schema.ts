@@ -604,6 +604,10 @@ export const events = pgTable("events", {
   // Soft-delete purge cron queries deleted_at < cutoff. PARTIAL index
   // (WHERE deleted_at IS NOT NULL) keeps it tiny — almost every row is live.
   deletedAtIdx: index("events_deleted_at_idx").on(t.deletedAt).where(sql`${t.deletedAt} IS NOT NULL`),
+  // 搜索用的 pg_trgm GIN 索引（summary / location / description /
+  // (extra ->> 'attendees')）只在迁移 0062 里建，没有写进这里：带 opclass 的
+  // 表达式索引 drizzle-kit 在这条冻结的快照链上表达不了，硬写一个没有
+  // gin_trgm_ops 的声明反而是错的。索引清单以迁移为准。
 }));
 
 export const calendarMembers = pgTable("calendar_members", {

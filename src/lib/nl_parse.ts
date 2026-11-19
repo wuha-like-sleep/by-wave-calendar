@@ -21,6 +21,8 @@ import {
   AT_PREFIX, HOUR_SUFFIX, MIN_SUFFIX, AM, PM, RANGE_SEP, RANGE_OPEN,
   HOUR_UNIT, MINUTE_UNIT, ONE_UNIT_WORDS, HALF_HOUR, AND_A_HALF, MONTHS,
   NEXT_BEFORE_WEEKDAY,
+  BYDAY_CODES, RECUR_WEEKDAY_CHAR_ZH, RECUR_WEEKDAY_CHAR_JA, RECUR_WEEKDAY_CHAR_KO,
+  RECUR_WEEKDAY_PREFIX_LATIN, RECUR_SIMPLE, ALL_DAY_WORDS,
   CJK_DIGITS, SPELLED_NUMBERS, NUM_CHAR, type Period,
 } from "./nl_vocab.js";
 
@@ -30,6 +32,20 @@ export type ParsedEvent = {
   startsAt: string;
   /** naive local wall-clock, "YYYY-MM-DDTHH:mm:ss" */
   endsAt: string;
+  /**
+   * Place named by an explicit location marker ("在星巴克开会",
+   * "meeting at Starbucks"). Only set when the marker is unambiguous —
+   * a phrase we cannot confidently split keeps the place in the summary.
+   * Added later than the original three fields; older clients ignore it.
+   */
+  location?: string;
+  /**
+   * Recurrence in the exact shape the create-event API stores in `rrule`
+   * ("FREQ=WEEKLY;BYDAY=FR"), when the phrase says the event repeats.
+   */
+  rrule?: string;
+  /** True when the phrase marks the event as all-day ("明天全天开会"). */
+  allDay?: boolean;
 };
 
 /** Parse "now" (an ISO-ish local string, or Date) into a UTC-anchored Date
@@ -62,6 +78,20 @@ function anchorNow(now: string | Date | undefined): Date {
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+/** 把若干 [start, end) 区段从文本里挖掉（重叠的先合并），每段换成一个空格。 */
+function removeSpans(text: string, spans: Array<readonly [number, number]>): string {
+  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+  let out = "";
+  let cursor = 0;
+  for (const [start, end] of sorted) {
+    const s = Math.max(start, cursor);
+    if (end <= s) continue;
+    out += text.slice(cursor, s) + " ";
+    cursor = end;
+  }
+  return out + text.slice(cursor);
 }
 
 /** All patterns are matched case-insensitively and with Unicode property
@@ -165,6 +195,89 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   const day = new Date(Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth(), nowAnchor.getUTCDate()));
   const dow = nowAnchor.getUTCDay();
 
+  // ── Step 0: recurrence + all-day ────────────────────────────────────────
+  // These run BEFORE the date step on purpose: "每周五" contains a weekday
+  // the date step would otherwise eat as a one-off, and "每月15号" contains
+  // a bare day-of-month. Weekday forms are rewritten to the bare weekday
+  // ("每周五" → "周五") so step 1b still lands the start date on the upcoming
+  // occurrence; the RRULE rides along on the result.
+  let rrule: string | null = null;
+
+  // 0a. CJK "every <weekday>": 每周五 / 毎週金曜日 / 매주 금요일.
+  if (rrule === null) {
+    const zh = remaining.match(/每\s*(?:周|週)\s*([一二三四五六日天])/);
+    if (zh) {
+      rrule = `FREQ=WEEKLY;BYDAY=${BYDAY_CODES[RECUR_WEEKDAY_CHAR_ZH[zh[1]!]!]}`;
+      remaining = remaining.replace(zh[0], ` 周${zh[1]} `);
+    }
+  }
+  if (rrule === null) {
+    const ja = remaining.match(/毎週\s*([月火水木金土日])\s*(?:曜日|曜)?/);
+    if (ja) {
+      rrule = `FREQ=WEEKLY;BYDAY=${BYDAY_CODES[RECUR_WEEKDAY_CHAR_JA[ja[1]!]!]}`;
+      remaining = remaining.replace(ja[0], ` ${ja[1]}曜日 `);
+    }
+  }
+  if (rrule === null) {
+    const ko = remaining.match(/매주\s*([월화수목금토일])\s*(?:요일)?/);
+    if (ko) {
+      rrule = `FREQ=WEEKLY;BYDAY=${BYDAY_CODES[RECUR_WEEKDAY_CHAR_KO[ko[1]!]!]}`;
+      remaining = remaining.replace(ko[0], ` ${ko[1]}요일 `);
+    }
+  }
+
+  // 0b. Latin "every <weekday>": every Friday / cada lunes / chaque lundi /
+  //     jeden Freitag. Trailing "s" allowed for es/fr plurals; the letter
+  //     boundary keeps "every month" from matching the "mon" of Monday.
+  //     The matched span is replaced by the ENGLISH weekday name: step 1b
+  //     matches it through the English entry no matter what language the
+  //     user wrote (a French plural "lundis" would fail 1b's word boundary
+  //     if we put the original word back).
+  if (rrule === null) {
+    const EN_WEEKDAY = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    for (const [pattern, target] of WEEKDAYS) {
+      const r = re(`(?<!\\p{L})(?:${RECUR_WEEKDAY_PREFIX_LATIN})\\s+(?:${pattern})s?(?!\\p{L})`);
+      if (!r.test(remaining)) continue;
+      rrule = `FREQ=WEEKLY;BYDAY=${BYDAY_CODES[target]!}`;
+      remaining = remaining.replace(r, ` ${EN_WEEKDAY[target]} `);
+      break;
+    }
+  }
+
+  // 0c. "每月15号" → monthly, leaving the bare "15号" for step 1h to date.
+  if (rrule === null) {
+    const md = remaining.match(/每\s*(?:个|個)?\s*月\s*([0-9]{1,2})\s*[号號日]/);
+    if (md) {
+      rrule = "FREQ=MONTHLY";
+      remaining = remaining.replace(md[0], ` ${md[1]}号 `);
+    }
+  }
+
+  // 0d. Whole-phrase markers （每天 / every week / 毎月 / 매달 / monatlich…).
+  if (rrule === null) {
+    for (const [pattern, rule] of RECUR_SIMPLE) {
+      const r = re(alt([pattern]));
+      if (r.test(remaining)) {
+        rrule = rule;
+        remaining = remaining.replace(r, " ");
+        break;
+      }
+    }
+  }
+
+  // 0e. All-day markers. The flag only shapes the result in step 4; an
+  //     explicit clock time next to one is contradictory input and the
+  //     all-day reading wins (the live preview shows what we understood).
+  let allDay = false;
+  for (const pattern of ALL_DAY_WORDS) {
+    const r = re(alt([pattern]));
+    if (r.test(remaining)) {
+      allDay = true;
+      remaining = remaining.replace(r, " ");
+      break;
+    }
+  }
+
   // ── Step 1: date ────────────────────────────────────────────────────────
   let dateOffset: number | null = null;
 
@@ -188,13 +301,20 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       const m = remaining.match(wdRe);
       if (!m) continue;
       let shift = 0;
+      // 命中的区段先记下来，最后一次性挖掉 —— 不能像以前那样先 replace 位移词
+      // 再 replace 星期词：「下周五」里两个词共用一个「周」字，先挖掉「下周」
+      // 就只剩一个「五」，第二个 replace 找不到「周五」，那个字会漏进标题
+      // （「下周五 9点 打球」的标题曾经是「五 打球」）。日期结果不受影响，
+      // 纯粹是标题被污染，所以这里只改挖法、不改任何日期语义。
+      const spans: Array<readonly [number, number]> = [[m.index!, m.index! + m[0].length]];
       // Look for a shift word immediately before, or anywhere in the text
       // for languages that put it after ("viernes de la semana que viene").
       for (const [shiftPattern, weeks] of WEEK_SHIFT) {
         const sRe = re(alt([shiftPattern]));
-        if (sRe.test(remaining)) {
+        const sm = remaining.match(sRe);
+        if (sm) {
           shift = weeks;
-          remaining = remaining.replace(sRe, " ");
+          spans.push([sm.index!, sm.index! + sm[0].length]);
           break;
         }
       }
@@ -203,15 +323,16 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       // standalone week-shift pass.
       if (shift === 0) {
         const nextRe = re(alt([NEXT_BEFORE_WEEKDAY.join("|")]));
-        if (nextRe.test(remaining)) {
+        const nm = remaining.match(nextRe);
+        if (nm) {
           shift = 7;
-          remaining = remaining.replace(nextRe, " ");
+          spans.push([nm.index!, nm.index! + nm[0].length]);
         }
       }
       let diff = (target - dow + 7) % 7;
       if (diff === 0) diff = 7; // upcoming, not today
       dateOffset = diff + shift;
-      remaining = remaining.replace(wdRe, " ");
+      remaining = removeSpans(remaining, spans);
       break;
     }
   }
@@ -295,6 +416,25 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       const tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + addMonths, Number(m[2]));
       dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
       remaining = remaining.replace(relMonthRe, " ");
+    }
+  }
+
+  // 1g2. "月底 / 下个月底 / 月末 / 월말 / end of month" → the last day of the
+  //      (possibly shifted) month. 裸「月底」永远是本月最后一天 —— 它不可能
+  //      已经过去，所以没有「过了往下滚」的问题；今天恰好是月底就是今天。
+  //      「每月底 / 每个月底」是重复说法，不许在这里吃掉：lookbehind 挡住
+  //      每 / 个月 直接领头的那两种，留给重复那一步（它目前锚不住月底，
+  //      整体返回 null —— 那是另一个缺口，不在这一步里假装解决）。
+  if (dateOffset === null) {
+    const monthEndRe = /(?<!每|个月|個月)(下下个月底|下下個月底|下个月底|下個月底|下月底|本月底|这个月底|這個月底|月底|月末|월말|end of next month|end of (?:the )?month)/i;
+    const m = remaining.match(monthEndRe);
+    if (m) {
+      const phrase = m[1]!;
+      const addMonths = phrase.includes("下下") ? 2
+        : phrase.startsWith("下") || /next/i.test(phrase) ? 1 : 0;
+      const tgt = Date.UTC(nowAnchor.getUTCFullYear(), nowAnchor.getUTCMonth() + addMonths + 1, 0);
+      dateOffset = Math.round((tgt - day.getTime()) / MS_DAY);
+      remaining = remaining.replace(monthEndRe, " ");
     }
   }
 
@@ -438,7 +578,8 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   }
 
   // Need at least a date OR time to count this as a successful parse.
-  if (dateOffset === null && hours === null) return null;
+  // An all-day marker also anchors ("全天开会" = today, all day).
+  if (dateOffset === null && hours === null && !allDay) return null;
 
   // ── Step 3: duration ────────────────────────────────────────────────────
   let durationMin = 60;
@@ -498,16 +639,24 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
   // ── Step 4: build the datetime (UTC-anchored wall-clock) ────────────────
   const startsAt = new Date(day.getTime());
   if (dateOffset !== null) startsAt.setUTCDate(startsAt.getUTCDate() + dateOffset);
-  if (hours === null) {
+  let endsAt: Date;
+  if (allDay) {
+    // All-day shape matches what the web form stores: the chosen date at
+    // 00:00:00 → 23:59:59. Any clock/range/duration also parsed is dropped.
+    startsAt.setUTCHours(0, 0, 0, 0);
+    endsAt = new Date(startsAt.getTime());
+    endsAt.setUTCHours(23, 59, 59, 0);
+  } else if (hours === null) {
     startsAt.setUTCHours(9, 0, 0, 0); // date but no time → 09:00, 1h
+    endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   } else {
     startsAt.setUTCHours(hours, mins, 0, 0);
     // No date + time already passed today → push to tomorrow.
     if (dateOffset === null && startsAt.getTime() < nowAnchor.getTime()) {
       startsAt.setUTCDate(startsAt.getUTCDate() + 1);
     }
+    endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
   }
-  const endsAt = new Date(startsAt.getTime() + durationMin * 60_000);
 
   // ── Step 5: leftover text is the summary ────────────────────────────────
   // Grammatical filler stranded once the date/time tokens were consumed
@@ -518,13 +667,111 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
     "on|at|the|from|a\\s+las|a\\s+la|al|a|de|del|la|el|los|por|en" +
     "|à|au|aux|le|les|du|des|d'|um|am|im|den|dem|der|dies(?:er|e)?",
   ]);
+  // Location comes out of the leftover BEFORE the filler cleanup: the
+  // markers （在/で/에서/at…) are exactly the kind of small words step 5
+  // would otherwise leave stranded in the summary.
+  const extracted = extractLocation(remaining);
+  if (extracted) remaining = extracted.rest;
+
   let summary = remaining.replace(/[，。、；：,;:]+/g, " ").replace(/\s+/g, " ").trim();
   for (let i = 0; i < 3; i++) {
     const next = summary.replace(re(`(?:^|\\s)${FILLER}(?=\\s|$)`), " ").replace(/\s+/g, " ").trim();
     if (next === summary) break;
     summary = next;
   }
-  return { summary, startsAt: fmt(startsAt), endsAt: fmt(endsAt) };
+  const out: ParsedEvent = { summary, startsAt: fmt(startsAt), endsAt: fmt(endsAt) };
+  if (extracted) out.location = extracted.location;
+  if (rrule !== null) out.rrule = rrule;
+  if (allDay) out.allDay = true;
+  return out;
+}
+
+/**
+ * Pull a place out of the leftover text — conservatively. A location is
+ * only extracted when an explicit marker names it:
+ *
+ *   zh  在 + place + a known activity word ("在星巴克开会"), or 在 + place
+ *       at the very end after some title text ("开会在会议室"); same for 去.
+ *   ja  place + で ("スタバで打ち合わせ"); ko place + 에서.
+ *   en  "at"/"in" + a Capitalized name at the end ("meeting at Starbucks").
+ *   de  "im"/"in der" + a Capitalized noun at the end; es "en" + Capitalized.
+ *
+ * Anything else — no marker, a place that runs to the end with nothing
+ * before it, a candidate that is itself an activity word — stays in the
+ * summary untouched. A missed extraction costs the user one field to fill
+ * in; a wrong one mangles their title, so every rule here errs towards
+ * leaving the text alone. The live preview shows the split before saving.
+ */
+function extractLocation(remaining: string): { location: string; rest: string } | null {
+  const ACTIVITY =
+    "开会|開會|见面|見面|吃饭|吃飯|吃|喝咖啡|喝茶|喝|上课|上課|办公|辦公|加班|集合|碰头|碰頭|" +
+    "面试|面試|健身|打球|看电影|看電影|购物|購物|聚会|聚會|团建|團建|培训|培訓|汇报|匯報|" +
+    "聊天|等人|接人|出差|谈事|談事|学习|學習";
+  const PLACE = "[^\\s，。、；;]{2,15}?";
+  const PLACE_TAIL = "[^\\s，。、；;]{2,15}";
+
+  // A place candidate is no good when it IS an activity word, STARTS with
+  // one ("在开会之前吃药" — 在开会之前 is "before the meeting", not a place),
+  // or is a bare verb phrase ("会议在举行" — 举行 is what happens, not where).
+  const startsActivity = new RegExp(`^(?:${ACTIVITY})`, "u");
+  const notPlace = /^(?:举行|舉行|召开|召開|进行|進行|开始|開始|结束|結束)$/u;
+
+  // zh: 在/去 + place + activity word.
+  for (const marker of ["在", "去"]) {
+    const r = new RegExp(`${marker}\\s*(${PLACE})\\s*(${ACTIVITY})`, "u");
+    const m = remaining.match(r);
+    if (m && !startsActivity.test(m[1]!) && !notPlace.test(m[1]!)) {
+      return { location: m[1]!, rest: remaining.replace(r, ` $2 `) };
+    }
+  }
+  // zh: title + 在 + place at the end ("开会在会议室"). The marker must not
+  // lead the string — "在星巴克" alone is a title, not a place to extract.
+  {
+    const r = new RegExp(`在\\s*(${PLACE_TAIL})\\s*$`, "u");
+    const m = remaining.match(r);
+    const idx = m?.index ?? 0;
+    if (
+      m && idx > 0 && remaining.slice(0, idx).trim().length > 0 &&
+      !startsActivity.test(m[1]!) && !notPlace.test(m[1]!)
+    ) {
+      return { location: m[1]!, rest: remaining.slice(0, idx) };
+    }
+  }
+  // ja: place + で; ko: place + 에서. The place must not swallow particles,
+  // and there must be activity text after the marker. Demonstratives are
+  // not places ("これで終わり" is an idiom, not a venue).
+  {
+    const ja = remaining.match(/([^\s、。はがをにへ]{2,12}?)で/u);
+    if (
+      ja && !/^(?:これ|それ|あれ|ここ|そこ|どれ)/u.test(ja[1]!) &&
+      remaining.slice((ja.index ?? 0) + ja[0].length).trim().length > 0
+    ) {
+      return { location: ja[1]!, rest: remaining.replace(ja[0], " ") };
+    }
+    const ko = remaining.match(/([^\s]{2,12}?)에서/u);
+    if (ko && remaining.slice((ko.index ?? 0) + ko[0].length).trim().length > 0) {
+      return { location: ko[1]!, rest: remaining.replace(ko[0], " ") };
+    }
+  }
+  // en/de/es: marker + Capitalized name(s) at the end, with title text
+  // before the marker ("meeting at Starbucks", "Treffen im Büro…").
+  const CAPS: Record<string, string> = {
+    en: "[A-Z][\\w&'.-]*(?:\\s+(?:[A-Z][\\w&'.-]*|&))*",
+    de: "[A-ZÄÖÜ][\\wäöüß-]*(?:\\s+[A-ZÄÖÜ][\\wäöüß-]*)*",
+    es: "[A-ZÁÉÍÓÚÑ][\\wáéíóúñ-]*(?:\\s+[A-ZÁÉÍÓÚÑ][\\wáéíóúñ-]*)*",
+  };
+  for (const [marker, caps] of [
+    [`(?:at|in)`, CAPS.en],
+    [`(?:im|in\\s+der|in\\s+dem)`, CAPS.de],
+    [`en`, CAPS.es],
+  ] as const) {
+    const r = new RegExp(`\\s${marker}\\s+(${caps})\\s*$`, "u");
+    const m = remaining.match(r);
+    if (m && remaining.slice(0, m.index).trim().length > 0) {
+      return { location: m[1]!, rest: remaining.slice(0, m.index) };
+    }
+  }
+  return null;
 }
 
 /** Days from `day` to the next occurrence of month/date (this year or next). */

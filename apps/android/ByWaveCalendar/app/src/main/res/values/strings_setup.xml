@@ -54,6 +54,10 @@
     <string name="search2_empty_prompt_subtitle">搜索范围覆盖标题、备注和地点</string>
     <string name="search2_no_results_title">没有匹配的事件</string>
     <string name="search2_no_results_subtitle">换个关键字再试试</string>
+    <string name="search2_server_section">全部历史（服务器）</string>
+    <string name="search2_server_more">在全部历史中搜索</string>
+    <string name="search2_server_searching">正在搜索全部历史…</string>
+    <string name="search2_offline_hint">当前离线，仅显示本地结果</string>
 
 
     <!-- 被动登出时配对页顶部的说明 -->

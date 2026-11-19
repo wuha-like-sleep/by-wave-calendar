@@ -78,7 +78,7 @@
     const eventItems = events.map((e) => ({
       kind: "event",
       label: e.summary,
-      hint: e.calendarName + " · " + new Date(e.startsAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      hint: e.calendarName + " · " + new Date(e.nextStartsAt || e.startsAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }),
       url: "/app",
       color: e.calendarColor,
     }));
