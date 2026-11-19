@@ -162,7 +162,11 @@ fun MainScreen(
         kotlinx.coroutines.coroutineScope {
             launch {
                 cn.bywave.calendar.desktop.data.notify.ReminderFeed.run { from, to ->
-                    c.events(from = from, to = to).events
+                    val resp = c.events(from = from, to = to)
+                    // 全天事件级提醒的墙上时间换算要用到日历时区，顺手交给
+                    // ReminderFeed（事件自己的 extra.timezone 优先于它）。
+                    cn.bywave.calendar.desktop.data.notify.ReminderFeed.noteCalendars(resp.calendars)
+                    resp.events
                 }
             }
             launch { cn.bywave.calendar.desktop.data.notify.ReminderScheduler.run() }
@@ -481,6 +485,9 @@ fun MainScreen(
             },
             onDismiss = { state.closeSheet() },
             onQuickParse = { state.parseEvent(it) },
+            onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
+                state.checkConflicts(calId, startsAt, endsAt, excludeId)
+            },
         )
         is ActiveSheet.Duplicate -> EventEditDialog(
             mode = EventEditMode.Duplicate(sheet.source),
@@ -491,6 +498,9 @@ fun MainScreen(
                 if (create != null) state.create(create)
             },
             onDismiss = { state.closeSheet() },
+            onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
+                state.checkConflicts(calId, startsAt, endsAt, excludeId)
+            },
         )
         is ActiveSheet.Edit -> EventEditDialog(
             mode = EventEditMode.Edit(sheet.event),
@@ -503,6 +513,9 @@ fun MainScreen(
                 }
             },
             onDismiss = { state.closeSheet() },
+            onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
+                state.checkConflicts(calId, startsAt, endsAt, excludeId)
+            },
         )
         null -> Unit
     }

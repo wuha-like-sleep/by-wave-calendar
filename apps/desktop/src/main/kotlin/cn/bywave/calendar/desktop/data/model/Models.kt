@@ -6,7 +6,16 @@
 
 package cn.bywave.calendar.desktop.data.model
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.JsonNull
 
 // ---- Calendar + events (read path) ----
 
@@ -24,6 +33,10 @@ data class EventDTO(
     val endsAt: String,
     val allDay: Boolean = false,
     val rrule: String? = null,
+    /** Deleted single occurrences of a recurring series (canonical ISO
+     *  instants). Top-level column, not part of extra — GET returns it
+     *  verbatim (null when the series never had an occurrence deleted). */
+    val exdates: List<String>? = null,
     /** True for non-first occurrences of a recurring series. */
     val isOccurrence: Boolean? = null,
     val extra: EventExtraDTO? = null,
@@ -36,8 +49,9 @@ data class EventExtraDTO(
     val category: String? = null,
     val url: String? = null,
     val meetingPassword: String? = null,
-    // Per-event reminders, edited on web. Retained for event duplication;
-    // ordinary edits omit them and rely on the server's shallow merge.
+    // Per-event reminders (extra.alarms), kept as raw JSON on the read
+    // path: the editor and the scheduler parse it via ReminderTriggers,
+    // which tolerates imported shapes this client doesn't know about.
     val alarms: kotlinx.serialization.json.JsonElement? = null,
 )
 
@@ -129,20 +143,76 @@ data class EventUpdateInput(
     val allDay: Boolean? = null,
     val rrule: String? = null,
     val extra: EventExtra? = null,
+    /** Whole-table replacement for the series' deleted occurrences
+     *  (PATCH only — POST ignores it). null here means the field is
+     *  omitted from the wire (explicitNulls=false) and the server leaves
+     *  the stored list untouched; a sent array replaces it wholesale,
+     *  so an empty array restores every deleted occurrence. The editor
+     *  only sets this when the user actually removed an entry. */
+    val exdates: List<String>? = null,
     /** "instance" | "future" | "series" | null. Sent as query param on
      *  PATCH for recurring events to disambiguate scope. */
     val scope: String? = null,
     val recurrenceId: String? = null,
 )
 
+/** One entry of extra.alarms — the server's alarm shape (see
+ *  src/lib/reminder_triggers.ts). `trigger` is the raw iCalendar value
+ *  ("-PT15M", "PT9H", or an imported custom value); action / description
+ *  ride along untouched for alarms this client did not create. */
+@Serializable
+data class AlarmDTO(
+    val trigger: String,
+    val action: String? = null,
+    val description: String? = null,
+)
+
+/** Non-null wrapper so an explicit alarms deletion survives
+ *  explicitNulls=false — the same trick EventStringField plays for
+ *  url / meetingPassword. The server shallow-merges extra: an omitted
+ *  `alarms` key keeps the stored value, only an explicit null deletes
+ *  it. So: wrapper == null → this editor is not managing alarms (omit);
+ *  wrapper.value == null → send `"alarms": null` (delete the key);
+ *  wrapper.value == list → send that array. */
+@Serializable(with = EventAlarmsFieldSerializer::class)
+data class EventAlarmsField(val value: List<AlarmDTO>?)
+
+object EventAlarmsFieldSerializer : KSerializer<EventAlarmsField> {
+    override val descriptor = PrimitiveSerialDescriptor("EventAlarmsField", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: EventAlarmsField) {
+        require(encoder is JsonEncoder)
+        val alarms = value.value
+        if (alarms == null) {
+            encoder.encodeJsonElement(JsonNull)
+        } else {
+            encoder.encodeJsonElement(
+                encoder.json.encodeToJsonElement(ListSerializer(AlarmDTO.serializer()), alarms),
+            )
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): EventAlarmsField {
+        require(decoder is JsonDecoder)
+        val element = decoder.decodeJsonElement()
+        if (element == JsonNull) return EventAlarmsField(null)
+        return EventAlarmsField(
+            decoder.json.decodeFromJsonElement(ListSerializer(AlarmDTO.serializer()), element),
+        )
+    }
+}
+
 @Serializable
 data class EventExtra(
     val timezone: String? = null,
     val attendees: List<String>? = null,
-    val category: String? = null,
+    /** Category is picked in the edit form, so — like url — it rides in
+     *  the EventStringField wrapper: wrapper null = not sent, wrapper
+     *  with null value = explicit `"category": null` (clears the key
+     *  under the server's shallow extra merge). */
+    val category: cn.bywave.calendar.event.EventStringField? = null,
     val url: cn.bywave.calendar.event.EventStringField? = null,
     val meetingPassword: cn.bywave.calendar.event.EventStringField? = null,
-    val alarms: kotlinx.serialization.json.JsonElement? = null,
+    val alarms: EventAlarmsField? = null,
 )
 
 // ---- Global search ----
@@ -330,17 +400,6 @@ data class BookingLinkUpdateInput(
     val notifyEmail: Boolean? = null,
 )
 
-// ---- Attendees ----
-
-@Serializable
-data class AttendeesResponse(val attendees: List<String>)
-
-@Serializable
-data class AttendeeInviteRequest(val email: String)
-
-@Serializable
-data class AttendeeRevokeRequest(val email: String)
-
 // ---- Auth refresh ----
 
 @Serializable
@@ -465,4 +524,98 @@ data class WebSessionRequest(
     /** Path inside the web app to land on after the token is consumed.
      *  Must start with /app/ (server enforces; rejects open redirects). */
     val next: String,
+)
+
+// ---- Event conflicts ----
+//
+// POST /api/v1/events/conflicts { calendarId, startsAt, endsAt,
+// excludeId? } → { conflicts: [{ id, summary, startsAt, endsAt }] }.
+// The route answers with a bare reply.send({ conflicts }), which the
+// server's onSend hook wraps into the usual { ok, data } envelope.
+
+@Serializable
+data class ConflictCheckInput(
+    val calendarId: String,
+    val startsAt: String,
+    val endsAt: String,
+    /** The event being edited, so it doesn't conflict with itself. */
+    val excludeId: String? = null,
+)
+
+@Serializable
+data class ConflictDTO(
+    val id: String,
+    val summary: String,
+    val startsAt: String,
+    val endsAt: String,
+)
+
+@Serializable
+data class ConflictsResponse(
+    val conflicts: List<ConflictDTO> = emptyList(),
+)
+
+// ---- ICS subscriptions (inbound feeds) ----
+//
+// GET/POST /api/v1/calendars/{id}/subscriptions,
+// POST   /api/v1/calendars/{id}/subscriptions/{subId}/refresh,
+// DELETE /api/v1/calendars/{id}/subscriptions/{subId}.
+// A subscription pulls an external .ics feed INTO this calendar — the
+// opposite direction of a ShareToken, which publishes this calendar
+// out. The list route uses okList(), so its `data` payload is a bare
+// JSON array of CalendarSubscription.
+
+@Serializable
+data class CalendarSubscription(
+    val id: String,
+    val calendarId: String,
+    val url: String,
+    val label: String? = null,
+    val refreshMinutes: Int = 360,
+    val lastFetchedAt: String? = null,
+    /** "ok" / "error" once the feed has been fetched at least once. */
+    val lastStatus: String? = null,
+    val lastError: String? = null,
+    val lastEventCount: Int? = null,
+    val createdAt: String,
+)
+
+/** POST /api/v1/calendars/{id}/subscriptions body. refreshMinutes is
+ *  server-defaulted (360) when omitted; the v1 UI doesn't expose it. */
+@Serializable
+data class SubscriptionCreateInput(
+    val url: String,
+    val label: String? = null,
+    val refreshMinutes: Int? = null,
+)
+
+/** The first-fetch outcome riding along in the create response. The
+ *  subscription is saved even when this says ok=false — the UI must
+ *  report "saved, first sync failed", not a creation failure. */
+@Serializable
+data class SubscriptionRefreshOutcome(
+    val ok: Boolean,
+    val inserted: Int? = null,
+    val updated: Int? = null,
+    val skipped: Int? = null,
+    val total: Int? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class SubscriptionCreateResponse(
+    val subscription: CalendarSubscription,
+    val refresh: SubscriptionRefreshOutcome,
+)
+
+/** POST .../subscriptions/{subId}/refresh response (the `data`
+ *  payload). A failed refresh is a 502 instead, surfaced as an
+ *  ApiException carrying the server's message. */
+@Serializable
+data class SubscriptionRefreshResponse(
+    val subscription: CalendarSubscription,
+    val inserted: Int = 0,
+    val updated: Int = 0,
+    val skipped: Int = 0,
+    val total: Int = 0,
 )

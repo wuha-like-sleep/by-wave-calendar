@@ -36,9 +36,11 @@ import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.RssFeed
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
@@ -84,6 +86,7 @@ import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
 import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.CalendarSubscription
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.ShareToken
@@ -464,6 +467,7 @@ private fun CalendarsSection(
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
 
     // At most one dialog up at a time. `null` = none, otherwise the kind
     // + (for edit/delete) the target calendar. Kept local to this section
@@ -473,6 +477,51 @@ private fun CalendarsSection(
     var deleting by remember { mutableStateOf<CalendarMeta?>(null) }  // delete confirm target
     var creating by remember { mutableStateOf(false) }               // create dialog open
     var sharing by remember { mutableStateOf<CalendarMeta?>(null) }   // share-links dialog target
+    var subscribing by remember { mutableStateOf<CalendarMeta?>(null) } // subscriptions dialog target
+    // One-shot .ics export state (per section, not per calendar: only
+    // one export runs at a time and the notice names the file written).
+    var exporting by remember { mutableStateOf(false) }
+    var exportNotice by remember { mutableStateOf<String?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
+
+    // 拉一次导出文本 → 原生保存对话框 → 写文件。文件名优先用服务端
+    // Content-Disposition 给的（它按日历名清洗过），拿不到才本地按同一
+    // 规则清洗。用户在保存对话框里取消 = 什么都不发生，不算失败。
+    fun runExport(cal: CalendarMeta) {
+        if (exporting) return
+        exporting = true
+        exportNotice = null
+        exportError = null
+        scope.launch {
+            val api = ApiClient(profile)
+            runCatching { api.exportCalendarIcs(cal.id) }
+                .onSuccess { result ->
+                    api.close()
+                    val target = pickIcsSaveFile(result.fileName ?: icsExportFileName(cal.name))
+                    if (target != null) {
+                        val written = runCatching {
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                target.writeText(result.text, Charsets.UTF_8)
+                            }
+                        }
+                        if (written.isSuccess) {
+                            exportNotice = cn.bywave.calendar.desktop.i18n.I18n.t(
+                                "settings.export.done",
+                                mapOf("name" to target.name),
+                            )
+                        } else {
+                            exportError = t("settings.export.failed")
+                        }
+                    }
+                    exporting = false
+                }
+                .onFailure {
+                    api.close()
+                    exporting = false
+                    exportError = userFacingError(it, "settings.export.failed")
+                }
+        }
+    }
 
     SectionTitle(t("settings.calendars.title"))
     Text(
@@ -514,13 +563,29 @@ private fun CalendarsSection(
                             )
                         }
                     }
-                    // Per-row Share + Edit + Delete affordances. Icon
-                    // buttons keep the row compact; tooltips come from
-                    // contentDescription.
+                    // Per-row Share + Subscriptions + Export + Edit +
+                    // Delete affordances. Icon buttons keep the row
+                    // compact; tooltips come from contentDescription.
                     IconButton(onClick = { sharing = cal }) {
                         Icon(
                             Icons.Default.Share,
                             contentDescription = t("settings.calendars.share"),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { subscribing = cal }) {
+                        Icon(
+                            Icons.Default.RssFeed,
+                            contentDescription = t("settings.subscriptions.button"),
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(onClick = { runExport(cal) }, enabled = !exporting) {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = t("settings.export.button"),
                             modifier = Modifier.size(18.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -544,6 +609,31 @@ private fun CalendarsSection(
                 }
                 if (cal != calendars.last()) HorizontalDivider()
             }
+        }
+    }
+
+    if (exporting || exportNotice != null || exportError != null) {
+        Spacer(Modifier.height(12.dp))
+        when {
+            exporting -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    t("settings.export.working"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            exportError != null -> Text(
+                exportError!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            else -> Text(
+                exportNotice!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 
@@ -597,6 +687,40 @@ private fun CalendarsSection(
             onDismiss = { sharing = null },
         )
     }
+
+    subscribing?.let { cal ->
+        SubscriptionsDialog(
+            profile = profile,
+            calendar = cal,
+            onDismiss = { subscribing = null },
+            onChanged = onChanged,
+        )
+    }
+}
+
+/** 默认导出文件名：和服务端导出同规则清洗（非字母数字/中文/连字符的
+ *  连续片段换一个下划线，最长 50 字符），再加 .ics。服务端给了
+ *  Content-Disposition 文件名时优先用服务端的，这只是兜底。 */
+internal fun icsExportFileName(calendarName: String): String {
+    val safe = calendarName.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fff-]+"), "_").take(50)
+    return (safe.ifEmpty { "calendar" }) + ".ics"
+}
+
+/** Native save-file dialog for the .ics export — the SAVE twin of
+ *  ImportIcsDialog's pickIcsFile (same AWT FileDialog reasoning: the
+ *  native picker on macOS and Windows, modal by construction).
+ *  Returns null when the user cancels. */
+internal fun pickIcsSaveFile(defaultName: String): java.io.File? {
+    val dialog = java.awt.FileDialog(
+        null as java.awt.Frame?,
+        cn.bywave.calendar.desktop.i18n.I18n.t("settings.export.title"),
+        java.awt.FileDialog.SAVE,
+    )
+    dialog.file = defaultName
+    dialog.isVisible = true
+    val dir = dialog.directory ?: return null
+    val name = dialog.file ?: return null
+    return java.io.File(dir, name)
 }
 
 /** Per-calendar share / subscribe-link manager. Mirrors the web
@@ -858,6 +982,375 @@ private fun ShareLinksDialog(
             },
             dismissButton = {
                 TextButton(onClick = { revoking = null }, enabled = !working) {
+                    Text(t("settings.calendars.cancel"))
+                }
+            },
+        )
+    }
+}
+
+/** Per-calendar ICS subscription manager — the inbound twin of
+ *  ShareLinksDialog: ShareLinks publishes this calendar OUT as a .ics
+ *  link, subscriptions pull external .ics feeds IN. Lists each feed
+ *  (label / URL, status, event count, last sync), adds new ones (URL +
+ *  optional label), refreshes on demand, and deletes with a confirm.
+ *  Same one-shot ApiClient pattern as the share-links dialog; the list
+ *  reloads after every mutation (reloadKey). A create whose first fetch
+ *  failed is still a successful create — the subscription was saved —
+ *  so that outcome gets its own notice instead of the error slot. */
+@Composable
+private fun SubscriptionsDialog(
+    profile: Profile,
+    calendar: CalendarMeta,
+    onDismiss: () -> Unit,
+    onChanged: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+    val scope = rememberCoroutineScope()
+
+    var subs by remember { mutableStateOf<List<CalendarSubscription>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var newUrl by remember { mutableStateOf("") }
+    var newLabel by remember { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    // Outcome line for add / refresh. Warning = saved-but-first-sync-
+    // failed (amber role played by the error color at body size).
+    var notice by remember { mutableStateOf<String?>(null) }
+    var noticeWarning by remember { mutableStateOf(false) }
+    // Subscription id currently being refreshed (per-row spinner).
+    var refreshingId by remember { mutableStateOf<String?>(null) }
+    // Delete confirm target. null = no confirm up.
+    var deleting by remember { mutableStateOf<CalendarSubscription?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+
+    androidx.compose.runtime.LaunchedEffect(reloadKey) {
+        loading = true
+        loadError = null
+        val api = ApiClient(profile)
+        runCatching { api.listSubscriptions(calendar.id) }
+            .onSuccess {
+                api.close()
+                subs = it
+                loading = false
+            }
+            .onFailure {
+                api.close()
+                loadError = userFacingError(it, "settings.subscriptions.loadFailed")
+                loading = false
+            }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                cn.bywave.calendar.desktop.i18n.I18n.t(
+                    "settings.subscriptions.title",
+                    mapOf("name" to calendar.name),
+                ),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    t("settings.subscriptions.intro"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // Add-new form: feed URL + optional label.
+                OutlinedTextField(
+                    value = newUrl,
+                    onValueChange = { newUrl = it },
+                    label = { Text(t("settings.subscriptions.urlPlaceholder")) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newLabel,
+                        onValueChange = { newLabel = it },
+                        label = { Text(t("settings.subscriptions.labelPlaceholder")) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = {
+                            adding = true
+                            actionError = null
+                            notice = null
+                            scope.launch {
+                                val api = ApiClient(profile)
+                                runCatching {
+                                    api.createSubscription(
+                                        calendarId = calendar.id,
+                                        url = newUrl.trim(),
+                                        label = newLabel.trim().ifBlank { null },
+                                    )
+                                }.onSuccess { resp ->
+                                    api.close()
+                                    adding = false
+                                    newUrl = ""
+                                    newLabel = ""
+                                    if (resp.refresh.ok) {
+                                        notice = cn.bywave.calendar.desktop.i18n.I18n.t(
+                                            "settings.subscriptions.savedSynced",
+                                            mapOf(
+                                                "inserted" to (resp.refresh.inserted ?: 0),
+                                                "updated" to (resp.refresh.updated ?: 0),
+                                                "skipped" to (resp.refresh.skipped ?: 0),
+                                            ),
+                                        )
+                                        noticeWarning = false
+                                    } else {
+                                        // 已保存、首次同步失败 —— 不是创建失败，
+                                        // 别让用户再建一条一模一样的订阅。
+                                        notice = cn.bywave.calendar.desktop.i18n.I18n.t(
+                                            "settings.subscriptions.savedSyncFailed",
+                                            mapOf("error" to (resp.refresh.error ?: "")),
+                                        )
+                                        noticeWarning = true
+                                    }
+                                    reloadKey++
+                                    onChanged()
+                                }.onFailure {
+                                    api.close()
+                                    adding = false
+                                    actionError = userFacingError(it, "settings.subscriptions.addFailed")
+                                }
+                            }
+                        },
+                        enabled = !adding && newUrl.isNotBlank(),
+                    ) {
+                        if (adding) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text(t("settings.subscriptions.add"))
+                    }
+                }
+
+                if (notice != null) {
+                    Text(
+                        notice!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (noticeWarning) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (actionError != null) {
+                    Text(
+                        actionError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                HorizontalDivider()
+
+                when {
+                    loading -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(t("settings.subscriptions.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    loadError != null -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { reloadKey++ }) { Text(t("error.retry")) }
+                        }
+                    }
+                    subs.isNullOrEmpty() -> {
+                        Text(
+                            t("settings.subscriptions.empty"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    else -> {
+                        val list = subs!!
+                        list.forEach { sub ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    sub.label?.ifBlank { null } ?: sub.url,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                                if (!sub.label.isNullOrBlank()) {
+                                    Text(
+                                        sub.url,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                        maxLines = 2,
+                                    )
+                                }
+                                when {
+                                    !sub.lastError.isNullOrBlank() -> Text(
+                                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                                            "settings.subscriptions.statusError",
+                                            mapOf("error" to sub.lastError!!),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                    sub.lastFetchedAt != null -> Text(
+                                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                                            "settings.subscriptions.statusOk",
+                                            mapOf(
+                                                "count" to (sub.lastEventCount ?: 0),
+                                                "when" to formatTimestamp(sub.lastFetchedAt!!, displayZone),
+                                            ),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    else -> Text(
+                                        t("settings.subscriptions.statusNever"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            refreshingId = sub.id
+                                            actionError = null
+                                            notice = null
+                                            scope.launch {
+                                                val api = ApiClient(profile)
+                                                runCatching {
+                                                    api.refreshSubscription(calendar.id, sub.id)
+                                                }.onSuccess { r ->
+                                                    api.close()
+                                                    refreshingId = null
+                                                    notice = cn.bywave.calendar.desktop.i18n.I18n.t(
+                                                        "settings.subscriptions.refreshed",
+                                                        mapOf(
+                                                            "inserted" to r.inserted,
+                                                            "updated" to r.updated,
+                                                            "skipped" to r.skipped,
+                                                        ),
+                                                    )
+                                                    noticeWarning = false
+                                                    reloadKey++
+                                                    onChanged()
+                                                }.onFailure {
+                                                    api.close()
+                                                    refreshingId = null
+                                                    actionError = userFacingError(it, "settings.subscriptions.refreshFailed")
+                                                }
+                                            }
+                                        },
+                                        enabled = refreshingId == null,
+                                    ) {
+                                        if (refreshingId == sub.id) {
+                                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                        }
+                                        Text(t("settings.subscriptions.refresh"))
+                                    }
+                                    TextButton(onClick = { deleting = sub }) {
+                                        Text(
+                                            t("settings.subscriptions.delete"),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
+                            if (sub != list.last()) HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(t("settings.subscriptions.close")) }
+        },
+    )
+
+    // Delete confirm — removing the feed detaches future syncs (events
+    // already imported stay), so the copy says exactly that.
+    deleting?.let { sub ->
+        var working by remember { mutableStateOf(false) }
+        var deleteError by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { if (!working) deleting = null },
+            title = {
+                Text(
+                    t("settings.subscriptions.deleteTitle"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(t("settings.subscriptions.deleteConfirm"))
+                    if (deleteError != null) {
+                        Text(
+                            deleteError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        working = true
+                        deleteError = null
+                        scope.launch {
+                            val api = ApiClient(profile)
+                            runCatching {
+                                api.deleteSubscription(calendar.id, sub.id)
+                            }.onSuccess {
+                                api.close()
+                                working = false
+                                deleting = null
+                                reloadKey++
+                            }.onFailure {
+                                api.close()
+                                working = false
+                                deleteError = userFacingError(it, "settings.subscriptions.deleteFailed")
+                            }
+                        }
+                    },
+                    enabled = !working,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    if (working) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(t("settings.subscriptions.delete"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }, enabled = !working) {
                     Text(t("settings.calendars.cancel"))
                 }
             },
