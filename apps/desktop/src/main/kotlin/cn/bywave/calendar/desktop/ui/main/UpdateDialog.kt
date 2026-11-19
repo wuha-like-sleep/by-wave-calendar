@@ -239,7 +239,7 @@ fun UpdateDialog(onDismiss: () -> Unit) {
                         // v0.7.7: download() — no implicit Finder open.
                         // The LaunchedEffect(download) collector above
                         // chains to UpdateInstaller.install() on Done.
-                        UpdateDownloader.download(asset!!.url, asset.sha256, asset.sizeBytes)
+                        UpdateDownloader.download(asset!!.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl)
                     }
                 }) {
                     Text(when {

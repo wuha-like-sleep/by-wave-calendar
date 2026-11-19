@@ -40,6 +40,11 @@ export interface DesktopRelease {
   releasedAt: string;
   notes: string;
   mandatory: boolean;
+  /** 客户端 versionCode 低于这个值的必须更新 —— 和安卓清单同名字段、
+   *  同一语义（可以事后把某个旧版本标成有严重问题）。以前桌面清单没有
+   *  这个字段：安卓能事后强制召回某个坏版本，桌面只能等下一版把
+   *  mandatory 打开，已经装了坏版本的用户在那之前不会被拦。 */
+  minSupportedVersionCode: number;
   /** Per-platform assets. Any platform missing → "not yet released for
    *  that OS" branch in the download page + in-app updater. */
   assets: Partial<Record<DesktopPlatform, DesktopReleaseAsset>>;
@@ -86,6 +91,7 @@ export function parseDesktopManifest(raw: unknown, fallbackReleasedAt: string): 
     releasedAt: String(r.releasedAt || fallbackReleasedAt),
     notes: String(r.notes || ""),
     mandatory: r.mandatory === true,
+    minSupportedVersionCode: Number(r.minSupportedVersionCode || 1),
     assets,
   };
 }

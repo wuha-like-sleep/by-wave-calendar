@@ -477,6 +477,11 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "日历共享平台",
   "footer.ourOpenSource": "我们的开源项目",
+  "webUpdate.chip": "新版本就绪",
+  "webUpdate.chipTitle": "点击刷新到最新版本",
+  "webUpdate.offlineText": "服务器似乎不可达，你看到的可能是缓存版本",
+  "webUpdate.offlinePurge": "强制清缓存重试",
+  "webUpdate.offlineDismiss": "忽略",
   "footer.linkHome": "首页",
   "footer.linkDownload": "下载",
   "footer.linkAbout": "关于",

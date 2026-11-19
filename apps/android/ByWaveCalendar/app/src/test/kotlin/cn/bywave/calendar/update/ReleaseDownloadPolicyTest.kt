@@ -21,4 +21,15 @@ class ReleaseDownloadPolicyTest {
             assertFalse(url, validReleaseDownload(release.copy(url = url)))
         }
     }
+    @Test fun fallbackUrlIsOptionalButMustBeUsableWhenPresent() {
+        assertTrue(validReleaseDownload(release.copy(fallbackUrl = "")))
+        assertTrue(validReleaseDownload(release.copy(fallbackUrl = "https://github.com/example/app.apk")))
+        // A bad fallback must not poison an otherwise valid release —
+        // the downloader just won't use it.
+        assertTrue(validReleaseDownload(release.copy(fallbackUrl = "http://calendar.example/app.apk")))
+        assertTrue(isUsableDownloadUrl("https://github.com/example/app.apk"))
+        assertFalse(isUsableDownloadUrl("http://calendar.example/app.apk"))
+        assertFalse(isUsableDownloadUrl("https://user:password@calendar.example/app.apk"))
+        assertFalse(isUsableDownloadUrl("not a URL"))
+    }
 }

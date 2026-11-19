@@ -36,6 +36,15 @@ data class AndroidReleaseDto(
     @SerialName("notes") val notes: String = "",
     @SerialName("mandatory") val mandatory: Boolean = false,
     @SerialName("minSupportedVersionCode") val minSupportedVersionCode: Int = 1,
+    /** Second source for the same APK (e.g. the upstream release page
+     *  when the primary is the user's own server). The server API sends
+     *  it when it has one; the committed GitHub manifest doesn't carry
+     *  it, so it defaults to "" = no fallback. ApkDownloader tries it
+     *  when the primary fails — same size + sha256 must still match.
+     *  Declared last on purpose: several call sites build this DTO
+     *  positionally, and a mid-list insertion would silently rebind
+     *  their arguments. */
+    @SerialName("fallbackUrl") val fallbackUrl: String = "",
 )
 
 interface UpdateApi {

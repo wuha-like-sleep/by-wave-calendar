@@ -54,12 +54,71 @@ object ApkDownloader {
             emit(DownloadProgress.Done(it)); return@flow
         }
         val target = cachedFileFor(context, release)
-        val partial = try { File.createTempFile("bywave-", ".part", target.parentFile) }
-        catch (_: java.io.IOException) {
-            emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
-            return@flow
+        // Deterministic partial next to the target. It used to be a
+        // random temp file deleted on ANY exit, so a dropped connection
+        // at 90% meant starting the whole download from zero next time —
+        // on exactly the networks «download from your own server» exists
+        // for. Now the partial survives failure and cancellation, and
+        // the next attempt resumes it with a Range request. The name
+        // derives from the target (versionCode + sha prefix), so bytes
+        // from a different release can never be resumed into this one;
+        // the final sha256 check still has the last word.
+        val partial = File(target.parentFile ?: context.cacheDir, target.name + ".part")
+        // Primary first, then the fallback source for the same APK.
+        // A fallback that isn't a usable https URL is dropped here —
+        // a broken fallback must never break the primary path.
+        val urls = buildList {
+            add(release.url)
+            if (release.fallbackUrl.isNotBlank() && release.fallbackUrl != release.url &&
+                isUsableDownloadUrl(release.fallbackUrl)
+            ) add(release.fallbackUrl)
         }
-        val call = client.newCall(Request.Builder().url(release.url).build())
+        for (url in urls) {
+            try {
+                downloadFrom(release, url, partial, target) { p -> emit(p) }
+                return@flow
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                currentCoroutineContext().ensureActive()
+                // Fall through to the next source. A sane partial
+                // carries over — both sources serve the same bytes,
+                // and sha256 arbitrates at the end.
+            }
+        }
+        emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
+    }.flowOn(Dispatchers.IO)
+
+    /** One download attempt against [url]: emits Downloading progress
+     *  and a terminal Done, throws on any failure (the caller decides
+     *  whether another source remains). Resumes [partial] when it
+     *  holds a strict prefix of the expected APK. */
+    private suspend fun downloadFrom(
+        release: AndroidReleaseDto,
+        url: String,
+        partial: File,
+        target: File,
+        emit: suspend (DownloadProgress) -> Unit,
+    ) {
+        var resumeFrom = if (partial.isFile) partial.length() else 0L
+        if (resumeFrom >= release.sizeBytes) {
+            // Not a usable prefix. One case is still salvageable: the
+            // previous attempt downloaded everything but died before
+            // the move — verify and finish instead of re-downloading.
+            if (resumeFrom == release.sizeBytes &&
+                sha256(partial).equals(release.sha256, ignoreCase = true)
+            ) {
+                moveIntoPlace(partial, target)
+                emit(DownloadProgress.Done(target))
+                return
+            }
+            partial.delete()
+            resumeFrom = 0L
+        }
+        val request = Request.Builder().url(url).apply {
+            if (resumeFrom > 0) header("Range", "bytes=$resumeFrom-")
+        }.build()
+        val call = client.newCall(request)
         // A separate child observes cancellation even while byteStream.read is
         // blocked; closing the socket promptly releases that blocking read.
         val cancellation = CoroutineScope(currentCoroutineContext()).launch(start = CoroutineStart.UNDISPATCHED) {
@@ -69,38 +128,65 @@ object ApkDownloader {
             call.execute().use { response ->
                 check(response.isSuccessful)
                 val body = checkNotNull(response.body)
+                // 206 = the server honored our Range. Anything else
+                // (a 200 from a server that ignores Range) means the
+                // body starts at byte 0 and the partial must restart.
+                val offset = if (resumeFrom > 0 && response.code == 206) resumeFrom else 0L
+                if (offset > 0) {
+                    val range = response.header("Content-Range").orEmpty()
+                    check(range.startsWith("bytes $offset-")) { "Unexpected Content-Range: $range" }
+                }
                 val declared = body.contentLength()
-                check(declared < 0 || declared == release.sizeBytes)
-                var read = 0L
-                var emittedAt = 0L
+                check(declared < 0 || declared == release.sizeBytes - offset)
                 val digest = MessageDigest.getInstance("SHA-256")
-                body.byteStream().use { source -> partial.outputStream().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val count = source.read(buffer)
-                        if (count < 0) break
-                        check(read + count <= release.sizeBytes)
-                        output.write(buffer, 0, count); digest.update(buffer, 0, count); read += count
-                        val now = System.currentTimeMillis()
-                        if (now - emittedAt >= 100) {
-                            emit(DownloadProgress.Downloading(read, release.sizeBytes)); emittedAt = now
+                if (offset > 0) {
+                    // The digest covers the whole file, so feed it the
+                    // resumed prefix before appending the rest.
+                    partial.inputStream().use { input ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            digest.update(buffer, 0, count)
                         }
                     }
-                } }
+                }
+                var read = offset
+                var emittedAt = 0L
+                body.byteStream().use { source ->
+                    java.io.FileOutputStream(partial, offset > 0).use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val count = source.read(buffer)
+                            if (count < 0) break
+                            check(read + count <= release.sizeBytes)
+                            output.write(buffer, 0, count); digest.update(buffer, 0, count); read += count
+                            val now = System.currentTimeMillis()
+                            if (now - emittedAt >= 100) {
+                                emit(DownloadProgress.Downloading(read, release.sizeBytes)); emittedAt = now
+                            }
+                        }
+                    }
+                }
                 check(read == release.sizeBytes)
-                check(digest.digest().joinToString("") { "%02x".format(it) }.equals(release.sha256, true))
+                if (!digest.digest().joinToString("") { "%02x".format(it) }.equals(release.sha256, true)) {
+                    // The bytes are wrong, not merely incomplete —
+                    // keeping them would poison every later resume.
+                    partial.delete()
+                    throw java.io.IOException("sha256 mismatch")
+                }
                 currentCoroutineContext().ensureActive()
-                try { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING) }
-                catch (_: AtomicMoveNotSupportedException) { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+                moveIntoPlace(partial, target)
                 emit(DownloadProgress.Done(target))
             }
-        } catch (e: CancellationException) { throw e }
-        catch (_: Exception) {
-            currentCoroutineContext().ensureActive()
-            emit(DownloadProgress.Failed(context.getString(R.string.update_err_download)))
-        } finally { cancellation.cancel(); call.cancel(); partial.delete() }
-    }.flowOn(Dispatchers.IO)
+        } finally { cancellation.cancel(); call.cancel() }
+    }
+
+    private fun moveIntoPlace(partial: File, target: File) {
+        try { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING) }
+        catch (_: AtomicMoveNotSupportedException) { Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING) }
+    }
 
     private suspend fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")

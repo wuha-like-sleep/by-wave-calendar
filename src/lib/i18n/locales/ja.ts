@@ -489,6 +489,11 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "カレンダー共有プラットフォーム",
   "footer.ourOpenSource": "私たちのオープンソースプロジェクト",
+  "webUpdate.chip": "新しいバージョンの準備ができました",
+  "webUpdate.chipTitle": "クリックして最新バージョンに更新",
+  "webUpdate.offlineText": "サーバーに接続できないようです。キャッシュされたバージョンが表示されている可能性があります",
+  "webUpdate.offlinePurge": "キャッシュを消去して再試行",
+  "webUpdate.offlineDismiss": "閉じる",
   "footer.linkHome": "ホーム",
   "footer.linkDownload": "ダウンロード",
   "footer.linkAbout": "概要",

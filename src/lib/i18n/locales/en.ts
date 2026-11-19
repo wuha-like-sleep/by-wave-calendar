@@ -496,6 +496,11 @@ export const en = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "Calendar sharing platform",
   "footer.ourOpenSource": "Our open source project",
+  "webUpdate.chip": "New version ready",
+  "webUpdate.chipTitle": "Click to refresh to the latest version",
+  "webUpdate.offlineText": "The server seems unreachable — you may be seeing a cached version",
+  "webUpdate.offlinePurge": "Clear cache and retry",
+  "webUpdate.offlineDismiss": "Dismiss",
   "footer.linkHome": "Home",
   "footer.linkDownload": "Download",
   "footer.linkAbout": "About",

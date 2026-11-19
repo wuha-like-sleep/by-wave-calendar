@@ -125,10 +125,16 @@ export async function appDownloadRoutes(app: FastifyInstance) {
     // /download 网页和这条接口共用同一份。
     // 走 req.protocol / req.hostname，不自己读转发头：那两个属性经过
     // trustProxy 的信任判定，自己读等于把「这个包从哪下载」交给调用方决定。
-    const [url] = await android.resolveApkUrls(`${req.protocol}://${req.hostname}`, rel);
+    const [url, fallbackUrl] = await android.resolveApkUrls(`${req.protocol}://${req.hostname}`, rel);
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
       versionCode: rel.versionCode, versionName: rel.versionName, url,
+      // 备选地址必须一起给到 App：/download 网页早就把两个地址都摆出来了
+      // （主链接走本站时，备选是给「下不动本站」的人兜底），而 App 内更新
+      // 以前只拿到主地址 —— 本站这条路一断（反代配置、磁盘、证书），
+      // 已装机的用户就只能干等，尽管同一份包在 GitHub 上好好的。
+      // 没有备选时是空串，客户端按「没给」处理。
+      fallbackUrl,
       sha256: rel.sha256, sizeBytes: rel.sizeBytes, releasedAt: rel.releasedAt,
       notes: rel.notes, mandatory: rel.mandatory,
       minSupportedVersionCode: rel.minSupportedVersionCode,
@@ -172,16 +178,18 @@ export async function appDownloadRoutes(app: FastifyInstance) {
     const rel = await desktop.getLatestRelease();
     if (!rel) return reply.code(404).send({ error: "no_release_published" });
     const origin = `${req.protocol}://${req.hostname}`;
-    const assets: Record<string, { url: string; sha256: string; sizeBytes: number }> = {};
+    const assets: Record<string, { url: string; fallbackUrl: string; sha256: string; sizeBytes: number }> = {};
     for (const [platform, a] of Object.entries(rel.assets)) {
       if (!a) continue;
-      const [url] = await desktop.resolveAssetUrls(origin, a);
-      assets[platform] = { url, sha256: a.sha256, sizeBytes: a.sizeBytes };
+      // 备选地址的理由同安卓那条：只给主地址，本站一断就没有第二条路。
+      const [url, fallbackUrl] = await desktop.resolveAssetUrls(origin, a);
+      assets[platform] = { url, fallbackUrl, sha256: a.sha256, sizeBytes: a.sizeBytes };
     }
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
       versionCode: rel.versionCode, versionName: rel.versionName,
-      releasedAt: rel.releasedAt, notes: rel.notes, mandatory: rel.mandatory, assets,
+      releasedAt: rel.releasedAt, notes: rel.notes, mandatory: rel.mandatory,
+      minSupportedVersionCode: rel.minSupportedVersionCode, assets,
     });
   });
 

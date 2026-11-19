@@ -3365,6 +3365,26 @@ export async function adminRoutes(app: FastifyInstance) {
       : await (await import("../lib/desktop_release.js")).getLatestRelease();
     const overrideRaw = await fs.readFile(CLIENT_MANIFEST_RUNTIME[platform], "utf8").catch(() => null);
     const committedExists = await fs.stat(CLIENT_MANIFEST_COMMITTED[platform]).then(() => true).catch(() => false);
+    // 发布后自检的最后一块:App 到底会被送去哪个地址下包。
+    // 版本号对、来源对，都不等于链路通 —— 地址是解析出来的（本站有没有
+    // 文件决定主地址走本站还是上游），站长在这页看不到它，就只能靠
+    // 用户反馈「更新下不动」才知道本地包没生效。口径和 /download、
+    // /api/app/*/latest 共用 resolve*Urls，不在这里另算一份。
+    const origin = env.PUBLIC_BASE_URL.replace(/\/$/, "");
+    let clientAssets: Array<{ platform: string; url: string; fallbackUrl: string }> = [];
+    if (live && platform === "android") {
+      const android = await import("../lib/android_release.js");
+      const [url, fallbackUrl] = await android.resolveApkUrls(origin, live as { downloadUrl?: string; filename?: string });
+      if (url) clientAssets = [{ platform: "android", url, fallbackUrl }];
+    } else if (live) {
+      const desktop = await import("../lib/desktop_release.js");
+      const assets = (live as { assets: Record<string, { downloadUrl?: string; filename?: string } | undefined> }).assets;
+      for (const [plat, a] of Object.entries(assets)) {
+        if (!a) continue;
+        const [url, fallbackUrl] = await desktop.resolveAssetUrls(origin, a);
+        if (url) clientAssets.push({ platform: plat, url, fallbackUrl });
+      }
+    }
     return {
       platform,
       label: platform === "android" ? "安卓" : "桌面端",
@@ -3376,6 +3396,7 @@ export async function adminRoutes(app: FastifyInstance) {
       source: overrideRaw ? "override" : committedExists ? "committed" : "none",
       overrideRaw,
       committedExists,
+      clientAssets,
     };
   }
 

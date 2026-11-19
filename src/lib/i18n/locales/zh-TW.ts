@@ -476,6 +476,11 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   // footer (extends existing footer namespace)
   "footer.copyrightSeparator": "日曆共享平台",
   "footer.ourOpenSource": "我們的開源專案",
+  "webUpdate.chip": "新版本就緒",
+  "webUpdate.chipTitle": "點擊刷新到最新版本",
+  "webUpdate.offlineText": "伺服器似乎無法連線，你看到的可能是快取版本",
+  "webUpdate.offlinePurge": "強制清快取重試",
+  "webUpdate.offlineDismiss": "忽略",
   "footer.linkHome": "首頁",
   "footer.linkDownload": "下載",
   "footer.linkAbout": "關於",
