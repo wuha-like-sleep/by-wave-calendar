@@ -1649,9 +1649,11 @@
     cal.clearGridSelections();
   });
 
-  cal.on("clickEvent", async (info) => {
-    const calId = info.event.calendarId;
-    const id = info.event.id;
+  // Open an existing event's editor. Shared by grid clicks and by the
+  // ?event=&cal= deep link (push notifications and the in-app inbox point
+  // here). occStart/occEnd are the clicked occurrence's bounds; deep
+  // links don't know them and pass null → master bounds are used.
+  async function openExistingEvent(calId, id, occStart, occEnd) {
     // Fetch just this one event (server filters by ?eventId) rather than
     // pulling the entire calendar's event list to find one by id. Falls back
     // gracefully on older servers that ignore the param (returns all → .find).
@@ -1669,21 +1671,44 @@
       meetingPassword: extra.meetingPassword || "",
       // Show the clicked occurrence's start/end (not the master's) so
       // editing "仅此次" starts from the right slot. fresh.startsAt is
-      // the master; info.event.start is the occurrence.
-      startsAt: info.event.start || fresh.startsAt,
-      endsAt: info.event.end || fresh.endsAt,
+      // the master; occStart is the occurrence.
+      startsAt: occStart || fresh.startsAt,
+      endsAt: occEnd || fresh.endsAt,
       masterStartsAt: fresh.startsAt,
       allDay: fresh.allDay,
       rrule: fresh.rrule || "",
       // The occurrence's start doubles as the RECURRENCE-ID. The server
       // uses this to know which instance to add to exdates / split at.
-      recurrenceId: info.event.start || null,
+      recurrenceId: occStart || null,
       category: extra.category,
       timezone: extra.timezone,
       attendees: Array.isArray(extra.attendees) ? extra.attendees : [],
       alarms: Array.isArray(extra.alarms) ? extra.alarms : [],
     });
+  }
+
+  cal.on("clickEvent", (info) => {
+    void openExistingEvent(info.event.calendarId, info.event.id, info.event.start, info.event.end);
   });
+
+  // Deep link: /app?event=<id>&cal=<calendarId> opens that event once, on
+  // load. The params are stripped right away so a refresh (or the version
+  // checker's silent reload) doesn't reopen the editor over the user's
+  // work. Failures are silent — a deleted event just lands on the calendar.
+  (function openDeepLinkedEvent() {
+    let params;
+    try { params = new URLSearchParams(window.location.search); } catch (_e) { return; }
+    const eventId = params.get("event");
+    const calId = params.get("cal");
+    if (!eventId || !calId) return;
+    params.delete("event");
+    params.delete("cal");
+    const rest = params.toString();
+    try {
+      window.history.replaceState(null, "", window.location.pathname + (rest ? "?" + rest : "") + window.location.hash);
+    } catch (_e) { /* history unavailable — the params just stay */ }
+    void openExistingEvent(calId, eventId, null, null);
+  })();
 
   function parseEmails(s) {
     return String(s || "")
