@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -83,6 +84,7 @@ import cn.bywave.calendar.desktop.BuildInfo
 import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.Booking
 import cn.bywave.calendar.desktop.data.model.BookingLink
 import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
 import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
@@ -139,10 +141,15 @@ fun SettingsScreen(
      *  pencil (the path the web app's sidebar calendar menu gives in
      *  one step). Null → the usual Account tab landing. */
     initialCalendarsEditId: String? = null,
+    /** When true, Settings opens on the Calendars tab with the create
+     *  dialog already open — the sidebar's "new calendar" entry uses
+     *  this so creating a calendar is one click from the main window
+     *  instead of gear → tab → button. */
+    initialCalendarsCreate: Boolean = false,
 ) {
     var tab by remember {
         mutableStateOf(
-            if (initialCalendarsEditId != null) SettingsTab.Calendars else SettingsTab.Account,
+            if (initialCalendarsEditId != null || initialCalendarsCreate) SettingsTab.Calendars else SettingsTab.Account,
         )
     }
     val contentScroll = remember(tab, profile.deviceId) { ScrollState(0) }
@@ -229,6 +236,7 @@ fun SettingsScreen(
                                 profile = profile,
                                 onChanged = onCalendarsChanged,
                                 initialEditId = initialCalendarsEditId,
+                                initialCreate = initialCalendarsCreate,
                             )
                             SettingsTab.Booking -> BookingSection(
                                 calendars = calendars,
@@ -484,6 +492,7 @@ private fun CalendarsSection(
     profile: Profile,
     onChanged: () -> Unit,
     initialEditId: String? = null,
+    initialCreate: Boolean = false,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -495,7 +504,9 @@ private fun CalendarsSection(
     // in CalendarState.
     var editing by remember { mutableStateOf<CalendarMeta?>(null) }   // edit dialog target
     var deleting by remember { mutableStateOf<CalendarMeta?>(null) }  // delete confirm target
-    var creating by remember { mutableStateOf(false) }               // create dialog open
+    // Seeded from initialCreate so the sidebar's "new calendar" entry
+    // lands with the create dialog already up (mirrors initialEditId).
+    var creating by remember { mutableStateOf(initialCreate) }        // create dialog open
     var sharing by remember { mutableStateOf<CalendarMeta?>(null) }   // share-links dialog target
     var subscribing by remember { mutableStateOf<CalendarMeta?>(null) } // subscriptions dialog target
     // One-shot .ics export state (per section, not per calendar: only
@@ -1699,8 +1710,9 @@ private fun ColorSwatchRow(selected: String, onSelect: (String) -> Unit) {
 // a short-lived ApiClient for the active profile — the same one-shot
 // pattern the calendar CRUD + share-links dialogs use. The list reloads
 // after any mutation (via reloadKey) so the UI always reflects server
-// state. weeklyAvailability is intentionally NOT exposed here for v1 — the
-// server defaults it, matching the web owner UI.
+// state. The create/edit dialog also edits weeklyAvailability (per-weekday
+// windows, the server's matrix) and each row opens a bookings viewer
+// (list / detail / owner-side cancel) — both used to be web-only.
 
 @Composable
 private fun BookingSection(
@@ -1722,6 +1734,7 @@ private fun BookingSection(
     var justCreated by remember { mutableStateOf<BookingLink?>(null) }
     var editing by remember { mutableStateOf<BookingLink?>(null) }  // edit dialog target
     var deleting by remember { mutableStateOf<BookingLink?>(null) } // delete confirm target
+    var viewingBookings by remember { mutableStateOf<BookingLink?>(null) } // bookings viewer target
     // Bump to force a reload after create / toggle / delete.
     var reloadKey by remember { mutableStateOf(0) }
     // Id currently being toggled — disables its switch while the PATCH flies.
@@ -1909,6 +1922,9 @@ private fun BookingSection(
                             }) {
                                 Text(t("booking.open"))
                             }
+                            TextButton(onClick = { viewingBookings = link }) {
+                                Text(t("booking.viewBookings"))
+                            }
                         }
                     }
                     if (link != list.last()) HorizontalDivider()
@@ -1979,6 +1995,14 @@ private fun BookingSection(
             },
         )
     }
+
+    viewingBookings?.let { link ->
+        BookingsDialog(
+            profile = profile,
+            link = link,
+            onDismiss = { viewingBookings = null },
+        )
+    }
 }
 
 /** Create-or-edit booking-link dialog. Owns its own form state + a
@@ -1986,8 +2010,9 @@ private fun BookingSection(
  *  (mirrors CalendarEditDialog). With `existing` set the form is seeded
  *  from that link and saving PATCHes it — the update endpoint existed
  *  from the start; this dialog is what finally wires it up.
- *  weeklyAvailability is left to the server default — no availability
- *  editor here for v1. */
+ *  weeklyAvailability is edited inline (AvailabilityEditor below) and
+ *  seeded from the link's real matrix, so saving an unrelated field
+ *  never resets custom hours back to the server default. */
 @Composable
 private fun BookingCreateDialog(
     profile: Profile,
@@ -2015,6 +2040,10 @@ private fun BookingCreateDialog(
     var bufferBefore by remember { mutableStateOf(existing?.bufferBeforeMin?.toString() ?: "0") }
     var bufferAfter by remember { mutableStateOf(existing?.bufferAfterMin?.toString() ?: "0") }
     var notifyEmail by remember { mutableStateOf(existing?.notifyEmail ?: true) }
+    // Per-weekday windows (dow 0=Sun..6=Sat → [start, end] text pairs).
+    // Absent key = not bookable that day. Seeded from the link's stored
+    // matrix; a fresh create starts from the server's default matrix.
+    var availability by remember { mutableStateOf(seedAvailability(existing?.weeklyAvailability)) }
 
     var saving by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -2029,7 +2058,8 @@ private fun BookingCreateDialog(
     val canSubmit = !saving && slugOk && title.isNotBlank() &&
         durationInt != null && durationInt > 0 &&
         minNoticeInt != null && minNoticeInt >= 0 &&
-        maxDaysInt != null && maxDaysInt > 0
+        maxDaysInt != null && maxDaysInt > 0 &&
+        availabilityValid(availability)
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
@@ -2175,6 +2205,12 @@ private fun BookingCreateDialog(
                     Switch(checked = notifyEmail, onCheckedChange = { notifyEmail = it })
                 }
 
+                AvailabilityEditor(
+                    availability = availability,
+                    onChange = { availability = it },
+                    t = t,
+                )
+
                 if (errorMsg != null) {
                     Text(
                         errorMsg!!,
@@ -2210,6 +2246,7 @@ private fun BookingCreateDialog(
                                         bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
                                         bufferAfterMin = bufferAfter.trim().toIntOrNull(),
                                         notifyEmail = notifyEmail,
+                                        weeklyAvailability = availabilityWire(availability),
                                     ),
                                 )
                             } else {
@@ -2225,6 +2262,7 @@ private fun BookingCreateDialog(
                                         bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
                                         bufferAfterMin = bufferAfter.trim().toIntOrNull(),
                                         notifyEmail = notifyEmail,
+                                        weeklyAvailability = availabilityWire(availability),
                                     ),
                                 )
                             }
@@ -2254,6 +2292,388 @@ private fun BookingCreateDialog(
             TextButton(onClick = onDismiss, enabled = !saving) {
                 Text(t("booking.cancel"))
             }
+        },
+    )
+}
+
+// ---- Weekly availability (shared by the booking-link create/edit dialog) ----
+//
+// The wire matrix is Record<dow, [start, end][] | null> with dow keys
+// "0".."6" (0 = Sunday) and "HH:MM" wall-clock pairs in the link's
+// scheduling zone. The editor state keeps only bookable days:
+// dow -> list of (start, end) text pairs; an absent day is "off".
+
+private val HHMM_REGEX = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+
+/** The server's DEFAULT_AVAILABILITY (src/lib/booking.ts): Mon–Fri 09:00–18:00. */
+private val DEFAULT_AVAILABILITY_DOWS: Map<Int, List<Pair<String, String>>> =
+    (1..5).associateWith { listOf("09:00" to "18:00") }
+
+private fun seedAvailability(wire: Map<String, List<List<String>>?>?): Map<Int, List<Pair<String, String>>> {
+    if (wire == null) return DEFAULT_AVAILABILITY_DOWS
+    val out = mutableMapOf<Int, List<Pair<String, String>>>()
+    for ((key, windows) in wire) {
+        val dow = key.toIntOrNull() ?: continue
+        if (windows.isNullOrEmpty()) continue
+        out[dow] = windows.mapNotNull { pair ->
+            if (pair.size == 2) pair[0] to pair[1] else null
+        }
+    }
+    return out
+}
+
+private fun availabilityValid(availability: Map<Int, List<Pair<String, String>>>): Boolean =
+    availability.values.all { windows ->
+        windows.all { (start, end) -> HHMM_REGEX.matches(start) && HHMM_REGEX.matches(end) && start < end }
+    }
+
+/** Editor state → wire matrix. Only bookable days are sent (absent day =
+ *  not bookable), so no explicit nulls ride along. */
+private fun availabilityWire(availability: Map<Int, List<Pair<String, String>>>): Map<String, List<List<String>>> =
+    availability.filterValues { it.isNotEmpty() }
+        .mapKeys { it.key.toString() }
+        .mapValues { (_, windows) -> windows.map { listOf(it.first, it.second) } }
+
+/** Per-weekday availability editor: a switch per day (Monday-first, like
+ *  the rest of the app) plus editable HH:MM windows. Lives inside the
+ *  booking-link create/edit dialog; purely local state — the dialog
+ *  serializes on save. */
+@Composable
+private fun AvailabilityEditor(
+    availability: Map<Int, List<Pair<String, String>>>,
+    onChange: (Map<Int, List<Pair<String, String>>>) -> Unit,
+    t: (String) -> String,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            t("booking.availability"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Text(
+            t("booking.availabilityHint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        // Monday-first rows; weekday.short.1..7 are Mon..Sun.
+        listOf(1, 2, 3, 4, 5, 6, 0).forEach { dow ->
+            val windows = availability[dow]
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    t("weekday.short.${if (dow == 0) 7 else dow}"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.width(30.dp),
+                )
+                Switch(
+                    checked = windows != null,
+                    onCheckedChange = { on ->
+                        onChange(
+                            if (on) availability + (dow to listOf("09:00" to "18:00"))
+                            else availability - dow,
+                        )
+                    },
+                )
+                if (windows == null) {
+                    Text(
+                        "—",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            windows?.forEachIndexed { idx, window ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(start = 38.dp),
+                ) {
+                    OutlinedTextField(
+                        value = window.first,
+                        onValueChange = { raw ->
+                            val v = raw.filter { c -> c.isDigit() || c == ':' }.take(5)
+                            val next = windows.toMutableList()
+                            next[idx] = v to window.second
+                            onChange(availability + (dow to next))
+                        },
+                        singleLine = true,
+                        isError = !HHMM_REGEX.matches(window.first),
+                        modifier = Modifier.width(96.dp),
+                    )
+                    Text("–")
+                    OutlinedTextField(
+                        value = window.second,
+                        onValueChange = { raw ->
+                            val v = raw.filter { c -> c.isDigit() || c == ':' }.take(5)
+                            val next = windows.toMutableList()
+                            next[idx] = window.first to v
+                            onChange(availability + (dow to next))
+                        },
+                        singleLine = true,
+                        isError = !HHMM_REGEX.matches(window.second),
+                        modifier = Modifier.width(96.dp),
+                    )
+                    IconButton(onClick = {
+                        val next = windows.toMutableList()
+                        next.removeAt(idx)
+                        onChange(if (next.isEmpty()) availability - dow else availability + (dow to next))
+                    }) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = t("common.close"),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                }
+            }
+            if (windows != null) {
+                TextButton(
+                    onClick = {
+                        val lastEnd = windows.lastOrNull()?.second ?: "09:00"
+                        onChange(availability + (dow to (windows + (lastEnd to lastEnd))))
+                    },
+                    modifier = Modifier.padding(start = 30.dp),
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(t("booking.availabilityAdd"))
+                }
+            }
+        }
+        if (!availabilityValid(availability)) {
+            Text(
+                t("booking.availabilityInvalid"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+// ---- Bookings viewer (per-link records: list / detail / owner cancel) ----
+
+private fun bookingStatusKey(booking: Booking): String = when {
+    booking.cancelledAt != null -> "booking.statusCancelled"
+    runCatching { java.time.Instant.parse(booking.endsAt) }.getOrNull()
+        ?.isBefore(java.time.Instant.now()) == true -> "booking.statusPast"
+    else -> "booking.statusConfirmed"
+}
+
+/** Read-mostly viewer for the bookings made on one link. The default
+ *  filter is the server's "upcoming & active" view; "All" also pulls
+ *  past + cancelled rows. Tapping a row opens its detail in place, where
+ *  an active booking can be cancelled (owner-side endpoint; the guest
+ *  gets the standard cancellation mail). */
+@Composable
+private fun BookingsDialog(
+    profile: Profile,
+    link: BookingLink,
+    onDismiss: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+
+    var showAll by remember { mutableStateOf(false) }
+    var bookings by remember { mutableStateOf<List<Booking>?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var selected by remember { mutableStateOf<Booking?>(null) }
+    var confirmingCancel by remember { mutableStateOf(false) }
+    var cancelling by remember { mutableStateOf(false) }
+    var cancelError by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+
+    androidx.compose.runtime.LaunchedEffect(showAll, reloadKey) {
+        bookings = null
+        loadError = null
+        val api = ApiClient(profile)
+        runCatching { api.listBookings(link.id, showAll) }
+            .onSuccess {
+                api.close()
+                bookings = it
+            }
+            .onFailure {
+                api.close()
+                loadError = userFacingError(it, "booking.bookingsLoadFailed")
+            }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                cn.bywave.calendar.desktop.i18n.I18n.t("booking.bookingsTitle", mapOf("name" to link.title)),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(480.dp).heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                val current = selected
+                if (current == null) {
+                    // Filter: upcoming & active (server default) vs all.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (showAll) {
+                            OutlinedButton(onClick = { showAll = false }) { Text(t("booking.bookingsUpcoming")) }
+                            Button(onClick = {}) { Text(t("booking.bookingsAll")) }
+                        } else {
+                            Button(onClick = {}) { Text(t("booking.bookingsUpcoming")) }
+                            OutlinedButton(onClick = { showAll = true }) { Text(t("booking.bookingsAll")) }
+                        }
+                    }
+                    if (notice != null) {
+                        Text(notice!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                    when {
+                        loadError != null -> Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                        bookings == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(t("booking.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        bookings!!.isEmpty() -> Text(
+                            t("booking.bookingsEmpty"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> bookings!!.forEach { booking ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { selected = booking; confirmingCancel = false; cancelError = null }
+                                    .padding(vertical = 6.dp, horizontal = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(booking.guestName, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        t(bookingStatusKey(booking)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (booking.cancelledAt != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    booking.guestEmail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    formatTimestamp(booking.startsAt, displayZone) + " – " + formatTimestamp(booking.endsAt, displayZone),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                } else if (!confirmingCancel) {
+                    // Detail view for one booking.
+                    Text(
+                        t("booking.guestLabel") + ": " + current.guestName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        current.guestEmail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        formatTimestamp(current.startsAt, displayZone) + " – " + formatTimestamp(current.endsAt, displayZone),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        t(bookingStatusKey(current)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (current.cancelledAt != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (!current.guestMessage.isNullOrBlank()) {
+                        Text(
+                            t("booking.messageLabel") + ": " + current.guestMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (cancelError != null) {
+                        Text(cancelError!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { selected = null }) { Text(t("common.back")) }
+                        Spacer(Modifier.weight(1f))
+                        if (current.cancelledAt == null) {
+                            Button(
+                                onClick = { confirmingCancel = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            ) { Text(t("booking.cancelBooking")) }
+                        }
+                    }
+                } else {
+                    // Cancel confirmation (same dialog, swapped content).
+                    Text(
+                        t("booking.cancelBookingTitle"),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                            "booking.cancelBookingWarning",
+                            mapOf(
+                                "guest" to current.guestName,
+                                "when" to formatTimestamp(current.startsAt, displayZone),
+                            ),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    if (cancelError != null) {
+                        Text(cancelError!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { confirmingCancel = false }, enabled = !cancelling) {
+                            Text(t("booking.cancel"))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Button(
+                            onClick = {
+                                cancelling = true
+                                cancelError = null
+                                scope.launch {
+                                    val api = ApiClient(profile)
+                                    runCatching { api.cancelBooking(link.id, current.id) }
+                                        .onSuccess {
+                                            api.close()
+                                            cancelling = false
+                                            confirmingCancel = false
+                                            selected = null
+                                            notice = t("booking.bookingCancelled")
+                                            reloadKey++
+                                        }
+                                        .onFailure {
+                                            api.close()
+                                            cancelling = false
+                                            cancelError = userFacingError(it, "booking.cancelBookingFailed")
+                                        }
+                                }
+                            },
+                            enabled = !cancelling,
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        ) {
+                            if (cancelling) {
+                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                            }
+                            Text(t("booking.cancelBooking"))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(t("common.close")) }
         },
     )
 }
