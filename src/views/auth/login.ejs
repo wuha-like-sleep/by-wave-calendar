@@ -9,7 +9,7 @@
     <% if (qrEnabled) { %>
     <div class="mt-5 grid grid-cols-2 gap-1 bg-slate-100 rounded-lg p-1">
       <button type="button" id="tab-password"
-              class="text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm">
+              class="text-sm font-medium rounded-md px-3 py-1.5 bg-brand-50 text-brand-700 shadow-sm">
         <%= t("login.tabPassword") %>
       </button>
       <button type="button" id="tab-qr"
@@ -118,22 +118,6 @@
     <% } %>
   </div>
 
-  <%# 匿名访客的语言切换器 —— 写 bwc_locale cookie 立即生效。
-      下次刷新页面 + 同一浏览器后续所有页面都用这个语言。 %>
-  <form method="post" action="/locale" class="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-    <input type="hidden" name="return_to" value="/login" />
-    <label for="locale-switch">🌐</label>
-    <select name="locale" id="locale-switch"
-            data-bwc-autosubmit
-            class="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs">
-      <% locales.forEach(function(l){ %>
-        <option value="<%= l.code %>" <%= currentLocale === l.code ? "selected" : "" %>>
-          <%= l.label %>
-        </option>
-      <% }) %>
-    </select>
-  </form>
 </div>
 
 <script src="/static/lib/simplewebauthn.umd.min.js"></script>
@@ -225,13 +209,13 @@ const BWC_LOGIN_T = <%- jsonForScript({
 
   function activateTab(which) {
     if (which === "pwd") {
-      tabPwd.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm";
+      tabPwd.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-brand-50 text-brand-700 shadow-sm";
       tabQr.className = "text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900";
       panelPwd.classList.remove("hidden");
       panelQr.classList.add("hidden");
       stopPolling();
     } else {
-      tabQr.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-white text-slate-900 shadow-sm";
+      tabQr.className = "text-sm font-medium rounded-md px-3 py-1.5 bg-brand-50 text-brand-700 shadow-sm";
       tabPwd.className = "text-sm font-medium rounded-md px-3 py-1.5 text-slate-600 hover:text-slate-900";
       panelQr.classList.remove("hidden");
       panelPwd.classList.add("hidden");
