@@ -26,7 +26,7 @@ import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
 import { recordLoginEvent } from "../lib/login_history.js";
-import { setThemeCookies } from "../lib/user_theme.js";
+import { setModeCookie, setThemeCookies } from "../lib/user_theme.js";
 import { returnToOrApp } from "../lib/return_to.js";
 
 /** Request-scoped translate for route handlers — flash messages, page
@@ -86,6 +86,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       setThemeCookies(reply, s.user.themePalette, s.user.themeDensity);
+      setModeCookie(reply, s.user.themeMode);
       return reply.redirect(consumeMfaReturnTo());
     }
 
@@ -102,6 +103,7 @@ export async function mfaRoutes(app: FastifyInstance) {
       void notifyLoginSuccess(req, s.user, "mfa").catch((err) => req.log.warn({ err }, "login_alert_failed"));
       void recordLoginEvent(req, s.user.id, "mfa").catch((err) => req.log.warn({ err }, "login_event_failed"));
       setThemeCookies(reply, s.user.themePalette, s.user.themeDensity);
+      setModeCookie(reply, s.user.themeMode);
       // Honor return_to and show the backup-code notice on the destination.
       const target = consumeMfaReturnTo();
       return redirectWithFlash(reply, target, { success: tr(req, "flash.mfa.backupUsed") });

@@ -16,7 +16,7 @@ import {
 } from "../lib/sso.js";
 import { recordLoginEvent } from "../lib/login_history.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
-import { setThemeCookies } from "../lib/user_theme.js";
+import { setModeCookie, setThemeCookies } from "../lib/user_theme.js";
 import { userIsActive } from "../lib/user_state.js";
 import {
   decideEmailClaim,
@@ -439,6 +439,7 @@ export async function ssoRoutes(app: FastifyInstance) {
 
         await createSession(reply, user.id, { kind: "sso", slug: parsed.slug });
         setThemeCookies(reply, user.themePalette, user.themeDensity);
+        setModeCookie(reply, user.themeMode);
         void notifyLoginSuccess(req, user, "sso").catch((err) => req.log.warn({ err }, "login_alert_failed"));
         void recordLoginEvent(req, user.id, "sso").catch((err) => req.log.warn({ err }, "login_event_failed"));
         // 返回到失效前的页面。判据收在 lib/return_to.ts —— 这里原来是一份手抄，

@@ -469,6 +469,13 @@ export const en = {
   "settings.appearance.densityComfortableHint": "Default spacing",
   "settings.appearance.densityCompact": "Compact",
   "settings.appearance.densityCompactHint": "Fit more on screen",
+  "settings.appearance.modeLabel": "Appearance mode",
+  "settings.appearance.modeSystem": "Follow system",
+  "settings.appearance.modeSystemHint": "Match your device appearance",
+  "settings.appearance.modeLight": "Light",
+  "settings.appearance.modeLightHint": "Always light",
+  "settings.appearance.modeDark": "Dark",
+  "settings.appearance.modeDarkHint": "Always dark, easier in low light",
   "settings.appearance.saveTheme": "Save appearance",
 
   // /admin/site

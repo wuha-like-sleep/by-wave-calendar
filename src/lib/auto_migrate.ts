@@ -188,4 +188,11 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "site_settings.data_migrations_done（缺了每一个页面都 500）",
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS data_migrations_done text NOT NULL DEFAULT ''`,
   },
+  {
+    // 0062。可空、无默认值：NULL = 跟随系统（深色模式三态里的默认态）。
+    // 这一列只被设置页和登录时的 cookie 同步读，补成 NULL 不改变任何人的
+    // 现有外观，迁移器恢复记账后也不会有回填要做。
+    why: "users.theme_mode（缺了设置页外观区和登录都 500）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_mode text`,
+  },
 ];

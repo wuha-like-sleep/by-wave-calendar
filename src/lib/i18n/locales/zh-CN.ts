@@ -451,6 +451,13 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "默认间距",
   "settings.appearance.densityCompact": "紧凑",
   "settings.appearance.densityCompactHint": "一屏多塞内容",
+  "settings.appearance.modeLabel": "明暗模式",
+  "settings.appearance.modeSystem": "跟随系统",
+  "settings.appearance.modeSystemHint": "随设备外观自动切换",
+  "settings.appearance.modeLight": "浅色",
+  "settings.appearance.modeLightHint": "始终浅色",
+  "settings.appearance.modeDark": "深色",
+  "settings.appearance.modeDarkHint": "始终深色，弱光下更护眼",
   "settings.appearance.saveTheme": "保存外观",
 
   "adminSite.heading": "站点设置",

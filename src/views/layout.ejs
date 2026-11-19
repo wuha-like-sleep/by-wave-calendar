@@ -2,8 +2,30 @@
 <html lang="<%= typeof currentLocale !== 'undefined' ? currentLocale : 'zh-CN' %>"
       data-theme="<%= typeof themePalette !== 'undefined' ? themePalette : 'indigo' %>"
       data-density="<%= typeof themeDensity !== 'undefined' ? themeDensity : 'comfortable' %>"
+      data-mode-pref="<%= typeof themeMode !== 'undefined' ? themeMode : 'system' %>"
       data-app-version="<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>">
   <head>
+    <%# Colour mode resolution — MUST run before the stylesheets below are
+        applied, or a dark-mode user gets a white flash on every navigation.
+        The server renders the saved preference into data-mode-pref (cookie
+        backed, so logged-out pages get "system"); "system" resolves here
+        through matchMedia, synchronously, and a listener keeps "system"
+        live when the OS flips while the page is open. %>
+    <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+      (function () {
+        var root = document.documentElement;
+        var mq = window.matchMedia("(prefers-color-scheme: dark)");
+        function apply() {
+          var pref = root.getAttribute("data-mode-pref") || "system";
+          var dark = pref === "dark" || (pref === "system" && mq.matches);
+          root.setAttribute("data-mode", dark ? "dark" : "light");
+          root.style.colorScheme = dark ? "dark" : "light";
+        }
+        apply();
+        if (mq.addEventListener) mq.addEventListener("change", apply);
+        else if (mq.addListener) mq.addListener(apply);
+      })();
+    </script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
@@ -59,6 +81,16 @@
         animation: bwc-spin 0.7s linear infinite;
       }
       .bwc-boot-splash__msg { font-size: 12px; color: #64748b; margin-top: -0.25rem; min-height: 1em; }
+      /* Splash in dark mode: same gradient idea, deep end of the scale. */
+      [data-mode="dark"] .bwc-boot-splash {
+        background: linear-gradient(160deg, #0b1120 0%, #111c33 60%, #1e1b4b 100%);
+      }
+      [data-mode="dark"] .bwc-boot-splash__name { color: #94a3b8; }
+      [data-mode="dark"] .bwc-boot-splash__msg { color: #64748b; }
+      [data-mode="dark"] .bwc-boot-splash__spinner {
+        border-color: rgba(129, 140, 248, 0.25);
+        border-top-color: #818cf8;
+      }
       @keyframes bwc-pulse { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(.95);opacity:.85} }
       @keyframes bwc-spin { to { transform: rotate(360deg); } }
 

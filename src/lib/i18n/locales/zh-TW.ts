@@ -450,6 +450,13 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "settings.appearance.densityComfortableHint": "預設間距",
   "settings.appearance.densityCompact": "緊湊",
   "settings.appearance.densityCompactHint": "一螢幕多放內容",
+  "settings.appearance.modeLabel": "明暗模式",
+  "settings.appearance.modeSystem": "跟隨系統",
+  "settings.appearance.modeSystemHint": "隨裝置外觀自動切換",
+  "settings.appearance.modeLight": "淺色",
+  "settings.appearance.modeLightHint": "始終淺色",
+  "settings.appearance.modeDark": "深色",
+  "settings.appearance.modeDarkHint": "始終深色，弱光下更護眼",
   "settings.appearance.saveTheme": "儲存外觀",
 
   "adminSite.heading": "站點設定",

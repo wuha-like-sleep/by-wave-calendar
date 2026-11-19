@@ -248,15 +248,24 @@
     input.value = value;
   }
 
+  // The widget is inline-styled (CSP-strict pages), so it cannot read
+  // the site's CSS variables — pick the palette from the page's resolved
+  // colour mode instead (set on <html data-mode> before first paint).
+  function darkMode() {
+    return document.documentElement.getAttribute("data-mode") === "dark";
+  }
+
   function buildShell(container, label) {
     container.innerHTML = "";
     var box = document.createElement("div");
     box.className = "bwc-captcha-box";
     box.setAttribute("role", "status");
     box.setAttribute("aria-live", "polite");
+    var dark = darkMode();
     box.style.cssText = "display:flex;align-items:center;gap:10px;padding:10px 12px;" +
-      "border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;font-size:14px;" +
-      "color:#334155;min-height:42px;max-width:320px;box-sizing:border-box;";
+      "border:1px solid " + (dark ? "#475569" : "#cbd5e1") + ";border-radius:10px;" +
+      "background:" + (dark ? "#1e293b" : "#f8fafc") + ";font-size:14px;" +
+      "color:" + (dark ? "#e2e8f0" : "#334155") + ";min-height:42px;max-width:320px;box-sizing:border-box;";
 
     var icon = document.createElement("span");
     icon.className = "bwc-captcha-icon";
@@ -299,14 +308,14 @@
   function setPassed(ui, label) {
     ui.icon.innerHTML = checkSvg();
     ui.text.textContent = label;
-    ui.box.style.borderColor = "#86efac";
-    ui.box.style.background = "#f0fdf4";
+    ui.box.style.borderColor = darkMode() ? "#166534" : "#86efac";
+    ui.box.style.background = darkMode() ? "#052e16" : "#f0fdf4";
   }
   function setFailed(ui, label) {
     ui.icon.innerHTML = errorSvg();
     ui.text.textContent = label;
-    ui.box.style.borderColor = "#fca5a5";
-    ui.box.style.background = "#fef2f2";
+    ui.box.style.borderColor = darkMode() ? "#991b1b" : "#fca5a5";
+    ui.box.style.background = darkMode() ? "#450a0a" : "#fef2f2";
   }
 
   // i18n-lite: read optional override labels off the container, else defaults.
