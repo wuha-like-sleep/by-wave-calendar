@@ -45,6 +45,12 @@
     <li>Die Serverlaufzeitprotokolle dienen der Fehlerbehebung; sensible Anmeldedaten wie Zugriffstoken, Push-Token und Passwörter werden <strong>nicht in Protokolle geschrieben</strong>.</li>
   </ul>
 
+  <h3>1.5 In-App-Benachrichtigungsdatensätze</h3>
+  <ul>
+    <li>Wenn etwas Ihre Aufmerksamkeit erfordert — eine neue oder stornierte Buchung über einen Ihrer Buchungslinks, eine Einladung zur Kalenderfreigabe, eine wesentliche Änderung oder Absage eines Ereignisses in einem mit Ihnen geteilten Kalender oder ein sicherheitsrelevantes Kontoereignis (etwa das Erstellen oder Widerrufen eines API-Tokens oder eine Anmeldung von einem neuen Gerät) — speichert der Dienst einen <strong>Benachrichtigungsdatensatz</strong> für Ihr In-App-Benachrichtigungs-Postfach: Benachrichtigungstyp, Titel und Text, einen In-App-Link zum zugehörigen Objekt (Buchung, Einladung oder Ereignis), ob Sie sie gelesen haben, und den Lesezeitpunkt.</li>
+    <li>Diese Datensätze dienen ausschließlich dem Benachrichtigungs-Postfach (Glockensymbol und Benachrichtigungsseite); sie werden nicht für Profiling oder Werbung verwendet. Bestimmte Benachrichtigungstypen können zusätzlich per Web Push an Ihren Browser gespiegelt werden — diese Zustellung nutzt das in Abschnitt 1.3 beschriebene Push-Abonnement und speichert nichts Weiteres.</li>
+  </ul>
+
   <h2>2. Informationen, die wir nicht erfassen</h2>
   <ul>
     <li>Wir erfassen <strong>nicht</strong> aktiv Ihren Standort, die Geräte-IMEI/MAC, Kontakte, Fotos, soziale Beziehungen oder sonstige Informationen, die nichts mit der Kalenderfunktion zu tun haben.</li>
@@ -108,6 +114,7 @@
     <li><strong>Konto + Kalender + Ereignisse</strong>: werden während des Bestehens des Kontos fortlaufend aufbewahrt, bis Sie Ereignisse löschen oder Ihr Konto auflösen.</li>
     <li><strong>Soft-gelöschte Ereignisse</strong>: werden nach dem Löschen 90 Tage zur Wiederherstellung aufbewahrt und nach Ablauf physisch gelöscht.</li>
     <li><strong>Anmeldeverlauf / Audit-Protokolle</strong>: werden vom Betreiber gemäß seiner Betriebsrichtlinie für Sicherheitsaudits aufbewahrt.</li>
+    <li><strong>In-App-Benachrichtigungen</strong>: Gelesene Benachrichtigungen werden 90 Tage nach dem Lesen automatisch gelöscht; ungelesene Benachrichtigungen bleiben erhalten, bis Sie sich um sie kümmern, und werden bei Auflösung Ihres Kontos zusammen mit diesem gelöscht.</li>
     <li><strong>Nach Auflösung des Kontos</strong>: Das Konto und die zugehörigen Daten werden dauerhaft gelöscht; in den <strong>regelmäßigen Datenbanksicherungen</strong> des Betreibers können Reste verbleiben, bis die Sicherung gemäß ihrer Rotationsstrategie abläuft.</li>
   </ul>
 

@@ -24,6 +24,7 @@
         <tr><td>Push-Abonnement-Token</td><td>Web-Push-Endpunkt; mobiles APNs/FCM-Token (wenn Push aktiviert und das Gerät registriert ist)</td><td>Zustellung von Benachrichtigungen an Ihr Gerät</td></tr>
         <tr><td>Sitzung und Sicherheit</td><td>Sitzungs-/CSRF-Cookie, Anmeldeverlauf (Zeit/IP/UA), Zähler fehlgeschlagener Anmeldungen</td><td>Aufrechterhaltung des Anmeldestatus, Schutz vor Brute-Force, Erkennung ungewöhnlicher Anmeldungen</td></tr>
         <tr><td>Abgeleitete Anmeldedaten</td><td>API-Token / App-Passwörter (nur gehasht gespeichert)</td><td>Autorisierung des API-/CalDAV-Zugriffs</td></tr>
+        <tr><td>In-App-Benachrichtigungsdatensätze</td><td>Benachrichtigungstyp, Titel und Text, In-App-Link zum zugehörigen Objekt, Lesestatus und Lesezeitpunkt</td><td>Bereitstellung des In-App-Benachrichtigungs-Postfachs (Buchungen, Kalendereinladungen, Ereignisänderungen, sicherheitsrelevante Kontoereignisse)</td></tr>
         <tr><td>Audit-Protokolle</td><td>Aufzeichnungen von Administratoraktionen, Aufzeichnungen von Webhook-Zustellungen</td><td>Betrieb und Sicherheitsaudit</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>Konto + Kalender + Ereignisse</strong>: werden während des Bestehens des Kontos fortlaufend aufbewahrt, bis Sie löschen oder das Konto auflösen.</li>
     <li><strong>Soft-gelöschte Ereignisse</strong>: werden 90 Tage zur Wiederherstellung aufbewahrt und nach Ablauf physisch gelöscht.</li>
     <li><strong>Anmeldeverlauf / Audit-Protokolle</strong>: werden vom Betreiber gemäß seiner Betriebsrichtlinie aufbewahrt.</li>
+    <li><strong>In-App-Benachrichtigungen</strong>: Gelesene Benachrichtigungen werden 90 Tage nach dem Lesen automatisch gelöscht; ungelesene Benachrichtigungen bleiben erhalten, bis Sie sich um sie kümmern, und werden bei der Auflösung zusammen mit dem Konto gelöscht.</li>
     <li><strong>Nach Auflösung</strong>: Das Konto und die zugehörigen Daten werden dauerhaft gelöscht; in den regelmäßigen Sicherungen des Betreibers können Reste verbleiben, bis diese Sicherung gemäß ihrer Rotationsstrategie abläuft.</li>
   </ul>
 

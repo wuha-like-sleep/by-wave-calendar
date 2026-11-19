@@ -45,6 +45,12 @@
     <li>Server runtime logs are used for troubleshooting; sensitive credentials such as access tokens, push tokens, and passwords <strong>are not written to the logs</strong>.</li>
   </ul>
 
+  <h3>1.5 In-App Notification Records</h3>
+  <ul>
+    <li>When something needs your attention — a new or cancelled booking on one of your booking links, a calendar sharing invitation, a meaningful change to or cancellation of an event on a calendar shared with you, or an account security event (such as an API token being created or revoked, or a sign-in from a new device) — the Service stores a <strong>notification record</strong> for your in-app notification inbox: the notification type, title and body text, an in-app link to the related object (booking, invitation, or event), whether you have read it, and the time you read it.</li>
+    <li>These records exist only to power the notification inbox (the bell icon and the notifications page); they are not used for profiling or advertising. Certain notification types can also be mirrored to your browser via Web Push — that delivery uses the push subscription described in Section 1.3 and stores nothing further.</li>
+  </ul>
+
   <h2>2. Information We Do Not Collect</h2>
   <ul>
     <li>We <strong>do not</strong> proactively collect your location, device IMEI/MAC, contacts, photo library, social connections, or any other information unrelated to calendar functionality.</li>
@@ -108,6 +114,7 @@
     <li><strong>Account + calendars + events</strong>: retained for the duration of the account, until you delete the events or close the account.</li>
     <li><strong>Soft-deleted events</strong>: retained for 90 days to allow recovery, then physically deleted upon expiry.</li>
     <li><strong>Login history / audit logs</strong>: retained by the operator according to their operational policy, for security auditing.</li>
+    <li><strong>In-app notifications</strong>: read notifications are automatically deleted 90 days after you read them; unread notifications are kept until you deal with them, and are deleted together with your account when you close it.</li>
     <li><strong>After account closure</strong>: the account and its associated data are permanently purged; they may still remain in the operator's <strong>periodic database backups</strong> until those backups expire under their rotation policy.</li>
   </ul>
 

@@ -45,6 +45,12 @@
     <li>Les journaux d'exploitation du serveur servent au dépannage ; les identifiants sensibles tels que les jetons d'accès, les jetons push et les mots de passe <strong>ne sont pas consignés dans les journaux</strong>.</li>
   </ul>
 
+  <h3>1.5 Enregistrements de notifications intégrées</h3>
+  <ul>
+    <li>Lorsqu'un événement requiert votre attention — une réservation créée ou annulée via l'un de vos liens de réservation, une invitation au partage d'un calendrier, une modification importante ou une annulation d'événement dans un calendrier partagé avec vous, ou un événement de sécurité du compte (création ou révocation d'un jeton d'API, connexion depuis un nouvel appareil, etc.) — le Service conserve un <strong>enregistrement de notification</strong> pour votre boîte de réception intégrée : le type de notification, le titre et le corps du texte, un lien intégré vers l'objet concerné (réservation, invitation ou événement), le fait que vous l'ayez lue ou non, et l'heure de lecture.</li>
+    <li>Ces enregistrements n'existent que pour alimenter la boîte de réception des notifications (l'icône en forme de cloche et la page des notifications) ; ils ne sont utilisés ni à des fins de profilage ni à des fins publicitaires. Certains types de notifications peuvent également être reflétés vers votre navigateur via Web Push — cette livraison utilise l'abonnement push décrit à la section 1.3 et ne stocke rien de plus.</li>
+  </ul>
+
   <h2>2. Informations que nous ne collectons pas</h2>
   <ul>
     <li>Nous <strong>ne collectons pas</strong> activement votre localisation, l'IMEI/MAC de votre appareil, vos contacts, votre galerie photo, vos relations sociales ni aucune information sans rapport avec les fonctionnalités de calendrier.</li>
@@ -108,6 +114,7 @@
     <li><strong>Compte + calendriers + événements</strong> : conservés pendant toute la durée de vie du compte, jusqu'à ce que vous supprimiez un événement ou résiliiez votre compte.</li>
     <li><strong>Événements supprimés en douceur</strong> : conservés 90 jours en vue d'une restauration, puis physiquement supprimés à l'échéance.</li>
     <li><strong>Historique de connexion / journaux d'audit</strong> : conservés par l'exploitant selon sa politique d'exploitation, à des fins d'audit de sécurité.</li>
+    <li><strong>Notifications intégrées</strong> : les notifications lues sont automatiquement supprimées 90 jours après leur lecture ; les notifications non lues sont conservées jusqu'à ce que vous les traitiez, et sont supprimées avec votre compte lors de sa résiliation.</li>
     <li><strong>Après résiliation du compte</strong> : le compte et les données associées sont définitivement effacés ; ils peuvent toutefois subsister dans les <strong>sauvegardes régulières de la base de données</strong> de l'exploitant jusqu'à expiration de celles-ci selon sa politique de rotation.</li>
   </ul>
 
