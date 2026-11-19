@@ -28,6 +28,13 @@ data class EventDTO(
     val endsAt: String,
     val allDay: Boolean = false,
     val rrule: String? = null,
+    /** Occurrence starts (ISO 8601) deleted one-by-one from a recurring
+     *  series — the server's events.exdates column, sent on GET rows.
+     *  Note the asymmetry: PATCH's updateSchema has NO exdates field
+     *  (verified in src/routes/events.ts), so the client can read and
+     *  stage restores but the current server strips them on save —
+     *  see EventUpdateInput.exdates. */
+    val exdates: List<String>? = null,
     /** True for non-first occurrences of a recurring series. */
     val isOccurrence: Boolean? = null,
     /** Server's JSONB `extra` column — timezone, attendees, link. */
@@ -47,6 +54,20 @@ data class EventExtraDTO(
     val url: String? = null,
     /** Optional meeting passcode (入会密码). */
     val meetingPassword: String? = null,
+    /** Event-level reminders from extra.alarms — the server's single
+     *  source of truth (src/lib/reminder_triggers.ts). First entry is
+     *  the "primary" reminder the editor shows; the rest are preserved
+     *  verbatim on save. */
+    val alarms: List<EventAlarm>? = null,
+)
+
+/** One entry of extra.alarms. `trigger` is a signed ISO 8601 duration
+ *  (e.g. "-PT15M"); action is "DISPLAY" for every alarm we create. */
+@Serializable
+data class EventAlarm(
+    val trigger: String,
+    val action: String? = null,
+    val description: String? = null,
 )
 
 /** GET /api/v1/events response envelope. */
@@ -429,6 +450,16 @@ data class EventUpdateInput(
     val endsAt: String? = null,
     val allDay: Boolean? = null,
     val rrule: String? = null,
+    /** Restored (un-deleted) occurrence list for a recurring series.
+     *  Sent ONLY when the user restored at least one entry in the
+     *  editor. **Current server caveat**: PATCH's updateSchema
+     *  (createSchema.partial() in src/routes/events.ts) has no
+     *  exdates field, so zod strips this today — the restore is
+     *  staged client-side and takes effect once the server schema
+     *  accepts exdates; the editor re-reads the list from the server
+     *  on every open, so a not-yet-effective restore is visible as
+     *  "still deleted" rather than silently believed. */
+    val exdates: List<String>? = null,
     val extra: EventExtra? = null,
     /** For recurring events: "instance" / "future" / "series" / null. */
     val scope: String? = null,
@@ -439,10 +470,55 @@ data class EventUpdateInput(
 data class EventExtra(
     val timezone: String? = null,
     val attendees: List<String>? = null,
-    val category: String? = null,
+    /** Category is FORM-MANAGED since this batch (was create-only
+     *  passthrough before), so it uses the same explicit-null wrapper
+     *  as url: selected value → string, cleared → JSON null (server's
+     *  extraSchema accepts category: string | null), unmanaged →
+     *  field omitted. Server values: work / personal / family /
+     *  health / travel / meeting (web editor's set). */
+    val category: cn.bywave.calendar.event.EventStringField? = null,
     val url: cn.bywave.calendar.event.EventStringField? = null,
     val meetingPassword: cn.bywave.calendar.event.EventStringField? = null,
+    /** Managed exactly like url / meetingPassword above: a null field
+     *  means "this editor doesn't touch alarms" (omitted from the wire
+     *  thanks to explicitNulls = false, server keeps the old value),
+     *  a wrapper holding null sends an explicit JSON null (server's
+     *  shallow merge deletes the alarms key), a wrapper holding a list
+     *  replaces it. See EventEditUiState.buildAlarmsField. */
+    val alarms: EventAlarmsField? = null,
 )
+
+/** Non-null wrapper so an explicit alarms deletion survives
+ *  explicitNulls = false — same trick as the shared EventStringField,
+ *  re-implemented here because apps/shared is out of scope for this
+ *  change and the payload is a list, not a string. */
+@Serializable(with = EventAlarmsFieldSerializer::class)
+data class EventAlarmsField(val alarms: List<EventAlarm>?)
+
+object EventAlarmsFieldSerializer : kotlinx.serialization.KSerializer<EventAlarmsField> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
+        "EventAlarmsField", kotlinx.serialization.descriptors.PrimitiveKind.STRING,
+    )
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: EventAlarmsField) {
+        require(encoder is kotlinx.serialization.json.JsonEncoder)
+        val element = value.alarms?.let {
+            kotlinx.serialization.json.Json.encodeToJsonElement(
+                kotlinx.serialization.builtins.ListSerializer(EventAlarm.serializer()), it,
+            )
+        } ?: kotlinx.serialization.json.JsonNull
+        encoder.encodeJsonElement(element)
+    }
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): EventAlarmsField {
+        require(decoder is kotlinx.serialization.json.JsonDecoder)
+        val element = decoder.decodeJsonElement()
+        if (element == kotlinx.serialization.json.JsonNull) return EventAlarmsField(null)
+        return EventAlarmsField(
+            kotlinx.serialization.json.Json.decodeFromJsonElement(
+                kotlinx.serialization.builtins.ListSerializer(EventAlarm.serializer()), element,
+            ),
+        )
+    }
+}
 
 // ---- Native account management ----
 //
@@ -476,4 +552,160 @@ data class ChangePasswordRequest(
 data class DeleteAccountRequest(
     val password: String,
     val confirm: String,
+)
+
+// ---- MFA settings (POST /api/v1/account/mfa/*) ----
+//
+// There is NO mfaEnabled field anywhere the native client can read:
+// GET /auth/me returns only id / email / displayName / isAdmin, and
+// LoginResponse has no MFA flag either (both checked against the
+// server + this file). So — same as iOS MfaSettingsPage — the settings
+// page probes POST /account/mfa/setup: 200 means "was off, here is a
+// pending secret", 409 already_enabled means "on, show disable form".
+
+/** Empty JSON body for POST /account/mfa/setup (the handler reads no
+ *  fields; Retrofit still needs a @Body to send `{}`). */
+@Serializable
+data class EmptyBodyRequest(val unused: String? = null)
+
+/** POST /api/v1/account/mfa/setup success — pending secret, NOT yet
+ *  active until /verify succeeds. */
+@Serializable
+data class MfaSetupResponse(
+    val otpauthUri: String,
+    val secret: String,
+)
+
+/** POST /api/v1/account/mfa/verify body. (Distinct from the login-time
+ *  MfaVerifyRequest, which carries an mfaToken instead.) */
+@Serializable
+data class AccountMfaVerifyRequest(val code: String)
+
+/** POST /api/v1/account/mfa/verify success. The handler replies with a
+ *  bare `{ ok: true, backupCodes: [...] }` — see the EnvelopeInterceptor
+ *  note in ApiClient.kt for why those codes survive unwrapping.
+ *  Backup codes are shown ONCE; the server stores only hashes. */
+@Serializable
+data class MfaVerifyResponse(
+    val ok: Boolean = true,
+    val backupCodes: List<String> = emptyList(),
+)
+
+/** POST /api/v1/account/mfa/disable body — password + current TOTP.
+ *  Wrong password or code is a 403 (not 401), so no refresh storm. */
+@Serializable
+data class MfaDisableRequest(
+    val password: String,
+    val code: String,
+)
+
+// ---- Devices (GET /api/v1/devices, /devices/me, DELETE /devices/{id}) ----
+
+/** One row of GET /api/v1/devices. Timestamps are ISO 8601 strings. */
+@Serializable
+data class DeviceItem(
+    val id: String,
+    val label: String? = null,
+    val kind: String? = null,
+    val prefix: String? = null,
+    val appVersion: String? = null,
+    val lastSeenAt: String? = null,
+    val lastSeenIp: String? = null,
+    val firstSeenIp: String? = null,
+    val createdAt: String? = null,
+)
+
+@Serializable
+data class DevicesResponse(
+    val devices: List<DeviceItem> = emptyList(),
+)
+
+/** GET /api/v1/devices/me — which devices row THIS bearer token belongs
+ *  to. Used only to badge the current device in the list. */
+@Serializable
+data class CurrentDevice(
+    val id: String,
+    val label: String? = null,
+    val kind: String? = null,
+    val hasPushToken: Boolean = false,
+)
+
+// ---- Conflict check (POST /api/v1/events/conflicts) ----
+
+@Serializable
+data class ConflictsRequest(
+    val calendarId: String,
+    val startsAt: String,
+    val endsAt: String,
+    /** The event being edited, so it doesn't conflict with itself. */
+    val excludeId: String? = null,
+)
+
+@Serializable
+data class EventConflict(
+    val id: String,
+    val summary: String,
+    val startsAt: String,
+    val endsAt: String,
+)
+
+@Serializable
+data class ConflictsResponse(
+    val conflicts: List<EventConflict> = emptyList(),
+)
+
+// ---- Calendar subscriptions (GET/POST/DELETE /calendars/{id}/subscriptions) ----
+
+/** One row of GET /api/v1/calendars/{id}/subscriptions. Mirrors the
+ *  server's presentSub() in src/routes/subscriptions.ts. */
+@Serializable
+data class CalendarSubscription(
+    val id: String,
+    val calendarId: String,
+    val url: String,
+    val label: String? = null,
+    val refreshMinutes: Int = 360,
+    val lastFetchedAt: String? = null,
+    val lastStatus: String? = null,
+    val lastError: String? = null,
+    val lastEventCount: Int? = null,
+    val createdAt: String? = null,
+)
+
+/** POST /calendars/{id}/subscriptions body. refreshMinutes is left to
+ *  the server default (360) in v1 — the native UI doesn't expose it. */
+@Serializable
+data class SubscriptionCreateRequest(
+    val url: String,
+    val label: String? = null,
+    val refreshMinutes: Int? = null,
+)
+
+/** The first-refresh outcome embedded in the create response. A failed
+ *  first fetch does NOT mean creation failed — the subscription row is
+ *  already stored and will retry on its normal cadence. */
+@Serializable
+data class SubscriptionRefreshOutcome(
+    val ok: Boolean,
+    val inserted: Int? = null,
+    val updated: Int? = null,
+    val skipped: Int? = null,
+    val total: Int? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class SubscriptionCreateResponse(
+    val subscription: CalendarSubscription,
+    val refresh: SubscriptionRefreshOutcome,
+)
+
+/** POST /calendars/{id}/subscriptions/{subId}/refresh success body. */
+@Serializable
+data class SubscriptionRefreshResponse(
+    val subscription: CalendarSubscription,
+    val inserted: Int = 0,
+    val updated: Int = 0,
+    val skipped: Int = 0,
+    val total: Int = 0,
 )

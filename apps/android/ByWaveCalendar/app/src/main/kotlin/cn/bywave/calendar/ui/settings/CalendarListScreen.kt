@@ -94,9 +94,11 @@ import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.api.serverErrorMessage
 import cn.bywave.calendar.data.model.CalendarCreateRequest
 import cn.bywave.calendar.data.model.CalendarMeta
+import cn.bywave.calendar.data.model.CalendarSubscription
 import cn.bywave.calendar.data.model.CalendarUpdateInput
 import cn.bywave.calendar.data.model.ShareToken
 import cn.bywave.calendar.data.model.ShareTokenCreateRequest
+import cn.bywave.calendar.data.model.SubscriptionCreateRequest
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.calendar.parseHex
@@ -126,19 +128,18 @@ private const val DEFAULT_CALENDAR_COLOR = "#6366f1"
 @Composable
 fun CalendarListScreen(
     onBack: () -> Unit,
-    onImportFile: (Uri) -> Unit = {},
-    vm: CalendarViewModel = viewModel(),
     // In-app ICS import entry: hands the picked file's Uri up to the
     // activity, which feeds it into the same pending-import pipeline
     // the system "open with / share" intents use. Import used to be
     // reachable ONLY from outside the app — a user holding a .ics file
     // had no way to start an import from inside.
-    onImportFile: (android.net.Uri) -> Unit = {},
+    onImportFile: (Uri) -> Unit = {},
+    vm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
-    val pickIcs = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    val pickIcs = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) onImportFile(uri) }
     var editing by remember { mutableStateOf<CalendarMeta?>(null) }
     var creating by remember { mutableStateOf(false) }
@@ -155,7 +156,7 @@ fun CalendarListScreen(
                 },
                 actions = {
                     IconButton(onClick = {
-                        pickIcs.launch(arrayOf("text/calendar", "text/x-vcalendar"))
+                        pickIcs.launch(arrayOf("text/calendar", "text/x-vcalendar", "text/plain", "application/octet-stream"))
                     }) {
                         Icon(
                             androidx.compose.material.icons.Icons.Outlined.FileUpload,
@@ -223,16 +224,14 @@ fun CalendarListScreen(
                 }
             }
 
-            // In-app .ics import entry. Until now the import screen was
-            // only reachable when another app handed a file over via
-            // intent; picking a file from inside the app reuses the same
-            // screen and flow (the host parks the Uri and navigates).
-            val pickIcs = rememberLauncherForActivityResult(
-                ActivityResultContracts.OpenDocument(),
-            ) { uri -> if (uri != null) onImportFile(uri) }
+            // In-app .ics import entry (button form of the top-bar
+            // action). Until now the import screen was only reachable
+            // when another app handed a file over via intent; picking
+            // a file from inside the app reuses the same screen and
+            // flow (the host parks the Uri and navigates).
             OutlinedButton(
                 onClick = {
-                    pickIcs.launch(arrayOf("text/calendar", "text/plain", "application/octet-stream"))
+                    pickIcs.launch(arrayOf("text/calendar", "text/x-vcalendar", "text/plain", "application/octet-stream"))
                 },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -478,6 +477,32 @@ private fun EditCalendarSheet(
     var error by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // Export (.ics) — fetch the raw snapshot first, then hand it to the
+    // system document picker; the picked URI is written in the launcher
+    // callback, so the fetched text + filename wait here meanwhile.
+    var exporting by remember { mutableStateOf(false) }
+    var pendingExport by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/calendar"),
+    ) { uri ->
+        val pending = pendingExport
+        pendingExport = null
+        if (uri != null && pending != null) {
+            scope.launch {
+                val written = runCatching {
+                    context.contentResolver.openOutputStream(uri)?.use { out ->
+                        out.write(pending.second.toByteArray(Charsets.UTF_8))
+                    } ?: throw java.io.IOException("openOutputStream returned null")
+                }
+                if (written.isSuccess) {
+                    snackbar.showSnackbar(context.getString(R.string.export_done, pending.first))
+                } else {
+                    snackbar.showSnackbar(context.getString(R.string.export_failed))
+                }
+            }
+        }
+    }
+
     // Dirty-check — disable Save when nothing changed, or name went
     // blank (server requires min length 1).
     val canSave = !busy &&
@@ -611,6 +636,53 @@ private fun EditCalendarSheet(
 
             // Subscribe-link (.ics) management — mirrors web app/calendar.ejs.
             ShareLinksSection(calendarId = calendar.id, snackbar = snackbar)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // Incoming .ics subscriptions feeding this calendar.
+            SubscriptionsSection(calendarId = calendar.id, snackbar = snackbar)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+            // One-shot .ics export — owner-authenticated snapshot from
+            // GET /calendars/{id}/export.ics (NOT the public share link:
+            // exporting must not mint a permanent public URL). The file
+            // lands wherever the user picks in the document picker.
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        exporting = true
+                        try {
+                            val profile = BywaveApp.instance.profiles.active()
+                                ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
+                            val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
+                            val resp = client.api.exportCalendarIcs(calendar.id)
+                            if (!resp.isSuccessful) throw retrofit2.HttpException(resp)
+                            val text = resp.body()?.string()
+                                ?: throw IllegalStateException(context.getString(R.string.export_failed))
+                            val filename = exportFilenameFromDisposition(
+                                resp.headers()["Content-Disposition"],
+                            ) ?: (sanitizeIcsFilename(calendar.name) + ".ics")
+                            pendingExport = filename to text
+                            createDocumentLauncher.launch(filename)
+                        } catch (e: Exception) {
+                            snackbar.showSnackbar(
+                                serverErrorMessage(e) ?: context.getString(R.string.export_failed),
+                            )
+                        } finally {
+                            exporting = false
+                        }
+                    }
+                },
+                enabled = !exporting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (exporting) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.size(6.dp))
+                }
+                Text(stringResource(R.string.export_ics))
+            }
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
@@ -862,6 +934,281 @@ private fun ShareLinksSection(
             },
             dismissButton = {
                 TextButton(onClick = { revoking = null }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+}
+
+// ---- Incoming .ics subscriptions ----
+
+/** Filename from a Content-Disposition header (`attachment;
+ *  filename="Work.ics"`), or null when absent/unparseable — the caller
+ *  falls back to the calendar name. */
+private fun exportFilenameFromDisposition(disposition: String?): String? {
+    if (disposition.isNullOrBlank()) return null
+    val quoted = Regex("""filename="([^"]+)"""").find(disposition)?.groupValues?.get(1)
+    val bare = quoted ?: Regex("""filename=([^;]+)""").find(disposition)?.groupValues?.get(1)?.trim()
+    return bare?.takeIf { it.isNotBlank() }
+}
+
+/** Keep a calendar name usable as a document-picker filename. */
+private fun sanitizeIcsFilename(name: String): String {
+    val cleaned = name.replace(Regex("""[\\/:*?"<>|]"""), "_").trim()
+    return cleaned.ifBlank { "calendar" }
+}
+
+@Composable
+private fun SubscriptionsSection(
+    calendarId: String,
+    snackbar: SnackbarHostState,
+) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val subs = remember(calendarId) { mutableStateListOf<CalendarSubscription>() }
+    var loading by remember(calendarId) { mutableStateOf(true) }
+    var working by remember { mutableStateOf(false) }
+    var refreshingId by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var deleting by remember { mutableStateOf<CalendarSubscription?>(null) }
+    var newUrl by remember(calendarId) { mutableStateOf("") }
+    var newLabel by remember(calendarId) { mutableStateOf("") }
+
+    fun api() = run {
+        val profile = BywaveApp.instance.profiles.active()
+            ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
+        ApiClient.forProfile(profile, BywaveApp.instance.profiles).api
+    }
+
+    suspend fun reloadSubs() {
+        try {
+            val list = api().subscriptions(calendarId)
+            subs.clear()
+            subs.addAll(list)
+            error = null
+        } catch (e: Exception) {
+            error = serverErrorMessage(e) ?: context.getString(R.string.subs_load_failed)
+        } finally {
+            loading = false
+        }
+    }
+
+    LaunchedEffect(calendarId) { reloadSubs() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.subs_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.subs_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = mutedTextColor(),
+        )
+
+        if (loading) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            }
+        } else if (subs.isEmpty()) {
+            Text(
+                text = stringResource(R.string.subs_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = mutedTextColor(),
+            )
+        } else {
+            subs.forEach { s ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = s.label?.takeIf { it.isNotBlank() } ?: s.url,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    if (!s.label.isNullOrBlank()) {
+                        Text(
+                            text = s.url,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = mutedTextColor(),
+                        )
+                    }
+                    // Status line: a stored lastError outranks everything —
+                    // it is the reason the feed looks stale. Otherwise the
+                    // last fetch result + how many events it produced.
+                    when {
+                        !s.lastError.isNullOrBlank() -> Text(
+                            text = stringResource(R.string.subs_status_error) + "：" + s.lastError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        s.lastFetchedAt != null -> Text(
+                            text = buildString {
+                                append(stringResource(R.string.subs_status_ok))
+                                s.lastEventCount?.let {
+                                    append(" · ")
+                                    append(stringResource(R.string.subs_status_events, it))
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = mutedTextColor(),
+                        )
+                        else -> Text(
+                            text = stringResource(R.string.subs_status_never),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = mutedTextColor(),
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = {
+                                scope.launch {
+                                    refreshingId = s.id
+                                    error = null
+                                    try {
+                                        api().refreshSubscription(calendarId, s.id)
+                                        snackbar.showSnackbar(context.getString(R.string.subs_refreshed))
+                                        reloadSubs()
+                                    } catch (e: Exception) {
+                                        error = serverErrorMessage(e)
+                                            ?: context.getString(R.string.subs_refresh_failed)
+                                    } finally {
+                                        refreshingId = null
+                                    }
+                                }
+                            },
+                            enabled = refreshingId == null && !working,
+                        ) {
+                            if (refreshingId == s.id) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.size(4.dp))
+                            }
+                            Text(stringResource(R.string.subs_refresh))
+                        }
+                        TextButton(
+                            onClick = { deleting = s },
+                            enabled = !working && refreshingId == null,
+                        ) {
+                            Text(
+                                stringResource(R.string.action_delete),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+        }
+
+        OutlinedTextField(
+            value = newUrl,
+            onValueChange = { newUrl = it },
+            label = { Text(stringResource(R.string.subs_url_label)) },
+            placeholder = { Text("https://example.com/feed.ics") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = newLabel,
+            onValueChange = { newLabel = it },
+            label = { Text(stringResource(R.string.subs_label_label)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    working = true
+                    error = null
+                    try {
+                        val resp = api().createSubscription(
+                            calendarId,
+                            SubscriptionCreateRequest(
+                                url = newUrl.trim(),
+                                label = newLabel.takeIf { it.isNotBlank() },
+                            ),
+                        )
+                        newUrl = ""
+                        newLabel = ""
+                        reloadSubs()
+                        // First-sync failure is NOT creation failure: the
+                        // row is stored and retries on cadence. Say so,
+                        // or the user creates a duplicate.
+                        if (resp.refresh.ok) {
+                            snackbar.showSnackbar(context.getString(R.string.subs_added))
+                        } else {
+                            snackbar.showSnackbar(
+                                context.getString(
+                                    R.string.subs_added_first_sync_failed,
+                                    resp.refresh.error.orEmpty(),
+                                ),
+                            )
+                        }
+                    } catch (e: Exception) {
+                        error = serverErrorMessage(e)
+                            ?: context.getString(R.string.subs_add_failed)
+                    } finally {
+                        working = false
+                    }
+                }
+            },
+            enabled = !working && newUrl.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (working) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(6.dp))
+                Text(stringResource(R.string.subs_add))
+            }
+        }
+    }
+
+    val toDelete = deleting
+    if (toDelete != null) {
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(stringResource(R.string.subs_delete_title)) },
+            text = { Text(stringResource(R.string.subs_delete_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        deleting = null
+                        scope.launch {
+                            working = true
+                            error = null
+                            try {
+                                api().deleteSubscription(calendarId, toDelete.id)
+                                reloadSubs()
+                                snackbar.showSnackbar(context.getString(R.string.subs_deleted))
+                            } catch (e: Exception) {
+                                error = serverErrorMessage(e)
+                                    ?: context.getString(R.string.subs_delete_failed)
+                            } finally {
+                                working = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        stringResource(R.string.action_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },

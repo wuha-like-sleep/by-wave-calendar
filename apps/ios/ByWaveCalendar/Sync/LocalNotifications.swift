@@ -109,14 +109,45 @@ final class LocalNotifications {
         let leadSec = TimeInterval(leadMinutes * 60)
         let calLookup = Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
 
-        // Only future events whose trigger time is also future.
-        let upcoming = events
-            .filter { !$0.allDay }   // all-day events are noisy on phone notifications
-            .filter { $0.startsAt.timeIntervalSince(now) > leadSec }
-            .sorted { $0.startsAt < $1.startsAt }
+        // 事件级提醒优先：事件带 alarms 就逐条按 alarms 排（定时事件
+        // 按绝对时长偏移，全天事件按时区墙上时间偏移，见
+        // alarmFireDate）；一条 alarms 都没有才回落到下面的全局
+        // 提前量逻辑，而全局逻辑维持原口径 —— 只排定时事件，
+        // 全天事件不排（没有 alarms 的全天事件在手机上太吵）。
+        struct Candidate {
+            let event: EventDTO
+            let fireDate: Date
+            /// alarms 里的下标；-1 = 全局提前量那条。进通知标识符，
+            /// 让同一事件的多条 alarms 各自成一条、互不覆盖。
+            let alarmIndex: Int
+        }
+        var candidates: [Candidate] = []
+        for ev in events {
+            let alarms = (ev.extra?.alarms ?? []).filter {
+                !$0.trigger.trimmingCharacters(in: .whitespaces).isEmpty
+            }
+            if !alarms.isEmpty {
+                for (idx, alarm) in alarms.enumerated() {
+                    guard let fire = Self.alarmFireDate(
+                        for: ev, trigger: alarm.trigger,
+                        calendar: calLookup[ev.calendarId],
+                    ), fire > now else { continue }
+                    candidates.append(Candidate(event: ev, fireDate: fire, alarmIndex: idx))
+                }
+            } else if !ev.allDay {
+                let fire = ev.startsAt.addingTimeInterval(-leadSec)
+                if fire > now {
+                    candidates.append(Candidate(event: ev, fireDate: fire, alarmIndex: -1))
+                }
+            }
+        }
+        // 按响的先后封顶，而不是按事件开始时间 —— 先响的先占坑。
+        let upcoming = candidates
+            .sorted { $0.fireDate < $1.fireDate }
             .prefix(Self.maxPending)
 
-        for ev in upcoming {
+        for item in upcoming {
+            let ev = item.event
             let content = UNMutableNotificationContent()
             content.title = ev.summary
             content.body = bodyLabel(for: ev, calendar: calLookup[ev.calendarId])
@@ -124,20 +155,57 @@ final class LocalNotifications {
             // Use the calendar identifier so we group reminders per event.
             content.threadIdentifier = ev.calendarId
 
-            let triggerDate = ev.startsAt.addingTimeInterval(-leadSec)
             let comps = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute],
-                from: triggerDate,
+                from: item.fireDate,
             )
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
             // Each (event, occurrence-time) pair gets a stable identifier
-            // so re-schedules don't double-fire.
+            // so re-schedules don't double-fire. Alarm-based ones append
+            // the alarm index so two alarms on one event don't collide.
             let iso = ISO8601DateFormatter()
             iso.formatOptions = [.withInternetDateTime]
-            let id = "\(Self.prefix(for: profileId))\(ev.id)@\(iso.string(from: ev.startsAt))"
+            var id = "\(Self.prefix(for: profileId))\(ev.id)@\(iso.string(from: ev.startsAt))"
+            if item.alarmIndex >= 0 { id += "#\(item.alarmIndex)" }
             let req = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
             try? await center.add(req)
         }
+    }
+
+    /// 一条 alarm 该响的绝对时刻。算不出来（trigger 解析不了、RELATED=END
+    /// 却没有结束时间、全天事件拿不到时区）返回 nil，调用方跳过这一条 ——
+    /// 宁可不响，也不要猜一个时刻响错。
+    ///
+    /// 口径与服务端 reminder_triggers.ts 的 resolveTriggerAt 一致：
+    ///   · 定时事件：startsAt（RELATED=END 时 endsAt）+ 有符号时长，
+    ///     纯绝对运算，跨不跨夏令时都一样。
+    ///   · 全天事件：基准是事件时区当天 00:00，偏移按**墙上时间**走：
+    ///     先在 UTC 日历上把日期 + 偏移做民用时间加减，得到目标墙上
+    ///     读数，再按事件时区把这个读数落成绝对时刻。这样 PT9H 永远
+    ///     落在当地 09:00，哪怕当天是夏令时切换日。时区取
+    ///     extra.timezone，没有就用日历时区，都没有就不排。
+    static func alarmFireDate(for ev: EventDTO, trigger raw: String, calendar: CalendarMeta?) -> Date? {
+        guard let parsed = AlarmTriggerParser.parse(raw) else { return nil }
+        if ev.allDay {
+            let tzId = ev.extra?.timezone ?? calendar?.timezone
+            guard let tzId, let tz = TimeZone(identifier: tzId) else { return nil }
+            let anchor = parsed.relatedToEnd ? ev.endsAt : ev.startsAt
+            // 全天事件的 startsAt 是那一天的 UTC 午夜，日期分量按 UTC 读。
+            var utcCal = Calendar(identifier: .gregorian)
+            utcCal.timeZone = TimeZone(secondsFromGMT: 0)!
+            let day = utcCal.dateComponents([.year, .month, .day], from: anchor)
+            guard let civilMidnight = utcCal.date(from: day) else { return nil }
+            // 民用时间加减：偏移加在「假 UTC 时刻」上，读回来的分量
+            // 就是目标墙上读数。
+            let civil = civilMidnight.addingTimeInterval(parsed.seconds)
+            let wall = utcCal.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second], from: civil)
+            var tzCal = Calendar(identifier: .gregorian)
+            tzCal.timeZone = tz
+            return tzCal.date(from: wall)
+        }
+        let base = parsed.relatedToEnd ? ev.endsAt : ev.startsAt
+        return base.addingTimeInterval(parsed.seconds)
     }
 
     /// 用户在设置里改了提前量之后照着上一次的数据立刻重排。
@@ -203,7 +271,9 @@ final class LocalNotifications {
 
     private func bodyLabel(for ev: EventDTO, calendar: CalendarMeta?) -> String {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "HH:mm"
-        var body = "%@ 开始".locFormat(f.string(from: ev.startsAt))
+        // 全天事件的 startsAt 是 UTC 午夜，格式化成 HH:mm 只会得到一个
+        // 和用户无关的钟点；直接写「全天」。
+        var body = ev.allDay ? "全天".loc : "%@ 开始".locFormat(f.string(from: ev.startsAt))
         if let location = ev.location, !location.isEmpty {
             body += " · 📍 \(location)"
         }

@@ -57,10 +57,22 @@ class EventEditPayloadTest {
         val extra = payload["extra"]!!.jsonObject
         assertEquals(JsonNull, extra["url"])
         assertEquals(JsonNull, extra["meetingPassword"])
+        // Category is form-managed now: the form state defaults to ""
+        // (no category picked) against a loaded extra that HAS one, so
+        // clearing sends an explicit null — same discipline as url.
+        // (It used to be create-only passthrough and simply omitted.)
+        assertEquals(JsonNull, extra["category"])
         assertEquals(JsonPrimitive("America/New_York"), extra["timezone"])
         assertFalse("attendees" in extra)
-        assertFalse("category" in extra)
         assertFalse("rrule" in payload)
+    }
+
+    @Test fun `picked category is sent as its web value`() {
+        val state = base.copy(category = "work",
+            sourceExtra = EventExtraDTO(timezone = "America/New_York", category = "personal"))
+        val extra = json.encodeToJsonElement(EventUpdateInput.serializer(), state.buildUpdateInput())
+            .jsonObject["extra"]!!.jsonObject
+        assertEquals(JsonPrimitive("work"), extra["category"])
     }
 
     @Test fun `unloaded extra fields are not interpreted as user clearing them`() {

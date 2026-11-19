@@ -32,7 +32,7 @@ class EventFormValuesTest {
         rrule = "FREQ=WEEKLY;BYDAY=MO", extra = extra,
     )
 
-    @Test fun `cleared editable fields are present on the wire while unmanaged metadata is untouched`() {
+    @Test fun `cleared editable fields are present on the wire while unmanaged metadata passes through`() {
         val src = EventExtraDTO(timezone = "America/New_York", url = "https://example.com", meetingPassword = "secret",
             attendees = listOf("a@example.com"), category = "Work", alarms = Json.parseToJsonElement("[{\"trigger\":\"-PT15M\"}]"))
         val form = initialState(EventEditMode.Edit(event(src)), listOf(calendar)).copy(
@@ -48,8 +48,63 @@ class EventFormValuesTest {
         assertEquals(JsonNull, extra["meetingPassword"])
         assertEquals(Json.parseToJsonElement("[]"), extra["attendees"])
         assertEquals(JsonPrimitive("America/New_York"), extra["timezone"])
-        assertFalse("alarms" in extra)
-        assertFalse("category" in extra)
+        // alarms and category are form-managed now: the loaded reminder is
+        // rebuilt as the editor's own DISPLAY alarm, and the (non-enum)
+        // stored category rides back verbatim instead of being dropped.
+        assertEquals(
+            Json.parseToJsonElement("[{\"trigger\":\"-PT15M\",\"action\":\"DISPLAY\",\"description\":\"Meeting\"}]"),
+            extra["alarms"],
+        )
+        assertEquals(JsonPrimitive("Work"), extra["category"])
+    }
+
+    @Test fun `category cleared on edit sends explicit null and picking one sends the value`() {
+        val src = event(EventExtraDTO(category = "work"))
+        val cleared = initialState(EventEditMode.Edit(src), listOf(calendar)).copy(category = "")
+        val clearedExtra = json.encodeToJsonElement(
+            EventUpdateInput.serializer(), buildBodies(cleared).second!!,
+        ).jsonObject["extra"]!!.jsonObject
+        assertEquals(JsonNull, clearedExtra["category"])
+        val picked = initialState(EventEditMode.Edit(src), listOf(calendar)).copy(category = "travel")
+        val pickedExtra = json.encodeToJsonElement(
+            EventUpdateInput.serializer(), buildBodies(picked).second!!,
+        ).jsonObject["extra"]!!.jsonObject
+        assertEquals(JsonPrimitive("travel"), pickedExtra["category"])
+    }
+
+    @Test fun `exdates ride the patch only when the list changed`() {
+        val src = event().copy(
+            exdates = listOf("2026-11-23T00:00:00.000Z", "2026-11-30T00:00:00.000Z"),
+        )
+        val untouched = buildBodies(initialState(EventEditMode.Edit(src), listOf(calendar))).second!!
+        assertNull(untouched.exdates)
+        // The wire must omit the field entirely when untouched (null
+        // property + explicitNulls=false), or the server would treat
+        // the save as a whole-table replacement.
+        val untouchedPayload = json.encodeToJsonElement(EventUpdateInput.serializer(), untouched).jsonObject
+        assertFalse("exdates" in untouchedPayload)
+        val oneRestored = initialState(EventEditMode.Edit(src), listOf(calendar)).copy(
+            exdates = listOf("2026-11-30T00:00:00.000Z"),
+        )
+        assertEquals(
+            listOf("2026-11-30T00:00:00.000Z"),
+            buildBodies(oneRestored).second!!.exdates,
+        )
+        val allRestored = initialState(EventEditMode.Edit(src), listOf(calendar)).copy(exdates = emptyList())
+        assertEquals(emptyList(), buildBodies(allRestored).second!!.exdates)
+    }
+
+    @Test fun `calendar fill only fills a blank selection`() {
+        // The discard guard compares submit bodies against a pristine
+        // snapshot that the dialog refreshes when the late calendar
+        // fill lands — that only works if the fill itself never
+        // overrides a selection the user already made.
+        val opened = initialState(EventEditMode.Create(), emptyList())
+        val filled = opened.withCalendars(listOf(calendar))
+        assertEquals(calendar.id, filled.calendarId)
+        val chosen = opened.copy(calendarId = "other")
+        assertEquals("other", chosen.withCalendars(listOf(calendar)).calendarId)
+        assertEquals("", opened.withCalendars(emptyList()).calendarId)
     }
 
     @Test fun `unchanged timed edits preserve instant in the second DST hour and after a device zone change`() {

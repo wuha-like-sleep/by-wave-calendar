@@ -13,6 +13,11 @@
 // 事件的不同场次），响过就进 fired。进程重启后这个集合清空，但已经过去的
 // 事件落在触发区间之外（now 已经越过 开始时间 + 宽限），不会补响——只有还没
 // 到的才可能响，这正是想要的。
+//
+// 事件级优先、全局兜底（口径定在 ReminderTriggers.kt 文件头，Android / iOS
+// 照同一套）：事件带 extra.alarms 就逐条按 alarm 排（定时走绝对时长、全天
+// 走墙上时间），不再叠加全局提前量；没有 alarms 的事件才用 ReminderPrefs
+// 的全局提前量，行为和以前一字不变（全天事件照旧不走全局路）。
 
 package cn.bywave.calendar.desktop.data.notify
 
@@ -63,16 +68,57 @@ object ReminderScheduler {
         nowMs: Long = System.currentTimeMillis(),
         enabled: Boolean = ReminderPrefs.enabled.value,
         leadMinutes: Int = ReminderPrefs.leadMinutes.value,
+        calendarTimezones: Map<String, String> = ReminderFeed.calendarTimezones.value,
         notify: (title: String, body: String) -> Unit = { t, b -> Notifier.notify(t, b) },
     ) {
         if (!enabled) return
         val leadMs = leadMinutes.toLong() * 60_000L
 
         for (ev in events) {
-            // 全天事件没有「提前多少分钟」这回事，跳过，免得半夜 0 点刷屏。
-            // （「当天早上汇总一条」是另一件事，还没做。）
-            if (ev.allDay) continue
             val startMs = parseStartMs(ev.startsAt) ?: continue
+
+            // 事件级优先：带 alarms 的事件逐条按 alarm 排。触发时刻的算法
+            // （含全天墙上时间）在 ReminderTriggers 里；这里只管「到点了没、
+            // 响过没」。窗口是 [触发时刻, 事件结束边际) —— 应用没开错过了
+            // 触发点、只要事件还没开始（全天则是当天还没过完）就补响一次，
+            // 和全局路「提醒时刻到开始时间之间都算数」是同一个哲学。
+            val triggers = eventTriggerInstants(
+                startsAt = java.time.Instant.ofEpochMilli(startMs),
+                endsAt = parseInstant(ev.endsAt),
+                allDay = ev.allDay,
+                timezone = ev.extra?.timezone ?: calendarTimezones[ev.calendarId],
+                alarms = alarmsOf(ev.extra),
+            )
+            if (triggers != null) {
+                for (at in triggers) {
+                    val atMs = at.toEpochMilli()
+                    // key 带上触发时刻：同一场会的多条 alarm 各响一次，
+                    // 而两条 alarm 算出同一时刻时只响一次（键相同）。
+                    val key = "${ev.id}|${ev.startsAt}|$atMs"
+                    if (key in fired) continue
+                    val windowEnd = if (ev.allDay) {
+                        allDayWindowEndMs(ev, calendarTimezones, atMs)
+                    } else {
+                        startMs + POST_START_GRACE_MS
+                    }
+                    if (nowMs in atMs until windowEnd) {
+                        fired.add(key)
+                        notify(
+                            ev.summary.ifBlank { I18n.t("reminder.untitled") },
+                            if (ev.allDay) {
+                                I18n.t("reminder.bodyAllDay", mapOf("date" to allDayCivilDate(startMs)))
+                            } else {
+                                I18n.t("reminder.body", mapOf("time" to formatLocalTime(startMs)))
+                            },
+                        )
+                    }
+                }
+                continue
+            }
+
+            // 全局兜底（没有 alarms 的事件）：和事件级提醒出现之前一字不变。
+            // 全天事件没有「提前多少分钟」这回事，跳过，免得半夜 0 点刷屏。
+            if (ev.allDay) continue
             val reminderAt = startMs - leadMs
             val key = "${ev.id}|${ev.startsAt}"
             if (key in fired) continue
@@ -87,18 +133,37 @@ object ReminderScheduler {
         }
 
         // 给「响过」的集合封顶，别让长时间不关的窗口一直涨：涨到一定数量就把
-        // 早已过去、再也不可能响的那些键丢掉。
+        // 早已过去、再也不可能响的那些键丢掉。键的第二段是 startsAt（事件级
+        // 的键后面还多一段触发时刻，不影响这里取第二段）。
         if (fired.size > 500) {
             fired.removeAll { k ->
-                val sa = k.substringAfter("|", "")
+                val sa = k.split("|").getOrNull(1).orEmpty()
                 val sm = parseStartMs(sa)
                 sm != null && sm < nowMs - POST_START_GRACE_MS
             }
         }
     }
 
+    /** 全天事件级提醒的补响窗口终点：事件当天过完为止（事件时区的次日
+     *  00:00）。时区拿不到时（只有绝对触发能走到这一步）退回触发后 24 小时。 */
+    private fun allDayWindowEndMs(ev: EventDTO, calendarTimezones: Map<String, String>, atMs: Long): Long {
+        val zone = (ev.extra?.timezone ?: calendarTimezones[ev.calendarId])
+            ?.let { runCatching { java.time.ZoneId.of(it) }.getOrNull() }
+            ?: return atMs + 24L * 3600 * 1000
+        val civilDate = java.time.Instant.ofEpochMilli(parseStartMs(ev.startsAt) ?: return atMs)
+            .atZone(java.time.ZoneOffset.UTC).toLocalDate()
+        return civilDate.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+
+    /** 全天事件的民用日期（startsAt 按 UTC 读出的那一天），通知正文里用。 */
+    private fun allDayCivilDate(startMs: Long): String =
+        java.time.Instant.ofEpochMilli(startMs).atZone(java.time.ZoneOffset.UTC).toLocalDate().toString()
+
+    private fun parseInstant(iso: String): java.time.Instant? =
+        runCatching { OffsetDateTime.parse(iso).toInstant() }.getOrNull()
+
     private fun parseStartMs(iso: String): Long? =
-        runCatching { OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrNull()
+        parseInstant(iso)?.toEpochMilli()
 
     private fun formatLocalTime(epochMs: Long): String =
         runCatching {

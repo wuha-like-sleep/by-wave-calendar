@@ -28,16 +28,17 @@
 package cn.bywave.calendar.desktop.data.api
 
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
-import cn.bywave.calendar.desktop.data.model.AttendeeInviteRequest
-import cn.bywave.calendar.desktop.data.model.AttendeeRevokeRequest
-import cn.bywave.calendar.desktop.data.model.AttendeesResponse
 import cn.bywave.calendar.desktop.data.model.BookingLink
 import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
 import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
 import cn.bywave.calendar.desktop.data.model.CalendarCreateInput
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.CalendarSubscription
 import cn.bywave.calendar.desktop.data.model.CalendarUpdateInput
 import cn.bywave.calendar.desktop.data.model.ChangePasswordInput
+import cn.bywave.calendar.desktop.data.model.ConflictCheckInput
+import cn.bywave.calendar.desktop.data.model.ConflictDTO
+import cn.bywave.calendar.desktop.data.model.ConflictsResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
 import cn.bywave.calendar.desktop.data.model.DevicesResponse
@@ -56,6 +57,9 @@ import cn.bywave.calendar.desktop.data.model.RefreshResponse
 import cn.bywave.calendar.desktop.data.model.SearchResponse
 import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
+import cn.bywave.calendar.desktop.data.model.SubscriptionCreateInput
+import cn.bywave.calendar.desktop.data.model.SubscriptionCreateResponse
+import cn.bywave.calendar.desktop.data.model.SubscriptionRefreshResponse
 import cn.bywave.calendar.desktop.data.model.WebSessionRequest
 import cn.bywave.calendar.desktop.data.model.WebSessionResponse
 import io.ktor.client.HttpClient
@@ -379,6 +383,105 @@ class ApiClient(
         }
     }
 
+    // ---- ICS subscriptions (inbound feeds) ----
+    //
+    // The opposite direction of share tokens: an external .ics feed the
+    // server pulls INTO this calendar on a schedule.
+
+    /** GET /api/v1/calendars/{id}/subscriptions — list a calendar's
+     *  inbound subscriptions. The route uses okList(), so `data` is a
+     *  bare JSON array — same decoding as listShareTokens. */
+    suspend fun listSubscriptions(calendarId: String): List<CalendarSubscription> {
+        return getAuthed(
+            "/api/v1/calendars/$calendarId/subscriptions",
+            ListSerializer(CalendarSubscription.serializer()),
+        )
+    }
+
+    /** POST /api/v1/calendars/{id}/subscriptions — add a subscription.
+     *  The server saves it and immediately fetches once; a failed first
+     *  fetch does NOT fail creation (201 either way) — the outcome rides
+     *  in `refresh` (ok=false + error), and the caller reports "saved,
+     *  first sync failed" instead of treating it as a failed create. */
+    suspend fun createSubscription(
+        calendarId: String,
+        url: String,
+        label: String? = null,
+    ): SubscriptionCreateResponse {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/calendars/$calendarId/subscriptions",
+            body = SubscriptionCreateInput(url = url, label = label),
+            bodySerializer = SubscriptionCreateInput.serializer(),
+            respSerializer = SubscriptionCreateResponse.serializer(),
+        )
+    }
+
+    /** POST /api/v1/calendars/{id}/subscriptions/{subId}/refresh — fetch
+     *  one subscription right now. No request body. A failed fetch is a
+     *  502 whose error body carries the reason; errorFrom() preserves
+     *  that message for the UI. */
+    suspend fun refreshSubscription(calendarId: String, subId: String): SubscriptionRefreshResponse {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.post("$baseUrl/api/v1/calendars/$calendarId/subscriptions/$subId/refresh") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "subscription refresh failed")
+        }
+        return unwrap(resp, SubscriptionRefreshResponse.serializer())
+    }
+
+    /** DELETE /api/v1/calendars/{id}/subscriptions/{subId} — remove a
+     *  subscription. Events it already imported stay; only the feed is
+     *  detached. Server returns { ok: true } in `data`, status is all
+     *  we need — same pattern as revokeShareToken. */
+    suspend fun deleteSubscription(calendarId: String, subId: String) {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.delete("$baseUrl/api/v1/calendars/$calendarId/subscriptions/$subId") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "subscription delete failed")
+        }
+    }
+
+    /** One calendar exported as raw .ics text plus the file name the
+     *  server proposed (from Content-Disposition; null when the header
+     *  is missing or unparsable — the caller falls back to the
+     *  calendar's name). */
+    data class IcsExport(val text: String, val fileName: String?)
+
+    /** GET /api/v1/calendars/{id}/export.ics — owner-authenticated
+     *  one-shot snapshot. NOT the JSON envelope: the body is the raw
+     *  text/calendar payload, so this bypasses unwrap() entirely and
+     *  reads bodyAsText() — but auth and refresh-on-401 go through the
+     *  same withRefresh path as every other authed call. Deliberately
+     *  not the public /ics/<token> feed: exporting must not mint a
+     *  persistent public link. */
+    suspend fun exportCalendarIcs(calendarId: String): IcsExport {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.get("$baseUrl/api/v1/calendars/$calendarId/export.ics") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "calendar export failed")
+        }
+        val fileName = resp.headers["Content-Disposition"]
+            ?.let { header ->
+                Regex("""filename="([^"]+)"""").find(header)?.groupValues?.get(1)
+                    ?: Regex("""filename=([^;\s]+)""").find(header)?.groupValues?.get(1)
+            }
+            ?.takeIf { it.isNotBlank() }
+        return IcsExport(text = resp.bodyAsText(), fileName = fileName)
+    }
+
     // ---- Booking links (owner management) ----
 
     /** GET /api/v1/booking-links — list the user's booking links. The route
@@ -488,6 +591,28 @@ class ApiClient(
         }
     }
 
+    /** POST /api/v1/events/conflicts — cheap overlap check before saving.
+     *  Returns the events (across the user's calendars) overlapping
+     *  [startsAt, endsAt]; `excludeId` keeps an edit from conflicting
+     *  with itself. The route answers a bare { conflicts: [...] } that
+     *  the envelope hook wraps, so this unwraps like every other call.
+     *  Callers must treat a failure here as "no information", never as
+     *  a reason to block the save. */
+    suspend fun checkConflicts(
+        calendarId: String,
+        startsAt: String,
+        endsAt: String,
+        excludeId: String? = null,
+    ): List<ConflictDTO> {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/events/conflicts",
+            body = ConflictCheckInput(calendarId, startsAt, endsAt, excludeId),
+            bodySerializer = ConflictCheckInput.serializer(),
+            respSerializer = ConflictsResponse.serializer(),
+        ).conflicts
+    }
+
     /** POST /api/v1/parse-event — natural-language quick-add. `now` is the
      *  caller's local wall-clock so 明天 / 周五 resolve in the user's zone.
      *  Server ≥ 1.6.4; older servers 404 (caller falls back to a blank form). */
@@ -592,51 +717,6 @@ class ApiClient(
         }
         if (!resp.status.isSuccess()) {
             throw errorFrom(resp, "revoke device failed")
-        }
-    }
-
-    suspend fun attendees(eventId: String): AttendeesResponse {
-        return getAuthed("/api/v1/events/$eventId/attendees", AttendeesResponse.serializer())
-    }
-
-    suspend fun inviteAttendee(eventId: String, email: String) {
-        // Server returns the updated AttendeesResponse, but we don't need
-        // it — the caller will re-list. Use a discard-result helper.
-        val resp = withRefresh {
-            val token = accessToken()
-            val jsonBody = jsonCfg.encodeToString(
-                AttendeeInviteRequest.serializer(), AttendeeInviteRequest(email),
-            )
-            client.post("$baseUrl/api/v1/events/$eventId/attendees") {
-                if (!token.isNullOrEmpty()) bearerAuth(token)
-                contentType(ContentType.Application.Json)
-                setBody(jsonBody)
-            }
-        }
-        if (!resp.status.isSuccess()) {
-            throw errorFrom(resp, "invite failed")
-        }
-    }
-
-    /** DELETE with a body — Ktor's `client.delete` doesn't support body
-     *  directly in a fluent way, so we use request {} with method =
-     *  HttpMethod.Delete. The server's revoke route uses HTTP DELETE +
-     *  body for parity with iOS/Android. */
-    suspend fun revokeAttendee(eventId: String, email: String) {
-        val resp = withRefresh {
-            val token = accessToken()
-            val jsonBody = jsonCfg.encodeToString(
-                AttendeeRevokeRequest.serializer(), AttendeeRevokeRequest(email),
-            )
-            client.request("$baseUrl/api/v1/events/$eventId/attendees") {
-                method = io.ktor.http.HttpMethod.Delete
-                if (!token.isNullOrEmpty()) bearerAuth(token)
-                contentType(ContentType.Application.Json)
-                setBody(jsonBody)
-            }
-        }
-        if (!resp.status.isSuccess()) {
-            throw errorFrom(resp, "revoke failed")
         }
     }
 

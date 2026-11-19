@@ -121,7 +121,28 @@ const createSchema = z.object({
 // calendars the user owns. Ownership is verified at apply time
 // (loadOwnedEvent + ownsCalendar check) so a malicious request can't
 // drop an event into someone else's calendar.
-const updateSchema = createSchema.partial();
+const updateSchema = createSchema.partial().extend({
+  // 例外日期（exdates）的整表替换，只在 PATCH 收，建事件不收（新事件没有
+  // 例外可言）。用途是三端编辑器里的「恢复某次已删除的单次」：客户端读到
+  // 当前列表、删掉其中一条、把剩下的整表发回来。在这之前 schema 里没有
+  // 这个字段，zod strip 把它静默丢掉 —— 客户端接了线、界面也刷新了，
+  // 服务端根本没存，恢复永远不生效。
+  //
+  // 口径：
+  //   不传     → 这一列不动（单次/未来范围的编辑自己管 exdates，不走这里）；
+  //   传数组   → 整表替换（空数组 = 恢复全部）；逐条收口成 canonical ISO
+  //              并去重排序 —— 存量行里的 exdates 都是 toISOString() 形状，
+  //              混进别的写法会让展开侧按字符串比对时对不上；
+  //   传 null  → 清空（与空数组同义，落库为 null）。
+  // 与「同一请求里系列起点/时区也变了」的合成：客户端的列表是按改之前
+  // 的时间线读到的，写入路径会先把它喂给既有的 remap 机器（和库里那份
+  // 享受同一套平移），平移结果优先于原样落库 —— 见下方 series 写入段。
+  exdates: z.array(z.string().datetime({ offset: true }))
+    .max(2000)
+    .transform((list) => [...new Set(list.map((v) => new Date(v).toISOString()))].sort())
+    .nullable()
+    .optional(),
+});
 
 const idParam = z.object({ id: z.string().uuid() });
 
@@ -802,8 +823,15 @@ export async function eventRoutes(app: FastifyInstance) {
     const nextStartsAt = plan?.startsAt ?? (body.startsAt ? new Date(body.startsAt) : undefined);
     const nextEndsAt = plan?.endsAt ?? (body.endsAt ? new Date(body.endsAt) : undefined);
     if ((nextEndsAt ?? target.endsAt) < (nextStartsAt ?? target.startsAt)) return reply.code(400).send({ error: "ends_before_starts" });
+    // 客户端显式发来的 exdates（恢复已删除单次）：它读到的是改之前时间线
+    // 上的列表，所以 remap 的底稿用它不用库里那份，平移完的结果才是新
+    // 时间线上的正确列表。plan 自己算出 exdates 时（按 recurrenceId 的
+    // 系列编辑）仍以 plan 为准，客户端这份不掺和。
+    const clientExdates = body.exdates;
     const zoneShift = await remapForEventEdit(
-      plan?.exdates ? { ...target, exdates: plan.exdates } : target,
+      plan?.exdates ? { ...target, exdates: plan.exdates }
+        : clientExdates !== undefined ? { ...target, exdates: clientExdates }
+        : target,
       {
         calendarId: body.calendarId ?? target.calendarId,
         startsAt: nextStartsAt ?? target.startsAt,
@@ -838,7 +866,10 @@ export async function eventRoutes(app: FastifyInstance) {
           endsAt: nextEndsAt,
           allDay: body.allDay ?? undefined,
           rrule: zoneShift.rrule ?? plan?.rrule ?? body.rrule ?? undefined,
-          exdates: zoneShift.exdates ?? plan?.exdates ?? undefined,
+          // 优先级：remap 平移后的列表 > plan 的列表 > 客户端原样发来的
+          // 列表 > 不动这一列。clientExdates 是 null 时落 null（清空）。
+          exdates: zoneShift.exdates ?? plan?.exdates
+            ?? (clientExdates !== undefined ? clientExdates : undefined),
           extra: nextExtra,
           // 无条件清掉原始 VEVENT 缓存。这条注释原来写的是「网页不编辑 VALARM」——
           // 而网页恰恰在编辑，现在这个 API 也能直接改 extra.alarms 了。rawIcs 是导入时

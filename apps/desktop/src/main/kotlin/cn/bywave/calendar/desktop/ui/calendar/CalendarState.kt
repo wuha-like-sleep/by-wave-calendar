@@ -424,6 +424,16 @@ class CalendarState(
         return runCatching { client.parseEvent(text, now) }
     }
 
+    /** 保存前的冲突查询（编辑弹窗提交时调）。失败原样往上抛 —— 弹窗那侧
+     *  把任何失败都当成「没查到」，照常保存：一次查不到不许挡住用户存东西。 */
+    suspend fun checkConflicts(
+        calendarId: String,
+        startsAt: String,
+        endsAt: String,
+        excludeId: String?,
+    ): List<cn.bywave.calendar.desktop.data.model.ConflictDTO> =
+        client.checkConflicts(calendarId, startsAt, endsAt, excludeId)
+
     /** Update an event. If `sourceRrule` is non-null we park the update
      *  and open the scope picker; the caller resumes via [resolveScopeEdit]. */
     fun update(

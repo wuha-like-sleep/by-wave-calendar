@@ -40,6 +40,21 @@ import cn.bywave.calendar.data.model.RefreshResponse
 import cn.bywave.calendar.data.model.SearchResponse
 import cn.bywave.calendar.data.model.ShareToken
 import cn.bywave.calendar.data.model.ShareTokenCreateRequest
+import cn.bywave.calendar.data.model.AccountMfaVerifyRequest
+import cn.bywave.calendar.data.model.CalendarSubscription
+import cn.bywave.calendar.data.model.ConflictsRequest
+import cn.bywave.calendar.data.model.ConflictsResponse
+import cn.bywave.calendar.data.model.CurrentDevice
+import cn.bywave.calendar.data.model.DevicesResponse
+import cn.bywave.calendar.data.model.EmptyBodyRequest
+import cn.bywave.calendar.data.model.MfaDisableRequest
+import cn.bywave.calendar.data.model.MfaSetupResponse
+import cn.bywave.calendar.data.model.MfaVerifyResponse
+import cn.bywave.calendar.data.model.SubscriptionCreateRequest
+import cn.bywave.calendar.data.model.SubscriptionCreateResponse
+import cn.bywave.calendar.data.model.SubscriptionRefreshResponse
+import okhttp3.ResponseBody
+import retrofit2.Response
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -283,6 +298,96 @@ interface BywaveApi {
      *  return to setup. */
     @POST("api/v1/account/delete")
     suspend fun deleteAccount(@Body body: DeleteAccountRequest)
+
+    // ---- MFA settings ----
+    //
+    // Same bare-body caveat as the account endpoints above. Probing
+    // setup doubles as the "is MFA on?" check: 409 already_enabled
+    // means it is (there is no mfaEnabled field on /auth/me or the
+    // login response — see Models.kt).
+
+    /** Start MFA setup — mints a PENDING secret (not active until
+     *  verify). 409 already_enabled when MFA is already on. */
+    @POST("api/v1/account/mfa/setup")
+    suspend fun mfaSetup(@Body body: EmptyBodyRequest = EmptyBodyRequest()): MfaSetupResponse
+
+    /** Activate MFA with the authenticator's current code. Returns the
+     *  one-time backup codes. Wrong code → 403 invalid_code. */
+    @POST("api/v1/account/mfa/verify")
+    suspend fun mfaVerify(@Body body: AccountMfaVerifyRequest): MfaVerifyResponse
+
+    /** Turn MFA off — requires password + current code.
+     *  Wrong password or code → 403. */
+    @POST("api/v1/account/mfa/disable")
+    suspend fun mfaDisable(@Body body: MfaDisableRequest)
+
+    // ---- Devices ----
+
+    /** List every device/session signed in to this account. */
+    @GET("api/v1/devices")
+    suspend fun devices(): DevicesResponse
+
+    /** Which devices row this bearer token belongs to (badges the
+     *  current device in the list). May 404 for non-device tokens —
+     *  callers treat failure as "no badge", never as an error. */
+    @GET("api/v1/devices/me")
+    suspend fun currentDevice(): CurrentDevice
+
+    /** Revoke one device — its refresh token dies immediately.
+     *  Revoking the CURRENT device signs this phone out server-side;
+     *  the UI follows up with the local sign-out path. */
+    @DELETE("api/v1/devices/{id}")
+    suspend fun revokeDevice(@Path("id") id: String)
+
+    // ---- Conflict check ----
+
+    /** Overlap check run before a save lands (same judgement as the
+     *  web editor). Callers must treat ANY failure here as "no known
+     *  conflicts" — a failed check never blocks the save. */
+    @POST("api/v1/events/conflicts")
+    suspend fun eventConflicts(@Body body: ConflictsRequest): ConflictsResponse
+
+    // ---- Calendar subscriptions (incoming .ics feeds) ----
+
+    /** List the .ics subscriptions feeding one calendar. */
+    @GET("api/v1/calendars/{id}/subscriptions")
+    suspend fun subscriptions(@Path("id") id: String): List<CalendarSubscription>
+
+    /** Add a subscription. Server replies 201 and runs the first fetch
+     *  inline; `refresh.ok == false` means "saved, first sync failed",
+     *  NOT creation failure — the row exists and retries on cadence. */
+    @POST("api/v1/calendars/{id}/subscriptions")
+    suspend fun createSubscription(
+        @Path("id") id: String,
+        @Body body: SubscriptionCreateRequest,
+    ): SubscriptionCreateResponse
+
+    /** Fetch one subscription right now. Failure is a 502 whose
+     *  message serverErrorMessage() surfaces. */
+    @POST("api/v1/calendars/{id}/subscriptions/{subId}/refresh")
+    suspend fun refreshSubscription(
+        @Path("id") id: String,
+        @Path("subId") subId: String,
+    ): SubscriptionRefreshResponse
+
+    /** Remove a subscription. Envelope unwraps to `{ ok: true }`. */
+    @DELETE("api/v1/calendars/{id}/subscriptions/{subId}")
+    suspend fun deleteSubscription(
+        @Path("id") id: String,
+        @Path("subId") subId: String,
+    )
+
+    // ---- Calendar export ----
+
+    /** Download one calendar as a raw .ics snapshot. NOT a JSON
+     *  envelope — the server replies text/calendar with a
+     *  Content-Disposition filename. Response<ResponseBody> keeps
+     *  Retrofit away from the JSON converter; the envelope interceptor
+     *  passes non-JSON bodies through, and the auth interceptor's
+     *  bearer + 401-refresh handling applies as usual. Callers check
+     *  isSuccessful (a non-2xx does not throw with Response<T>). */
+    @GET("api/v1/calendars/{id}/export.ics")
+    suspend fun exportCalendarIcs(@Path("id") id: String): Response<ResponseBody>
 }
 
 class ApiClient private constructor(
@@ -528,9 +633,21 @@ private class EnvelopeInterceptor : Interceptor {
         val okBool = runCatching { okVal?.jsonPrimitive?.boolean }.getOrNull()
             ?: return resp.rebody(raw, contentType)  // not enveloped — pass through
         if (okBool) {
+            // **裸 `{ ok: true, …其余字段 }` 的响应不能按「data 为空」处理。**
+            //
+            // 服务端的 onSend 只给「还没有 ok 字段」的响应包信封；像 MFA
+            // verify 这样 handler 直接回 `{ ok: true, backupCodes: [...] }`
+            // 的，信封不会再包一层，其余字段就是数据本身。以前这里一律把
+            // body 换成 data（不存在 → "null"），备用码在解码之前就被吞了，
+            // 用户启用完两步验证却拿不到备用码。这种形状（ok 为 true、
+            // 没有 data、还有别的字段）原样放行，让 DTO 直接按裸形状解码；
+            // 纯 `{ ok: true }` 没有其余字段，照旧走下面的 data 路径。
+            val data = parsed["data"]
+            if (data == null && parsed.keys.size > 1) {
+                return resp.rebody(raw, contentType)
+            }
             // Replace body with just the `data` payload (string-serialized).
             // `data` can be an object, array, primitive, or null — handle each.
-            val data = parsed["data"]
             val newBody = data?.toString() ?: "null"
             return resp.rebody(newBody, contentType)
         }

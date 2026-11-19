@@ -1,7 +1,12 @@
 // Lightweight RRULE editor. Covers the 90% case: pick a FREQ (none /
 // daily / weekly / monthly / yearly), set INTERVAL, optionally cap with
-// UNTIL or COUNT. Anything more exotic (BYDAY, BYMONTHDAY, BYSETPOS,
-// EXDATE) still passes through verbatim — we keep the raw RRULE string
+// UNTIL or COUNT. BYDAY is modeled in the two shapes the server's
+// expansion (rrule library, full RFC 5545) and the other clients
+// actually produce: WEEKLY with plain weekday codes (MO..SU, picked
+// via checkboxes) and MONTHLY with a single ordinal weekday (2TU,
+// -1FR — "second Tuesday" / "last Friday", picked via two dropdowns).
+// Anything more exotic (BYMONTHDAY, BYSETPOS, BYDAY in any other
+// shape) still passes through verbatim — we keep the raw RRULE string
 // in the form state and only rebuild it if the user actually edits.
 //
 // Why we own this (vs iOS/Android): iOS/Android treat rrule as opaque
@@ -14,6 +19,7 @@ package cn.bywave.calendar.desktop.ui.event
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +59,33 @@ private fun RruleFreq.label(): String = cn.bywave.calendar.desktop.i18n.I18n.t(l
 
 enum class RruleEnd { Forever, Until, Count }
 
+/** Weekday codes in RFC order (week starts Monday for display). */
+val WEEKDAY_CODES: List<String> = listOf("MO", "TU", "WE", "TH", "FR", "SA", "SU")
+
+/** Ordinal BYDAY token for MONTHLY rules: 2TU, -1FR. The editor only
+ *  offers ordinals 1..4 and -1 (last) — the shapes the web / mobile
+ *  clients and typical imports use; anything else stays passthrough. */
+private val ORDINAL_BYDAY = Regex("^([1-4]|-1)(MO|TU|WE|TH|FR|SA|SU)$")
+
+/** Whether [byday] (raw tokens from a BYDAY part) is a shape this
+ *  editor models for [freq]. Kept next to the state so the parse /
+ *  serialize round-trip and the tests share one definition. */
+internal fun bydayIsModeled(freq: RruleFreq, byday: List<String>): Boolean = when (freq) {
+    RruleFreq.Weekly -> byday.isNotEmpty() && byday.all { it in WEEKDAY_CODES }
+    RruleFreq.Monthly -> byday.size == 1 && ORDINAL_BYDAY.matches(byday[0])
+    else -> false
+}
+
+/** Canonical BYDAY token order for the wire: weekday order for WEEKLY
+ *  (so MO,WE stays MO,WE regardless of click order); MONTHLY's single
+ *  ordinal token goes out as-is. */
+internal fun orderedByday(freq: RruleFreq, byday: List<String>): List<String> =
+    if (freq == RruleFreq.Weekly) {
+        WEEKDAY_CODES.filter { it in byday }
+    } else {
+        byday
+    }
+
 /** Stable state object — owner (EventEditDialog) keeps one in remember
  *  and passes it down. Edit operations mutate fields and the caller
  *  rebuilds the RRULE via [toRrule] before save. */
@@ -63,8 +97,11 @@ data class RruleState(
     val count: Int,
     /** Verbatim original RRULE if it has fields we don't understand —
      *  we surface a warning + send the original instead of rebuilding,
-     *  so we don't accidentally drop BYDAY / EXDATE etc. */
+     *  so we don't accidentally drop BYMONTHDAY / BYSETPOS etc. */
     val passthrough: String?,
+    /** Raw BYDAY tokens ("MO", "2TU", "-1FR"), modeled only in the
+     *  shapes [bydayIsModeled] accepts; empty = no BYDAY part. */
+    val byday: List<String> = emptyList(),
 ) {
     companion object {
         fun fromRrule(rrule: String?): RruleState {
@@ -85,11 +122,25 @@ data class RruleState(
                 parts["COUNT"] != null -> RruleEnd.Count
                 else -> RruleEnd.Forever
             }
+            val byday = parts["BYDAY"]
+                ?.split(",")
+                ?.map { it.trim().uppercase() }
+                ?.filter { it.isNotEmpty() }
+                .orEmpty()
+            val bydayModeled = byday.isNotEmpty() && bydayIsModeled(freq, byday)
             // If the RRULE has any "exotic" key we don't model, keep
-            // the original around so we don't lose data on save.
-            val known = setOf("FREQ", "INTERVAL", "UNTIL", "COUNT")
+            // the original around so we don't lose data on save. BYDAY
+            // counts as modeled only in the shapes bydayIsModeled
+            // accepts — an unmodeled BYDAY keeps the whole rule on the
+            // passthrough path, verbatim.
+            val known = setOf("FREQ", "INTERVAL", "UNTIL", "COUNT") +
+                (if (bydayModeled) setOf("BYDAY") else emptySet())
             val hasExotic = parts.keys.any { it !in known }
-            return RruleState(freq, interval, end, until, count, if (hasExotic) rrule else null)
+            return RruleState(
+                freq, interval, end, until, count,
+                if (hasExotic) rrule else null,
+                if (bydayModeled) orderedByday(freq, byday) else emptyList(),
+            )
         }
     }
 }
@@ -104,6 +155,8 @@ fun RruleState.toRrule(): String? {
     if (passthrough != null) return passthrough
     val sb = StringBuilder("FREQ=").append(freq.wire)
     if (interval > 1) sb.append(";INTERVAL=").append(interval)
+    val bydayOut = orderedByday(freq, byday)
+    if (bydayOut.isNotEmpty()) sb.append(";BYDAY=").append(bydayOut.joinToString(","))
     when (end) {
         RruleEnd.Until -> if (until.isNotBlank()) {
             // RRULE UNTIL wants YYYYMMDDTHHMMSSZ. We accept YYYY-MM-DD
@@ -162,7 +215,16 @@ fun RruleEditor(
                         DropdownMenuItem(
                             text = { Text(f.label()) },
                             onClick = {
-                                onChange(state.copy(freq = f, passthrough = null))
+                                // BYDAY tokens only make sense in the
+                                // shape the new FREQ models — drop what
+                                // doesn't carry over instead of emitting
+                                // a rule the editor can't show.
+                                val keptByday = when (f) {
+                                    RruleFreq.Weekly -> state.byday.filter { it in WEEKDAY_CODES }
+                                    RruleFreq.Monthly -> state.byday.filter { ORDINAL_BYDAY.matches(it) }.take(1)
+                                    else -> emptyList()
+                                }
+                                onChange(state.copy(freq = f, passthrough = null, byday = keptByday))
                                 freqOpen = false
                             },
                         )
@@ -204,6 +266,47 @@ fun RruleEditor(
             )
             Spacer(Modifier.width(8.dp))
             Text(intervalSuffix(state.freq), style = MaterialTheme.typography.bodyMedium)
+        }
+
+        // BYDAY: WEEKLY picks any set of weekdays; MONTHLY picks one
+        // ordinal weekday ("second Tuesday", "last Friday"). An empty
+        // BYDAY is valid for both — the series then follows DTSTART's
+        // weekday / day-of-month, like a rule without BYDAY at all.
+        if (state.freq == RruleFreq.Weekly) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    t("rrule.byday"),
+                    modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                Spacer(Modifier.width(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    for ((idx, code) in WEEKDAY_CODES.withIndex()) {
+                        val picked = code in state.byday
+                        val label = t("weekday.medium.${idx + 1}")
+                        if (picked) {
+                            Button(
+                                onClick = { onChange(state.copy(byday = state.byday - code)) },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                            ) { Text(label) }
+                        } else {
+                            OutlinedButton(
+                                onClick = { onChange(state.copy(byday = state.byday + code)) },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                            ) { Text(label) }
+                        }
+                    }
+                }
+            }
+        }
+        if (state.freq == RruleFreq.Monthly) {
+            MonthlyBydayRow(state = state, onChange = onChange)
         }
 
         // END row
@@ -277,4 +380,87 @@ private fun endLabel(e: RruleEnd): String = when (e) {
     RruleEnd.Forever -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.forever")
     RruleEnd.Until -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.until")
     RruleEnd.Count -> cn.bywave.calendar.desktop.i18n.I18n.t("rrule.end.count")
+}
+
+private val ORDINAL_TOKEN = Regex("^(-?\\d+)(MO|TU|WE|TH|FR|SA|SU)$")
+
+/** MONTHLY BYDAY editor: an ordinal dropdown (none / 1st / 2nd / 3rd /
+ *  4th / last) plus a weekday dropdown. "None" clears BYDAY entirely —
+ *  the series then repeats on DTSTART's day-of-month. */
+@Composable
+private fun MonthlyBydayRow(
+    state: RruleState,
+    onChange: (RruleState) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    var ordinalOpen by remember { mutableStateOf(false) }
+    var weekdayOpen by remember { mutableStateOf(false) }
+
+    val parsed = state.byday.firstOrNull()?.let { ORDINAL_TOKEN.matchEntire(it) }
+    val ordinal: String? = parsed?.groupValues?.get(1)
+    val weekday: String = parsed?.groupValues?.get(2) ?: "MO"
+
+    fun ordinalLabel(ord: String?): String = when (ord) {
+        null -> t("rrule.ordinal.none")
+        "-1" -> t("rrule.ordinal.last")
+        else -> t("rrule.ordinal.$ord")
+    }
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            t("rrule.byday"),
+            modifier = Modifier.widthIn(min = 56.dp, max = 104.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Spacer(Modifier.width(8.dp))
+        Box {
+            OutlinedButton(onClick = { ordinalOpen = true }) {
+                Text(ordinalLabel(ordinal))
+                Spacer(Modifier.width(8.dp))
+                Text("▾", color = MaterialTheme.colorScheme.outline)
+            }
+            DropdownMenu(expanded = ordinalOpen, onDismissRequest = { ordinalOpen = false }) {
+                for (ord in listOf<String?>(null, "1", "2", "3", "4", "-1")) {
+                    DropdownMenuItem(
+                        text = { Text(ordinalLabel(ord)) },
+                        onClick = {
+                            onChange(
+                                state.copy(
+                                    byday = if (ord == null) emptyList() else listOf(ord + weekday),
+                                ),
+                            )
+                            ordinalOpen = false
+                        },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Box {
+            OutlinedButton(
+                onClick = { weekdayOpen = true },
+                enabled = ordinal != null,
+            ) {
+                Text(t("weekday.medium.${WEEKDAY_CODES.indexOf(weekday) + 1}"))
+                Spacer(Modifier.width(8.dp))
+                Text("▾", color = MaterialTheme.colorScheme.outline)
+            }
+            DropdownMenu(expanded = weekdayOpen, onDismissRequest = { weekdayOpen = false }) {
+                for ((idx, code) in WEEKDAY_CODES.withIndex()) {
+                    DropdownMenuItem(
+                        text = { Text(t("weekday.medium.${idx + 1}")) },
+                        onClick = {
+                            val ord = ordinal
+                            if (ord != null) {
+                                onChange(state.copy(byday = listOf(ord + code)))
+                            }
+                            weekdayOpen = false
+                        },
+                    )
+                }
+            }
+        }
+    }
 }

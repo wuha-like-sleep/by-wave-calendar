@@ -147,7 +147,9 @@ class EventRepository(
                 runCatching { mirror.mirror(profile, resp.calendars, resp.events, selectedCalendars) }
             }
             if (current.remindersEnabled) {
-                runCatching { reminders.reschedule(profile, resp.events, current.reminderLeadMinutes) }
+                runCatching {
+                    reminders.reschedule(profile, resp.events, current.reminderLeadMinutes, resp.calendars)
+                }
             }
         }
     }
@@ -199,7 +201,12 @@ class EventRepository(
         val current = prefs.current()
 
         if (current.remindersEnabled) {
-            runCatching { reminders.reschedule(profile, events, current.reminderLeadMinutes) }
+            // Calendars ride along so all-day event-level alarms can
+            // anchor in the calendar's timezone (extra.timezone wins
+            // when the event carries one — see Reminders).
+            val calendars = runCatching { db.calendarDao().listForProfile(profile.id).map { it.toDto() } }
+                .getOrElse { emptyList() }
+            runCatching { reminders.reschedule(profile, events, current.reminderLeadMinutes, calendars) }
         } else {
             runCatching { reminders.cancelAll(profile, events) }
         }

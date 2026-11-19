@@ -91,6 +91,94 @@ struct EventEditView: View {
     @State private var url: String = ""
     // Optional meeting passcode, stored at extra.meetingPassword server-side.
     @State private var meetingPassword: String = ""
+    // Event-level reminder (extra.alarms). Holds ONE trigger value
+    // from ReminderOptions for the current allDay group; "" = none.
+    // Imported alarms whose trigger isn't in the group aren't the
+    // picker's business — buildExtra() re-attaches them untouched.
+    @State private var reminder: String = ""
+    // The reminder value the editor was seeded with. When the event's
+    // extra never loaded (search results omit it), an UNCHANGED
+    // picker must leave alarms alone entirely — see alarmsField().
+    @State private var initialReminder: String = ""
+    // Overlap prompt state for the pre-save conflict check. When the
+    // user confirms「仍要保存」, conflictCheckPassed lets the retried
+    // save() skip straight to the write.
+    @State private var conflictPrompt: ConflictPrompt?
+    @State private var conflictCheckPassed = false
+    // Category (extra.category) — one of EventCategory's values or ""
+    // for「无」. A stored value outside that set (older imports) is
+    // kept selectable through categoryOptions so it survives the edit.
+    @State private var category: String = ""
+    // Recurrence editor state (parse/build in Models.swift). Seeded
+    // from the master's rrule for edit, empty for create; duplicate
+    // starts empty on purpose (see init).
+    @State private var rruleState = RruleState()
+    // Deleted single occurrences still excluded from the series.
+    // The user can restore them here (series scope only).
+    @State private var exdates: [String] = []
+    // Unsaved-changes guard: Cancel asks before discarding when the
+    // form differs from the seed snapshot, and swipe-to-dismiss is
+    // disabled while dirty so a stray drag can't lose an edit.
+    @State private var showDiscardConfirm = false
+    private let snapshot: FormSnapshot
+
+    /// The form's seed values, captured in init. `isDirty` compares
+    /// the live fields against this — including the quick-add parser's
+    /// writes, which go through the same @State fields.
+    private struct FormSnapshot: Equatable {
+        var summary: String
+        var location: String
+        var description: String
+        var startsAt: Date
+        var endsAt: Date
+        var allDay: Bool
+        var calendarId: String
+        var timezone: String
+        var url: String
+        var meetingPassword: String
+        var category: String
+        var reminder: String
+        var rruleBuilt: String?
+        var exdates: [String]
+    }
+
+    private var currentSnapshot: FormSnapshot {
+        FormSnapshot(
+            summary: summary, location: location, description: description,
+            startsAt: startsAt, endsAt: endsAt, allDay: allDay,
+            calendarId: calendarId, timezone: timezone,
+            url: url, meetingPassword: meetingPassword,
+            category: category, reminder: reminder,
+            rruleBuilt: rruleState.build(), exdates: exdates,
+        )
+    }
+
+    private var isDirty: Bool { currentSnapshot != snapshot }
+
+    /// The recurrence editor only runs where the whole series is the
+    /// subject: creating, or editing with no scope / series scope.
+    /// For「仅此事件」/「此次及之后」the rule belongs to the master the
+    /// user isn't editing, so the section is hidden rather than
+    /// letting a rule edit ride along on a scoped PATCH.
+    private var rruleEditable: Bool {
+        mode.isCreate || scope == nil || scope == .series
+    }
+
+    /// Restoring a deleted occurrence rewrites the master's list —
+    /// same series-only boundary as the recurrence editor.
+    private var exdatesEditable: Bool {
+        mode.existing != nil && (scope == nil || scope == .series)
+    }
+
+    /// Category options: the web set, plus the stored value itself
+    /// when it isn't in the set (so an imported custom category is
+    /// shown selected instead of being silently cleared on save).
+    private var categoryOptions: [CategoryOption] {
+        if category.isEmpty || EventCategory.values.contains(where: { $0.value == category }) {
+            return EventCategory.values
+        }
+        return EventCategory.values + [CategoryOption(value: category, labelKey: category)]
+    }
     // attendees are no longer collected here — see AttendeesPage which
     // appears as a NavigationLink ONLY for already-saved events. Matches
     // the web flow ("保存事件后会出现「管理参与者」入口").
@@ -130,37 +218,84 @@ struct EventEditView: View {
             // For "duplicate" we want today's slot, not the source's
             // possibly-historical start. Edit keeps the original time.
             let useOriginalTime = mode.existing != nil
+            let seedStart: Date
+            let seedEnd: Date
+            if useOriginalTime {
+                seedStart = e.allDay ? EventEditorDates.localAllDay(e.startsAt) : e.startsAt
+                seedEnd = e.allDay ? EventEditorDates.localAllDay(e.endsAt) : e.endsAt
+            } else {
+                (seedStart, seedEnd) = EventEditorDates.duplicate(
+                    start: e.startsAt, end: e.endsAt, allDay: e.allDay,
+                    from: Self.roundUpToHalfHour(Date()))
+            }
             _summary = State(initialValue: e.summary)
             _location = State(initialValue: e.location ?? "")
             _description = State(initialValue: e.description ?? "")
-            if useOriginalTime {
-                _startsAt = State(initialValue: e.allDay ? EventEditorDates.localAllDay(e.startsAt) : e.startsAt)
-                _endsAt = State(initialValue: e.allDay ? EventEditorDates.localAllDay(e.endsAt) : e.endsAt)
-            } else {
-                let (start, end) = EventEditorDates.duplicate(
-                    start: e.startsAt, end: e.endsAt, allDay: e.allDay,
-                    from: Self.roundUpToHalfHour(Date()))
-                _startsAt = State(initialValue: start)
-                _endsAt = State(initialValue: end)
-            }
+            _startsAt = State(initialValue: seedStart)
+            _endsAt = State(initialValue: seedEnd)
             _allDay = State(initialValue: e.allDay)
             _calendarId = State(initialValue: e.calendarId)
             // Preload timezone from the server's extra JSONB. Attendees
             // are not preloaded here — they live on the dedicated
             // AttendeesPage which fetches them fresh each open.
-            if let tz = e.extra?.timezone, !tz.isEmpty {
-                _timezone = State(initialValue: tz)
+            let seedTimezone = (e.extra?.timezone?.isEmpty == false)
+                ? e.extra!.timezone! : TimeZone.current.identifier
+            if seedTimezone != TimeZone.current.identifier {
+                _timezone = State(initialValue: seedTimezone)
             }
             // Preload URL from extra. Existing events created on the web
             // (where the link field has been live for a while) will have
             // this populated; new iOS-created events start empty.
-            if let storedURL = e.extra?.url, !storedURL.isEmpty {
-                _url = State(initialValue: storedURL)
+            let seedURL = e.extra?.url ?? ""
+            if !seedURL.isEmpty {
+                _url = State(initialValue: seedURL)
             }
             // Preload meeting passcode from extra, same as URL above.
-            if let storedPassword = e.extra?.meetingPassword, !storedPassword.isEmpty {
-                _meetingPassword = State(initialValue: storedPassword)
+            let seedPassword = e.extra?.meetingPassword ?? ""
+            if !seedPassword.isEmpty {
+                _meetingPassword = State(initialValue: seedPassword)
             }
+            // Preload the picker with the event's primary reminder:
+            // the first stored alarm whose trigger is one of this
+            // event's group values (timed vs all-day). Alarms outside
+            // the group (custom imports) stay invisible here and are
+            // preserved verbatim by alarmsField() on save.
+            let group = ReminderOptions.values(allDay: e.allDay)
+            let primary = (e.extra?.alarms ?? [])
+                .map { $0.trigger.trimmingCharacters(in: .whitespaces) }
+                .first { group.contains($0) } ?? ""
+            _reminder = State(initialValue: primary)
+            _initialReminder = State(initialValue: primary)
+            // Category preload (extra.category). A value outside the
+            // web's set (older imports) stays selected via the extra
+            // option categoryOptions adds for it, so it isn't lost.
+            let seedCategory = e.extra?.category ?? ""
+            _category = State(initialValue: seedCategory)
+            // Recurrence + deleted occurrences. Edit seeds both from
+            // the master row. Duplicate deliberately starts clean —
+            // the long-standing behavior (a copy is a fresh event,
+            // not a parallel series) — with the editor now visible,
+            // the user can re-add a rule explicitly if they want one.
+            let seedRrule: RruleState
+            let seedExdates: [String]
+            if useOriginalTime {
+                seedRrule = RruleState.parse(e.rrule, seedStart: e.startsAt)
+                seedExdates = e.exdates ?? []
+            } else {
+                seedRrule = RruleState.parse(nil, seedStart: seedStart)
+                seedExdates = []
+            }
+            _rruleState = State(initialValue: seedRrule)
+            _exdates = State(initialValue: seedExdates)
+            snapshot = FormSnapshot(
+                summary: e.summary, location: e.location ?? "",
+                description: e.description ?? "",
+                startsAt: seedStart, endsAt: seedEnd, allDay: e.allDay,
+                calendarId: e.calendarId, timezone: seedTimezone,
+                url: seedURL, meetingPassword: seedPassword,
+                category: seedCategory, reminder: primary,
+                rruleBuilt: seedRrule.build(), exdates: seedExdates,
+            )
         } else {
             // Sensible default for "new event": next half-hour, 60min
             // duration. Caller can override via prefilledStart (e.g.
@@ -178,9 +313,20 @@ struct EventEditView: View {
             // calendar. Falls back to the first calendar when the
             // remembered one is gone (deleted / other account).
             let lastUsed = UserDefaults.standard.string(forKey: "lastUsedCalendarId")
-            _calendarId = State(initialValue:
+            let initialCalendarId =
                 calendars.first(where: { $0.id == lastUsed })?.id
-                    ?? calendars.first?.id ?? "")
+                    ?? calendars.first?.id ?? ""
+            _calendarId = State(initialValue: initialCalendarId)
+            let freshRrule = RruleState.parse(nil, seedStart: start)
+            _rruleState = State(initialValue: freshRrule)
+            snapshot = FormSnapshot(
+                summary: "", location: "", description: "",
+                startsAt: start, endsAt: start.addingTimeInterval(3600),
+                allDay: false, calendarId: initialCalendarId,
+                timezone: TimeZone.current.identifier,
+                url: "", meetingPassword: "", category: "", reminder: "",
+                rruleBuilt: freshRrule.build(), exdates: [],
+            )
         }
         // Generate the idempotency key exactly once, here at construction
         // time — NOT inside save() — so that if the first POST times out and
@@ -199,13 +345,6 @@ struct EventEditView: View {
     @State private var quickText = ""
     @State private var quickParsing = false
     @State private var quickError: String?
-    // Recurrence produced by the quick-add parse (create modes only).
-    // The editor has no recurrence picker of its own, so the parsed
-    // rule is carried here, shown read-only in the form, and sent on
-    // create. It is NOT seeded from a duplicated event — only an
-    // explicit recurrence phrase in this session sets it.
-    @State private var quickRrule: String?
-
     var body: some View {
         Form {
             if mode.isCreate {
@@ -292,17 +431,68 @@ struct EventEditView: View {
                 }
             }
 
-            // Parsed recurrence from the quick-add phrase (create modes
-            // only) — read-only display plus a way out: the editor has
-            // no recurrence picker, so without the remove button a
-            // mis-parsed 每周 would silently mint a series on save.
-            if let quickRrule {
-                Section("重复规则") {
-                    Text(QuickParsedEvent.humanRrule(quickRrule))
-                    Button("quickadd.rrule.remove", role: .destructive) {
-                        self.quickRrule = nil
+            // Recurrence editor — same shape as the desktop
+            // RruleEditor (freq / interval / end) plus the BYDAY
+            // shapes the server expander supports. Hidden for
+            // instance/future scoped edits (see rruleEditable).
+            if rruleEditable {
+                recurrenceSection
+            }
+
+            // Deleted occurrences of this series, restorable one by
+            // one. Only meaningful on the master (series scope).
+            if exdatesEditable && !exdates.isEmpty {
+                Section {
+                    ForEach(exdates, id: \.self) { iso in
+                        HStack {
+                            Text(exdateLabel(iso))
+                                .font(.callout)
+                            Spacer()
+                            Button("恢复") {
+                                exdates.removeAll { $0 == iso }
+                            }
+                            .buttonStyle(.borderless)
+                        }
+                    }
+                } header: {
+                    Text("已删除的单次")
+                } footer: {
+                    Text("恢复后，这一次会重新出现在日历里。")
+                }
+            }
+
+            // Reminder picker — values are the server's trigger
+            // strings verbatim (see ReminderOptions); the option set
+            // follows the 全天 toggle, and a selection that doesn't
+            // exist in the new group falls back to「不提醒」.
+            Section {
+                Picker("提醒", selection: $reminder) {
+                    ForEach(ReminderOptions.options(allDay: allDay)) { opt in
+                        Text(opt.labelKey.loc).tag(opt.value)
                     }
                 }
+                .pickerStyle(.menu)
+                .onChange(of: allDay) { _, newValue in
+                    if !ReminderOptions.values(allDay: newValue).contains(reminder) {
+                        reminder = ""
+                    }
+                }
+            } header: {
+                Text("提醒")
+            }
+
+            // Category — the web editor's set, stored at
+            // extra.category. Picking「无」clears the key on save
+            // (buildExtra's field() sends an explicit null).
+            Section {
+                Picker("app.event.category".loc, selection: $category) {
+                    ForEach(categoryOptions) { opt in
+                        Text(opt.labelKey.loc).tag(opt.value)
+                    }
+                }
+                .pickerStyle(.menu)
+            } header: {
+                Text("app.event.category".loc)
             }
 
             Section("地点") {
@@ -384,7 +574,7 @@ struct EventEditView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Button("取消") { onCancel() }
+                Button("取消") { attemptCancel() }
                     .disabled(saving)
             }
             ToolbarItem(placement: .topBarTrailing) {
@@ -400,6 +590,187 @@ struct EventEditView: View {
         }
         .onAppear {
             oldStartValue = startsAt
+        }
+        .alert("app.js.conflict.title".loc, isPresented: Binding(
+            get: { conflictPrompt != nil },
+            set: { if !$0 { conflictPrompt = nil } },
+        )) {
+            Button("取消", role: .cancel) {
+                conflictPrompt = nil
+                // Stayed on the editor; the next save re-checks (the
+                // user may have changed the time because of this).
+                conflictCheckPassed = false
+            }
+            Button("app.js.conflict.saveAnyway".loc) {
+                conflictPrompt = nil
+                conflictCheckPassed = true
+                Task { await save() }
+            }
+        } message: {
+            Text(conflictPrompt?.message ?? "")
+        }
+        // Unsaved-changes guard (2/2): swipe-to-dismiss is disabled
+        // while dirty — the sheet can then only leave through Cancel
+        // (which asks, above) or a successful save.
+        .interactiveDismissDisabled(isDirty)
+        .alert("放弃修改？", isPresented: $showDiscardConfirm) {
+            Button("继续编辑", role: .cancel) {}
+            Button("放弃修改", role: .destructive) { onCancel() }
+        } message: {
+            Text("未保存的修改将丢失。")
+        }
+    }
+
+    /// Unsaved-changes guard (1/2): Cancel with a dirty form asks
+    /// first; a clean form (or right after seeding) closes at once.
+    private func attemptCancel() {
+        if isDirty {
+            showDiscardConfirm = true
+        } else {
+            onCancel()
+        }
+    }
+
+    // MARK: - Recurrence editor
+
+    /// Freq / interval / end + BYDAY controls. An unmodelable rule
+    /// (passthrough) renders as its raw string plus a note and an
+    /// explicit clear button — it is never rebuilt behind the
+    /// user's back.
+    @ViewBuilder
+    private var recurrenceSection: some View {
+        Section {
+            if let raw = rruleState.passthrough {
+                Text(raw)
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                Text("这个重复规则较复杂，APP 里暂不支持编辑，将原样保留。")
+                    .font(.callout).foregroundStyle(.secondary)
+                Button("清除重复规则", role: .destructive) {
+                    rruleState.passthrough = nil
+                    rruleState.freq = .none
+                }
+            } else {
+                Picker("重复", selection: Binding(
+                    get: { rruleState.freq },
+                    set: { rruleState.freq = $0 },
+                )) {
+                    ForEach(RruleFreq.allCases, id: \.self) { f in
+                        Text(f.labelKey.loc).tag(f)
+                    }
+                }
+                .pickerStyle(.menu)
+                if rruleState.freq != .none {
+                    Stepper(value: $rruleState.interval, in: 1...99) {
+                        Text("间隔：%lld".locFormat(rruleState.interval))
+                    }
+                    if rruleState.freq == .weekly {
+                        weekdayChips
+                    }
+                    if rruleState.freq == .monthly {
+                        Picker("每月方式", selection: $rruleState.monthlyMode) {
+                            ForEach(RruleMonthlyMode.allCases, id: \.self) { m in
+                                Text(m.labelKey.loc).tag(m)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        if rruleState.monthlyMode == .byWeekday {
+                            Picker("第几个", selection: $rruleState.monthlyOrdinal) {
+                                Text("第一个").tag(1)
+                                Text("第二个").tag(2)
+                                Text("第三个").tag(3)
+                                Text("第四个").tag(4)
+                                Text("最后一个").tag(-1)
+                            }
+                            .pickerStyle(.menu)
+                            Picker("星期", selection: $rruleState.monthlyWeekday) {
+                                ForEach(1...7, id: \.self) { wd in
+                                    Text(Self.weekdayName(wd)).tag(wd)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                        }
+                    }
+                    Picker("结束", selection: $rruleState.end) {
+                        ForEach(RruleEndKind.allCases, id: \.self) { e in
+                            Text(e.labelKey.loc).tag(e)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    switch rruleState.end {
+                    case .forever:
+                        EmptyView()
+                    case .until:
+                        DatePicker("结束日期", selection: $rruleState.until, displayedComponents: .date)
+                    case .count:
+                        Stepper(value: $rruleState.count, in: 1...999) {
+                            Text("共 %lld 次".locFormat(rruleState.count))
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("重复")
+        }
+    }
+
+    /// WEEKLY weekday multi-select: one chip per weekday, Monday
+    /// first (matching BYDAY emission order). Symbols come from the
+    /// system calendar so they follow the UI language for free.
+    private var weekdayChips: some View {
+        HStack(spacing: 6) {
+            ForEach([2, 3, 4, 5, 6, 7, 1], id: \.self) { wd in
+                let selected = rruleState.byday.contains(wd)
+                Button {
+                    if selected { rruleState.byday.remove(wd) } else { rruleState.byday.insert(wd) }
+                } label: {
+                    Text(Self.weekdayName(wd, short: true))
+                        .font(.callout.weight(selected ? .semibold : .regular))
+                        .frame(width: 34, height: 34)
+                        .background(
+                            selected ? Color.accentColor : Color.secondary.opacity(0.12),
+                            in: Circle(),
+                        )
+                        .foregroundStyle(selected ? Color.white : Color.primary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Weekday display name from the system calendar (1 = Sunday …
+    /// 7 = Saturday, matching Calendar's weekday numbers).
+    private static func weekdayName(_ wd: Int, short: Bool = false) -> String {
+        let cal = Calendar.current
+        let symbols = short ? cal.veryShortWeekdaySymbols : cal.weekdaySymbols
+        guard (1...7).contains(wd), symbols.count == 7 else { return "" }
+        return symbols[wd - 1]
+    }
+
+    /// One exdate row's label: the stored ISO string as a readable
+    /// date (time shown for timed events, hidden for all-day ones).
+    private func exdateLabel(_ iso: String) -> String {
+        let withFrac = ISO8601DateFormatter()
+        withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        guard let d = withFrac.date(from: iso) ?? plain.date(from: iso) else { return iso }
+        return d.formatted(date: .abbreviated, time: allDay ? .omitted : .shortened)
+    }
+
+    /// What the conflict alert lists: at most 3 titles, the rest
+    /// folded into a「还有 N 条」line — same shape as the web prompt.
+    private struct ConflictPrompt {
+        let conflicts: [ConflictDTO]
+
+        var message: String {
+            var lines = ["app.js.conflict.message".loc]
+            lines += conflicts.prefix(3).map { "• \($0.summary)" }
+            if conflicts.count > 3 {
+                lines.append("app.js.conflict.more".locFormat(conflicts.count - 3))
+            }
+            return lines.joined(separator: "\n")
         }
     }
 
@@ -485,7 +856,11 @@ struct EventEditView: View {
             endsAt = max(fill.end, fill.start.addingTimeInterval(60))
             // A fresh parse replaces the recurrence wholesale: a new
             // phrase without 每周 clears a previously parsed rule.
-            quickRrule = fill.rrule
+            // The parsed rule lands in the recurrence editor's state
+            // (unmodelable rules as passthrough), so the user sees it
+            // in the recurrence section and can adjust or remove it
+            // before saving — no separate read-only carrier.
+            rruleState = RruleState.parse(fill.rrule, seedStart: fill.start)
             // The user got an explicit end from the parser — break the
             // start→end linkage so tweaking start won't shift it again.
             endLinkedToStart = false
@@ -556,17 +931,34 @@ struct EventEditView: View {
         let isoEnd = iso(endsAt, allDay: allDay, isStart: false)
         let extra = buildExtra()
 
+        // 冲突检测（软检查，和网页端同一口径）：真正保存前先查一次，
+        // 新建和编辑都查（编辑带 excludeId 排除自己），定时与全天都查。
+        // 有冲突 → 弹确认框，用户选「仍要保存」才继续（靠
+        // conflictCheckPassed 跳过复查）；选「取消」→ 中止保存、留在
+        // 编辑页。查询本身失败（网络错等）绝不阻断保存，静默跳过。
+        if !conflictCheckPassed {
+            let conflicts = (try? await APIClient(state: state).checkConflicts(
+                calendarId: calendarId,
+                startsAt: isoStart,
+                endsAt: isoEnd,
+                excludeId: mode.existing?.id,
+            )) ?? []
+            if !conflicts.isEmpty {
+                conflictPrompt = ConflictPrompt(conflicts: conflicts)
+                return
+            }
+            conflictCheckPassed = true
+        }
+
         do {
             let client = APIClient(state: state)
             let saved: EventSaved
             switch mode {
             case .create, .duplicateOf:
-                // Both paths POST a new event. Duplicate doesn't inherit
-                // the source's rrule — we intentionally clear it so the
-                // user doesn't accidentally spawn a parallel recurring
-                // series. The only rrule a create can carry is one the
-                // user just dictated through the quick-add phrase
-                // (quickRrule, shown read-only in the form above).
+                // Both paths POST a new event. Duplicate starts with an
+                // empty recurrence editor (seeded in init) so the user
+                // doesn't accidentally spawn a parallel recurring
+                // series; a rule only goes out if they set one here.
                 saved = try await client.post("/events", body: EventCreateInput(
                     calendarId: calendarId,
                     summary: summary.trimmingCharacters(in: .whitespaces),
@@ -575,8 +967,9 @@ struct EventEditView: View {
                     startsAt: isoStart,
                     endsAt: isoEnd,
                     allDay: allDay,
-                    rrule: quickRrule,
+                    rrule: rruleState.build(),
                     extra: extra,
+                    exdates: nil,
                     // Stable across retries within this editor session (see
                     // the clientUid @State). Always set in create/duplicate
                     // mode; this branch only runs for those modes.
@@ -600,10 +993,11 @@ struct EventEditView: View {
                     startsAt: isoStart,
                     endsAt: isoEnd,
                     allDay: allDay,
-                    rrule: nil,
+                    rrule: rruleToSend,
                     extra: extra,
                     scope: scope?.rawValue,
                     recurrenceId: recIdIso,
+                    exdates: exdatesToSend,
                 ))
             }
             // Success buzz — mirrors WeekView.commitMove so every
@@ -616,10 +1010,35 @@ struct EventEditView: View {
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved(saved)
         } catch let e as APIError {
+            // 保存没成：下次再点保存要重新查冲突（用户多半会改时间）。
+            conflictCheckPassed = false
             errorMessage = e.localizedDescription
         } catch {
+            conflictCheckPassed = false
             errorMessage = error.localizedDescription
         }
+    }
+
+    /// rrule for the PATCH: only when the editor owns the rule AND
+    /// the user changed it. Clearing sends "" — the web editor's
+    /// convention, which the server reads as「rule removed」, while
+    /// an omitted field keeps the stored rule (its series planner
+    /// also keys off whether the value differs, so echoing the same
+    /// string back would be noise).
+    private var rruleToSend: String? {
+        guard rruleEditable, rruleState.isEdited else { return nil }
+        return rruleState.build() ?? ""
+    }
+
+    /// exdates for the PATCH: the full remaining list, only when the
+    /// user restored at least one occurrence. Sending the list when
+    /// it didn't change would fight the server's own exdate
+    /// bookkeeping (scoped deletes append server-side; a time-zone
+    /// change remaps them server-side).
+    private var exdatesToSend: [String]? {
+        guard exdatesEditable else { return nil }
+        let original = mode.existing?.exdates ?? []
+        return exdates != original ? exdates : nil
     }
 
     /// 新建（含「复制一份」）走 POST，编辑走 PATCH —— 两者对「字段空着」的含义不同。
@@ -662,13 +1081,46 @@ struct EventEditView: View {
             // 全天事件这个界面不提供时区选择，所以它不是「被清空」而是「不归我管」。
             // 写成清空会把别的端设的时区删掉，而服务端算全天事件的提醒正要用它。
             timezone: allDay ? .unmanaged : field(timezone.isEmpty ? nil : timezone),
-            // 参与者有自己的页面和接口，分类和提醒由网页 / 其它端维护 ——
-            // 在这里发 null 等于把别人设的东西抹掉。
+            // 参与者有自己的页面和接口 —— 在这里发 null 等于把别人
+            // 设的东西抹掉。分类不同：这个界面现在有分类选择器，
+            // 走 field() 同一口径（选「无」= 清空，发显式 null）。
             attendees: .unmanaged,
-            category: .unmanaged,
+            category: field(category.isEmpty ? nil : category),
             url: field(trimmedURL.isEmpty ? nil : trimmedURL),
             meetingPassword: field(trimmedPassword.isEmpty ? nil : trimmedPassword),
+            alarms: alarmsField(extraLoaded: extraLoaded),
         )
+    }
+
+    /// 拼 extra.alarms：选择器选中的一条 + 既有 alarms 里不归选择器管的那些。
+    ///
+    /// 归选择器管 = trigger 落在当前组（定时 / 全天）枚举内。导入进来的
+    /// 自定义提醒（带参数的 TRIGGER、组外的值）不在枚举内，原样保留；
+    /// 枚举内的旧提醒则被选择器的当前值取代（主提醒只有一个）。
+    ///
+    /// 选「无」且没有其余 alarms 时发显式 null：服务端是浅合并，
+    /// 省略 = 保留原值，只有 null 能把这个键删掉（网页端同口径）。
+    private func alarmsField(extraLoaded: Bool) -> ExtraField<[EventAlarmDTO]> {
+        // extra 根本没加载进来（搜索结果不带 extra）时，区分不了
+        // 「原来没有提醒」和「我没看到」：选择器没被动过就整个不归
+        // 我管，免得把服务端上的提醒当成「用户清掉了」抹掉。
+        if mode.existing != nil, !extraLoaded, reminder == initialReminder {
+            return .unmanaged
+        }
+        let group = ReminderOptions.values(allDay: allDay)
+        let preserved = (mode.seed?.extra?.alarms ?? []).filter {
+            !group.contains($0.trigger.trimmingCharacters(in: .whitespaces))
+        }
+        var combined: [EventAlarmDTO] = []
+        if !reminder.isEmpty {
+            combined.append(EventAlarmDTO(
+                trigger: reminder,
+                action: "DISPLAY",
+                description: summary.trimmingCharacters(in: .whitespaces),
+            ))
+        }
+        combined.append(contentsOf: preserved)
+        return combined.isEmpty ? .cleared : .value(combined)
     }
 
     /// Top-of-list candidate timezones for the picker. The system tz is

@@ -25,6 +25,8 @@ import { makeSharedRouteStore } from "./lib/rate_limit_store.js";
 import { recordRateLimitExceeded } from "./lib/security_events.js";
 import { eventRoutes } from "./routes/events.js";
 import { importRoutes } from "./routes/import.js";
+import { subscriptionRoutes } from "./routes/subscriptions.js";
+import { exportRoutes } from "./routes/export.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
@@ -754,6 +756,8 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(nativeCalendarSyncRoutes, { prefix });
   await app.register(eventRoutes, { prefix });
   await app.register(importRoutes, { prefix });
+  await app.register(subscriptionRoutes, { prefix });
+  await app.register(exportRoutes, { prefix });
   await app.register(searchRoutes, { prefix });
   await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
@@ -856,6 +860,19 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
       },
       "/calendars/{id}/share-tokens/{token}": {
         delete: { summary: "Revoke ICS share token" },
+      },
+      "/calendars/{id}/subscriptions": {
+        get: { summary: "List ICS subscriptions of a calendar" },
+        post: { summary: "Create an ICS subscription (saved even when the first fetch fails; outcome in refresh)" },
+      },
+      "/calendars/{id}/subscriptions/{subId}/refresh": {
+        post: { summary: "Refresh one ICS subscription now" },
+      },
+      "/calendars/{id}/subscriptions/{subId}": {
+        delete: { summary: "Delete an ICS subscription" },
+      },
+      "/calendars/{id}/export.ics": {
+        get: { summary: "Download one calendar as an .ics file (owner-authenticated snapshot, not a share link)" },
       },
       "/events": {
         get: { summary: "List events across visible calendars in a date range (expands RRULE)" },

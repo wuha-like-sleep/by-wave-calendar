@@ -23,6 +23,10 @@ import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
 import cn.bywave.calendar.data.model.CalendarMeta
+import cn.bywave.calendar.data.model.ConflictsRequest
+import cn.bywave.calendar.data.model.EventAlarm
+import cn.bywave.calendar.data.model.EventAlarmsField
+import cn.bywave.calendar.data.model.EventConflict
 import cn.bywave.calendar.data.model.EventCreateInput
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.EventExtra
@@ -77,12 +81,6 @@ data class EventEditUiState(
      *  when scope is "instance" or "future" so it knows WHICH occurrence
      *  the user is editing. */
     val sourceStartsAt: String? = null,
-    /** Recurrence produced by the quick-add parse (create modes only).
-     *  The editor has no recurrence picker, so the parsed rule is
-     *  carried here, shown read-only in the form, and sent on create.
-     *  Never seeded from a duplicated event — only an explicit
-     *  recurrence phrase in this session sets it. */
-    val quickRrule: String? = null,
     val sourceExtra: EventExtraDTO? = null,
     val originalStart: EventFormInstant? = null,
     val originalEnd: EventFormInstant? = null,
@@ -96,6 +94,32 @@ data class EventEditUiState(
     val start: LocalDateTime = nextHalfHour(),
     val end: LocalDateTime = nextHalfHour().plusHours(1),
     val allDay: Boolean = false,
+    /** Selected primary reminder trigger ("" = none). One of
+     *  TIMED_REMINDER_TRIGGERS / ALLDAY_REMINDER_TRIGGERS depending on
+     *  [allDay] — the exact value sets from the server's
+     *  src/lib/reminder_triggers.ts. Existing alarms outside the
+     *  current group are not represented here; buildAlarmsField
+     *  carries them through untouched. */
+    val reminder: String = "",
+    /** Selected category ("" = none) — one of the web editor's values
+     *  (work / personal / family / health / travel / meeting), stored
+     *  in extra.category. Form-managed: buildExtra sends the current
+     *  selection, with an explicit null when cleared. */
+    val category: String = "",
+    /** Recurrence form state (see RruleEditor.kt). Parse/build keep
+     *  unmodelable rules as passthrough so they survive a save. */
+    val rruleState: RruleFormState = RruleFormState(),
+    /** The series' exdates as loaded from the server (edit mode). */
+    val sourceExdates: List<String> = emptyList(),
+    /** Current exdates — restoring one in the editor removes it here.
+     *  Sent on PATCH only when different from [sourceExdates] (and
+     *  see the server caveat on EventUpdateInput.exdates). */
+    val exdates: List<String> = emptyList(),
+    /** Conflicts found by the pre-save server check. Non-empty means
+     *  the save is PAUSED on the confirmation dialog — nothing has
+     *  been written yet. The check failing never fills this (a failed
+     *  check must not block saving). */
+    val pendingConflicts: List<EventConflict> = emptyList(),
     val saving: Boolean = false,
     val parsing: Boolean = false,
     val deleting: Boolean = false,
@@ -113,7 +137,9 @@ data class EventEditUiState(
     val fingerprint: String
         get() = listOf(
             calendarId, summary, location, description, url, meetingPassword,
-            start.toString(), end.toString(), allDay.toString(), quickRrule ?: "",
+            start.toString(), end.toString(), allDay.toString(), reminder,
+            category, rruleState.effectiveRrule().orEmpty(),
+            exdates.joinToString(","),
         ).joinToString("\u0000")
 
     /** 有未保存的改动。退出前要拦一下：新建/编辑事件里填了一半的内容
@@ -139,10 +165,66 @@ internal fun EventEditUiState.withCalendars(calendars: List<CalendarMeta>): Even
 internal fun EventEditUiState.buildExtra(zone: ZoneId): EventExtra = EventExtra(
     timezone = sourceExtra?.timezone ?: if (!isEdit && !allDay) zone.id else null,
     attendees = if (isEdit) null else sourceExtra?.attendees,
-    category = if (isEdit) null else sourceExtra?.category,
+    // Category used to be create-only passthrough; the form manages it
+    // now, so — exactly like url — the CURRENT selection is sent, and
+    // clearing it against a loaded extra sends an explicit null (the
+    // server's shallow merge deletes the key). When extra was never
+    // loaded (sourceExtra == null) we still don't invent a deletion.
+    category = eventStringField(category, clearWhenEmpty = sourceExtra != null),
     url = eventStringField(url, clearWhenEmpty = isEdit && sourceExtra != null),
     meetingPassword = eventStringField(meetingPassword, clearWhenEmpty = isEdit && sourceExtra != null),
+    alarms = buildAlarmsField(),
 )
+
+/** Reminder trigger value sets — copied value-for-value from the
+ *  server's src/lib/reminder_triggers.ts (TIMED_TRIGGERS /
+ *  ALLDAY_TRIGGERS). "" is the "no reminder" sentinel, not a trigger.
+ *  Timed offsets are absolute durations; all-day offsets are wall-time
+ *  offsets from 00:00 in the event's timezone (PT9H = 09:00 that day). */
+internal val TIMED_REMINDER_TRIGGERS: List<String> =
+    listOf("", "-PT0M", "-PT5M", "-PT15M", "-PT30M", "-PT1H", "-PT2H", "-P1D", "-P1W")
+
+internal val ALLDAY_REMINDER_TRIGGERS: List<String> =
+    listOf("", "PT9H", "-PT15H", "-P1DT15H", "-P6DT15H")
+
+internal fun reminderTriggersFor(allDay: Boolean): List<String> =
+    if (allDay) ALLDAY_REMINDER_TRIGGERS else TIMED_REMINDER_TRIGGERS
+
+/** The reminder the editor displays: the first existing alarm whose
+ *  trigger falls inside the current (timed / all-day) value set. */
+internal fun primaryReminderTrigger(alarms: List<EventAlarm>?, allDay: Boolean): String {
+    val group = reminderTriggersFor(allDay)
+    return alarms?.firstOrNull { it.trigger in group && it.trigger.isNotEmpty() }?.trigger ?: ""
+}
+
+/**
+ * 把提醒选择折回 extra.alarms，规则和服务端的浅合并语义配套：
+ *
+ *   · 结果 = 选中的一条（action DISPLAY、description 用事件标题）
+ *     + 既有 alarms 里**不在本组枚举内**的那些（别的客户端/导入写进来的，
+ *     编辑器不认识，但绝不能因为用户改了个标题就把它们抹掉）。
+ *   · 选「无」且没有其余 alarms，而事件**原本有** alarms key → 显式 null：
+ *     服务端浅合并里省略 = 保留、null = 删键，不发 null 提醒永远删不掉。
+ *   · 原本就没有 alarms、现在也没选 → 返回 null（字段省略）。这也保住
+ *     「extra 没加载完时不要把『没加载』当成『用户清空了』」的老纪律：
+ *     sourceExtra 为 null 时 existing 恒为 null，未选提醒绝不发删除。
+ */
+internal fun EventEditUiState.buildAlarmsField(): EventAlarmsField? {
+    val existing = sourceExtra?.alarms
+    val group = reminderTriggersFor(allDay)
+    val others = existing?.filter { it.trigger !in group } ?: emptyList()
+    val selected = if (reminder.isNotEmpty()) {
+        listOf(EventAlarm(trigger = reminder, action = "DISPLAY", description = summary))
+    } else {
+        emptyList()
+    }
+    val result = selected + others
+    return when {
+        result.isNotEmpty() -> EventAlarmsField(result)
+        existing != null -> EventAlarmsField(null)
+        else -> null
+    }
+}
 
 internal fun EventEditUiState.buildUpdateInput(
     scope: String? = null,
@@ -156,10 +238,42 @@ internal fun EventEditUiState.buildUpdateInput(
     startsAt = eventFormIso(start, allDay, isStart = true, zone, originalStart),
     endsAt = eventFormIso(end, allDay, isStart = false, zone, originalEnd),
     allDay = allDay,
+    // rrule is sent ONLY when the user actually changed the rule:
+    // an unchanged rebuilt string can differ textually from the
+    // stored one (UNTIL re-encoding, BYDAY ordering), and the server
+    // treats any different rrule as "client changed the rule", which
+    // switches its exdate-remap behaviour for what was really just a
+    // title edit. A passthrough rule always equals sourceRrule, so it
+    // is never re-sent. Clearing the rule (freq → none) yields null
+    // here too — the wire model cannot express "delete the rule"
+    // (explicitNulls drops it, and the server schema rejects JSON
+    // null for rrule); same limitation as the desktop editor.
+    rrule = rruleState.effectiveRrule().takeIf { it != sourceRrule },
+    // Restored occurrences, only when the list actually changed.
+    exdates = exdates.takeIf { it != sourceExdates },
     extra = buildExtra(zone),
     scope = scope,
     recurrenceId = recurrenceId,
 )
+
+/** The POST body for create / duplicate. Extracted as a pure function
+ *  (like buildUpdateInput) so payload tests can pin it — the create
+ *  path used to be inlined in doSave, which is exactly how the
+ *  duplicate-loses-rrule bug stayed invisible: nothing carried the
+ *  source's rule into this body. */
+internal fun EventEditUiState.buildCreateInput(zone: ZoneId = ZoneId.systemDefault()): EventCreateInput =
+    EventCreateInput(
+        calendarId = calendarId,
+        summary = summary,
+        description = description.ifBlank { null },
+        location = location.ifBlank { null },
+        startsAt = eventFormIso(start, allDay, isStart = true, zone),
+        endsAt = eventFormIso(end, allDay, isStart = false, zone),
+        allDay = if (allDay) true else null,
+        rrule = rruleState.effectiveRrule(),
+        extra = buildExtra(zone),
+        clientUid = clientUid,
+    )
 
 class EventEditViewModel : ViewModel() {
     // Application singleton doubles as a Context for resolving localized
@@ -239,6 +353,14 @@ class EventEditViewModel : ViewModel() {
                     start = sourceStart ?: nextHalfHour(),
                     end = sourceEnd ?: nextHalfHour().plusHours(1),
                     allDay = s.allDay,
+                    reminder = primaryReminderTrigger(s.extra?.alarms, s.allDay),
+                    category = s.extra?.category.orEmpty(),
+                    rruleState = RruleFormState.parse(
+                        s.rrule,
+                        (sourceStart ?: nextHalfHour()).dayOfWeek,
+                    ),
+                    sourceExdates = s.exdates ?: emptyList(),
+                    exdates = s.exdates ?: emptyList(),
                 )
             }
             is EventEditMode.Duplicate -> {
@@ -261,6 +383,15 @@ class EventEditViewModel : ViewModel() {
                     start = newStart,
                     end = newEnd,
                     allDay = s.allDay,
+                    reminder = primaryReminderTrigger(s.extra?.alarms, s.allDay),
+                    category = s.extra?.category.orEmpty(),
+                    // **复制必须带上重复规则。** 以前这个分支根本没读
+                    // s.rrule，doSave 的新建路径也没给 rrule 赋值 ——
+                    // 复制一个每周例会，得到的是一个只出现一次的普通
+                    // 事件，而且界面上看不出来。exdates 不复制：那是
+                    // 原系列某些具体时刻的删除记录，搬到新系列的
+                    // 新起点上没有意义。
+                    rruleState = RruleFormState.parse(s.rrule, newStart.dayOfWeek),
                 )
             }
         }
@@ -316,7 +447,12 @@ class EventEditViewModel : ViewModel() {
                         // clears the old parse's flags).
                         location = if (!r.location.isNullOrBlank()) r.location else it.location,
                         allDay = r.allDay ?: false,
-                        quickRrule = r.rrule,
+                        // The parsed rule lands in the RRULE editor
+                        // state (unmodelable rules as passthrough), so
+                        // the user sees it in the recurrence section
+                        // and can adjust or remove it before saving —
+                        // no separate read-only carrier.
+                        rruleState = RruleFormState.parse(r.rrule, start.dayOfWeek),
                         start = start,
                         end = end,
                         parsing = false,
@@ -330,20 +466,41 @@ class EventEditViewModel : ViewModel() {
             }
         }
     }
-    /** User removed the parsed recurrence in the form — the event
-     *  will be created as a one-off. */
-    fun onQuickRruleCleared() = _state.update { it.copy(quickRrule = null) }
-
     fun onCalendar(id: String) = _state.update { it.copy(calendarId = id) }
+    fun onReminder(v: String) = _state.update { it.copy(reminder = v) }
+    fun onCategory(v: String) = _state.update { it.copy(category = v) }
+    fun onRruleChange(v: RruleFormState) = _state.update {
+        // First time the user picks WEEKLY with no BYDAY yet, seed the
+        // start's weekday — the overwhelmingly common intent, and the
+        // same default the server expansion assumes without BYDAY.
+        val seeded = if (v.freq == RruleFreq.Weekly && v.byDay.isEmpty() && v.passthrough == null) {
+            v.copy(byDay = setOf(it.start.dayOfWeek))
+        } else {
+            v
+        }
+        it.copy(rruleState = seeded)
+    }
+    /** Restore one deleted occurrence: drop it from the exdates list.
+     *  The change goes out with the next save (see the server caveat
+     *  on EventUpdateInput.exdates). */
+    fun onRestoreExdate(iso: String) = _state.update {
+        it.copy(exdates = it.exdates.filterNot { e -> e == iso })
+    }
     fun onAllDay(v: Boolean) = _state.update {
+        // The reminder value sets differ between timed and all-day; a
+        // trigger from the other group is meaningless here, so it
+        // falls back to "none" instead of being saved verbatim.
+        val keptReminder = it.reminder.takeIf { r -> r in reminderTriggersFor(v) } ?: ""
         // When toggling to all-day, snap to date boundaries; when
         // toggling back to timed, restore a reasonable timed window.
         if (v) it.copy(
             allDay = true,
+            reminder = keptReminder,
             start = it.start.toLocalDate().atStartOfDay(),
             end = maxOf(it.start.toLocalDate(), it.end.toLocalDate()).atTime(23, 59),
         ) else it.copy(
             allDay = false,
+            reminder = keptReminder,
             start = it.start,
             end = it.start.plusHours(1),
         )
@@ -366,54 +523,106 @@ class EventEditViewModel : ViewModel() {
      *  and pass scope + recurrenceId, otherwise the server defaults to
      *  "series" and the user's "edit just this one occurrence" silently
      *  rewrites the whole repeating set. */
+    /** Scope/recurrenceId of the save paused on the conflict dialog,
+     *  so 「仍要保存」 resumes exactly the save the user asked for. */
+    private var conflictScope: String? = null
+    private var conflictRecurrenceId: String? = null
+
     fun save(scope: String? = null, recurrenceId: String? = null) {
         val s = _state.value
         if (!s.canSubmit) return
         _state.update { it.copy(saving = true, errorMessage = null) }
 
         viewModelScope.launch {
-            try {
-                val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
-                val client = ApiClient.forProfile(profile, profiles)
-
-                val zone = ZoneId.systemDefault()
-                val startIso = eventFormIso(s.start, s.allDay, isStart = true, zone)
-                val endIso = eventFormIso(s.end, s.allDay, isStart = false, zone)
-
-                val extra = s.buildExtra(zone)
-
-                if (s.isEdit) {
-                    val body = s.buildUpdateInput(scope, recurrenceId, zone)
-                    client.api.updateEvent(s.sourceId!!, body)
-                } else {
-                    val body = EventCreateInput(
-                        calendarId = s.calendarId,
-                        summary = s.summary,
-                        description = s.description.ifBlank { null },
-                        location = s.location.ifBlank { null },
-                        startsAt = startIso,
-                        endsAt = endIso,
-                        allDay = if (s.allDay) true else null,
-                        rrule = s.quickRrule,
-                        extra = extra,
-                        // Reuse the once-per-open key so a retried save
-                        // (timeout → tap again) hits the same server uid
-                        // and collapses onto the first row.
-                        clientUid = s.clientUid,
-                    )
-                    client.api.createEvent(body)
-                }
-                // Feed the create-default memory: the next new event
-                // starts on the calendar this save just used (for an
-                // edit that moved the event, that's the target one).
-                rememberCalendarId(s.calendarId)
-                _state.update { it.copy(saving = false, finished = true) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
+            // Conflict check BEFORE anything is written — new and edit,
+            // timed and all-day, same server judgement as the web
+            // editor. A failed check (offline, old server, anything)
+            // returns an empty list here: it must never block the save.
+            val conflicts = runCatching { fetchConflicts(s) }
+                .getOrDefault(emptyList())
+            if (conflicts.isNotEmpty()) {
+                conflictScope = scope
+                conflictRecurrenceId = recurrenceId
                 _state.update {
-                    it.copy(saving = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_save_failed))
+                    it.copy(saving = false, pendingConflicts = conflicts)
                 }
+                return@launch
+            }
+            doSave(s, scope, recurrenceId)
+        }
+    }
+
+    /** 「仍要保存」 on the conflict dialog — resume the paused save. */
+    fun confirmSaveDespiteConflicts() {
+        val s = _state.value
+        if (s.pendingConflicts.isEmpty() || s.saving || s.finished) return
+        val scope = conflictScope
+        val recurrenceId = conflictRecurrenceId
+        conflictScope = null
+        conflictRecurrenceId = null
+        _state.update { it.copy(saving = true, errorMessage = null, pendingConflicts = emptyList()) }
+        viewModelScope.launch { doSave(s, scope, recurrenceId) }
+    }
+
+    /** 「取消」 on the conflict dialog — abort the save, keep editing. */
+    fun dismissConflicts() {
+        conflictScope = null
+        conflictRecurrenceId = null
+        _state.update { it.copy(pendingConflicts = emptyList()) }
+    }
+
+    /** Server-side overlap check for the form's current range. Throws
+     *  on any failure — save() catches and treats it as no conflicts. */
+    private suspend fun fetchConflicts(s: EventEditUiState): List<EventConflict> {
+        val profile = profiles.active() ?: return emptyList()
+        val client = ApiClient.forProfile(profile, profiles)
+        val zone = ZoneId.systemDefault()
+        val startIso: String
+        val endIso: String
+        if (s.isEdit) {
+            val body = s.buildUpdateInput(zone = zone)
+            startIso = body.startsAt ?: return emptyList()
+            endIso = body.endsAt ?: return emptyList()
+        } else {
+            startIso = eventFormIso(s.start, s.allDay, isStart = true, zone)
+            endIso = eventFormIso(s.end, s.allDay, isStart = false, zone)
+        }
+        return client.api.eventConflicts(
+            ConflictsRequest(
+                calendarId = s.calendarId,
+                startsAt = startIso,
+                endsAt = endIso,
+                excludeId = if (s.isEdit) s.sourceId else null,
+            ),
+        ).conflicts
+    }
+
+    private suspend fun doSave(s: EventEditUiState, scope: String?, recurrenceId: String?) {
+        try {
+            val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
+            val client = ApiClient.forProfile(profile, profiles)
+
+            val zone = ZoneId.systemDefault()
+
+            if (s.isEdit) {
+                val body = s.buildUpdateInput(scope, recurrenceId, zone)
+                client.api.updateEvent(s.sourceId!!, body)
+            } else {
+                // buildCreateInput carries the once-per-open clientUid
+                // (retried saves collapse onto the first server row)
+                // and the recurrence rule — duplicates keep repeating.
+                client.api.createEvent(s.buildCreateInput(zone))
+            }
+            // Feed the create-default memory: the next new event
+            // starts on the calendar this save just used (for an
+            // edit that moved the event, that's the target one).
+            rememberCalendarId(s.calendarId)
+            _state.update { it.copy(saving = false, finished = true) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.update {
+                it.copy(saving = false, errorMessage = e.localizedMessage ?: app.getString(R.string.eventedit_err_save_failed))
             }
         }
     }

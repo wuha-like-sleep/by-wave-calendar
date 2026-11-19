@@ -67,11 +67,20 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.desktop.data.model.AlarmDTO
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.ConflictDTO
+import cn.bywave.calendar.desktop.data.model.EventAlarmsField
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.EventExtra
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import cn.bywave.calendar.desktop.data.notify.alarmsOf
+import cn.bywave.calendar.desktop.data.notify.buildAlarms
+import cn.bywave.calendar.desktop.data.notify.keptAlarms
+import cn.bywave.calendar.desktop.data.notify.mainReminder
+import cn.bywave.calendar.desktop.data.notify.nextReminderValue
+import cn.bywave.calendar.desktop.data.notify.reminderOptionsFor
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import cn.bywave.calendar.event.duplicateEventRange
 import cn.bywave.calendar.event.eventFormDateTime
@@ -85,6 +94,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 sealed class EventEditMode {
@@ -111,6 +121,21 @@ internal data class FormState(
     val allDay: Boolean,
     val rrule: RruleState,
     val attendees: List<String>,
+    /** 提醒下拉当前选中的 trigger（"" = 不提醒）。按 allDay 在
+     *  ReminderTriggers 的两组枚举里选，口径见该文件头。 */
+    val reminder: String = "",
+    /** 打开编辑时事件原有的全部 alarms。保存时枚举外的那些（导入的
+     *  自定义提醒）由 keptAlarms 原样带回，不会被下拉吞掉。 */
+    val sourceAlarms: List<AlarmDTO> = emptyList(),
+    /** 分类下拉的当前值（"" = 无）。取值见 EVENT_CATEGORIES；不在枚举
+     *  里的存量值（导入带进来的）原样回显、原样发回，不会被吞。 */
+    val category: String = "",
+    /** 重复事件「已删除的单次」当前列表（原始 ISO 字符串，逐字保留，
+     *  保存时整表发回）。逐条移除 = 恢复那一次。 */
+    val exdates: List<String> = emptyList(),
+    /** 打开编辑时的 exdates 快照：和 [exdates] 不等才随 PATCH 发
+     *  （服务端整表替换语义，不传 = 不动这一列）。 */
+    val sourceExdates: List<String> = emptyList(),
     // Source metadata distinguishes cleared fields from unloaded fields;
     // duplication also copies metadata this editor does not expose.
     val sourceExtra: cn.bywave.calendar.desktop.data.model.EventExtraDTO? = null,
@@ -147,6 +172,14 @@ fun EventEditDialog(
      *  以前这里是可空返回值，失败和「解析出来是空的」长得一模一样，
      *  对话框只能什么都不做。 */
     onQuickParse: (suspend (String) -> Result<cn.bywave.calendar.desktop.data.model.ParseEventResult>)? = null,
+    /** 保存前的冲突查询。Null = 不查（直接保存）。查询失败绝不阻断保存：
+     *  本对话框把任何异常都当成「没查到冲突」，照常走 onSave。 */
+    onCheckConflicts: (suspend (
+        calendarId: String,
+        startsAt: String,
+        endsAt: String,
+        excludeId: String?,
+    ) -> List<ConflictDTO>)? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -176,20 +209,59 @@ fun EventEditDialog(
     val hasUnsavedChanges: Boolean
         get() = buildBodies(form) != buildBodies(pristine)
 
+    val scope = rememberCoroutineScope()
+    // 冲突查询进行中（保存按钮转圈、不可重复点）。
+    var checking by remember { mutableStateOf(false) }
+    // 查到冲突、等用户决定「仍要保存 / 取消」的那一次提交。非 null 时
+    // 冲突确认框盖在编辑框之上；取消只是把它收掉，编辑框原样留着。
+    var pendingConflict by remember { mutableStateOf<PendingConflictSave?>(null) }
+
     // 提交入口抽出来,给「点保存」和「在标题里敲回车」共用。桌面端填完
     // 标题按回车就想存下,以前回车在单行输入框里什么都不做,用户要伸手
     // 去够鼠标。日期/备注这些字段不挂回车:备注是多行的,回车在那里
     // 的意思是换行。
+    //
+    // 真正提交前先查一次冲突（新建 + 编辑都查，编辑带 excludeId 排除
+    // 自己，定时与全天都查）。有冲突先弹确认框；查询失败绝不阻断保存 ——
+    // 查不到不等于有问题，挡住用户存东西才是问题。
     val submit = {
-        if (form.canSubmit && !saving) {
+        if (form.canSubmit && !saving && !checking) {
             val (create, update) = buildBodies(form)
-            onSave(form.isEdit, form.sourceId, form.sourceRrule, form.sourceStartsAt, create, update)
-            // Remember the calendar this save used, so the next create
-            // starts there instead of resetting to the first calendar.
-            // Written at submit time (the dialog doesn't learn the
-            // async result); if the save fails the form stays open and
-            // the memory still points at the user's chosen calendar.
-            cn.bywave.calendar.desktop.data.LastCalendarPrefs.set(form.calendarId)
+            // Remember the calendar a dispatched save used, so the
+            // next create starts there instead of resetting to the
+            // first calendar. Written at dispatch time (the dialog
+            // doesn't learn the async result); if the save fails the
+            // form stays open and the memory still points at the
+            // user's chosen calendar.
+            val dispatchSave = { c: EventCreateInput?, u: EventUpdateInput? ->
+                onSave(form.isEdit, form.sourceId, form.sourceRrule, form.sourceStartsAt, c, u)
+                cn.bywave.calendar.desktop.data.LastCalendarPrefs.set(form.calendarId)
+            }
+            val checker = onCheckConflicts
+            val calId = create?.calendarId ?: update?.calendarId
+            val startsAt = create?.startsAt ?: update?.startsAt
+            val endsAt = create?.endsAt ?: update?.endsAt
+            if (checker == null || calId == null || startsAt == null || endsAt == null) {
+                dispatchSave(create, update)
+            } else {
+                checking = true
+                scope.launch {
+                    val conflicts = try {
+                        checker(calId, startsAt, endsAt, if (form.isEdit) form.sourceId else null)
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    checking = false
+                    if (conflicts.isEmpty()) {
+                        dispatchSave(create, update)
+                    } else {
+                        pendingConflict = PendingConflictSave(conflicts, create, update)
+                    }
+                }
+            }
+            Unit
         }
     }
 
@@ -338,20 +410,29 @@ fun EventEditDialog(
                     onSelect = { form = form.copy(calendarId = it) },
                 )
 
+                CategoryPicker(
+                    selected = form.category,
+                    onSelect = { form = form.copy(category = it) },
+                )
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t("event.edit.allDay"), modifier = Modifier.weight(1f))
                     Switch(
                         checked = form.allDay,
                         onCheckedChange = { v ->
+                            // 全天一换，提醒档位要跟着换组：属于目标组的留着，
+                            // 不属于的换成目标组默认档（和网页端口径一致）。
                             form = if (v) form.copy(
                                 allDay = true,
                                 start = form.start.toLocalDate().atStartOfDay(),
                                 end = maxOf(form.start.toLocalDate(), form.end.toLocalDate()).atTime(23, 59),
                                 originalStart = null, originalEnd = null,
+                                reminder = nextReminderValue(form.reminder, true),
                             ) else form.copy(
                                 allDay = false,
                                 end = form.start.plusHours(1),
                                 originalStart = null, originalEnd = null,
+                                reminder = nextReminderValue(form.reminder, false),
                             )
                         },
                     )
@@ -378,6 +459,25 @@ fun EventEditDialog(
                     Text(t("event.detail.displayTimezone") + ": " + form.displayZone.id,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                ReminderPicker(
+                    allDay = form.allDay,
+                    selected = form.reminder,
+                    onSelect = { form = form.copy(reminder = it) },
+                )
+                // 枚举外的既有提醒（导入的自定义值）不在下拉里，但保存时会
+                // 原样带回去 —— 看不见的东西要说一声，和网页端的提示同理。
+                val keptCount = keptAlarms(form.sourceAlarms, form.allDay).size
+                if (keptCount > 0) {
+                    Text(
+                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                            "event.edit.reminderExtraKept",
+                            mapOf("n" to keptCount),
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 OutlinedTextField(
@@ -412,6 +512,33 @@ fun EventEditDialog(
 
                 RruleEditor(state = form.rrule, onChange = { form = form.copy(rrule = it) })
 
+                // 「已删除的单次」：重复事件被逐次删掉的那些出现次。
+                // 逐条恢复（从列表里移除）后随保存整表发回；这里不提供
+                // 手动新增 —— 新增例外就是删单次，走范围选择流程。
+                if (form.isEdit && form.sourceRrule != null && form.exdates.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            t("event.edit.exdates"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        for (ex in form.exdates) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    formatExdate(ex, form.allDay, form.displayZone),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                TextButton(
+                                    onClick = { form = form.copy(exdates = form.exdates - ex) },
+                                ) {
+                                    Text(t("event.edit.exdates.restore"))
+                                }
+                            }
+                        }
+                    }
+                }
+
                 AttendeesSection(
                     attendees = form.attendees,
                     onAdd = { email ->
@@ -437,9 +564,9 @@ fun EventEditDialog(
         confirmButton = {
             Button(
                 onClick = { submit() },
-                enabled = form.canSubmit && !saving,
+                enabled = form.canSubmit && !saving && !checking,
             ) {
-                if (saving) {
+                if (saving || checking) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                 }
@@ -474,6 +601,163 @@ fun EventEditDialog(
                 }
             },
         )
+    }
+
+    // 冲突确认框：盖在编辑框之上。列最多 3 条，其余折叠成「还有 N 条」；
+    // 「仍要保存」把刚才那一次提交原样发出去，「取消」只是收掉本框，
+    // 编辑框里的内容一字不动。
+    pendingConflict?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingConflict = null },
+            title = {
+                Text(
+                    t("event.edit.conflict.title"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(t("event.edit.conflict.intro"))
+                    for (conflict in pending.conflicts.take(3)) {
+                        Text("• " + conflict.summary.ifBlank { t("reminder.untitled") })
+                    }
+                    if (pending.conflicts.size > 3) {
+                        Text(
+                            cn.bywave.calendar.desktop.i18n.I18n.t(
+                                "event.edit.conflict.more",
+                                mapOf("n" to pending.conflicts.size - 3),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    pendingConflict = null
+                    onSave(form.isEdit, form.sourceId, form.sourceRrule, form.sourceStartsAt, pending.create, pending.update)
+                    cn.bywave.calendar.desktop.data.LastCalendarPrefs.set(form.calendarId)
+                }) {
+                    Text(t("event.edit.conflict.saveAnyway"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingConflict = null }) { Text(t("event.edit.cancel")) }
+            },
+        )
+    }
+}
+
+/** 一次被冲突拦下来的提交：查到的冲突 + 已经拼好的请求体。
+ *  用户点「仍要保存」时原样发出去，不重新拼 —— 重新拼就可能和他刚
+ *  确认过的那一份不一样了。 */
+private data class PendingConflictSave(
+    val conflicts: List<ConflictDTO>,
+    val create: EventCreateInput?,
+    val update: EventUpdateInput?,
+)
+
+/** 提醒下拉：按 allDay 出两组枚举里的一组，形状和 CalendarPicker 一致。 */
+@Composable
+private fun ReminderPicker(
+    allDay: Boolean,
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    var open by remember { mutableStateOf(false) }
+    val options = reminderOptionsFor(allDay)
+    val current = options.firstOrNull { it.value == selected } ?: options.first()
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            t("event.edit.reminder"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Box {
+            OutlinedButton(
+                onClick = { open = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    t(current.labelKey),
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                )
+                Text("▾", color = MaterialTheme.colorScheme.outline)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (option in options) {
+                    DropdownMenuItem(
+                        text = { Text(t(option.labelKey)) },
+                        onClick = {
+                            onSelect(option.value)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 分类取值与网页端编辑器同一组，存 extra.category。 */
+internal val EVENT_CATEGORIES: List<String> =
+    listOf("work", "personal", "family", "health", "travel", "meeting")
+
+/** 分类下拉：形状和 ReminderPicker 一致。存量值不在枚举里（导入带
+ *  进来的）时把它作为额外选项原样回显 — 不显示就会在保存时被换掉。 */
+@Composable
+private fun CategoryPicker(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    var open by remember { mutableStateOf(false) }
+    val options = listOf("") + EVENT_CATEGORIES +
+        if (selected.isNotEmpty() && selected !in EVENT_CATEGORIES) listOf(selected) else emptyList()
+
+    fun label(value: String): String = when {
+        value.isEmpty() -> t("event.edit.category.none")
+        value in EVENT_CATEGORIES -> t("event.edit.category.$value")
+        else -> value
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            t("event.edit.category"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+        Box {
+            OutlinedButton(
+                onClick = { open = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    label(selected),
+                    modifier = Modifier.weight(1f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                )
+                Text("▾", color = MaterialTheme.colorScheme.outline)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (option in options) {
+                    DropdownMenuItem(
+                        text = { Text(label(option)) },
+                        onClick = {
+                            onSelect(option)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -686,6 +970,19 @@ private fun AttendeesSection(
 
 private val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+private val EXDATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+/** 「已删除的单次」列表里一条的显示文本。exdates 存的是 canonical
+ *  ISO 时刻：全天事件按 UTC 日期读（全天一律 UTC 展开），定时事件按
+ *  编辑框当前的显示时区读。解析不了就原样显示字符串，不丢信息。 */
+internal fun formatExdate(iso: String, allDay: Boolean, zone: ZoneId): String {
+    val instant = runCatching { Instant.parse(iso) }.getOrNull() ?: return iso
+    return if (allDay) {
+        instant.atZone(ZoneOffset.UTC).toLocalDate().format(DATE_FMT)
+    } else {
+        instant.atZone(zone).format(EXDATE_FMT)
+    }
+}
 
 internal fun FormState.withCalendars(calendars: List<CalendarMeta>): FormState =
     if (calendarId.isBlank() && calendars.isNotEmpty()) copy(calendarId = calendars.first().id) else this
@@ -729,6 +1026,7 @@ internal fun initialState(
         }
         is EventEditMode.Edit -> {
             val s = mode.source
+            val sourceAlarms = alarmsOf(s.extra)
             val sourceStart = eventFormDateTime(s.startsAt, s.allDay, displayZone)
             val sourceEnd = eventFormDateTime(s.endsAt, s.allDay, displayZone)
             FormState(
@@ -748,6 +1046,11 @@ internal fun initialState(
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(s.rrule),
                 attendees = s.extra?.attendees.orEmpty(),
+                reminder = mainReminder(sourceAlarms, s.allDay),
+                sourceAlarms = sourceAlarms,
+                category = s.extra?.category.orEmpty(),
+                exdates = s.exdates.orEmpty(),
+                sourceExdates = s.exdates.orEmpty(),
                 sourceExtra = s.extra,
                 originalStart = sourceStart?.takeIf { !s.allDay }?.let { EventFormInstant(s.startsAt, it) },
                 originalEnd = sourceEnd?.takeIf { !s.allDay }?.let { EventFormInstant(s.endsAt, it) },
@@ -755,6 +1058,7 @@ internal fun initialState(
         }
         is EventEditMode.Duplicate -> {
             val s = mode.source
+            val sourceAlarms = alarmsOf(s.extra)
             val (civilStart, civilEnd) = duplicateEventRange(s.startsAt, s.endsAt, s.allDay, nextHalfHour(displayZone, now))
             val first = initialInstant(civilStart)
             val duration = runCatching { java.time.Duration.between(Instant.parse(s.startsAt), Instant.parse(s.endsAt)) }
@@ -779,6 +1083,11 @@ internal fun initialState(
                 allDay = s.allDay,
                 rrule = RruleState.fromRrule(null),   // intentionally clear
                 attendees = s.extra?.attendees.orEmpty(),
+                reminder = mainReminder(sourceAlarms, s.allDay),
+                sourceAlarms = sourceAlarms,
+                category = s.extra?.category.orEmpty(),
+                // exdates 不复制：复制出来的是新事件，例外列表没有意义，
+                // 且建事件接口本来就不收 exdates。
                 sourceExtra = s.extra,
             )
         }
@@ -795,19 +1104,39 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
     val urlTrim = form.url.trim()
     val pwTrim = form.meetingPassword.trim()
     val attendees = form.attendees.takeIf { it.isNotEmpty() || form.sourceExtra != null }
-    // The server merges extra keys. Only send fields this editor manages on
-    // PATCH; replaying source alarms/category could overwrite a concurrent edit.
+    // The server shallow-merges extra keys: an omitted key keeps its stored
+    // value, an explicit null deletes it. Only send fields this editor
+    // manages. Category used to be replayed only on create/duplicate —
+    // replaying a value the form never showed could overwrite a concurrent
+    // edit. The form now has a real category picker, so it sends the
+    // user's current selection like every other managed field (and an
+    // explicit null when they pick "none" on an event that had one).
     val src = form.sourceExtra
+    // Alarms ARE managed by this editor now (the reminder dropdown), with
+    // one exception: editing a partial event whose extra was never loaded
+    // (src == null, e.g. promoted from search results) must not touch
+    // alarms at all — sending the explicit null there would delete
+    // reminders this form never saw. Otherwise the field always goes out:
+    // the built list, or an explicit null when the user picked "none"
+    // and no custom alarms remain (omitting it would keep the old value,
+    // so "no reminder" could never be saved).
+    val managesAlarms = !form.isEdit || src != null
+    val alarmsField = if (managesAlarms) {
+        val built = buildAlarms(form.reminder, form.summary, form.sourceAlarms, form.allDay)
+        EventAlarmsField(if (built.isEmpty()) null else built)
+    } else {
+        null
+    }
     val extra = run {
         val merged = EventExtra(
             // Timed events: keep the event's own zone; fall back to the
             // desktop zone only when the event never had one (create).
             timezone = src?.timezone ?: if (!form.isEdit && !form.allDay) form.creationZone.id else null,
             attendees = attendees,
-            category = if (form.isEdit) null else src?.category,
+            category = eventStringField(form.category, clearWhenEmpty = form.isEdit && src != null),
             url = eventStringField(urlTrim, clearWhenEmpty = form.isEdit && src != null),
             meetingPassword = eventStringField(pwTrim, clearWhenEmpty = form.isEdit && src != null),
-            alarms = if (form.isEdit) null else src?.alarms,
+            alarms = alarmsField,
         )
         val allNull = merged.timezone == null && merged.attendees == null &&
             merged.category == null && merged.url == null &&
@@ -828,6 +1157,11 @@ internal fun buildBodies(form: FormState): Pair<EventCreateInput?, EventUpdateIn
             allDay = form.allDay,
             rrule = rrule.orEmpty(),
             extra = extra,
+            // 整表替换语义：只有用户真的移除过条目才发（发当时的完整
+            // 剩余列表，字符串逐字保留）；没动过就不带这个字段，
+            // 服务端不会碰这一列。若同一次保存还改了系列起点/时区，
+            // 服务端会先把这份列表按新时间线平移再落库。
+            exdates = if (form.exdates != form.sourceExdates) form.exdates else null,
         )
     } else {
         EventCreateInput(

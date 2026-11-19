@@ -398,11 +398,10 @@ private fun AppRoot(
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             CalendarListScreen(
                 onBack = { nav.popBackStack() },
-                onImportFile = { uri -> pendingImport = uri },
-                vm = calVm,
                 // Same pending-import pipeline as the system intents:
                 // setting it while signed in navigates to import_ics.
                 onImportFile = { uri -> pendingImport = uri },
+                vm = calVm,
             )
         }
 

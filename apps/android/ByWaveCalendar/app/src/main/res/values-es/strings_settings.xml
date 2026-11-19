@@ -36,4 +36,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">Seguir el sistema · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">Introduce el secreto siguiente en tu aplicación de autenticación (o importa el enlace otpauth) y escribe el código de 6 dígitos que muestra la aplicación.</string>
+    <string name="mfa_settings_secret_label">Secreto</string>
+    <string name="mfa_settings_otpauth_label">Enlace otpauth</string>
+    <string name="mfa_settings_code_label">Código de verificación</string>
+    <string name="mfa_settings_verify_button">Verificar y activar</string>
+    <string name="mfa_settings_enabled_note">La verificación en dos pasos está activada. Al iniciar sesión necesitarás un código de tu aplicación de autenticación.</string>
+    <string name="mfa_settings_backup_title">Guarda tus códigos de respaldo</string>
+    <string name="mfa_settings_backup_warn">Estos códigos de respaldo se muestran una sola vez. Si pierdes tu aplicación de autenticación, cada código sirve para iniciar sesión una vez. Guárdalos en un lugar seguro.</string>
+    <string name="mfa_settings_backup_copy_all">Copiar todos los códigos</string>
+    <string name="mfa_settings_backup_done">Ya los guardé</string>
+    <string name="mfa_settings_copied">Copiado</string>
+    <string name="mfa_settings_disable_button">Desactivar la verificación en dos pasos</string>
+    <string name="mfa_settings_failed">La operación de verificación en dos pasos falló</string>
+    <string name="mfa_settings_disabled_toast">La verificación en dos pasos está desactivada</string>
+    <string name="mfa_settings_load_failed">No se pudo cargar el estado de la verificación en dos pasos</string>
+    <string name="settings_devices_row">Dispositivos con sesión iniciada</string>
+    <string name="devices_current_badge">Este dispositivo</string>
+    <string name="devices_last_seen">Última actividad: %1$s</string>
+    <string name="devices_revoke">Eliminar</string>
+    <string name="devices_revoke_title">¿Eliminar este dispositivo?</string>
+    <string name="devices_revoke_message">%1$s cerrará sesión y tendrá que volver a iniciarla para seguir usando la aplicación.</string>
+    <string name="devices_revoke_current_message">Este es el dispositivo actual. Al eliminarlo, este dispositivo cerrará sesión de inmediato.</string>
+    <string name="devices_revoked">Dispositivo eliminado</string>
+    <string name="devices_revoke_failed">No se pudo eliminar el dispositivo</string>
+    <string name="devices_empty">Aún no hay dispositivos</string>
+    <string name="devices_load_failed">No se pudieron cargar los dispositivos</string>
+    <string name="devices_unknown_label">Dispositivo sin nombre</string>
+    <string name="subs_title">Suscripciones de calendario</string>
+    <string name="subs_desc">Suscríbete a una URL .ics externa y sus eventos se sincronizarán periódicamente en este calendario.</string>
+    <string name="subs_empty">Aún no hay suscripciones</string>
+    <string name="subs_url_label">URL de suscripción (enlace .ics)</string>
+    <string name="subs_label_label">Nombre (opcional)</string>
+    <string name="subs_add">Añadir suscripción</string>
+    <string name="subs_added">Suscripción añadida</string>
+    <string name="subs_added_first_sync_failed">La suscripción se guardó, pero la primera sincronización falló: %1$s</string>
+    <string name="subs_add_failed">No se pudo añadir la suscripción</string>
+    <string name="subs_refresh">Actualizar ahora</string>
+    <string name="subs_refreshed">Suscripción actualizada</string>
+    <string name="subs_refresh_failed">No se pudo actualizar la suscripción</string>
+    <string name="subs_delete_title">¿Eliminar esta suscripción?</string>
+    <string name="subs_delete_message">Después de eliminarla, esta suscripción ya no sincronizará actualizaciones.</string>
+    <string name="subs_deleted">Suscripción eliminada</string>
+    <string name="subs_delete_failed">No se pudo eliminar la suscripción</string>
+    <string name="subs_status_events">%1$d eventos</string>
+    <string name="subs_status_error">La última sincronización falló</string>
+    <string name="subs_status_never">Aún no sincronizado</string>
+    <string name="subs_status_ok">La última sincronización fue correcta</string>
+    <string name="subs_load_failed">No se pudieron cargar las suscripciones</string>
+    <string name="export_ics">Exportar .ics</string>
+    <string name="export_failed">La exportación falló</string>
+    <string name="export_done">Se exportó %1$s</string>
 </resources>

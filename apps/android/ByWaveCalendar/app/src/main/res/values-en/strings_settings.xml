@@ -36,4 +36,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">Follow system · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">Enter the secret below in your authenticator app (or import the otpauth link), then type the 6-digit code the app shows.</string>
+    <string name="mfa_settings_secret_label">Secret</string>
+    <string name="mfa_settings_otpauth_label">otpauth link</string>
+    <string name="mfa_settings_code_label">Verification code</string>
+    <string name="mfa_settings_verify_button">Verify and enable</string>
+    <string name="mfa_settings_enabled_note">Two-step verification is on. Signing in requires a code from your authenticator app.</string>
+    <string name="mfa_settings_backup_title">Save your backup codes</string>
+    <string name="mfa_settings_backup_warn">These backup codes are shown only once. If you lose your authenticator, each code can sign you in once. Keep them somewhere safe.</string>
+    <string name="mfa_settings_backup_copy_all">Copy all backup codes</string>
+    <string name="mfa_settings_backup_done">I have saved them</string>
+    <string name="mfa_settings_copied">Copied</string>
+    <string name="mfa_settings_disable_button">Turn off two-step verification</string>
+    <string name="mfa_settings_failed">Two-step verification failed</string>
+    <string name="mfa_settings_disabled_toast">Two-step verification is off</string>
+    <string name="mfa_settings_load_failed">Could not load two-step verification status</string>
+    <string name="settings_devices_row">Signed-in devices</string>
+    <string name="devices_current_badge">This device</string>
+    <string name="devices_last_seen">Last active: %1$s</string>
+    <string name="devices_revoke">Remove</string>
+    <string name="devices_revoke_title">Remove this device?</string>
+    <string name="devices_revoke_message">%1$s will be signed out and will need to sign in again to keep using the app.</string>
+    <string name="devices_revoke_current_message">This is the current device. Removing it will sign this device out right away.</string>
+    <string name="devices_revoked">Device removed</string>
+    <string name="devices_revoke_failed">Could not remove the device</string>
+    <string name="devices_empty">No devices yet</string>
+    <string name="devices_load_failed">Could not load devices</string>
+    <string name="devices_unknown_label">Unnamed device</string>
+    <string name="subs_title">Calendar subscriptions</string>
+    <string name="subs_desc">Subscribe to an external .ics URL and its events sync into this calendar regularly.</string>
+    <string name="subs_empty">No subscriptions yet</string>
+    <string name="subs_url_label">Subscription URL (.ics link)</string>
+    <string name="subs_label_label">Label (optional)</string>
+    <string name="subs_add">Add subscription</string>
+    <string name="subs_added">Subscription added</string>
+    <string name="subs_added_first_sync_failed">Subscription saved, but the first sync failed: %1$s</string>
+    <string name="subs_add_failed">Could not add the subscription</string>
+    <string name="subs_refresh">Refresh now</string>
+    <string name="subs_refreshed">Subscription refreshed</string>
+    <string name="subs_refresh_failed">Could not refresh the subscription</string>
+    <string name="subs_delete_title">Delete this subscription?</string>
+    <string name="subs_delete_message">After deletion, this subscription will no longer sync updates.</string>
+    <string name="subs_deleted">Subscription deleted</string>
+    <string name="subs_delete_failed">Could not delete the subscription</string>
+    <string name="subs_status_events">%1$d events</string>
+    <string name="subs_status_error">Last sync failed</string>
+    <string name="subs_status_never">Not synced yet</string>
+    <string name="subs_status_ok">Last sync succeeded</string>
+    <string name="subs_load_failed">Could not load subscriptions</string>
+    <string name="export_ics">Export .ics</string>
+    <string name="export_failed">Export failed</string>
+    <string name="export_done">Exported %1$s</string>
 </resources>

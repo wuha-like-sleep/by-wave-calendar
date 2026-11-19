@@ -15,11 +15,13 @@
 //
 // 几个参数是怎么定的：
 //
-//   HORIZON_DAYS = 3
-//     提醒真正需要的只是「即将开始」的事件。提前量上限：界面上能选到 60 分钟，
-//     存盘格式允许 0..1440（24 小时）。3 天 = 24 小时提前量 + 48 小时余量，
-//     余量留给断网/休眠：网断了就一直用上一次拉到的这份，3 天内的会照常响。
-//     再往长拉只是白白增大每次的返回体，提醒用不上。
+//   HORIZON_DAYS = 8
+//     提醒真正需要的只是「即将开始」的事件。全局提前量上限 24 小时（存盘
+//     格式允许 0..1440 分钟），本来 3 天就够；但事件级提醒（extra.alarms）
+//     最远的一档是「提前一周」（-P1W / -P6DT15H）：触发时刻 = 开始前 7 天，
+//     事件必须在那之前就进这份列表，否则那一档永远赶不上。8 天 = 7 天
+//     最远提前量 + 1 天余量（也留给断网/休眠：网断了就一直用上一次拉到
+//     的这份，窗口内的会照常响）。
 //
 //   LOOKBACK_MS = 1 小时
 //     窗口往回留一段，不是从「此刻」开始。因为提醒的触发区间是
@@ -38,6 +40,7 @@
 
 package cn.bywave.calendar.desktop.data.notify
 
+import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.util.DebugLog
 import kotlinx.coroutines.CancellationException
@@ -59,7 +62,7 @@ internal typealias EventFetcher = suspend (fromIso: String, toIso: String) -> Li
 object ReminderFeed {
 
     /** 往后拉多少天。见文件头的理由。 */
-    internal const val HORIZON_DAYS = 3L
+    internal const val HORIZON_DAYS = 8L
 
     /** 窗口往回留多久。见文件头的理由。 */
     internal const val LOOKBACK_MS = 60L * 60 * 1000
@@ -80,6 +83,22 @@ object ReminderFeed {
     /** 调度器读的就是这一份。取数失败时保留上一次成功的内容——提醒宁可用
      *  几分钟前的数据响，也不要因为一次网络抖动整段哑掉。 */
     val events: StateFlow<List<EventDTO>> = _events.asStateFlow()
+
+    private val _calendarTimezones = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** 日历 id → 日历时区。全天事件级提醒的墙上时间换算要用它（事件自己的
+     *  extra.timezone 优先，见 ReminderTriggers 文件头的口径）。事件那一份
+     *  里没有日历时区，所以由取数方（MainScreen 的 fetcher，它手里有完整
+     *  的 EventsResponse）顺手把日历表交进来 —— 取数通道本身仍然只回事件，
+     *  测试里的假服务端不用跟着改。 */
+    val calendarTimezones: StateFlow<Map<String, String>> = _calendarTimezones.asStateFlow()
+
+    /** 记下最近一次取数见到的日历时区表。 */
+    fun noteCalendars(calendars: List<CalendarMeta>) {
+        _calendarTimezones.value = calendars.mapNotNull { cal ->
+            cal.timezone?.takeIf { it.isNotBlank() }?.let { cal.id to it }
+        }.toMap()
+    }
 
     /** 墙上时间。到点才拉。0 表示「立刻拉」。 */
     private var nextAttemptAtMs: Long = 0L
@@ -129,6 +148,7 @@ object ReminderFeed {
     /** 切账号 / 被登出时清空。别让上一个账号的会继续弹通知。 */
     fun reset() {
         _events.value = emptyList()
+        _calendarTimezones.value = emptyMap()
         nextAttemptAtMs = 0L
         consecutiveFailures = 0
         refreshRequested.set(false)
@@ -172,6 +192,7 @@ object ReminderFeed {
                 }
                 Step.STOP_AND_CLEAR -> {
                     _events.value = emptyList()
+                    _calendarTimezones.value = emptyMap()
                     nextAttemptAtMs = 0L
                     consecutiveFailures = 0
                     refreshRequested.set(false)

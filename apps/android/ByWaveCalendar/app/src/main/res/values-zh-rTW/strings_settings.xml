@@ -36,4 +36,56 @@
 
     <!-- Language picker -->
     <string name="settings_language_follow_system_detail">跟隨系統 · %1$s</string>
+    <!-- MFA settings / devices / subscriptions / export -->
+    <string name="mfa_settings_setup_intro">在驗證器 App 中手動輸入下面的密鑰（或複製 otpauth 連結匯入），然後輸入 App 顯示的 6 位數驗證碼。</string>
+    <string name="mfa_settings_secret_label">密鑰</string>
+    <string name="mfa_settings_otpauth_label">otpauth 連結</string>
+    <string name="mfa_settings_code_label">驗證碼</string>
+    <string name="mfa_settings_verify_button">驗證並啟用</string>
+    <string name="mfa_settings_enabled_note">兩步驟驗證已啟用，登入時需要輸入驗證器 App 的驗證碼。</string>
+    <string name="mfa_settings_backup_title">保存備用碼</string>
+    <string name="mfa_settings_backup_warn">這些備用碼只顯示這一次。驗證器遺失時，每個碼可以用來登入一次。請把它們保存在安全的地方。</string>
+    <string name="mfa_settings_backup_copy_all">複製全部備用碼</string>
+    <string name="mfa_settings_backup_done">我已保存</string>
+    <string name="mfa_settings_copied">已複製</string>
+    <string name="mfa_settings_disable_button">關閉兩步驟驗證</string>
+    <string name="mfa_settings_failed">兩步驟驗證操作失敗</string>
+    <string name="mfa_settings_disabled_toast">兩步驟驗證已關閉</string>
+    <string name="mfa_settings_load_failed">無法讀取兩步驟驗證狀態</string>
+    <string name="settings_devices_row">已登入裝置</string>
+    <string name="devices_current_badge">本機</string>
+    <string name="devices_last_seen">最後活躍：%1$s</string>
+    <string name="devices_revoke">解除綁定</string>
+    <string name="devices_revoke_title">解除綁定這台裝置？</string>
+    <string name="devices_revoke_message">「%1$s」將登出，需要重新登入才能繼續使用。</string>
+    <string name="devices_revoke_current_message">這是目前裝置。解除綁定後，本機將立即登出。</string>
+    <string name="devices_revoked">已解除綁定</string>
+    <string name="devices_revoke_failed">解除綁定失敗</string>
+    <string name="devices_empty">尚無裝置記錄</string>
+    <string name="devices_load_failed">載入裝置列表失敗</string>
+    <string name="devices_unknown_label">未命名裝置</string>
+    <string name="subs_title">行事曆訂閱</string>
+    <string name="subs_desc">訂閱外部 .ics 位址，事件會定期同步進這個行事曆。</string>
+    <string name="subs_empty">尚無訂閱</string>
+    <string name="subs_url_label">訂閱位址（.ics 連結）</string>
+    <string name="subs_label_label">名稱（可選）</string>
+    <string name="subs_add">新增訂閱</string>
+    <string name="subs_added">訂閱已新增</string>
+    <string name="subs_added_first_sync_failed">訂閱已保存，但首次同步失敗：%1$s</string>
+    <string name="subs_add_failed">新增訂閱失敗</string>
+    <string name="subs_refresh">立即重新整理</string>
+    <string name="subs_refreshed">訂閱已重新整理</string>
+    <string name="subs_refresh_failed">重新整理訂閱失敗</string>
+    <string name="subs_delete_title">刪除這個訂閱？</string>
+    <string name="subs_delete_message">刪除後，這個訂閱將不再同步更新。</string>
+    <string name="subs_deleted">訂閱已刪除</string>
+    <string name="subs_delete_failed">刪除訂閱失敗</string>
+    <string name="subs_status_events">%1$d 個事件</string>
+    <string name="subs_status_error">上次同步失敗</string>
+    <string name="subs_status_never">尚未同步</string>
+    <string name="subs_status_ok">上次同步成功</string>
+    <string name="subs_load_failed">載入訂閱失敗</string>
+    <string name="export_ics">匯出 .ics</string>
+    <string name="export_failed">匯出失敗</string>
+    <string name="export_done">已匯出 %1$s</string>
 </resources>
