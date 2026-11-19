@@ -235,6 +235,7 @@
     <string name="quickadd_recurrence_remove">移除重複</string>
     <string name="quickadd_cd">智慧識別</string>
     <string name="quickadd_save_directly">直接儲存</string>
+    <string name="eventedit_duplicate_rrule_copied">重複規則已一併複製，可在下方重複區修改或移除</string>
     <string name="action_undo">撤銷</string>
     <string name="event_deleted">已刪除</string>
     <string name="event_created_notice">已建立：%1$s</string>

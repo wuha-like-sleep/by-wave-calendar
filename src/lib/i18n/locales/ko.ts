@@ -558,6 +558,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "<strong>{host}</strong>님과 함께 · {minutes}분",
   "booking.public.duration": "{minutes}분",
+  "bookingLinks.createdBanner": "링크가 만들어졌습니다. 복사해서 공유하세요:",
+  "bookingLinks.copyLink": "링크 복사",
   "booking.public.noSlots": "지금 예약 가능한 시간이 없습니다. 주최자에게 시간을 더 열어달라고 요청하거나 나중에 다시 시도하세요.",
   "booking.public.pickTime": "시간 선택",
   "booking.public.slotCount": "{count}개 시간대",

@@ -371,6 +371,20 @@ fun EventEditScreen(
                 onSelected = vm::onReminder,
             )
 
+            // 复制事件时把重复规则的去向说在前面：Android 的复制是连
+            // 重复一起复制的（修「复制丢重复」的老 bug 时定的），规则
+            // 虽然就在下面编辑器里摆着，还是明说一句，免得用户以为
+            // 复制出来的只是单次。
+            if (initialMode is EventEditMode.Duplicate &&
+                !initialMode.source.rrule.isNullOrBlank()
+            ) {
+                Text(
+                    stringResource(R.string.eventedit_duplicate_rrule_copied),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             // Recurrence — RRULE editor (freq / interval / end / BYDAY).
             // A quick-add parse lands here too (the ViewModel seeds
             // rruleState from the parsed rule), so a mis-parsed 每周

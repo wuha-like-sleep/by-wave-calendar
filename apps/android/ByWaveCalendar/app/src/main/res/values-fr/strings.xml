@@ -225,6 +225,7 @@
     <string name="quickadd_recurrence_remove">Supprimer</string>
     <string name="quickadd_cd">Analyser</string>
     <string name="quickadd_save_directly">Enregistrer directement</string>
+    <string name="eventedit_duplicate_rrule_copied">La règle de répétition a aussi été copiée ; modifiez-la ou retirez-la dans la section répétition ci-dessous</string>
     <string name="action_undo">Annuler</string>
     <string name="event_deleted">Supprimé</string>
     <string name="event_created_notice">Créé : %1$s</string>

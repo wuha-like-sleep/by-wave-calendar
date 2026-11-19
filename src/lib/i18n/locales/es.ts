@@ -558,6 +558,8 @@ export const es: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "Con <strong>{host}</strong> · {minutes} min",
   "booking.public.duration": "{minutes} minutos",
+  "bookingLinks.createdBanner": "Enlace creado: cópialo y compártelo:",
+  "bookingLinks.copyLink": "Copiar enlace",
   "booking.public.noSlots": "No hay horarios disponibles ahora mismo. Pida al anfitrión que abra más tiempo, o inténtelo más tarde.",
   "booking.public.pickTime": "Elija una hora",
   "booking.public.slotCount": "{count} horarios",

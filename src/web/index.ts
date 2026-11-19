@@ -2856,7 +2856,12 @@ export async function webRoutes(app: FastifyInstance) {
       const msg = err instanceof Error ? err.message : tr(req, "common.unknownError");
       return redirectWith(reply, "/app/booking-links", { error: msg.includes("duplicate") ? tr(req, "flash.bookingLink.slugTaken") : msg });
     }
-    return redirectWith(reply, "/app/booking-links", { success: tr(req, "flash.bookingLink.created") });
+    // 带上刚建好的公开链接：列表页据此渲染一条带「复制链接」的高亮
+    // 横幅。以前只有一句「已创建」，用户还得回列表里找到那一行再复制。
+    return redirectWith(reply, "/app/booking-links", {
+      success: tr(req, "flash.bookingLink.created"),
+      createdBookingUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${body.data.slug}`,
+    });
   });
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle", async (req, reply) => {

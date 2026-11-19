@@ -606,6 +606,17 @@ fun EventEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                // 复制带重复规则的事件时把话说在前面：桌面端的复制按
+                // 设计不带重复规则（避免误开一条平行系列），但以前是
+                // 静默丢掉，用户存完才发现新事件只出现一次。
+                if (mode is EventEditMode.Duplicate && !mode.source.rrule.isNullOrBlank()) {
+                    Text(
+                        t("event.edit.duplicateRruleDropped"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
                 RruleEditor(state = form.rrule, onChange = { form = form.copy(rrule = it) })
 
                 // 「已删除的单次」：重复事件被逐次删掉的那些出现次。

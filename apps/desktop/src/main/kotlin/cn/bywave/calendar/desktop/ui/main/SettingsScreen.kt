@@ -1717,6 +1717,9 @@ private fun BookingSection(
     // The id the user just copied — drives a transient "已复制" hint.
     var copied by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }            // create dialog open
+    // 刚创建好的那条 — 列表上方渲染一条带「复制链接」的横幅，直到
+    // 用户关掉或又建了新的一条。
+    var justCreated by remember { mutableStateOf<BookingLink?>(null) }
     var editing by remember { mutableStateOf<BookingLink?>(null) }  // edit dialog target
     var deleting by remember { mutableStateOf<BookingLink?>(null) } // delete confirm target
     // Bump to force a reload after create / toggle / delete.
@@ -1749,6 +1752,47 @@ private fun BookingSection(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(bottom = 12.dp),
     )
+
+    // 创建成功的第一时间把链接摆出来给复制动作，不让用户回列表里找那一行。
+    justCreated?.let { created ->
+        val url = created.publicUrl ?: created.slug
+        var bannerCopied by remember(created.id) { mutableStateOf(false) }
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        t("booking.createdBanner", mapOf("name" to created.title)),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        url,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = {
+                    copyToClipboard(url)
+                    bannerCopied = true
+                }) {
+                    Text(if (bannerCopied) t("booking.copied") else t("booking.copyLink"))
+                }
+                TextButton(onClick = { justCreated = null }) {
+                    Text(t("common.close"))
+                }
+            }
+        }
+    }
 
     SectionCard {
         when {
@@ -1903,8 +1947,9 @@ private fun BookingSection(
             profile = profile,
             calendars = calendars,
             onDismiss = { creating = false },
-            onCreated = {
+            onCreated = { created ->
                 creating = false
+                justCreated = created
                 reloadKey++
             },
         )
@@ -1949,7 +1994,9 @@ private fun BookingCreateDialog(
     calendars: List<CalendarMeta>,
     existing: BookingLink? = null,
     onDismiss: () -> Unit,
-    onCreated: () -> Unit,
+    /** 创建成功时带回新建的那条（父区据此渲染带「复制链接」的横幅）；
+     *  编辑成功时传 null。 */
+    onCreated: (created: BookingLink?) -> Unit,
 ) {
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
@@ -2181,10 +2228,12 @@ private fun BookingCreateDialog(
                                     ),
                                 )
                             }
-                        }.onSuccess {
+                        }.onSuccess { saved ->
                             api.close()
                             saving = false
-                            onCreated()
+                            // runCatching 的值就是 API 返回的那条：新建时
+                            // 带回去给父区弹复制横幅，编辑时传 null。
+                            onCreated(if (existing == null) saved else null)
                         }.onFailure {
                             api.close()
                             saving = false

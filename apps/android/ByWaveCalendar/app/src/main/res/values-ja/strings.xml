@@ -225,6 +225,7 @@
     <string name="quickadd_recurrence_remove">削除</string>
     <string name="quickadd_cd">解析</string>
     <string name="quickadd_save_directly">そのまま保存</string>
+    <string name="eventedit_duplicate_rrule_copied">繰り返しルールも一緒にコピーしました。下の繰り返しセクションで変更・削除できます</string>
     <string name="action_undo">取り消す</string>
     <string name="event_deleted">削除しました</string>
     <string name="event_created_notice">作成しました：%1$s</string>

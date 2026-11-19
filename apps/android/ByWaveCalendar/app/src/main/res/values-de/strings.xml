@@ -225,6 +225,7 @@
     <string name="quickadd_recurrence_remove">Entfernen</string>
     <string name="quickadd_cd">Erkennen</string>
     <string name="quickadd_save_directly">Direkt speichern</string>
+    <string name="eventedit_duplicate_rrule_copied">Die Wiederholungsregel wurde mitkopiert – unten im Abschnitt Wiederholung änderbar oder entfernbar</string>
     <string name="action_undo">Rückgängig</string>
     <string name="event_deleted">Gelöscht</string>
     <string name="event_created_notice">Erstellt: %1$s</string>

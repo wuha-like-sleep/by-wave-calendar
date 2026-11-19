@@ -60,8 +60,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -247,9 +249,26 @@ fun BookingLinksScreen(
         CreateBookingLinkSheet(
             calendars = state.calendars,
             onDismiss = { creating = false },
-            onCreated = {
+            onCreated = { created ->
                 creating = false
-                scope.launch { reloadLinks() }
+                scope.launch {
+                    reloadLinks()
+                    // 创建成功的第一时间给「复制链接」：以前只有一句
+                    // 「已创建」，用户还得回列表里找到那一行再点复制。
+                    // snackbar 挂在父屏（sheet 关掉后它自己的作用域就
+                    // 没了），复制走父屏的 clipboard。
+                    if (created != null) {
+                        val result = snackbar.showSnackbar(
+                            message = context.getString(R.string.booking_created),
+                            actionLabel = context.getString(R.string.booking_copy_link),
+                            duration = SnackbarDuration.Short,
+                        )
+                        if (result == SnackbarResult.ActionPerformed) {
+                            clipboard.setText(AnnotatedString(created.publicUrl ?: created.slug))
+                            snackbar.showSnackbar(context.getString(R.string.booking_copied))
+                        }
+                    }
+                }
             },
             snackbar = snackbar,
         )
@@ -422,7 +441,9 @@ private fun CreateBookingLinkSheet(
     calendars: List<CalendarMeta>,
     existing: BookingLink? = null,
     onDismiss: () -> Unit,
-    onCreated: () -> Unit,
+    /** 创建成功时带回新建的那条（父屏据此给「复制链接」）；编辑保存
+     *  成功时传 null（编辑的反馈仍是 sheet 内的「已保存」）。 */
+    onCreated: (created: BookingLink?) -> Unit,
     snackbar: SnackbarHostState,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -634,8 +655,9 @@ private fun CreateBookingLinkSheet(
                                         ),
                                     )
                                     snackbar.showSnackbar(context.getString(R.string.booking_saved))
+                                    onCreated(null)
                                 } else {
-                                    client.api.createBookingLink(
+                                    val created = client.api.createBookingLink(
                                         BookingLinkCreateRequest(
                                             slug = slug.trim(),
                                             title = title.trim(),
@@ -649,9 +671,10 @@ private fun CreateBookingLinkSheet(
                                             notifyEmail = notifyEmail.takeIf { it },
                                         ),
                                     )
-                                    snackbar.showSnackbar(context.getString(R.string.booking_created))
+                                    // 「已创建 + 复制链接」的 snackbar 由父屏弹
+                                    // （带回 created），这里不再自己弹一句纯文本。
+                                    onCreated(created)
                                 }
-                                onCreated()
                             } catch (e: Exception) {
                                 error = serverErrorMessage(e)
                                     ?: context.getString(if (existing != null) R.string.booking_update_failed else R.string.booking_create_failed)

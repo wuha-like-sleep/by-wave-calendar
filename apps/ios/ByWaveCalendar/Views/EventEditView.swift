@@ -470,6 +470,17 @@ struct EventEditView: View {
                 }
             }
 
+            // 复制带重复规则的事件时把话说在前面：复制按设计不带重复
+            // 规则（避免误开一条平行系列），但以前是静默丢掉，用户存
+            // 完才发现新事件只出现一次。
+            if case .duplicateOf(let source) = mode, let rule = source.rrule, !rule.isEmpty {
+                Section {
+                    Label("重复规则未复制，已按单次事件复制；如需重复请在下方重新设置。", systemImage: "info.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             // Recurrence editor — same shape as the desktop
             // RruleEditor (freq / interval / end) plus the BYDAY
             // shapes the server expander supports. Hidden for

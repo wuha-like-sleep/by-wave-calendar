@@ -558,6 +558,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   // booking.public
   "booking.public.withHost": "<strong>{host}</strong> と · {minutes} 分",
   "booking.public.duration": "{minutes} 分",
+  "bookingLinks.createdBanner": "リンクを作成しました。コピーして共有：",
+  "bookingLinks.copyLink": "リンクをコピー",
   "booking.public.noSlots": "現在、予約可能な枠はありません。ホストにもっと時間を開けてもらうか、後でもう一度お試しください。",
   "booking.public.pickTime": "時間を選択",
   "booking.public.slotCount": "{count} 枠",

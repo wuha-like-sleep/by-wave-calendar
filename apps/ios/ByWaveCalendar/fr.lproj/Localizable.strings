@@ -250,6 +250,7 @@
 "状态与通知" = "État et notifications";
 "公开链接" = "Lien public";
 "复制链接" = "Copier le lien";
+"链接已创建" = "Lien créé";
 "在浏览器中打开" = "Ouvrir dans le navigateur";
 
 // MARK: - v1.4.1 i18n pass — newly-keyed hardcoded UI strings
@@ -394,6 +395,7 @@
 "撤销删除" = "Annuler";
 "快速新建" = "Création rapide";
 "直接保存" = "Enregistrer directement";
+"重复规则未复制，已按单次事件复制；如需重复请在下方重新设置。" = "La règle de répétition n'a pas été copiée : c'est un événement unique. Définissez une règle ci-dessous si besoin.";
 "已创建「%@」" = "« %@ » créé";
 "quickadd.rrule.daily" = "Tous les jours";
 "quickadd.rrule.weekly" = "Chaque semaine";

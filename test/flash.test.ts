@@ -84,3 +84,11 @@ it.each(["//example.com/", "/\\example.com/", "/\t/example.com/"])("rejects non-
   expect(save.statusCode).toBe(500);
   expect(save.headers.location).toBeUndefined();
 });
+
+it("carries createdBookingUrl through the redirect so the list page can offer a copy action", async () => {
+  const url = "https://rl.example.com/book/user-1/intro-call";
+  const save = await app.inject({ method: "POST", url: "/save", payload: { success: "created", createdBookingUrl: url } });
+  expect(save.statusCode).toBe(302);
+  const page = await app.inject({ url: "/result", headers: { cookie: cookieHeader(save) } });
+  expect(page.json().flash).toEqual({ success: "created", createdBookingUrl: url });
+});
