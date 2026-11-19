@@ -294,7 +294,8 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
 
   // 1b. Weekday, optionally prefixed by a week shift ("next Friday",
   //     "下周五", "다음 주 금요일"). A bare weekday always means the
-  //     UPCOMING one, never today.
+  //     UPCOMING one, never today. A "next week" shift names that weekday
+  //     of the next calendar week (Monday-first) — see below.
   if (dateOffset === null) {
     for (const [pattern, target] of WEEKDAYS) {
       const wdRe = re(alt([pattern]));
@@ -331,7 +332,20 @@ export function parseNaturalLanguageEvent(text: string, now?: string | Date): Pa
       }
       let diff = (target - dow + 7) % 7;
       if (diff === 0) diff = 7; // upcoming, not today
-      dateOffset = diff + shift;
+      if (shift === 0) {
+        dateOffset = diff;
+      } else {
+        // 「下周X」指下个日历周（周一起始）里的那个星期 X，不是裸 X 再加 7 天：
+        // 周五说「下周五」，裸周五本来就落在下周（+7），旧算法再 +7 就成了
+        // 下下周的周五（+14），而多数人指的就是下周那个周五。改按日历周
+        // 定位：下周一的偏移 + X 在一周内的位置（周一 0 … 周日 6）。裸 X
+        // 已经落在下周时结果不变，还在本周时正好顺延一周，和旧算法在
+        // 周一到周四说「下周五」的结果一致。「下周」单独出现（1c）一直是
+        // 这么算的，两边对齐；下下周同理，在下周的基础上再顺延一周。
+        let nextMon = (1 - dow + 7) % 7;
+        if (nextMon === 0) nextMon = 7; // this week's Monday is gone; next is +7
+        dateOffset = nextMon + ((target + 6) % 7) + (shift - 7);
+      }
       remaining = removeSpans(remaining, spans);
       break;
     }

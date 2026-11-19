@@ -46,8 +46,8 @@ describe("parseNaturalLanguageEvent", () => {
     });
   });
 
-  it("下周一 forces +7 over 周一", () => {
-    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-13T10:00:00");
+  it("下周一 → Monday of the next calendar week (same day 下周 alone gives)", () => {
+    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-06T10:00:00");
   });
 
   it("X月X日 absolute date", () => {
@@ -209,8 +209,8 @@ describe("parseNaturalLanguageEvent", () => {
     expect(parseNaturalLanguageEvent("周末爬山", NOW)?.startsAt).toBe("2026-07-04T09:00:00");
   });
 
-  it("下下周一 → +14 over 周一", () => {
-    expect(parseNaturalLanguageEvent("下下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-20T10:00:00");
+  it("下下周一 → Monday of the week after next", () => {
+    expect(parseNaturalLanguageEvent("下下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-13T10:00:00");
   });
 
   it("does not treat a numeral inside a word as a time ('三国杀')", () => {
@@ -485,6 +485,8 @@ describe("parseNaturalLanguageEvent — 地点", () => {
 //
 // 下面这组钉的是「一半人会理解成另一个意思」的约定。它们是全端共用解析器的
 // 既有语义，老用户已经按这个习惯在用了 —— 要改先过产品决定，不许顺手改。
+// 例外只有「下周X」一条：已经过了产品决定，改成下个日历周语义（见下面那条
+// 用例的注释），其余约定照旧不许动。
 // NOW 是 2026-07-03（周五）10:00。
 describe("parseNaturalLanguageEvent — 歧义约定", () => {
   it("裸星期永远是「即将到来的那个」，哪怕今天就是周五也不是今天", () => {
@@ -497,19 +499,66 @@ describe("parseNaturalLanguageEvent — 歧义约定", () => {
     expect(parseNaturalLanguageEvent("Freitag 15 Uhr Treffen", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
   });
 
-  it("「下周X」= 裸 X 的结果再 +7 天（周五说下周五 = 14 天后，不是 7 天后）", () => {
-    // 这个约定最容易被「顺手修正」：口语里不少人用「下周五」指 7 天后那个周五。
-    // 现约定是先按裸星期落到即将到来的周五（+7），位移词再 +7 → +14。
-    // 下周一同理：裸周一是 +3（下周一），再 +7 → +10。这里钉死，改要走产品决定。
-    expect(parseNaturalLanguageEvent("下周五 9点 打球", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
-    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-13T10:00:00");
-    expect(parseNaturalLanguageEvent("next Friday 9am gym", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
-    expect(parseNaturalLanguageEvent("来週金曜日 9時 会議", NOW)?.startsAt).toBe("2026-07-17T09:00:00");
-    expect(parseNaturalLanguageEvent("다음 주 금요일 오후 3시 회의", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
-    expect(parseNaturalLanguageEvent("viernes que viene 15:00 reunión", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
-    expect(parseNaturalLanguageEvent("próximo viernes 15:00 reunión", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
-    expect(parseNaturalLanguageEvent("vendredi prochain 15h réunion", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
-    expect(parseNaturalLanguageEvent("nächsten Freitag 15 Uhr Treffen", NOW)?.startsAt).toBe("2026-07-17T15:00:00");
+  it("「下周X」= 下个日历周（周一起始）里的那个星期 X", () => {
+    // 产品决定改的，就是这一条：旧约定是裸 X 再 +7 —— 周五说「下周五」，
+    // 裸周五已经落在下周（+7），再 +7 就成了 +14，可多数人指的就是下周
+    // 那个周五。改后按日历周定位：下周是 7/6（周一）到 7/12（周日），
+    // 下周五 = 7/10（+7），下周一 = 7/6（+3，和「下周」单独出现一致，
+    // 旧算法这里给的是 +10）。下下周同理顺延一周。
+    // 共用同一位移机制的说法（next Friday、来週金曜日、다음 주 금요일、
+    // viernes que viene、próximo viernes、vendredi prochain、
+    // nächsten Freitag）一起改，语义不许各说各话。
+    expect(parseNaturalLanguageEvent("下周五 9点 打球", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("下周一 10点 复盘", NOW)?.startsAt).toBe("2026-07-06T10:00:00");
+    expect(parseNaturalLanguageEvent("next Friday 9am gym", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("来週金曜日 9時 会議", NOW)?.startsAt).toBe("2026-07-10T09:00:00");
+    expect(parseNaturalLanguageEvent("다음 주 금요일 오후 3시 회의", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("viernes que viene 15:00 reunión", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("próximo viernes 15:00 reunión", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("vendredi prochain 15h réunion", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("nächsten Freitag 15 Uhr Treffen", NOW)?.startsAt).toBe("2026-07-10T15:00:00");
+  });
+
+  it("「下周五」一周七天矩阵（中文）：永远落在下个日历周的周五", () => {
+    // 2026-07-05 是周日，这一周（周一起始）是 6/29–7/5，下周是 7/6–7/12；
+    // 7/6 起的一周，下周是 7/13–7/19。周一到周四的结果和旧算法（裸 X +7）
+    // 完全一致，差异只出在周五、周六、周日：旧算法分别给 +14、+13、+12。
+    const cases: Array<[string, string]> = [
+      ["2026-07-05T10:00:00", "2026-07-10T09:00:00"], // 周日 → +5（旧 +12）
+      ["2026-07-06T10:00:00", "2026-07-17T09:00:00"], // 周一 → +11（同旧）
+      ["2026-07-07T10:00:00", "2026-07-17T09:00:00"], // 周二 → +10（同旧）
+      ["2026-07-08T10:00:00", "2026-07-17T09:00:00"], // 周三 → +9（同旧）
+      ["2026-07-09T10:00:00", "2026-07-17T09:00:00"], // 周四 → +8（同旧）
+      ["2026-07-10T10:00:00", "2026-07-17T09:00:00"], // 周五 → +7（旧 +14）
+      ["2026-07-11T10:00:00", "2026-07-17T09:00:00"], // 周六 → +6（旧 +13）
+    ];
+    for (const [now, want] of cases) {
+      expect(parseNaturalLanguageEvent("下周五 9点 打球", now)?.startsAt).toBe(want);
+    }
+  });
+
+  it("\"next Friday\" one-week matrix (en): always the Friday of next calendar week", () => {
+    const cases: Array<[string, string]> = [
+      ["2026-07-05T10:00:00", "2026-07-10T09:00:00"], // Sunday
+      ["2026-07-06T10:00:00", "2026-07-17T09:00:00"], // Monday
+      ["2026-07-07T10:00:00", "2026-07-17T09:00:00"], // Tuesday
+      ["2026-07-08T10:00:00", "2026-07-17T09:00:00"], // Wednesday
+      ["2026-07-09T10:00:00", "2026-07-17T09:00:00"], // Thursday
+      ["2026-07-10T10:00:00", "2026-07-17T09:00:00"], // Friday
+      ["2026-07-11T10:00:00", "2026-07-17T09:00:00"], // Saturday
+    ];
+    for (const [now, want] of cases) {
+      expect(parseNaturalLanguageEvent("next Friday 9am gym", now)?.startsAt).toBe(want);
+    }
+  });
+
+  it("「下周X」其余语言抽查关键日（周末说下周五）", () => {
+    // 周六 7/11 说：下周五是 7/17（+6），旧算法给 +13。
+    expect(parseNaturalLanguageEvent("来週金曜日 9時 会議", "2026-07-11T10:00:00")?.startsAt).toBe("2026-07-17T09:00:00");
+    expect(parseNaturalLanguageEvent("nächsten Freitag 15 Uhr Treffen", "2026-07-11T10:00:00")?.startsAt).toBe("2026-07-17T15:00:00");
+    // 周日 7/5 说：下周五是 7/10（+5），旧算法给 +12。
+    expect(parseNaturalLanguageEvent("다음 주 금요일 오후 3시 회의", "2026-07-05T10:00:00")?.startsAt).toBe("2026-07-10T15:00:00");
+    expect(parseNaturalLanguageEvent("viernes que viene 15:00 reunión", "2026-07-05T10:00:00")?.startsAt).toBe("2026-07-10T15:00:00");
   });
 
   it("「本周五」在周五当天也落到下周五（裸星期约定优先于「本周」字面）", () => {
