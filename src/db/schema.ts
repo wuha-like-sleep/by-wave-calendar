@@ -50,6 +50,14 @@ export const users = pgTable("users", {
   // 那类邮件故意不给关（见 securityChangeMail / login_alert 的调用方）。
   notifyReminderEmail: boolean("notify_reminder_email").notNull().default(true),
   notifyReminderPush: boolean("notify_reminder_push").notNull().default(true),
+  // 站内通知的两个偏好（0065）。event_changes：别人改/取消了与你有关的事件
+  // （共享日历成员、事件参与者）时要不要进你的收件箱 —— 对应 Apple 日历的
+  // 「共享日历更改」开关，默认开、可关。inbox_push：需要处理的站内通知
+  // （邀请、预约、安全、事件取消）要不要再同步推一份 Web Push，默认开；
+  // 关掉只停推送，站内那条照常写。安全类站内通知本身不给关（与安全邮件
+  // 同口径），这两个开关都管不到它。
+  notifyEventChanges: boolean("notify_event_changes").notNull().default(true),
+  notifyInboxPush: boolean("notify_inbox_push").notNull().default(true),
   // Per-user UI language. NULL means "inherit site default". Valid
   // values are entries in src/lib/i18n.ts SUPPORTED_LOCALES (zh-CN, en).
   // The locale resolver falls back to site_settings.default_locale →
@@ -363,7 +371,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  // 机器可读的类别：calendar_invitation | booking_created | booking_cancelled。
+  // 机器可读的类别：calendar_invitation | booking_created | booking_cancelled
+  // | event_updated | event_cancelled | security_alert（后三类为第二轮新增：
+  // 事件变更走 event_change_notify，安全动态走 security_inbox）。
   // 界面按它选图标/分组，新类别往这里加，不要拿 title 文案做判断。
   type: text("type").notNull(),
   title: text("title").notNull(),

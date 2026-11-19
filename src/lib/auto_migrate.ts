@@ -206,4 +206,15 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "users.notify_reminder_push（缺了提醒调度器每分钟报错、提醒全停）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_reminder_push boolean NOT NULL DEFAULT true`,
   },
+  {
+    // 0065。默认值与迁移一致（true = 保持通知开启）。这两列只被站内通知的
+    // 生产者/推送门控读，缺列时生产者走旁路吞异常、通知静默丢失，不会像
+    // 提醒列那样全站停摆 —— 但静默丢通知更难查，照样进安全网。
+    why: "users.notify_event_changes（缺了事件变更通知被旁路吞掉、静默丢失）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_event_changes boolean NOT NULL DEFAULT true`,
+  },
+  {
+    why: "users.notify_inbox_push（缺了站内通知推送门控读不到、推送静默丢失）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_inbox_push boolean NOT NULL DEFAULT true`,
+  },
 ];
