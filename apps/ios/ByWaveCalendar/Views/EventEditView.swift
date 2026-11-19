@@ -418,6 +418,22 @@ struct EventEditView: View {
                         .onChange(of: endsAt) { _, _ in
                             endLinkedToStart = false
                         }
+                    // 时长快捷片：点一下把结束设成开始 + 片上时长。
+                    // 设完即解除「结束跟随开始」的联动（用户已显式定过
+                    // 结束时间，再拖开始不该把它冲掉）。
+                    HStack(spacing: 8) {
+                        Text("时长")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        ForEach([30, 60, 120], id: \.self) { minutes in
+                            Button(durationChipLabel(minutes)) {
+                                endsAt = startsAt.addingTimeInterval(TimeInterval(minutes * 60))
+                                endLinkedToStart = false
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
                     // Timezone picker — only meaningful for timed events.
                     // All-day events span the calendar's local day per ICS
                     // spec, so the field would be misleading.
@@ -751,6 +767,16 @@ struct EventEditView: View {
 
     /// One exdate row's label: the stored ISO string as a readable
     /// date (time shown for timed events, hidden for all-day ones).
+    /// 时长快捷片的文案。用无空格的键：带空格的「30 分钟」等键与提醒
+    /// 档位共用，日/韩译文带「前/전」后缀（提醒语境），拿来当时长是错的。
+    private func durationChipLabel(_ minutes: Int) -> String {
+        switch minutes {
+        case 30: return "30分钟".loc
+        case 60: return "1小时".loc
+        default: return "2小时".loc
+        }
+    }
+
     private func exdateLabel(_ iso: String) -> String {
         let withFrac = ISO8601DateFormatter()
         withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

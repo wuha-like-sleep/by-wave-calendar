@@ -1039,11 +1039,27 @@
   const allDayCheckbox = $('#form-event [name="allDay"]');
   const timeRow = $("#time-row");
   const dateRow = $("#date-row");
+  const durationChips = $("#duration-chips");
+
+  // 时长快捷片：点一下把结束时间设成开始时间 + 片上时长。只对定时
+  // 事件有意义，全天时随 #time-row 一起隐藏（syncAllDayUI 里切换）。
+  durationChips?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-duration-min]");
+    if (!btn) return;
+    const startInput = $('#form-event [name="startsAt"]');
+    const endInput = $('#form-event [name="endsAt"]');
+    if (!startInput?.value) return;
+    const start = new Date(startInput.value);
+    if (Number.isNaN(start.getTime())) return;
+    endInput.value = toLocalDateTimeValue(new Date(start.getTime() + Number(btn.dataset.durationMin) * 60000));
+    endInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
 
   function syncAllDayUI() {
     const isAllDay = allDayCheckbox.checked;
     if (isAllDay) {
       timeRow.classList.add("hidden");
+      durationChips?.classList.add("hidden");
       dateRow.classList.remove("hidden");
       // Mirror values
       const s = $('#form-event [name="startsAt"]').value;
@@ -1052,6 +1068,7 @@
       if (e) $('#form-event [name="endsAtDate"]').value = e.slice(0, 10);
     } else {
       timeRow.classList.remove("hidden");
+      durationChips?.classList.remove("hidden");
       dateRow.classList.add("hidden");
     }
   }

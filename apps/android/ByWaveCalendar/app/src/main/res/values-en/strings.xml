@@ -63,6 +63,10 @@ to match the development locale.
     <string name="event_allday">All day</string>
     <string name="event_start">Starts</string>
     <string name="event_end">Ends</string>
+    <string name="eventedit_duration">Duration</string>
+    <string name="eventedit_duration_30m">30 min</string>
+    <string name="eventedit_duration_1h">1 hour</string>
+    <string name="eventedit_duration_2h">2 hours</string>
     <string name="event_location">Location</string>
     <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
     <string name="event_link">Link</string>

@@ -65,6 +65,10 @@
     <string name="event_allday">全天</string>
     <string name="event_start">開始</string>
     <string name="event_end">結束</string>
+    <string name="eventedit_duration">時長</string>
+    <string name="eventedit_duration_30m">30 分鐘</string>
+    <string name="eventedit_duration_1h">1 小時</string>
+    <string name="eventedit_duration_2h">2 小時</string>
     <string name="event_location">地點</string>
     <string name="event_location_hint">選填 — 例如 上海 / Zoom 會議室</string>
     <string name="event_link">連結</string>

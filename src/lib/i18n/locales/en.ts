@@ -1077,6 +1077,10 @@ export const en = {
   "app.event.reminderMinutes": "{n} minutes before",
   "app.event.reminder1Hour": "1 hour before",
   "app.event.reminder2Hours": "2 hours before",
+  "app.event.duration30m": "30 min",
+  "app.event.duration1h": "1 hour",
+  "app.event.duration2h": "2 hours",
+  "app.event.duration": "Duration",
   "app.event.reminder1Day": "1 day before",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；

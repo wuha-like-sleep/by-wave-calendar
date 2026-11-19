@@ -58,6 +58,10 @@
     <string name="event_allday">Todo el día</string>
     <string name="event_start">Empieza</string>
     <string name="event_end">Termina</string>
+    <string name="eventedit_duration">Duración</string>
+    <string name="eventedit_duration_30m">30 min</string>
+    <string name="eventedit_duration_1h">1 hora</string>
+    <string name="eventedit_duration_2h">2 horas</string>
     <string name="event_location">Ubicación</string>
     <string name="event_location_hint">Opcional — p. ej. Shanghái / Zoom</string>
     <string name="event_link">Enlace</string>

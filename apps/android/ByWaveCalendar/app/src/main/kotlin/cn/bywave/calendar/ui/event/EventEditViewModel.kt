@@ -601,6 +601,12 @@ class EventEditViewModel : ViewModel() {
         it.copy(end = newEnd)
     }
 
+    /** 时长快捷片：结束 = 开始 + 片上时长。直接写 end（不走 onEnd 的
+     *  日期/时间拆分），片上时长都 ≥30 分钟，不会触发 15 分钟下限。 */
+    fun onDurationMinutes(minutes: Long) = _state.update {
+        it.copy(end = it.start.plusMinutes(minutes))
+    }
+
     /** Save the in-progress edit. For recurring events (state.sourceRrule
      *  is non-null) the caller MUST first pop the RecurringScopePicker
      *  and pass scope + recurrenceId, otherwise the server defaults to

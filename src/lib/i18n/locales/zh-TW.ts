@@ -1056,6 +1056,10 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "開始前 {n} 分鐘",
   "app.event.reminder1Hour": "開始前 1 小時",
   "app.event.reminder2Hours": "開始前 2 小時",
+  "app.event.duration30m": "30 分鐘",
+  "app.event.duration1h": "1 小時",
+  "app.event.duration2h": "2 小時",
+  "app.event.duration": "時長",
   "app.event.reminder1Day": "開始前 1 天",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；

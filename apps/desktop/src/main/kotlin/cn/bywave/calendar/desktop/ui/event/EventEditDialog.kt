@@ -455,6 +455,30 @@ fun EventEditDialog(
                     onChange = { newEnd, selected -> form = form.withEnd(newEnd, selected) },
                 )
 
+                // 时长快捷片：点一下把结束设成开始 + 片上时长，省得在结束
+                // 时间里手算。全天事件没有「时长」概念，不显示。
+                if (!form.allDay) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            t("event.edit.duration"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        listOf(30L to "event.edit.duration30m", 60L to "event.edit.duration1h", 120L to "event.edit.duration2h")
+                            .forEach { (minutes, labelKey) ->
+                                OutlinedButton(onClick = {
+                                    val startInstant = draftInstant(form.start, form.displayZone, form.originalStart)
+                                    val newEnd = startInstant.plus(java.time.Duration.ofMinutes(minutes))
+                                        .atZone(form.displayZone).toLocalDateTime()
+                                    form = form.withEnd(newEnd)
+                                }) { Text(t(labelKey)) }
+                            }
+                    }
+                }
+
                 if (!form.allDay) {
                     Text(t("event.detail.displayTimezone") + ": " + form.displayZone.id,
                         style = MaterialTheme.typography.bodySmall,

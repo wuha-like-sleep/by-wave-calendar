@@ -56,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
@@ -290,6 +291,37 @@ fun EventEditScreen(
                 allDay = state.allDay,
                 onChange = { date, time -> vm.onEnd(date, time) },
             )
+
+            // 时长快捷片：点一下把结束设成开始 + 片上时长。全天事件
+            // 没有「时长」概念，不显示（与时区行同一显隐口径）。
+            if (!state.allDay) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        stringResource(R.string.eventedit_duration),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(30) },
+                        label = { Text(stringResource(R.string.eventedit_duration_30m)) },
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(60) },
+                        label = { Text(stringResource(R.string.eventedit_duration_1h)) },
+                    )
+                    FilterChip(
+                        selected = false,
+                        onClick = { vm.onDurationMinutes(120) },
+                        label = { Text(stringResource(R.string.eventedit_duration_2h)) },
+                    )
+                }
+            }
 
             // Timezone (timed events only, same as iOS — for all-day
             // events the field would be misleading). The wall clock

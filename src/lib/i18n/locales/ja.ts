@@ -1070,6 +1070,10 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "app.event.reminderMinutes": "開始 {n} 分前",
   "app.event.reminder1Hour": "開始 1 時間前",
   "app.event.reminder2Hours": "開始 2 時間前",
+  "app.event.duration30m": "30分",
+  "app.event.duration1h": "1時間",
+  "app.event.duration2h": "2時間",
+  "app.event.duration": "所要時間",
   "app.event.reminder1Day": "開始 1 日前",
   // 提醒档位（定时 / 全天两组）。key 和顺序由 src/lib/reminder_triggers.ts 导出的
   // TIMED_TRIGGERS / ALLDAY_TRIGGERS 决定，test/reminder_enum_parity.test.ts 会比对；

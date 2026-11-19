@@ -58,6 +58,10 @@
     <string name="event_allday">종일</string>
     <string name="event_start">시작</string>
     <string name="event_end">종료</string>
+    <string name="eventedit_duration">기간</string>
+    <string name="eventedit_duration_30m">30분</string>
+    <string name="eventedit_duration_1h">1시간</string>
+    <string name="eventedit_duration_2h">2시간</string>
     <string name="event_location">위치</string>
     <string name="event_location_hint">선택 사항 — 예: 상하이 / Zoom</string>
     <string name="event_link">링크</string>

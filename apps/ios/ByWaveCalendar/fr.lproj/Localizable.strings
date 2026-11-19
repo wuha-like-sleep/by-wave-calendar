@@ -111,6 +111,9 @@
 "10 分钟" = "10 minutes";
 "15 分钟" = "15 minutes";
 "30 分钟" = "30 minutes";
+"30分钟" = "30 min";
+"1小时" = "1 h";
+"2小时" = "2 h";
 "1 小时" = "1 heure";
 "2 小时" = "2 heures";
 "没有日历权限。打开 设置 → 隐私 → 日历 → ByWaveCalendar 开启。" = "Autorisation de calendrier requise. Ouvrez Réglages → Confidentialité → Calendriers → ByWaveCalendar.";
