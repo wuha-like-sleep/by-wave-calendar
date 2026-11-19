@@ -14,4 +14,4 @@
     admin: 'adminSource.admin',
   };
   var _labelKey = _labelKeys[src.kind];
-%><span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs <%= src.badge %>"><% if (_labelKey) { %><%= t(_labelKey) %><% } else { %><%= src.raw %><% } %><% if (src.detail) { %> · <%= src.detail %><% } %></span>
+%><span class="inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs <%= src.badge %>"><% if (_labelKey) { %><%= t(_labelKey) %><% } else { %><%= src.raw %><% } %><% if (src.detail) { %> · <%= src.detail %><% } %></span>

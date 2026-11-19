@@ -93,21 +93,21 @@
 </form>
 
 <div class="rounded-2xl border border-slate-200 bg-white overflow-x-auto">
-  <table class="min-w-full text-sm">
+  <table class="min-w-[840px] w-full text-sm">
     <thead class="bg-slate-50 border-b border-slate-200">
       <tr class="text-left text-xs uppercase tracking-wide text-slate-500">
-        <th class="px-4 py-3 w-10">
+        <th class="px-3 py-3 whitespace-nowrap w-10">
           <input type="checkbox" data-bwc-checkall="input[data-bulk-user]" aria-label="<%= t('adminUsers.bulk.selectAll') %>"
                  class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
         </th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.email") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.displayName") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.status") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.loginMethod") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.source") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.createdAt") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.role") %></th>
-        <th class="px-4 py-3"><%= t("adminUsers.col.actions") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.email") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.displayName") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.status") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.loginMethod") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.source") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.createdAt") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.role") %></th>
+        <th class="px-3 py-3 whitespace-nowrap"><%= t("adminUsers.col.actions") %></th>
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
@@ -123,54 +123,54 @@
       <% } %>
       <% users.forEach(function(u){ %>
         <tr>
-          <td class="px-4 py-3 align-top">
+          <td class="px-3 py-3 whitespace-nowrap align-top">
             <% if (u.id !== user.id) { %>
               <input type="checkbox" form="bwc-bulk-disable" name="userIds" value="<%= u.id %>" data-bulk-user
                      aria-label="<%= u.email %>"
                      class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
             <% } %>
           </td>
-          <td class="px-4 py-3 truncate max-w-[260px]">
+          <td class="px-3 py-3 whitespace-nowrap truncate max-w-[200px]">
             <a href="/admin/users/<%= u.id %>" class="text-slate-900 hover:text-brand-600 hover:underline"><%= u.email %></a>
-            <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]"><%= t("adminUsers.badge.disabled") %></span><% } %>
+            <% if (u.disabledAt) { %><span class="ml-1 inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 text-amber-700 px-1.5 py-0.5 text-[10px]"><%= t("adminUsers.badge.disabled") %></span><% } %>
           </td>
-          <td class="px-4 py-3 text-slate-700"><%= u.displayName || '—' %></td>
-          <td class="px-4 py-3">
+          <td class="px-3 py-3 whitespace-nowrap text-slate-700 truncate max-w-[140px]"><%= u.displayName || '—' %></td>
+          <td class="px-3 py-3 whitespace-nowrap">
             <div class="flex flex-wrap gap-1">
               <% if (u.emailVerified) { %>
-                <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminUsers.badge.emailVerified") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"><%= t("adminUsers.badge.emailVerified") %></span>
               <% } else { %>
-                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.emailUnverified") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700"><%= t("adminUsers.badge.emailUnverified") %></span>
               <% } %>
               <%# 锁定是有时效的,路由里已经比过时间了(isLocked),模板不再自己比 —— 
                   每个模板各比一次,迟早有一处忘了,然后挂着一个早就能登录的人。 %>
               <% if (u.isLocked) { %>
-                <span class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700" title="<%= t("adminUsers.badge.lockedTitle") %>">🔒 <%= t("adminUsers.badge.locked") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-700" title="<%= t("adminUsers.badge.lockedTitle") %>">🔒 <%= t("adminUsers.badge.locked") %></span>
               <% } %>
             </div>
           </td>
-          <td class="px-4 py-3">
+          <td class="px-3 py-3 whitespace-nowrap">
             <div class="flex flex-wrap gap-1 max-w-[220px]">
               <%# 以前这一格对**每个人**都挂「密码」。而 SSO / Apple 建的号拿的是
                   一串随机不可用的哈希,根本没法用密码登录 —— 站长照着看会以为
                   关掉 SSO 之后这些人还有退路,其实没有。现在按真实情况显示。 %>
               <% if (u.passwordSet === true) { %>
-                <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700" title="<%= t("adminUsers.badge.passwordTitle") %>"><%= t("adminUsers.badge.password") %></span>
               <% } else if (u.passwordSet === false) { %>
-                <span class="inline-flex items-center rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-400 border border-dashed border-slate-300" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUsers.badge.noPassword") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-slate-50 px-2 py-0.5 text-xs text-slate-400 border border-dashed border-slate-300" title="<%= t("adminUsers.badge.noPasswordTitle") %>"><%= t("adminUsers.badge.noPassword") %></span>
               <% } else { %>
                 <%# NULL = 升级之前建的号,库里没记这一项。**不许显示成「有密码」** ——
                     站长会照着它判断「关掉第三方登录谁还进得来」,而那个答案是错的。 %>
-                <span class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700" title="<%= t("adminUsers.badge.passwordUnknownTitle") %>"><%= t("adminUsers.badge.passwordUnknown") %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs text-amber-700" title="<%= t("adminUsers.badge.passwordUnknownTitle") %>"><%= t("adminUsers.badge.passwordUnknown") %></span>
               <% } %>
               <% if (u.passkeyCount > 0) { %>
-                <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Passkey × <%= u.passkeyCount %></span>
               <% } %>
               <% if (u.mfaEnabled) { %>
-                <span class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">MFA</span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">MFA</span>
               <% } %>
               <% if (u.ssoProviderSlug) { %>
-                <span class="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">SSO · <%= u.ssoProviderSlug %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">SSO · <%= u.ssoProviderSlug %></span>
               <% } %>
             </div>
             <% if (u.lastLoginMethod) { %>
@@ -179,19 +179,19 @@
           </td>
           <%# data-source-cell 是给断言用的锚点:这一格整个被删掉时,
               页面上别处(筛选下拉里)还留着同样的来源文字,光找文字找不出来。 %>
-          <td class="px-4 py-3" data-source-cell><%- include('_signup_source', { src: u.source }) %></td>
-          <td class="px-4 py-3 text-xs text-slate-500">
+          <td class="px-3 py-3 whitespace-nowrap" data-source-cell><%- include('_signup_source', { src: u.source }) %></td>
+          <td class="px-3 py-3 whitespace-nowrap text-xs text-slate-500">
             <%# 写死 zh-CN 的话,德语站长看到的是中文格式的日期。 %>
             <%= new Intl.DateTimeFormat(currentLocale, { year:'numeric', month:'2-digit', day:'2-digit' }).format(u.createdAt) %>
           </td>
-          <td class="px-4 py-3">
+          <td class="px-3 py-3 whitespace-nowrap">
             <% if (u.isAdmin) { %>
-              <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"><%= t("adminUsers.role.admin") %></span>
+              <span class="inline-flex items-center whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800"><%= t("adminUsers.role.admin") %></span>
             <% } else { %>
               <span class="text-xs text-slate-400"><%= t("adminUsers.role.normal") %></span>
             <% } %>
           </td>
-          <td class="px-4 py-3">
+          <td class="px-3 py-3 whitespace-nowrap">
             <% if (u.id !== user.id) { %>
               <div class="flex flex-wrap gap-x-3 gap-y-1 items-center text-xs">
                 <form method="post" action="/admin/users/<%= u.id %>/toggle-admin" class="m-0 inline"
@@ -199,7 +199,7 @@
                       data-confirm-danger="<%= u.isAdmin ? '1' : '0' %>"
                       data-confirm-ok="<%= u.isAdmin ? t("adminUsers.action.revokeAdmin") : t("adminUsers.action.promoteAdmin") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="<%= u.isAdmin ? 'text-red-600 hover:text-red-700' : 'text-brand-600 hover:text-brand-700' %>">
+                  <button type="submit" class="whitespace-nowrap <%= u.isAdmin ? 'text-red-600 hover:text-red-700' : 'text-brand-600 hover:text-brand-700' %>">
                     <%= u.isAdmin ? t("adminUsers.action.revokeAdmin") : t("adminUsers.action.promoteAdmin") %>
                   </button>
                 </form>
@@ -208,14 +208,14 @@
                       data-confirm-danger="<%= u.disabledAt ? '0' : '1' %>"
                       data-confirm-ok="<%= u.disabledAt ? t("adminUsers.action.enable") : t("adminUsers.action.disable") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="<%= u.disabledAt ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700' %>">
+                  <button type="submit" class="whitespace-nowrap <%= u.disabledAt ? 'text-emerald-600 hover:text-emerald-700' : 'text-amber-600 hover:text-amber-700' %>">
                     <%= u.disabledAt ? t("adminUsers.action.enable") : t("adminUsers.action.disable") %>
                   </button>
                 </form>
                 <form method="post" action="/admin/users/<%= u.id %>/revoke-sessions" class="m-0 inline"
                       data-confirm="<%= t("adminUsers.confirm.kick") %>" data-confirm-danger="1" data-confirm-ok="<%= t("adminUsers.confirmOk.kick") %>">
                   <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                  <button type="submit" class="text-slate-600 hover:text-slate-900"><%= t("adminUsers.action.kick") %></button>
+                  <button type="submit" class="whitespace-nowrap text-slate-600 hover:text-slate-900"><%= t("adminUsers.action.kick") %></button>
                 </form>
               </div>
             <% } else { %>

@@ -157,7 +157,7 @@
                 <%# 面板用 data-bwc-when 声明自己在哪些取值下显示；app.js 里的
                     委托监听负责切换。初始状态仍由下面两个 div 的 style 服务端渲染。 %>
                 data-bwc-switch
-                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
           <% captchaProviders.forEach(function (p) { %>
             <option value="<%= p %>" <%= settings.captchaProvider === p ? "selected" : "" %>><%= captchaLabels[p] || p %></option>
           <% }); %>

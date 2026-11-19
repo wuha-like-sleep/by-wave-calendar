@@ -54,7 +54,7 @@
               <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap"><%- e.createdAtIso %></td>
               <td class="px-4 py-3 text-slate-700 max-w-[200px] truncate" title="<%= e.actorEmail || '已删除用户' %>"><%= e.actorEmail || '— 已删除用户' %></td>
               <td class="px-4 py-3 whitespace-nowrap">
-                <span class="inline-block rounded-full px-2 py-0.5 text-[11px] font-medium <%= e.cat.badge %> mr-1.5"><%= e.cat.label %></span>
+                <span class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium <%= e.cat.badge %> mr-1.5"><%= e.cat.label %></span>
                 <code class="text-xs text-slate-500 font-mono"><%= e.action %></code>
               </td>
               <td class="px-4 py-3 text-xs text-slate-500">

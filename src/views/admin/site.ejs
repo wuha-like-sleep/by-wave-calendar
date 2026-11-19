@@ -14,7 +14,7 @@
     <div>
       <label class="block text-sm font-medium text-slate-700"><%= t("adminSite.registrationModeLabel") %></label>
       <select name="registrationMode" required
-              class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+              class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
         <option value="public" <%= settings.registrationMode === "public" ? "selected" : "" %>><%= t("adminSite.registrationPublic") %></option>
         <option value="invite" <%= settings.registrationMode === "invite" ? "selected" : "" %>><%= t("adminSite.registrationInvite") %></option>
         <option value="closed" <%= settings.registrationMode === "closed" ? "selected" : "" %>><%= t("adminSite.registrationClosed") %></option>
@@ -48,7 +48,7 @@
       <label for="signupDomainAllowlist" class="block text-sm font-medium text-slate-700"><%= t("adminSite.gates.domainLabel") %></label>
       <textarea id="signupDomainAllowlist" name="signupDomainAllowlist" rows="3" maxlength="4000"
                 placeholder="<%= t('adminSite.gates.domainPlaceholder') %>"
-                class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"><%= settings.signupDomainAllowlist %></textarea>
+                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"><%= settings.signupDomainAllowlist %></textarea>
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.gates.domainHintEmpty") %></p>
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.gates.domainHintSubdomain") %></p>
     </div>

@@ -17,7 +17,7 @@
     <input type="hidden" name="action" value="save">
     <div>
       <label for="microsoft-client-id" class="block text-sm font-medium text-slate-900 mb-2"><%= t('adminCalendar.clientId') %></label>
-      <input id="microsoft-client-id" name="clientId" type="text" value="<%= config.clientId %>" maxlength="36" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="microsoft-client-help" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" class="block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm font-mono focus:border-brand-500 focus:ring-brand-500">
+      <input id="microsoft-client-id" name="clientId" type="text" value="<%= config.clientId %>" maxlength="36" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="microsoft-client-help" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" class="block w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-mono focus:border-brand-500 focus:ring-brand-500">
       <p id="microsoft-client-help" class="text-xs text-slate-500 mt-2 leading-relaxed"><%= t('adminCalendar.clientHelp') %></p>
     </div>
     <p class="text-xs text-slate-500 leading-relaxed"><%= t('adminCalendar.clearHelp') %></p>

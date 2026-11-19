@@ -91,7 +91,7 @@
           <% invites.forEach(function (inv) { const st = inviteState(inv); const url = baseUrl + "/register?invite=" + inv.token; %>
             <tr>
               <td class="px-3 py-3 align-top">
-                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium <%= st.cls %>"><%= st.label %></span>
+                <span class="inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium <%= st.cls %>"><%= st.label %></span>
               </td>
               <td class="px-3 py-3 align-top">
                 <div class="font-medium text-slate-800"><%= inv.email || "任意邮箱" %></div>
