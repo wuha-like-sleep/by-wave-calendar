@@ -102,6 +102,47 @@
       </div>
     </details>
 
+    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> Accéder à mes calendriers via l'API (scripts / automatisation)</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <p class="mb-3">Avec un jeton, tout outil capable d'envoyer des requêtes HTTPS (scripts, n8n, Zapier, Raccourcis…) peut lire et écrire dans vos propres calendriers. Voici le guide minimal ; la spécification complète lisible par machine se trouve dans <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a>, importable dans Postman pour générer le code d'appel.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Authentification et adresse de base</p>
+        <p class="mb-3">Envoyez l'en-tête <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code> avec chaque requête. L'adresse de base est <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>. Les réponses /api/v1 sont uniformes : succès {"ok": true, "data": …}, échec {"ok": false, "error": {"code": "…", "message": "…"}}.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Points d'accès courants</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars</code> — lister mes calendriers</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars</code> — créer un calendrier (jeton en écriture)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /calendars/{id} · DELETE /calendars/{id}</code> — modifier / supprimer un calendrier (jeton en écriture)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events?from=…&amp;to=…</code> — lister les événements d'une période (from et to obligatoires, heures ISO avec décalage ; calendarIds optionnel, séparés par des virgules)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/events</code> — événements d'un seul calendrier</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events/{id}</code> — un événement en entier</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /events</code> — créer un événement (jeton en écriture ; requis : calendarId, summary, startsAt, endsAt)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /events/{id} · DELETE /events/{id}</code> — modifier / supprimer un événement (jeton en écriture ; la suppression est douce — restauration via POST /events/{id}/restore)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars/{id}/import/preview · POST /calendars/{id}/import</code> — aperçu / import ICS (jeton en écriture ; corps JSON {"text": "le texte .ics complet"}, 8 Mo max, mêmes règles de déduplication que l'import web)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/export.ics</code> — télécharger un calendrier entier en .ics (pour les sauvegardes)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/subscriptions · POST</code> — lister / ajouter des abonnements ICS externes (l'ajout exige un jeton en écriture) ; POST /calendars/{id}/subscriptions/{subId}/refresh actualise aussitôt ; DELETE en supprime un</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /search?q=mot-clé</code> — rechercher des événements</li>
+        </ul>
+        <p class="font-medium text-slate-800 mb-1.5">Exemples curl</p>
+        <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-900 text-slate-100 p-3 text-xs leading-relaxed">curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/calendars"
+curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/events?from=2026-01-05T00:00:00+11:00&amp;to=2026-01-12T00:00:00+11:00"
+curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>" -H "Content-Type: application/json" -d '{"calendarId":"&lt;calendar-id&gt;","summary":"Report","startsAt":"2026-01-05T14:00:00+11:00","endsAt":"2026-01-05T15:00:00+11:00"}'</pre>
+        <p class="font-medium text-slate-800 mb-1.5 mt-3">Codes d'erreur et limites</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — jeton erroné, révoqué ou expiré, API désactivée ou compte suspendu (voir l'ordre de vérification dans l'entrée ci-dessus)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — un jeton en lecture seule a tenté d'écrire ; ces jetons ne peuvent que GET</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400 invalid_body / bad_query / ends_before_starts</code> — corps ou paramètres invalides (champs requis manquants, from/to manquants, fin avant le début)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404 not_found / calendar_not_found</code> — inexistant, ou pas à vous (les calendriers et événements d'autrui semblent toujours inexistants)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">413 file_too_large / 422 import_failed</code> — import de plus de 8 Mo / contenu ICS illisible</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429 too_many_requests</code> — limite globale atteinte (par IP, 120 par minute par défaut, réglable par l'opérateur) ; attendez une minute puis réessayez</li>
+        </ul>
+        <p>Un jeton n'accède qu'à vos propres calendriers. L'utilisation (dernière utilisation, IP source, nombre total d'appels) s'affiche à côté de chaque jeton dans Réglages → Appareils → Jetons API — révoquez ceux qui ne servent plus.</p>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> Inscription et e-mails de vérification</span>

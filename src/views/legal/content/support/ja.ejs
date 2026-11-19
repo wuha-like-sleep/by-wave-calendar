@@ -102,6 +102,47 @@
       </div>
     </details>
 
+    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> API で自分のカレンダーにアクセス（スクリプト / 自動化）</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <p class="mb-3">Token を用意すれば、HTTPS リクエストを送れるツール（スクリプト、n8n、Zapier、ショートカットなど）があなたのカレンダーを読み書きできます。ここは最小限のガイドです。機械可読な完全な仕様は <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a> にあり、Postman などに取り込めば呼び出しコードを生成できます。</p>
+        <p class="font-medium text-slate-800 mb-1.5">認証とベース URL</p>
+        <p class="mb-3">すべてのリクエストにヘッダー <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code> を付けます。ベース URL は <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code> です。/api/v1 のレスポンスは統一形式で、成功は {"ok": true, "data": …}、失敗は {"ok": false, "error": {"code": "…", "message": "…"}} です。</p>
+        <p class="font-medium text-slate-800 mb-1.5">主なエンドポイント</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars</code> — 自分のカレンダー一覧</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars</code> — カレンダーを作成（書き込み Token が必要）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /calendars/{id} · DELETE /calendars/{id}</code> — カレンダーの変更 / 削除（書き込み Token が必要）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events?from=…&amp;to=…</code> — 期間内の予定一覧（from・to 必須、オフセット付き ISO 時刻。calendarIds は任意、カンマ区切り）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/events</code> — 1 つのカレンダーの予定</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events/{id}</code> — 予定 1 件の全文</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /events</code> — 予定を作成（書き込み Token が必要。必須：calendarId、summary、startsAt、endsAt）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /events/{id} · DELETE /events/{id}</code> — 予定の変更 / 削除（書き込み Token が必要。削除は論理削除で、POST /events/{id}/restore で復元可能）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars/{id}/import/preview · POST /calendars/{id}/import</code> — ICS のプレビュー / インポート（書き込み Token が必要。本文は JSON {"text": ".ics 全文"}、上限 8 MB、Web インポートと同じ重複排除ルール）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/export.ics</code> — カレンダー全体を .ics でダウンロード（バックアップ用）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/subscriptions · POST</code> — 外部 ICS 購読の一覧 / 追加（追加には書き込み Token が必要）。POST /calendars/{id}/subscriptions/{subId}/refresh で即時更新、DELETE で削除</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /search?q=キーワード</code> — 予定を検索</li>
+        </ul>
+        <p class="font-medium text-slate-800 mb-1.5">curl の例</p>
+        <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-900 text-slate-100 p-3 text-xs leading-relaxed">curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/calendars"
+curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/events?from=2026-01-05T00:00:00+11:00&amp;to=2026-01-12T00:00:00+11:00"
+curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>" -H "Content-Type: application/json" -d '{"calendarId":"&lt;calendar-id&gt;","summary":"Report","startsAt":"2026-01-05T14:00:00+11:00","endsAt":"2026-01-05T15:00:00+11:00"}'</pre>
+        <p class="font-medium text-slate-800 mb-1.5 mt-3">エラーコードと制限</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — Token の誤り・失効・期限切れ、API が無効、またはアカウント停止（確認順序は上の項目を参照）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — 読み取り専用 Token が書き込みを試行。読み取り専用 Token は GET のみ可能</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400 invalid_body / bad_query / ends_before_starts</code> — 本文やパラメータの不備（必須項目の欠落、from/to の欠落、終了が開始より前）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404 not_found / calendar_not_found</code> — 存在しない、またはあなたのものではない（他人のカレンダーや予定は常に「存在しない」扱い）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">413 file_too_large / 422 import_failed</code> — インポートが 8 MB 超過 / ICS の内容を解析できない</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429 too_many_requests</code> — サイト全体のレート制限に到達（IP ごと、既定は 1 分あたり 120 回、運営者が変更可能）。1 分待って再試行</li>
+        </ul>
+        <p>Token がアクセスできるのは自分のカレンダーだけです。使用状況（最終利用日時、接続元 IP、累計呼び出し回数）は「設定 → デバイス → API Token」の一覧で確認できます。使わなくなった Token は失効させてください。</p>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 登録と確認メール</span>

@@ -303,6 +303,9 @@ export async function webRoutes(app: FastifyInstance) {
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
       siteName: settings.siteName || "ByWave Calendar",
+      // The site's own origin, for the support page's API examples —
+      // docs must show the address of THIS deployment, not a hardcoded one.
+      baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
       updatedDate: LEGAL_UPDATED,
     });
   }
