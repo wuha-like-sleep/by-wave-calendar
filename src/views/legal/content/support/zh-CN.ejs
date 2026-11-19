@@ -123,10 +123,10 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li><code>401 invalid_token</code>——Token 写错、已被撤销或过期，或 API 没开启，或账号被停用。按上面 API Token 那条逐项查。</li>
-          <li><code>403 token_is_read_only</code>——Token 是只读的，但工具想写入。改建读写 Token，或者让工具只读。</li>
-          <li><code>400</code>——请求内容有问题（比如缺开始或结束时间），检查工具那边的字段对应。</li>
-          <li><code>404</code>——日历或日程不存在，或者不是你的。<code>429</code>——请求太频繁，等一会儿再试。<code>5xx</code>——服务端问题，过一会儿再试。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code>——Token 写错、已被撤销或过期，或 API 没开启，或账号被停用。按上面 API Token 那条逐项查。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code>——Token 是只读的，但工具想写入。改建读写 Token，或者让工具只读。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400</code>——请求内容有问题（比如缺开始或结束时间），检查工具那边的字段对应。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404</code>——日历或日程不存在，或者不是你的。<code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429</code>——请求太频繁，等一会儿再试。<code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">5xx</code>——服务端问题，过一会儿再试。</li>
         </ul>
       </div>
     </details>
@@ -138,7 +138,7 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li>服务端版本号：在浏览器打开 <code>/health</code>，把显示的 version 记下来。再写清你用的客户端和版本、浏览器、出问题的时间和时区。</li>
+          <li>服务端版本号：在浏览器打开 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code>，把显示的 version 记下来。再写清你用的客户端和版本、浏览器、出问题的时间和时区。</li>
           <li>你做了哪些步骤、期望发生什么、实际发生了什么。</li>
           <li>发到公开地方之前，把截图和日志里的密码、完整 Token 和邮箱地址去掉。</li>
         </ul>

@@ -123,10 +123,10 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li><code>401 invalid_token</code>: el token es incorrecto, fue revocado o venció, la API está desactivada o la cuenta está suspendida. Sigue los pasos del apartado de tokens de API.</li>
-          <li><code>403 token_is_read_only</code>: el token es de solo lectura pero la herramienta intentó escribir. Crea un token de lectura y escritura, o deja que la herramienta solo lea.</li>
-          <li><code>400</code>: algo va mal en la solicitud (por ejemplo, falta la hora de inicio o de fin). Revisa la correspondencia de campos en la herramienta.</li>
-          <li><code>404</code>: el calendario o el evento no existe, o no es tuyo. <code>429</code>: demasiadas solicitudes; espera un poco y reintenta. <code>5xx</code>: problema del servidor; inténtalo más tarde.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code>: el token es incorrecto, fue revocado o venció, la API está desactivada o la cuenta está suspendida. Sigue los pasos del apartado de tokens de API.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code>: el token es de solo lectura pero la herramienta intentó escribir. Crea un token de lectura y escritura, o deja que la herramienta solo lea.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400</code>: algo va mal en la solicitud (por ejemplo, falta la hora de inicio o de fin). Revisa la correspondencia de campos en la herramienta.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404</code>: el calendario o el evento no existe, o no es tuyo. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429</code>: demasiadas solicitudes; espera un poco y reintenta. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">5xx</code>: problema del servidor; inténtalo más tarde.</li>
         </ul>
       </div>
     </details>
@@ -138,7 +138,7 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li>La versión del servidor: abre <code>/health</code> en el navegador y anota el version que muestra. Añade tu cliente y su versión, el navegador, y la hora y zona horaria en que pasó.</li>
+          <li>La versión del servidor: abre <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code> en el navegador y anota el version que muestra. Añade tu cliente y su versión, el navegador, y la hora y zona horaria en que pasó.</li>
           <li>Los pasos que seguiste, qué esperabas que pasara y qué pasó en realidad.</li>
           <li>Antes de publicar en un sitio público, quita de capturas y registros las contraseñas, los tokens completos y los correos.</li>
         </ul>

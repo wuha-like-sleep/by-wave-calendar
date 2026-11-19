@@ -123,10 +123,10 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li><code>401 invalid_token</code> — トークンが間違っている、取り消された、期限切れ、API が無効、またはアカウントが停止されています。上の API トークンの項目を順に確認してください。</li>
-          <li><code>403 token_is_read_only</code> — トークンが読み取り専用なのにツールが書き込もうとしています。読み書きトークンを作るか、ツールを読み取りだけにしてください。</li>
-          <li><code>400</code> — リクエストの内容に問題があります（開始・終了時刻の欠けなど）。ツール側の項目対応を確認してください。</li>
-          <li><code>404</code> — カレンダーや予定が存在しないか、あなたのものではありません。<code>429</code> — リクエストが多すぎます。少し待って再試行してください。<code>5xx</code> — サーバー側の問題です。時間をおいて再試行してください。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — トークンが間違っている、取り消された、期限切れ、API が無効、またはアカウントが停止されています。上の API トークンの項目を順に確認してください。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — トークンが読み取り専用なのにツールが書き込もうとしています。読み書きトークンを作るか、ツールを読み取りだけにしてください。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400</code> — リクエストの内容に問題があります（開始・終了時刻の欠けなど）。ツール側の項目対応を確認してください。</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404</code> — カレンダーや予定が存在しないか、あなたのものではありません。<code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429</code> — リクエストが多すぎます。少し待って再試行してください。<code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">5xx</code> — サーバー側の問題です。時間をおいて再試行してください。</li>
         </ul>
       </div>
     </details>
@@ -138,7 +138,7 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li>サーバーのバージョン：ブラウザで <code>/health</code> を開き、表示される version を控えてください。使っているクライアントとそのバージョン、ブラウザ、起きた時刻とタイムゾーンも添えてください。</li>
+          <li>サーバーのバージョン：ブラウザで <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code> を開き、表示される version を控えてください。使っているクライアントとそのバージョン、ブラウザ、起きた時刻とタイムゾーンも添えてください。</li>
           <li>行った操作の手順、期待した結果、実際の結果。</li>
           <li>公開の場所に貼る前に、スクリーンショットやログからパスワード、トークン全体、メールアドレスを取り除いてください。</li>
         </ul>

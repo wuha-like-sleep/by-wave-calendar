@@ -123,10 +123,10 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li><code>401 invalid_token</code> — the token is wrong, revoked or expired, the API is switched off, or the account is suspended. Work through the API token entry above.</li>
-          <li><code>403 token_is_read_only</code> — the token is read-only but the tool tried to write. Create a read &amp; write token, or let the tool only read.</li>
-          <li><code>400</code> — something in the request is off (for example a missing start or end time). Check the tool's field mapping.</li>
-          <li><code>404</code> — the calendar or event doesn't exist, or it isn't yours. <code>429</code> — too many requests; wait a bit and retry. <code>5xx</code> — a server-side problem; try again later.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — the token is wrong, revoked or expired, the API is switched off, or the account is suspended. Work through the API token entry above.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — the token is read-only but the tool tried to write. Create a read &amp; write token, or let the tool only read.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400</code> — something in the request is off (for example a missing start or end time). Check the tool's field mapping.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404</code> — the calendar or event doesn't exist, or it isn't yours. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429</code> — too many requests; wait a bit and retry. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">5xx</code> — a server-side problem; try again later.</li>
         </ul>
       </div>
     </details>
@@ -138,7 +138,7 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li>The server version — open <code>/health</code> in your browser and copy the version shown. Also note your client and its version, your browser, and the time and timezone when it happened.</li>
+          <li>The server version — open <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code> in your browser and copy the version shown. Also note your client and its version, your browser, and the time and timezone when it happened.</li>
           <li>What you did, step by step, and what you expected to happen instead.</li>
           <li>Before posting anywhere public, remove passwords, full tokens and email addresses from screenshots and logs.</li>
         </ul>

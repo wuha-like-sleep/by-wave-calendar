@@ -587,8 +587,12 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
   <% if (issuedToken) { %>
     <div class="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-      <div class="text-sm font-medium text-emerald-900 mb-2"><%= t("settings.devices.newApiTokenHeading", { label: issuedLabel || "" }) %></div>
-      <code class="block break-all rounded-md bg-white border border-emerald-200 px-3 py-2 text-sm font-mono text-slate-900"><%= issuedToken %></code>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <div class="text-sm font-medium text-emerald-900"><%= t("settings.devices.newApiTokenHeading", { label: issuedLabel || "" }) %></div>
+        <button type="button" data-copy-api-token
+                class="rounded-md bg-white border border-emerald-300 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50"><%= t("settings.devices.copy") %></button>
+      </div>
+      <code id="new-api-token" class="block break-all rounded-md bg-white border border-emerald-200 px-3 py-2 text-sm font-mono text-slate-900"><%= issuedToken %></code>
       <p class="mt-2 text-xs text-emerald-800"><%= t("settings.devices.newApiTokenHint") %></p>
     </div>
   <% } %>
@@ -608,7 +612,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
                class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <label class="flex items-center gap-2 text-sm text-slate-600">
           <%= t("settings.devices.apiTokenExpiryLabel") %>
-          <input type="number" name="expiresInDays" min="0" max="3650" value="365"
+          <input type="number" name="expiresInDays" min="0" max="3650" value="365" inputmode="numeric"
                  class="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </label>
       </div>
@@ -627,7 +631,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       </fieldset>
       <p class="text-xs text-amber-700"><%= t("settings.devices.apiTokenScopeWriteHint") %></p>
       <% if (user.passwordSet !== false) { %>
-        <input type="password" name="currentPassword" autocomplete="current-password"
+        <input type="password" name="currentPassword" autocomplete="current-password"<% if (user.passwordSet === true) { %> required<% } %>
                aria-label="<%= t('settings.devices.apiTokenCurrentPassword') %>"
                placeholder="<%= t('settings.devices.apiTokenCurrentPassword') %>"
                class="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
@@ -654,7 +658,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
         <li class="py-3 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900"><%= tok.label %>
-              <span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= tok.scope === 'read' ? t("settings.devices.apiTokenScopeRead") : t("settings.devices.apiTokenScopeWrite") %></span>
+              <% if (tok.scope === 'read') { %><span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.devices.apiTokenScopeRead") %></span><% } else { %><span class="ml-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700"><%= t("settings.devices.apiTokenScopeWrite") %></span><% } %>
               <% if (tok.expired) { %><span class="ml-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-normal text-red-600"><%= t("settings.devices.apiTokenExpired") %></span><% } %>
             </div>
             <div class="text-xs text-slate-500">
@@ -920,6 +924,21 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
   document.querySelector("[data-copy-app-pwd]")?.addEventListener("click", async () => {
     const el = document.getElementById("new-app-password");
+    if (!el) return;
+    try {
+      await navigator.clipboard.writeText(el.textContent.trim());
+      window.bwc.toast(BWC_I18N.copySuccess, "success");
+    } catch {
+      const r = document.createRange();
+      r.selectNode(el);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(r);
+      window.bwc.toast(BWC_I18N.copyFallback, "info");
+    }
+  });
+
+  document.querySelector("[data-copy-api-token]")?.addEventListener("click", async () => {
+    const el = document.getElementById("new-api-token");
     if (!el) return;
     try {
       await navigator.clipboard.writeText(el.textContent.trim());

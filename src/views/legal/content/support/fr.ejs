@@ -123,10 +123,10 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li><code>401 invalid_token</code> : le jeton est faux, révoqué ou expiré, l'API est désactivée, ou le compte est suspendu. Suivez les étapes de la rubrique jetons d'API ci-dessus.</li>
-          <li><code>403 token_is_read_only</code> : le jeton est en lecture seule mais l'outil a essayé d'écrire. Créez un jeton en lecture et écriture, ou laissez l'outil seulement lire.</li>
-          <li><code>400</code> : quelque chose cloche dans la requête (par exemple une heure de début ou de fin manquante). Vérifiez la correspondance des champs dans l'outil.</li>
-          <li><code>404</code> : le calendrier ou l'événement n'existe pas, ou n'est pas à vous. <code>429</code> : trop de requêtes ; attendez un peu et réessayez. <code>5xx</code> : problème côté serveur ; réessayez plus tard.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> : le jeton est faux, révoqué ou expiré, l'API est désactivée, ou le compte est suspendu. Suivez les étapes de la rubrique jetons d'API ci-dessus.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> : le jeton est en lecture seule mais l'outil a essayé d'écrire. Créez un jeton en lecture et écriture, ou laissez l'outil seulement lire.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400</code> : quelque chose cloche dans la requête (par exemple une heure de début ou de fin manquante). Vérifiez la correspondance des champs dans l'outil.</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404</code> : le calendrier ou l'événement n'existe pas, ou n'est pas à vous. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429</code> : trop de requêtes ; attendez un peu et réessayez. <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">5xx</code> : problème côté serveur ; réessayez plus tard.</li>
         </ul>
       </div>
     </details>
@@ -138,7 +138,7 @@
       </summary>
       <div class="px-4 pb-4 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
-          <li>La version du serveur : ouvrez <code>/health</code> dans le navigateur et notez le version affiché. Ajoutez votre client et sa version, le navigateur, ainsi que l'heure et le fuseau horaire du problème.</li>
+          <li>La version du serveur : ouvrez <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code> dans le navigateur et notez le version affiché. Ajoutez votre client et sa version, le navigateur, ainsi que l'heure et le fuseau horaire du problème.</li>
           <li>Les étapes que vous avez suivies, ce que vous attendiez et ce qui s'est réellement passé.</li>
           <li>Avant de publier dans un endroit public, retirez des captures et des journaux les mots de passe, les jetons complets et les adresses e-mail.</li>
         </ul>

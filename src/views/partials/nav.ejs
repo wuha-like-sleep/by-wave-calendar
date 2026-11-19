@@ -1,14 +1,18 @@
 <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
   <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-    <div class="flex h-14 items-center justify-between gap-4">
-      <a href="<%= user ? '/app' : '/' %>" class="flex items-center gap-2.5 font-semibold text-slate-900">
+    <div class="flex h-14 items-center justify-between gap-2 sm:gap-4">
+      <a href="<%= user ? '/app' : '/' %>" class="flex shrink-0 items-center gap-2.5 font-semibold text-slate-900">
         <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
           <img src="<%= siteLogoUrl %>" alt="logo" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
         <% } else { %>
           <img src="/static/brand/logo-small.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" alt="" width="36" height="36" class="h-9 w-9" />
         <% } %>
-        <span class="hidden sm:inline text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
-        <span class="sm:hidden text-base"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>
+        <span class="hidden sm:inline text-base whitespace-nowrap"><%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></span>
+        <%# Logged-out bar: below 480px the language select + sign-in/register
+            buttons need the room more than the brand wordmark does (long
+            locales overflowed the viewport) — the logo stays. Logged-in
+            pages keep the name: their right side is just two icon buttons. %>
+        <span class="sm:hidden text-base whitespace-nowrap<% if (!user) { %> max-[479px]:hidden<% } %>"><%= (typeof siteName !== 'undefined' && siteName) ? siteName.split(/[\s·-]/)[0] : 'ByWave' %></span>
       </a>
 
       <% if (user) { %>
@@ -42,11 +46,11 @@
           </button>
         </div>
       <% } else { %>
-        <div class="flex items-center gap-2 text-sm">
+        <div class="flex items-center gap-1.5 sm:gap-2 text-sm">
           <%- include('lang-switcher') %>
-          <a href="/login" class="px-3 py-1.5 rounded-md text-slate-700 hover:bg-slate-100"><%= t("nav.signIn") %></a>
+          <a href="/login" class="px-2 sm:px-3 py-1.5 rounded-md text-slate-700 hover:bg-slate-100 whitespace-nowrap"><%= t("nav.signIn") %></a>
           <% if (registrationOpen) { %>
-            <a href="/register" class="px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow-sm"><%= t("nav.register") %></a>
+            <a href="/register" class="px-2 sm:px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow-sm whitespace-nowrap"><%= t("nav.register") %></a>
           <% } %>
         </div>
       <% } %>
