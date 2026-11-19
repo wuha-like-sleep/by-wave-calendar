@@ -136,7 +136,7 @@
   </form>
 </div>
 
-<script src="/static/lib/simplewebauthn.umd.min.js"></script>
+<script src="/static/lib/simplewebauthn.umd.min.js?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>"></script>
 <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
 // Strings the scripts below inject at runtime. Same idea as window.BWC_T on
 // /app: client JS can't call the server-side t(), so hand it a resolved map.

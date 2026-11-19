@@ -67,3 +67,33 @@ export function loadAssetVersion(projectRoot: string): string {
   }
   return computeAssetVersion(path.join(projectRoot, "src", "public"));
 }
+
+/**
+ * 带 ?v=<内容哈希> 的静态资源可以「永久缓存」：URL 里的 v 就是全部资源
+ * 内容的哈希（见上面），任何一个文件变了，所有带 v 的 URL 都跟着变，
+ * 所以旧 URL 上的内容永远不会变——immutable 是这条语义的准确表达。
+ * 以前全局只有 7 天 maxAge：过期之后浏览器对每个资源各发一次条件请求，
+ * 日历页 15 个资源就是 15 次往返换回 15 个 304，弱网下肉眼可见地慢。
+ *
+ * 只对 /static/ 下、且 query 里带非空 v 参数的 URL 返回长缓存：
+ *   · 没带 v 的（vendor 直引、favicon 之外的零星引用）保持注册时的 7 天，
+ *     免得某个没走版本戳的引用把旧内容钉死一年；
+ *   · /static/uploads/ 是管理员上传内容，URL 不带版本语义，哪怕误带了
+ *     v 参数也绝不给长缓存（哈希计算本来就排除了 uploads 目录）。
+ * 返回 null 表示「不接管，用 fastifyStatic 自己的 Cache-Control」。
+ */
+export const VERSIONED_STATIC_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
+export function cacheControlForVersionedStatic(rawUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(rawUrl, "http://static.local");
+  } catch {
+    return null;
+  }
+  if (!url.pathname.startsWith("/static/")) return null;
+  if (url.pathname.startsWith("/static/uploads/")) return null;
+  const v = url.searchParams.get("v");
+  if (!v) return null;
+  return VERSIONED_STATIC_CACHE_CONTROL;
+}

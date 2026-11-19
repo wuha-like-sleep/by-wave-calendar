@@ -236,7 +236,8 @@ class CalendarState(
             //    缓存按**这个 client 的账号**读写，不按「当前活动账号」：切账号
             //    时还在飞的那次加载，结果不能写进另一个账号的缓存。
             val deviceId = client.profileId
-            val cached = if (useCache) deviceId?.let { EventCache.read(it, fromIso, toIso) } else null
+            val cachedEntry = if (useCache) deviceId?.let { EventCache.readEntry(it, fromIso, toIso) } else null
+            val cached = cachedEntry?.resp
             if (cached != null) {
                 loadedWindow = queryWindow
                 _ui.value = _ui.value.copy(
@@ -256,20 +257,35 @@ class CalendarState(
             //    (e.g. clicked prev/next twice quickly), so the next
             //    load() call wins and we don't surface the cancellation.
             try {
-                val resp = client.events(from = fromIso, to = toIso)
-                currentCoroutineContext().ensureActive()
-                _ui.value = _ui.value.copy(
-                    events = resp.events,
-                    calendars = resp.calendars,
-                    // Absence only means deletion within the same query window.
-                    // A timezone switch can move a still-open event to another day.
-                    activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events,
-                        allowMissingAsDeletion = loadedWindow == queryWindow),
-                    loading = false,
-                    error = null,
-                )
-                loadedWindow = queryWindow
-                if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp)
+                // 条件请求：快照里存了这个窗口的 ETag 就带上。服务端回
+                // 304 = 内容没变，刚画上去的缓存就是最新，正文的传输、
+                // 解析、状态替换全部省掉；回 200 才走下面整套替换。
+                // useCache=false（刚改完数据）时没读快照、没有令牌，
+                // 天然是全量拉取——自己的改动也必然让服务端令牌变化，
+                // 两条路都不会漏数据。
+                when (val fetch = client.eventsConditional(fromIso, toIso, cachedEntry?.etag)) {
+                    is ApiClient.EventsFetch.NotModified -> {
+                        currentCoroutineContext().ensureActive()
+                        loadedWindow = queryWindow
+                        _ui.value = _ui.value.copy(loading = false, error = null)
+                    }
+                    is ApiClient.EventsFetch.Fresh -> {
+                        val resp = fetch.resp
+                        currentCoroutineContext().ensureActive()
+                        _ui.value = _ui.value.copy(
+                            events = resp.events,
+                            calendars = resp.calendars,
+                            // Absence only means deletion within the same query window.
+                            // A timezone switch can move a still-open event to another day.
+                            activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events,
+                                allowMissingAsDeletion = loadedWindow == queryWindow),
+                            loading = false,
+                            error = null,
+                        )
+                        loadedWindow = queryWindow
+                        if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp, fetch.etag)
+                    }
+                }
             } catch (e: CancellationException) {
                 // Re-throw so the coroutine machinery sees it correctly.
                 // DON'T flip to error state — this is a benign cancellation.

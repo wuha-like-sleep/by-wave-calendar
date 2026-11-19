@@ -47,7 +47,10 @@
         expired-session 401 bounces the user to /login instead of silently
         failing in place. %>
     <script src="<%= js %>/auth-guard.js?v=<%= v %>" defer></script>
-    <script defer src="/static/lib/htmx.min.js"></script>
+    <%# htmx 不再全局加载：全站模板里没有任何 hx-* 属性在用它（只有 app.js /
+        auth-guard 里几个监听 htmx 事件的防御性钩子，没装 htmx 时它们就是
+        空转的 addEventListener）。以前每个页面都白下载 52KB（gzip 17KB）
+        再执行一遍。哪个页面真需要时自己引，别让所有页面替它买单。 %>
     <script src="<%= js %>/app.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/local-time.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>

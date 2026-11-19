@@ -75,6 +75,7 @@ import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -221,11 +222,18 @@ interface BywaveApi {
     @GET("api/v1/booking-links/{id}/bookings")
     suspend fun bookings(@Path("id") id: String): List<Booking>
 
+    /** Window fetch with conditional-request support. Returns the raw
+     *  Response so the caller can see 304 (window unchanged — the server
+     *  ETag covers the visible calendars + window + content version) and
+     *  the fresh ETag on a 200. [ifNoneMatch] is the ETag the server
+     *  issued for this exact (profile, window) last time; null = fetch
+     *  unconditionally. Only caller is EventRepository.fetchAndCache. */
     @GET("api/v1/events")
     suspend fun events(
         @Query("from") from: String,
         @Query("to") to: String,
-    ): EventsResponse
+        @Header("If-None-Match") ifNoneMatch: String? = null,
+    ): retrofit2.Response<EventsResponse>
 
     @POST("api/v1/events")
     suspend fun createEvent(@Body body: EventCreateInput): EventDTO

@@ -4,7 +4,7 @@ import path from "node:path";
 import type { Server as HttpsServer } from "node:https";
 import Fastify, { type FastifyError } from "fastify";
 import { httpsOptionsFromEnv, startHttpRedirectServer, watchCertReload } from "./lib/tls.js";
-import { loadAssetVersion } from "./lib/asset_version.js";
+import { cacheControlForVersionedStatic, loadAssetVersion } from "./lib/asset_version.js";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
@@ -455,6 +455,23 @@ await app.register(fastifyStatic, {
   cacheControl: true,
   maxAge: env.NODE_ENV === "production" ? "7d" : 0,
 });
+
+// 带 ?v=<内容哈希> 的静态 URL 给一年 immutable：v 本身就是内容哈希，
+// 内容变了 URL 必变，旧 URL 上的字节永远不变（判定逻辑在
+// lib/asset_version.ts 的 cacheControlForVersionedStatic，uploads 与
+// 没带 v 的引用不接管、保持上面的 7 天）。只覆盖 200 响应——304 / 404
+// 的 Cache-Control 各有自己的语义，不许把「永久缓存」贴到错误响应上。
+// 只在生产挂：开发时 maxAge 本来就是 0（改完立刻生效），挂了这个钩子
+// 浏览器会把带 v 的资源钉一年，dev 循环就废了。
+if (env.NODE_ENV === "production") {
+  app.addHook("onSend", async (req, reply, payload) => {
+    if (reply.statusCode === 200) {
+      const cc = cacheControlForVersionedStatic(req.raw.url ?? "");
+      if (cc) reply.header("Cache-Control", cc);
+    }
+    return payload;
+  });
+}
 
 // ---- Views (EJS) ----
 await app.register(view, {

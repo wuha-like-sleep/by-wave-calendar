@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { computeAssetVersion, loadAssetVersion } from "../src/lib/asset_version.js";
+import { cacheControlForVersionedStatic, computeAssetVersion, loadAssetVersion, VERSIONED_STATIC_CACHE_CONTROL } from "../src/lib/asset_version.js";
 
 let root: string;
 let pub: string;
@@ -70,6 +70,31 @@ describe("loadAssetVersion", () => {
   it("戳文件内容损坏时不信任它，回落到现算", () => {
     writeFileSync(path.join(root, "asset-version.txt"), "not-a-version\n");
     expect(loadAssetVersion(root)).toBe(computeAssetVersion(pub));
+  });
+});
+
+describe("cacheControlForVersionedStatic", () => {
+  it("带 v 的静态资源给一年 immutable", () => {
+    expect(cacheControlForVersionedStatic("/static/_built/app.js?v=4af6afc9639c4f6e"))
+      .toBe(VERSIONED_STATIC_CACHE_CONTROL);
+    expect(VERSIONED_STATIC_CACHE_CONTROL).toContain("immutable");
+    expect(VERSIONED_STATIC_CACHE_CONTROL).toContain("max-age=31536000");
+  });
+
+  it("没带 v（或 v 为空）不接管，保持 fastifyStatic 自己的 7 天", () => {
+    expect(cacheControlForVersionedStatic("/static/lib/htmx.min.js")).toBeNull();
+    expect(cacheControlForVersionedStatic("/static/app.js?v=")).toBeNull();
+    expect(cacheControlForVersionedStatic("/static/app.js?x=1")).toBeNull();
+  });
+
+  it("uploads 哪怕误带 v 也绝不给长缓存（管理员上传内容没有版本语义）", () => {
+    expect(cacheControlForVersionedStatic("/static/uploads/logo.svg?v=4af6afc9639c4f6e")).toBeNull();
+  });
+
+  it("非 /static/ 路径不接管（API、页面 HTML 的缓存语义各有主人）", () => {
+    expect(cacheControlForVersionedStatic("/api/v1/events?v=1")).toBeNull();
+    expect(cacheControlForVersionedStatic("/app?v=1")).toBeNull();
+    expect(cacheControlForVersionedStatic("/staticx/app.js?v=1")).toBeNull();
   });
 });
 
