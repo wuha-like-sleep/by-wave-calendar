@@ -13,7 +13,7 @@
         <div>
           <label class="block text-sm font-medium text-slate-700">平台名称</label>
           <input type="text" id="bwc-name" name="siteName" maxlength="100" value="<%= settings.siteName %>"
-                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <p class="mt-1 text-xs text-slate-400">显示在邮件顶栏与署名（与 站点设置 同源，这里改也会同步）。</p>
         </div>
         <div>
@@ -22,14 +22,14 @@
             <input type="color" id="bwc-color-picker" value="<%= settings.emailBrandColor %>"
                    class="h-9 w-12 cursor-pointer rounded border border-slate-300 bg-white p-0.5" />
             <input type="text" id="bwc-color" name="emailBrandColor" maxlength="16" value="<%= settings.emailBrandColor %>"
-                   class="block w-32 rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                   class="block w-32 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           </div>
           <p class="mt-1 text-xs text-slate-400">用于邮件按钮、链接、顶栏渐变。支持 #rrggbb / #rgb。</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">页脚说明</label>
           <input type="text" id="bwc-footer" name="emailFooterNote" maxlength="100" value="<%= settings.emailFooterNote %>"
-                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <p class="mt-1 text-xs text-slate-400">显示在版权行后面（默认「日历共享平台」）。</p>
         </div>
         <div class="flex items-center gap-2 pt-1">
@@ -63,7 +63,7 @@
         </div>
         <div class="flex items-center gap-2 pt-1">
           <input type="email" name="to" required placeholder="you@example.com"
-                 class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <button type="submit" class="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">发送所选</button>
         </div>
       </form>

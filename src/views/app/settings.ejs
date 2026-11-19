@@ -91,7 +91,7 @@
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <input type="text" name="code" required pattern="[0-9]{6}" maxlength="6" placeholder="<%= t('settings.security.mfaCodePlaceholder') %>"
                inputmode="numeric"
-               class="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <button type="submit" class="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"><%= t("settings.security.mfaDisableButton") %></button>
       </form>
     </details>
@@ -546,7 +546,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="text" name="label" required maxlength="60"
            placeholder="<%= t('settings.devices.appPasswordLabelPlaceholder') %>"
-           class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+           class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     <button type="submit"
             class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
       <%= t("settings.devices.generateAppPassword") %>
@@ -609,11 +609,11 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="text" name="label" required maxlength="80"
                placeholder="<%= t('settings.devices.apiTokenLabelPlaceholder') %>"
-               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <label class="flex items-center gap-2 text-sm text-slate-600">
           <%= t("settings.devices.apiTokenExpiryLabel") %>
           <input type="number" name="expiresInDays" min="0" max="3650" value="365" inputmode="numeric"
-                 class="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </label>
       </div>
       <p class="text-xs text-slate-500"><%= t("settings.devices.apiTokenExpiryHint") %></p>
@@ -634,13 +634,13 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
         <input type="password" name="currentPassword" autocomplete="current-password"<% if (user.passwordSet === true) { %> required<% } %>
                aria-label="<%= t('settings.devices.apiTokenCurrentPassword') %>"
                placeholder="<%= t('settings.devices.apiTokenCurrentPassword') %>"
-               class="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <% } %>
       <% if (user.mfaEnabled) { %>
         <input type="text" name="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="16"
                aria-label="<%= t('settings.devices.apiTokenMfaCode') %>"
                placeholder="<%= t('settings.devices.apiTokenMfaCode') %>"
-               class="w-full sm:w-72 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full sm:w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <% } %>
       <p class="text-xs text-slate-500"><%= t("settings.devices.apiTokenStepUpHint") %></p>
       <button type="submit"
@@ -795,12 +795,12 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     <div>
       <label class="block text-sm font-medium text-slate-700"><%= t("settings.security.currentPasswordLabel") %></label>
       <input type="password" name="currentPassword" required autocomplete="current-password"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div>
       <label class="block text-sm font-medium text-slate-700"><%= t("settings.security.newPasswordLabel") %></label>
       <input type="password" name="newPassword" required minlength="8" autocomplete="new-password"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("settings.security.updatePassword") %></button>
   </form>

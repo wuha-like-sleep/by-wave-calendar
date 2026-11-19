@@ -39,27 +39,27 @@
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
                 <input type="text" name="label" required maxlength="100" value="<%= p.label %>"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">Sort order</span>
                 <input type="number" name="sortOrder" value="<%= p.sortOrder %>"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm sm:col-span-2">
                 <span class="block font-medium text-slate-700 mb-1">Issuer URL</span>
                 <input type="url" name="issuerUrl" required value="<%= p.issuerUrl %>"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">Client ID</span>
                 <input type="text" name="clientId" required value="<%= p.clientId %>"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm">
                 <span class="block font-medium text-slate-700 mb-1">Client Secret <span class="text-xs text-slate-400">(留空不修改)</span></span>
                 <input type="password" name="clientSecret" autocomplete="new-password" placeholder="•••••••"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm sm:col-span-2 inline-flex items-center gap-2">
                 <input type="checkbox" name="enabled" <%= p.enabled ? "checked" : "" %>
@@ -91,27 +91,27 @@
       <span class="block font-medium text-slate-700 mb-1">slug <span class="text-xs text-slate-400">(URL 标识，如 <code>keycloak</code> / <code>okta</code> / <code>google</code>)</span></span>
       <input type="text" name="slug" required pattern="[a-z0-9][a-z0-9-]{0,30}" maxlength="31"
              placeholder="keycloak"
-             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm">
       <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
       <input type="text" name="label" required maxlength="100" placeholder="使用 Keycloak 登录"
-             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm sm:col-span-2">
       <span class="block font-medium text-slate-700 mb-1">Issuer URL</span>
       <input type="url" name="issuerUrl" required placeholder="https://okta.lz-ss.com/realms/master"
-             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm">
       <span class="block font-medium text-slate-700 mb-1">Client ID</span>
       <input type="text" name="clientId" required maxlength="200"
-             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm">
       <span class="block font-medium text-slate-700 mb-1">Client Secret</span>
       <input type="password" name="clientSecret" required maxlength="400" autocomplete="new-password"
-             class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm sm:col-span-2 inline-flex items-center gap-2">
       <input type="checkbox" name="enabled" checked class="h-4 w-4 rounded border-slate-300 accent-brand-600" />

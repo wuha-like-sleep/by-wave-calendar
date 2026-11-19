@@ -28,10 +28,10 @@
             <tr class="border-b border-slate-50">
               <td class="py-2 px-5 sm:px-0 sm:pr-4 text-slate-700 whitespace-nowrap"><%- e.createdAtLocal %></td>
               <td class="py-2 pr-4">
-                <% if (e.method === 'passkey') { %><span class="inline-block rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs">Passkey</span>
-                <% } else if (e.method === 'mfa') { %><span class="inline-block rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-xs">密码+MFA</span>
-                <% } else if (e.method === 'sso') { %><span class="inline-block rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs">SSO</span>
-                <% } else { %><span class="inline-block rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">密码</span><% } %>
+                <% if (e.method === 'passkey') { %><span class="inline-block whitespace-nowrap rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs">Passkey</span>
+                <% } else if (e.method === 'mfa') { %><span class="inline-block whitespace-nowrap rounded-full bg-indigo-50 text-indigo-700 px-2 py-0.5 text-xs">密码+MFA</span>
+                <% } else if (e.method === 'sso') { %><span class="inline-block whitespace-nowrap rounded-full bg-violet-50 text-violet-700 px-2 py-0.5 text-xs">SSO</span>
+                <% } else { %><span class="inline-block whitespace-nowrap rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">密码</span><% } %>
               </td>
               <td class="py-2 pr-4 font-mono text-xs text-slate-700"><%= e.ip %></td>
               <td class="py-2 px-5 sm:px-0 text-xs text-slate-500 max-w-xs truncate" title="<%= e.userAgent %>"><%= e.userAgent %></td>

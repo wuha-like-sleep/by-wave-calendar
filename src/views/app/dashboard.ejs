@@ -15,12 +15,12 @@
   <form method="post" action="/app/calendars" class="grid sm:grid-cols-4 gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="text" name="name" required maxlength="200" placeholder="<%= t('dashboard.namePlaceholder') %>"
-           class="sm:col-span-2 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+           class="sm:col-span-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     <input type="text" name="timezone" id="new-cal-timezone" maxlength="100" value="Asia/Shanghai"
-           class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+           class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     <input type="color" name="color" value="#6366f1" class="rounded-lg border border-slate-300 h-9 w-full" />
     <textarea name="description" maxlength="2000" rows="2" placeholder="<%= t('dashboard.descriptionPlaceholder') %>"
-              class="sm:col-span-3 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+              class="sm:col-span-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("dashboard.createButton") %></button>
   </form>
 </div>

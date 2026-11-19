@@ -227,7 +227,10 @@
   --c-white: 30 41 59;
   --c-black: 0 0 0;
   --c-slate-50: 15 23 42;
-  --c-slate-100: 30 41 59;
+  /* One step above the card surface (--c-white): at the same value the
+     slate-100 fills (badges, kbd chips, segmented tracks) and the
+     slate-100 hairlines on cards had no visible boundary in dark mode. */
+  --c-slate-100: 41 54 76;
   --c-slate-200: 51 65 85;
   --c-slate-300: 71 85 105;
   --c-slate-400: 148 163 184;
@@ -562,6 +565,19 @@ details > summary::-webkit-details-marker { display: none; }
 [data-mode="dark"] .hover\:bg-brand-50:hover { background-color: rgb(var(--brand-900) / 0.45); }
 [data-mode="dark"] .bg-brand-100 { background-color: rgb(var(--brand-900) / 0.65); }
 [data-mode="dark"] .hover\:bg-brand-100:hover { background-color: rgb(var(--brand-900) / 0.65); }
+
+/* Gradient stops read the raw brand/violet variables, which never flip:
+   a from-brand-50 gradient kept its pale start in dark mode and glowed
+   against the page (landing / download hero, quick-add bar, next-event
+   banner), and to-violet-* landed on saturated violet-950. Restate the
+   stops as the same deep brand wash the solid tints above use. */
+[data-mode="dark"] .from-brand-50 { --tw-gradient-from: rgb(var(--brand-900) / 0.45) var(--tw-gradient-from-position); --tw-gradient-to: rgb(var(--brand-900) / 0) var(--tw-gradient-to-position); }
+[data-mode="dark"] .from-brand-50\/60 { --tw-gradient-from: rgb(var(--brand-900) / 0.5) var(--tw-gradient-from-position); --tw-gradient-to: rgb(var(--brand-900) / 0) var(--tw-gradient-to-position); }
+[data-mode="dark"] .from-brand-50\/70 { --tw-gradient-from: rgb(var(--brand-900) / 0.35) var(--tw-gradient-from-position); --tw-gradient-to: rgb(var(--brand-900) / 0) var(--tw-gradient-to-position); }
+[data-mode="dark"] .from-brand-100 { --tw-gradient-from: rgb(var(--brand-900) / 0.65) var(--tw-gradient-from-position); --tw-gradient-to: rgb(var(--brand-900) / 0) var(--tw-gradient-to-position); }
+[data-mode="dark"] .to-violet-50 { --tw-gradient-to: rgb(var(--brand-900) / 0.3) var(--tw-gradient-to-position); }
+[data-mode="dark"] .to-violet-50\/70 { --tw-gradient-to: rgb(var(--brand-900) / 0.25) var(--tw-gradient-to-position); }
+[data-mode="dark"] .to-violet-100 { --tw-gradient-to: rgb(var(--brand-900) / 0.45) var(--tw-gradient-to-position); }
 
 /* Saturated semantic fills with white text (delete / confirm / verify
    buttons, error + success toasts) keep their light-mode values — the

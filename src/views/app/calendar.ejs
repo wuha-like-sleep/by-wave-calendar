@@ -38,15 +38,15 @@
   <form method="post" action="/app/calendars/<%= calendar.id %>/invitations" class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2 mb-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="email" name="email" required maxlength="254" placeholder="<%= t('calendar.invite.emailPlaceholder') %>"
-           class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    <select name="role" class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+           class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    <select name="role" class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
       <option value="viewer"><%= t("calendar.invite.roleViewer") %></option>
       <option value="editor"><%= t("calendar.invite.roleEditor") %></option>
     </select>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.invite.send") %></button>
   </form>
   <textarea name="message" placeholder="<%= t('calendar.invite.messagePlaceholder') %>" maxlength="500" rows="2"
-            class="hidden w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+            class="hidden w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
 
   <% if (members && members.length > 0) { %>
     <div class="mt-2">
@@ -110,7 +110,7 @@
   <form method="post" action="/app/calendars/<%= calendar.id %>/share-tokens" class="flex flex-col sm:flex-row gap-2 mb-4">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="text" name="label" maxlength="100" placeholder="<%= t('calendar.share.labelPlaceholder') %>"
-           class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+           class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.share.generate") %></button>
   </form>
 
@@ -182,7 +182,7 @@
     <form method="post" action="/app/calendars/<%= calendar.id %>/import/url-once" class="flex flex-col sm:flex-row gap-2">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="url" name="url" required placeholder="<%= t('calendar.import.urlPlaceholder') %>"
-             class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.urlSubmit") %></button>
     </form>
     <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.urlHint") %></p>
@@ -193,14 +193,14 @@
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="url" name="url" required placeholder="<%= t('calendar.import.subUrlPlaceholder') %>"
-               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.subSubmit") %></button>
       </div>
       <div class="flex flex-col sm:flex-row gap-2">
         <input type="text" name="label" maxlength="60" placeholder="<%= t('calendar.import.subLabelPlaceholder') %>"
-               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <select name="refreshMinutes"
-                class="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+                class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
           <option value="60"><%= t("calendar.import.refresh.hourly") %></option>
           <option value="360" selected><%= t("calendar.import.refresh.6h") %></option>
           <option value="720"><%= t("calendar.import.refresh.12h") %></option>
@@ -249,7 +249,7 @@
     <form method="post" action="/app/calendars/<%= calendar.id %>/import/text" class="space-y-2">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <textarea name="text" required rows="6" placeholder="<%= t('calendar.import.pastePlaceholder') %>"
-                class="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.pasteSubmit") %></button>
     </form>
     <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.pasteHint") %></p>
@@ -280,7 +280,7 @@
     <h2 class="text-lg font-semibold text-slate-900"><%= t("calendar.events.heading") %></h2>
     <div class="flex items-center gap-2">
       <input type="date" id="event-filter-from"
-             class="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <label class="inline-flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
         <input type="checkbox" id="event-show-past" class="h-3.5 w-3.5 rounded border-slate-300 accent-brand-600" />
         <%= t("calendar.events.showPast") %>
@@ -298,27 +298,27 @@
     <div class="sm:col-span-2">
       <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("calendar.events.titleLabel") %></label>
       <input type="text" name="summary" required maxlength="500"
-             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div>
       <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("calendar.events.startLabel") %></label>
       <input type="datetime-local" name="startsAt" required
-             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div>
       <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("calendar.events.endLabel") %></label>
       <input type="datetime-local" name="endsAt" required
-             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div class="sm:col-span-2">
       <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("calendar.events.locationLabel") %></label>
       <input type="text" name="location" maxlength="500"
-             class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <div class="sm:col-span-2">
       <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("calendar.events.descriptionLabel") %></label>
       <textarea name="description" maxlength="5000" rows="2"
-                class="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
     </div>
     <div class="sm:col-span-2 flex justify-end gap-2">
       <button type="button" data-bwc-hide="#new-event-form"
