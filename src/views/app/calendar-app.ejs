@@ -1,6 +1,8 @@
 <link rel="stylesheet" href="/static/lib/toastui-calendar.min.css?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" />
 
-<div id="calendar-app" class="flex-1 min-h-0 flex flex-col">
+<%# bg-white: the shell gets safe-area inline padding in CSS (landscape
+    notch), and the strips that padding reveals must match the surface. %>
+<div id="calendar-app" class="flex-1 min-h-0 flex flex-col bg-white">
   <!-- Top toolbar -->
   <header class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-5 py-2 sm:py-3 border-b border-slate-200 bg-white sticky top-14 z-30">
     <button type="button" id="btn-toggle-sidebar" class="p-2 rounded-md hover:bg-slate-100" aria-label="<%= t("app.toolbar.sidebar") %>">
@@ -75,15 +77,16 @@
 
   <div class="flex-1 min-h-0 flex relative">
     <!-- Sidebar backdrop (mobile only when open) -->
-    <div id="cal-sidebar-backdrop" class="hidden md:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
+    <div id="cal-sidebar-backdrop" class="hidden duo:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
 
     <!-- Sidebar.
-         Default state: on md+, in-flow flex item (w-64 lg:w-72); on mobile, hidden.
+         Default state: on duo+ (≥700px, the unfolded-foldable band and
+         up), in-flow flex item (w-60 duo, w-64 md, lg:w-72); below that, hidden.
          When opened on mobile: becomes a fixed drawer via the .sidebar-open class added by JS.
          When collapsed on desktop: hidden via .sidebar-collapsed (also added by JS). -->
     <aside id="cal-sidebar"
-           class="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
-      <div class="md:hidden flex items-center justify-between p-3 border-b border-slate-100">
+           class="hidden duo:flex duo:w-60 md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
+      <div class="duo:hidden flex items-center justify-between p-3 border-b border-slate-100">
         <span class="text-sm font-semibold text-slate-700"><%= t("nav.calendar") %></span>
         <button type="button" id="btn-close-sidebar" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -165,7 +168,7 @@
     </aside>
 
     <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
-    <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
+    <section id="cal-main" class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
       <%# 一句话快速添加：主界面常驻，和新建弹窗里的 #nl-input 是同一个
           解析器、同一套回填逻辑（calendar-app.js 的 NL 区块接线）。
           输入时在下方实时预览解析结果，回车打开新建表单并回填；
@@ -201,14 +204,14 @@
           <a href="/app/settings#caldav-connect" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><%= t("app.empty.caldav") %></a>
         </div>
       </div>
-      <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem);"></div>
+      <div id="calendar" class="flex-1" style="min-height: calc(100vh - 14rem); min-height: calc(100dvh - 14rem);"></div>
     </section>
   </div>
 </div>
 
 <!-- Modal: New / Edit Event -->
 <div id="modal-event" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+  <div class="bg-white w-full sm:w-[480px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900"><%= t("app.toolbar.newEvent") %></h3>
       <div class="flex items-center gap-2">
@@ -487,7 +490,7 @@
     UTC offset; selecting commits a known-valid IANA id to the hidden
     <input name="timezone"> in the picker that opened the modal. %>
 <div id="modal-tz" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col max-h-[85vh]">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col style="max-height: 85vh; max-height: 85dvh"">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
       <h3 class="text-base font-semibold text-slate-900"><%= t("app.tz.title") %></h3>
       <button type="button" data-tz-close class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -520,7 +523,7 @@
     each conflict with original timestamp + last error + retry/discard
     buttons. %>
 <div id="modal-conflicts" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 85vh; max-height: 85dvh" overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 class="text-lg font-semibold text-slate-900"><%= t("app.conflicts.title") %></h3>
       <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -541,7 +544,7 @@
 
 <!-- Modal: Import calendar (file / URL / subscription / paste, into new or existing) -->
 <div id="modal-import" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 class="text-lg font-semibold text-slate-900"><%= t("app.import.title") %></h3>
       <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -661,7 +664,7 @@
 
 <!-- Modal: Calendar context menu (share, edit, delete) -->
 <div id="modal-cal-menu" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <div class="flex items-center gap-2 min-w-0">
         <span id="cal-menu-color" class="inline-block h-4 w-4 rounded-full flex-shrink-0"></span>

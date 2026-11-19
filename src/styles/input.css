@@ -416,6 +416,108 @@ details > summary::-webkit-details-marker { display: none; }
   footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
 
+/* ---------- Safe areas beyond the footer (notch / Dynamic Island / home
+   indicator), site-wide ----------
+   The layout opts into viewport-fit=cover, so in landscape the page really
+   does extend under the side notch, and in standalone mode the home
+   indicator overlays the bottom edge. Until now only the footer kept
+   clear. These rules give every fixed/full-bleed surface the same
+   treatment; on devices without cutouts every inset is 0 and nothing
+   changes. The variables are the single source — components compose them
+   with max()/calc() against their designed offsets instead of replacing
+   them, so the Tailwind spacing underneath is untouched. */
+:root {
+  --bwc-sat: env(safe-area-inset-top, 0px);
+  --bwc-sab: env(safe-area-inset-bottom, 0px);
+  --bwc-sal: env(safe-area-inset-left, 0px);
+  --bwc-sar: env(safe-area-inset-right, 0px);
+}
+/* Top bar: its inner container keeps its own px-*; this pads the header
+   element itself, so the two compose. Matters in landscape, where the
+   notch eats into the left/right ends of the bar. */
+header.bwc-site-nav {
+  padding-left: var(--bwc-sal);
+  padding-right: var(--bwc-sar);
+}
+/* Calendar shell is full-bleed (sidebar + grid touch both edges). The
+   shell div carries bg-white so the inset strips match the surface. */
+#calendar-app {
+  padding-left: var(--bwc-sal);
+  padding-right: var(--bwc-sar);
+}
+/* Mobile calendar drawer slides over the left edge — same treatment. */
+#cal-sidebar.bwc-drawer { padding-left: var(--bwc-sal); }
+/* Floating actions: keep the designed offset, but never inside the home
+   indicator / side-notch zone. */
+#btn-new-event-fab {
+  bottom: max(1.25rem, calc(var(--bwc-sab) + 0.75rem));
+  right: max(1.25rem, calc(var(--bwc-sar) + 0.75rem));
+}
+#btn-shortcuts {
+  bottom: max(1rem, calc(var(--bwc-sab) + 0.5rem));
+  right: max(1rem, calc(var(--bwc-sar) + 0.5rem));
+}
+#shortcuts-panel {
+  bottom: max(4rem, calc(var(--bwc-sab) + 3.5rem));
+  right: max(1rem, calc(var(--bwc-sar) + 0.5rem));
+}
+/* Toasts are bottom-anchored full-width on phones: lift the stack clear
+   of the home indicator and the landscape notch on both sides. */
+#toast-root {
+  padding-bottom: var(--bwc-sab);
+  padding-left: var(--bwc-sal);
+  padding-right: var(--bwc-sar);
+}
+/* The app shell's slim copyright strip sits on the very bottom edge. */
+#bwc-app-strip { padding-bottom: max(0.375rem, var(--bwc-sab)); }
+/* Bottom sheets: lift the panel above the home indicator; the backdrop
+   still covers the full screen behind it. */
+@media (max-width: 639px) {
+  [id^="modal-"] { padding-bottom: var(--bwc-sab); }
+}
+
+/* ---------- Dynamic viewport height ----------
+   100vh on iOS Safari is the LARGE viewport (URL bar hidden), so a
+   min-h-screen page starts out taller than the visible area and the
+   layout settles with a jump once the bar state is known. dvh tracks
+   the actually-visible height; keep the vh line first as the fallback
+   for engines without dvh. (Modal panels and the calendar's fallback
+   min-height carry the same dual declaration inline in the templates,
+   where their exact rem/vh values live.) */
+body.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* ---------- Unfolded band (duo tier, ≈700–1023px) ----------
+   Between phone and tablet: the calendar gets its sidebar in-flow from
+   700px (the `duo` screen in tailwind.config + the sidebar classes).
+   Text-list pages get a reading measure here — full-bleed lines at
+   800–1000px are hard to scan — while the desktop layout above the band
+   keeps its own, already-tuned widths. */
+@media (min-width: 700px) and (max-width: 1023px) {
+  .bwc-notif-panel {
+    max-width: 44rem;
+    margin-inline: auto;
+    width: 100%;
+  }
+}
+
+/* ---------- Fold hinge (progressive enhancement) ----------
+   Where the engine exposes viewport segments (Chromium foldables today;
+   WebKit ignores the whole block), put the pane boundary ON the hinge:
+   the sidebar takes exactly the first segment's width and the calendar
+   grid starts after the hinge gap instead of straddling it. */
+@media (horizontal-viewport-segments: 2) {
+  #cal-sidebar {
+    width: env(viewport-segment-width 0 0);
+    flex-shrink: 0;
+  }
+  #cal-main {
+    padding-left: calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0));
+  }
+}
+
 /* ---------- Modal + drawer + FAB motion ----------
    Every modal is a full-screen backdrop container ([id^="modal-"]) whose single
    child is the panel card. The JS (openModal/closeModal) un-hides the element,

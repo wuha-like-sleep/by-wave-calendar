@@ -308,7 +308,7 @@
   const MOBILE_OPEN = ["flex", "fixed", "inset-y-0", "left-0", "z-50", "w-72"];
   const HIDDEN = ["hidden"];
 
-  function isMobile() { return window.matchMedia("(max-width: 767px)").matches; }
+  function isMobile() { return window.matchMedia("(max-width: 699px)").matches; }
 
   const DRAWER_LEAVE_MS = 300; // ≥ the CSS drawer/backdrop leave transition
   function showOnMobile() {
@@ -333,12 +333,12 @@
   }
   function showOnDesktop() {
     sidebar.classList.remove("hidden");
-    sidebar.classList.add("md:flex");
+    sidebar.classList.add("duo:flex");
     localStorage.setItem(SIDEBAR_DESKTOP_KEY, "1");
     requestAnimationFrame(() => { try { cal.render(); } catch (e) {} });
   }
   function hideOnDesktop() {
-    sidebar.classList.remove("md:flex");
+    sidebar.classList.remove("duo:flex");
     sidebar.classList.add("hidden");
     localStorage.setItem(SIDEBAR_DESKTOP_KEY, "0");
     requestAnimationFrame(() => { try { cal.render(); } catch (e) {} });
@@ -354,8 +354,32 @@
   // Restore desktop preference
   if (!isMobile() && localStorage.getItem(SIDEBAR_DESKTOP_KEY) === "0") {
     sidebar.classList.add("hidden");
-    sidebar.classList.remove("md:flex");
+    sidebar.classList.remove("duo:flex");
   }
+
+  // Form-factor flip across the duo boundary (fold/unfold, rotation):
+  // the drawer's fixed-position classes are meaningless in-flow and vice
+  // versa — an open drawer would stay glued over the unfolded layout.
+  // Reset to the canonical state for the new form factor, honouring the
+  // saved desktop collapse preference, then re-render the grid.
+  const duoMq = window.matchMedia("(max-width: 699px)");
+  function onDuoFlip() {
+    MOBILE_OPEN.forEach(c => sidebar.classList.remove(c));
+    sidebar.classList.remove("bwc-drawer");
+    sidebar.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    backdrop.classList.add("hidden");
+    if (duoMq.matches || localStorage.getItem(SIDEBAR_DESKTOP_KEY) === "0") {
+      sidebar.classList.add("hidden");
+      sidebar.classList.remove("duo:flex");
+    } else {
+      sidebar.classList.remove("hidden");
+      sidebar.classList.add("duo:flex");
+    }
+    requestAnimationFrame(() => { try { cal.render(); } catch (e) {} });
+  }
+  if (duoMq.addEventListener) duoMq.addEventListener("change", onDuoFlip);
+  else if (duoMq.addListener) duoMq.addListener(onDuoFlip);
 
   $("#btn-toggle-sidebar").addEventListener("click", toggleSidebar);
   $("#btn-close-sidebar")?.addEventListener("click", hideOnMobile);

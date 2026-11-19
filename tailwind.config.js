@@ -13,6 +13,19 @@ module.exports = {
     "flex", "hidden", "absolute", "z-30", "inset-y-0", "left-0",
   ],
   theme: {
+    // Full screen set, defaults plus one tier: `duo` at 700px — the
+    // unfolded-foldable / large-phone-landscape band (≈700–900px) where
+    // a phone UI is too cramped but the tablet/desktop layout is not yet
+    // warranted. Declared in full (not via extend) so the cascade order
+    // is guaranteed ascending: duo rules must never outrank md/lg ones.
+    screens: {
+      sm: "640px",
+      duo: "700px",
+      md: "768px",
+      lg: "1024px",
+      xl: "1280px",
+      "2xl": "1536px",
+    },
     extend: {
       fontFamily: {
         sans: [

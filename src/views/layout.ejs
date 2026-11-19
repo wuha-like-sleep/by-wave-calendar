@@ -5,6 +5,15 @@
       data-mode-pref="<%= typeof themeMode !== 'undefined' ? themeMode : 'system' %>"
       data-app-version="<%= typeof assetVersion !== 'undefined' ? assetVersion : '0' %>">
   <head>
+    <meta charset="utf-8" />
+    <%# theme-color sits BEFORE the mode script on purpose: the script
+        re-tints this meta to the resolved colour mode, and it can only
+        find the element if it is already parsed. Static value is the
+        light surface; the script corrects it before first paint (and,
+        unlike a media-attribute pair of metas, also follows a manual
+        light/dark preference). %>
+    <meta name="theme-color" content="#f8fafc" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <%# Colour mode resolution — MUST run before the stylesheets below are
         applied, or a dark-mode user gets a white flash on every navigation.
         The server renders the saved preference into data-mode-pref (cookie
@@ -20,15 +29,18 @@
           var dark = pref === "dark" || (pref === "system" && mq.matches);
           root.setAttribute("data-mode", dark ? "dark" : "light");
           root.style.colorScheme = dark ? "dark" : "light";
+          // Keep the browser/PWA chrome tint on the resolved mode, not the
+          // OS scheme alone: a manual light/dark preference must win. The
+          // values match the app surfaces (slate-50 / the dark splash's
+          // deep end) so the status-bar area blends into the page.
+          var tc = document.querySelector('meta[name="theme-color"]');
+          if (tc) tc.setAttribute("content", dark ? "#0b1120" : "#f8fafc");
         }
         apply();
         if (mq.addEventListener) mq.addEventListener("change", apply);
         else if (mq.addListener) mq.addListener(apply);
       })();
     </script>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f172a" />
     <meta name="csrf-token" content="<%= csrfToken %>" />
     <title><%= title %> · <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %></title>
     <%# SEO / 分享卡片：公开页（首页、下载、支持、法律页）靠这几行在搜索
@@ -46,12 +58,41 @@
     <meta name="twitter:description" content="<%= metaDesc %>" />
     <% const v = typeof assetVersion !== 'undefined' ? assetVersion : '1'; %>
     <link rel="icon" type="image/svg+xml" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/favicon.svg?v=' + encodeURIComponent(v) %>" />
-    <link rel="apple-touch-icon" href="<%= (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) ? siteLogoUrl : '/static/icons/apple-touch-icon.png?v=' + encodeURIComponent(v) %>" />
+    <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
+    <link rel="apple-touch-icon" href="<%= siteLogoUrl %>" />
+    <% } else { %>
+    <%# Default icon in the three sizes iOS asks for (180 current phones,
+        167 iPad, 152 older iPads) so no device has to upscale a favicon. %>
+    <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/static/icons/apple-touch-icon-167.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/static/icons/apple-touch-icon-152.png?v=<%= encodeURIComponent(v) %>" />
+    <%# iOS launch screens. Without these, a cold-started home-screen app
+        shows the system default blank until first paint; with them it
+        shows the brand gradient + icon, which the in-page boot splash
+        then continues seamlessly. Portrait sizes of the current iPhone
+        range; devices without an exact match (e.g. foldables) fall back
+        to the default behaviour. %>
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/static/icons/splash/apple-splash-750-1334.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1125-2436.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1170-2532.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1179-2556.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1206-2622.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="/static/icons/splash/apple-splash-828-1792.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1242-2688.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1284-2778.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1290-2796.png?v=<%= encodeURIComponent(v) %>" />
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="/static/icons/splash/apple-splash-1320-2868.png?v=<%= encodeURIComponent(v) %>" />
+    <% } %>
     <link rel="manifest" href="/manifest.webmanifest" />
     <%# iOS reads apple-mobile-web-app-title for the home-screen icon
         label rather than the manifest's short_name — so set both. %>
     <meta name="apple-mobile-web-app-title" content="<%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %>" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <%# "default": the status bar keeps its own (light) background and the
+        page starts below it — declared explicitly so every page makes the
+        same choice. Paired with viewport-fit=cover, landscape side insets
+        are handled by the safe-area padding in the CSS. %>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
     <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
@@ -264,7 +305,7 @@
       </footer>
     <% } %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>
-      <div class="border-t border-slate-200 bg-white py-1.5 px-4 text-center text-[11px] text-slate-400">
+      <div id="bwc-app-strip" class="border-t border-slate-200 bg-white py-1.5 px-4 text-center text-[11px] text-slate-400">
         © <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · <%= t("footer.ourOpenSource") %>
         <% if (typeof icpNumber !== 'undefined' && icpNumber) { %>
           · <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="hover:text-slate-600"><%= icpNumber %></a>
@@ -288,7 +329,7 @@
                  class="flex-1 py-3 px-3 text-sm bg-transparent border-0 focus:outline-none focus:ring-0 placeholder:text-slate-400" />
           <kbd class="text-xs text-slate-400 bg-slate-100 rounded px-1.5 py-0.5">Esc</kbd>
         </div>
-        <ul id="palette-results" class="max-h-[50vh] overflow-y-auto py-1 text-sm"></ul>
+        <ul id="palette-results" class="overflow-y-auto py-1 text-sm" style="max-height: 50vh; max-height: 50dvh"></ul>
         <div class="border-t border-slate-100 px-4 py-2 text-xs text-slate-400 flex items-center gap-3">
           <span><%= t("layout.palette.hintNavigate") %></span><span><%= t("layout.palette.hintSelect") %></span><span><%= t("layout.palette.hintClose") %></span>
         </div>
