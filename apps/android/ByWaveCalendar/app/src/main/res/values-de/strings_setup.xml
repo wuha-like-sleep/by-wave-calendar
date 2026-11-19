@@ -75,4 +75,19 @@
     <string name="setupvm_err_bad_format">E-Mail oder Passwort hat ein ungültiges Format</string>
     <string name="setupvm_err_rate_limited">Zu viele Versuche. Versuche es später erneut.</string>
     <string name="setupvm_err_server">Serverfehler. Versuche es später erneut.</string>
+    <string name="importics_title">Termine importieren</string>
+    <string name="importics_pick_calendar">Kalender für den Import wählen</string>
+    <string name="importics_preview">Vorschau</string>
+    <string name="importics_confirm">Import bestätigen</string>
+    <string name="importics_working_preview">Wird berechnet…</string>
+    <string name="importics_importing">Wird importiert…</string>
+    <string name="importics_summary">%1$d Termine: %2$d neu · %3$d aktualisiert · %4$d Duplikate · %5$d ungültig</string>
+    <string name="importics_invalid_title">Ungültige Einträge</string>
+    <string name="importics_result">Import abgeschlossen: %1$d neu · %2$d aktualisiert · %3$d übersprungen</string>
+    <string name="importics_done">Fertig</string>
+    <string name="importics_no_calendars">Noch keine Kalender — zuerst einen Kalender erstellen</string>
+    <string name="importics_error_read">Die Datei konnte nicht gelesen werden</string>
+    <string name="importics_error_too_large">Datei zu groß (über 8 MB)</string>
+    <string name="importics_error_not_ics">Diese Datei ist keine Kalenderdatei (.ics)</string>
+    <string name="importics_error_generic">Import fehlgeschlagen, bitte später erneut versuchen</string>
 </resources>

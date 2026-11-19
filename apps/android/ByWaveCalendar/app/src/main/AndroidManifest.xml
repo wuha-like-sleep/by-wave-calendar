@@ -93,6 +93,25 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="${appAuthRedirectScheme}" android:host="auth" android:path="/complete" />
             </intent-filter>
+
+            <!-- .ics handovers: "Open with ByWave" from file managers,
+                 mail and chat apps (VIEW), and the share sheet (SEND).
+                 MainActivity.receiveImportIntent re-checks the type
+                 before routing to the import screen — the auth deep
+                 link above is also an ACTION_VIEW and must not be
+                 mistaken for a calendar file. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="text/x-vcalendar" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/calendar" />
+                <data android:mimeType="text/x-vcalendar" />
+            </intent-filter>
         </activity>
 
         <!-- ReminderReceiver — fires when an AlarmManager pending intent

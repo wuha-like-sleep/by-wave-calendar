@@ -16,6 +16,7 @@ package cn.bywave.calendar
 
 import android.content.Intent
 import android.content.Context
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,8 +27,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -42,6 +46,7 @@ import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.event.AttendeesScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
+import cn.bywave.calendar.ui.importics.ImportIcsScreen
 import cn.bywave.calendar.ui.search.SearchScreen
 import cn.bywave.calendar.ui.settings.BookingLinksScreen
 import cn.bywave.calendar.ui.settings.CalendarListScreen
@@ -65,9 +70,38 @@ class MainActivity : ComponentActivity() {
             setIntent(Intent(this, MainActivity::class.java))
         }
     }
+
+    private val incomingImport = kotlinx.coroutines.flow.MutableStateFlow<Uri?>(null)
+
+    /** A .ics file handed over by another app ("Open with ByWave" /
+     *  share sheet — see the intent filters in the manifest). Only
+     *  calendar-typed handovers count: the bywave:// auth deep link is
+     *  also an ACTION_VIEW, and it must never land here. For untyped
+     *  VIEWs we fall back to the .ics suffix on content/file URIs. */
+    private fun receiveImportIntent(intent: Intent?) {
+        if (intent == null) return
+        val type = intent.type
+        val isCalendarType = type == "text/calendar" || type == "text/x-vcalendar"
+        val uri = when (intent.action) {
+            Intent.ACTION_VIEW -> intent.data?.takeIf {
+                isCalendarType ||
+                    ((it.scheme == "content" || it.scheme == "file") &&
+                        it.path?.endsWith(".ics", ignoreCase = true) == true)
+            }
+            Intent.ACTION_SEND -> IntentCompat
+                .getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?.takeIf { isCalendarType }
+            else -> null
+        } ?: return
+        incomingImport.value = uri
+        // Do not replay the same handover on a later activity recreation.
+        setIntent(Intent(this, MainActivity::class.java))
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         receiveWebCallback(intent)
+        receiveImportIntent(intent)
     }
     // APP 内语言在 Android 12 及以下就是在这里生效的：Activity 的
     // Configuration 换成带目标 locale 的那一份，Compose 的
@@ -80,12 +114,19 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         receiveWebCallback(intent)
+        receiveImportIntent(intent)
         enableEdgeToEdge()
         setContent {
             ByWaveTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val callback by webCallback.collectAsState()
-                    AppRoot(callback) { webCallback.value = null }
+                    val importUri by incomingImport.collectAsState()
+                    AppRoot(
+                        webCallback = callback,
+                        callbackHandled = { webCallback.value = null },
+                        incomingImport = importUri,
+                        importHandled = { incomingImport.value = null },
+                    )
                 }
             }
         }
@@ -103,7 +144,12 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
+private fun AppRoot(
+    webCallback: String?,
+    callbackHandled: () -> Unit,
+    incomingImport: Uri?,
+    importHandled: () -> Unit,
+) {
     val profiles = remember { BywaveApp.instance.profiles }
     val activeId by profiles.activeId.collectAsState()
     val nav = rememberNavController()
@@ -147,6 +193,23 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
                 profiles.prefillNextSignIn(null)
                 nav.navigate(AuthRouting.SETUP) { launchSingleTop = true }
             } else { callbackHandled() }
+        }
+    }
+
+    // A .ics handover waits here until someone is signed in (a cold
+    // start from a file manager may land on the setup screen first);
+    // the effect re-fires when the sign-in state flips, so the import
+    // screen follows the login instead of racing it.
+    var pendingImport by remember { mutableStateOf<Uri?>(null) }
+    LaunchedEffect(incomingImport) {
+        if (incomingImport != null) {
+            pendingImport = incomingImport
+            importHandled()
+        }
+    }
+    LaunchedEffect(pendingImport, loggedIn) {
+        if (pendingImport != null && loggedIn && nav.currentDestination?.route != "import_ics") {
+            nav.navigate("import_ics") { launchSingleTop = true }
         }
     }
 
@@ -271,6 +334,23 @@ private fun AppRoot(webCallback: String?, callbackHandled: () -> Unit) {
                         calVm.setAnchor(day)
                     }
                     nav.popBackStack()
+                },
+            )
+        }
+
+        composable("import_ics") { entry ->
+            val parentEntry = remember(nav, entry) { nav.getBackStackEntry(AuthRouting.CALENDAR) }
+            val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
+            ImportIcsScreen(
+                uri = pendingImport,
+                onClose = {
+                    pendingImport = null
+                    nav.popBackStack()
+                },
+                onImported = {
+                    pendingImport = null
+                    nav.popBackStack()
+                    calVm.reload()
                 },
             )
         }
