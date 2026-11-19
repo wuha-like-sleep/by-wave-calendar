@@ -628,6 +628,13 @@
         <% } %>
       </div>
 
+      <!-- Import preview (file / paste only): filled in by calendar-app.js after
+           the preview call, before anything is written. -->
+      <div id="import-preview" class="hidden rounded-lg border border-brand-200 bg-brand-50 px-3 py-2">
+        <p id="import-preview-summary" class="text-sm text-slate-700"></p>
+        <ul id="import-preview-reasons" class="hidden mt-1 list-disc pl-5 text-xs text-slate-500"></ul>
+      </div>
+
       <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
         <button type="button" class="modal-close rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("common.cancel") %></button>
         <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("app.import.submit") %></button>

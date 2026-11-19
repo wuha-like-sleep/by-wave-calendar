@@ -196,14 +196,33 @@ type PendingWrite = {
   remappedExdates: string[] | undefined;
 };
 
-async function upsertEvents(
+/**
+ * 一次导入的「判定结果」：哪些新增、哪些更新、哪些跳过、要写哪些行。
+ * 真实导入（upsertEvents）和导入预览（previewIcsText）共用这一份判定 ——
+ * 预览说新增 X、导入就必须是新增 X，两边各写一套迟早对不上。
+ * 这里只读库（预查现有行、日历时区），一个字都不写。
+ */
+type ImportPlan = {
+  inserted: number;
+  updated: number;
+  /** 重复跳过：内容和库里一模一样 + 已软删不复活。真实导入里算 skipped。 */
+  duplicates: number;
+  /** 无效：解析出来了但缺 uid / 标题。真实导入里算 skipped。 */
+  invalid: number;
+  invalidReasons: string[];
+  pending: PendingWrite[];
+};
+
+async function planImport(
   calendarId: string,
   parsed: IcalEvent[],
   sourceTag: string | null,
-): Promise<ImportResult> {
+): Promise<ImportPlan> {
   let inserted = 0;
   let updated = 0;
-  let skipped = 0;
+  let duplicates = 0;
+  let invalid = 0;
+  const invalidReasons: string[] = [];
   let calendarTimezone: string | null | undefined;
 
   // ---- 第一步：按原顺序把 uid 定下来（短 uid 合成规则和以前一字不差） ----
@@ -221,7 +240,11 @@ async function upsertEvents(
   // share a short source uid still resolve to different uids.
   const items: { ev: IcalEvent; uid: string }[] = [];
   for (const ev of parsed) {
-    if (!ev.uid || !ev.summary) { skipped++; continue; }
+    if (!ev.uid || !ev.summary) {
+      invalid++;
+      if (invalidReasons.length < 5) invalidReasons.push("有一条事件缺少 UID 或标题");
+      continue;
+    }
     const uid = ev.uid.length >= 8
       ? ev.uid
       : `${ev.uid}-${createHash("sha1")
@@ -279,7 +302,7 @@ async function upsertEvents(
     if (existing) {
       // Leave soft-deleted rows alone: don't resurrect something the user
       // (or the dedupe script) removed, and don't churn its updatedAt.
-      if (existing.deletedAt != null) { skipped++; continue; }
+      if (existing.deletedAt != null) { duplicates++; continue; }
       const unchanged =
         existing.summary === ev.summary &&
         (existing.description ?? null) === desc &&
@@ -293,7 +316,7 @@ async function upsertEvents(
         // extraVal 已经算好了，只是没人写进去，症状是「上游改了但我们这边没反应」。
         stableJson(extraVal) === stableJson(existing.extra ?? null) &&
         !remappedExdates;
-      if (unchanged) { skipped++; continue; }
+      if (unchanged) { duplicates++; continue; }
       updated++;
     } else {
       inserted++;
@@ -336,18 +359,119 @@ async function upsertEvents(
     });
   }
 
-  // ---- 第四步：攒下的写分块落库，一块一条多行 upsert、一个事务 ----
+  return {
+    inserted,
+    updated,
+    duplicates,
+    invalid,
+    invalidReasons,
+    pending: [...pending.values()],
+  };
+}
+
+async function upsertEvents(
+  calendarId: string,
+  parsed: IcalEvent[],
+  sourceTag: string | null,
+): Promise<ImportResult> {
+  const plan = await planImport(calendarId, parsed, sourceTag);
+
+  // ---- 落库：攒下的写分块，一块一条多行 upsert、一个事务 ----
   //
   // 分两组是因为 SET 子句一条语句里只能有一套：改过 exdates 的行要连 exdates
   // 一起写；没改过的行 SET 里不带 exdates —— 和逐条版一样不碰那一列（预查之后
   // 用户刚删掉的某一次出现，不会被导入拿旧快照盖回去）。
-  const writes = [...pending.values()];
-  const plainWrites = writes.filter((w) => !w.remappedExdates);
-  const exdateWrites = writes.filter((w) => w.remappedExdates);
+  const plainWrites = plan.pending.filter((w) => !w.remappedExdates);
+  const exdateWrites = plan.pending.filter((w) => w.remappedExdates);
   await flushUpsertChunk(calendarId, plainWrites, false);
   await flushUpsertChunk(calendarId, exdateWrites, true);
 
-  return { inserted, updated, skipped, total: parsed.length };
+  return {
+    inserted: plan.inserted,
+    updated: plan.updated,
+    skipped: plan.duplicates + plan.invalid,
+    total: parsed.length,
+  };
+}
+
+// ---------- 导入预览（只判定，不落库） ----------
+
+export type ImportPreview = {
+  /** 文件里的 VEVENT 块总数（含解析不出来的那些）。 */
+  total: number;
+  /** 预计新增。 */
+  inserted: number;
+  /** 预计更新（库里已有、内容变了的）。 */
+  updated: number;
+  /** 重复跳过：内容和库里一模一样 + 已删掉不复活的。 */
+  duplicates: number;
+  /** 无效：解析不出来 + 缺 uid/标题。 */
+  invalid: number;
+  /** 无效原因摘要，最多 5 条。 */
+  invalidReasons: string[];
+};
+
+/**
+ * 数一遍文本里的 VEVENT 块、并给解析不出来的块找原因（缺哪几个必填字段）。
+ * parseEvent 丢弃一个块只有两种情况：块本身不完整（没有 END:VEVENT）、
+ * 或者缺 UID / SUMMARY / DTSTART / DTEND 之一（见 ical.ts）。这里按同一套
+ * 展开规则走一遍块，只用来给用户解释，不参与导入判定（判定在 planImport）。
+ */
+function droppedBlockReasons(text: string): { blocks: number; reasons: string[] } {
+  const unfolded = text.replace(/\r?\n[\t ]/g, "");
+  const lines = unfolded.split(/\r?\n/);
+  const reasons: string[] = [];
+  let blocks = 0;
+  let i = 0;
+  while (i < lines.length) {
+    if ((lines[i] ?? "").toUpperCase() === "BEGIN:VEVENT") {
+      blocks++;
+      let j = i + 1;
+      while (j < lines.length && (lines[j] ?? "").toUpperCase() !== "END:VEVENT") j++;
+      if (j >= lines.length) {
+        if (reasons.length < 5) reasons.push(`第 ${blocks} 条事件不完整（缺少 END:VEVENT）`);
+        break;
+      }
+      const present = new Set<string>();
+      for (let k = i + 1; k < j; k++) {
+        const m = /^([A-Za-z0-9-]+)[;:]/u.exec(lines[k] ?? "");
+        if (m) present.add(m[1]!.toUpperCase());
+      }
+      const missing = ["UID", "SUMMARY", "DTSTART", "DTEND"].filter((p) => !present.has(p));
+      if (missing.length && reasons.length < 5) {
+        reasons.push(`第 ${blocks} 条事件缺少 ${missing.join("、")}`);
+      }
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return { blocks, reasons };
+}
+
+/**
+ * 预览一次导入：解析 + 判定，**不落库、不留任何临时数据**。
+ * 判定走 planImport，和真实导入同一份代码、同一个 sourceTag 口径 ——
+ * 调用方必须传和随后真实导入一样的 sourceTag（它参与 extra 合并、
+ * 影响「内容有没有变」的判定），否则预览和导入会对不上。
+ */
+export async function previewIcsText(
+  calendarId: string,
+  text: string,
+  opts: { sourceTag?: string | null } = {},
+): Promise<ImportPreview> {
+  const parsed = parseEvents(text);
+  const plan = await planImport(calendarId, parsed, opts.sourceTag ?? null);
+  const { blocks, reasons } = droppedBlockReasons(text);
+  const unparsed = Math.max(0, blocks - parsed.length);
+  return {
+    total: parsed.length + unparsed,
+    inserted: plan.inserted,
+    updated: plan.updated,
+    duplicates: plan.duplicates,
+    invalid: plan.invalid + unparsed,
+    invalidReasons: [...reasons, ...plan.invalidReasons].slice(0, 5),
+  };
 }
 
 async function flushUpsertChunk(

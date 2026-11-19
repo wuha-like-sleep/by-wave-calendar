@@ -36,7 +36,7 @@ import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
-import { fetchIcsUrl, importIcsText, refreshSubscription } from "../lib/ics_import.js";
+import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
 import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
@@ -1283,6 +1283,87 @@ export async function webRoutes(app: FastifyInstance) {
     } catch (err) {
       req.log.warn({ err }, "ics_text_import_failed");
       return importFailed(req, reply, calId.data, 422, tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }));
+    }
+  });
+
+  // ---------- ICS import preview（只解析 + 判定，绝不落库） ----------
+  // 导入弹窗的两步流程专用：文件 / 粘贴在真正写入前先把结果给用户看一眼
+  // （共 N 条、新增 / 更新 / 重复跳过 / 无效各多少）。判定走 previewIcsText，
+  // 和真实导入同一份 planImport、同一个 sourceTag —— 预览的数字必须和随后
+  // 导入的结果对得上。只回 JSON，不走 importDone 的跳转形态；校验口径
+  // （大小上限、CSRF、BEGIN:VCALENDAR 检查）和对应的导入路由逐条一致。
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/preview/file", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.code(404).send({ ok: false, message: "Not Found" });
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.code(404).send({ ok: false, message: "Not Found" });
+
+    let file: Awaited<ReturnType<typeof req.file>>;
+    try {
+      file = await req.file({ limits: { fileSize: MAX_ICS_IMPORT_BYTES } });
+    } catch (err) {
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return reply.code(413).send({ ok: false, message: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
+      }
+      throw err;
+    }
+    if (!file) {
+      return reply.code(400).send({ ok: false, message: tr(req, "flash.import.pickFile") });
+    }
+    if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
+    let buf: Buffer;
+    try {
+      buf = await file.toBuffer();
+    } catch (err) {
+      if ((err as { code?: string }).code === "FST_REQ_FILE_TOO_LARGE") {
+        return reply.code(413).send({ ok: false, message: tr(req, "flash.import.fileTooLarge", { mb: MAX_ICS_IMPORT_MB }) });
+      }
+      throw err;
+    }
+    const text = buf.toString("utf8");
+    if (!text.toUpperCase().includes("BEGIN:VCALENDAR")) {
+      return reply.code(400).send({ ok: false, message: tr(req, "flash.import.notIcs") });
+    }
+    try {
+      const preview: ImportPreview = await previewIcsText(calId.data, text, { sourceTag: `file:${file.filename ?? "upload"}` });
+      return reply.send({ ok: true, preview });
+    } catch (err) {
+      req.log.warn({ err }, "ics_file_preview_failed");
+      return reply.code(422).send({ ok: false, message: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/app/calendars/:id/import/preview/text", {
+    bodyLimit: MAX_ICS_PASTE_BODY_BYTES,
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const calId = z.string().uuid().safeParse(req.params.id);
+    if (!calId.success) return reply.code(404).send({ ok: false, message: "Not Found" });
+    if (!(await ownsCalendar(calId.data, user.id))) return reply.code(404).send({ ok: false, message: "Not Found" });
+
+    const body = z.object({ text: z.string().min(20).max(MAX_ICS_PASTE_CHARS) }).safeParse(req.body);
+    if (!body.success) {
+      const raw = (req.body as { text?: unknown } | undefined)?.text;
+      if (typeof raw === "string" && raw.length > MAX_ICS_PASTE_CHARS) {
+        const locale = (req as unknown as { locale?: string }).locale;
+        let max = String(MAX_ICS_PASTE_CHARS);
+        try { max = new Intl.NumberFormat(locale).format(MAX_ICS_PASTE_CHARS); } catch { /* 认不出的语言就用原样数字 */ }
+        return reply.code(413).send({ ok: false, message: tr(req, "flash.import.pasteTooLong", { max, mb: MAX_ICS_IMPORT_MB }) });
+      }
+      return reply.code(400).send({ ok: false, message: tr(req, "flash.import.pasteText") });
+    }
+    if (!body.data.text.toUpperCase().includes("BEGIN:VCALENDAR")) {
+      return reply.code(400).send({ ok: false, message: tr(req, "flash.import.pasteNotIcs") });
+    }
+    try {
+      const preview: ImportPreview = await previewIcsText(calId.data, body.data.text, { sourceTag: "paste" });
+      return reply.send({ ok: true, preview });
+    } catch (err) {
+      req.log.warn({ err }, "ics_text_preview_failed");
+      return reply.code(422).send({ ok: false, message: tr(req, "flash.import.failed", { error: err instanceof Error ? err.message : tr(req, "common.unknownError") }) });
     }
   });
 
