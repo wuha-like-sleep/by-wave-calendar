@@ -155,6 +155,24 @@ class ImportIcsViewModel : ViewModel() {
         }
     }
 
+    /** Back to the form after an API failure, with the file's content
+     *  still in hand: a preview failure lands on Ready (re-preview), an
+     *  import failure on Previewed (that preview still matches the
+     *  selected calendar). Only Generic failures are retryable — the
+     *  413/400 kinds are properties of the file itself, and read
+     *  failures never had content to retry with. */
+    fun retry() {
+        val s = _state.value
+        if (s.phase != ImportPhase.Failed || s.error != ImportErrorKind.Generic || text == null) return
+        _state.update {
+            it.copy(
+                phase = if (it.preview != null) ImportPhase.Previewed else ImportPhase.Ready,
+                error = null,
+                errorDetail = null,
+            )
+        }
+    }
+
     private fun fail(e: Exception) {
         val kind = when ((e as? retrofit2.HttpException)?.code()) {
             413 -> ImportErrorKind.TooLarge

@@ -99,19 +99,27 @@ struct CalendarCreateView: View {
 
     @State private var name: String = ""
     @State private var description: String = ""
-    @State private var color: String = Self.swatches[0]
+    @State private var color: String = Self.defaultColor
     @State private var timezone: String = TimeZone.current.identifier
     @State private var saving = false
     @State private var errorMessage: String?
 
-    // Curated palette — same hex values the web client offers in its
-    // "新建日历" modal so calendars created on either platform share
-    // the same color vocabulary.
+    // Shared palette — the same 17 colors, in the same order, as the
+    // web client's COLOR_PALETTE (calendar-app.js), so a color offered
+    // on one platform can be picked identically on every other. (This
+    // used to be an 11-color set whose comment claimed parity with the
+    // web list it didn't actually match; Android and desktop carried
+    // two further, different sets.)
     static let swatches: [String] = [
-        "#4F46E5", "#7C3AED", "#DB2777", "#DC2626", "#EA580C",
-        "#D97706", "#65A30D", "#059669", "#0891B2", "#2563EB",
-        "#475569",
+        "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+        "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
+        "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+        "#ec4899", "#64748b",
     ]
+
+    // New-calendar default — the web create dialog's default (#6366f1
+    // indigo), not the first palette entry (which is red).
+    static let defaultColor = "#6366f1"
 
     var body: some View {
         Form {

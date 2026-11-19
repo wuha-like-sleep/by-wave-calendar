@@ -16,6 +16,7 @@
 
 package cn.bywave.calendar.ui.event
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cn.bywave.calendar.BywaveApp
@@ -160,6 +161,22 @@ class EventEditViewModel : ViewModel() {
     // has no built-in getApplication()).
     private val app = BywaveApp.instance
     private val profiles = app.profiles
+
+    // "Last calendar an event was saved into" memory for the create
+    // default above. Plain SharedPreferences (same store family as
+    // ProfileStore); a single string, read synchronously at bootstrap.
+    private val uiPrefs by lazy {
+        app.getSharedPreferences("bwc-ui-prefs", Context.MODE_PRIVATE)
+    }
+
+    private fun lastUsedCalendarId(): String? =
+        uiPrefs.getString("last_calendar_id", null)
+
+    private fun rememberCalendarId(id: String) {
+        if (id.isNotBlank()) {
+            uiPrefs.edit().putString("last_calendar_id", id).apply()
+        }
+    }
     private val _state = MutableStateFlow(EventEditUiState())
     val state: StateFlow<EventEditUiState> = _state.asStateFlow()
 
@@ -179,7 +196,15 @@ class EventEditViewModel : ViewModel() {
                     // editor open, so retried saves reuse it (no dupes).
                     clientUid = newClientUid(),
                     calendars = calendars,
-                    calendarId = calendars.firstOrNull()?.id.orEmpty(),
+                    // Default to the calendar the user last saved an
+                    // event into (the web editor does the same via its
+                    // lastCalendarId memory); before this, every create
+                    // silently reset to the server's first calendar and
+                    // events kept landing in the wrong one. Falls back
+                    // to the first calendar when the remembered one is
+                    // gone (deleted / other account).
+                    calendarId = calendars.firstOrNull { it.id == lastUsedCalendarId() }?.id
+                        ?: calendars.firstOrNull()?.id.orEmpty(),
                     summary = mode.seedSummary.orEmpty(),
                     start = start,
                     end = mode.seedEnd ?: start.plusHours(1),
@@ -357,6 +382,10 @@ class EventEditViewModel : ViewModel() {
                     )
                     client.api.createEvent(body)
                 }
+                // Feed the create-default memory: the next new event
+                // starts on the calendar this save just used (for an
+                // edit that moved the event, that's the target one).
+                rememberCalendarId(s.calendarId)
                 _state.update { it.copy(saving = false, finished = true) }
             } catch (e: CancellationException) {
                 throw e

@@ -474,6 +474,7 @@ private fun CalendarBody(
                         calendars = state.calendars,
                         onEventClick = onEventClick,
                         onEventLongPress = onEventLongPress,
+                        onCreateEvent = onCreateEvent,
                     )
                     ViewMode.Week -> WeekView(
                         weekStart = startOfWeek(state.anchor),

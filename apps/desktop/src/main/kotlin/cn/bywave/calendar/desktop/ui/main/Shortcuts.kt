@@ -42,6 +42,10 @@ enum class ShortcutAction {
     /** Open the global event search dialog. Cmd/Ctrl + F — the universal
      *  "find" shortcut; matches the web Cmd+K palette / iOS search. */
     OpenSearch,
+    /** Open the ICS file picker for import. Cmd/Ctrl + I — the toolbar
+     *  import button's tooltip has advertised "I" since the button
+     *  landed, but no mapping existed until now. */
+    OpenImport,
     /** Switch the calendar view. Cmd/Ctrl + 1/2/3/4 → Day/Week/Month/Agenda
      *  — the digit-to-view convention from Google Calendar / Fantastical. */
     ViewDay,
@@ -75,6 +79,7 @@ fun keyEventToShortcut(e: KeyEvent): ShortcutAction? {
         mod && e.key == Key.DirectionRight -> ShortcutAction.Next
         mod && e.key == Key.U -> ShortcutAction.CheckUpdate
         mod && e.key == Key.F -> ShortcutAction.OpenSearch
+        mod && e.key == Key.I -> ShortcutAction.OpenImport
         mod && e.key == Key.Comma -> ShortcutAction.OpenSettings
         mod && e.key == Key.One -> ShortcutAction.ViewDay
         mod && e.key == Key.Two -> ShortcutAction.ViewWeek

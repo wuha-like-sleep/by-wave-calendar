@@ -70,7 +70,12 @@ class CalendarActionErrorTest {
             st.load()
             awaitIdle()
 
+            // 删除先停在确认弹窗这一步：没确认之前不许真的发 DELETE。
             st.delete(event)
+            awaitIdle()
+            assertNotNull(st.ui.value.pendingConfirmDelete, "删除要先弹确认")
+            assertNull(st.ui.value.actionError, "还没确认，不该有任何结果")
+            st.resolveConfirmDelete(true)
             awaitIdle()
             client.close()
 
@@ -137,6 +142,7 @@ class CalendarActionErrorTest {
             val client = ApiClient(s.url)
             val st = CalendarState(client, this)
             st.delete(event)
+            st.resolveConfirmDelete(true)
             awaitIdle()
             assertNotNull(st.ui.value.undoDelete, "删成功了应该给「撤销」")
 
@@ -205,10 +211,12 @@ class CalendarActionErrorTest {
             awaitIdle()
 
             st.delete(event)
+            st.resolveConfirmDelete(true)
             awaitIdle()
             assertNotNull(st.ui.value.actionError, "第一次失败要提示")
 
             st.delete(event)
+            st.resolveConfirmDelete(true)
             awaitIdle()
             client.close()
 
@@ -226,6 +234,7 @@ class CalendarActionErrorTest {
             val client = ApiClient(s.url)
             val st = CalendarState(client, this)
             st.delete(untitled)
+            st.resolveConfirmDelete(true)
             awaitIdle()
             client.close()
 

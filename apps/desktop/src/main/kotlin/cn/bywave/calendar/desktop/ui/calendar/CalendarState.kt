@@ -161,6 +161,12 @@ data class CalendarUiState(
     val formError: String? = null,
     val pendingScopeEdit: PendingEdit? = null,
     val pendingScopeDelete: PendingDelete? = null,
+    /** Non-recurring delete waiting on the confirmation dialog.
+     *  Recurring deletes confirm through their scope picker instead;
+     *  plain deletes used to fire immediately with only the 5-second
+     *  undo bar as a safety net, unlike Android / iOS where a plain
+     *  delete always asks first. */
+    val pendingConfirmDelete: PendingDelete? = null,
     val undoDelete: UndoDelete? = null,
     /** 弹窗外的操作（删除、拖动改时间、撤销删除）失败时给用户看的那句话，
      *  主界面顶部提示条显示，用户点 × 关掉。和 [formError] 分开：那个只在
@@ -208,7 +214,7 @@ class CalendarState(
      *  原位、等网络回来再跳过去，刚删掉的事件也会先冒出来一下。 */
     fun refreshIfIdle() {
         val current = _ui.value
-        if (loadJob?.isActive == true || current.saving || isFormSheet(current.activeSheet) || current.pendingScopeDelete != null || current.pendingScopeEdit != null) return
+        if (loadJob?.isActive == true || current.saving || isFormSheet(current.activeSheet) || current.pendingScopeDelete != null || current.pendingScopeEdit != null || current.pendingConfirmDelete != null) return
         load(useCache = false, silent = true)
     }
 
@@ -348,6 +354,7 @@ class CalendarState(
             formError = null,
             pendingScopeEdit = null,
             pendingScopeDelete = null,
+            pendingConfirmDelete = null,
         )
     }
 
@@ -483,8 +490,10 @@ class CalendarState(
         }
     }
 
-    /** Initiate delete. For recurring events we open the scope picker;
-     *  for non-recurring we delete immediately. */
+    /** Initiate delete. For recurring events we open the scope picker
+     *  (picking a scope IS the confirmation there); for non-recurring
+     *  we open a confirmation dialog first — the delete itself only
+     *  runs from [resolveConfirmDelete]. */
     fun delete(event: EventDTO) {
         if (event.rrule != null) {
             _ui.value = _ui.value.copy(
@@ -492,7 +501,16 @@ class CalendarState(
             )
             return
         }
-        sendDelete(event.id, scope = null, recurrenceId = null, summary = event.summary)
+        _ui.value = _ui.value.copy(
+            pendingConfirmDelete = PendingDelete(event.id, event.startsAt, event.summary),
+        )
+    }
+
+    fun resolveConfirmDelete(confirmed: Boolean) {
+        val pending = _ui.value.pendingConfirmDelete ?: return
+        _ui.value = _ui.value.copy(pendingConfirmDelete = null)
+        if (!confirmed) return
+        sendDelete(pending.sourceId, scope = null, recurrenceId = null, summary = pending.summary)
     }
 
     fun resolveScopeDelete(scope: String?) {

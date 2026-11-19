@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
@@ -182,6 +183,11 @@ fun MainScreen(
     // Cmd+, shortcut, or the MenuBar item. Esc inside Settings closes
     // it (the SettingsScreen's own onClose).
     var showSettings by remember { mutableStateOf(false) }
+    // Deep-link target for Settings: when set via a sidebar calendar's
+    // edit button, Settings opens on the Calendars tab with that
+    // calendar's edit dialog up. Cleared whenever Settings is opened
+    // the ordinary way (gear / shortcut) and when it closes.
+    var settingsEditCalendarId by remember { mutableStateOf<String?>(null) }
     // Global search dialog visibility. Opened by the toolbar magnifier or
     // Cmd/Ctrl+F; Esc closes it (handled in the ShortcutAction.Escape arm).
     var showSearch by remember { mutableStateOf(false) }
@@ -260,6 +266,7 @@ fun MainScreen(
                     }
                 }
                 ShortcutAction.OpenSearch -> { showSearch = true }
+                ShortcutAction.OpenImport -> { pickIcsFile()?.let { importFile = it } }
                 ShortcutAction.CheckUpdate -> {
                     val url = p?.serverUrl ?: return@collect
                     UpdateChecker.forceCheck(url)
@@ -269,7 +276,7 @@ fun MainScreen(
                     // give the user feedback via a small dialog.
                     showUpdateDialog = true
                 }
-                ShortcutAction.OpenSettings -> { showSettings = true }
+                ShortcutAction.OpenSettings -> { settingsEditCalendarId = null; showSettings = true }
                 ShortcutAction.ViewDay -> s.setMode(ViewMode.Day)
                 ShortcutAction.ViewWeek -> s.setMode(ViewMode.Week)
                 ShortcutAction.ViewMonth -> s.setMode(ViewMode.Month)
@@ -345,7 +352,7 @@ fun MainScreen(
                 // appearance / about controls. Previously the toolbar had
                 // its own Logout icon — removed in favor of the Settings
                 // path so a misclick can't drop the active profile.
-                onOpenSettings = { showSettings = true },
+                onOpenSettings = { settingsEditCalendarId = null; showSettings = true },
             )
             HorizontalDivider()
 
@@ -385,6 +392,10 @@ fun MainScreen(
                     onDaySelect = { state.jumpToDay(it) },
                     hiddenCalendars = hiddenCalendars,
                     onCalendarToggle = { id -> hiddenCalendars = if (id in hiddenCalendars) hiddenCalendars - id else hiddenCalendars + id },
+                    onEditCalendar = { cal ->
+                        settingsEditCalendarId = cal.id
+                        showSettings = true
+                    },
                 )
                 Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(start = 8.dp, top = 14.dp, end = 18.dp, bottom = 18.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
                     androidx.compose.runtime.key(deviceZone.id) {
@@ -523,6 +534,52 @@ fun MainScreen(
             onDismiss = { state.resolveScopeDelete(null) },
         )
     }
+    // Confirmation for plain (non-recurring) deletes. Recurring ones
+    // confirm through the scope picker above; plain ones used to fire
+    // immediately with only the 5-second undo bar as a net, while
+    // Android / iOS ask first AND offer undo. The undo bar still
+    // follows a confirmed delete.
+    if (ui.pendingConfirmDelete != null) {
+        val pendingDelete = ui.pendingConfirmDelete!!
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { state.resolveConfirmDelete(false) },
+            title = {
+                androidx.compose.material3.Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t("event.deleteConfirmTitle"),
+                )
+            },
+            text = {
+                androidx.compose.material3.Text(
+                    cn.bywave.calendar.desktop.i18n.I18n.t(
+                        "event.deleteConfirmMessage",
+                        mapOf("name" to pendingDelete.summary),
+                    ),
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.Button(
+                    onClick = { state.resolveConfirmDelete(true) },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) {
+                    androidx.compose.material3.Text(
+                        cn.bywave.calendar.desktop.i18n.I18n.t("event.detail.delete"),
+                    )
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { state.resolveConfirmDelete(false) },
+                ) {
+                    androidx.compose.material3.Text(
+                        cn.bywave.calendar.desktop.i18n.I18n.t("common.cancel"),
+                    )
+                }
+            },
+        )
+    }
 
     // In-app updater. Auto-opens when a new manifest is spotted; user
     // can also open it via MenuBar "检查更新" / Cmd+U. We render it
@@ -605,7 +662,7 @@ fun MainScreen(
                 profile = p,
                 profiles = profiles,
                 calendars = ui.calendars,
-                onClose = { showSettings = false },
+                onClose = { showSettings = false; settingsEditCalendarId = null },
                 onSignOut = {
                     showSettings = false
                     ProfileStore.clear()
@@ -630,6 +687,7 @@ fun MainScreen(
                 // flows back into both the Settings list and the calendar
                 // views behind the overlay.
                 onCalendarsChanged = { state.load() },
+                initialCalendarsEditId = settingsEditCalendarId,
             )
         }
     }
@@ -875,6 +933,7 @@ private fun Sidebar(
     onDaySelect: (java.time.LocalDate) -> Unit,
     hiddenCalendars: Set<String>,
     onCalendarToggle: (String) -> Unit,
+    onEditCalendar: (cn.bywave.calendar.desktop.data.model.CalendarMeta) -> Unit,
 ) {
     // Observe locale so the section header + empty state re-render on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -936,6 +995,22 @@ private fun Sidebar(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
+                        // Direct edit entry — the web sidebar's calendar
+                        // menu opens the properties editor in one click;
+                        // here the only path used to be gear → Calendars
+                        // tab → find the row → pencil. The button opens
+                        // Settings pre-landed on that calendar's editor.
+                        IconButton(
+                            onClick = { onEditCalendar(cal) },
+                            modifier = Modifier.size(28.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = t("settings.calendars.edit"),
+                                modifier = Modifier.size(15.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

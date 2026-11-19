@@ -99,28 +99,42 @@ import cn.bywave.calendar.ui.calendar.parseHex
 import cn.bywave.calendar.ui.components.EmptyState
 import kotlinx.coroutines.launch
 
-// iOS-parity swatch palette. Same 8 presets the iOS calendar editor
-// offers; keep them as valid 6-hex so the server's color regex accepts
-// the value verbatim. First entry doubles as the new-calendar default.
+// Shared swatch palette — the same 17 colors, in the same order, as
+// the web app's COLOR_PALETTE (calendar-app.js), so a color offered on
+// one platform can be picked identically on every other. (This used to
+// be a divergent 8-color set whose comment claimed parity with an iOS
+// list that was itself a third, different set.) Keep them as valid
+// 6-hex so the server's color regex accepts the value verbatim.
 private val CALENDAR_COLOR_SWATCHES = listOf(
-    "#6640E9", // brand purple (FALLBACK_COLOR)
-    "#2F6FED", // blue
-    "#16A34A", // green
-    "#EA580C", // orange
-    "#DC2626", // red
-    "#DB2777", // pink
-    "#0891B2", // teal
-    "#737373", // gray
+    "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16",
+    "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9",
+    "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef",
+    "#ec4899", "#64748b",
 )
+
+// New-calendar default color — the web create dialog's default
+// (#6366f1 indigo), NOT the first palette entry (which is red). The
+// brand purple #6640E9 remains only as the parse fallback in
+// CalendarHelpers / SystemCalendarMirror, not as a creation default.
+private const val DEFAULT_CALENDAR_COLOR = "#6366f1"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarListScreen(
     onBack: () -> Unit,
     vm: CalendarViewModel = viewModel(),
+    // In-app ICS import entry: hands the picked file's Uri up to the
+    // activity, which feeds it into the same pending-import pipeline
+    // the system "open with / share" intents use. Import used to be
+    // reachable ONLY from outside the app — a user holding a .ics file
+    // had no way to start an import from inside.
+    onImportFile: (android.net.Uri) -> Unit = {},
 ) {
     val state by vm.state.collectAsState()
     val snackbar = remember { SnackbarHostState() }
+    val pickIcs = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) onImportFile(uri) }
     var editing by remember { mutableStateOf<CalendarMeta?>(null) }
     var creating by remember { mutableStateOf(false) }
 
@@ -135,6 +149,14 @@ fun CalendarListScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = {
+                        pickIcs.launch(arrayOf("text/calendar", "text/x-vcalendar"))
+                    }) {
+                        Icon(
+                            androidx.compose.material.icons.Icons.Outlined.FileUpload,
+                            contentDescription = stringResource(R.string.importics_title),
+                        )
+                    }
                     IconButton(onClick = { creating = true }) {
                         Icon(Icons.Default.Add, contentDescription = stringResource(R.string.calendars_new))
                     }
@@ -278,8 +300,12 @@ private fun CreateCalendarSheet(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var name by remember { mutableStateOf("") }
-    var color by remember { mutableStateOf(CALENDAR_COLOR_SWATCHES.first()) }
-    var timezone by remember { mutableStateOf("") }
+    var color by remember { mutableStateOf(DEFAULT_CALENDAR_COLOR) }
+    // Prefill the device zone like desktop / iOS do — a blank field used
+    // to fall through to the server's hardcoded Asia/Shanghai default,
+    // which is wrong for anyone outside that zone who doesn't notice
+    // the placeholder and type over it.
+    var timezone by remember { mutableStateOf(java.util.TimeZone.getDefault().id) }
     var description by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -419,6 +445,10 @@ private fun EditCalendarSheet(
     var name by remember(calendar.id) { mutableStateOf(calendar.name) }
     var color by remember(calendar.id) { mutableStateOf(calendar.color) }
     var timezone by remember(calendar.id) { mutableStateOf(calendar.timezone.orEmpty()) }
+    // Description was create-only until now: the create sheet collected
+    // it but this edit sheet never rendered the field, so a description
+    // set at creation (or on web / iOS) could never be changed here.
+    var description by remember(calendar.id) { mutableStateOf(calendar.description.orEmpty()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -429,7 +459,8 @@ private fun EditCalendarSheet(
         name.isNotBlank() &&
         (name != calendar.name ||
             !color.equals(calendar.color, ignoreCase = true) ||
-            timezone != calendar.timezone.orEmpty())
+            timezone != calendar.timezone.orEmpty() ||
+            description != calendar.description.orEmpty())
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
@@ -482,6 +513,18 @@ private fun EditCalendarSheet(
                 },
             )
 
+            // Same field + strings as the create sheet. Clearing the
+            // text sends "" (not null), which the server stores as an
+            // empty description — so unlike web/desktop, clearing here
+            // actually clears.
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(stringResource(R.string.calendars_description)) },
+                placeholder = { Text(stringResource(R.string.calendars_description_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
@@ -514,6 +557,7 @@ private fun EditCalendarSheet(
                                     color = color.takeIf { !it.equals(calendar.color, ignoreCase = true) },
                                     timezone = timezone.takeIf { it != calendar.timezone.orEmpty() }
                                         ?.takeIf { it.isNotBlank() },
+                                    description = description.takeIf { it != calendar.description.orEmpty() },
                                 )
                                 client.api.updateCalendar(calendar.id, body)
                                 snackbar.showSnackbar(context.getString(R.string.callist_saved))

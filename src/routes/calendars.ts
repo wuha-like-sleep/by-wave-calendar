@@ -20,6 +20,25 @@ const updateSchema = createSchema.partial();
 
 const idParam = z.object({ id: z.string().uuid() });
 
+/**
+ * 把 ZodError 压成一句话，带上出错的字段路径。只取前三条 —— 与
+ * events.ts 的同名 helper 同口径。
+ *
+ * 本文件以前各处都用 schema.parse()：ZodError 身上没有 statusCode，
+ * 一路冒到 server.ts 的 setErrorHandler 就变成 500「服务器内部错误」，
+ * 客户端看不出是自己发错了（events.ts 的 POST 早先修过同一课）。
+ * 所以这里一律 safeParse，校验失败回 400 invalid_body。
+ */
+function zodMessage(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 3)
+    .map((issue) => {
+      const path = issue.path.join(".");
+      return path ? `${path}: ${issue.message}` : issue.message;
+    })
+    .join("; ");
+}
+
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /**
@@ -81,7 +100,11 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.post("/calendars", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const body = createSchema.parse(req.body);
+    const parsedBody = createSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return err(req, reply, 400, "invalid_body", zodMessage(parsedBody.error));
+    }
+    const body = parsedBody.data;
     const [row] = await db
       .insert(schema.calendars)
       .values({ ownerId: user.id, ...body })
@@ -93,8 +116,16 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.patch("/calendars/:id", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const { id } = idParam.parse(req.params);
-    const body = updateSchema.parse(req.body);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) {
+      return err(req, reply, 400, "invalid_id", zodMessage(parsedParams.error));
+    }
+    const { id } = parsedParams.data;
+    const parsedBody = updateSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return err(req, reply, 400, "invalid_body", zodMessage(parsedBody.error));
+    }
+    const body = parsedBody.data;
     const row = await db.transaction(async (tx) => {
       const [before] = await tx.select({ timezone: schema.calendars.timezone })
         .from(schema.calendars)
@@ -119,7 +150,11 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.delete("/calendars/:id", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const { id } = idParam.parse(req.params);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) {
+      return err(req, reply, 400, "invalid_id", zodMessage(parsedParams.error));
+    }
+    const { id } = parsedParams.data;
     const result = await db
       .delete(schema.calendars)
       .where(and(eq(schema.calendars.id, id), eq(schema.calendars.ownerId, user.id)))
@@ -131,7 +166,11 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.get("/calendars/:id/share-tokens", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const { id } = idParam.parse(req.params);
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) {
+      return err(req, reply, 400, "invalid_id", zodMessage(parsedParams.error));
+    }
+    const { id } = parsedParams.data;
     const owned = await ownsCalendar(id, user.id);
     if (!owned) return err(req, reply, 404, "not_found", "日历不存在");
     const tokens = await db
@@ -144,8 +183,16 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.post("/calendars/:id/share-tokens", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const { id } = idParam.parse(req.params);
-    const body = z.object({ label: z.string().max(100).optional() }).parse(req.body ?? {});
+    const parsedParams = idParam.safeParse(req.params);
+    if (!parsedParams.success) {
+      return err(req, reply, 400, "invalid_id", zodMessage(parsedParams.error));
+    }
+    const { id } = parsedParams.data;
+    const parsedBody = z.object({ label: z.string().max(100).optional() }).safeParse(req.body ?? {});
+    if (!parsedBody.success) {
+      return err(req, reply, 400, "invalid_body", zodMessage(parsedBody.error));
+    }
+    const body = parsedBody.data;
     const owned = await ownsCalendar(id, user.id);
     if (!owned) return err(req, reply, 404, "not_found", "日历不存在");
     const token = newShareToken();
@@ -161,7 +208,11 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.delete("/calendars/:id/share-tokens/:token", async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
-    const { id, token } = z.object({ id: z.string().uuid(), token: z.string() }).parse(req.params);
+    const parsedParams = z.object({ id: z.string().uuid(), token: z.string() }).safeParse(req.params);
+    if (!parsedParams.success) {
+      return err(req, reply, 400, "invalid_id", zodMessage(parsedParams.error));
+    }
+    const { id, token } = parsedParams.data;
     const owned = await ownsCalendar(id, user.id);
     if (!owned) return err(req, reply, 404, "not_found", "日历不存在");
     const result = await db
