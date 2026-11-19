@@ -260,6 +260,7 @@ export async function webRoutes(app: FastifyInstance) {
     if (user) return reply.redirect("/app");
     return reply.view("landing", {
       title: tr(req, "page.home"),
+      metaDescription: tr(req, "meta.description.home"),
       user: null,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -269,6 +270,7 @@ export async function webRoutes(app: FastifyInstance) {
   app.get("/about", async (req, reply) => {
     return reply.view("landing", {
       title: tr(req, "page.about"),
+      metaDescription: tr(req, "meta.description.home"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -291,6 +293,9 @@ export async function webRoutes(app: FastifyInstance) {
     const locale = resolveLocaleFromRequest(req, user?.locale ?? null, settings.defaultLocale);
     return reply.view(`legal/content/${page}/${locale}`, {
       title: makeT(locale)(titleKey),
+      // 支持页是 App Store 填的 Support URL，也是用户搜「怎么用」最
+      // 常落到的页，给它单独的摘要；其余法律页走 layout 的全站缺省。
+      metaDescription: page === "support" ? makeT(locale)("meta.description.support") : undefined,
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -352,6 +357,7 @@ export async function webRoutes(app: FastifyInstance) {
     const [desktopLinuxUrl, desktopLinuxAltUrl] = await resolveAssetUrls(origin, desktop?.assets.linux);
     return reply.view("download", {
       title: tr(req, "page.download"),
+      metaDescription: tr(req, "meta.description.download"),
       user: await loadUserFromRequest(req),
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
