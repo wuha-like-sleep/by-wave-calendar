@@ -4,6 +4,13 @@
 <dict>
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
+	<!-- Silent APNs pushes wake the APP in the background so it can
+	     re-fetch events (PushService.swift). Pairs with the
+	     aps-environment entitlement — keep the two in sync. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>CFBundleLocalizations</key>
 	<array>
 		<string>zh-Hans</string>

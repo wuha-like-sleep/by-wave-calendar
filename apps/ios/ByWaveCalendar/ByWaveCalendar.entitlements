@@ -3,24 +3,34 @@
 <plist version="1.0">
 <dict>
     <!--
-    APNs note: push capability is intentionally not declared. v1.3.3
-    removed it because the server isn't actually sending pushes (no
-    APNs cert configured) and an unused capability invites reviewer
-    questions. PushService.swift stays in place but its
-    registerForRemoteNotifications call no-ops via
-    didFailToRegisterForRemoteNotificationsWithError — graceful.
+    Push Notifications entitlement. Without this, APNs registration
+    fails with the error "未找到应用程序的 aps-environment 的授权字符串".
 
-    To re-enable later:
-      - add back <key>aps-environment</key> with value "production"
-      - re-tick "Push Notifications" on the App ID at
-        developer.apple.com → Identifiers
-      - restore UIBackgroundModes remote-notification in Info.plist
+    v1.3.3 removed it while the server had no APNs key configured;
+    restored once the server side (APNS_KEY_PATH / APNS_KEY_ID /
+    APNS_TEAM_ID / APNS_BUNDLE_ID) and the privacy wording caught up.
+    The App ID must also have "Push Notifications" ticked at
+    developer.apple.com → Identifiers, and Info.plist declares
+    UIBackgroundModes = remote-notification — the three move together.
+
+    "development" is the value Xcode's capability toggle writes and
+    what this file carried before the v1.3.3 removal: it works for
+    Xcode debug builds (real device or iOS 16+ simulator on Apple
+    Silicon) and ad-hoc / TestFlight builds. For App Store submission
+    the shipped binary's entitlement comes from the distribution
+    provisioning profile ("production"), so no separate Release-only
+    entitlements file is needed.
+
+    The app uses silent (content-available) pushes only — no alert /
+    badge / sound permission required from the user at runtime.
 
     The App Sandbox + capability keys below are REQUIRED for the Mac
     Catalyst variant (v1.4.0+). iOS ignores them — the iOS sandbox is
     managed separately. Adding them here keeps a single entitlements
     file across both platforms.
     -->
+    <key>aps-environment</key>
+    <string>development</string>
     <key>com.apple.security.app-sandbox</key>
     <true/>
     <!-- HTTP/HTTPS calls to the user's ByWave server. -->
