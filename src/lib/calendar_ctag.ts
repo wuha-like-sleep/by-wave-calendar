@@ -31,8 +31,9 @@ export function etagOf(t: Date | string): string {
 // 以后再有这类变更，bump 一次纪元即可，不必再去猜该动哪些行。
 //
 // 纪元只进 ctag，**不进单行 etag**（etagOf 只喂 updatedAt）。这是刻意的：
-// ctag 变 = 客户端来重新「列」一遍（一次 Depth:1 PROPFIND，本仓库没有实现
-// sync-collection，客户端只有这一条路）；etag 变才是「这条正文变了、重下」。
+// ctag 变 = 客户端来重新同步一遍（Depth:1 PROPFIND 列清单，或 sync-collection
+// 增量——后者的令牌里同样掺了纪元，纪元一 bump 旧令牌直接 403 回退全量）；
+// etag 变才是「这条正文变了、重下」。
 // 纪元要的是前者。把它也掺进 etag 的话，bump 一次 = 每台设备重下整个日历。
 //
 // 拼串的三条讲究：
