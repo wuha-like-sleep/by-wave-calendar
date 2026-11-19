@@ -1,4 +1,124 @@
-private val en: Map<String, String> = mapOf(
+// Compose Desktop i18n. Mirrors src/lib/i18n.ts on the web side:
+// flat key → string dictionaries per locale, English as the canonical
+// "source of truth" (missing keys fall back to English, then to the
+// key itself for greppability).
+//
+// Persistence: ~/.bywave-calendar/locale (plain text, single line, the
+// locale code). Survives upgrades. Read once at app boot via init().
+//
+// Usage from Composables:
+//
+//   @Composable
+//   fun MyScreen() {
+//       val locale by I18n.current.collectAsState()
+//       Text(I18n.t("nav.settings"))    // reactive via `locale`
+//   }
+//
+// The `locale by collectAsState()` line is critical even if you don't
+// reference `locale` — Compose needs it to know the @Composable
+// depends on I18n.current. Without it, switching language doesn't
+// re-render.
+//
+// Adding a language:
+//   1. Add an entry to Locale enum
+//   2. Add a dictionary map below
+//   3. Translate the keys you have; missing ones inherit English
+
+package cn.bywave.calendar.desktop.i18n
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import cn.bywave.calendar.desktop.util.DebugLog
+
+object I18n {
+
+    enum class Locale(val code: String, val label: String) {
+        ZH_CN("zh-CN", "简体中文"),
+        ZH_TW("zh-TW", "繁體中文"),
+        EN("en", "English"),
+        JA("ja", "日本語"),
+        KO("ko", "한국어"),
+        ES("es", "Español"),
+        FR("fr", "Français"),
+        DE("de", "Deutsch"),
+    }
+
+    val all: List<Locale> = Locale.entries.toList()
+
+    private val storeDir: Path = Paths.get(System.getProperty("user.home"), ".bywave-calendar")
+    private val storeFile: Path = storeDir.resolve("locale")
+
+    private val _current = MutableStateFlow(Locale.ZH_CN)
+    val current: StateFlow<Locale> = _current.asStateFlow()
+
+    /** Call once at app boot before any Compose tree mounts. Picks up
+     *  the user's previous choice from disk; falls back to JVM system
+     *  language ("en" → EN, anything else → ZH_CN). */
+    fun init() {
+        runCatching {
+            if (Files.exists(storeFile)) {
+                val code = Files.readString(storeFile).trim()
+                val match = all.firstOrNull { it.code == code }
+                if (match != null) {
+                    _current.value = match
+                    return
+                }
+            }
+        }
+        // No saved preference — sniff the JVM default properly. The old
+        // logic mapped everything non-English to ZH_CN, which gave a
+        // Japanese/Korean/German… machine a Chinese UI despite full
+        // dictionaries existing. Match by language (+ script/region for
+        // Traditional Chinese) and fall back to English, then ZH_CN only
+        // for Chinese-simplified systems.
+        val sys = java.util.Locale.getDefault()
+        val lang = sys.language ?: ""
+        _current.value = when {
+            lang == "zh" && (sys.script == "Hant" || sys.country in setOf("TW", "HK", "MO")) -> Locale.ZH_TW
+            lang == "zh" -> Locale.ZH_CN
+            lang == "ja" -> Locale.JA
+            lang == "ko" -> Locale.KO
+            lang == "es" -> Locale.ES
+            lang == "fr" -> Locale.FR
+            lang == "de" -> Locale.DE
+            else -> Locale.EN
+        }
+    }
+
+    /** Switch UI language. Persists to disk so the choice survives
+     *  app restarts. The Compose tree re-renders automatically via
+     *  the StateFlow. */
+    fun setLocale(loc: Locale) {
+        if (_current.value == loc) return
+        _current.value = loc
+        runCatching {
+            Files.createDirectories(storeDir)
+            Files.writeString(storeFile, loc.code)
+        }.onFailure {
+            // Persistence failure isn't fatal — language still switches
+            // for this session; next launch reverts. Debug-only log.
+            DebugLog.d("I18n") { "failed to persist locale: ${it.message}" }
+        }
+    }
+
+    /** Translate a key. Falls back to English, then to the key itself.
+     *  Optional `vars` substitutes `{name}` placeholders. */
+    fun t(key: String, vars: Map<String, Any>? = null): String {
+        val dict = DICTIONARIES[_current.value] ?: DICTIONARIES[Locale.EN]!!
+        var value = dict[key] ?: DICTIONARIES[Locale.EN]?.get(key) ?: key
+        if (vars != null) {
+            for ((k, v) in vars) value = value.replace("{$k}", v.toString())
+        }
+        return value
+    }
+
+    // -------- Dictionaries --------
+
+    private val en: Map<String, String> = mapOf(
         "settings.tabSystemCalendar" to "System calendars",
         "sync.intro" to "Your schedule, in the apps you already use.",
         "sync.apple" to "Connect the native Calendar app with a CalDAV account. Events and recurring schedules sync in both directions, even when ByWave is closed.",
