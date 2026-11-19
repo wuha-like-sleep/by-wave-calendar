@@ -59,6 +59,8 @@ export const EXPORT_TABLES = [
   { name: "share_tokens",         table: schema.shareTokens },
   { name: "calendar_subscriptions", table: schema.calendarSubscriptions },
   { name: "event_invite_tokens",  table: schema.eventInviteTokens },
+  // 站内通知收件箱：未读通知丢了用户会发现（铃铛突然变空），要跟着走。
+  { name: "notifications",        table: schema.notifications },
 ] as const;
 
 /** 明确「不进备份」的表。跟着 users 的 cascade 一起消失是对的 ——

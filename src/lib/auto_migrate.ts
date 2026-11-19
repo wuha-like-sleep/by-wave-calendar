@@ -195,4 +195,15 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "users.theme_mode（缺了设置页外观区和登录都 500）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_mode text`,
   },
+  {
+    // 0064。两个默认值都和迁移里一字不差，补出来的都是 true = 保持现状
+    // （提醒邮件和推送照发）。这两列被提醒调度器的 loadUsers 每次都读，
+    // 缺列不是某个页面坏掉，而是全部事件提醒停摆，必须进安全网。
+    why: "users.notify_reminder_email（缺了提醒调度器每分钟报错、提醒全停）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_reminder_email boolean NOT NULL DEFAULT true`,
+  },
+  {
+    why: "users.notify_reminder_push（缺了提醒调度器每分钟报错、提醒全停）",
+    statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_reminder_push boolean NOT NULL DEFAULT true`,
+  },
 ];

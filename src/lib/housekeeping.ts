@@ -1,6 +1,7 @@
 import { lt, isNotNull, and } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { purgeStaleDeviceRows } from "./devices.js";
+import { purgeOldReadNotifications } from "./notifications.js";
 import { remindIdleApiTokens } from "./token_idle_reminders.js";
 
 // Days after which soft-deleted events are physically purged. 90 days is
@@ -44,6 +45,11 @@ export function startHousekeepingScheduler(log: { info: (m: string) => void; war
       const idle = await remindIdleApiTokens();
       if (idle.sent > 0) {
         log.info(`[housekeeping] sent ${idle.sent} idle API token reminder(s)`);
+      }
+      // 已读站内通知只留 90 天（未读的是用户待办，不动）。
+      const notif = await purgeOldReadNotifications();
+      if (notif.purged > 0) {
+        log.info(`[housekeeping] purged ${notif.purged} read notification(s) older than 90d`);
       }
     } catch (err) {
       log.warn({ err });

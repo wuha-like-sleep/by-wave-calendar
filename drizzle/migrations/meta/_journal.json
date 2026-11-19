@@ -449,6 +449,13 @@
       "when": 1794873600000,
       "tag": "0063_user_theme_mode",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1794960000000,
+      "tag": "0064_notifications",
+      "breakpoints": true
     }
   ]
 }

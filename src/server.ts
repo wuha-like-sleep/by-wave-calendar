@@ -30,6 +30,7 @@ import { exportRoutes } from "./routes/export.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { bookingRoutes } from "./routes/booking.js";
 import { accountRoutes } from "./routes/accounts.js";
 import { oauthServerRoutes } from "./web/oauth_server.js";
@@ -778,6 +779,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(searchRoutes, { prefix });
   await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
+  await app.register(notificationRoutes, { prefix });
   await app.register(bookingRoutes, { prefix });
   await app.register(accountRoutes, { prefix });
 }
@@ -902,6 +904,7 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
       },
       "/events/conflicts": { post: { summary: "Check for overlapping events" } },
       "/search": { get: { summary: "Search events", parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }] } },
+      "/notifications/unread-count": { get: { summary: "Unread in-app notification count (ETag-aware, for the nav bell)" } },
       "/push/public-key": { get: { summary: "VAPID public key for browser PushManager" } },
       "/push/subscribe": { post: { summary: "Register a push subscription" } },
       "/push/unsubscribe": { post: { summary: "Remove a push subscription" } },

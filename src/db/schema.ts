@@ -44,6 +44,12 @@ export const users = pgTable("users", {
   // the OS) — that is also the behaviour for logged-out pages, which have
   // no user row to read.
   themeMode: text("theme_mode"),
+  // 事件提醒的两个投递渠道，用户可在设置页分别关。NOT NULL DEFAULT true：
+  // 存量行补出来的就是「保持现状（两个都发）」，不需要回填判断。
+  // 注意这只管事件提醒：安全类邮件（登录提醒、安全变更）不走这两个开关，
+  // 那类邮件故意不给关（见 securityChangeMail / login_alert 的调用方）。
+  notifyReminderEmail: boolean("notify_reminder_email").notNull().default(true),
+  notifyReminderPush: boolean("notify_reminder_push").notNull().default(true),
   // Per-user UI language. NULL means "inherit site default". Valid
   // values are entries in src/lib/i18n.ts SUPPORTED_LOCALES (zh-CN, en).
   // The locale resolver falls back to site_settings.default_locale →
@@ -344,6 +350,32 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 }, (t) => ({
   userIdx: index("push_subscriptions_user_idx").on(t.userId),
   endpointUnique: uniqueIndex("push_subscriptions_endpoint_unique").on(t.endpoint),
+}));
+
+// 站内通知（铃铛收件箱）。此前站内没有任何通知载体：日历邀请、新预约、
+// 预约取消都只有一封邮件，SMTP 没配或邮件被拦时用户在站内无从知晓。
+// 这一行就是那封邮件的站内对应物 —— 生产者写一行，铃铛未读数 +1，
+// 通知页里点开跳到 url 指向的对象并标已读。
+//
+// title/body 在写入时就按收件人的 locale 定稿（和提醒邮件同口径：
+// 发出去的文字不能等用户打开页面时再按当时的语言重译，否则同条通知
+// 在不同语言设置下会变脸，审计和复现都无从对起）。url 只存站内路径。
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // 机器可读的类别：calendar_invitation | booking_created | booking_cancelled。
+  // 界面按它选图标/分组，新类别往这里加，不要拿 title 文案做判断。
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  // 点击后要去的站内路径（必须以 / 开头，写入方负责，读出方再校验一次）。
+  url: text("url"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // 列表页与未读数都按 (user_id, created_at desc) 走；未读数另有一个
+  // 只数 read_at IS NULL 的查询，行数被每人 200 条的保留上限兜住，不另建索引。
+  userCreatedIdx: index("notifications_user_created_idx").on(t.userId, desc(t.createdAt)),
 }));
 
 export const loginAlerts = pgTable("login_alerts", {
@@ -826,6 +858,8 @@ export type NewWebauthnCredential = typeof webauthnCredentials.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
 export type EmailVerification = typeof emailVerifications.$inferSelect;
 export type LoginAlert = typeof loginAlerts.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type CalendarMember = typeof calendarMembers.$inferSelect;
 export type CalendarInvitation = typeof calendarInvitations.$inferSelect;
