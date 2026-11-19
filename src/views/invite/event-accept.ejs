@@ -18,6 +18,44 @@
     </div>
 
     <% if (!sourceEvent.deletedAt) { %>
+    <!-- Organizer + invitees -->
+    <% if (organizer || invitees.length > 0) { %>
+    <section class="mb-6">
+      <h2 class="text-sm font-semibold text-slate-700 mb-2"><%= t("inviteAccept.inviteesHeading", { count: invitees.length }) %></h2>
+      <ul class="divide-y divide-slate-100 rounded-xl border border-slate-200">
+        <% if (organizer) { %>
+          <li class="flex items-center gap-3 px-3 py-2.5">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white"><%= (organizer.name || organizer.email).slice(0, 1).toUpperCase() %></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-slate-900"><%= organizer.name %></span>
+              <span class="block truncate text-xs text-slate-400"><%= organizer.email %></span>
+            </span>
+            <span class="inline-flex items-center rounded-full bg-brand-50 text-brand-700 px-2 py-0.5 text-xs"><%= t("inviteAccept.organizerLabel") %></span>
+          </li>
+        <% } %>
+        <% invitees.forEach(function(inv){ %>
+          <li class="flex items-center gap-3 px-3 py-2.5">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-sm font-semibold text-slate-600"><%= (inv.name || inv.email).slice(0, 1).toUpperCase() %></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium text-slate-900"><%= inv.name || inv.email %></span>
+              <% if (inv.name) { %><span class="block truncate text-xs text-slate-400"><%= inv.email %></span><% } %>
+            </span>
+            <% if (inv.isMe) { %><span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-xs"><%= t("inviteAccept.youBadge") %></span><% } %>
+            <% if (inv.status === 'accepted') { %>
+              <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs">✓ <%= t("inviteAccept.statusAccepted") %></span>
+            <% } else if (inv.status === 'declined') { %>
+              <span class="inline-flex items-center rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-xs">✗ <%= t("inviteAccept.statusDeclined") %></span>
+            <% } else if (inv.status === 'tentative') { %>
+              <span class="inline-flex items-center rounded-full bg-amber-50 text-amber-700 px-2 py-0.5 text-xs">? <%= t("inviteAccept.statusTentative") %></span>
+            <% } else { %>
+              <span class="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-xs"><%= t("inviteAccept.statusPending") %></span>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    </section>
+    <% } %>
+
     <!-- RSVP -->
     <section class="mb-6">
       <h2 class="text-sm font-semibold text-slate-700 mb-2"><%= t("inviteAccept.rsvpHeading") %></h2>
@@ -49,6 +87,49 @@
           </button>
         </form>
       </div>
+    </section>
+
+    <!-- Propose a new time -->
+    <section class="mb-6">
+      <h2 class="text-sm font-semibold text-slate-700 mb-2"><%= t("inviteAccept.proposeHeading") %></h2>
+      <% if (myProposals.length > 0) { %>
+        <ul class="mb-3 space-y-2">
+          <% myProposals.forEach(function(p){ %>
+            <li class="rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+              <div><%- p.startsAtLocal %> → <%- p.endsAtLocal %></div>
+              <% if (p.note) { %><div class="mt-0.5 text-xs text-slate-500"><%= p.note %></div><% } %>
+              <div class="mt-1 text-xs">
+                <% if (p.status === 'pending') { %><span class="text-amber-700"><%= t("inviteAccept.proposalPending") %></span>
+                <% } else if (p.status === 'accepted') { %><span class="text-emerald-700">✓ <%= t("inviteAccept.proposalAccepted") %></span>
+                <% } else if (p.status === 'declined') { %><span class="text-red-700">✗ <%= t("inviteAccept.proposalDeclined") %></span>
+                <% } else { %><span class="text-slate-400"><%= t("inviteAccept.proposalSuperseded") %></span><% } %>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <form method="post" action="/event-invite/<%= encodeURIComponent(token) %>/propose" class="rounded-xl border border-slate-200 p-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label class="block">
+            <span class="text-xs text-slate-500"><%= t("inviteAccept.proposeStart") %></span>
+            <input type="<%= sourceEvent.allDay ? 'date' : 'datetime-local' %>" name="start" required value="<%= proposalDefaults.start %>"
+                   class="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          </label>
+          <label class="block">
+            <span class="text-xs text-slate-500"><%= t("inviteAccept.proposeEnd") %></span>
+            <input type="<%= sourceEvent.allDay ? 'date' : 'datetime-local' %>" name="end" required value="<%= proposalDefaults.end %>"
+                   class="mt-0.5 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+          </label>
+        </div>
+        <% if (!sourceEvent.allDay) { %>
+          <p class="mt-1.5 text-xs text-slate-400"><%= t("inviteAccept.proposeTzNote", { tz: displayTz }) %></p>
+        <% } %>
+        <input type="text" name="note" maxlength="500" placeholder="<%= t('inviteAccept.proposeNote') %>"
+               class="mt-2 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+        <button type="submit" class="mt-2 w-full rounded-lg border border-brand-300 bg-brand-50 px-3 py-2 text-sm font-medium text-brand-800 hover:bg-brand-100">
+          <%= t("inviteAccept.proposeSubmit") %>
+        </button>
+      </form>
     </section>
 
     <!-- Add to calendar (multi-platform) -->
