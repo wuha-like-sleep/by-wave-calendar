@@ -97,6 +97,13 @@ struct SettingsView: View {
                                subtitle: LocaleManager.shared.currentLabel,
                                tint: .blue)
                     }
+                    NavigationLink {
+                        DevicesView()
+                    } label: {
+                        navRow(icon: "iphone", title: "我的设备",
+                               subtitle: "查看并解绑已登录设备",
+                               tint: .teal)
+                    }
                     // Scan a desktop's pair-init QR to approve it from
                     // the logged-in APP — no browser bounce required.
                     // The phone reads <server>/desktop-pair/<CODE> from

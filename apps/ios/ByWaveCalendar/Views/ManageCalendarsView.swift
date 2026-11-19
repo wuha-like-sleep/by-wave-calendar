@@ -15,6 +15,7 @@
 //  second of returning from settings.
 
 import SwiftUI
+import UIKit
 
 struct ManageCalendarsView: View {
     @EnvironmentObject var state: AppState
@@ -105,6 +106,8 @@ struct EditCalendarView: View {
     @State private var description: String = ""
     @State private var saving = false
     @State private var errorMessage: String?
+    @State private var exporting = false
+    @State private var exportItem: ICSExportItem?
 
     // Curated palette — same hex values as CalendarCreateView so the
     // two flows share a color vocabulary.
@@ -155,6 +158,45 @@ struct EditCalendarView: View {
             } header: {
                 Text("描述")
             }
+            // Sharing + subscriptions live on the per-calendar page,
+            // same as web / desktop / Android: share links let others
+            // subscribe read-only; subscriptions pull an external
+            // .ics feed into this calendar.
+            Section {
+                NavigationLink {
+                    ShareLinksView(calendar: calendar)
+                } label: {
+                    Label("分享链接", systemImage: "link")
+                }
+                NavigationLink {
+                    SubscriptionsView(calendar: calendar)
+                } label: {
+                    Label("日历订阅", systemImage: "arrow.down.circle")
+                }
+            } header: {
+                Text("分享与订阅")
+            }
+            // One-off export: owner-authenticated snapshot from
+            // GET /calendars/:id/export.ics (NOT a share token — no
+            // lasting public link is minted for a one-time export).
+            Section {
+                Button(action: { Task { await exportICS() } }) {
+                    HStack {
+                        Label("导出 .ics", systemImage: "square.and.arrow.up")
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if exporting {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
+                .disabled(exporting)
+            } header: {
+                Text("导出")
+            } footer: {
+                Text("把这个日历的全部事件导出成一个 .ics 文件，可存到文件或发给别人。")
+                    .font(.footnote)
+            }
             if let errorMessage {
                 Section {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
@@ -174,6 +216,10 @@ struct EditCalendarView: View {
                 }
                 .disabled(saving || !canSave)
             }
+        }
+        .sheet(item: $exportItem) { item in
+            ActivityShareSheet(items: [item.url])
+                .ignoresSafeArea()
         }
         .onAppear {
             // Pre-fill from the calendar metadata. Done in onAppear (not
@@ -244,4 +290,49 @@ struct EditCalendarView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    /// Fetch the .ics snapshot and hand it to the system share sheet
+    /// as a real file, so the user can save it to Files or send it.
+    /// The bytes land in the temp directory (the OS reclaims it);
+    /// the filename follows the server's own sanitising rule so the
+    /// saved file is named like a web export of the same calendar.
+    private func exportICS() async {
+        exporting = true
+        errorMessage = nil
+        defer { exporting = false }
+        do {
+            let data = try await APIClient(state: state).exportCalendarICS(calendarId: calendar.id)
+            let safeName = calendar.name
+                .replacingOccurrences(of: "[^a-zA-Z0-9\u{4e00}-\u{9fff}-]+", with: "_", options: .regularExpression)
+                .prefix(50)
+            let fileName = (safeName.isEmpty ? "calendar" : String(safeName)) + ".ics"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+            try data.write(to: url, options: .atomic)
+            exportItem = ICSExportItem(url: url)
+        } catch let e as APIError {
+            errorMessage = e.localizedDescription
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+/// Payload for the export share sheet. URL alone isn't Identifiable,
+/// which sheet(item:) needs.
+struct ICSExportItem: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+/// Thin UIActivityViewController bridge — the app has no other
+/// file-sharing surface, and ShareLink can't present on demand
+/// after an async fetch the way this sheet can.
+struct ActivityShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }

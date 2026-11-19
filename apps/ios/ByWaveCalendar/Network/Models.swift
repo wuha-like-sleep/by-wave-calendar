@@ -37,6 +37,12 @@ struct EventDTO: Codable, Identifiable, Hashable {
     let endsAt: Date
     let allDay: Bool
     let rrule: String?
+    // Deleted single occurrences of a recurring series (ISO strings),
+    // as stored on the master row. The server's row responses carry
+    // this column (forClient only strips rawIcs); occurrences share
+    // the master's list. Optional so search-lifted DTOs (which build
+    // EventDTO by hand) and old caches decode cleanly.
+    let exdates: [String]?
     // isOccurrence is set by the server's RRULE expansion. true for the
     // 2nd+ render of a recurring event; false for the master / non-recurring.
     let isOccurrence: Bool?
@@ -44,6 +50,16 @@ struct EventDTO: Codable, Identifiable, Hashable {
     // mirror only the fields the APP currently cares about; the server
     // round-trips the rest unchanged via createSchema's extraSchema.
     let extra: EventExtraDTO?
+}
+
+// One VALARM row inside extra.alarms. Mirrors the server's alarm
+// shape (src/routes/events.ts extraSchema): trigger is an ISO 8601
+// duration string (or a parameter-prefixed iCalendar TRIGGER value
+// for imported rows), action is usually "DISPLAY".
+struct EventAlarmDTO: Codable, Hashable {
+    let trigger: String
+    let action: String?
+    let description: String?
 }
 
 // Read-side mirror of EventExtra. Defined as a separate type so the
@@ -60,6 +76,9 @@ struct EventExtraDTO: Codable, Hashable {
     // Optional meeting passcode, e.g. Zoom 入会密码. Stored at
     // extra.meetingPassword. Optional so old events decode cleanly.
     let meetingPassword: String?
+    // Event-level reminders (extra.alarms). Optional so old events
+    // (and search results, which omit extra entirely) decode cleanly.
+    let alarms: [EventAlarmDTO]?
 }
 
 // The /api/v1/events endpoint returns { calendars: [...], events: [...] }.
@@ -96,9 +115,10 @@ struct EventExtra: Encodable {
     let category: ExtraField<String>
     let url: ExtraField<String>
     let meetingPassword: ExtraField<String>
+    let alarms: ExtraField<[EventAlarmDTO]>
 
     enum CodingKeys: String, CodingKey {
-        case timezone, attendees, category, url, meetingPassword
+        case timezone, attendees, category, url, meetingPassword, alarms
     }
 
     func encode(to encoder: Encoder) throws {
@@ -108,6 +128,7 @@ struct EventExtra: Encodable {
         try put(category, .category, &c)
         try put(url, .url, &c)
         try put(meetingPassword, .meetingPassword, &c)
+        try put(alarms, .alarms, &c)
     }
 
     private func put<T: Encodable>(
@@ -135,6 +156,10 @@ struct EventCreateInput: Encodable {
     let allDay: Bool?
     let rrule: String?
     let extra: EventExtra?
+    // Deleted-occurrence list for a recurring series. Only the editor
+    // sets this, and only when the user actually restored one of the
+    // listed occurrences; nil is dropped by the encoder.
+    let exdates: [String]?
     // Optional stable idempotency key. When set, the server uses it as the
     // event's uid (UNIQUE per calendar), so a retried create (user taps
     // 创建, request times out, taps again) collapses onto the first row
@@ -165,6 +190,11 @@ struct EventUpdateInput: Encodable {
     let extra: EventExtra?
     let scope: String?
     let recurrenceId: String?
+    // Restored occurrences: PATCH replaces the stored list wholesale
+    // (server updateSchema accepts exdates; omitted = untouched). The
+    // editor sends the full remaining list only when the user restored
+    // at least one deleted occurrence; nil (omitted) leaves it alone.
+    let exdates: [String]?
 }
 
 // Body for POST /api/v1/calendars (create) — matches server createSchema
@@ -377,6 +407,531 @@ struct IcsImportResult: Decodable {
     let updated: Int
     let skipped: Int
     let total: Int
+}
+
+// MARK: - 重复规则 (RRULE 编辑器状态)
+
+/// Frequency of a recurrence rule. Raw values are the RFC 5545
+/// wire strings; `none` is the editor's「不重复」state (no RRULE).
+enum RruleFreq: String, CaseIterable, Hashable {
+    case none = ""
+    case daily = "DAILY"
+    case weekly = "WEEKLY"
+    case monthly = "MONTHLY"
+    case yearly = "YEARLY"
+
+    var labelKey: String {
+        switch self {
+        case .none: return "app.event.repeatNone"
+        case .daily: return "app.event.repeatDaily"
+        case .weekly: return "app.event.repeatWeekly"
+        case .monthly: return "app.event.repeatMonthly"
+        case .yearly: return "app.event.repeatYearly"
+        }
+    }
+}
+
+enum RruleEndKind: String, CaseIterable, Hashable {
+    case forever, until, count
+
+    var labelKey: String {
+        switch self {
+        case .forever: return "rrule.end.forever"
+        case .until: return "rrule.end.until"
+        case .count: return "rrule.end.count"
+        }
+    }
+}
+
+/// How a MONTHLY rule picks its day: by day-of-month (DTSTART's day,
+/// no BYDAY at all) or by ordinal weekday (BYDAY=2MO / BYDAY=-1FR).
+enum RruleMonthlyMode: String, CaseIterable, Hashable {
+    case byMonthDay, byWeekday
+
+    var labelKey: String {
+        switch self {
+        case .byMonthDay: return "rrule.monthly.byDate"
+        case .byWeekday: return "rrule.monthly.byWeekday"
+        }
+    }
+}
+
+/// Editable recurrence state — the iOS counterpart of the desktop
+/// RruleEditor's RruleState, widened with the two BYDAY shapes the
+/// server's expander (the `rrule` library, see src/lib/
+/// rrule_expand.ts) fully supports: WEEKLY weekday sets and MONTHLY
+/// ordinal weekdays.
+///
+/// Round-trip rule, same as desktop: anything the editor can't model
+/// exactly (BYSETPOS, BYMONTHDAY lists, FREQ=HOURLY, ordinal BYDAY
+/// on a WEEKLY rule, UNTIL+COUNT together…) is kept verbatim in
+/// `passthrough` and sent back untouched — parsing must never
+/// silently drop a rule it doesn't understand.
+struct RruleState: Equatable {
+    var freq: RruleFreq = .none
+    var interval: Int = 1
+    var end: RruleEndKind = .forever
+    /// UNTIL day (date-only in the UI; built as end-of-day UTC, the
+    /// desktop editor's convention).
+    var until: Date = Date()
+    var count: Int = 10
+    /// WEEKLY: chosen weekdays as Calendar weekday numbers
+    /// (1 = Sunday … 7 = Saturday). Empty = DTSTART's weekday.
+    var byday: Set<Int> = []
+    var monthlyMode: RruleMonthlyMode = .byMonthDay
+    /// MONTHLY byWeekday: 1…4 = first…fourth, -1 = last.
+    var monthlyOrdinal: Int = 1
+    var monthlyWeekday: Int = 2  // Calendar weekday; Monday default
+    /// Verbatim original when it can't be modeled. Non-nil blocks
+    /// rebuilding: build() returns it as-is until the user picks a
+    /// frequency explicitly (which clears it, like desktop).
+    var passthrough: String?
+    /// The string this state was parsed from (nil for a fresh event),
+    /// so the editor can tell "unchanged" from "edited" and only
+    /// then put rrule on the PATCH.
+    var original: String?
+
+    private static let weekdayCodes = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"]  // index = weekday - 1
+    /// BYDAY emission order (RFC examples use week order from Monday).
+    private static let codeOrder = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+
+    static func parse(_ raw: String?, seedStart: Date) -> RruleState {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else {
+            var s = RruleState()
+            s.until = Calendar.current.date(byAdding: .month, value: 1, to: seedStart) ?? seedStart
+            return s
+        }
+        var s = RruleState()
+        s.original = raw
+        s.until = Calendar.current.date(byAdding: .month, value: 1, to: seedStart) ?? seedStart
+
+        var parts: [String: String] = [:]
+        for chunk in raw.split(separator: ";") {
+            let kv = chunk.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2 else { s.passthrough = raw; return s }
+            parts[String(kv[0]).uppercased()] = String(kv[1]).uppercased()
+        }
+        guard let freqWire = parts["FREQ"], let freq = RruleFreq(rawValue: freqWire), freq != .none else {
+            s.passthrough = raw
+            return s
+        }
+        s.freq = freq
+
+        // Every key must be one we model, or the whole rule passes through.
+        let known: Set<String> = ["FREQ", "INTERVAL", "UNTIL", "COUNT", "BYDAY", "BYMONTHDAY"]
+        if parts.keys.contains(where: { !known.contains($0) }) {
+            s.passthrough = raw
+            return s
+        }
+        if let iv = parts["INTERVAL"] {
+            guard let n = Int(iv), n >= 1 else { s.passthrough = raw; return s }
+            s.interval = n
+        }
+        if parts["UNTIL"] != nil && parts["COUNT"] != nil {
+            s.passthrough = raw  // RFC forbids both; don't pick a winner
+            return s
+        }
+        if let u = parts["UNTIL"] {
+            guard let d = parseUntil(u) else { s.passthrough = raw; return s }
+            s.end = .until
+            s.until = d
+        } else if let c = parts["COUNT"] {
+            guard let n = Int(c), n >= 1 else { s.passthrough = raw; return s }
+            s.end = .count
+            s.count = n
+        }
+        if let md = parts["BYMONTHDAY"] {
+            // Only the plain monthly case is modeled: a single day
+            // equal to DTSTART's day-of-month. Anything richer
+            // (lists, negative offsets) passes through.
+            let seedDay = Calendar.current.component(.day, from: seedStart)
+            guard freq == .monthly, Int(md) == seedDay else { s.passthrough = raw; return s }
+        }
+        if let byday = parts["BYDAY"] {
+            let tokens = byday.split(separator: ",").map(String.init)
+            switch freq {
+            case .weekly:
+                var days: Set<Int> = []
+                for token in tokens {
+                    guard let wd = weekdayNumber(token) else { s.passthrough = raw; return s }
+                    days.insert(wd)
+                }
+                s.byday = days
+            case .monthly:
+                guard tokens.count == 1, let (ordinal, wd) = parseOrdinalToken(tokens[0]) else {
+                    s.passthrough = raw
+                    return s
+                }
+                s.monthlyMode = .byWeekday
+                s.monthlyOrdinal = ordinal
+                s.monthlyWeekday = wd
+            default:
+                s.passthrough = raw
+                return s
+            }
+        }
+        return s
+    }
+
+    /// The RRULE to store, or nil for「不重复」. A passthrough rule
+    /// comes back verbatim until the user explicitly picks a
+    /// frequency (the view clears `passthrough` at that moment).
+    func build() -> String? {
+        if let passthrough { return passthrough }
+        guard freq != .none else { return nil }
+        var out = "FREQ=\(freq.rawValue)"
+        if interval > 1 { out += ";INTERVAL=\(interval)" }
+        switch freq {
+        case .weekly:
+            if !byday.isEmpty {
+                let codes = Self.codeOrder.filter { code in
+                    guard let wd = Self.weekdayNumber(code) else { return false }
+                    return byday.contains(wd)
+                }
+                out += ";BYDAY=" + codes.joined(separator: ",")
+            }
+        case .monthly:
+            if monthlyMode == .byWeekday {
+                out += ";BYDAY=\(monthlyOrdinal)\(Self.weekdayCodes[monthlyWeekday - 1])"
+            }
+        default:
+            break
+        }
+        switch end {
+        case .forever:
+            break
+        case .until:
+            out += ";UNTIL=" + Self.formatUntil(until)
+        case .count:
+            out += ";COUNT=\(max(count, 1))"
+        }
+        return out
+    }
+
+    /// True when the user actually changed the rule — the editor
+    /// only then sends rrule on PATCH (sending the identical string
+    /// would needlessly wake the server's series-edit planner).
+    var isEdited: Bool { build() != original }
+
+    // MARK: Parsing helpers
+
+    /// Plain weekday token ("MO") → Calendar weekday (1 = Sun … 7 = Sat).
+    private static func weekdayNumber(_ code: String) -> Int? {
+        guard let idx = weekdayCodes.firstIndex(of: code) else { return nil }
+        return idx + 1
+    }
+
+    /// Ordinal weekday token ("2MO", "-1FR") → (ordinal, weekday).
+    private static func parseOrdinalToken(_ token: String) -> (Int, Int)? {
+        guard token.count >= 3 else { return nil }
+        let code = String(token.suffix(2))
+        guard let wd = weekdayNumber(code) else { return nil }
+        guard let ordinal = Int(token.dropLast(2)), ordinal != 0, (-1...4).contains(ordinal) || ordinal == 5 else { return nil }
+        return (ordinal, wd)
+    }
+
+    /// UNTIL as stored: "yyyyMMdd'T'HHmmss'Z'" or date-only "yyyyMMdd".
+    /// The editor works in whole calendar days (that's all the date
+    /// picker offers), so the day is materialized in the DEVICE
+    /// calendar — the same day the picker will show — rather than as
+    /// a UTC-midnight instant that lands on the previous local day
+    /// west of UTC.
+    private static func parseUntil(_ u: String) -> Date? {
+        let digits = u.replacingOccurrences(of: "Z", with: "")
+            .split(separator: "T").first.map(String.init) ?? ""
+        guard digits.count == 8, digits.allSatisfy(\.isNumber) else { return nil }
+        return Calendar.current.date(from: DateComponents(
+            year: Int(digits.prefix(4)),
+            month: Int(digits.dropFirst(4).prefix(2)),
+            day: Int(digits.dropFirst(6).prefix(2)),
+        ))
+    }
+
+    /// UI date → UNTIL wire value, end-of-day UTC (desktop convention).
+    /// Components are read in the device calendar so the wire day is
+    /// the day the user picked, not its UTC projection.
+    private static func formatUntil(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d%02d%02dT235959Z", c.year ?? 1970, c.month ?? 1, c.day ?? 1)
+    }
+}
+
+// MARK: - 事件分类 (extra.category)
+
+/// Category values, value-for-value with the web editor's select
+/// (src/views/app/calendar-app.ejs): "" is「无」, the rest are stored
+/// verbatim in extra.category. Labels use the server's
+/// app.event.category* keys so all clients name them alike.
+struct CategoryOption: Identifiable, Hashable {
+    var id: String { value }
+    let value: String
+    let labelKey: String
+}
+
+enum EventCategory {
+    static let values: [CategoryOption] = [
+        CategoryOption(value: "", labelKey: "app.event.none"),
+        CategoryOption(value: "work", labelKey: "app.event.categoryWork"),
+        CategoryOption(value: "personal", labelKey: "app.event.categoryPersonal"),
+        CategoryOption(value: "family", labelKey: "app.event.categoryFamily"),
+        CategoryOption(value: "health", labelKey: "app.event.categoryHealth"),
+        CategoryOption(value: "travel", labelKey: "app.event.categoryTravel"),
+        CategoryOption(value: "meeting", labelKey: "app.event.categoryMeeting"),
+    ]
+}
+
+// MARK: - 日历分享链接 (share-tokens)
+
+/// One row of GET /calendars/:id/share-tokens. `url` is composed by
+/// the server (PUBLIC_BASE_URL + /ics/<token>.ics) — the client never
+/// builds it itself, so a self-hosted origin change can't strand the
+/// copied link. `token` doubles as the row id and the revoke key.
+struct ShareTokenDTO: Codable, Identifiable, Hashable {
+    var id: String { token }
+    let token: String
+    let calendarId: String
+    let label: String?
+    let createdAt: Date
+    let url: String
+}
+
+/// Body for POST /calendars/:id/share-tokens. nil label is dropped by
+/// the encoder so an unnamed link sends `{}`.
+struct ShareTokenCreateInput: Encodable {
+    let label: String?
+}
+
+// MARK: - 设备 (devices)
+
+/// One row of GET /devices (the endpoint answers with a raw
+/// `{devices:[...]}` body, no v1 envelope). Dates decode through
+/// JSONDecoder.iso() like every other DTO.
+struct DeviceDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let kind: String
+    let prefix: String
+    let appVersion: String?
+    let lastSeenAt: Date?
+    let lastSeenIp: String?
+    let firstSeenIp: String?
+    let createdAt: Date
+}
+
+struct DevicesResponse: Decodable {
+    let devices: [DeviceDTO]
+}
+
+/// GET /devices/me — which devices row this bearer session belongs
+/// to. Only `id` is needed to mark the「本机」row; the rest is decoded
+/// so the shape stays honest if the page ever wants it.
+struct CurrentDeviceResponse: Decodable {
+    let id: String
+    let label: String?
+    let kind: String?
+    let hasPushToken: Bool?
+}
+
+/// `{ok:true}` acknowledgement (DELETE /devices/:id and friends).
+struct OkResponse: Decodable {
+    let ok: Bool
+}
+
+// MARK: - 冲突检测 (POST /events/conflicts)
+
+struct ConflictCheckInput: Encodable {
+    let calendarId: String
+    let startsAt: String  // ISO8601 with offset
+    let endsAt: String
+    let excludeId: String?
+}
+
+/// One overlapping event. The endpoint answers with a raw
+/// `{conflicts:[...]}` body (no envelope), dates as ISO strings.
+struct ConflictDTO: Decodable, Identifiable, Hashable {
+    let id: String
+    let summary: String
+    let startsAt: Date
+    let endsAt: Date
+}
+
+struct ConflictsResponse: Decodable {
+    let conflicts: [ConflictDTO]
+}
+
+// MARK: - 日历订阅 (subscriptions)
+
+/// One row of GET /calendars/:id/subscriptions. lastStatus is the
+/// server's raw "ok" / "error" / nil (never fetched yet).
+struct CalendarSubscriptionDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let calendarId: String
+    let url: String
+    let label: String?
+    let refreshMinutes: Int
+    let lastFetchedAt: Date?
+    let lastStatus: String?
+    let lastError: String?
+    let lastEventCount: Int?
+    let createdAt: Date
+}
+
+/// Body for POST /calendars/:id/subscriptions. refreshMinutes is
+/// left nil from the iOS UI — the server default (360) applies.
+struct SubscriptionCreateInput: Encodable {
+    let url: String
+    let label: String?
+    let refreshMinutes: Int?
+}
+
+/// The `refresh` half of the create response: the subscription is
+/// already stored even when the first fetch failed, so `ok == false`
+/// carries the error as data, not as a thrown failure.
+struct SubscriptionRefreshOutcome: Decodable, Hashable {
+    let ok: Bool
+    let inserted: Int?
+    let updated: Int?
+    let skipped: Int?
+    let total: Int?
+    let error: String?
+}
+
+struct SubscriptionCreateResponse: Decodable {
+    let subscription: CalendarSubscriptionDTO
+    let refresh: SubscriptionRefreshOutcome
+}
+
+/// POST /calendars/:id/subscriptions/:subId/refresh success shape
+/// (a failed refresh is an HTTP 502 instead, thrown as APIError).
+struct SubscriptionRefreshResponse: Decodable {
+    let subscription: CalendarSubscriptionDTO
+    let inserted: Int
+    let updated: Int
+    let skipped: Int
+    let total: Int
+}
+
+// MARK: - 事件提醒档位与 trigger 解析
+
+/// The reminder picker values. These MUST stay value-for-value with
+/// the server's src/lib/reminder_triggers.ts (TIMED_TRIGGERS /
+/// ALLDAY_TRIGGERS) — the string is stored verbatim in
+/// extra.alarms[].trigger and is part of the reminder idempotency
+/// key, so an invented or mistyped value saves fine and then never
+/// fires. "" is the「不提醒」sentinel, not a trigger.
+struct ReminderOption: Identifiable, Hashable {
+    var id: String { value }
+    let value: String
+    let labelKey: String
+}
+
+enum ReminderOptions {
+    static let timed: [ReminderOption] = [
+        ReminderOption(value: "", labelKey: "app.reminder.none"),
+        ReminderOption(value: "-PT0M", labelKey: "app.reminder.timed.atStart"),
+        ReminderOption(value: "-PT5M", labelKey: "app.reminder.timed.min5"),
+        ReminderOption(value: "-PT15M", labelKey: "app.reminder.timed.min15"),
+        ReminderOption(value: "-PT30M", labelKey: "app.reminder.timed.min30"),
+        ReminderOption(value: "-PT1H", labelKey: "app.reminder.timed.hour1"),
+        ReminderOption(value: "-PT2H", labelKey: "app.reminder.timed.hour2"),
+        ReminderOption(value: "-P1D", labelKey: "app.reminder.timed.day1"),
+        ReminderOption(value: "-P1W", labelKey: "app.reminder.timed.week1"),
+    ]
+    static let allDay: [ReminderOption] = [
+        ReminderOption(value: "", labelKey: "app.reminder.none"),
+        ReminderOption(value: "PT9H", labelKey: "app.reminder.allDay.sameDay9am"),
+        ReminderOption(value: "-PT15H", labelKey: "app.reminder.allDay.dayBefore9am"),
+        ReminderOption(value: "-P1DT15H", labelKey: "app.reminder.allDay.twoDaysBefore9am"),
+        ReminderOption(value: "-P6DT15H", labelKey: "app.reminder.allDay.weekBefore9am"),
+    ]
+
+    static func options(allDay: Bool) -> [ReminderOption] {
+        allDay ? allDay : timed
+    }
+
+    static func values(allDay: Bool) -> [String] {
+        options(allDay: allDay).map(\.value)
+    }
+}
+
+/// A parsed alarm trigger: a signed duration in seconds plus which
+/// end of the event it hangs off (iCalendar RELATED=END).
+struct ParsedAlarmTrigger: Equatable {
+    let seconds: TimeInterval
+    let relatedToEnd: Bool
+}
+
+/// Minimal ISO 8601 duration parser for alarm triggers — the local
+/// counterpart of the server's parseTrigger (reminder_triggers.ts),
+/// narrowed to what local notification scheduling needs:
+///
+///   - Accepts a bare duration (`-PT15M`, `P1DT15H`…) and the
+///     parameter-prefixed form imports carry
+///     (`RELATED=END:-PT15M`, `VALUE=DURATION:-PT15M`).
+///   - Grammar: `[+-]P[nW][nD]T[nH][nM][nS]`, sign applies to the
+///     whole value, years/months are NOT accepted (a "month" has no
+///     fixed length — guessing would fire on the wrong day).
+///   - Anything else (absolute DATE-TIME triggers, garbage) returns
+///     nil and the caller skips that one alarm instead of guessing.
+enum AlarmTriggerParser {
+    private static let durationRegex = try? NSRegularExpression(
+        pattern: #"^([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$"#, // raw string, no escaping needed
+        options: [.caseInsensitive],
+    )
+
+    static func parse(_ raw: String) -> ParsedAlarmTrigger? {
+        var text = raw.trimmingCharacters(in: .whitespaces)
+        // Tolerate a whole property line sneaking in ("TRIGGER:..." /
+        // "TRIGGER;..."), same stance as the server parser.
+        if text.count > 8 {
+            let head = text.prefix(8).uppercased()
+            if head == "TRIGGER:" || head == "TRIGGER;" {
+                text = String(text.dropFirst(8))
+            }
+        }
+        if text.isEmpty { return nil }
+
+        var value = text
+        var relatedToEnd = false
+        // Parameter block: only when the segment before the first
+        // colon contains "=", otherwise the colon is part of the value.
+        if let colon = text.firstIndex(of: ":"), text[..<colon].contains("=") {
+            let params = text[..<colon]
+            value = String(text[text.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            for part in params.split(separator: ";") {
+                let kv = part.split(separator: "=", maxSplits: 1)
+                guard kv.count == 2, kv[0].trimmingCharacters(in: .whitespaces).uppercased() == "RELATED" else { continue }
+                switch kv[1].trimmingCharacters(in: .whitespaces).uppercased() {
+                case "END": relatedToEnd = true
+                case "START": relatedToEnd = false
+                default: return nil  // a RELATED we don't understand — don't guess
+                }
+            }
+        }
+        guard let seconds = parseDurationSeconds(value) else { return nil }
+        return ParsedAlarmTrigger(seconds: seconds, relatedToEnd: relatedToEnd)
+    }
+
+    /// Signed seconds for one duration string, nil when unparseable.
+    /// 0 is a legitimate result ("-PT0M" = at start) — callers must
+    /// compare against nil, never against 0.
+    static func parseDurationSeconds(_ value: String) -> TimeInterval? {
+        guard let re = durationRegex else { return nil }
+        let ns = value as NSString
+        guard let m = re.firstMatch(in: value, range: NSRange(location: 0, length: ns.length)) else { return nil }
+        func group(_ i: Int) -> Double? {
+            let r = m.range(at: i)
+            guard r.location != NSNotFound else { return nil }
+            return Double(ns.substring(with: r))
+        }
+        let w = group(2), d = group(3), h = group(4), min = group(5), s = group(6)
+        // A bare "P" / "PT" matches the regex with every group empty.
+        guard w != nil || d != nil || h != nil || min != nil || s != nil else { return nil }
+        let total = (w ?? 0) * 604_800 + (d ?? 0) * 86_400 + (h ?? 0) * 3_600 + (min ?? 0) * 60 + (s ?? 0)
+        let signRange = m.range(at: 1)
+        let negative = signRange.location != NSNotFound && ns.substring(with: signRange) == "-"
+        return negative ? -total : total
+    }
 }
 
 /// Availability stays in the initiating calendar's zone; legacy calendars used Shanghai.

@@ -308,6 +308,145 @@ extension APIClient {
     }
 }
 
+// MARK: - Raw data (非 JSON 响应)
+
+extension APIClient {
+    /// GET that returns the response body untouched — for the one
+    /// endpoint that doesn't speak JSON (calendar .ics export).
+    /// Same auth + one-shot 401 refresh as `request`, and HTTP
+    /// errors still surface as APIError.server with the body text so
+    /// callers get the server's error code, not a blob of ICS.
+    func getData(_ path: String) async throws -> Data {
+        try await requestData(path: path, isRetry: false)
+    }
+
+    private func requestData(path: String, isRetry: Bool) async throws -> Data {
+        guard state.activeProfileId == profileID else { throw CancellationError() }
+        guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
+        let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let url = Self.makeURL(server: serverURL, path: path) else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 30
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.network(error)
+        }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.network(NSError(domain: "no-http-response", code: 0))
+        }
+        if http.statusCode == 401 && !isRetry {
+            state.invalidateAccessToken()
+            return try await requestData(path: path, isRetry: true)
+        }
+        if http.statusCode >= 400 {
+            throw APIError.server(status: http.statusCode, body: String(data: data, encoding: .utf8))
+        }
+        return data
+    }
+}
+
+// MARK: - 日历分享 / 订阅 / 导出 (对齐 web/桌面/Android 的日历管理)
+
+extension APIClient {
+    // GET /calendars/:id/share-tokens → bare array in the v1 envelope.
+    func listShareTokens(calendarId: String) async throws -> [ShareTokenDTO] {
+        try await get("/calendars/\(calendarId)/share-tokens")
+    }
+
+    // POST /calendars/:id/share-tokens → 201, the new row incl. url.
+    func createShareToken(calendarId: String, label: String?) async throws -> ShareTokenDTO {
+        try await post("/calendars/\(calendarId)/share-tokens", body: ShareTokenCreateInput(label: label))
+    }
+
+    // DELETE /calendars/:id/share-tokens/:token — server soft-revokes
+    // (sets revokedAt) and answers {ok:true}; the void helper is fine.
+    func revokeShareToken(calendarId: String, token: String) async throws {
+        try await delete("/calendars/\(calendarId)/share-tokens/\(token)")
+    }
+
+    // GET /calendars/:id/subscriptions → bare array in the envelope.
+    func listSubscriptions(calendarId: String) async throws -> [CalendarSubscriptionDTO] {
+        try await get("/calendars/\(calendarId)/subscriptions")
+    }
+
+    // POST /calendars/:id/subscriptions → 201 {subscription, refresh}.
+    // A failed FIRST refresh is not a failed create: the row exists
+    // and refresh.ok == false carries the reason (see Models).
+    func createSubscription(calendarId: String, url: String, label: String?) async throws -> SubscriptionCreateResponse {
+        try await post(
+            "/calendars/\(calendarId)/subscriptions",
+            body: SubscriptionCreateInput(url: url, label: label, refreshMinutes: nil),
+        )
+    }
+
+    // POST /calendars/:id/subscriptions/:subId/refresh — a failed
+    // refresh is HTTP 502 here, so it throws like any other error.
+    func refreshSubscription(calendarId: String, subscriptionId: String) async throws -> SubscriptionRefreshResponse {
+        try await post(
+            "/calendars/\(calendarId)/subscriptions/\(subscriptionId)/refresh",
+            body: EmptyJSONBody(),
+        )
+    }
+
+    // DELETE /calendars/:id/subscriptions/:subId → {ok:true}.
+    func deleteSubscription(calendarId: String, subscriptionId: String) async throws {
+        try await delete("/calendars/\(calendarId)/subscriptions/\(subscriptionId)")
+    }
+
+    // GET /calendars/:id/export.ics → raw text/calendar body.
+    func exportCalendarICS(calendarId: String) async throws -> Data {
+        try await getData("/calendars/\(calendarId)/export.ics")
+    }
+}
+
+// MARK: - 设备管理
+
+extension APIClient {
+    // GET /devices → raw {devices:[...]} (no envelope; request()
+    // falls back to decoding the body as-is when there's no `data`).
+    func listDevices() async throws -> [DeviceDTO] {
+        let resp: DevicesResponse = try await get("/devices")
+        return resp.devices
+    }
+
+    // GET /devices/me → the row this session belongs to. Throws
+    // server(400) for web-session-style logins that aren't bound to
+    // a device — callers treat that as "no current device".
+    func currentDevice() async throws -> CurrentDeviceResponse {
+        try await get("/devices/me")
+    }
+
+    // DELETE /devices/:id → {ok:true}. Revoking the CURRENT device
+    // kills this session's refresh token too; the caller signs out
+    // locally right after (same path as SettingsView's revoke flow).
+    func revokeDevice(id: String) async throws {
+        try await delete("/devices/\(id)")
+    }
+}
+
+// MARK: - 冲突检测
+
+extension APIClient {
+    // POST /events/conflicts → raw {conflicts:[...]}. Soft check
+    // only — callers must never block a save on this throwing.
+    func checkConflicts(calendarId: String, startsAt: String, endsAt: String, excludeId: String?) async throws -> [ConflictDTO] {
+        let resp: ConflictsResponse = try await post(
+            "/events/conflicts",
+            body: ConflictCheckInput(calendarId: calendarId, startsAt: startsAt, endsAt: endsAt, excludeId: excludeId),
+        )
+        return resp.conflicts
+    }
+}
+
 // MARK: - ICS 导入 (对齐 web/Android 的两步导入)
 extension APIClient {
     /// POST /calendars/:id/import/preview — counts only, the server

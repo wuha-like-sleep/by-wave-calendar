@@ -26,6 +26,8 @@
 		1F000100000000000000000F /* WebAuthLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000000F /* WebAuthLogin.swift */; };
 		1F0001000000000000000043 /* WebLoginProof.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000043 /* WebLoginProof.swift */; };
 		1F0001000000000000000044 /* ImportIcsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000044 /* ImportIcsView.swift */; };
+		1F0001000000000000000045 /* CalendarSharingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000045 /* CalendarSharingView.swift */; };
+		1F0001000000000000000046 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000046 /* DevicesView.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
 		1F0001000000000000000012 /* EventRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000012 /* EventRowView.swift */; };
@@ -78,6 +80,8 @@
 		1B000100000000000000000F /* WebAuthLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthLogin.swift; sourceTree = "<group>"; };
 		1B0001000000000000000043 /* WebLoginProof.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebLoginProof.swift; sourceTree = "<group>"; };
 		1B0001000000000000000044 /* ImportIcsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportIcsView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000045 /* CalendarSharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSharingView.swift; sourceTree = "<group>"; };
+		1B0001000000000000000046 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
 		1B0001000000000000000012 /* EventRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRowView.swift; sourceTree = "<group>"; };
@@ -209,6 +213,8 @@
 				1B0001000000000000000022 /* LegalPage.swift */,
 				1B0001000000000000000024 /* AttendeesPage.swift */,
 				1B0001000000000000000029 /* ManageCalendarsView.swift */,
+				1B0001000000000000000045 /* CalendarSharingView.swift */,
+				1B0001000000000000000046 /* DevicesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -363,6 +369,8 @@
 				1F0001000000000000000025 /* DateFormatters.swift in Sources */,
 				1F0001000000000000000B01 /* AllDayDates.swift in Sources */,
 				1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */,
+				1F0001000000000000000045 /* CalendarSharingView.swift in Sources */,
+				1F0001000000000000000046 /* DevicesView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -180,6 +180,7 @@ private extension SearchResult {
             // 保存时由 EventEditView 决定发不发（没加载过就不发）。
             allDay: allDay ?? false,
             rrule: rrule,
+            exdates: nil,
             isOccurrence: nil,
             // extra 搜索结果里没有。**nil 的意思是「没加载过」，不是「空的」** ——
             // EventEditView 靠这个区分，不会拿它去清空别处设好的东西。
