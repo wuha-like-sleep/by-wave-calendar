@@ -945,7 +945,7 @@ app.addHook("onRequest", async (req, reply) => {
   // > "zh-CN". See src/lib/i18n.ts:resolveLocale for the exact precedence.
   // Computed once per request so every template render + every route
   // handler shares the same answer.
-  const { resolveLocaleFromRequest, makeT, LOCALES, SITE_LOCALE_OPTIONS } = await import("./lib/i18n.js");
+  const { resolveLocaleFromRequest, makeT, LOCALES, SITE_LOCALE_OPTIONS, localeOptionLabel } = await import("./lib/i18n.js");
   const currentLocale = resolveLocaleFromRequest(req, currentUser?.locale ?? null, settings.defaultLocale);
   (req as unknown as { locale: string }).locale = currentLocale;
   const t = makeT(currentLocale);
@@ -977,6 +977,11 @@ app.addHook("onRequest", async (req, reply) => {
       t,
       currentLocale,
       locales: LOCALES,
+      // The one site-wide rule for how a locale's name is displayed in
+      // a picker (header switcher / settings / admin site form), bound
+      // to this request's UI locale. See lib/i18n.ts:localeOptionLabel.
+      localeLabel: (entry: { code: string; label: string; labelEn: string }, gloss?: boolean) =>
+        localeOptionLabel(entry, currentLocale, gloss ?? false),
       siteLocaleOptions: SITE_LOCALE_OPTIONS,
       siteDefaultLocale: settings.defaultLocale,
       jsBasePath: JS_BASE_PATH,

@@ -718,7 +718,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
         <option value="" <%= !user.locale ? "selected" : "" %>><%= t("settings.languageFollowSite") %></option>
         <% locales.forEach(function(l){ %>
           <option value="<%= l.code %>" <%= user.locale === l.code ? "selected" : "" %>>
-            <%= l.label %><% if (currentLocale === "en" && l.label !== l.labelEn) { %> (<%= l.labelEn %>)<% } %>
+            <%= localeLabel(l, true) %>
           </option>
         <% }) %>
       </select>

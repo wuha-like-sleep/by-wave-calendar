@@ -68,6 +68,43 @@ export function isValidLocale(s: unknown): s is LocaleCode {
   return typeof s === "string" && LOCALES.some((l) => l.code === s);
 }
 
+/**
+ * THE display rule for a locale's name in every language picker on the
+ * site (header switcher, settings form, admin site form) — one rule,
+ * defined once. The three surfaces used to each improvise their own:
+ * the header swapped the zh/ja names to English in non-CJK UIs (but
+ * not ko — Hangul fell outside its script regex), settings appended
+ * an English gloss only in an English UI, and the admin form printed
+ * the "auto" entry's Simplified-Chinese label in every UI.
+ *
+ * Rule: the native name (endonym) always — 简体中文 / 日本語 / 한국어 /
+ * Español — because the person hunting for a language in the list is
+ * the one least likely to read the current UI language. That is also
+ * the mainstream convention for account language pickers: native
+ * names, no flag icons (a flag is a country, not a language), no
+ * swapping to English. `gloss: true` (the roomy surfaces: settings +
+ * admin forms) appends the English name in parentheses when the UI
+ * itself is English and the two differ, e.g. "简体中文 (Chinese
+ * (Simplified))".
+ *
+ * "auto" (site default only, label 跟随浏览器 / "Follow browser") is
+ * not a language name, so it follows the UI instead: the Chinese
+ * label in a Chinese UI, the English label everywhere else.
+ */
+export function localeOptionLabel(
+  entry: { code: string; label: string; labelEn: string },
+  uiLocale: string,
+  gloss = false,
+): string {
+  if (entry.code === "auto") {
+    return uiLocale === "zh-CN" || uiLocale === "zh-TW" ? entry.label : entry.labelEn;
+  }
+  if (gloss && uiLocale === "en" && entry.label !== entry.labelEn) {
+    return `${entry.label} (${entry.labelEn})`;
+  }
+  return entry.label;
+}
+
 export function isValidSiteLocale(s: unknown): s is "auto" | LocaleCode {
   return typeof s === "string" && (s === "auto" || isValidLocale(s));
 }
