@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { notifyEventUpdated } from "./event_change_notify.js";
 import { notifyOrganizerProposal, notifyProposerResult } from "./invite_notify.js";
@@ -47,6 +47,19 @@ export async function createTimeProposal(opts: {
   if (!event) return { ok: false, error: "event_missing" };
   if (event.deletedAt) return { ok: false, error: "event_cancelled" };
 
+  // 提议人若是注册用户，把账号 id 一并记下（回执通知优先按 id 找人）。
+  // 在这里按受邀邮箱统一解析，调用方就不必为了拿这个 id 去读会话 ——
+  // 公开回应页那条路由因此可以保持「只认 token、不读 cookie」。
+  let proposerUserId = opts.proposerUserId ?? null;
+  if (!proposerUserId) {
+    const [u] = await db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(sql<string>`lower(${schema.users.email})`, tok.recipientEmail.toLowerCase()))
+      .limit(1);
+    proposerUserId = u?.id ?? null;
+  }
+
   const proposal = await db.transaction(async (tx) => {
     await tx
       .update(schema.eventTimeProposals)
@@ -60,7 +73,7 @@ export async function createTimeProposal(opts: {
       sourceEventId: event.id,
       inviteToken: tok.token,
       proposerEmail: tok.recipientEmail,
-      proposerUserId: opts.proposerUserId ?? null,
+      proposerUserId,
       proposedStartsAt: opts.startsAt,
       proposedEndsAt: opts.endsAt,
       note: opts.note?.trim() ? opts.note.trim().slice(0, 500) : null,

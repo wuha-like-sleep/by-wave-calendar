@@ -1792,35 +1792,38 @@ export async function webRoutes(app: FastifyInstance) {
   });
 
   // ---------- Time proposals: organizer decision ----------
-  for (const decision of ["accept", "decline"] as const) {
-    app.post<{ Params: { id: string; pid: string } }>(`/app/events/:id/proposals/:pid/${decision}`, async (req, reply) => {
-      const user = await loadAuthedUser(req, reply);
-      if (!user) return reply;
-      if (!verifyCsrf(req, reply)) return;
-      const evId = z.string().uuid().safeParse(req.params.id);
-      const pid = z.string().uuid().safeParse(req.params.pid);
-      if (!evId.success || !pid.success) return reply.redirect("/app");
-      const back = `/app/events/${evId.data}/attendees`;
-      const result = await decideTimeProposal({
-        proposalId: pid.data,
-        organizer: { id: user.id, email: user.email, displayName: user.displayName },
-        accept: decision === "accept",
-      });
-      if (!result.ok) {
-        // not_owner 在这里表现为「这个事件不归你管」，和页面其他入口一样
-        // 直接回日历，不泄露提议存在与否。
-        if (result.error === "not_owner" || result.error === "not_found" || result.error === "event_missing") {
-          return reply.redirect("/app");
-        }
-        const key = result.error === "event_cancelled" ? "flash.proposal.eventCancelled" : "flash.proposal.alreadyDecided";
-        return redirectWith(reply, back, { error: tr(req, key) });
-      }
-      if (result.event.id !== evId.data) return reply.redirect("/app");
-      return redirectWith(reply, back, {
-        success: tr(req, decision === "accept" ? "flash.proposal.accepted" : "flash.proposal.declined"),
-      });
+  // 两条路由分开写死而不是循环注册：CSRF 审计（test/admin_post_csrf）
+  // 按字面量扫 app.post(...)，循环 + 模板路径在它眼里是「方法不明」。
+  const decideProposalWeb = (accept: boolean) => async (req: FastifyRequest, reply: FastifyReply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const params = req.params as { id: string; pid: string };
+    const evId = z.string().uuid().safeParse(params.id);
+    const pid = z.string().uuid().safeParse(params.pid);
+    if (!evId.success || !pid.success) return reply.redirect("/app");
+    const back = `/app/events/${evId.data}/attendees`;
+    const result = await decideTimeProposal({
+      proposalId: pid.data,
+      organizer: { id: user.id, email: user.email, displayName: user.displayName },
+      accept,
     });
-  }
+    if (!result.ok) {
+      // not_owner 在这里表现为「这个事件不归你管」，和页面其他入口一样
+      // 直接回日历，不泄露提议存在与否。
+      if (result.error === "not_owner" || result.error === "not_found" || result.error === "event_missing") {
+        return reply.redirect("/app");
+      }
+      const key = result.error === "event_cancelled" ? "flash.proposal.eventCancelled" : "flash.proposal.alreadyDecided";
+      return redirectWith(reply, back, { error: tr(req, key) });
+    }
+    if (result.event.id !== evId.data) return reply.redirect("/app");
+    return redirectWith(reply, back, {
+      success: tr(req, accept ? "flash.proposal.accepted" : "flash.proposal.declined"),
+    });
+  };
+  app.post<{ Params: { id: string; pid: string } }>("/app/events/:id/proposals/:pid/accept", decideProposalWeb(true));
+  app.post<{ Params: { id: string; pid: string } }>("/app/events/:id/proposals/:pid/decline", decideProposalWeb(false));
 
   app.post<{ Params: { id: string } }>("/app/events/:id/delete", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
@@ -2178,13 +2181,14 @@ export async function webRoutes(app: FastifyInstance) {
     const startsAt = parseWall(body.data.start);
     const endsAt = parseWall(body.data.end);
     if (!startsAt || !endsAt) return redirectWith(reply, back, { error: tr(req, "flash.proposal.badTime") });
-    const currentUser = await loadUserFromRequest(req);
+    // 注意：这里刻意不读 cookie 会话（proposerUserId 由 createTimeProposal
+    // 按受邀邮箱解析）—— 这条路由和 respond 一样凭 token 授权，读了会话
+    // 就丢掉 CSRF 豁免的资格（见 test/admin_post_csrf 的 EXEMPT 规则）。
     const result = await createTimeProposal({
       inviteToken: tok.token,
       startsAt,
       endsAt,
       note: body.data.note ?? null,
-      proposerUserId: currentUser && currentUser.email.toLowerCase() === tok.recipientEmail.toLowerCase() ? currentUser.id : null,
     });
     if (!result.ok) {
       const key = result.error === "event_cancelled" ? "flash.proposal.eventCancelled"
