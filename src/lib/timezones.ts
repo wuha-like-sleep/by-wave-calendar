@@ -9,6 +9,7 @@
 // (e.g. America/New_York shows UTC-5 in winter, UTC-4 in summer).
 
 import { translate, type LocaleCode } from "./i18n.js";
+import { canonicalTimeZone } from "./zoned_time.js";
 
 // Curated entries with friendly localized labels. The label is an i18n
 // key under app.tz.city.* (translated per-request in listTimezones), so
@@ -116,6 +117,25 @@ function currentOffset(id: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * 日历 timezone 字段的**写入**口径：必须是合法 IANA 时区名，合法但不规范的
+ * 写法（大小写不一、别名如 Asia/Chongqing / US/Eastern、前后空白）在落库前
+ * 归一化成规范名；非法（包括空串）返回 null，由调用方回 400。
+ *
+ * 为什么写入要拦：calendars.timezone 以前只有长度校验，乱填的字符串能存
+ * 进去，而展开重复事件时 expansionTimeZone 对非法值静默回退 UTC —— 用户
+ * 的「每周一 9 点」会一声不吭地按 UTC 展开，本人毫无察觉。事件自己的
+ * extra.timezone 一直是「合法才算数」（canonicalTimeZone），日历这一层
+ * 补上同一口径，且更进一步：不合法不许存。
+ *
+ * 判定与归一化都走 zoned_time.canonicalTimeZone（Intl 解析），不在这里
+ * 再养一份时区名单。注意 canonicalTimeZone 本身不接受带空白的输入，
+ * 所以先 trim —— 与 booking.ts 对访客时区的处理一致。
+ */
+export function normalizeCalendarTimeZone(raw: string): string | null {
+  return canonicalTimeZone(raw.trim());
 }
 
 export type TimezoneOption = { id: string; label: string; offset: string; curated: boolean };
