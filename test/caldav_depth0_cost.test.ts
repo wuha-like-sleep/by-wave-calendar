@@ -16,6 +16,11 @@ import path from "node:path";
 // ctag 本身不需要这些行：calendarCtags 走的是 max(updated_at) + count 的聚合查询。
 //
 // 判据是位置关系，不是「有没有调用」—— 调用当然还在，问题是它在哪一层。
+//
+// 后续（sync 专项）：Depth:1 列清单本身也换成了 loadEventListing 的轻量列读
+// （只取 uid / updatedAt 等四列），propfindCalendar 里连整行加载都不该再有。
+// 守卫跟着升级：presence 从「有一次 loadAllEventsOf」改成「有一次
+// loadEventListing、且没有 loadAllEventsOf」。
 
 const SRC = readFileSync(path.resolve("src/web/caldav.ts"), "utf8");
 
@@ -31,23 +36,27 @@ function propfindCalendarBody(): string {
 describe("CalDAV 例行轮询的开销", () => {
   const body = propfindCalendarBody();
 
-  it("propfindCalendar 里确实有一次 loadAllEventsOf（presence）", () => {
+  it("propfindCalendar 里确实有一次 loadEventListing、且没有整行加载（presence）", () => {
     // 少了这条，下面那条在「调用被整个删掉」时会因为找不到而恒成立 ——
     // 而那种情况下 Depth:1 会返回一个空清单，客户端会把事件全删了。
     expect(
-      (body.match(/loadAllEventsOf\(/g) ?? []).length,
-      "propfindCalendar 里没有 loadAllEventsOf 了 —— Depth:1 会列出一个空日历",
+      (body.match(/loadEventListing\(/g) ?? []).length,
+      "propfindCalendar 里没有 loadEventListing 了 —— Depth:1 会列出一个空日历",
     ).toBe(1);
+    expect(
+      (body.match(/loadAllEventsOf\(/g) ?? []).length,
+      "propfindCalendar 里又出现整行加载了 —— 列清单只需要四列，整行（含 raw_ics）是白捞的",
+    ).toBe(0);
   });
 
   it("它排在 depth !== \"0\" 的判断之后", () => {
-    const loadAt = body.indexOf("loadAllEventsOf(");
+    const loadAt = body.indexOf("loadEventListing(");
     const branchAt = body.indexOf('if (depth !== "0")');
     expect(branchAt, '找不到 depth !== "0" 这个分支 —— 结构变了，这条断言要跟着改').toBeGreaterThan(-1);
     expect(
       loadAt,
       "事件加载排在 depth 判断之前 —— 每台设备每一轮 Depth:0 轮询都会把整个日历" +
-        "的全部行（含 raw_ics）捞进内存再扔掉。ctag 走的是聚合查询，用不着它们。",
+        "捞进内存再扔掉。ctag 走的是聚合查询，用不着它们。",
     ).toBeGreaterThan(branchAt);
   });
 

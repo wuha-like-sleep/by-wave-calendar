@@ -1,8 +1,9 @@
 import { requestCalendarSync } from "../lib/calendar_sync/queue.js";
 import { pushEventChanged } from "../lib/apns.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
+import { getSettings } from "../lib/site_settings.js";
 import { basicAuth, calDavCalendarAllowed } from "../lib/caldav_auth.js";
 import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
 import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
@@ -40,6 +41,7 @@ type PropDict = {
   calendarUserAddressSet?: string;  // mailto:
   supportedCalendarComponentSet?: string[];  // ["VEVENT"]
   supportedReportSet?: boolean;
+  syncToken?: string;
   ctag?: string;
   etag?: string;
   contentType?: string;             // getcontenttype — required by iOS for resources
@@ -68,8 +70,10 @@ function buildPropXml(props: PropDict): string {
     parts.push(`<supported-report-set>
       <supported-report><report><C:calendar-query/></report></supported-report>
       <supported-report><report><C:calendar-multiget/></report></supported-report>
+      <supported-report><report><sync-collection/></report></supported-report>
     </supported-report-set>`);
   }
+  if (props.syncToken !== undefined) parts.push(`<sync-token>${xmlEscape(props.syncToken)}</sync-token>`);
   if (props.ctag !== undefined) parts.push(`<CS:getctag>${xmlEscape(props.ctag)}</CS:getctag>`);
   if (props.etag !== undefined) parts.push(`<getetag>${xmlEscape(props.etag)}</getetag>`);
   if (props.contentType !== undefined) parts.push(`<getcontenttype>${xmlEscape(props.contentType)}</getcontenttype>`);
@@ -153,6 +157,8 @@ async function streamMultistatus(
   reply: FastifyReply,
   entries: AsyncIterable<string> | Iterable<string>,
   code = 207,
+  // 写在 </multistatus> 之前的尾巴元素（sync-collection 的 <sync-token> 用）。
+  trailing = "",
 ): Promise<void> {
   reply
     .code(code)
@@ -215,7 +221,7 @@ async function streamMultistatus(
     // ERR_STREAM_WRITE_AFTER_END，而 reply_guard 的 isBenignDoubleWrite
     // 只白名单了 ERR_HTTP_HEADERS_SENT —— 那会一路走到 process.exit(1)。
     if (!raw.writableEnded) {
-      try { raw.end("</multistatus>\n"); } catch { /* socket 已消失，无事可做 */ }
+      try { raw.end(`${trailing}</multistatus>\n`); } catch { /* socket 已消失，无事可做 */ }
     }
   }
 }
@@ -272,6 +278,65 @@ async function loadAllEventsOf(calId: string, range?: { start: Date | null; end:
   return db.select().from(schema.events).where(and(...conds)).orderBy(asc(schema.events.startsAt));
 }
 
+/**
+ * 只列清单（uid + etag + lastmodified）的轻量读法：PROPFIND Depth:1 和
+ * 「只要 etag」的 calendar-query 用。
+ *
+ * 以前这两条路走 loadAllEventsOf 的整行 select：2000 条事件的日历，
+ * 一次 Depth:1 要把每条的 raw_ics（手机写上来的 VEVENT 原文，约 1KB 一条）、
+ * description、extra 全捞进内存，只为拼出 uid 和 etag。实测（sync_bench）
+ * 2000 条日历 Depth:1 中位数 497ms，其中绝大部分耗在这次无谓的全行读上。
+ * 清单只需要这四列。
+ */
+async function loadEventListing(calId: string, range?: { start: Date | null; end: Date | null }) {
+  const conds = [
+    eq(schema.events.calendarId, calId),
+    isNull(schema.events.deletedAt),
+  ];
+  // 与 loadAllEventsOf 同一套粗筛口径：窗口外的非重复事件不捞，重复主记录永远捞。
+  if (range?.start) {
+    conds.push(or(
+      gte(schema.events.endsAt, range.start),
+      isNotNull(schema.events.rrule),
+    )!);
+  }
+  if (range?.end) {
+    conds.push(or(
+      lte(schema.events.startsAt, range.end),
+      isNotNull(schema.events.rrule),
+    )!);
+  }
+  return db
+    .select({
+      uid: schema.events.uid,
+      updatedAt: schema.events.updatedAt,
+      startsAt: schema.events.startsAt,
+      endsAt: schema.events.endsAt,
+      rrule: schema.events.rrule,
+    })
+    .from(schema.events)
+    .where(and(...conds))
+    .orderBy(asc(schema.events.startsAt));
+}
+
+/** multiget 按 uid 取行：把过滤推进 SQL，分块 IN，避免整日历捞进内存再 JS 过滤。 */
+async function loadEventsByUids(calId: string, uids: string[]) {
+  const out: schema.Event[] = [];
+  for (let i = 0; i < uids.length; i += 500) {
+    const chunk = uids.slice(i, i + 500);
+    const rows = await db
+      .select()
+      .from(schema.events)
+      .where(and(
+        eq(schema.events.calendarId, calId),
+        isNull(schema.events.deletedAt),
+        inArray(schema.events.uid, chunk),
+      ));
+    out.push(...rows);
+  }
+  return out;
+}
+
 function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEvent {
   const extra = (row.extra ?? null) as null | {
     // 两种存量形状都可能（见 lib/attendees.ts）：CalDAV 写的对象数组、网页 / JSON API
@@ -280,6 +345,13 @@ function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEven
     organizer?: string | null;
     timezone?: string | null;
     alarms?: unknown;
+    transp?: string | null;
+    status?: string | null;
+    categories?: string[] | null;
+    // 网页 / API 的分类是单值 category（extraSchema），CalDAV 的 CATEGORIES 是数组。
+    // 合成时数组优先、单值兜底，否则网页上选的分类永远到不了手机自带日历。
+    category?: string | null;
+    url?: string | null;
   };
   return {
     uid: row.uid,
@@ -314,6 +386,15 @@ function rowToIcal(row: schema.Event, calendarTimezone: string | null): IcalEven
     // 而合成路径正是网页/API 建的事件（没有 rawIcs 可回放）。GET 不给 VALARM，
     // 手机就没见过这条提醒，用户在手机上动一下事件，网页设的提醒就被回写清掉了。
     alarms: normalizeAlarms(extra?.alarms ?? []),
+    // TRANSP / STATUS / CATEGORIES / URL 同理：PUT 存进了 extra，合成路径
+    // 必须带出去，否则网页上改过一次（PATCH 会清 rawIcs）这些字段就从
+    // CalDAV 客户端眼前消失。serializeEvent 负责真正写进行里。
+    transp: extra?.transp ?? null,
+    status: extra?.status ?? null,
+    categories: Array.isArray(extra?.categories) && extra.categories.length
+      ? extra.categories
+      : extra?.category ? [extra.category] : null,
+    url: extra?.url ?? null,
   };
 }
 
@@ -483,6 +564,7 @@ async function propfindHome(req: FastifyRequest, reply: FastifyReply) {
         supportedCalendarComponentSet: ["VEVENT"],
         supportedReportSet: true,
         ctag: ctags.get(c.id)!,
+        syncToken: await currentSyncToken(c.id),
         ownerHref: principalHref(user.id),
         calendarColor: c.color,
         calendarDescription: c.description ?? undefined,
@@ -512,6 +594,7 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
     supportedCalendarComponentSet: ["VEVENT"],
     supportedReportSet: true,
     ctag: (await calendarCtags([cal.id])).get(cal.id)!,
+    syncToken: await currentSyncToken(cal.id),
     ownerHref: principalHref(user.id),
     calendarColor: cal.color,
     calendarDescription: cal.description ?? undefined,
@@ -526,7 +609,8 @@ async function propfindCalendar(req: FastifyRequest, reply: FastifyReply) {
     // 全部事件行连同 raw_ics 一起捞进内存，然后原样扔掉。
     // 3000 条事件的日历实测 25ms/次 —— 而这笔钱是每台设备、每轮都在付的。
     // ctag 本身走的是聚合查询（见 calendarCtags），不需要这些行。
-    const events = await loadAllEventsOf(cal.id);
+    // 列清单本身也只需要 uid + updatedAt（见 loadEventListing）。
+    const events = await loadEventListing(cal.id);
     for (const e of events) {
       entries.push(responseEntry(eventHref(user.id, cal.id, e.uid), {
         resourcetype: "",
@@ -569,13 +653,11 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
 
     // Soft-deleted rows are excluded on purpose: returning them here
     // would resurrect deleted events on the client.
+    // 按 uid 取行走 SQL 的 IN（loadEventsByUids）：以前是把整个日历的全部行
+    // 捞出来再在 JS 里 filter —— 客户端只取 50 条，服务端先读 2000 条。
     const events = wantedUids.length === 0
       ? await loadAllEventsOf(cal.id)
-      : (await db
-          .select()
-          .from(schema.events)
-          .where(and(eq(schema.events.calendarId, cal.id), isNull(schema.events.deletedAt))))
-          .filter(e => wantedUids.includes(e.uid));
+      : await loadEventsByUids(cal.id, wantedUids);
 
     // Batch-load RSVP statuses for all matched events so the response
     // reflects current accept/decline state without N+1 queries.
@@ -625,45 +707,62 @@ async function reportCalendar(req: FastifyRequest, reply: FastifyReply) {
     if (e) end = parseIcalUtcStamp(e);
   }
 
+  // sync-collection（RFC 6578）：客户端拿着上次的 sync-token 只取增量。
+  // 放在 calendar-query 之前分流——两者的 body 都长在 REPORT 上，靠根元素名区分。
+  if (/sync-collection/i.test(bodyStr)) {
+    await reportSyncCollection(req, reply, user, cal, bodyStr);
+    return;
+  }
+
+  // 客户端只要 etag 的时候，正文既不序列化也不发 —— 连 RSVP 状态那一批查询
+  // 都省掉（它只是为了拼正文里的 ATTENDEE;PARTSTAT）。而且这一路连行都不用
+  // 整行读：只要 uid + updatedAt（外加过滤要用的 startsAt/endsAt/rrule），
+  // 走 loadEventListing 的轻量列读。实测 2000 条日历「只要 etag、无时间窗」
+  // 以前要整行读完 2000 条（含 raw_ics）才开始拼响应。
+  const includeData = wantsCalendarData(bodyStr);
+
   // Push the time-range into SQL so we don't fan a giant calendar
   // (10K+ events) into memory just to throw most of them away. We
   // still keep the JS filter below as a safety net for edge cases the
   // SQL coarse-grain didn't catch (e.g. allDay UTC-midnight ambiguity).
-  let events = await loadAllEventsOf(cal.id, { start, end });
-  if (start || end) {
-    events = events.filter(ev => {
-      // 重复事件永远保留，和上面 SQL 里的豁免保持一致。
-      //
-      // 这里曾经漏掉这个豁免：SQL 特意把每条重复事件的主记录都捞出来
-      // （因为 DTSTART 可能在很久以前），紧接着就被这个「兜底」过滤一个不剩地
-      // 扔掉了。后果是 iPhone 的「设置 → 日历 → 同步 → 一个月前的事件」
-      // ——**这是系统默认值**——一生效，所有长期周会/例会就从手机上整个消失，
-      // 而网页端照常显示、服务端一条日志都不打。用户会以为日程被人删了。
-      //
-      // 判断「某次重复是否落在窗口内」要展开 RRULE，代价高且容易算错；
-      // 多返回一些是安全的（CalDAV 客户端自己会展开并过滤），少返回才是 bug。
-      if (ev.rrule) return true;
-      if (start && ev.endsAt < start) return false;
-      if (end && ev.startsAt > end) return false;
-      return true;
-    });
+  const inWindow = (ev: { rrule: string | null; startsAt: Date; endsAt: Date }) => {
+    // 重复事件永远保留，和上面 SQL 里的豁免保持一致。
+    //
+    // 这里曾经漏掉这个豁免：SQL 特意把每条重复事件的主记录都捞出来
+    // （因为 DTSTART 可能在很久以前），紧接着就被这个「兜底」过滤一个不剩地
+    // 扔掉了。后果是 iPhone 的「设置 → 日历 → 同步 → 一个月前的事件」
+    // ——**这是系统默认值**——一生效，所有长期周会/例会就从手机上整个消失，
+    // 而网页端照常显示、服务端一条日志都不打。用户会以为日程被人删了。
+    //
+    // 判断「某次重复是否落在窗口内」要展开 RRULE，代价高且容易算错；
+    // 多返回一些是安全的（CalDAV 客户端自己会展开并过滤），少返回才是 bug。
+    if (ev.rrule) return true;
+    if (start && ev.endsAt < start) return false;
+    if (end && ev.startsAt > end) return false;
+    return true;
+  };
+
+  if (!includeData) {
+    const listing = await loadEventListing(cal.id, { start, end });
+    const rows = start || end ? listing.filter(inWindow) : listing;
+    await streamMultistatus(reply, (function* () {
+      for (const e of rows) {
+        yield responseEntry(eventHref(user.id, cal.id, e.uid), { etag: etagOf(e.updatedAt) });
+      }
+    })());
+    return;
   }
 
-  // 客户端只要 etag 的时候，正文既不序列化也不发 —— 连 RSVP 状态那一批查询
-  // 都省掉（它只是为了拼正文里的 ATTENDEE;PARTSTAT）。
-  const includeData = wantsCalendarData(bodyStr);
-  const statusMap = includeData
-    ? await loadAttendeeStatuses(events.map((e) => e.id))
-    : new Map<string, never>();
+  let events = await loadAllEventsOf(cal.id, { start, end });
+  if (start || end) events = events.filter(inWindow);
+  const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
   await streamMultistatus(reply, (function* () {
     for (const e of events) {
       let entry: string;
       try {
         entry = responseEntry(eventHref(user.id, cal.id, e.uid), {
           etag: etagOf(e.updatedAt),
-          ...(includeData
-            ? { calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)) }
-            : {}),
+          calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)),
         });
       } catch (err) {
         // Skip one un-serializable event instead of breaking the whole
@@ -694,6 +793,171 @@ function wantsCalendarData(body: string): boolean {
   const propBlock = body.match(/<(?:[A-Za-z0-9]+:)?prop[\s>][\s\S]*?<\/(?:[A-Za-z0-9]+:)?prop>/i);
   if (!propBlock) return true;
   return /<(?:[A-Za-z0-9]+:)?calendar-data[\s/>]/i.test(propBlock[0]);
+}
+
+// ---------- sync-collection（RFC 6578） ----------
+//
+// 在这之前服务端没有实现 sync-collection：客户端每次同步只能
+// PROPFIND Depth:1 把整个日历的 etag 清单全列一遍再逐条比对——日历越大、
+// 设备越多，这笔钱付得越勤。sync-collection 让客户端拿着上次的令牌
+// 只取「自那以后变过的」：新增/改过的给 200 条目，删掉的给 404 条目。
+//
+// 令牌 = 水位线（这个日历里所有行——**含软删行**——的 max(updatedAt)）
+// + 同步纪元（与 ctag 同一个，见 calendar_ctag.ts）。软删行必须算进水位：
+// cancelEvent 靠 bump updatedAt 发出唯一的删除信号，水位若只看活行，
+// 一次删除之后水位纹丝不动，增量同步永远看不见这次删除。
+// 纪元对不上（服务端发过「只改序列化口径」的版）→ 403 valid-sync-token，
+// 客户端按协议自己回退到全量同步，不会卡死。
+//
+// 下界用 >= 不用 >：水位那一行会在下一次增量里被重发一次（无害，客户端
+// 按 etag 比对后跳过），换来的是「同一毫秒内落库的另一笔写」不会因为
+// 恰好等于水位被永久漏掉。
+
+const SYNC_TOKEN_PREFIX = "bw1.";
+
+export function encodeSyncToken(watermarkIso: string, epoch: string): string {
+  return SYNC_TOKEN_PREFIX + Buffer.from(JSON.stringify({ t: watermarkIso, e: epoch }), "utf8").toString("base64url");
+}
+
+export function decodeSyncToken(raw: string): { watermark: Date | null; epoch: string } | null {
+  if (!raw.startsWith(SYNC_TOKEN_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw.slice(SYNC_TOKEN_PREFIX.length), "base64url").toString("utf8")) as { t?: unknown; e?: unknown };
+    if (typeof parsed.e !== "string") return null;
+    if (parsed.t === "" || parsed.t === null || parsed.t === undefined) return { watermark: null, epoch: parsed.e };
+    const d = new Date(String(parsed.t));
+    if (isNaN(d.getTime())) return null;
+    return { watermark: d, epoch: parsed.e };
+  } catch {
+    return null;
+  }
+}
+
+async function calendarSyncWatermark(calId: string): Promise<Date | null> {
+  const [row] = await db
+    .select({ maxUpdated: sql<string | null>`max(${schema.events.updatedAt})::text` })
+    .from(schema.events)
+    .where(eq(schema.events.calendarId, calId));
+  return row?.maxUpdated ? new Date(row.maxUpdated) : null;
+}
+
+async function currentSyncToken(calId: string): Promise<string> {
+  const epoch = (await getSettings()).caldavSyncEpoch;
+  const wm = await calendarSyncWatermark(calId);
+  return encodeSyncToken(wm ? wm.toISOString() : "", epoch);
+}
+
+// REPORT sync-collection：无令牌/空令牌 = 初次全量；带令牌 = 只回水位之后的变更。
+async function reportSyncCollection(
+  req: FastifyRequest,
+  reply: FastifyReply,
+  user: { id: string },
+  cal: schema.Calendar,
+  bodyStr: string,
+) {
+  const level = bodyStr.match(/<(?:[A-Za-z0-9]+:)?sync-level[^>]*>([^<]*)<\/(?:[A-Za-z0-9]+:)?sync-level>/i)?.[1]?.trim();
+  if (level && level !== "1") {
+    return sendXml(reply, `${XML_DECL}\n<D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>`, 403);
+  }
+  const rawToken = bodyStr.match(/<(?:[A-Za-z0-9]+:)?sync-token[^>]*>([^<]*)<\/(?:[A-Za-z0-9]+:)?sync-token>/i)?.[1]?.trim() ?? "";
+  const epoch = (await getSettings()).caldavSyncEpoch;
+
+  let since: Date | null = null;
+  let initial = true;
+  if (rawToken) {
+    const decoded = decodeSyncToken(rawToken);
+    // 令牌坏了、或是纪元之前的旧令牌：按 RFC 6578 回 403 valid-sync-token，
+    // 客户端会丢掉本地状态重新全量同步。绝不能「猜」一个起点继续增量——
+    // 猜错的代价是用户日历里缺事件且永不自愈。
+    if (!decoded || decoded.epoch !== epoch) {
+      return sendXml(reply, `${XML_DECL}\n<D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>`, 403);
+    }
+    since = decoded.watermark;
+    initial = since === null;
+  }
+
+  // 先定新水位再读变更：读完之后才落库的写，updatedAt 只会大于新水位，
+  // 下一轮增量（下界 >= 新水位）必然带上它，不会漏。
+  const newWatermark = await calendarSyncWatermark(cal.id);
+  const newToken = encodeSyncToken(newWatermark ? newWatermark.toISOString() : "", epoch);
+  const includeData = wantsCalendarData(bodyStr);
+
+  type ChangeRow = { event: schema.Event | null; listing: { uid: string; updatedAt: Date } | null; deleted: boolean };
+  const changes: ChangeRow[] = [];
+  if (initial) {
+    if (includeData) {
+      const events = await loadAllEventsOf(cal.id);
+      const statusMap = await loadAttendeeStatuses(events.map((e) => e.id));
+      await streamMultistatus(reply, (function* () {
+        for (const e of events) {
+          try {
+            yield responseEntry(eventHref(user.id, cal.id, e.uid), {
+              etag: etagOf(e.updatedAt),
+              calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)),
+            });
+          } catch (err) {
+            req.log.warn({ caldav: "sync-collection", calId: cal.id, eventId: e.id, uid: e.uid, err: String(err) }, "caldav_event_serialize_skipped");
+            continue;
+          }
+        }
+      })(), 207, `<sync-token>${xmlEscape(newToken)}</sync-token>\n`);
+      return;
+    }
+    const listing = await loadEventListing(cal.id);
+    for (const e of listing) changes.push({ event: null, listing: e, deleted: false });
+  } else {
+    // 增量：水位之后动过的行，含软删行（deletedAt 非空 → 404 条目）。
+    const conds = [
+      eq(schema.events.calendarId, cal.id),
+      gte(schema.events.updatedAt, since!),
+    ];
+    if (newWatermark) conds.push(lte(schema.events.updatedAt, newWatermark));
+    if (includeData) {
+      const rows = await db.select().from(schema.events).where(and(...conds)).orderBy(asc(schema.events.updatedAt));
+      const live = rows.filter((r) => !r.deletedAt);
+      const statusMap = await loadAttendeeStatuses(live.map((e) => e.id));
+      await streamMultistatus(reply, (function* () {
+        for (const e of rows) {
+          if (e.deletedAt) {
+            yield `<response>\n    <href>${xmlEscape(eventHref(user.id, cal.id, e.uid))}</href>\n    <status>HTTP/1.1 404 Not Found</status>\n  </response>`;
+            continue;
+          }
+          try {
+            yield responseEntry(eventHref(user.id, cal.id, e.uid), {
+              etag: etagOf(e.updatedAt),
+              calendarData: rowToVCalendar(e, cal, statusMap.get(e.id)),
+            });
+          } catch (err) {
+            req.log.warn({ caldav: "sync-collection", calId: cal.id, eventId: e.id, uid: e.uid, err: String(err) }, "caldav_event_serialize_skipped");
+            continue;
+          }
+        }
+      })(), 207, `<sync-token>${xmlEscape(newToken)}</sync-token>\n`);
+      return;
+    }
+    const rows = await db
+      .select({
+        uid: schema.events.uid,
+        updatedAt: schema.events.updatedAt,
+        deletedAt: schema.events.deletedAt,
+      })
+      .from(schema.events)
+      .where(and(...conds))
+      .orderBy(asc(schema.events.updatedAt));
+    for (const r of rows) {
+      changes.push({ event: null, listing: { uid: r.uid, updatedAt: r.updatedAt }, deleted: r.deletedAt !== null });
+    }
+  }
+
+  await streamMultistatus(reply, (function* () {
+    for (const c of changes) {
+      if (c.deleted) {
+        yield `<response>\n    <href>${xmlEscape(eventHref(user.id, cal.id, c.listing!.uid))}</href>\n    <status>HTTP/1.1 404 Not Found</status>\n  </response>`;
+      } else {
+        yield responseEntry(eventHref(user.id, cal.id, c.listing!.uid), { etag: etagOf(c.listing!.updatedAt) });
+      }
+    }
+  })(), 207, `<sync-token>${xmlEscape(newToken)}</sync-token>\n`);
 }
 
 function parseIcalUtcStamp(val: string): Date | null {
@@ -863,6 +1127,8 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     applyAlarmsFromPut(extraPatch, parsed, { clientHasCurrentCopy });
     if (parsed.organizer) extraPatch.organizer = parsed.organizer;
     if (parsed.categories) extraPatch.categories = parsed.categories;
+    // URL（会议链接）：和网页/API 的 extra.url 同一个键，合成路径靠它吐回去。
+    if (parsed.url) extraPatch.url = parsed.url;
     // Persist the IANA zone the client sent (DTSTART;TZID=…). Without this
     // an event created on iPhone in Shanghai TZ would round-trip as UTC and
     // lose its "anchored to wall-clock" semantics — re-export would show

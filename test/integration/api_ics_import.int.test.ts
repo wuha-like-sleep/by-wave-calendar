@@ -124,7 +124,7 @@ describe("POST /api/v1/calendars/:id/import", () => {
 
   it("预览能把解析不出的块单列 invalid 并给原因", async () => {
     const { cal, auth } = await seed();
-    const broken = ["BEGIN:VEVENT", "UID:broken-1", "SUMMARY:缺结束时间", "DTSTART:20261101T010000Z", "END:VEVENT"];
+    const broken = ["BEGIN:VEVENT", "UID:broken-1", "SUMMARY:缺开始时间", "DTEND:20261101T020000Z", "END:VEVENT"];
     const p = await callImport(cal.id, auth, { text: ics(vevent("evt-0001-import"), broken), filename: "a.ics" }, true);
     const preview = (p.json() as { data: Preview }).data;
     expect(preview.total).toBe(2);
@@ -132,6 +132,16 @@ describe("POST /api/v1/calendars/:id/import", () => {
     expect(preview.invalid).toBe(1);
     expect(preview.invalidReasons.length).toBeGreaterThan(0);
     expect(await eventCount(cal.id)).toBe(0);
+  });
+
+  it("缺 DTEND 的块不再算坏块：按 RFC 缺省导入（定时事件 DTEND = DTSTART）", async () => {
+    const { cal, auth } = await seed();
+    const noEnd = ["BEGIN:VEVENT", "UID:no-dtend-1", "SUMMARY:缺结束时间", "DTSTART:20261101T010000Z", "END:VEVENT"];
+    const p = await callImport(cal.id, auth, { text: ics(noEnd), filename: "a.ics" }, true);
+    const preview = (p.json() as { data: Preview }).data;
+    expect(preview.total).toBe(1);
+    expect(preview.inserted).toBe(1);
+    expect(preview.invalid).toBe(0);
   });
 
   it("会话 cookie 也能导（网页内嵌场景与 Token 走同一条路）", async () => {

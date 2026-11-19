@@ -89,9 +89,21 @@ describe("calendar-query 只给客户端要的字段", () => {
       calls.length,
       "caldav.ts 里除了定义之外没人调用 wantsCalendarData —— 判据写了但没接上",
     ).toBeGreaterThanOrEqual(2);
+    // 现在的形状（sync 专项之后）：reportCalendar 先算 includeData，
+    // 「只要 etag」的一路走 loadEventListing 轻量列读并提前返回，
+    // 要正文的一路才走 loadAllEventsOf + rowToVCalendar。
+    const reportBody = src.slice(
+      src.indexOf("async function reportCalendar("),
+      src.indexOf("function wantsCalendarData"),
+    );
+    expect(reportBody, "reportCalendar 里没有按 includeData 分流").toContain("if (!includeData)");
     expect(
-      /includeData\s*$|\.\.\.\(includeData/m.test(src),
-      "calendar-query 组装 response 时没有按 includeData 取舍正文",
-    ).toBe(true);
+      reportBody.indexOf("loadEventListing("),
+      "只要 etag 的一路没有走轻量列读 —— 它会把整行（含 raw_ics）全捞出来再扔掉",
+    ).toBeGreaterThan(reportBody.indexOf("if (!includeData)"));
+    expect(
+      reportBody,
+      "要正文的一路不见了 —— 客户端要 calendar-data 时会拿到空日历",
+    ).toContain("rowToVCalendar(");
   });
 });

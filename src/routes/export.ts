@@ -40,7 +40,8 @@ export async function exportRoutes(app: FastifyInstance) {
         .from(schema.events)
         .where(and(eq(schema.events.calendarId, cal.id), isNull(schema.events.deletedAt)))
         .orderBy(asc(schema.events.startsAt));
-      const body = buildIcsFeed(cal, events);
+      // 属主本人导出 = 备份口径：参与者/提醒/分类等全带（见 services/ics.ts）。
+      const body = buildIcsFeed(cal, events, { full: true });
       // 文件名清洗与网页导出同规则：非字母数字/中文/连字符一律换下划线。
       // 但清洗后的名字仍可能含中文，直接塞进 filename= 会让 Node 以
       // ERR_INVALID_CHAR 拒绝整个响应头（导出 500）——所以 filename= 只放
