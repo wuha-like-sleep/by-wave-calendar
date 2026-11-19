@@ -5,7 +5,7 @@ import { db, schema } from "../db/client.js";
 import { requireUserOrSend } from "../lib/session.js";
 import { env } from "../env.js";
 import { ok, okList, err } from "../lib/api_response.js";
-import { DEFAULT_AVAILABILITY, bookingTimeZone, bookingTimeZoneFromCalendar, deleteBookingLink, type WeeklyAvailability } from "../lib/booking.js";
+import { DEFAULT_AVAILABILITY, bookingTimeZone, bookingTimeZoneFromCalendar, cancelBooking, deleteBookingLink, type WeeklyAvailability } from "../lib/booking.js";
 
 // JSON API for booking-link management — the owner-facing side of the
 // 预约链接 feature. Until now booking was 100% server-rendered HTML forms
@@ -192,6 +192,36 @@ export async function bookingRoutes(app: FastifyInstance) {
       .where(and(...conds))
       .orderBy(q.all ? desc(schema.bookings.startsAt) : asc(schema.bookings.startsAt));
     return okList(req, reply, rows);
+  });
+
+  // Owner-side cancellation of one booking. The web owner UI never grew
+  // this (owners cancelled by deleting the calendar event); native owner
+  // UIs list bookings per link, so they need a direct action. It resolves
+  // the booking's own cancel token and runs the exact guest chain —
+  // event soft-delete + METHOD:CANCEL mail to the guest + sync — with
+  // byOwner set so the owner isn't mailed/notified as if the guest had
+  // cancelled. Idempotent: an already-cancelled booking reports
+  // alreadyCancelled instead of erroring or re-firing notifications.
+  app.post("/booking-links/:id/bookings/:bookingId/cancel", async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    const params = z.object({ id: z.string().uuid(), bookingId: z.string().uuid() }).parse(req.params);
+    const [link] = await db
+      .select({ id: schema.bookingLinks.id })
+      .from(schema.bookingLinks)
+      .where(and(eq(schema.bookingLinks.id, params.id), eq(schema.bookingLinks.userId, user.id)))
+      .limit(1);
+    if (!link) return err(req, reply, 404, "not_found", "预约链接不存在");
+    const [booking] = await db
+      .select({ id: schema.bookings.id, cancelToken: schema.bookings.cancelToken, cancelledAt: schema.bookings.cancelledAt })
+      .from(schema.bookings)
+      .where(and(eq(schema.bookings.id, params.bookingId), eq(schema.bookings.linkId, params.id)))
+      .limit(1);
+    if (!booking) return err(req, reply, 404, "not_found", "预约不存在");
+    if (booking.cancelledAt) return ok(req, reply, { ok: true, alreadyCancelled: true });
+    const result = await cancelBooking(booking.cancelToken, { byOwner: true });
+    if (!result.found) return err(req, reply, 404, "not_found", "预约不存在");
+    return ok(req, reply, { ok: true, alreadyCancelled: result.alreadyCancelled });
   });
 }
 

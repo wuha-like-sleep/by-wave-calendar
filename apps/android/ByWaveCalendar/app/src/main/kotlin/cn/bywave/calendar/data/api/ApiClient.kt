@@ -13,6 +13,7 @@ import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
 import cn.bywave.calendar.data.model.Booking
+import cn.bywave.calendar.data.model.BookingCancelResult
 import cn.bywave.calendar.data.model.BookingLink
 import cn.bywave.calendar.data.model.BookingLinkCreateRequest
 import cn.bywave.calendar.data.model.BookingLinkUpdateInput
@@ -218,9 +219,24 @@ interface BywaveApi {
     @DELETE("api/v1/booking-links/{id}")
     suspend fun deleteBookingLink(@Path("id") id: String)
 
-    /** List the confirmed appointments made through a booking link. */
+    /** List the appointments made through a booking link. Default is
+     *  the server's "upcoming & active" view; all=true also returns
+     *  past + cancelled rows, newest first. */
     @GET("api/v1/booking-links/{id}/bookings")
-    suspend fun bookings(@Path("id") id: String): List<Booking>
+    suspend fun bookings(
+        @Path("id") id: String,
+        @Query("all") all: Int? = null,
+    ): List<Booking>
+
+    /** Owner-side booking cancellation. Runs the same chain as the
+     *  guest's cancel link (event soft-delete + cancellation mail to
+     *  the guest); the result reports alreadyCancelled when it was
+     *  already cancelled. */
+    @POST("api/v1/booking-links/{id}/bookings/{bookingId}/cancel")
+    suspend fun cancelBooking(
+        @Path("id") id: String,
+        @Path("bookingId") bookingId: String,
+    ): BookingCancelResult
 
     /** Window fetch with conditional-request support. Returns the raw
      *  Response so the caller can see 304 (window unchanged — the server

@@ -32,6 +32,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
@@ -99,6 +100,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     onManageCalendars: () -> Unit = {},
+    onCreateCalendar: () -> Unit = {},
     onManageBookingLinks: () -> Unit = {},
     onScanDesktopPair: () -> Unit = {},
 ) {
@@ -475,6 +477,15 @@ fun SettingsScreen(
                     label = stringResource(R.string.settings2_manage_calendars),
                     onClick = onManageCalendars,
                     trailingIcon = Icons.Default.ChevronRight,
+                )
+                HorizontalDivider()
+                // Direct create entry next to "manage" — creating used to
+                // mean opening the list and finding its top-bar "+"; this
+                // lands on the same list with the create sheet already up.
+                ActionRow(
+                    label = stringResource(R.string.calendars_new),
+                    onClick = onCreateCalendar,
+                    trailingIcon = Icons.Default.Add,
                 )
                 HorizontalDivider()
                 // Booking links (v0.12) — owner-managed public scheduling

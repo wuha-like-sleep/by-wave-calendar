@@ -218,6 +218,27 @@
     <string name="booking_deleted">預約連結已刪除</string>
     <string name="booking_delete_failed">無法刪除預約連結</string>
     <string name="booking_update_failed">無法更新預約連結</string>
+    <string name="booking_loading">載入中…</string>
+    <string name="booking_availability">每週可約時間</string>
+    <string name="booking_availability_hint">按星期設定可預約時段，時間按上方排期時區計。</string>
+    <string name="booking_availability_add">新增時段</string>
+    <string name="booking_availability_invalid">每個時段須為 HH:MM 格式且開始早於結束。</string>
+    <string name="booking_view_bookings">預約記錄</string>
+    <string name="booking_bookings_title">預約記錄 · %1$s</string>
+    <string name="booking_bookings_empty">暫無預約。</string>
+    <string name="booking_bookings_upcoming">即將到來</string>
+    <string name="booking_bookings_all">全部</string>
+    <string name="booking_bookings_load_failed">載入預約記錄失敗。</string>
+    <string name="booking_guest_label">訪客</string>
+    <string name="booking_message_label">留言</string>
+    <string name="booking_status_confirmed">已確認</string>
+    <string name="booking_status_past">已結束</string>
+    <string name="booking_status_cancelled">已取消</string>
+    <string name="booking_cancel_booking">取消預約</string>
+    <string name="booking_cancel_booking_title">取消這條預約？</string>
+    <string name="booking_cancel_booking_warning">將取消 %1$s 於 %2$s 的預約，並向訪客寄送取消通知。</string>
+    <string name="booking_booking_cancelled">預約已取消。</string>
+    <string name="booking_cancel_booking_failed">取消預約失敗。</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">重複事件</string>

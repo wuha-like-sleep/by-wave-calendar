@@ -208,6 +208,27 @@
     <string name="booking_deleted">Buchungslink gelöscht</string>
     <string name="booking_delete_failed">Buchungslink konnte nicht gelöscht werden</string>
     <string name="booking_update_failed">Buchungslink konnte nicht aktualisiert werden</string>
+    <string name="booking_loading">Wird geladen…</string>
+    <string name="booking_availability">Wöchentliche Verfügbarkeit</string>
+    <string name="booking_availability_hint">Buchbare Zeitfenster pro Wochentag, in der oben angegebenen Planungszeitzone.</string>
+    <string name="booking_availability_add">Zeitfenster hinzufügen</string>
+    <string name="booking_availability_invalid">Jedes Zeitfenster muss im Format HH:MM vorliegen und der Beginn muss vor dem Ende liegen.</string>
+    <string name="booking_view_bookings">Buchungen</string>
+    <string name="booking_bookings_title">Buchungen · %1$s</string>
+    <string name="booking_bookings_empty">Noch keine Buchungen.</string>
+    <string name="booking_bookings_upcoming">Anstehend</string>
+    <string name="booking_bookings_all">Alle</string>
+    <string name="booking_bookings_load_failed">Buchungen konnten nicht geladen werden.</string>
+    <string name="booking_guest_label">Gast</string>
+    <string name="booking_message_label">Nachricht</string>
+    <string name="booking_status_confirmed">Bestätigt</string>
+    <string name="booking_status_past">Vorbei</string>
+    <string name="booking_status_cancelled">Storniert</string>
+    <string name="booking_cancel_booking">Buchung stornieren</string>
+    <string name="booking_cancel_booking_title">Diese Buchung stornieren?</string>
+    <string name="booking_cancel_booking_warning">Dadurch wird die Buchung von %1$s um %2$s storniert und der Gast per E-Mail über die Stornierung informiert.</string>
+    <string name="booking_booking_cancelled">Buchung storniert.</string>
+    <string name="booking_cancel_booking_failed">Die Buchung konnte nicht storniert werden.</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">Wiederkehrender Termin</string>

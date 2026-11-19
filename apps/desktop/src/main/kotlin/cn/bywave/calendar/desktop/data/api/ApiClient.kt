@@ -28,6 +28,8 @@
 package cn.bywave.calendar.desktop.data.api
 
 import cn.bywave.calendar.desktop.data.auth.ProfileStore
+import cn.bywave.calendar.desktop.data.model.Booking
+import cn.bywave.calendar.desktop.data.model.BookingCancelResult
 import cn.bywave.calendar.desktop.data.model.BookingLink
 import cn.bywave.calendar.desktop.data.model.BookingLinkCreateInput
 import cn.bywave.calendar.desktop.data.model.BookingLinkUpdateInput
@@ -563,6 +565,35 @@ class ApiClient(
      *  enabled flag (pause / resume a link). Returns the updated row. */
     suspend fun setBookingLinkEnabled(id: String, enabled: Boolean): BookingLink {
         return updateBookingLink(id, BookingLinkUpdateInput(enabled = enabled))
+    }
+
+    /** GET /api/v1/booking-links/{id}/bookings — the bookings guests made
+     *  on one link. Default (all=false) is the server's "upcoming & active"
+     *  view; all=true also returns past + cancelled rows, newest first. */
+    suspend fun listBookings(linkId: String, all: Boolean): List<Booking> {
+        return getAuthed(
+            "/api/v1/booking-links/$linkId/bookings",
+            ListSerializer(Booking.serializer()),
+        ) {
+            if (all) parameter("all", "1")
+        }
+    }
+
+    /** POST /api/v1/booking-links/{id}/bookings/{bookingId}/cancel —
+     *  owner-side cancellation. Runs the same chain as the guest's cancel
+     *  link (event soft-delete + cancellation mail to the guest); the
+     *  response reports alreadyCancelled when it was already cancelled. */
+    suspend fun cancelBooking(linkId: String, bookingId: String): BookingCancelResult {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.post("$baseUrl/api/v1/booking-links/$linkId/bookings/$bookingId/cancel") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw errorFrom(resp, "booking cancel failed")
+        }
+        return unwrap(resp, BookingCancelResult.serializer())
     }
 
     /** DELETE /api/v1/booking-links/{id} — delete a booking link. Server

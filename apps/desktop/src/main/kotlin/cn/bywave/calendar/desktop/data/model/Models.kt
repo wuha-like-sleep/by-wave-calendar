@@ -369,11 +369,16 @@ data class ShareTokenCreateInput(
 //
 // GET/POST/PATCH/DELETE /api/v1/booking-links. A booking link is a public
 // scheduling page (the `publicUrl`) where guests can pick an open slot and
-// book a meeting; the owner manages these here. Mirrors the web owner UI:
-// no weekly-availability editor on desktop for v1 — the server defaults
-// `weeklyAvailability`, so we ignore it on the wire (ignoreUnknownKeys on
-// the shared Json config drops it). The list route returns a bare JSON
-// ARRAY of BookingLink (see ApiClient.listBookingLinks).
+// book a meeting; the owner manages these here. Mirrors the web owner UI.
+// `weeklyAvailability` is the server's per-weekday window matrix:
+// keys "0".."6" (0 = Sunday), each value a list of [start, end] "HH:MM"
+// pairs (wall-clock in the link's scheduling zone) or null/absent for
+// "not bookable that day". The desktop editor edits it in the
+// create/edit dialog and the row model round-trips it so an edit never
+// silently resets a link's custom hours back to the server default.
+
+/** Wire shape of one weekday's windows is a list of [start, end] pairs. */
+typealias AvailabilityWindows = List<List<String>>
 
 @Serializable
 data class BookingLink(
@@ -384,6 +389,7 @@ data class BookingLink(
     val title: String,
     val description: String? = null,
     val durationMinutes: Int,
+    val weeklyAvailability: Map<String, AvailabilityWindows?>? = null,
     val minNoticeHours: Int,
     val maxDaysAhead: Int,
     val bufferBeforeMin: Int,
@@ -400,10 +406,10 @@ data class BookingLink(
 )
 
 /** A single guest booking for a link, from
- *  GET /api/v1/booking-links/{id}/bookings. Not surfaced in the v1 UI but
- *  modeled for completeness / future use. `eventId` is null until the
- *  server materializes the calendar event; `cancelledAt` is null while
- *  active. */
+ *  GET /api/v1/booking-links/{id}/bookings. Surfaced by the bookings
+ *  viewer in the booking-links settings section. `eventId` is null until
+ *  the server materializes the calendar event; `cancelledAt` is null
+ *  while active. */
 @Serializable
 data class Booking(
     val id: String,
@@ -421,8 +427,9 @@ data class Booking(
 
 /** POST /api/v1/booking-links body. `slug` must match
  *  ^[a-z0-9][a-z0-9-]{0,30}$ (server validates). Buffers + notifyEmail are
- *  optional (server defaults them); weeklyAvailability is server-defaulted
- *  and intentionally not exposed in the desktop v1 UI. */
+ *  optional (server defaults them); weeklyAvailability is sent by the
+ *  editor with only the bookable weekdays present as keys (absent day =
+ *  not bookable), so no explicit nulls go over the wire. */
 @Serializable
 data class BookingLinkCreateInput(
     val slug: String,
@@ -435,6 +442,7 @@ data class BookingLinkCreateInput(
     val bufferBeforeMin: Int? = null,
     val bufferAfterMin: Int? = null,
     val notifyEmail: Boolean? = null,
+    val weeklyAvailability: Map<String, AvailabilityWindows?>? = null,
 )
 
 /** PATCH /api/v1/booking-links/{id} body. Any subset of fields; only the
@@ -453,6 +461,16 @@ data class BookingLinkUpdateInput(
     val bufferAfterMin: Int? = null,
     val enabled: Boolean? = null,
     val notifyEmail: Boolean? = null,
+    val weeklyAvailability: Map<String, AvailabilityWindows?>? = null,
+)
+
+/** POST /api/v1/booking-links/{id}/bookings/{bookingId}/cancel result.
+ *  `alreadyCancelled` is true when the booking was already cancelled
+ *  (by the guest or an earlier owner action) — the call is idempotent. */
+@Serializable
+data class BookingCancelResult(
+    val ok: Boolean,
+    val alreadyCancelled: Boolean = false,
 )
 
 // ---- Auth refresh ----

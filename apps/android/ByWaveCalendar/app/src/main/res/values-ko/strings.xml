@@ -208,6 +208,27 @@
     <string name="booking_deleted">예약 링크가 삭제되었습니다</string>
     <string name="booking_delete_failed">예약 링크를 삭제할 수 없습니다</string>
     <string name="booking_update_failed">예약 링크를 업데이트할 수 없습니다</string>
+    <string name="booking_loading">불러오는 중…</string>
+    <string name="booking_availability">주간 예약 가능 시간</string>
+    <string name="booking_availability_hint">요일별로 예약 가능한 시간대를 설정합니다. 시간은 위의 일정 시간대 기준입니다.</string>
+    <string name="booking_availability_add">시간대 추가</string>
+    <string name="booking_availability_invalid">각 시간대는 HH:MM 형식이어야 하며 시작이 종료보다 빨라야 합니다.</string>
+    <string name="booking_view_bookings">예약 기록</string>
+    <string name="booking_bookings_title">예약 기록 · %1$s</string>
+    <string name="booking_bookings_empty">아직 예약이 없습니다.</string>
+    <string name="booking_bookings_upcoming">예정된 예약</string>
+    <string name="booking_bookings_all">전체</string>
+    <string name="booking_bookings_load_failed">예약 기록을 불러오지 못했습니다.</string>
+    <string name="booking_guest_label">게스트</string>
+    <string name="booking_message_label">메시지</string>
+    <string name="booking_status_confirmed">확정됨</string>
+    <string name="booking_status_past">종료됨</string>
+    <string name="booking_status_cancelled">취소됨</string>
+    <string name="booking_cancel_booking">예약 취소</string>
+    <string name="booking_cancel_booking_title">이 예약을 취소할까요?</string>
+    <string name="booking_cancel_booking_warning">%1$s님의 %2$s 예약을 취소하고 게스트에게 취소 안내 메일을 보냅니다.</string>
+    <string name="booking_booking_cancelled">예약이 취소되었습니다.</string>
+    <string name="booking_cancel_booking_failed">예약을 취소하지 못했습니다.</string>
 
     <!-- Event detail sheet -->
     <string name="event_detail_recurring_badge">반복 일정</string>

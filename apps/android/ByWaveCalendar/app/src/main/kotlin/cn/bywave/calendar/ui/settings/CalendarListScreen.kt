@@ -134,6 +134,10 @@ fun CalendarListScreen(
     // reachable ONLY from outside the app — a user holding a .ics file
     // had no way to start an import from inside.
     onImportFile: (Uri) -> Unit = {},
+    // Deep-link flag from Settings' "new calendar" row: open with the
+    // create sheet already up instead of making the user find the
+    // top-bar "+" after landing here.
+    startCreating: Boolean = false,
     vm: CalendarViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -142,7 +146,7 @@ fun CalendarListScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) onImportFile(uri) }
     var editing by remember { mutableStateOf<CalendarMeta?>(null) }
-    var creating by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(startCreating) }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },

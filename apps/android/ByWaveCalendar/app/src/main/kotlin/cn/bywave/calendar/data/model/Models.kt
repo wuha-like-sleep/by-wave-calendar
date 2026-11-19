@@ -199,11 +199,12 @@ data class ShareTokenCreateRequest(val label: String? = null)
 
 /** One row from GET /api/v1/booking-links (and the body returned by
  *  POST / PATCH .../booking-links). Mirrors the server's bookingLinks
- *  table + the augmented `publicUrl` (`<base>/book/<slug>`). The server
- *  also returns `weeklyAvailability` (a JSON object keyed by weekday)
- *  — the v1 native UI doesn't edit it, so we omit it from the model and
- *  rely on ignoreUnknownKeys to drop it on decode. createdAt/updatedAt
- *  are ISO 8601 strings. */
+ *  table + the augmented `publicUrl` (`<base>/book/<slug>`).
+ *  `weeklyAvailability` is the bookable-windows matrix: keys "0".."6"
+ *  (0 = Sunday), values a list of ["HH:MM", "HH:MM"] wall-clock pairs
+ *  in the linked calendar's timezone, or null for a day off. The
+ *  management UI edits it (BookingLinksScreen's availability section),
+ *  seeded from this value. createdAt/updatedAt are ISO 8601 strings. */
 @Serializable
 data class BookingLink(
     val id: String,
@@ -213,6 +214,7 @@ data class BookingLink(
     val title: String,
     val description: String? = null,
     val durationMinutes: Int,
+    val weeklyAvailability: Map<String, List<List<String>>?>? = null,
     val minNoticeHours: Int,
     val maxDaysAhead: Int,
     val bufferBeforeMin: Int = 0,
@@ -230,9 +232,11 @@ data class BookingLink(
 /** POST /api/v1/booking-links body. `slug` must match
  *  /^[a-z0-9][a-z0-9-]{0,30}$/ (validated client-side before submit).
  *  bufferBeforeMin / bufferAfterMin / notifyEmail are optional — the
- *  server defaults the buffers to 0 and notifyEmail to false. The server
- *  defaults weeklyAvailability, so the native v1 create flow never sends
- *  it. Response is a BookingLink row. */
+ *  server defaults the buffers to 0 and notifyEmail to false.
+ *  weeklyAvailability carries only the bookable weekdays as keys (an
+ *  absent day means "not bookable"), matching what the availability
+ *  editor produces; omitting it entirely keeps the server default.
+ *  Response is a BookingLink row. */
 @Serializable
 data class BookingLinkCreateRequest(
     val slug: String,
@@ -245,6 +249,7 @@ data class BookingLinkCreateRequest(
     val bufferBeforeMin: Int? = null,
     val bufferAfterMin: Int? = null,
     val notifyEmail: Boolean? = null,
+    val weeklyAvailability: Map<String, List<List<String>>>? = null,
 )
 
 /** PATCH /api/v1/booking-links/:id body. Server's update schema is the
@@ -265,22 +270,39 @@ data class BookingLinkUpdateInput(
     val bufferAfterMin: Int? = null,
     val enabled: Boolean? = null,
     val notifyEmail: Boolean? = null,
+    val weeklyAvailability: Map<String, List<List<String>>>? = null,
 )
 
-/** One row from GET /api/v1/booking-links/:id/bookings — a confirmed
- *  appointment a visitor made through the public page. Not surfaced in
- *  the v1 management UI's primary flow but modeled for completeness;
- *  extra server fields decode away via ignoreUnknownKeys. */
+/** One row from GET /api/v1/booking-links/:id/bookings — an appointment
+ *  a visitor made through the public page. Field names are the server's
+ *  bookings-table columns (an earlier model guessed bookingLinkId /
+ *  name / email / note, which never matched the wire — the row decoded
+ *  to defaults and the list was unusable). Surfaced by the bookings
+ *  viewer in BookingLinksScreen. `cancelledAt` non-null = cancelled
+ *  (by the guest or the owner); `eventId` links to the calendar event
+ *  the booking created (null once that event is gone). */
 @Serializable
 data class Booking(
     val id: String,
-    val bookingLinkId: String,
-    val name: String? = null,
-    val email: String? = null,
+    val linkId: String,
+    val guestName: String,
+    val guestEmail: String,
+    val guestMessage: String? = null,
     val startsAt: String,
     val endsAt: String,
-    val note: String? = null,
+    val cancelToken: String? = null,
+    val cancelledAt: String? = null,
+    val eventId: String? = null,
     val createdAt: String? = null,
+)
+
+/** POST /api/v1/booking-links/{id}/bookings/{bookingId}/cancel result.
+ *  `alreadyCancelled` is true when the booking was already cancelled —
+ *  the call is idempotent. */
+@Serializable
+data class BookingCancelResult(
+    val ok: Boolean,
+    val alreadyCancelled: Boolean = false,
 )
 
 // ---- Auth ----
