@@ -6,6 +6,7 @@ package cn.bywave.calendar.desktop.data.update
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.request.header
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.isSuccess
@@ -56,10 +57,21 @@ object UpdateDownloader {
         }
     }
 
+    /** The downloaded bytes don't match the published sha256. Distinct
+     *  from a network failure: the partial is deleted (resuming wrong
+     *  bytes is pointless) but a second source may still serve the
+     *  right file, so the caller gets to try it before failing. */
+    private class ChecksumMismatchException : Exception("checksum mismatch")
+
     /** Download or reuse a verified installer. Disk I/O and checksums run off
-     * the UI thread; the caller owns installation after [DownloadState.Done]. */
-    suspend fun download(url: String, expectedSha256: String? = null, expectedSizeBytes: Long = 0) = withContext(Dispatchers.IO) { downloadLock.withLock {
-        var partial: File? = null
+     * the UI thread; the caller owns installation after [DownloadState.Done].
+     *
+     * Downloads resume: the partial file is deterministic (named by the
+     * sha256 it must end up matching) and survives failed attempts, so
+     * the next attempt continues with a Range request instead of
+     * restarting a 100MB+ installer — and [fallbackUrl], when the
+     * checker supplied one, is tried before giving up. */
+    suspend fun download(url: String, expectedSha256: String? = null, expectedSizeBytes: Long = 0, fallbackUrl: String? = null) = withContext(Dispatchers.IO) { downloadLock.withLock {
         try {
             if (expectedSha256 == null || !expectedSha256.matches(Regex("[a-fA-F0-9]{64}"))) {
                 _state.value = DownloadState.Failed(cn.bywave.calendar.desktop.i18n.I18n.t("update.download.checksumFailed"))
@@ -71,58 +83,117 @@ object UpdateDownloader {
             Files.createDirectories(downloads.toPath())
             val target = File(downloads, filename)
             require(!Files.isSymbolicLink(target.toPath())) { "Installer destination must not be a link" }
+            val partial = File(downloads, ".bywave-update-${expectedSha256.lowercase().take(16)}.partial")
             if (target.isFile && target.length() > 0 &&
                 (expectedSizeBytes == 0L || target.length() == expectedSizeBytes) &&
                 sha256(target).equals(expectedSha256, ignoreCase = true)) {
+                partial.delete() // stale leftover for an already-verified installer
                 _state.value = DownloadState.Done(target)
                 return@withLock
             }
-            _state.value = DownloadState.Running(0, 0)
-            client.prepareGet(url).execute { resp ->
-                check(resp.status.isSuccess()) { "Installer request failed (${resp.status.value})" }
-                val total = resp.headers["Content-Length"]?.toLongOrNull() ?: 0L
-                require(total in 0..MAX_INSTALLER_BYTES) { "Invalid download length" }
-                if (expectedSizeBytes > 0 && total > 0) check(total == expectedSizeBytes) { "Installer length mismatch" }
-                val channel: ByteReadChannel = resp.bodyAsChannel()
-                val temporary = Files.createTempFile(downloads.toPath(), ".bywave-update-", ".partial").toFile()
-                partial = temporary
-                var done = 0L
-                FileOutputStream(temporary).use { out ->
-                    val buf = ByteArray(64 * 1024)
-                    while (!channel.isClosedForRead) {
-                        val n = channel.readAvailable(buf, 0, buf.size)
-                        if (n < 0) break
-                        if (n == 0) continue
-                        done += n
-                        check(done <= MAX_INSTALLER_BYTES && (expectedSizeBytes == 0L || done <= expectedSizeBytes)) {
-                            "Installer exceeded expected length"
-                        }
-                        out.write(buf, 0, n)
-                        _state.value = DownloadState.Running(done, if (expectedSizeBytes > 0) expectedSizeBytes else total)
-                    }
-                }
-                if (done == 0L || (expectedSizeBytes > 0 && done != expectedSizeBytes) ||
-                    !sha256(temporary).equals(expectedSha256, ignoreCase = true)) {
-                    _state.value = DownloadState.Failed(cn.bywave.calendar.desktop.i18n.I18n.t("update.download.checksumFailed"))
-                    return@execute
-                }
-                // Keep the previous installer until its replacement is fully verified.
-                try {
-                    Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-                } catch (_: AtomicMoveNotSupportedException) {
-                    Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                }
-                _state.value = DownloadState.Done(target)
+            val urls = buildList {
+                add(url)
+                if (!fallbackUrl.isNullOrBlank() && fallbackUrl != url) add(fallbackUrl)
             }
+            var failure: DownloadState.Failed? = null
+            for (u in urls) {
+                try {
+                    attemptDownload(u, partial, target, expectedSha256, expectedSizeBytes)
+                    _state.value = DownloadState.Done(target)
+                    return@withLock
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: ChecksumMismatchException) {
+                    failure = DownloadState.Failed(cn.bywave.calendar.desktop.i18n.I18n.t("update.download.checksumFailed"))
+                } catch (e: Exception) {
+                    // Network / HTTP failure: the partial stays on disk
+                    // so whichever source is tried next (or the user's
+                    // retry) resumes where this attempt stopped.
+                    failure = DownloadState.Failed(userFacingError(e, "update.download.failed"))
+                }
+            }
+            _state.value = failure ?: DownloadState.Failed(cn.bywave.calendar.desktop.i18n.I18n.t("update.download.failed"))
         } catch (e: CancellationException) {
             _state.value = DownloadState.Idle
             throw e
-        } catch (e: Exception) {
-            _state.value = DownloadState.Failed(userFacingError(e, "update.download.failed"))
-        } finally {
-            partial?.delete()
         }
     } }
+
+    /** One attempt against [url]. Returns normally only when the
+     *  verified installer has been moved to [target]. Throws
+     *  [ChecksumMismatchException] when the bytes are wrong (partial
+     *  already deleted), CancellationException on cancel, anything
+     *  else on network/HTTP failure (partial kept for resume). */
+    private suspend fun attemptDownload(
+        url: String,
+        partial: File,
+        target: File,
+        expectedSha256: String,
+        expectedSizeBytes: Long,
+    ) {
+        var resumeFrom = if (partial.isFile) partial.length() else 0L
+        if (expectedSizeBytes <= 0 || resumeFrom >= expectedSizeBytes) {
+            // No known total → a length is meaningless as a resume
+            // offset. A complete-looking partial is still worth one
+            // sha check before throwing its bytes away.
+            if (expectedSizeBytes > 0 && resumeFrom == expectedSizeBytes &&
+                sha256(partial).equals(expectedSha256, ignoreCase = true)) {
+                moveIntoPlace(partial, target)
+                return
+            }
+            partial.delete()
+            resumeFrom = 0L
+        }
+        _state.value = DownloadState.Running(resumeFrom, expectedSizeBytes)
+        client.prepareGet(url) {
+            if (resumeFrom > 0) header("Range", "bytes=$resumeFrom-")
+        }.execute { resp ->
+            check(resp.status.isSuccess()) { "Installer request failed (${resp.status.value})" }
+            // 206 = the Range was honored; a 200 means the server
+            // ignored it and this body starts at byte 0.
+            val offset = if (resumeFrom > 0 && resp.status.value == 206) resumeFrom else 0L
+            if (offset > 0) {
+                val range = resp.headers["Content-Range"].orEmpty()
+                check(range.startsWith("bytes $offset-")) { "Unexpected Content-Range: $range" }
+            }
+            val total = resp.headers["Content-Length"]?.toLongOrNull() ?: 0L
+            require(total in 0..MAX_INSTALLER_BYTES) { "Invalid download length" }
+            if (expectedSizeBytes > 0 && total > 0) check(total == expectedSizeBytes - offset) { "Installer length mismatch" }
+            val channel: ByteReadChannel = resp.bodyAsChannel()
+            var done = offset
+            FileOutputStream(partial, offset > 0).use { out ->
+                val buf = ByteArray(64 * 1024)
+                while (!channel.isClosedForRead) {
+                    val n = channel.readAvailable(buf, 0, buf.size)
+                    if (n < 0) break
+                    if (n == 0) continue
+                    done += n
+                    check(done <= MAX_INSTALLER_BYTES && (expectedSizeBytes == 0L || done <= expectedSizeBytes)) {
+                        "Installer exceeded expected length"
+                    }
+                    out.write(buf, 0, n)
+                    _state.value = DownloadState.Running(done, if (expectedSizeBytes > 0) expectedSizeBytes else total + offset)
+                }
+            }
+            if (done == 0L || (expectedSizeBytes > 0 && done != expectedSizeBytes) ||
+                !sha256(partial).equals(expectedSha256, ignoreCase = true)) {
+                // Wrong bytes, not incomplete ones — resuming them
+                // would fail the same way forever.
+                partial.delete()
+                throw ChecksumMismatchException()
+            }
+            // Keep the previous installer until its replacement is fully verified.
+            moveIntoPlace(partial, target)
+        }
+    }
+
+    private fun moveIntoPlace(partial: File, target: File) {
+        try {
+            Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
 
     internal fun installerFilename(url: String): String {
         val uri = URI(url)

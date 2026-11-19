@@ -222,7 +222,7 @@ fun MainScreen(
         if ((dl is DownloadState.Idle || dl is DownloadState.Failed) &&
             UpdateInstaller.staged.value == null
         ) {
-            scope.launch { UpdateDownloader.download(asset.url, asset.sha256, asset.sizeBytes) }
+            scope.launch { UpdateDownloader.download(asset.url, asset.sha256, asset.sizeBytes, asset.fallbackUrl) }
         }
     }
     // When the background download finishes, stage the file so it applies

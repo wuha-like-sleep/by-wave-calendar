@@ -25,6 +25,12 @@ data class DesktopUpdateAsset(
     val url: String,
     val sha256: String = "",
     val sizeBytes: Long = 0,
+    /** Second source for the same installer (e.g. the upstream
+     *  release page when the primary is the user's own server). ""
+     *  when the source has none — the committed GitHub manifest
+     *  doesn't carry it. Declared last: call sites build this
+     *  positionally. */
+    val fallbackUrl: String = "",
 )
 
 @Serializable
@@ -37,6 +43,11 @@ data class DesktopUpdateInfo(
     /** Keyed by "mac" / "win" / "linux". Server may return only the
      *  platforms it has assets for. */
     val assets: Map<String, DesktopUpdateAsset> = emptyMap(),
+    /** Builds older than this must update — the Android manifest has
+     *  carried the field from the start; the desktop chain (server
+     *  parser → API → here) only learned it later, so manifests
+     *  without it deserialize as 1 = no floor. */
+    val minSupportedVersionCode: Int = 1,
 )
 
 object UpdateChecker {
@@ -96,7 +107,14 @@ object UpdateChecker {
         if (requestedServer != server) return CheckResult.Unreachable
         val release = result.release ?: return CheckResult.Unreachable
         if (release.versionCode > BuildInfo.VERSION_CODE) {
-            if (result.fresh || force) _available.value = release
+            // Below the minimum supported version counts as mandatory
+            // even when the release itself isn't flagged — that's the
+            // point of the floor (retroactively recalling a bad build),
+            // same rule the Android checker applies.
+            val effective = if (BuildInfo.VERSION_CODE < release.minSupportedVersionCode && !release.mandatory) {
+                release.copy(mandatory = true)
+            } else release
+            if (result.fresh || force) _available.value = effective
             return CheckResult.UpdateAvailable
         }
         _available.value = null
@@ -105,6 +123,9 @@ object UpdateChecker {
 
     internal fun validManifest(info: DesktopUpdateInfo, platform: String?): Boolean {
         if (info.versionCode <= 0 || info.versionName.isBlank()) return false
+        // Same bound the Android policy enforces: a floor outside
+        // 1..versionCode is a malformed manifest, not a strong floor.
+        if (info.minSupportedVersionCode !in 1..info.versionCode) return false
         val asset = info.assets[platform] ?: return false
         val suffix = when (platform) { "mac", "macIntel" -> ".dmg"; "win" -> ".msi"; "linux" -> ".deb"; else -> return false }
         val uri = runCatching { URI(asset.url) }.getOrNull() ?: return false

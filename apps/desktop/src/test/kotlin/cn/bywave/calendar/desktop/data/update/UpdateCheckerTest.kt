@@ -18,6 +18,15 @@ class UpdateCheckerTest {
             assertFalse(UpdateChecker.validManifest(release.copy(assets = mapOf("mac" to bad)), "mac"))
         }
     }
+    @Test fun minimumSupportedVersionMustBeWithinRelease() {
+        val asset = DesktopUpdateAsset("https://example.com/app.dmg", "a".repeat(64), 100)
+        val release = DesktopUpdateInfo(30, "1.4.0", assets = mapOf("mac" to asset), minSupportedVersionCode = 30)
+        assertTrue(UpdateChecker.validManifest(release, "mac"))
+        assertFalse(UpdateChecker.validManifest(release.copy(minSupportedVersionCode = 31), "mac"))
+        assertFalse(UpdateChecker.validManifest(release.copy(minSupportedVersionCode = 0), "mac"))
+        // Manifests published before the field existed deserialize as 1.
+        assertTrue(UpdateChecker.validManifest(release.copy(minSupportedVersionCode = 1), "mac"))
+    }
     @Test fun installersMatchMacArchitecture() {
         assertEquals("mac", UpdateChecker.detectPlatform("Mac OS X", "aarch64"))
         assertEquals("mac", UpdateChecker.detectPlatform("Darwin", "arm64"))
