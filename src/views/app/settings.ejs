@@ -703,7 +703,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
             <div class="text-xs text-slate-500">
               <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= tok.prefix %></code> ·
               <%= t("settings.devices.appPasswordCreatedLabel") %> <%- tok.createdAtLocal %>
-              <% if (tok.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsedLabel") %> <%- tok.lastUsedAtLocal %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
+              <% if (tok.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsedLabel") %> <%- tok.lastUsedAtLocal %><% if (tok.lastUsedIp) { %> · <span class="font-mono text-slate-400"><%= tok.lastUsedIp %></span><% } %><% if (tok.useCount > 0) { %> · <%= t("settings.devices.apiTokenUseCount", { count: tok.useCount }) %><% } %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
               <% if (tok.expiresAtLocal) { %> · <%= t("settings.devices.apiTokenExpiresLabel") %> <%- tok.expiresAtLocal %><% } else { %> · <%= t("settings.devices.apiTokenNeverExpires") %><% } %>
             </div>
           </div>

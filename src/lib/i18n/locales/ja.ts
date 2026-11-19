@@ -454,6 +454,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "settings.devices.apiTokenExpires": "{date} に期限切れ",
   "settings.devices.apiTokenExpiresLabel": "期限",
   "settings.devices.apiTokenNeverExpires": "期限なし",
+  "settings.devices.apiTokenUseCount": "呼び出し {count} 回",
   "settings.devices.apiTokenExpiryHint": "既定値は 365 日です。必要な場合は増やせます（0 = 無期限）。",
   "settings.devices.apiTokenExpired": "期限切れ",
   "settings.devices.apiTokenRevoke": "取り消し",

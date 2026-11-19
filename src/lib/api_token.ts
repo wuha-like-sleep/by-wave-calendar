@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { getSettings } from "./site_settings.js";
@@ -77,6 +77,7 @@ export async function listAllApiTokens() {
       scope: schema.apiTokens.scope,
       lastUsedAt: schema.apiTokens.lastUsedAt,
       lastUsedIp: schema.apiTokens.lastUsedIp,
+      useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
       createdAt: schema.apiTokens.createdAt,
       userEmail: schema.users.email,
@@ -111,6 +112,7 @@ export async function listApiTokensForUser(userId: string) {
       scope: schema.apiTokens.scope,
       lastUsedAt: schema.apiTokens.lastUsedAt,
       lastUsedIp: schema.apiTokens.lastUsedIp,
+      useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
       createdAt: schema.apiTokens.createdAt,
     })
@@ -244,6 +246,11 @@ export async function verifyApiToken(token: string): Promise<VerifiedToken | nul
 export async function touchApiToken(tokenId: string, ip: string): Promise<void> {
   await db
     .update(schema.apiTokens)
-    .set({ lastUsedAt: new Date(), lastUsedIp: ip })
+    .set({
+      lastUsedAt: new Date(),
+      lastUsedIp: ip,
+      // Same UPDATE, so the lifetime call count costs no extra write.
+      useCount: sql`${schema.apiTokens.useCount} + 1`,
+    })
     .where(eq(schema.apiTokens.id, tokenId));
 }

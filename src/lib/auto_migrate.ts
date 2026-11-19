@@ -217,4 +217,10 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "users.notify_inbox_push（缺了站内通知推送门控读不到、推送静默丢失）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_inbox_push boolean NOT NULL DEFAULT true`,
   },
+  {
+    // 0066。touchApiToken 每次鉴权成功都写这一列，缺了它每个 API 请求
+    // 都会在 touch 上报错（调用方 catch 吞掉，结果是最近使用信息永远不更新）。
+    why: "api_tokens.use_count（缺了 Token 最近使用信息静默停更）",
+    statement: `ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS use_count integer NOT NULL DEFAULT 0`,
+  },
 ];

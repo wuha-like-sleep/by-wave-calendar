@@ -461,6 +461,7 @@ export const en = {
   "settings.devices.apiTokenExpires": "Expires {date}",
   "settings.devices.apiTokenExpiresLabel": "Expires",
   "settings.devices.apiTokenNeverExpires": "never expires",
+  "settings.devices.apiTokenUseCount": "{count} calls",
   "settings.devices.apiTokenExpiryHint": "Defaults to 365 days. Make it longer if you need to, or set 0 for no expiry.",
   "settings.devices.apiTokenExpired": "Expired",
   "settings.devices.apiTokenRevoke": "Revoke",
