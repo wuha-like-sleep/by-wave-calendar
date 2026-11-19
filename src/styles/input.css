@@ -489,6 +489,35 @@ body.min-h-screen {
   min-height: 100dvh;
 }
 
+/* ---------- Unfolded band (duo tier, ≈700–1023px) ----------
+   Between phone and tablet: the calendar gets its sidebar in-flow from
+   700px (the `duo` screen in tailwind.config + the sidebar classes).
+   Text-list pages get a reading measure here — full-bleed lines at
+   800–1000px are hard to scan — while the desktop layout above the band
+   keeps its own, already-tuned widths. */
+@media (min-width: 700px) and (max-width: 1023px) {
+  .bwc-notif-panel {
+    max-width: 44rem;
+    margin-inline: auto;
+    width: 100%;
+  }
+}
+
+/* ---------- Fold hinge (progressive enhancement) ----------
+   Where the engine exposes viewport segments (Chromium foldables today;
+   WebKit ignores the whole block), put the pane boundary ON the hinge:
+   the sidebar takes exactly the first segment's width and the calendar
+   grid starts after the hinge gap instead of straddling it. */
+@media (horizontal-viewport-segments: 2) {
+  #cal-sidebar {
+    width: env(viewport-segment-width 0 0);
+    flex-shrink: 0;
+  }
+  #cal-main {
+    padding-left: calc(env(viewport-segment-left 1 0) - env(viewport-segment-right 0 0));
+  }
+}
+
 /* ---------- Modal + drawer + FAB motion ----------
    Every modal is a full-screen backdrop container ([id^="modal-"]) whose single
    child is the panel card. The JS (openModal/closeModal) un-hides the element,

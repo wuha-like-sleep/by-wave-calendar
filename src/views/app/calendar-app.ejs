@@ -77,15 +77,16 @@
 
   <div class="flex-1 min-h-0 flex relative">
     <!-- Sidebar backdrop (mobile only when open) -->
-    <div id="cal-sidebar-backdrop" class="hidden md:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
+    <div id="cal-sidebar-backdrop" class="hidden duo:!hidden fixed inset-0 z-40 bg-slate-900/40"></div>
 
     <!-- Sidebar.
-         Default state: on md+, in-flow flex item (w-64 lg:w-72); on mobile, hidden.
+         Default state: on duo+ (≥700px, the unfolded-foldable band and
+         up), in-flow flex item (w-60 duo, w-64 md, lg:w-72); below that, hidden.
          When opened on mobile: becomes a fixed drawer via the .sidebar-open class added by JS.
          When collapsed on desktop: hidden via .sidebar-collapsed (also added by JS). -->
     <aside id="cal-sidebar"
-           class="hidden md:flex md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
-      <div class="md:hidden flex items-center justify-between p-3 border-b border-slate-100">
+           class="hidden duo:flex duo:w-60 md:w-64 lg:w-72 flex-shrink-0 border-r border-slate-200 bg-white flex-col">
+      <div class="duo:hidden flex items-center justify-between p-3 border-b border-slate-100">
         <span class="text-sm font-semibold text-slate-700"><%= t("nav.calendar") %></span>
         <button type="button" id="btn-close-sidebar" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -167,7 +168,7 @@
     </aside>
 
     <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
-    <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
+    <section id="cal-main" class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
       <%# 一句话快速添加：主界面常驻，和新建弹窗里的 #nl-input 是同一个
           解析器、同一套回填逻辑（calendar-app.js 的 NL 区块接线）。
           输入时在下方实时预览解析结果，回车打开新建表单并回填；
