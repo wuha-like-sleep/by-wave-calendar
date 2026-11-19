@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.EventNote
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ fun DayView(
     calendars: List<CalendarMeta>,
     onEventClick: (EventDTO) -> Unit,
     onEventLongPress: (EventDTO) -> Unit = {},
+    onCreateEvent: () -> Unit = {},
 ) {
     if (events.isEmpty()) {
         EmptyState(
@@ -58,6 +60,14 @@ fun DayView(
             title = if (anchor == LocalDate.now()) stringResource(R.string.calendar_no_events_today)
                     else stringResource(R.string.calendar_no_events),
             subtitle = stringResource(R.string.day_empty_subtitle),
+            // The subtitle tells the user to create an event — give
+            // them the button right here instead of only pointing at
+            // the FAB across the screen.
+            action = {
+                Button(onClick = onCreateEvent) {
+                    Text(stringResource(R.string.event_new))
+                }
+            },
         )
         return
     }

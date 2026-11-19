@@ -384,6 +384,9 @@ private fun AppRoot(
             CalendarListScreen(
                 onBack = { nav.popBackStack() },
                 vm = calVm,
+                // Same pending-import pipeline as the system intents:
+                // setting it while signed in navigates to import_ics.
+                onImportFile = { uri -> pendingImport = uri },
             )
         }
 
@@ -405,7 +408,20 @@ private fun AppRoot(
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             val state by calVm.state.collectAsState()
             EventEditScreen(
-                initialMode = EventEditMode.Create(seedStart = null),
+                // Seed with the day the user is browsing: the FAB used
+                // to hard-code null, so creating while looking at a
+                // future day still defaulted to today and the event
+                // landed somewhere the user wasn't looking. Today keeps
+                // the plain next-half-hour default (null seed).
+                initialMode = EventEditMode.Create(
+                    seedStart = if (state.anchor == java.time.LocalDate.now()) {
+                        null
+                    } else {
+                        state.anchor.atTime(
+                            cn.bywave.calendar.ui.event.nextHalfHour().toLocalTime(),
+                        )
+                    },
+                ),
                 calendars = state.calendars,
                 onDismiss = { nav.popBackStack() },
                 onSaved = {

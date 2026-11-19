@@ -166,7 +166,15 @@ struct EventEditView: View {
             _startsAt = State(initialValue: start)
             _endsAt = State(initialValue: start.addingTimeInterval(3600))
             _allDay = State(initialValue: false)
-            _calendarId = State(initialValue: calendars.first?.id ?? "")
+            // Default to the calendar the user last saved an event
+            // into (the web editor remembers the same way); before
+            // this, every create silently reset to the server's first
+            // calendar. Falls back to the first calendar when the
+            // remembered one is gone (deleted / other account).
+            let lastUsed = UserDefaults.standard.string(forKey: "lastUsedCalendarId")
+            _calendarId = State(initialValue:
+                calendars.first(where: { $0.id == lastUsed })?.id
+                    ?? calendars.first?.id ?? "")
         }
         // Generate the idempotency key exactly once, here at construction
         // time — NOT inside save() — so that if the first POST times out and
@@ -532,6 +540,10 @@ struct EventEditView: View {
             // Success buzz — mirrors WeekView.commitMove so every
             // create / edit / duplicate that lands on the server gives the
             // same confirmation feel.
+            // Feed the create-default memory (see the create branch in
+            // init): the next new event starts on the calendar this
+            // save just used.
+            UserDefaults.standard.set(calendarId, forKey: "lastUsedCalendarId")
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             onSaved(saved)
         } catch let e as APIError {

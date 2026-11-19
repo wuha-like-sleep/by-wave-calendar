@@ -152,9 +152,29 @@ fun EventEditDialog(
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
-    var form by remember(mode) { mutableStateOf(initialState(mode, calendars, displayZone)) }
-    LaunchedEffect(calendars) { form = form.withCalendars(calendars) }
+    var form by remember(mode) {
+        mutableStateOf(
+            initialState(
+                mode, calendars, displayZone,
+                lastCalendarId = cn.bywave.calendar.desktop.data.LastCalendarPrefs.get(),
+            ),
+        )
+    }
+    // Pristine snapshot for the discard guard below: what the form
+    // would submit untouched. Compared through buildBodies so pure
+    // display changes (a timezone rebase, the late calendar fill) do
+    // not read as edits — the same fingerprint idea the Android editor
+    // uses, with the submit body as the fingerprint.
+    var pristine by remember(mode) { mutableStateOf(form) }
+    LaunchedEffect(calendars) {
+        val updated = form.withCalendars(calendars)
+        if (buildBodies(form) == buildBodies(pristine)) pristine = updated
+        form = updated
+    }
     LaunchedEffect(displayZone) { form = form.withDisplayZone(displayZone) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    val hasUnsavedChanges: Boolean
+        get() = buildBodies(form) != buildBodies(pristine)
 
     // 提交入口抽出来,给「点保存」和「在标题里敲回车」共用。桌面端填完
     // 标题按回车就想存下,以前回车在单行输入框里什么都不做,用户要伸手
@@ -164,11 +184,26 @@ fun EventEditDialog(
         if (form.canSubmit && !saving) {
             val (create, update) = buildBodies(form)
             onSave(form.isEdit, form.sourceId, form.sourceRrule, form.sourceStartsAt, create, update)
+            // Remember the calendar this save used, so the next create
+            // starts there instead of resetting to the first calendar.
+            // Written at submit time (the dialog doesn't learn the
+            // async result); if the save fails the form stays open and
+            // the memory still points at the user's chosen calendar.
+            cn.bywave.calendar.desktop.data.LastCalendarPrefs.set(form.calendarId)
         }
     }
 
+    // Every exit path (Cancel button, click-outside, Esc) goes through
+    // here: with unsaved changes, ask before throwing the draft away.
+    // The Android editor has had this guard; the desktop editor used
+    // to drop the draft silently on any of these.
+    fun requestClose() {
+        if (saving) return
+        if (hasUnsavedChanges) showDiscardConfirm = true else onDismiss()
+    }
+
     AlertDialog(
-        onDismissRequest = { if (!saving) onDismiss() },
+        onDismissRequest = { requestClose() },
         title = {
             Text(
                 if (form.isEdit) t("event.edit.titleEdit") else t("event.edit.titleCreate"),
@@ -403,9 +438,34 @@ fun EventEditDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, enabled = !saving) { Text(t("event.edit.cancel")) }
+            TextButton(onClick = { requestClose() }, enabled = !saving) { Text(t("event.edit.cancel")) }
         },
     )
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text(t("event.discardTitle")) },
+            text = { Text(t("event.discardMessage")) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDiscardConfirm = false
+                        onDismiss()
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text(t("event.discardConfirm")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text(t("event.keepEditing"))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -626,6 +686,9 @@ internal fun initialState(
     calendars: List<CalendarMeta>,
     displayZone: ZoneId = ZoneId.systemDefault(),
     now: Instant = Instant.now(),
+    /** Calendar the user last saved an event into (LastCalendarPrefs);
+     *  the create branch prefers it over the list's first entry. */
+    lastCalendarId: String? = null,
 ): FormState {
     fun initialInstant(value: LocalDateTime): Instant = java.time.ZonedDateTime.ofLocal(
         value, displayZone, now.atZone(displayZone).offset).toInstant()
@@ -639,7 +702,8 @@ internal fun initialState(
                 sourceId = null,
                 sourceRrule = null,
                 sourceStartsAt = null,
-                calendarId = calendars.firstOrNull()?.id.orEmpty(),
+                calendarId = calendars.firstOrNull { it.id == lastCalendarId }?.id
+                    ?: calendars.firstOrNull()?.id.orEmpty(),
                 summary = "",
                 location = "",
                 description = "",

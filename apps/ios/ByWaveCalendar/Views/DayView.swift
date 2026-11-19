@@ -15,6 +15,7 @@ struct DayView: View {
     @State private var pendingDeleteId: String?
     @State private var showDeleteAlert = false
     @State private var pendingDuplicate: EventDTO?
+    @State private var creating = false
 
     private var calLookup: [String: CalendarMeta] {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
@@ -23,7 +24,7 @@ struct DayView: View {
     var body: some View {
         Group {
             if events.isEmpty {
-                EmptyDayPlaceholder(date: anchor)
+                EmptyDayPlaceholder(date: anchor, onCreate: { creating = true })
             } else {
                 List {
                     ForEach(events) { ev in
@@ -72,6 +73,26 @@ struct DayView: View {
                 )
             }
         }
+        // Create straight from the day sheet: an empty day used to be a
+        // dead end (close the sheet, go find the top-bar +). Seeded at
+        // 9:00 on the shown day; today keeps the editor's own
+        // next-half-hour default.
+        .sheet(isPresented: $creating) {
+            NavigationStack {
+                EventEditView(
+                    mode: .create,
+                    calendars: calendars,
+                    prefilledStart: Calendar.current.isDateInToday(anchor)
+                        ? nil
+                        : Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: anchor),
+                    onSaved: { _ in
+                        creating = false
+                        onEventChanged()
+                    },
+                    onCancel: { creating = false },
+                )
+            }
+        }
     }
 
     private func delete(id: String) async {
@@ -92,13 +113,20 @@ struct DayView: View {
 
 private struct EmptyDayPlaceholder: View {
     let date: Date
+    let onCreate: () -> Void
     var body: some View {
         // Unified with ManageCalendarsView / BookingLinksView, which both
         // use the system ContentUnavailableView. App target is iOS 17, so
         // the system component is available everywhere — no self-drawn
-        // VStack to keep in sync.
-        ContentUnavailableView(label, systemImage: "calendar")
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // VStack to keep in sync. The actions form adds the one next
+        // step this placeholder exists for: creating that day's event.
+        ContentUnavailableView {
+            Label(label, systemImage: "calendar")
+        } actions: {
+            Button("新建事件") { onCreate() }
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     private var label: String {
         let cal = Calendar.current

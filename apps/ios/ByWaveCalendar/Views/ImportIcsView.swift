@@ -41,6 +41,11 @@ struct ImportIcsView: View {
 
     @State private var phase: Phase = .reading
     @State private var failure: Failure?
+    /// True when the failure came from a preview/import API call and
+    /// the file's text is still in hand — the failure view can then
+    /// offer a retry that returns to the form instead of forcing the
+    /// user to re-pick the file from scratch.
+    @State private var failureRetryable = false
     @State private var filename: String?
     @State private var text: String?
     @State private var selectedCalendarId: String?
@@ -88,8 +93,20 @@ struct ImportIcsView: View {
                 .foregroundStyle(.secondary)
             Text(failure?.text ?? "导入失败，请稍后再试".loc)
                 .multilineTextAlignment(.center)
-            Button("完成") { onFinished(false) }
+            if failureRetryable {
+                // Back to the form with the same file + calendar: a
+                // preview failure lands on 预览, an import failure on
+                // 确认导入 (the preview is still in state).
+                Button("重试") {
+                    phase = preview != nil ? .previewed : .ready
+                }
                 .buttonStyle(.borderedProminent)
+                Button("完成") { onFinished(false) }
+                    .buttonStyle(.bordered)
+            } else {
+                Button("完成") { onFinished(false) }
+                    .buttonStyle(.borderedProminent)
+            }
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -258,6 +275,7 @@ struct ImportIcsView: View {
 
     private func fail(_ f: Failure) {
         failure = f
+        failureRetryable = false
         phase = .failed
     }
 
@@ -266,6 +284,13 @@ struct ImportIcsView: View {
             if status == 413 { fail(.tooLarge); return }
             if status == 400 { fail(.notIcs); return }
         }
-        fail(.message((error as? APIError)?.localizedDescription ?? "导入失败，请稍后再试".loc))
+        // Anything else here (network drop, 5xx, auth refresh hiccup)
+        // is transient by nature and the file text is still in state —
+        // let the user retry in place. The 413/400 mappings above are
+        // properties of the file itself, so retrying them is pointless
+        // and they stay on the non-retryable path.
+        failure = .message((error as? APIError)?.localizedDescription ?? "导入失败，请稍后再试".loc)
+        failureRetryable = text != nil
+        phase = .failed
     }
 }

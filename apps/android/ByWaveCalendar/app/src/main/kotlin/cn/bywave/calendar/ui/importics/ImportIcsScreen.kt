@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -103,8 +104,22 @@ fun ImportIcsScreen(
                         ),
                         subtitle = state.errorDetail,
                         action = {
-                            Button(onClick = onClose) {
-                                Text(stringResource(R.string.importics_done))
+                            // Generic (API) failures keep the file in
+                            // the VM — offer an in-place retry instead of
+                            // forcing the user out to re-share the file.
+                            // File-intrinsic failures (too large / not
+                            // ICS / unreadable) keep the single button.
+                            if (state.error == ImportErrorKind.Generic) {
+                                Button(onClick = { vm.retry() }) {
+                                    Text(stringResource(R.string.action_retry))
+                                }
+                                OutlinedButton(onClick = onClose) {
+                                    Text(stringResource(R.string.importics_done))
+                                }
+                            } else {
+                                Button(onClick = onClose) {
+                                    Text(stringResource(R.string.importics_done))
+                                }
                             }
                         },
                     )

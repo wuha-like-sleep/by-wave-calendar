@@ -286,7 +286,23 @@ fun ImportIcsDialog(
                 }
 
                 ImportPhase.Failed -> {
-                    Button(onClick = onDismiss) { Text(t("import.done")) }
+                    if (text != null) {
+                        // API failure (preview / import): the file's
+                        // content is still in state, so offer an in-place
+                        // retry back on the form — a preview failure
+                        // lands on Ready (re-preview), an import failure
+                        // on Previewed (that preview is still valid for
+                        // the selected calendar). Read failures above
+                        // (text == null) keep the single dismiss button:
+                        // there is nothing in hand to retry with.
+                        Button(onClick = {
+                            phase = if (preview != null) ImportPhase.Previewed else ImportPhase.Ready
+                        }) {
+                            Text(t("error.retry"))
+                        }
+                    } else {
+                        Button(onClick = onDismiss) { Text(t("import.done")) }
+                    }
                 }
 
                 ImportPhase.Previewing, ImportPhase.Importing -> {
@@ -314,9 +330,11 @@ fun ImportIcsDialog(
             }
         },
         dismissButton = {
-            if (phase != ImportPhase.Done && phase != ImportPhase.Failed) {
+            // Failed with content in hand gets a plain dismiss next to
+            // the retry button; other phases get Cancel.
+            if (phase != ImportPhase.Done && (phase != ImportPhase.Failed || text != null)) {
                 TextButton(onClick = onDismiss, enabled = !busy) {
-                    Text(t("common.cancel"))
+                    Text(t(if (phase == ImportPhase.Failed) "import.done" else "common.cancel"))
                 }
             }
         },
