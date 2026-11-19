@@ -39,23 +39,23 @@
       <div>
         <label class="block text-sm font-medium text-slate-700">受邀邮箱 <span class="text-slate-400 font-normal">（可选）</span></label>
         <input type="email" name="email" autocomplete="off" placeholder="someone@example.com"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700">备注 <span class="text-slate-400 font-normal">（可选）</span></label>
         <input type="text" name="note" maxlength="200" placeholder="例如：张三 / 市场部"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700">可用次数</label>
         <input type="number" name="maxUses" min="1" max="1000" value="1"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <p class="mt-1 text-xs text-slate-400">绑定邮箱的邀请建议设为 1。</p>
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700">有效期（天）</label>
         <input type="number" name="expiresInDays" min="0" max="365" value="7" placeholder="0 = 永久"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <p class="mt-1 text-xs text-slate-400">填 0 表示永不过期。</p>
       </div>
     </div>
@@ -109,7 +109,7 @@
                     <form method="post" action="/admin/invites/<%= inv.token %>/email" class="inline-flex items-center gap-1">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
                       <% if (!inv.email) { %>
-                      <input type="email" name="to" required placeholder="发送到…" class="w-36 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-brand-500 focus:outline-none" />
+                      <input type="email" name="to" required placeholder="发送到…" class="w-36 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs focus:border-brand-500 focus:outline-none" />
                       <% } %>
                       <button type="submit" class="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">发邮件</button>
                     </form>

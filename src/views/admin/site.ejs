@@ -8,7 +8,7 @@
     <div>
       <label class="block text-sm font-medium text-slate-700"><%= t("adminSite.siteNameLabel") %></label>
       <input type="text" name="siteName" required maxlength="200" value="<%= settings.siteName %>"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.siteNameHint") %></p>
     </div>
     <div>
@@ -24,13 +24,13 @@
       <label class="block text-sm font-medium text-slate-700"><%= t("adminSite.icpNumberLabel") %></label>
       <input type="text" name="icpNumber" maxlength="100" value="<%= settings.icpNumber || '' %>"
              placeholder="<%= t('adminSite.icpNumberPlaceholder') %>"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.icpNumberHint") %></p>
     </div>
     <div>
       <label class="block text-sm font-medium text-slate-700"><%= t("adminSite.icpUrlLabel") %></label>
       <input type="url" name="icpUrl" value="<%= settings.icpUrl %>"
-             class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
@@ -55,7 +55,7 @@
     <div>
       <label for="signupDailyQuota" class="block text-sm font-medium text-slate-700"><%= t("adminSite.gates.quotaLabel") %></label>
       <input id="signupDailyQuota" type="number" name="signupDailyQuota" min="0" max="100000" step="1" value="<%= settings.signupDailyQuota %>"
-             class="mt-1 block w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+             class="mt-1 block w-40 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.gates.quotaHintZero") %></p>
       <p class="mt-1 text-xs text-slate-500"><%= t("adminSite.gates.quotaHintWindow") %></p>
     </div>

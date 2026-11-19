@@ -38,13 +38,13 @@
         <label class="block text-sm font-medium text-slate-700">阈值（连续错误次数）</label>
         <input type="number" name="lockoutThreshold" required min="1" max="100"
                value="<%= settings.lockoutThreshold %>"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
         <label class="block text-sm font-medium text-slate-700">锁定时长（分钟）</label>
         <input type="number" name="lockoutMinutes" required min="1" max="10080"
                value="<%= settings.lockoutMinutes %>"
-               class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
     </div>
     <p class="mt-2 text-xs text-slate-400">默认 5 次 / 15 分钟。设过低会被弱密码扫描器锁到怀疑人生，设过高就失去防护意义。</p>
@@ -183,14 +183,14 @@
           <input type="text" name="captchaSiteKey" maxlength="500" autocomplete="off"
                  value="<%= settings.captchaSiteKey || '' %>"
                  placeholder="0x4AAAAAAA…"
-                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <p class="mt-1 text-xs text-slate-400">显示在前端的公开密钥，可以放心暴露。</p>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Secret Key（保密）</label>
           <input type="password" name="captchaSecret" maxlength="2000" autocomplete="new-password"
                  placeholder="<%= settings.captchaProvider !== 'none' && settings.captchaProvider !== 'builtin' ? '留空则保持当前已保存的 Secret' : '' %>"
-                 class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <p class="mt-1 text-xs text-slate-400">服务端校验用的密钥，<strong>只写不显</strong>。留空表示沿用已保存的值，不会被清空。</p>
         </div>
       </div>

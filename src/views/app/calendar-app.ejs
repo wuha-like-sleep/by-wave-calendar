@@ -374,7 +374,7 @@
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.location") %></label>
         <input type="text" name="location" maxlength="500" placeholder="<%= t("app.event.optional") %>"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
       <!-- Attendees (managed on a separate page for richer invite/revoke flow) -->
@@ -391,7 +391,7 @@
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.notes") %></label>
         <textarea name="description" maxlength="5000" rows="3" placeholder="<%= t("app.event.notesPlaceholder") %>"
-                  class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       </div>
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.link") %> <span class="text-slate-400"><%= t("app.event.linkHint") %></span></label>
@@ -402,7 +402,7 @@
       <div id="field-meeting-password" class="hidden">
         <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.meetingPassword") %> <span class="text-slate-400"><%= t("app.event.meetingPasswordHint") %></span></label>
         <input type="text" name="meetingPassword" maxlength="100" placeholder="<%= t("app.event.meetingPasswordPlaceholder") %>" autocomplete="off"
-               class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
 
       <div class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-slate-100">
@@ -439,7 +439,7 @@
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1"><%= t("app.calendar.description") %></label>
           <textarea name="description" maxlength="2000" rows="2" placeholder="<%= t("app.calendar.descPlaceholder") %>"
-                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-2"><%= t("app.calendar.color") %></label>
@@ -486,7 +486,7 @@
         <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.555 9.7l3.122 3.123a.75.75 0 1 0 1.06-1.06l-3.122-3.123A5.5 5.5 0 0 0 9 3.5zM4.5 9a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z" clip-rule="evenodd"/></svg>
         <input id="tz-search" type="search" inputmode="search" autocomplete="off"
                placeholder="<%= t("app.tz.searchPlaceholder") %>"
-               class="w-full rounded-lg border border-slate-300 pl-9 pr-3 py-2.5 text-base sm:text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+               class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2.5 text-base sm:text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
     </div>
     <ul id="tz-list" class="flex-1 overflow-y-auto px-2 pb-3" role="listbox">
@@ -578,7 +578,7 @@
                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <div class="flex flex-col sm:flex-row gap-2">
           <input type="text" name="label" maxlength="60" placeholder="<%= t("app.import.labelPlaceholder") %>"
-                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <select name="refreshMinutes"
                   class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
             <option value="60"><%= t("app.import.refreshHourly") %></option>
@@ -605,7 +605,7 @@
               <div class="text-sm font-medium text-slate-900"><%= t("app.import.destNew") %></div>
               <div data-dest-pane="new" class="mt-2 space-y-2">
                 <input type="text" name="newName" maxlength="200" placeholder="<%= t("app.import.newNamePlaceholder") %>"
-                       class="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                       class="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
                 <div>
                   <span class="block text-xs text-slate-500 mb-1"><%= t("app.calendar.color") %></span>
                   <div class="flex flex-wrap gap-1.5" data-color-picker="form-import"></div>
@@ -676,7 +676,7 @@
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.calendar.description") %></label>
             <textarea name="description" maxlength="2000" rows="2" placeholder="<%= t("app.event.optional") %>"
-                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
+                      class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
           </div>
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-2"><%= t("app.calendar.color") %></label>
@@ -705,7 +705,7 @@
         <h4 class="text-sm font-semibold text-slate-800 mb-3"><%= t("app.calMenu.subscribeLinks") %></h4>
         <form id="form-new-share-token" class="flex gap-2 mb-3">
           <input type="text" name="label" maxlength="100" placeholder="<%= t("app.calMenu.labelPlaceholder") %>"
-                 class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                 class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
           <button type="submit" class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("app.calMenu.generate") %></button>
         </form>
         <ul id="share-tokens-list" class="space-y-2 text-sm"></ul>
