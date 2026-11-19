@@ -67,7 +67,7 @@ async function writeManifest() {
   await mkdir(path.dirname(MANIFEST), { recursive: true });
   await writeFile(MANIFEST, JSON.stringify({
     versionCode: 999, versionName: "9.9.9", releasedAt: "2026-01-01T00:00:00Z",
-    notes: "", mandatory: false,
+    notes: "", mandatory: false, minSupportedVersionCode: 42,
     assets: { mac: { filename: DMG, downloadUrl: GITHUB_URL, sha256: "a".repeat(64), sizeBytes: CONTENT.length } },
   }), "utf8");
 }
@@ -82,6 +82,13 @@ async function macUrl(): Promise<string> {
   expect(res.statusCode, `更新接口没回 200。响应: ${res.body.slice(0, 200)}`).toBe(200);
   const b = JSON.parse(res.body) as { assets: { mac?: { url: string } } };
   return b.assets.mac?.url ?? "";
+}
+
+async function macAsset(): Promise<{ url: string; fallbackUrl: string }> {
+  const res = await app.inject({ method: "GET", url: "/api/app/desktop/latest" });
+  expect(res.statusCode, `更新接口没回 200。响应: ${res.body.slice(0, 200)}`).toBe(200);
+  const b = JSON.parse(res.body) as { assets: { mac?: { url: string; fallbackUrl: string } } };
+  return b.assets.mac ?? { url: "", fallbackUrl: "" };
 }
 
 beforeAll(async () => { await ensureSchema(); app = await buildApp(); });
@@ -116,6 +123,77 @@ describe("App 的更新接口要认本站的包", () => {
   it("0 字节的文件不算数（上传半途留下的壳）", async () => {
     await putBinary(Buffer.alloc(0));
     expect(await macUrl(), "空文件被当成「本站有」，用户会下到一个空包").toBe(GITHUB_URL);
+  });
+
+  it("备选地址也要给到 App —— 网页早就两个都摆出来了，App 只拿主地址等于本站一断就没路", async () => {
+    // 本站没有 → 主地址就是 GitHub，没有备选。
+    const remote = await macAsset();
+    expect(remote.url).toBe(GITHUB_URL);
+    expect(remote.fallbackUrl, "主地址已经是 GitHub 时不该再给一个备选").toBe("");
+    // 本站有 → 主地址走本站，GitHub 退为备选。
+    await putBinary();
+    const local = await macAsset();
+    expect(local.url).toContain("/downloads/desktop/");
+    expect(
+      local.fallbackUrl,
+      "本站是主地址时 GitHub 必须作为备选一起下发 —— 本站这条路一断，" +
+        "App 手里没有任何第二条路，尽管同一份包在 GitHub 上好好的",
+    ).toBe(GITHUB_URL);
+  });
+
+  it("minSupportedVersionCode 要透传 —— 桌面客户端靠它事后召回坏版本", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/app/desktop/latest" });
+    const b = JSON.parse(res.body) as { minSupportedVersionCode?: number };
+    expect(
+      b.minSupportedVersionCode,
+      "清单里写了 42，接口没带出来 —— 桌面端永远不知道自己低于最低支持版本",
+    ).toBe(42);
+  });
+});
+
+describe("安卓的更新接口同样要把备选地址给全", () => {
+  const APK_DIR = path.resolve("data/android-apks");
+  const APK_MANIFEST = path.resolve("data/app-android-manifest.json");
+  const APK = "bywave-test.apk";
+  const APK_GITHUB_URL = `https://github.com/example/repo/releases/download/v9.9.9/${APK}`;
+
+  async function writeApkManifest() {
+    await mkdir(path.dirname(APK_MANIFEST), { recursive: true });
+    await writeFile(APK_MANIFEST, JSON.stringify({
+      versionCode: 999, versionName: "9.9.9", filename: APK, downloadUrl: APK_GITHUB_URL,
+      sha256: "b".repeat(64), sizeBytes: CONTENT.length, releasedAt: "2026-01-01T00:00:00Z",
+      notes: "", mandatory: false, minSupportedVersionCode: 7,
+    }), "utf8");
+  }
+
+  async function androidLatest(): Promise<{ url: string; fallbackUrl: string; minSupportedVersionCode: number }> {
+    const res = await app.inject({ method: "GET", url: "/api/app/android/latest" });
+    expect(res.statusCode, `更新接口没回 200。响应: ${res.body.slice(0, 200)}`).toBe(200);
+    return JSON.parse(res.body) as { url: string; fallbackUrl: string; minSupportedVersionCode: number };
+  }
+
+  beforeEach(async () => {
+    await writeApkManifest();
+    await rm(path.join(APK_DIR, APK), { force: true });
+  });
+  afterEach(async () => {
+    await rm(path.join(APK_DIR, APK), { force: true });
+    await rm(APK_MANIFEST, { force: true });
+  });
+
+  it("本站没有 APK → 主地址是 GitHub，备选为空，minSupported 透传", async () => {
+    const b = await androidLatest();
+    expect(b.url).toBe(APK_GITHUB_URL);
+    expect(b.fallbackUrl).toBe("");
+    expect(b.minSupportedVersionCode).toBe(7);
+  });
+
+  it("本站有 APK → 主地址走本站，GitHub 作备选", async () => {
+    await mkdir(APK_DIR, { recursive: true });
+    await writeFile(path.join(APK_DIR, APK), CONTENT);
+    const b = await androidLatest();
+    expect(b.url).toContain(`/downloads/android/${APK}`);
+    expect(b.fallbackUrl, "本站一断，App 必须还有 GitHub 这条路").toBe(APK_GITHUB_URL);
   });
 });
 
