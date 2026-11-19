@@ -303,7 +303,7 @@
       </footer>
     <% } %>
     <% if (typeof appShell !== 'undefined' && appShell) { %>
-      <div class="border-t border-slate-200 bg-white py-1.5 px-4 text-center text-[11px] text-slate-400">
+      <div id="bwc-app-strip" class="border-t border-slate-200 bg-white py-1.5 px-4 text-center text-[11px] text-slate-400">
         © <%= (typeof siteName !== 'undefined' && siteName) ? siteName : 'ByWave-Calendar' %> · <%= t("footer.ourOpenSource") %>
         <% if (typeof icpNumber !== 'undefined' && icpNumber) { %>
           · <a href="<%= icpUrl %>" target="_blank" rel="noopener" class="hover:text-slate-600"><%= icpNumber %></a>
