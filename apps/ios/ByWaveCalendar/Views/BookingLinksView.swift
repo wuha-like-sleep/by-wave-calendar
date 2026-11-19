@@ -12,6 +12,9 @@
 //  create + edit forms can offer a calendar picker without plumbing
 //  through CalendarView's local @State. weeklyAvailability is NOT edited
 //  here for v1 — the server keeps whatever default it assigned.
+//  Swipe-to-delete asks for confirmation first (ManageCalendarsView's
+//  pattern) — desktop/Android already confirmed; iOS used to delete
+//  immediately on the swipe.
 
 import SwiftUI
 import UIKit
@@ -27,6 +30,8 @@ struct BookingLinksView: View {
     /// 刚创建好的那条：创建成功后弹一个带「复制链接」的确认框，
     /// 不让用户回列表里再找那一行。
     @State private var justCreated: BookingLink?
+    /// 滑动删除先落到这里等确认，确认后才真正调 delete(_:)。
+    @State private var pendingDelete: BookingLink?
 
     var body: some View {
         Group {
@@ -59,7 +64,7 @@ struct BookingLinksView: View {
                             }
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    Task { await delete(link) }
+                                    pendingDelete = link
                                 } label: {
                                     Label("删除", systemImage: "trash")
                                 }
@@ -85,6 +90,20 @@ struct BookingLinksView: View {
             }
         }
         .task { await reload() }
+        .confirmationDialog("删除预约链接", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } },
+        ), titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let link = pendingDelete {
+                    pendingDelete = nil
+                    Task { await delete(link) }
+                }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("删除「\(pendingDelete?.title ?? "")」？删除后该预约页面立即失效；已经确认的预约会保留在对方日历里。")
+        }
         .sheet(isPresented: $showingCreate) {
             NavigationStack {
                 CreateBookingLinkView(
