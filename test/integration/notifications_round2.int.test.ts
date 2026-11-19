@@ -234,6 +234,8 @@ describe("安全事件站内镜像", () => {
     expect(rows[0]!.type).toBe("security_alert");
     expect(rows[0]!.body).toContain("n8n 同步");
     expect(rows[0]!.body).toContain("只读");
+    // 文案里的每个占位符都必须被填掉 —— 残留的 {xxx} 会原样印给用户看。
+    expect(rows[0]!.body).not.toContain("{");
     expect(`${rows[0]!.title} ${rows[0]!.body}`).not.toMatch(FULL_TOKEN_SHAPE);
     expect(rows[0]!.url).toBe("/app/settings/security");
     expect(pushCalls.filter((c) => c.userId === user.id)).toHaveLength(1);
