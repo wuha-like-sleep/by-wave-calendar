@@ -56,6 +56,14 @@ export type PushPayload = {
   // Optional tag — multiple notifications with the same tag collapse
   // into one in the OS notification center.
   tag?: string;
+  // 大图标（通知展开时右侧那张品牌图）。不传时 sw.js 用站内默认品牌图标。
+  icon?: string;
+  // 状态栏小图标（Android 用它的 alpha 做单色掩码，必须是剪影图）。
+  // 不传时 sw.js 用 /static/icons/badge-72.png。
+  badge?: string;
+  // 通知上的动作按钮（如「查看」）。sw.js 最多取前两个（规范上限），
+  // 点击与点通知本体同路：打开 url 指向的深链接。
+  actions?: Array<{ action: string; title: string }>;
 };
 
 // Send a push to every device the user has registered. Failures are

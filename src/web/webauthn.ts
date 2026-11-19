@@ -18,6 +18,7 @@ import { recordLoginEvent } from "../lib/login_history.js";
 import { setThemeCookies } from "../lib/user_theme.js";
 import { sendMail } from "../lib/mailer.js";
 import { securityChangeMail } from "../lib/email_templates.js";
+import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { userIsActive } from "../lib/user_state.js";
 import { returnToOrApp } from "../lib/return_to.js";
 
@@ -84,6 +85,7 @@ export async function webauthnRoutes(app: FastifyInstance) {
     });
     void sendMail(securityChangeMail(s.user.email, { kind: "passkey_added", deviceName }))
       .catch((err) => req.log.warn({ err }, "passkey_add_mail_failed"));
+    void notifySecurityEvent(s.user.id, "passkey_added").catch(() => undefined);
 
     return reply.send({ ok: true });
   });

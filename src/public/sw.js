@@ -27,7 +27,10 @@ self.addEventListener("message", (event) => {
 
 // ---------- Web Push ----------
 // Display the push payload as an OS notification. Payload format is
-// our own (set in pushToUser): { title, body, url, tag }.
+// our own (set in pushToUser): { title, body, url, tag, icon, badge,
+// actions }. Title/body are composed server-side in the recipient's
+// locale; icon is the brand calendar, badge the monochrome silhouette
+// Android uses for the status-bar glyph.
 self.addEventListener("push", (event) => {
   let data = { title: "ByWave", body: "" };
   try {
@@ -35,11 +38,17 @@ self.addEventListener("push", (event) => {
   } catch { /* malformed payload; just show the defaults */ }
   const opts = {
     body: data.body || "",
-    icon: "/static/icons/icon-192.png",
-    // No dedicated badge yet — browsers fall back to icon. If we want
-    // monochrome small-badge later, add /static/icons/badge-72.png.
+    icon: data.icon || "/static/icons/icon-192.png",
+    badge: data.badge || "/static/icons/badge-72.png",
     tag: data.tag || "bwc-default",
     data: { url: data.url || "/app" },
+    // Action buttons (e.g. "View"). The spec caps us at two; anything
+    // malformed is dropped rather than breaking the whole notification.
+    actions: Array.isArray(data.actions)
+      ? data.actions
+          .filter((a) => a && typeof a.action === "string" && typeof a.title === "string")
+          .slice(0, 2)
+      : undefined,
     requireInteraction: false,
   };
   event.waitUntil(self.registration.showNotification(data.title || "ByWave", opts));

@@ -862,6 +862,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { securityChangeMail } = await import("../lib/email_templates.js");
     void sendMail(securityChangeMail(user.email, { kind: "mfa_enabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_enable_mail_failed"));
+    const { notifySecurityEvent } = await import("../lib/security_inbox.js");
+    void notifySecurityEvent(user.id, "mfa_enabled").catch(() => undefined);
     return reply.send({ ok: true, backupCodes: codes.plain });
   });
 
@@ -895,6 +897,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { securityChangeMail } = await import("../lib/email_templates.js");
     void sendMail(securityChangeMail(user.email, { kind: "mfa_disabled" }))
       .catch((err) => req.log.warn({ err }, "mfa_disable_mail_failed"));
+    const { notifySecurityEvent: mirrorMfaDisabled } = await import("../lib/security_inbox.js");
+    void mirrorMfaDisabled(user.id, "mfa_disabled").catch(() => undefined);
     return reply.send({ ok: true });
   });
 
@@ -941,6 +945,8 @@ export async function deviceRoutes(app: FastifyInstance) {
     const { securityChangeMail } = await import("../lib/email_templates.js");
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
+    const { notifySecurityEvent: mirrorPasswordChanged } = await import("../lib/security_inbox.js");
+    void mirrorPasswordChanged(user.id, "password_changed").catch(() => undefined);
     // 所有钥匙一起作废，**只留当前这台**（否则用户在 App 里改完密码自己就被登出了）。
     // 以前这里只清了会话和其它设备，应用密码、第三方授权、CalDAV 缓存都没动。
     const { evictAllCredentials } = await import("../lib/user_state.js");

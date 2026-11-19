@@ -30,6 +30,7 @@ import {
   normalizeHexColor,
 } from "../lib/email_templates.js";
 import { createInvite, listInvites, revokeInvite, validateInvite } from "../lib/signup_invite.js";
+import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { likeNeedle } from "../lib/search_query.js";
 import { normalizeBimiSvg, bimiDnsRecord } from "../lib/bimi.js";
 import { addRemote, applyUpdate, applyUpdateStream, applyUploadedUpdate, checkForUpdates, listRemotes, MAX_UPLOAD_BYTES, pickBranch, pickRemote, restartProcess } from "../lib/self_update.js";
@@ -1353,6 +1354,7 @@ export async function adminRoutes(app: FastifyInstance) {
     await audit(req, u.id, "user.disable_mfa", { targetType: "user", targetId: t.id, details: { email: t.email } });
     void sendMail(securityChangeMail(t.email, { kind: "mfa_disabled" }))
       .catch((err) => req.log.warn({ err }, "admin_mfa_disable_mail_failed"));
+    void notifySecurityEvent(t.id, "mfa_disabled").catch(() => undefined);
     return redirectWithFlash(reply, back + "?success=" + encodeURIComponent(tr(req, "adminUserActions.mfaDisabled", { email: t.email })));
   });
 
@@ -2266,6 +2268,7 @@ export async function adminRoutes(app: FastifyInstance) {
         via: "admin",
       },
     })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    void notifySecurityEvent(body.data.userId, "token_created", { tokenLabel: body.data.label, tokenScope: body.data.scope }).catch(() => undefined);
     return redirectWithFlash(reply, "/admin/api", { issuedToken: issued.plain, issuedLabel: body.data.label, success: "Token 已生成，仅显示一次，请立即复制" });
   });
 
@@ -2281,6 +2284,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .select({
         label: schema.apiTokens.label, prefix: schema.apiTokens.prefix,
         scope: schema.apiTokens.scope, expiresAt: schema.apiTokens.expiresAt,
+        ownerId: schema.apiTokens.userId,
         ownerEmail: schema.users.email,
       })
       .from(schema.apiTokens)
@@ -2294,6 +2298,7 @@ export async function adminRoutes(app: FastifyInstance) {
         kind: "api_token_revoked",
         token: { label: victim.label, prefix: victim.prefix, scope: victim.scope === "read" ? "read" : "write", expiresAt: victim.expiresAt, via: "admin" },
       })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+      void notifySecurityEvent(victim.ownerId, "token_revoked", { tokenLabel: victim.label, tokenScope: victim.scope === "read" ? "read" : "write" }).catch(() => undefined);
     }
     return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent("Token 已撤销"));
   });
@@ -2324,6 +2329,7 @@ export async function adminRoutes(app: FastifyInstance) {
         const [oldRow] = await db
           .select({
             label: schema.apiTokens.label, scope: schema.apiTokens.scope,
+            ownerId: schema.apiTokens.userId,
             ownerEmail: schema.users.email,
           })
           .from(schema.apiTokens)
@@ -2345,6 +2351,7 @@ export async function adminRoutes(app: FastifyInstance) {
               expiresAt: null, via: "admin",
             },
           })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+          void notifySecurityEvent(oldRow.ownerId, "token_created", { tokenLabel: oldRow.label, tokenScope: oldRow.scope === "read" ? "read" : "write" }).catch(() => undefined);
         }
         const feedback = {
           issuedToken: issued.plain,

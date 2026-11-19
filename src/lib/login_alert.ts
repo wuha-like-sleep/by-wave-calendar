@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { sendMail } from "./mailer.js";
 import { loginAlertMail } from "./email_templates.js";
+import { notifySecurityEvent } from "./security_inbox.js";
 import { env } from "../env.js";
 
 const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -57,6 +58,9 @@ export async function notifyLoginSuccess(
   });
   // Fire-and-forget; failures should not block login.
   void sendMail(mail).catch((err) => req.log.warn({ err }, "login_alert_send_failed"));
+  // 站内镜像与邮件同生同灭：只在真的发出提醒（过了 24h 去重）时才写，
+  // 免得收件箱被同一台设备的日常登录刷满。UA 截断到 60 字，正文一行放得下。
+  void notifySecurityEvent(user.id, "new_login", { device: ua.slice(0, 60), ip }).catch(() => undefined);
 
   // Upsert dedup record
   await db

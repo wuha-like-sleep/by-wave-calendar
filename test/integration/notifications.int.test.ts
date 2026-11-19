@@ -231,5 +231,28 @@ describe("站内通知", () => {
     [u] = await db.select().from(schema.users).where(eq(schema.users.id, owner.id));
     expect(u!.notifyReminderEmail).toBe(true);
     expect(u!.notifyReminderPush).toBe(true);
+
+    // 第二轮新增的两个开关（事件变更 / 收件箱推送）同表单同口径。
+    const csrf3 = await csrfFrom("/app/settings/notifications", ownerAuth);
+    const both = await app.inject({
+      method: "POST", url: "/app/settings/notification-prefs",
+      headers: { cookie: ownerAuth },
+      payload: { _csrf: csrf3, reminderEmail: "on", reminderPush: "on", eventChanges: "on", inboxPush: "on" },
+    });
+    expect(both.statusCode).toBe(302);
+    [u] = await db.select().from(schema.users).where(eq(schema.users.id, owner.id));
+    expect(u!.notifyEventChanges).toBe(true);
+    expect(u!.notifyInboxPush).toBe(true);
+
+    const csrf4 = await csrfFrom("/app/settings/notifications", ownerAuth);
+    const neither = await app.inject({
+      method: "POST", url: "/app/settings/notification-prefs",
+      headers: { cookie: ownerAuth },
+      payload: { _csrf: csrf4, reminderEmail: "on", reminderPush: "on", eventChanges: "on" },
+    });
+    expect(neither.statusCode).toBe(302);
+    [u] = await db.select().from(schema.users).where(eq(schema.users.id, owner.id));
+    expect(u!.notifyEventChanges).toBe(true);
+    expect(u!.notifyInboxPush).toBe(false);
   });
 });

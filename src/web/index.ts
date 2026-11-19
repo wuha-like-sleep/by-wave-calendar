@@ -17,6 +17,7 @@ import { csrfTokenFor, verifyCsrf, verifyMultipartCsrf } from "../lib/csrf.js";
 import { newEventUid, newInvitationToken, newShareToken } from "../lib/ids.js";
 import { isMailerEnabled, sendMail } from "../lib/mailer.js";
 import { welcomeMail, passwordResetMail, calendarInviteMail, securityChangeMail, loginChallengeMail, eventInviteMail } from "../lib/email_templates.js";
+import { notifySecurityEvent } from "../lib/security_inbox.js";
 import { invitationIcs } from "../lib/ical.js";
 import { attendeeEmails } from "../lib/attendees.js";
 import { cancelEvent } from "../lib/event_cancel.js";
@@ -1842,6 +1843,8 @@ export async function webRoutes(app: FastifyInstance) {
           role: translate(locale, body.data.role === "editor" ? "notif.calendarInvitation.roleEditor" : "notif.calendarInvitation.roleViewer"),
         }),
         url: `/invite/${token}`,
+        // 邀请要等人点头 —— 值得推（收件人可在设置里关 notify_inbox_push）。
+        push: { actionLabel: translate(locale, "notif.push.view") },
       }).catch(() => undefined);
     }
 
@@ -2281,7 +2284,11 @@ export async function webRoutes(app: FastifyInstance) {
       notifications: rows.map((n) => ({
         ...n,
         createdAtIso: n.createdAt.toISOString(),
-        createdAtLocal: localTime(n.createdAt),
+        createdAtMs: n.createdAt.getTime(),
+        // 相对时间（「3 小时前」）由 local-time.js 按浏览器时区重渲染；
+        // 模板里必须用 <%- 原样输出（localTime 返回的是 <time> 片段，
+        // 用 <%= 会把标签当文本印出来 —— 第一轮就是这么翻车的）。
+        createdAtLocal: localTime(n.createdAt, undefined, "relative"),
         unread: !n.readAt,
       })),
       unreadCount: rows.filter((n) => !n.readAt).length,
@@ -2520,6 +2527,8 @@ export async function webRoutes(app: FastifyInstance) {
         via: "self_service",
       },
     })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    // 站内镜像：同一件事在收件箱再留一条（关不掉、无明文，见 security_inbox）。
+    void notifySecurityEvent(user.id, "token_created", { tokenLabel: body.data.label, tokenScope: body.data.scope }).catch(() => undefined);
     return redirectWith(reply, "/app/settings/devices#api-tokens", {
       success: tr(req, "flash.apiToken.created"),
       issuedToken: issued.plain,
@@ -2547,6 +2556,7 @@ export async function webRoutes(app: FastifyInstance) {
           kind: "api_token_revoked",
           token: { label: own.label, prefix: own.prefix, scope: own.scope === "read" ? "read" : "write", expiresAt: own.expiresAt, via: "self_service" },
         })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+        void notifySecurityEvent(user.id, "token_revoked", { tokenLabel: own.label, tokenScope: own.scope === "read" ? "read" : "write" }).catch(() => undefined);
       }
     }
     return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
@@ -2613,8 +2623,8 @@ export async function webRoutes(app: FastifyInstance) {
     return reply.redirect("/app/settings#language");
   });
 
-  // -------- 通知偏好 -------- (per-user；只管事件提醒的两个渠道)
-  // 安全类邮件（登录提醒、安全变更）不走这里，故意不给关，表单里也写明。
+  // -------- 通知偏好 -------- (per-user；提醒渠道 + 收件箱两类开关)
+  // 安全类通知（邮件 + 站内安全动态）不走这里，故意不给关，表单里也写明。
   // checkbox 缺席 = 关，出现且为 "on" = 开（HTML 表单的老规矩）。
   app.post("/app/settings/notification-prefs", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
@@ -2626,6 +2636,8 @@ export async function webRoutes(app: FastifyInstance) {
         // 「值是 undefined」是两回事，缺席只有 .optional() 放行。
         reminderEmail: z.union([z.literal("on"), z.literal("off")]).optional(),
         reminderPush: z.union([z.literal("on"), z.literal("off")]).optional(),
+        eventChanges: z.union([z.literal("on"), z.literal("off")]).optional(),
+        inboxPush: z.union([z.literal("on"), z.literal("off")]).optional(),
       })
       .safeParse(req.body);
     if (!body.success) {
@@ -2634,6 +2646,8 @@ export async function webRoutes(app: FastifyInstance) {
     await db.update(schema.users).set({
       notifyReminderEmail: body.data.reminderEmail === "on",
       notifyReminderPush: body.data.reminderPush === "on",
+      notifyEventChanges: body.data.eventChanges === "on",
+      notifyInboxPush: body.data.inboxPush === "on",
       updatedAt: new Date(),
     }).where(eq(schema.users.id, user.id));
     return redirectWith(reply, "/app/settings/notifications", { success: tr(req, "flash.notificationPrefs.updated") });
@@ -2739,6 +2753,8 @@ export async function webRoutes(app: FastifyInstance) {
     await db.update(schema.users).set({ passwordHash, passwordSet: true, updatedAt: new Date() }).where(eq(schema.users.id, user.id));
     void sendMail(securityChangeMail(user.email, { kind: "password_changed" }))
       .catch((err) => req.log.warn({ err }, "password_change_mail_failed"));
+    // 站内镜像要在会话销毁前写（写完这条，当前会话就被 evict 了）。
+    await notifySecurityEvent(user.id, "password_changed").catch(() => undefined);
     // 改密码 = 这个号上所有的钥匙一起作废，包括当前这个浏览器会话（要重新登录）。
     // 清单收在 evictAllCredentials 一处：以前这里自己列了一张，漏了应用密码和
     // 第三方授权 —— 用户以为改完密码就把盗号的人赶走了，对方还能继续同步他的日历。
