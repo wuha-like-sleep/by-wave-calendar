@@ -31,7 +31,7 @@
     <li><strong>推播訂閱 token</strong>：
       <ul>
         <li><strong>網頁 Web Push</strong>：當您在瀏覽器上同意推播通知時，儲存瀏覽器簽發的推播訂閱 endpoint。</li>
-        <li><strong>行動端 APNs / FCM</strong>：伺服器具備向行動裝置推播的能力；當某台裝置註冊推播時，會儲存該裝置的推播 token。<strong>目前發布的 iOS APP 並未宣告推播能力、不會取得或上傳 APNs token</strong>，僅使用前景重新整理與背景輪詢同步事件；後續版本若啟用推播，會在升級說明中另行公告。</li>
+        <li><strong>行動端 APNs / FCM</strong>：伺服器具備向行動裝置推播的能力；當某台裝置註冊推播時，會儲存該裝置的推播 token。<strong>iOS APP 會為事件變更推播註冊 APNs，並將 APNs token 上傳到伺服器</strong>，以便事件變更及時推播到您的裝置；同時也會使用前景重新整理與背景輪詢同步事件。</li>
       </ul>
     </li>
     <li><strong>多帳號設定檔（iOS APP）</strong>：當您在 iOS APP 中綁定多個伺服器時，每個帳號設定檔（伺服器位址、電子郵件、顯示名稱）獨立儲存在本機 Keychain 中。這些設定檔本身不會被同步到伺服器；iCloud Keychain 端對端加密可選地同步到您自己的其它 Apple 裝置。</li>

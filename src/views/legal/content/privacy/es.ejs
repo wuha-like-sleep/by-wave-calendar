@@ -31,7 +31,7 @@
     <li><strong>Token de suscripción a notificaciones push</strong>:
       <ul>
         <li><strong>Web Push (navegador)</strong>: cuando autoriza las notificaciones push en el navegador, se almacena el endpoint de suscripción emitido por el navegador.</li>
-        <li><strong>APNs / FCM (móvil)</strong>: el servidor tiene la capacidad de enviar notificaciones push a dispositivos móviles; cuando un dispositivo registra el push, se almacena su token. <strong>La versión actual de la app de iOS no declara capacidad de push y no obtiene ni envía el token de APNs</strong>; solo utiliza la actualización en primer plano y el sondeo en segundo plano para sincronizar los eventos. Si una versión posterior activa el push, se anunciará por separado en las notas de actualización.</li>
+        <li><strong>APNs / FCM (móvil)</strong>: el servidor tiene la capacidad de enviar notificaciones push a dispositivos móviles; cuando un dispositivo registra el push, se almacena su token. <strong>La app de iOS se registra en APNs y envía su token de APNs al servidor</strong>, para que los cambios en los eventos puedan enviarse a su dispositivo; también utiliza la actualización en primer plano y el sondeo en segundo plano para sincronizar los eventos.</li>
       </ul>
     </li>
     <li><strong>Varios perfiles de cuenta (app de iOS)</strong>: cuando vincula varios servidores en la app de iOS, cada perfil de cuenta (dirección del servidor, correo, nombre visible) se almacena de forma independiente en el Keychain local del dispositivo. Estos perfiles no se sincronizan con el servidor; el Keychain de iCloud, cifrado de extremo a extremo, puede sincronizarlos opcionalmente con sus otros dispositivos Apple.</li>

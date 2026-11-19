@@ -31,7 +31,7 @@
     <li><strong>Push-Abonnement-Token</strong>:
       <ul>
         <li><strong>Web Push (Web)</strong>: Wenn Sie im Browser Push-Benachrichtigungen zustimmen, wird der vom Browser ausgestellte Push-Abonnement-Endpunkt gespeichert.</li>
-        <li><strong>Mobil APNs / FCM</strong>: Der Server verfügt über die Fähigkeit, an mobile Geräte zu pushen; wenn ein Gerät Push registriert, wird das Push-Token dieses Geräts gespeichert. <strong>Die aktuell veröffentlichte iOS-App deklariert keine Push-Fähigkeit und ruft kein APNs-Token ab oder lädt es hoch</strong>; sie nutzt lediglich Vordergrundaktualisierung und Hintergrund-Polling zur Synchronisierung von Ereignissen; falls eine spätere Version Push aktiviert, wird dies gesondert in den Update-Hinweisen bekannt gegeben.</li>
+        <li><strong>Mobil APNs / FCM</strong>: Der Server verfügt über die Fähigkeit, an mobile Geräte zu pushen; wenn ein Gerät Push registriert, wird das Push-Token dieses Geräts gespeichert. <strong>Die iOS-App registriert sich für APNs-Push und lädt ihr APNs-Token auf den Server hoch</strong>, damit Ereignisänderungen an Ihr Gerät gepusht werden können; daneben nutzt sie Vordergrundaktualisierung und Hintergrund-Polling zur Synchronisierung von Ereignissen.</li>
       </ul>
     </li>
     <li><strong>Mehrkonten-Profile (iOS-App)</strong>: Wenn Sie in der iOS-App mehrere Server binden, wird jedes Kontoprofil (Serveradresse, E-Mail, Anzeigename) separat lokal im Keychain gespeichert. Diese Profile selbst werden nicht mit dem Server synchronisiert; die iCloud-Keychain-Ende-zu-Ende-Verschlüsselung synchronisiert sie optional mit Ihren eigenen anderen Apple-Geräten.</li>

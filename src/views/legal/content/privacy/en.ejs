@@ -31,7 +31,7 @@
     <li><strong>Push subscription tokens</strong>:
       <ul>
         <li><strong>Web Push</strong>: when you consent to push notifications in your browser, the push subscription endpoint issued by the browser is stored.</li>
-        <li><strong>Mobile APNs / FCM</strong>: the server is capable of pushing to mobile devices; when a device registers for push, that device's push token is stored. <strong>The currently released iOS app does not declare push capability and does not obtain or upload an APNs token</strong>; it only uses foreground refresh and background polling to sync events. If a future version enables push, this will be announced separately in the upgrade notes.</li>
+        <li><strong>Mobile APNs / FCM</strong>: the server is capable of pushing to mobile devices; when a device registers for push, that device's push token is stored. <strong>The iOS app registers for APNs push and uploads its APNs token to the server</strong>, so that event changes can be pushed to your device; it also uses foreground refresh and background polling to sync events.</li>
       </ul>
     </li>
     <li><strong>Multi-account profiles (iOS app)</strong>: when you bind multiple servers in the iOS app, each account profile (server address, email, display name) is stored independently in the local Keychain. These profiles themselves are not synced to the server; iCloud Keychain end-to-end encryption optionally syncs them to your own other Apple devices.</li>

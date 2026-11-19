@@ -31,7 +31,7 @@
     <li><strong>推送订阅 token</strong>：
       <ul>
         <li><strong>网页 Web Push</strong>：当您在浏览器上同意推送通知时，存储浏览器签发的推送订阅 endpoint。</li>
-        <li><strong>移动端 APNs / FCM</strong>：服务器具备向移动设备推送的能力；当某台设备注册推送时，会存储该设备的推送 token。<strong>当前发布的 iOS APP 并未声明推送能力、不会获取或上传 APNs token</strong>，仅使用前台刷新与后台轮询同步事件；后续版本若启用推送，会在升级说明中另行公告。</li>
+        <li><strong>移动端 APNs / FCM</strong>：服务器具备向移动设备推送的能力；当某台设备注册推送时，会存储该设备的推送 token。<strong>iOS APP 会为事件变更推送注册 APNs，并将 APNs token 上传到服务器</strong>，以便事件变更及时推送到您的设备；同时也会使用前台刷新与后台轮询同步事件。</li>
       </ul>
     </li>
     <li><strong>多账号档案（iOS APP）</strong>：当您在 iOS APP 中绑定多个服务器时，每个账号档案（服务器地址、邮箱、显示名）独立存储在本机 Keychain 中。这些档案本身不会被同步到服务器；iCloud Keychain 端到端加密可选地同步到您自己的其它 Apple 设备。</li>
