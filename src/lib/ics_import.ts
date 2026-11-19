@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { parseEvents, type IcalEvent } from "./ical.js";
+import { attendeeEmails } from "./attendees.js";
 import { safeFetch, SsrfBlockedError } from "./ssrf_guard.js";
 import { canonicalTimeZone } from "./zoned_time.js";
 import { expansionTimeZone, rawIcsStartIsUtc } from "./event_zone.js";
@@ -121,6 +122,14 @@ export function mergeImportExtra(
   sourceTag: string | null,
   alarms: IcalEvent["alarms"],
   timezone: string | null = null,
+  fidelity: {
+    attendees?: string[] | null;
+    organizer?: string | null;
+    categories?: string[] | null;
+    transp?: string | null;
+    status?: string | null;
+    url?: string | null;
+  } | null = null,
 ): Record<string, unknown> | null {
   const base = existingExtra && typeof existingExtra === "object" && !Array.isArray(existingExtra)
     ? { ...(existingExtra as Record<string, unknown>) }
@@ -128,6 +137,19 @@ export function mergeImportExtra(
   if (sourceTag) base.source = sourceTag;
   if (Array.isArray(alarms) && alarms.length) base.alarms = alarms;
   if (timezone) base.timezone = timezone;
+  // 保真字段（参与者 / 组织者 / 分类 / TRANSP / STATUS / 会议链接）和 alarms
+  // 同一条口径：上游带了就以上游为准，没带就保留库里已有的。
+  // 在这之前导入只收 alarms 和时区：从 Google / Apple 导出的 .ics 里
+  // ATTENDEE、CATEGORIES 全在解析结果里躺着，却一行都没进库——导进来的
+  // 事件在网页上没有参与者、CalDAV 合成路径也吐不回去，等于导入即丢字段。
+  if (fidelity) {
+    if (fidelity.attendees && fidelity.attendees.length) base.attendees = fidelity.attendees;
+    if (fidelity.organizer) base.organizer = fidelity.organizer;
+    if (fidelity.categories && fidelity.categories.length) base.categories = fidelity.categories;
+    if (fidelity.transp) base.transp = fidelity.transp;
+    if (fidelity.status) base.status = fidelity.status;
+    if (fidelity.url) base.url = fidelity.url;
+  }
   return Object.keys(base).length ? base : null;
 }
 
@@ -180,8 +202,8 @@ const UPSERT_ROW_CHUNK = 200;
 
 /**
  * 一次导入里某个 uid 最终要落库的样子。同一文件里同 uid 出现多次时按顺序合并：
- * 最后一个版本的内容字段胜出；exdates 只有被时区重映射改过才动，没改的那一版
- * 不许把先前那一版的重映射冲掉（和逐条写时「没重映射就不碰 exdates 列」一致）。
+ * 最后一个版本的内容字段胜出；exdates 只有真的变了才动，没变的那一版
+ * 不许把先前那一版的结果冲掉（和逐条写时「没变就不碰 exdates 列」一致）。
  */
 type PendingWrite = {
   uid: string;
@@ -193,8 +215,25 @@ type PendingWrite = {
   allDay: boolean;
   rrule: string | null;
   extra: Record<string, unknown> | null;
-  remappedExdates: string[] | undefined;
+  /** undefined = 这一列不动；数组 / null = 写成这个值（新行恒写，含 null）。 */
+  exdates: string[] | null | undefined;
 };
+
+/** exdates 归一：去重 + 排序，空集落 null（与库里存量形状一致，比对才稳）。 */
+function normalizeExdates(v: unknown): string[] | null {
+  if (!Array.isArray(v)) return null;
+  const out = [...new Set(v.filter((x): x is string => typeof x === "string"))].sort();
+  return out.length ? out : null;
+}
+
+function unionExdates(a: string[] | null, b: string[] | null): string[] | null {
+  return normalizeExdates([...(a ?? []), ...(b ?? [])]);
+}
+
+/** 两边都归一过（排序去重）才可以直接比文本。 */
+function sameExdates(a: string[] | null, b: string[] | null): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 /**
  * 一次导入的「判定结果」：哪些新增、哪些更新、哪些跳过、要写哪些行。
@@ -238,21 +277,60 @@ async function planImport(
   // identity instead, so the same source event maps to the same row
   // across imports, while two genuinely-distinct events that happen to
   // share a short source uid still resolve to different uids.
-  const items: { ev: IcalEvent; uid: string }[] = [];
+  const derivedUid = (ev: IcalEvent): string => ev.uid.length >= 8
+    ? ev.uid
+    : `${ev.uid}-${createHash("sha1")
+        .update(`${ev.uid}|${ev.summary}|${ev.startsAt.toISOString()}|${ev.endsAt.toISOString()}`)
+        .digest("hex")
+        .slice(0, 12)}`;
+
+  const rawItems: { ev: IcalEvent; uid: string }[] = [];
   for (const ev of parsed) {
     if (!ev.uid || !ev.summary) {
       invalid++;
       if (invalidReasons.length < 5) invalidReasons.push("有一条事件缺少 UID 或标题");
       continue;
     }
-    const uid = ev.uid.length >= 8
-      ? ev.uid
-      : `${ev.uid}-${createHash("sha1")
-          .update(`${ev.uid}|${ev.summary}|${ev.startsAt.toISOString()}|${ev.endsAt.toISOString()}`)
-          .digest("hex")
-          .slice(0, 12)}`;
-    items.push({ ev, uid });
+    rawItems.push({ ev, uid: derivedUid(ev) });
   }
+
+  // ---- 第一步之二：RECURRENCE-ID 的 VEVENT 转成我们自己的模型 ----
+  //
+  // 带 RECURRENCE-ID 的 VEVENT 不是一条独立事件，而是某个重复系列里「被单独
+  // 改过的那一次」（改时间、改标题）。我们的存储模型里没有 override 行，
+  // 对应物是服务端 scoped 编辑的那套：主记录 exdates 加上这一次 + 一条独立
+  // 的单次事件。所以导入时把 override 拆开：
+  //   · 本体 → 独立单次事件，uid = `<主uid>~<RECURRENCE-ID 的 ISO>`（确定性，
+  //     重复导入幂等）；rrule / exdates 清掉，recurrenceId 清掉。
+  //   · 主记录 → 在主循环之后给它的 exdates 补上这一次（见第三步之二）。
+  // 在这之前 override 和主记录同 uid、在 pending 里后到者胜出：文件里主记录
+  // 在前、override 在后是通行写法，于是**主记录会被那一次的内容整个顶掉**——
+  // 系列只剩被改过的那一次，其余全没了，而且导入计数还报「更新 1 条」。
+  //
+  // 找不到主记录（文件里没有、库里也查不到）就当孤儿：按它自己的 uid 当
+  // 普通单次事件收，至少这一次日程不丢。短 uid（<8）的派生 uid 含内容哈希，
+  // override 和主记录哈希必然不同，这种主记录只认「文件里同时出现」的情况。
+  const masterUidInFile = new Map<string, string>();
+  for (const it of rawItems) {
+    if (!it.ev.recurrenceId) masterUidInFile.set(it.ev.uid, it.uid);
+  }
+  const items: { ev: IcalEvent; uid: string }[] = [];
+  const masterExdateAdds = new Map<string, string[]>();
+  for (const it of rawItems) {
+    const recId = it.ev.recurrenceId;
+    if (!recId) { items.push(it); continue; }
+    const masterUid = masterUidInFile.get(it.ev.uid) ?? (it.ev.uid.length >= 8 ? it.ev.uid : null);
+    if (!masterUid) { items.push(it); continue; }
+    const adds = masterExdateAdds.get(masterUid) ?? [];
+    adds.push(recId);
+    masterExdateAdds.set(masterUid, adds);
+    items.push({
+      ev: { ...it.ev, rrule: null, exdates: null, recurrenceId: null },
+      uid: `${masterUid}~${recId}`,
+    });
+  }
+  // 顺序保持文件原样即可：主记录补 exdate 在主循环之后单独做（第三步之二），
+  // 那时主记录的 pending / byUid 都已是这次导入的最终形状。
 
   // ---- 第二步：现有行按 uid 一次预查（分块 IN），不再逐条 SELECT ----
   //
@@ -261,7 +339,9 @@ async function planImport(
   // 缓存 etag，etag 老在动，它的 If-Match PUT 就 412 → 用户看到「无法更新
   // 日历 / The calendar could not be updated」。只有用户可见字段真的变了才写。
   const byUid = new Map<string, EventRow>();
-  const distinctUids = [...new Set(items.map((i) => i.uid))];
+  // masterExdateAdds 的主 uid 一并预查：主记录可能只在库里、不在这份文件里，
+  // 第三步之二要拿它的现有行判断 exdate 补没补过。
+  const distinctUids = [...new Set([...items.map((i) => i.uid), ...masterExdateAdds.keys()])];
   for (let i = 0; i < distinctUids.length; i += PREFETCH_UID_CHUNK) {
     const chunk = distinctUids.slice(i, i + PREFETCH_UID_CHUNK);
     const rows = await db
@@ -284,7 +364,14 @@ async function planImport(
     const rrule = ev.rrule ?? null;
     const existing = byUid.get(uid);
 
-    const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null, importTimeZone(ev));
+    const extraVal = mergeImportExtra(existing?.extra ?? null, sourceTag, ev.alarms ?? null, importTimeZone(ev), {
+      attendees: ev.attendees ? attendeeEmails(ev.attendees) : null,
+      organizer: ev.organizer ?? null,
+      categories: ev.categories ?? null,
+      transp: ev.transp ?? null,
+      status: ev.status ?? null,
+      url: ev.url ?? null,
+    });
     // 这次刷新 / 重新导入把展开时区换了（升级后第一次刷新补上源时区就是这样）：用户在我们这边
     // 「删掉这一次」记下的那几次要跟着对过去，不然删过的又冒出来。规则是上游给的，UNTIL 不替它挪。
     let remappedExdates: string[] | undefined;
@@ -297,6 +384,23 @@ async function planImport(
       remappedExdates = remapSeriesForZoneChange({
         startsAt: ev.startsAt, rrule, allDay: false, exdates: existing.exdates, fromZone, toZone,
       }).exdates;
+    }
+
+    // EXDATE 的最终形状（undefined = 和库里一致、不动这一列）：
+    //   · 新行：文件里带的 EXDATE 必须落库。在这之前新行根本不写这一列——
+    //     从别家导出的周会带着「已取消的那一次」，导进来那一次照样出现。
+    //   · 已有行：并集。文件新带的要落库（上游删了某一次，我们这边要跟着删），
+    //     库里已有的不能被冲掉（用户在我们这边删的那一次，上游文件里没有，
+    //     整表替换等于把它复活）——和 CalDAV PUT 的 EXDATE 并集同一条口径。
+    //   · 时区重映射的结果是并集的底：remap 改的是库里那批的对位，先 remap 再并。
+    const evExdates = normalizeExdates(ev.exdates);
+    let nextExdates: string[] | null | undefined;
+    if (!existing) {
+      nextExdates = evExdates;
+    } else {
+      const existingExdates = normalizeExdates(existing.exdates);
+      const merged = unionExdates(remappedExdates ?? existingExdates, evExdates);
+      if (!sameExdates(merged, existingExdates)) nextExdates = merged;
     }
 
     if (existing) {
@@ -315,7 +419,7 @@ async function planImport(
         // 而别的字段没动，这里会判定 unchanged 直接 skip，新提醒永远落不了库 ——
         // extraVal 已经算好了，只是没人写进去，症状是「上游改了但我们这边没反应」。
         stableJson(extraVal) === stableJson(existing.extra ?? null) &&
-        !remappedExdates;
+        nextExdates === undefined;
       if (unchanged) { duplicates++; continue; }
       updated++;
     } else {
@@ -333,7 +437,7 @@ async function planImport(
       allDay: ev.allDay,
       rrule,
       extra: extraVal,
-      remappedExdates: remappedExdates ?? prev?.remappedExdates,
+      exdates: nextExdates !== undefined ? nextExdates : prev?.exdates,
     };
     pending.set(uid, write);
 
@@ -350,13 +454,47 @@ async function planImport(
       endsAt: write.endsAt,
       allDay: write.allDay,
       rrule: write.rrule,
-      exdates: write.remappedExdates ?? existing?.exdates ?? null,
+      exdates: write.exdates !== undefined ? write.exdates : (existing?.exdates ?? null),
       extra: write.extra,
       rawIcs: existing?.rawIcs ?? null,
       deletedAt: null,
       createdAt: existing?.createdAt ?? write.startsAt,
       updatedAt: existing?.updatedAt ?? write.startsAt,
     });
+  }
+
+  // ---- 第三步之二：给主记录补上 override 的那一次 exdate ----
+  //
+  // 主记录在这次导入里可能有三种状态：被写了（pending 里有）、没变（只有
+  // byUid 里的现有行）、根本不存在（孤儿已在第一步之二降级，不会进到这里的
+  // map 里——map 里只剩「文件里有主记录」或「uid ≥ 8 假定库里可能有」的）。
+  // 补 exdate 本身算一次更新（除非主记录这次已经在写了，那就顺带）。
+  // 主记录已被软删：不碰（不复活，也不给死行改数据）。
+  for (const [masterUid, recIds] of masterExdateAdds) {
+    const master = byUid.get(masterUid);
+    if (!master || master.deletedAt != null) continue;
+    const write = pending.get(masterUid);
+    const base = write && write.exdates !== undefined ? write.exdates : normalizeExdates(master.exdates);
+    const merged = unionExdates(base, recIds);
+    if (sameExdates(merged, normalizeExdates(master.exdates)) && !(write && write.exdates !== undefined)) continue;
+    if (write) {
+      write.exdates = merged;
+    } else {
+      pending.set(masterUid, {
+        uid: masterUid,
+        summary: master.summary,
+        description: master.description,
+        location: master.location,
+        startsAt: master.startsAt,
+        endsAt: master.endsAt,
+        allDay: master.allDay,
+        rrule: master.rrule,
+        extra: (master.extra as Record<string, unknown> | null) ?? null,
+        exdates: merged,
+      });
+      updated++;
+    }
+    byUid.set(masterUid, { ...master, exdates: merged });
   }
 
   return {
@@ -378,11 +516,12 @@ async function upsertEvents(
 
   // ---- 落库：攒下的写分块，一块一条多行 upsert、一个事务 ----
   //
-  // 分两组是因为 SET 子句一条语句里只能有一套：改过 exdates 的行要连 exdates
-  // 一起写；没改过的行 SET 里不带 exdates —— 和逐条版一样不碰那一列（预查之后
-  // 用户刚删掉的某一次出现，不会被导入拿旧快照盖回去）。
-  const plainWrites = plan.pending.filter((w) => !w.remappedExdates);
-  const exdateWrites = plan.pending.filter((w) => w.remappedExdates);
+  // 分两组是因为 SET 子句一条语句里只能有一套：要写 exdates 的行连 exdates
+  // 一起写；其余行 SET 里不带 exdates —— 和逐条版一样不碰那一列（预查之后
+  // 用户刚删掉的某一次出现，不会被导入拿旧快照盖回去）。新行恒在前一组：
+  // 它的 exdates 是文件里带来的值（可能就是 null），不写等于丢。
+  const plainWrites = plan.pending.filter((w) => w.exdates === undefined);
+  const exdateWrites = plan.pending.filter((w) => w.exdates !== undefined);
   await flushUpsertChunk(calendarId, plainWrites, false);
   await flushUpsertChunk(calendarId, exdateWrites, true);
 
@@ -414,8 +553,9 @@ export type ImportPreview = {
 /**
  * 数一遍文本里的 VEVENT 块、并给解析不出来的块找原因（缺哪几个必填字段）。
  * parseEvent 丢弃一个块只有两种情况：块本身不完整（没有 END:VEVENT）、
- * 或者缺 UID / SUMMARY / DTSTART / DTEND 之一（见 ical.ts）。这里按同一套
- * 展开规则走一遍块，只用来给用户解释，不参与导入判定（判定在 planImport）。
+ * 或者缺 UID / SUMMARY / DTSTART 之一（DTEND 缺省有 RFC 缺省值、DURATION
+ * 也能顶替，见 ical.ts）。这里按同一套展开规则走一遍块，只用来给用户
+ * 解释，不参与导入判定（判定在 planImport）。
  */
 function droppedBlockReasons(text: string): { blocks: number; reasons: string[] } {
   const unfolded = text.replace(/\r?\n[\t ]/g, "");
@@ -437,7 +577,7 @@ function droppedBlockReasons(text: string): { blocks: number; reasons: string[] 
         const m = /^([A-Za-z0-9-]+)[;:]/u.exec(lines[k] ?? "");
         if (m) present.add(m[1]!.toUpperCase());
       }
-      const missing = ["UID", "SUMMARY", "DTSTART", "DTEND"].filter((p) => !present.has(p));
+      const missing = ["UID", "SUMMARY", "DTSTART"].filter((p) => !present.has(p));
       if (missing.length && reasons.length < 5) {
         reasons.push(`第 ${blocks} 条事件缺少 ${missing.join("、")}`);
       }
@@ -493,7 +633,7 @@ async function flushUpsertChunk(
       allDay: w.allDay,
       rrule: w.rrule,
       extra: w.extra,
-      ...(withExdates ? { exdates: w.remappedExdates ?? null } : {}),
+      ...(withExdates ? { exdates: w.exdates ?? null } : {}),
       updatedAt: now,
     }));
     await db.transaction(async (tx) => {
