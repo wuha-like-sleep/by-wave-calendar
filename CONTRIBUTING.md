@@ -31,6 +31,8 @@ npm run audit:prod   # 查询生产依赖的已知漏洞（需要联网）
 
 `npm run release` 打包前强制执行 `npm run check`，再构建生产资源。集成测试使用进程内 PGlite，不需要额外数据库；导入配置仍需要 `.env` 中的必填值。
 
+本仓库的提交历史只署作者本人。`npm ci` 会自动装好 commit-msg 钩子（零额外依赖），提交信息里出现 AI 共同署名、Generated 标记或 AI 账号邮箱会被拦下；`npm run check` 里另有一道对未推送提交的兜底检查。确属误报时可用 `git commit --no-verify` 跳过一次。
+
 单独运行：`npm run typecheck`、`npm test`、`npm run test:int`、`npm run i18n:check`。测试类型检查保留了六个历史欠账文件的独立清单，新增测试须通过正常类型检查。
 
 数据库迁移请先读 [drizzle/README.md](drizzle/README.md)，当前快照链不完整，不能直接运行 `db:generate`。文档入口见 [docs/README.md](docs/README.md)。
