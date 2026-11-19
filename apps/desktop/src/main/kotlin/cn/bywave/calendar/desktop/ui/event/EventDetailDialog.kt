@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
@@ -78,6 +79,13 @@ fun EventDetailDialog(
                     event.summary,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
+                    // The title slot does not scroll with the body —
+                    // an unbounded summary (or one long German
+                    // compound word) would grow the header without
+                    // limit and squeeze the body out.
+                    modifier = Modifier.weight(1f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         },
@@ -119,6 +127,13 @@ fun EventDetailDialog(
                 }
                 event.extra?.meetingPassword?.takeIf { it.isNotBlank() }?.let {
                     MetaRow(label = t("event.detail.meetingPassword"), value = it)
+                }
+                // Attendees were only visible inside the edit dialog —
+                // the read-only detail view skipped them entirely, so a
+                // shared event looked unshared. The data is already on
+                // the event (extra.attendees); one row per guest.
+                event.extra?.attendees?.takeIf { it.isNotEmpty() }?.let { attendees ->
+                    MetaRow(label = t("event.edit.attendees"), value = attendees.joinToString("\n"))
                 }
                 if (event.rrule != null) {
                     MetaRow(label = t("event.detail.recurrence"), value = formatRrule(event.rrule))

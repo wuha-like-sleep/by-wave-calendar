@@ -569,6 +569,12 @@ fun MainScreen(
     if (showSearch) {
         SearchDialog(
             profile = p,
+            // Local search corpus: the events this window currently
+            // holds. The dialog filters them instantly and falls back
+            // to them (labelled local-only) when the server is
+            // unreachable — the Android search shape.
+            localEvents = ui.events,
+            calendars = ui.calendars,
             onJumpToDate = { day ->
                 state.jumpToDay(day)
                 showSearch = false

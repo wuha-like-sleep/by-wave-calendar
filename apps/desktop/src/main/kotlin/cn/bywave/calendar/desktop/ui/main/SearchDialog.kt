@@ -1,20 +1,26 @@
 // Global event search dialog. Reachable from the toolbar magnifier icon
-// or Cmd/Ctrl+F. Mirrors the web Cmd+K palette and iOS SearchView:
+// or Cmd/Ctrl+F. Mirrors the web Cmd+K palette and iOS SearchView, with
+// the same local-first + server-fallback shape Android's search uses:
 //
-//   - Calls GET /api/v1/search?q=…&limit=100 on a short debounce (300ms),
-//     so we don't fire a request per keystroke.
-//   - Search is SERVER-SIDE (not a client filter over a wide fetch): the
-//     server matches the needle against summary / description / location
-//     across every calendar the user can see, recency-first. Same approach
-//     iOS takes — its SearchView hits the same endpoint.
-//   - Renders matches in a scrollable results list (calendar dot + title +
-//     time + location + calendar name), reusing the visual motif of the
-//     calendar views' event rows. Clicking a result jumps the calendar to
-//     that event's local date via CalendarState.jumpToDay() and closes the
-//     dialog.
+//   - Local: the events CalendarState currently holds (the loaded window
+//     and its disk snapshots) are filtered in memory — instant, and it
+//     works offline. The needle matches summary / description / location,
+//     case-insensitively, exactly like Android's local filter. This
+//     corpus is much smaller than Android's ~15-month Room cache, which
+//     is why the server part below matters more here.
+//   - Server: GET /api/v1/search?q=…&limit=100 on a short debounce
+//     (300ms), matching across every calendar the user can see and all
+//     history. Hits that aren't already shown locally land in a separate
+//     section headed "全部历史（服务器）" so the scope of each group is
+//     explicit. A failed call keeps the local results and flags the
+//     dialog offline ("连不上服务器，仅显示本地结果") instead of
+//     replacing them with an error.
+//   - Clicking a result jumps the calendar to that event's local date
+//     via CalendarState.jumpToDay() and closes the dialog.
 //
 // The search response is a lighter shape than EventDTO (no rrule / allDay /
-// extra), which is fine here — we only need the date to jump to. Tapping a
+// extra), which is fine here — we only need the date to jump to. Local
+// EventDTOs are converted into the same row shape for rendering. Tapping a
 // result navigates; the user opens the event from the day view if they want
 // detail (same as the calendar's own click behaviour).
 
@@ -64,15 +70,17 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
+import cn.bywave.calendar.desktop.data.model.CalendarMeta
+import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.SearchResultDTO
 import cn.bywave.calendar.desktop.ui.calendar.parseHex
 import cn.bywave.calendar.desktop.ui.theme.Dimens
 import cn.bywave.calendar.desktop.ui.theme.hoverHighlight
 import cn.bywave.calendar.desktop.ui.theme.rowShape
-import cn.bywave.calendar.desktop.util.userFacingError
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -87,11 +95,37 @@ internal fun resultTimeLabel(iso: String, displayZone: ZoneId): String {
     return cn.bywave.calendar.desktop.ui.calendar.parseInstant(iso)?.let(formatter::format) ?: iso
 }
 
+/** Convert a locally held event into the shared result-row shape,
+ *  resolving the calendar name / colour from the loaded calendar list. */
+private fun EventDTO.toSearchRow(calendars: List<CalendarMeta>): SearchResultDTO {
+    val cal = calendars.firstOrNull { it.id == calendarId }
+    return SearchResultDTO(
+        id = id,
+        calendarId = calendarId,
+        calendarName = cal?.name,
+        calendarColor = cal?.color,
+        summary = summary,
+        location = location,
+        startsAt = startsAt,
+        endsAt = endsAt,
+    )
+}
+
+/** Android-parity local filter: summary / description / location,
+ *  case-insensitive substring. */
+private fun EventDTO.matchesLocal(needleLower: String): Boolean =
+    summary.lowercase().contains(needleLower) ||
+        (description ?: "").lowercase().contains(needleLower) ||
+        (location ?: "").lowercase().contains(needleLower)
+
 /**
  * Search dialog.
  *
  * @param profile the account to search in (a short-lived ApiClient bound to it,
  *   same one-shot pattern the Settings dialogs use).
+ * @param localEvents events the main window currently holds — the local
+ *   search corpus (loaded window + restored snapshots).
+ * @param calendars the account's calendars, for local rows' name/colour.
  * @param onJumpToDate called with the chosen result's local date — the
  *   caller wires this to CalendarState.jumpToDay() then closes the dialog.
  * @param onDismiss close without navigating.
@@ -99,6 +133,8 @@ internal fun resultTimeLabel(iso: String, displayZone: ZoneId): String {
 @Composable
 fun SearchDialog(
     profile: cn.bywave.calendar.desktop.data.model.Profile,
+    localEvents: List<EventDTO> = emptyList(),
+    calendars: List<CalendarMeta> = emptyList(),
     onJumpToDate: (java.time.LocalDate) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -107,13 +143,31 @@ fun SearchDialog(
     val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
 
     var query by remember { mutableStateOf("") }
-    var results by remember { mutableStateOf<List<SearchResultDTO>>(emptyList()) }
+    // Server-section results (all history), already de-duplicated against
+    // the local section. Local results are derived, not state — they
+    // follow the query and the held events instantly.
+    var serverResults by remember { mutableStateOf<List<SearchResultDTO>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
-    var errorMsg by remember { mutableStateOf<String?>(null) }
-    // True once a query has actually run + returned — so we only show the
-    // "no matches" empty state after a real search, not before the user
-    // has typed anything.
-    var hasSearched by remember { mutableStateOf(false) }
+    // The server search for the current query has finished (ok or not).
+    var serverDone by remember { mutableStateOf(false) }
+    // The server could not be reached — results are local-only.
+    var offline by remember { mutableStateOf(false) }
+    // A tapped result whose date would not parse. Kept separate from the
+    // search state: a failed search is "offline" now, not an error.
+    var jumpError by remember { mutableStateOf<String?>(null) }
+
+    val trimmed = query.trim()
+    val localResults = remember(trimmed, localEvents, calendars) {
+        if (trimmed.isEmpty()) {
+            emptyList()
+        } else {
+            val needle = trimmed.lowercase()
+            localEvents.filter { it.matchesLocal(needle) }
+                .sortedBy { it.startsAt }
+                .map { it.toSearchRow(calendars) }
+        }
+    }
+    val allResults = localResults + serverResults
 
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
@@ -130,7 +184,7 @@ fun SearchDialog(
         if (day != null) {
             onJumpToDate(day)
         } else {
-            errorMsg = cn.bywave.calendar.desktop.i18n.I18n.t("search.jumpFailed")
+            jumpError = cn.bywave.calendar.desktop.i18n.I18n.t("search.jumpFailed")
         }
     }
 
@@ -138,34 +192,38 @@ fun SearchDialog(
     // A fresh keystroke cancels the previous in-flight LaunchedEffect, so
     // only the last query wins — same debounce iOS does (250ms there; 300
     // here is plenty responsive for a desktop typist).
-    LaunchedEffect(query) {
-        val trimmed = query.trim()
-        if (trimmed.isEmpty()) {
-            results = emptyList()
-            errorMsg = null
-            hasSearched = false
-            searching = false
-            return@LaunchedEffect
-        }
+    LaunchedEffect(trimmed) {
+        serverResults = emptyList()
+        serverDone = false
+        offline = false
+        searching = false
+        jumpError = null
+        if (trimmed.isEmpty()) return@LaunchedEffect
         searching = true
-        errorMsg = null
         kotlinx.coroutines.delay(300)
         val api = ApiClient(profile)
         runCatching { api.search(trimmed, limit = 100) }
             .onSuccess {
                 api.close()
-                results = it.events
+                // Drop hits the local section already shows. The pair
+                // (id, startsAt) identifies an occurrence — a recurring
+                // series shares one id across many starts.
+                val localKeys = localResults.map { r -> r.id to r.startsAt }.toSet()
+                serverResults = it.events.filter { r -> (r.id to r.startsAt) !in localKeys }
                 searching = false
-                hasSearched = true
+                serverDone = true
             }
             .onFailure {
                 api.close()
                 // CancellationException means a newer keystroke superseded
                 // this run — leave state alone so the newer run owns it.
                 if (it is kotlinx.coroutines.CancellationException) throw it
-                errorMsg = userFacingError(it, "search.failed")
+                // Android parity: a failed server call is not an error
+                // state — the local results stay and the dialog says
+                // they are local-only.
+                offline = true
                 searching = false
-                hasSearched = true
+                serverDone = true
             }
     }
 
@@ -199,7 +257,7 @@ fun SearchDialog(
                         // 的默认预期,以前回车没反应,用户得手动去点那一行。
                         // 还在搜 / 没有结果时回车什么都不做,不要弹错。
                         .onPreviewKeyEvent { e ->
-                            val first = results.firstOrNull()
+                            val first = allResults.firstOrNull()
                             if (e.type == KeyEventType.KeyDown &&
                                 (e.key == Key.Enter || e.key == Key.NumPadEnter) &&
                                 first != null
@@ -212,35 +270,14 @@ fun SearchDialog(
                 )
 
                 when {
-                    errorMsg != null -> {
+                    jumpError != null -> {
                         Text(
-                            errorMsg!!,
+                            jumpError!!,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    searching && results.isEmpty() -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CircularProgressIndicator(
-                                strokeWidth = Dimens.spinnerStroke,
-                                modifier = Modifier.size(Dimens.spinnerSmall),
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(t("search.searching"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    hasSearched && results.isEmpty() -> {
-                        Text(
-                            t("search.empty"),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(vertical = 12.dp),
-                        )
-                    }
-                    !hasSearched && query.isBlank() -> {
+                    trimmed.isEmpty() -> {
                         Text(
                             t("search.hint"),
                             style = MaterialTheme.typography.bodySmall,
@@ -259,8 +296,52 @@ fun SearchDialog(
                                 .verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            results.forEach { r ->
+                            if (offline) {
+                                Text(
+                                    t("search.offlineHint"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            localResults.forEach { r ->
                                 SearchResultRow(result = r, displayZone = displayZone, onClick = { jumpTo(r) })
+                            }
+                            if (searching && serverResults.isEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = Dimens.spinnerStroke,
+                                        modifier = Modifier.size(Dimens.spinnerSmall),
+                                    )
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(
+                                        t("search.serverSearching"),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                            if (serverResults.isNotEmpty()) {
+                                Text(
+                                    t("search.serverSection"),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = if (localResults.isEmpty()) 0.dp else 6.dp),
+                                )
+                                serverResults.forEach { r ->
+                                    SearchResultRow(result = r, displayZone = displayZone, onClick = { jumpTo(r) })
+                                }
+                            }
+                            if (serverDone && !searching && allResults.isEmpty()) {
+                                Text(
+                                    t("search.empty"),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 6.dp),
+                                )
                             }
                         }
                     }
@@ -305,6 +386,7 @@ private fun SearchResultRow(result: SearchResultDTO, displayZone: ZoneId, onClic
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 resultTimeLabel(result.startsAt, displayZone),
@@ -317,6 +399,7 @@ private fun SearchResultRow(result: SearchResultDTO, displayZone: ZoneId, onClic
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             if (!result.calendarName.isNullOrEmpty()) {
