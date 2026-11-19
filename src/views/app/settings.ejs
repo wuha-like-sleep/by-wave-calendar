@@ -62,8 +62,8 @@
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900"><%= pk.deviceName || 'Passkey' %></div>
             <div class="text-xs text-slate-500">
-              <%= t("settings.security.passkeyAddedAt", { date: pk.createdAtLocal }) %>
-              <% if (pk.lastUsedAtLocal) { %> · <%= t("settings.security.passkeyLastUsed", { date: pk.lastUsedAtLocal }) %><% } %>
+              <%= t("settings.security.passkeyAddedLabel") %> <%- pk.createdAtLocal %>
+              <% if (pk.lastUsedAtLocal) { %> · <%= t("settings.security.passkeyLastUsedLabel") %> <%- pk.lastUsedAtLocal %><% } %>
             </div>
           </div>
           <button type="button" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"
@@ -563,13 +563,13 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
             <div class="text-sm font-medium text-slate-900"><%= ap.label %></div>
             <div class="text-xs text-slate-500">
               <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= ap.prefix %></code> ·
-              <%= t("settings.devices.appPasswordCreated", { date: ap.createdAtLocal }) %>
-              <% if (ap.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsed", { date: ap.lastUsedAtLocal }) %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
+              <%= t("settings.devices.appPasswordCreatedLabel") %> <%- ap.createdAtLocal %>
+              <% if (ap.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsedLabel") %> <%- ap.lastUsedAtLocal %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
             </div>
           </div>
           <form method="post" action="/app/settings/app-passwords/<%= ap.id %>/revoke" data-confirm="<%= t('settings.devices.appPasswordRevokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.devices.appPasswordRevoke') %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.appPasswordRevoke") %></button>
+            <button type="submit" class="whitespace-nowrap text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.appPasswordRevoke") %></button>
           </form>
         </li>
       <% }) %>
@@ -659,14 +659,14 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
             </div>
             <div class="text-xs text-slate-500">
               <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= tok.prefix %></code> ·
-              <%= t("settings.devices.appPasswordCreated", { date: tok.createdAtLocal }) %>
-              <% if (tok.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsed", { date: tok.lastUsedAtLocal }) %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
-              <% if (tok.expiresAtLocal) { %> · <%= t("settings.devices.apiTokenExpires", { date: tok.expiresAtLocal }) %><% } else { %> · <%= t("settings.devices.apiTokenNeverExpires") %><% } %>
+              <%= t("settings.devices.appPasswordCreatedLabel") %> <%- tok.createdAtLocal %>
+              <% if (tok.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsedLabel") %> <%- tok.lastUsedAtLocal %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
+              <% if (tok.expiresAtLocal) { %> · <%= t("settings.devices.apiTokenExpiresLabel") %> <%- tok.expiresAtLocal %><% } else { %> · <%= t("settings.devices.apiTokenNeverExpires") %><% } %>
             </div>
           </div>
           <form method="post" action="/app/settings/api-tokens/<%= tok.id %>/revoke" data-confirm="<%= t('settings.devices.apiTokenRevokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.devices.apiTokenRevoke') %>">
             <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.apiTokenRevoke") %></button>
+            <button type="submit" class="whitespace-nowrap text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.apiTokenRevoke") %></button>
           </form>
         </li>
       <% }) %>
