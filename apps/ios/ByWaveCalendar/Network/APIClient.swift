@@ -240,6 +240,62 @@ final class APIClient {
             throw APIError.decode(error)
         }
     }
+
+    /// /events 专用条件请求。带上 If-None-Match 后，窗口内容没变时
+    /// 服务端只回 304 空正文，整个窗口的下载与解码都省掉；变了才回
+    /// 200 + 新的 ETag。返回 (nil, _) 表示 304——本地缓存即最新。
+    /// 鉴权 / 401 重试 / 信封拆包与 request() 同一套口径；单独写一份，
+    /// 是因为 request() 不暴露状态码与响应头。cachePolicy 明确绕开
+    /// URLCache：条件请求由我们自己发，系统缓存层不要插手（应用自己
+    /// 有 EventCache 做离线快照）。
+    func getEventsConditional(path: String, ifNoneMatch: String?, isRetry: Bool = false) async throws -> (response: EventsResponse?, etag: String?) {
+        guard state.activeProfileId == profileID else { throw CancellationError() }
+        guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
+        let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let url = Self.makeURL(server: serverURL, path: path) else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let ifNoneMatch { req.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match") }
+        req.timeoutInterval = 15
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.network(error)
+        }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.network(NSError(domain: "no-http-response", code: 0))
+        }
+        if http.statusCode == 401 && !isRetry {
+            state.invalidateAccessToken()
+            return try await getEventsConditional(path: path, ifNoneMatch: ifNoneMatch, isRetry: true)
+        }
+        if http.statusCode == 304 {
+            return (nil, http.value(forHTTPHeaderField: "ETag") ?? ifNoneMatch)
+        }
+        if http.statusCode >= 400 {
+            throw APIError.server(status: http.statusCode, body: String(data: data, encoding: .utf8))
+        }
+        let etag = http.value(forHTTPHeaderField: "ETag")
+        do {
+            if let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let inner = outer["data"] {
+                let innerData = try JSONSerialization.data(withJSONObject: inner)
+                return (try JSONDecoder.iso().decode(EventsResponse.self, from: innerData), etag)
+            }
+            return (try JSONDecoder.iso().decode(EventsResponse.self, from: data), etag)
+        } catch {
+            throw APIError.decode(error)
+        }
+    }
 }
 
 // MARK: - Booking links (预约链接)

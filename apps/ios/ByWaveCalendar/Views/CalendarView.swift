@@ -684,6 +684,14 @@ struct CalendarView: View {
         }
     }
 
+    /// /events 窗口的 ETag 存档键（UserDefaults）：离线缓存键（服务器 +
+    /// 账号）再加上窗口起止。少了窗口这一维，就会拿着 A 窗口的令牌去
+    /// 问 B 窗口、换回一个假的 304 把 B 窗口的新数据挡在门外。
+    private func eventsETagKey(from: Date, to: Date) -> String {
+        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+        return "bwc.eventsETag.\(key).\(DateFormatters.isoPlain.string(from: from)).\(DateFormatters.isoPlain.string(from: to))"
+    }
+
     // MARK: - Fetch
     private func load(force: Bool) async {
         // De-duplicate concurrent loads (polling + manual refresh racing).
@@ -714,7 +722,21 @@ struct CalendarView: View {
 
         do {
             let client = APIClient(state: state)
-            let resp: EventsResponse = try await client.get(path)
+            // 条件请求：带上这个（账号、窗口）上次拿到的 ETag。内容没变
+            // 时服务端只回 304，整个窗口的下载、解码、缓存重写、镜像与
+            // 提醒重排全部跳过——15 秒一次的轮询绝大多数时候就该是这个
+            // 结局。令牌由服务端按「可见日历 + 窗口 + 内容版本」算，
+            // 任何一处数据变了令牌就变，不会拿着旧令牌漏掉新数据。
+            let etagKey = eventsETagKey(from: from, to: to)
+            let (fetched, newETag) = try await client.getEventsConditional(
+                path: path, ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
+            guard let resp = fetched else {
+                guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
+                self.lastSyncedAt = Date()
+                self.lastFetchedWindow = (start: from, end: to)
+                return
+            }
+            if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
             // Sort off the main actor before publishing. With a 12-month
             // pre-cache (incoming v1.0.x feature), the event count can
             // hit a few thousand — sorting 3000 elements on main was
