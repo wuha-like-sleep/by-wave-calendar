@@ -279,9 +279,10 @@ export async function webRoutes(app: FastifyInstance) {
 
   // Privacy + Terms — required by Apple App Store Connect for any APP
   // that handles personal data. Linked from the site footer + iOS APP
-  // Settings + initial signup flow. Updated date is sourced from
-  // package.json's version timestamp via getReleaseDate so a server
-  // upgrade automatically refreshes the "最近更新" line.
+  // Settings + initial signup flow. The "最近更新" date comes from the
+  // LEGAL_UPDATED constant below — it is a MANUAL value: bump it in the
+  // same change whenever any legal/support page's text changes, so the
+  // displayed date never claims a freshness the text doesn't have.
   // Legal/policy pages are localized into all 8 locales via per-locale content
   // views at legal/content/<page>/<locale>.ejs. The effective locale honors
   // ?lang= (so the native apps open these in the app's language), then cookie /
