@@ -48,6 +48,14 @@ export type SettingsView = {
   // CalDAV 集合的同步纪元。掺进每个日历的 ctag,bump 一次 = 所有 CalDAV
   // 客户端下一轮轮询时会重新列一遍事件清单。见 schema.ts 上的说明。
   caldavSyncEpoch: string;
+  // iOS 应用内公告（见 schema.ts 上的说明）。enabled=false 或 version
+  // 为空 = 没有公告。publishedAt 是管理员最近一次保存公告的时间。
+  iosAnnouncementEnabled: boolean;
+  iosAnnouncementVersion: string | null;
+  iosAnnouncementTitle: string | null;
+  iosAnnouncementBody: string | null;
+  iosAnnouncementStoreUrl: string | null;
+  iosAnnouncementPublishedAt: Date | null;
   // CAPTCHA — provider + public site key are safe for the wide-read view.
   // The secret is NOT here; read it only via getCaptchaConfig().
   captchaProvider: CaptchaProvider;
@@ -117,8 +125,12 @@ function logoFileExists(logoUrl: string | null): boolean {
 // 把新列在参数类型里标成可选,TS 就会逼着每一处写回落。
 // 以后每加一个新列,先加进这个 Partial 里,等它在所有存量库上都落地了再摘掉。
 type SettingsRow =
-  Omit<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch">
-  & Partial<Pick<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch">>;
+  Omit<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch"
+    | "iosAnnouncementEnabled" | "iosAnnouncementVersion" | "iosAnnouncementTitle"
+    | "iosAnnouncementBody" | "iosAnnouncementStoreUrl" | "iosAnnouncementPublishedAt">
+  & Partial<Pick<schema.SiteSettings, "signupDomainAllowlist" | "signupDailyQuota" | "caldavSyncEpoch"
+    | "iosAnnouncementEnabled" | "iosAnnouncementVersion" | "iosAnnouncementTitle"
+    | "iosAnnouncementBody" | "iosAnnouncementStoreUrl" | "iosAnnouncementPublishedAt">>;
 
 // 导出只是为了测试能直接喂一行进来 —— 纯逻辑测试档里没有 Postgres,
 // 走 getSettings() 就得起一个真数据库。这是「行 → 视图」的唯一回落口径。
@@ -174,6 +186,14 @@ export function toView(r: SettingsRow): SettingsView {
     // 空串本身是个稳定取值,ctag 对同一份数据照样稳定,客户端不会无限重同步。
     // 这个窗口到下一次开机为止 —— auto_migrate.ts 的兜底补丁会把列补回来。
     caldavSyncEpoch: r.caldavSyncEpoch ?? "",
+    // 列不存在（老库）一律回落到「没有公告」—— 升级不能凭空给全体
+    // iOS 用户弹一条公告，回落方向和 enabled 的默认值一致。
+    iosAnnouncementEnabled: r.iosAnnouncementEnabled ?? false,
+    iosAnnouncementVersion: r.iosAnnouncementVersion ?? null,
+    iosAnnouncementTitle: r.iosAnnouncementTitle ?? null,
+    iosAnnouncementBody: r.iosAnnouncementBody ?? null,
+    iosAnnouncementStoreUrl: r.iosAnnouncementStoreUrl ?? null,
+    iosAnnouncementPublishedAt: r.iosAnnouncementPublishedAt ?? null,
     captchaProvider: isCaptchaProvider(r.captchaProvider) ? r.captchaProvider : "builtin",
     captchaSiteKey: r.captchaSiteKey ?? null,
     captchaBuiltinMode: isBuiltinMode(r.captchaBuiltinMode) ? r.captchaBuiltinMode : "invisible",
@@ -275,6 +295,12 @@ export async function updateSettings(patch: Partial<{
   idpApiServiceClients: string;
   idpApiAutoProvision: boolean;
   caldavSyncEpoch: string;
+  iosAnnouncementEnabled: boolean;
+  iosAnnouncementVersion: string | null;
+  iosAnnouncementTitle: string | null;
+  iosAnnouncementBody: string | null;
+  iosAnnouncementStoreUrl: string | null;
+  iosAnnouncementPublishedAt: Date | null;
 }>): Promise<void> {
   await db
     .update(schema.siteSettings)

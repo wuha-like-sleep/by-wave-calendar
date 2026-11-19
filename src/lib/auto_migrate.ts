@@ -217,4 +217,31 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "users.notify_inbox_push（缺了站内通知推送门控读不到、推送静默丢失）",
     statement: `ALTER TABLE users ADD COLUMN IF NOT EXISTS notify_inbox_push boolean NOT NULL DEFAULT true`,
   },
+  {
+    // 0066。iOS 公告六列。缺列时 getSettings() 的 toView 读不到就按
+    // 「没有公告」回落（SettingsRow 里这几列是 Partial），接口回 404，
+    // 不会全站停摆 —— 但公告会静默发不出去，照样进安全网。
+    why: "site_settings.ios_announcement_enabled（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_enabled boolean NOT NULL DEFAULT false`,
+  },
+  {
+    why: "site_settings.ios_announcement_version（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_version text`,
+  },
+  {
+    why: "site_settings.ios_announcement_title（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_title text`,
+  },
+  {
+    why: "site_settings.ios_announcement_body（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_body text`,
+  },
+  {
+    why: "site_settings.ios_announcement_store_url（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_store_url text`,
+  },
+  {
+    why: "site_settings.ios_announcement_published_at（缺了 iOS 公告发不出去）",
+    statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_published_at timestamp with time zone`,
+  },
 ];
