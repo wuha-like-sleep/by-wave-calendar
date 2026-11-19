@@ -925,6 +925,9 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
       "/booking-links/{id}/bookings": {
         get: { summary: "List bookings made on a link (future & active by default; ?all=1 for all)" },
       },
+      "/booking-links/{id}/bookings/{bookingId}/cancel": {
+        post: { summary: "Owner cancels one booking (same chain as the guest cancel link; guest is emailed)" },
+      },
     },
   });
 });

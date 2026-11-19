@@ -374,8 +374,12 @@ async function notifyBookingCancelled(ownerId: string, linkTitle: string, guestN
   });
 }
 
-/** Commit the booking and event cancellation together; notifications run afterwards. */
-export async function cancelBooking(token: string): Promise<{ found: boolean; alreadyCancelled: boolean }> {
+/** Commit the booking and event cancellation together; notifications run afterwards.
+ *  `byOwner` marks a cancellation the link owner performs themselves (native
+ *  owner UI): the guest still gets the same METHOD:CANCEL mail chain, but the
+ *  owner is NOT sent the "guest cancelled" inbox note — they just did it, and
+ *  that note's copy attributes the cancellation to the guest. */
+export async function cancelBooking(token: string, opts?: { byOwner?: boolean }): Promise<{ found: boolean; alreadyCancelled: boolean }> {
   const result = await db.transaction(async (tx) => {
     const [candidate] = await tx.select({ eventId: schema.bookings.eventId }).from(schema.bookings)
       .where(eq(schema.bookings.cancelToken, token)).limit(1);
@@ -404,8 +408,9 @@ export async function cancelBooking(token: string): Promise<{ found: boolean; al
     if (result.owner) await notifyEventCancellation(result.event, result.owner).catch(() => undefined);
     // 站内通知给所有者：访客取消预约目前只有一封取消邮件能告诉他，邮件
     // 没到（SMTP 未配/被拦）就只能等他自己翻日历才发现。result.event 非空
-    // 意味着这次调用真的删掉了事件，重复取消不会重复写。
-    if (result.owner && result.booking) {
+    // 意味着这次调用真的删掉了事件，重复取消不会重复写。所有者自己取消
+    // 时不写这条——文案是「访客取消了」，发给操作者本人既多余又张冠李戴。
+    if (!opts?.byOwner && result.owner && result.booking) {
       const [link] = await db.select({ title: schema.bookingLinks.title }).from(schema.bookingLinks)
         .where(eq(schema.bookingLinks.id, result.booking.linkId)).limit(1);
       const tz = await bookingTimeZone({ calendarId: result.event.calendarId }).catch(() => "UTC");
