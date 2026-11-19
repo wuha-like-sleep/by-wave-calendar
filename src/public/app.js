@@ -264,15 +264,62 @@
   });
 
   // data-bwc-autosubmit — submit the owning form when the control changes.
-  // Used by the language switcher and the login page's locale <select>.
+  // Used by the language switcher (header / mobile menu / bare-layout
+  // pages) and the admin user-list filters.
   document.body.addEventListener("change", function (e) {
     const el = e.target;
     if (!el || !el.dataset || el.dataset.bwcAutosubmit === undefined) return;
     const form = el.form || (el.closest && el.closest("form"));
     if (!form) return;
+    // A language switch (any form posting to a */locale endpoint) reloads
+    // the whole page in the new language. Stash the scroll position so
+    // the restore below can land the user back where they were reading
+    // instead of at the top of the page. Unsaved form input on the page
+    // is still lost — a full reload is the price of a server-rendered
+    // language switch; the scroll position is the part we can keep.
+    try {
+      const action = form.getAttribute("action") || "";
+      if (/(^|\/)locale$/.test(action)) {
+        sessionStorage.setItem(
+          "bwcLocaleScroll",
+          JSON.stringify({ path: location.pathname, y: window.scrollY }),
+        );
+      }
+    } catch (err) { /* sessionStorage unavailable — the switch still works */ }
     if (typeof form.requestSubmit === "function") form.requestSubmit();
     else form.submit();
   });
+
+  // Restore the scroll position stashed by a language switch. Skipped
+  // when the URL carries a #anchor (e.g. the settings form bounces back
+  // to #language) — the anchor jump is the more specific intent.
+  let localeScrollY = null;
+  try {
+    const raw = sessionStorage.getItem("bwcLocaleScroll");
+    if (raw) {
+      sessionStorage.removeItem("bwcLocaleScroll");
+      if (!location.hash) {
+        const saved = JSON.parse(raw);
+        if (saved && saved.path === location.pathname && typeof saved.y === "number" && saved.y > 0) {
+          localeScrollY = saved.y;
+        }
+      }
+    }
+  } catch (err) { /* ignore — nothing depends on this */ }
+  if (localeScrollY !== null) {
+    const restoreLocaleScroll = function () { window.scrollTo(0, localeScrollY); };
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", restoreLocaleScroll);
+    } else {
+      restoreLocaleScroll();
+    }
+    // The browser's own scroll restoration for the POST→redirect
+    // navigation can land after DOMContentLoaded and stomp the value
+    // back to the top; re-apply once more after full load.
+    window.addEventListener("load", function () {
+      requestAnimationFrame(restoreLocaleScroll);
+    });
+  }
 
   // data-bwc-checkall="selector" — master checkbox drives every match inside
   // the same form (falls back to the document if it isn't in one).
