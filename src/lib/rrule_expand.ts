@@ -51,6 +51,13 @@ export type EventForExpansion = {
   /** 全天事件一律按 UTC 展开（不管 timeZone 传的是什么）。 */
   allDay: boolean;
   /**
+   * 这一行的 updatedAt（可选）。只用来给下面的展开缓存做键的一部分：任何写路径
+   * 改了这行都会 bump 它，键跟着变，缓存自然失效。不带也不算错 —— 键里还有
+   * 展开的全部输入字段（startsAt / endsAt / rrule / exdates / 时区），哪个变了
+   * 都换键。带上它是为了「行变了但展开输入恰好没变」时也别用旧键占着坑。
+   */
+  updatedAt?: Date | string | null;
+  /**
    * 按哪个时区展开，调用方用 event_zone.ts 的 expansionTimeZone() 算好传进来。
    * 必填：漏传就是回到「按 UTC 展开」的老毛病，所以让类型检查替我们盯着每个调用点。
    * null / 非法时区名 → UTC。
@@ -269,6 +276,59 @@ function prepareRule(rule: RRuleType, windowFrom: Date): RRuleType | null {
   return new RRule({ ...orig, dtstart: new Date(orig.dtstart.getTime() + (behind - 1) * step) });
 }
 
+// ── 展开结果记忆化 ──────────────────────────────────────────────────────
+//
+// 展开是纯函数：同样的事件行 + 同样的窗口，结果必然一样。但调用方全是高频的：
+// 网页每 30 秒轮询一次 /events，提醒 cron 每分钟把 30 天窗口全量重展开一遍，
+// 同一批事件被反复算。进程内记一份结果，键算对了就没有一致性问题。
+//
+// 键 = 决定展开结果的**全部输入**，一个不落：
+//   · id + updatedAt：行被任何写路径改过，updatedAt 就会 bump，键跟着变；
+//   · startsAt / endsAt / rrule / exdates / allDay / timeZone：就算某个调用方
+//     没带 updatedAt，这些字段本身变了也换键 —— exdates 是用户「删掉这一次」
+//     的落点，它一变结果必须变，这是这组键最要紧的一条；
+//   · from / to：窗口不同，结果不同。
+// 原则是宁可多失效、不要给旧结果：键里多放字段只会少命中，绝不会算错；
+// 少放一个字段才是 bug。所以 exdates 按存的原样拼，不排序、不归一化。
+//
+// 存和取都拷贝一份 Date：调用方拿到的是能随便改的对象，缓存里那份不能被
+// 外面改坏。条数上限 FIFO/LRU 混合：命中时把条目挪到末尾（近似 LRU），
+// 超上限从最旧的开始扔。
+const EXPANSION_CACHE_MAX = 1000;
+const expansionCache = new Map<string, ExpandedOccurrence[]>();
+let expansionCacheHits = 0;
+let expansionCacheMisses = 0;
+
+function expansionCacheKey(event: EventForExpansion, from: Date, to: Date): string {
+  const upd = event.updatedAt == null ? "" : new Date(event.updatedAt).getTime();
+  return JSON.stringify([
+    event.id, upd,
+    event.startsAt.getTime(), event.endsAt.getTime(),
+    event.rrule ?? "", (event.exdates ?? []).join(","),
+    event.allDay ? 1 : 0, event.timeZone ?? "",
+    from.getTime(), to.getTime(),
+  ]);
+}
+
+function copyOccurrences(list: ExpandedOccurrence[]): ExpandedOccurrence[] {
+  return list.map((o) => ({
+    id: o.id,
+    startsAt: new Date(o.startsAt.getTime()),
+    endsAt: new Date(o.endsAt.getTime()),
+    isOccurrence: o.isOccurrence,
+  }));
+}
+
+/** 只给测试用：看缓存命中情况、清缓存。 */
+export function __expansionCacheStatsForTest(): { size: number; hits: number; misses: number } {
+  return { size: expansionCache.size, hits: expansionCacheHits, misses: expansionCacheMisses };
+}
+export function __clearExpansionCacheForTest(): void {
+  expansionCache.clear();
+  expansionCacheHits = 0;
+  expansionCacheMisses = 0;
+}
+
 // Given an event with optional RRULE and a [from, to] window, return all
 // occurrence start/end pairs that overlap the window. For non-recurring
 // events this is just the single (startsAt, endsAt) pair (filtered to the
@@ -277,6 +337,28 @@ function prepareRule(rule: RRuleType, windowFrom: Date): RRuleType | null {
 //   - MAX_OCCURRENCES_PER_EVENT
 //   - the requested [from, to] window
 export function expandEvent(event: EventForExpansion, from: Date, to: Date): ExpandedOccurrence[] {
+  if (!event.rrule) return expandEventUncached(event, from, to);
+  const key = expansionCacheKey(event, from, to);
+  const hit = expansionCache.get(key);
+  if (hit) {
+    expansionCacheHits++;
+    // 挪到末尾：近似 LRU，常被轮询命中的窗口别被一次性流量挤掉。
+    expansionCache.delete(key);
+    expansionCache.set(key, hit);
+    return copyOccurrences(hit);
+  }
+  expansionCacheMisses++;
+  const result = expandEventUncached(event, from, to);
+  expansionCache.set(key, copyOccurrences(result));
+  while (expansionCache.size > EXPANSION_CACHE_MAX) {
+    const oldest = expansionCache.keys().next().value;
+    if (oldest === undefined) break;
+    expansionCache.delete(oldest);
+  }
+  return result;
+}
+
+function expandEventUncached(event: EventForExpansion, from: Date, to: Date): ExpandedOccurrence[] {
   const durationMs = event.endsAt.getTime() - event.startsAt.getTime();
 
   if (!event.rrule) {

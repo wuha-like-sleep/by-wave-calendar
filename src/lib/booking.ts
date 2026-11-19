@@ -191,7 +191,7 @@ async function recurringBusy(calendarId: string, from: Date, to: Date, query: Pi
     .select({
       id: schema.events.id, startsAt: schema.events.startsAt, endsAt: schema.events.endsAt,
       allDay: schema.events.allDay, rrule: schema.events.rrule, exdates: schema.events.exdates,
-      extra: schema.events.extra, rawIcs: schema.events.rawIcs,
+      extra: schema.events.extra, rawIcs: schema.events.rawIcs, updatedAt: schema.events.updatedAt,
     })
     .from(schema.events)
     .where(and(
@@ -207,7 +207,7 @@ async function recurringBusy(calendarId: string, from: Date, to: Date, query: Pi
     for (const occ of expandEvent({
       id: m.id, startsAt: m.startsAt, endsAt: m.endsAt, rrule: m.rrule,
       exdates: Array.isArray(m.exdates) ? (m.exdates as string[]) : null,
-      allDay: m.allDay,
+      allDay: m.allDay, updatedAt: m.updatedAt,
       timeZone: expansionTimeZone({
         allDay: m.allDay, extra: m.extra, calendarTimezone: timezone,
         rawStartIsUtc: rawIcsStartIsUtc(m.rawIcs),

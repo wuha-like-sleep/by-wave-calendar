@@ -394,6 +394,7 @@ export async function eventRoutes(app: FastifyInstance) {
           rrule: row.rrule ?? null,
           exdates: (row.exdates as string[] | null) ?? null,
           allDay: row.allDay,
+          updatedAt: row.updatedAt,
           timeZone: expansionTimeZone({
             allDay: row.allDay,
             extra: row.extra,
