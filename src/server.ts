@@ -23,6 +23,7 @@ import { registerApiCsrf } from "./lib/api_csrf.js";
 import { isNoindexPath, robotsTxt } from "./lib/crawler_policy.js";
 import { makeSharedRouteStore } from "./lib/rate_limit_store.js";
 import { eventRoutes } from "./routes/events.js";
+import { importRoutes } from "./routes/import.js";
 import { searchRoutes } from "./routes/search.js";
 import { deviceRoutes, pairPageRoutes } from "./routes/devices.js";
 import { pushRoutes } from "./routes/push.js";
@@ -747,6 +748,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(calendarRoutes, { prefix });
   await app.register(nativeCalendarSyncRoutes, { prefix });
   await app.register(eventRoutes, { prefix });
+  await app.register(importRoutes, { prefix });
   await app.register(searchRoutes, { prefix });
   await app.register(deviceRoutes, { prefix });
   await app.register(pushRoutes, { prefix });
@@ -841,6 +843,8 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
         delete: { summary: "Delete calendar" },
       },
       "/calendars/{id}/events": { get: { summary: "List events in one calendar" } },
+      "/calendars/{id}/import": { post: { summary: "Import ICS text into a calendar (same dedupe semantics as the web import)" } },
+      "/calendars/{id}/import/preview": { post: { summary: "Preview an ICS import (counts only, writes nothing)" } },
       "/calendars/{id}/share-tokens": {
         get: { summary: "List ICS share tokens" },
         post: { summary: "Create ICS share token" },
