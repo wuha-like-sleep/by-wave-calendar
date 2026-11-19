@@ -12,7 +12,14 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.security.MessageDigest
 
 @Serializable
-data class CachedEvents(val savedAtMs: Long, val resp: EventsResponse)
+data class CachedEvents(
+    val savedAtMs: Long,
+    val resp: EventsResponse,
+    /** 服务端给这个（账号、窗口）的 ETag，下次刷新拿它做条件请求。
+     *  带默认值：旧版本写的快照没有这个字段，照常解码、只是第一次
+     *  刷新拿不到 304、刷新完就补上了。 */
+    val etag: String? = null,
+)
 
 /** Bounded, disposable snapshots. Network responses remain authoritative. */
 internal class DiskEventCache(private val root: Path, private val now: () -> Long = System::currentTimeMillis) {
@@ -21,24 +28,28 @@ internal class DiskEventCache(private val root: Path, private val now: () -> Lon
     private fun directory(profile: String) = root.resolve(hash(profile))
     private fun file(profile: String, from: String, to: String) = directory(profile).resolve(hash("$from\n$to") + ".json")
 
-    @Synchronized fun read(profile: String, from: String, to: String): EventsResponse? = try {
+    @Synchronized fun read(profile: String, from: String, to: String): EventsResponse? =
+        readEntry(profile, from, to)?.resp
+
+    /** 连 ETag 一起读：条件请求要拿快照里存的令牌去问服务端。 */
+    @Synchronized fun readEntry(profile: String, from: String, to: String): CachedEvents? = try {
         val path = file(profile, from, to)
         if (Files.isSymbolicLink(directory(profile)) || Files.isSymbolicLink(path) || !Files.isRegularFile(path) || Files.size(path) > MAX_BYTES) null
         else {
             val cached = json.decodeFromString(CachedEvents.serializer(), Files.readString(path))
             val age = now() - cached.savedAtMs
-            if (age < -300_000 || age > MAX_AGE_MS) { Files.deleteIfExists(path); null } else cached.resp
+            if (age < -300_000 || age > MAX_AGE_MS) { Files.deleteIfExists(path); null } else cached
         }
     } catch (_: Exception) { null }
 
-    @Synchronized fun write(profile: String, from: String, to: String, response: EventsResponse) {
+    @Synchronized fun write(profile: String, from: String, to: String, response: EventsResponse, etag: String? = null) {
         var temporary: Path? = null
         try {
             val dir = directory(profile)
             if (Files.isSymbolicLink(dir)) return
             Files.createDirectories(dir)
             runCatching { Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------")) }
-            val text = json.encodeToString(CachedEvents.serializer(), CachedEvents(now(), response))
+            val text = json.encodeToString(CachedEvents.serializer(), CachedEvents(now(), response, etag))
             if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return
             temporary = Files.createTempFile(dir, ".snapshot-", ".tmp")
             runCatching { Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------")) }
@@ -80,6 +91,7 @@ internal class DiskEventCache(private val root: Path, private val now: () -> Lon
 object EventCache {
     private val cache by lazy { DiskEventCache(Paths.get(System.getProperty("user.home"), ".bywave-calendar", "event-cache")) }
     fun read(deviceId: String, fromIso: String, toIso: String) = cache.read(deviceId, fromIso, toIso)
-    fun write(deviceId: String, fromIso: String, toIso: String, resp: EventsResponse) = cache.write(deviceId, fromIso, toIso, resp)
+    fun readEntry(deviceId: String, fromIso: String, toIso: String) = cache.readEntry(deviceId, fromIso, toIso)
+    fun write(deviceId: String, fromIso: String, toIso: String, resp: EventsResponse, etag: String? = null) = cache.write(deviceId, fromIso, toIso, resp, etag)
     fun clear(deviceId: String) = cache.clear(deviceId)
 }

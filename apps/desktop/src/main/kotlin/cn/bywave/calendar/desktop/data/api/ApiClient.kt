@@ -65,6 +65,7 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.bearerAuth
+import io.ktor.client.request.header
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -253,6 +254,31 @@ class ApiClient(
             parameter("from", from)
             parameter("to", to)
         }
+    }
+
+    /** /events 条件请求的结果：304 时正文不必再传，调用方手上的缓存
+     *  就是最新；200 时带回正文和服务端给这个窗口的新 ETag。 */
+    sealed interface EventsFetch {
+        data class Fresh(val resp: EventsResponse, val etag: String?) : EventsFetch
+        data object NotModified : EventsFetch
+    }
+
+    /** 带 If-None-Match 的窗口拉取（主日历网格用）。令牌由服务端按
+     *  「可见日历 + 窗口 + 内容版本」算：任何一处数据变了令牌就变，
+     *  所以拿着旧令牌最多是白问一次（回 200 全量），不会漏数据。
+     *  expectSuccess=false，304 作为正常响应回到这里、先于 unwrap 判掉。 */
+    suspend fun eventsConditional(from: String, to: String, ifNoneMatch: String?): EventsFetch {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.get("$baseUrl/api/v1/events") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                parameter("from", from)
+                parameter("to", to)
+                if (!ifNoneMatch.isNullOrEmpty()) header("If-None-Match", ifNoneMatch)
+            }
+        }
+        if (resp.status == HttpStatusCode.NotModified) return EventsFetch.NotModified
+        return EventsFetch.Fresh(unwrap(resp, EventsResponse.serializer()), resp.headers["ETag"])
     }
 
     /** GET /api/v1/search?q=<needle>&limit=<n>. Server-side substring match
