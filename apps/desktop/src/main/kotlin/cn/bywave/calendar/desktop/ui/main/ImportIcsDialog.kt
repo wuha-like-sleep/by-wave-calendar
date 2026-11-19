@@ -214,7 +214,16 @@ fun ImportIcsDialog(
                 }
 
                 else -> {
-                    Column {
+                    // The whole step scrolls: the invalid-reasons list
+                    // below is unbounded, and an AlertDialog's text area
+                    // does not scroll on its own — without this, a file
+                    // with many invalid entries pushes the confirm /
+                    // cancel buttons out of a small window.
+                    Column(
+                        modifier = Modifier
+                            .heightIn(max = 440.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
                         Text(file.name)
                         Spacer(Modifier.size(12.dp))
                         Text(t("import.pickCalendar"), fontWeight = FontWeight.SemiBold)

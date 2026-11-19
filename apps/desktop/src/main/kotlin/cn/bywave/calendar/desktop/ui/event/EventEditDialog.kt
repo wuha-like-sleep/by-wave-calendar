@@ -242,10 +242,19 @@ fun EventEditDialog(
                                     if (start == null || end == null) {
                                         quickError = cn.bywave.calendar.desktop.i18n.I18n.t("event.edit.quickadd.failed")
                                     } else {
-                                        val first = EventPickerDraft(start, parseZone, form.allDay).withDisplayZone(form.displayZone)
-                                        val last = EventPickerDraft(end, parseZone, form.allDay).withDisplayZone(form.displayZone)
+                                        // 地点 / 全天 / 重复与网页端同一口径：
+                                        // 解析没说到的字段不覆盖用户已填的
+                                        // 内容；说到了就填进去（重复规则走
+                                        // RruleState.fromRrule，BYDAY 等编辑
+                                        // 器不建模的字段会原样透传）。
+                                        val newAllDay = parsed.allDay ?: form.allDay
+                                        val first = EventPickerDraft(start, parseZone, newAllDay).withDisplayZone(form.displayZone)
+                                        val last = EventPickerDraft(end, parseZone, newAllDay).withDisplayZone(form.displayZone)
                                         form = form.copy(
                                             summary = if (parsed.summary.isNotBlank()) parsed.summary else form.summary,
+                                            location = if (!parsed.location.isNullOrBlank()) parsed.location else form.location,
+                                            allDay = newAllDay,
+                                            rrule = if (parsed.rrule != null) RruleState.fromRrule(parsed.rrule) else form.rrule,
                                             start = first.value, end = last.value,
                                             originalStart = first.original, originalEnd = last.original,
                                         )

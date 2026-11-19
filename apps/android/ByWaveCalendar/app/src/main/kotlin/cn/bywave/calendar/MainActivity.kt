@@ -21,6 +21,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -40,6 +41,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import cn.bywave.calendar.data.auth.SignInPrefill
+import cn.bywave.calendar.data.store.SyncPreferences
+import cn.bywave.calendar.data.store.SyncPrefs
 import cn.bywave.calendar.i18n.LocaleHelper
 import cn.bywave.calendar.ui.calendar.CalendarScreen
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
@@ -117,7 +120,19 @@ class MainActivity : ComponentActivity() {
         receiveImportIntent(intent)
         enableEdgeToEdge()
         setContent {
-            ByWaveTheme {
+            // Three-state appearance (follow system / light / dark),
+            // persisted in the same DataStore as the other sync prefs.
+            // Default "system" reproduces the previous behaviour exactly.
+            val syncPrefs = remember { SyncPreferences(this@MainActivity) }
+            val prefs by syncPrefs.flow.collectAsState(initial = SyncPrefs())
+            val systemDark = isSystemInDarkTheme()
+            ByWaveTheme(
+                darkTheme = when (prefs.themeMode) {
+                    "light" -> false
+                    "dark" -> true
+                    else -> systemDark
+                },
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val callback by webCallback.collectAsState()
                     val importUri by incomingImport.collectAsState()
@@ -383,6 +398,7 @@ private fun AppRoot(
             val calVm: CalendarViewModel = viewModel(viewModelStoreOwner = parentEntry)
             CalendarListScreen(
                 onBack = { nav.popBackStack() },
+                onImportFile = { uri -> pendingImport = uri },
                 vm = calVm,
                 // Same pending-import pipeline as the system intents:
                 // setting it while signed in navigates to import_ics.

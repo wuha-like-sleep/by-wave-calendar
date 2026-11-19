@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
@@ -114,7 +115,12 @@ private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit)
         }
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = profile.email, fontWeight = FontWeight.Medium)
+            Text(
+                text = profile.email,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             // Strip scheme + trailing slash for compact display
             val display = profile.serverUrl
                 .removePrefix("https://").removePrefix("http://")
@@ -124,6 +130,7 @@ private fun ProfileRow(profile: Profile, isActive: Boolean, onClick: () -> Unit)
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         if (isActive) {

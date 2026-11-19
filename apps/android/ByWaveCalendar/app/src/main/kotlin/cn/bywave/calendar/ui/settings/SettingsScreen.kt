@@ -69,6 +69,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -190,6 +191,79 @@ fun SettingsScreen(
                     onClick = { showChangePassword = true },
                     trailingIcon = Icons.Default.ChevronRight,
                 )
+            }
+
+            // Appearance — three-state theme (follow system / light /
+            // dark), matching the web and the other clients. The choice
+            // lives in SyncPreferences and MainActivity feeds it into
+            // ByWaveTheme; changing it here re-renders immediately.
+            run {
+                var showThemeDialog by remember { mutableStateOf(false) }
+                val themeOptions = listOf(
+                    "system" to stringResource(R.string.settings_language_follow_system),
+                    "light" to stringResource(R.string.theme_light),
+                    "dark" to stringResource(R.string.theme_dark),
+                )
+                Section(title = stringResource(R.string.settings_appearance_section)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showThemeDialog = true }
+                            .padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(stringResource(R.string.settings_theme_title), fontWeight = FontWeight.Medium)
+                            Text(
+                                themeOptions.firstOrNull { it.first == prefs.themeMode }?.second
+                                    ?: themeOptions[0].second,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (showThemeDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showThemeDialog = false },
+                        title = { Text(stringResource(R.string.settings_theme_title)) },
+                        text = {
+                            Column {
+                                themeOptions.forEach { (mode, label) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                scope.launch { prefsStore.setThemeMode(mode) }
+                                                showThemeDialog = false
+                                            }
+                                            .padding(vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(label, modifier = Modifier.weight(1f))
+                                        if (mode == prefs.themeMode) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showThemeDialog = false }) {
+                                Text(stringResource(android.R.string.cancel))
+                            }
+                        },
+                    )
+                }
             }
 
             // Language (v0.10+) — APP 内语言覆盖。13+ 走平台 LocaleManager，
@@ -852,6 +926,7 @@ private fun ReadRow(label: String, value: String) {
             color = mutedTextColor(),
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -894,6 +969,8 @@ private fun ActionRow(
                 text = trailing,
                 color = mutedTextColor(),
                 style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Spacer(Modifier.size(6.dp))
         }

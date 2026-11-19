@@ -24,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.connect.*
@@ -89,7 +90,7 @@ fun CalendarConnectionsScreen(profile: Profile, onBack: () -> Unit) {
                                 val next = if (checked) selected + calendar.id else selected - calendar.id
                                 apply { prefsStore.selectCalendars(profile.id, next); selection = next }
                             })
-                            Text(calendar.name)
+                            Text(calendar.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     TextButton(enabled = prefs.mirrorToSystemCalendar && !localBusy, onClick = { apply {} }) { Text(CalendarCopy.text(locale, "syncNow")) }

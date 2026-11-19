@@ -30,6 +30,11 @@ struct WeekView: View {
     // Drag-to-move state. Set when a long-press completes on an event;
     // updated as the finger moves; consumed (commit/cancel) on release.
     @State private var dragState: DragState?
+    /// Column width from the event layer's latest layout pass. The drag
+    /// snap math needs it at gesture-commit time; it used to estimate
+    /// from UIScreen, which is wrong whenever the week view isn't the
+    /// full screen width (iPad split view / Stage Manager / foldables).
+    @State private var lastColumnWidth: CGFloat = 0
     // After release on a recurring event, hold this until the user picks
     // a scope (or cancels), then fire the PATCH.
     @State private var pendingMove: PendingMove?
@@ -155,20 +160,24 @@ struct WeekView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(height: 52)
+        // Minimum, not fixed: the weekday + date labels are Dynamic Type
+        // fonts, and at the largest sizes a hard 52pt clipped them.
+        .frame(minHeight: 52)
         .padding(.vertical, 4)
         .background(Color(.systemBackground))
         .overlay(Divider(), alignment: .bottom)
     }
 
     // MARK: - All-day row
-    // Each pill is ~20pt tall; cap at allDayMaxRows × 20 + padding so
-    // a busy all-day day can't push the time grid completely off
-    // screen. With 3 rows = ~70pt, comfortably under the threshold.
+    // Each pill is ~24pt tall at the default text size (caption2 line +
+    // vertical padding); cap at allDayMaxRows × 24 + padding so a busy
+    // all-day day can't push the time grid completely off screen. The
+    // per-row allowance used to be 20pt, which under-measured the pill
+    // at larger Dynamic Type sizes and let pills overlap the row frame.
     private var allDayRow: some View {
         let perDay = bucketAllDayByDay()
         let maxRows = min(allDayMaxRows, perDay.values.map { $0.count }.max() ?? 0)
-        let rowHeight = CGFloat(maxRows) * 20 + 16
+        let rowHeight = CGFloat(maxRows) * 24 + 16
         return HStack(spacing: 0) {
             Text("全天")
                 .font(.caption2)
@@ -301,6 +310,10 @@ struct WeekView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: columnWidth) { newWidth in
+                lastColumnWidth = newWidth
+            }
+            .onAppear { lastColumnWidth = columnWidth }
         }
     }
 
@@ -341,6 +354,10 @@ struct WeekView: View {
             .padding(.horizontal, 4).padding(.vertical, 3)
             .frame(width: p.width, height: max(p.height + resizeDy, 18), alignment: .topLeading)
             .background(color.opacity(bgOpacity), in: RoundedRectangle(cornerRadius: 4))
+            // The title/location are fixed-size fonts inside a
+            // duration-sized frame; without clipping, a two-line title
+            // on a short event painted over the block below it.
+            .clipShape(RoundedRectangle(cornerRadius: 4))
             // Resize handle — bottom 6pt strip, slightly darker. Gesture
             // attached separately so we can detect "is the touch on the
             // handle" by Y position in onChanged.
@@ -491,16 +508,14 @@ struct WeekView: View {
     // Snap the in-progress drag to grid increments. Day delta = full
     // columns. Time delta = 15-min increments within the column.
     private func computeSnappedMove(_ s: DragState) -> (minuteDelta: Int, dayDelta: Int) {
-        // Day delta from horizontal translation. We need column width
-        // at gesture commit time — approximate using the on-screen ratio.
-        // Since columnWidth depends on layout, we use a reasonable
-        // assumption: visible width / 7. Compute lazily off a stash that
-        // the layer captures via GeometryReader.
-        // Simpler: use the most recent columnWidth we computed in
-        // positionedEvents (cached via @State would be cleaner; for v0.9
-        // we read from UIScreen.main.bounds and trust it).
-        let estimatedWidth = (UIScreen.main.bounds.width - timeGutterWidth) / 7
-        let dayDelta = Int((s.dx / estimatedWidth).rounded())
+        // Day delta from horizontal translation, using the column width
+        // the event layer actually laid out with (stashed via onChange
+        // above). The UIScreen estimate remains only as a fallback for a
+        // drag that somehow starts before the first layout pass.
+        let columnWidth = lastColumnWidth > 0
+            ? lastColumnWidth
+            : (UIScreen.main.bounds.width - timeGutterWidth) / 7
+        let dayDelta = Int((s.dx / columnWidth).rounded())
         // Minutes from vertical translation: dy / hourHeight * 60
         let rawMin = (s.dy / hourHeight) * 60.0
         // Round to nearest 15-min step

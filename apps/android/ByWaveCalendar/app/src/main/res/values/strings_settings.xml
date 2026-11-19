@@ -23,6 +23,7 @@
     <string name="callist_title">管理日历</string>
     <string name="callist_empty">还没有日历</string>
     <string name="callist_edit">编辑</string>
+    <string name="callist_import_file">从文件导入 .ics</string>
     <string name="callist_edit_title">编辑日历</string>
     <string name="callist_saved">已保存</string>
     <string name="callist_save_failed">保存失败</string>

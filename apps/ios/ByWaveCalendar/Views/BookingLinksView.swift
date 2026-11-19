@@ -413,6 +413,8 @@ struct EditBookingLinkView: View {
     @State private var notifyEmail: Bool = true
     @State private var saving = false
     @State private var errorMessage: String?
+    @State private var bookings: [Booking] = []
+    @State private var bookingsLoaded = false
 
     private var normalizedSlug: String {
         slug.trimmingCharacters(in: .whitespaces).lowercased()
@@ -527,11 +529,56 @@ struct EditBookingLinkView: View {
                 Text("公开链接")
             }
 
+            // Bookings received through this link. The API client and
+            // DTO existed but nothing ever called them, so hosts had to
+            // go to the web to see who booked. Read-only list; managing
+            // a booking still happens from the calendar event itself.
+            Section {
+                if !bookingsLoaded {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("加载中…").foregroundStyle(.secondary)
+                    }
+                } else if bookings.isEmpty {
+                    Text("暂无预约").foregroundStyle(.secondary)
+                } else {
+                    ForEach(bookings) { booking in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(booking.guestName).fontWeight(.medium)
+                                if booking.cancelledAt != nil {
+                                    Text("已取消")
+                                        .font(.caption)
+                                        .foregroundStyle(.red)
+                                }
+                            }
+                            Text(booking.guestEmail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(booking.startsAt.formatted(date: .abbreviated, time: .shortened))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } header: {
+                Text("预约记录")
+            }
+
             if let errorMessage {
                 Section {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
                 }
             }
+        }
+        .task {
+            // Best-effort: a failed bookings fetch must not block editing
+            // the link itself, so errors just leave the section empty.
+            if let list = try? await APIClient(state: state).listBookings(forLinkId: link.id) {
+                bookings = list
+            }
+            bookingsLoaded = true
         }
         .navigationTitle(link.title)
         .navigationBarTitleDisplayMode(.inline)

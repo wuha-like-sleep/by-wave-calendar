@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -167,7 +168,7 @@ private fun CalendarConnectionContent(
             }
             state.pairs.forEach { pair ->
                 key(pair.id) { ConnectionCard {
-                    Text((state.calendars.find { it.id == pair.calendarId }?.name ?: "ByWave") + "  ↔  " + pair.remoteName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text((state.calendars.find { it.id == pair.calendarId }?.name ?: "ByWave") + "  ↔  " + pair.remoteName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(if (!pair.enabled) t("paused") else pair.lastSyncedAt?.let { t("lastSync") + " · " + formatSyncTime(it, displayTimeZone, locale) } ?: t("pending"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     pair.error?.let { Text(t("error." + if (it in setOf("invalid_grant", "microsoft_reconnect", "calendar_changed_retry")) it else "unavailable"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -178,7 +179,7 @@ private fun CalendarConnectionContent(
                         Text(t("conflictTitle"), color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Medium)
                         listOf("ByWave" to conflict.left, "Outlook" to conflict.right).forEach { (name, item) ->
                             Text(name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                            Text(item?.content?.summary ?: t("deleted"), fontWeight = FontWeight.Medium)
+                            Text(item?.content?.summary ?: t("deleted"), fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             item?.content?.let {
                                 Text(formatSyncTime(it.startsAt, displayTimeZone, locale) + " — " + formatSyncTime(it.endsAt, displayTimeZone, locale), style = MaterialTheme.typography.bodySmall)
                                 if (it.location.isNotEmpty()) Text(it.location, style = MaterialTheme.typography.bodySmall)

@@ -29,6 +29,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -41,6 +42,7 @@ object SyncPrefsKeys {
     val MIRROR_TO_SYSTEM = booleanPreferencesKey("mirror_to_system_calendar")
     val REMINDERS_ENABLED = booleanPreferencesKey("reminders_enabled")
     val REMINDER_LEAD_MIN = intPreferencesKey("reminder_lead_minutes")
+    val THEME_MODE = stringPreferencesKey("theme_mode")
 }
 
 /** 提醒的默认值。和桌面端对齐；两处默认值只有一个来源，省得再走歪。 */
@@ -52,6 +54,11 @@ data class SyncPrefs(
     /** Minutes before event start to fire the local notification.
      *  iOS uses 15 by default; matching that. */
     val reminderLeadMinutes: Int = 15,
+    /** Appearance: "system" | "light" | "dark". Until now the app only
+     *  followed the system; the web and the other clients all offer the
+     *  three-state choice. Default stays "system" so existing users see
+     *  no change. */
+    val themeMode: String = "system",
 )
 
 class SyncPreferences(private val context: Context) {
@@ -77,9 +84,14 @@ class SyncPreferences(private val context: Context) {
         context.syncDataStore.edit { it[SyncPrefsKeys.REMINDER_LEAD_MIN] = minutes }
     }
 
+    suspend fun setThemeMode(mode: String) {
+        context.syncDataStore.edit { it[SyncPrefsKeys.THEME_MODE] = mode }
+    }
+
     private fun Preferences.toModel(): SyncPrefs = SyncPrefs(
         mirrorToSystemCalendar = this[SyncPrefsKeys.MIRROR_TO_SYSTEM] ?: false,
         remindersEnabled = this[SyncPrefsKeys.REMINDERS_ENABLED] ?: REMINDERS_DEFAULT,
         reminderLeadMinutes = this[SyncPrefsKeys.REMINDER_LEAD_MIN] ?: 15,
+        themeMode = this[SyncPrefsKeys.THEME_MODE] ?: "system",
     )
 }

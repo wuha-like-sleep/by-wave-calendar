@@ -44,6 +44,17 @@ internal fun parseHex(hex: String?): Color {
 internal fun calendarColor(event: EventDTO, calendars: List<CalendarMeta>): Color =
     parseHex(calendars.firstOrNull { it.id == event.calendarId }?.color)
 
+/** Readable text color on top of a calendar color. Calendar colors come
+ *  from the server as arbitrary #rrggbb (the web palette includes light
+ *  yellows/greys), so the white text the chips used unconditionally was
+ *  unreadable on light calendars created on the web. A plain luminance
+ *  cut keeps saturated colors on white text and flips light ones to a
+ *  dark neutral. */
+internal fun onCalendarColor(bg: Color): Color {
+    val luminance = 0.299f * bg.red + 0.587f * bg.green + 0.114f * bg.blue
+    return if (luminance > 0.72f) Color(0xFF1C1B1F) else Color.White
+}
+
 internal fun calendarName(event: EventDTO, calendars: List<CalendarMeta>): String? =
     calendars.firstOrNull { it.id == event.calendarId }?.name
 

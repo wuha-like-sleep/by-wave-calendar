@@ -6,6 +6,11 @@
 "完成" = "Terminé";
 "取消" = "Annuler";
 "保存" = "Enregistrer";
+"删除日历" = "Supprimer le calendrier";
+"预约记录" = "Réservations";
+"暂无预约" = "Aucune réservation pour le moment";
+"加载中…" = "Chargement…";
+"确定要删除这个日历吗？其中的所有事件将一并删除，此操作无法撤销。" = "Supprimer ce calendrier ? Tous ses événements seront également supprimés. Cette action est irréversible.";
 "删除" = "Supprimer";
 "确定" = "OK";
 "好" = "OK";
@@ -129,6 +134,9 @@
 "隐私政策" = "Politique de confidentialité";
 "使用条款" = "Conditions d’utilisation";
 "GitHub 仓库" = "Dépôt GitHub";
+"帮助" = "Aide";
+"帮助与支持" = "Aide et assistance";
+"常见问题与联系方式" = "FAQ et moyens de contact";
 "自托管日历，专为你设计" = "Calendrier auto-hébergé, conçu pour vous";
 
 // MARK: - Calendar list / filter
@@ -382,11 +390,17 @@
 "已删除「%@」" = "« %@ » supprimé";
 "撤销删除" = "Annuler";
 "快速新建" = "Création rapide";
+"quickadd.rrule.daily" = "Tous les jours";
+"quickadd.rrule.weekly" = "Chaque semaine";
+"quickadd.rrule.weeklyDay" = "Chaque %@";
+"quickadd.rrule.biweekly" = "Toutes les deux semaines";
+"quickadd.rrule.workdays" = "Jours ouvrés";
+"quickadd.rrule.monthly" = "Chaque mois";
+"quickadd.rrule.yearly" = "Chaque année";
+"quickadd.rrule.remove" = "Supprimer la répétition";
 "试试：明天下午3点和老王开会" = "Essayez : réunion demain à 15 h";
 "填入" = "Remplir";
 "没看懂，换个说法试试" = "Impossible d’interpréter. Essayez une autre formulation";
-"删除后 5 秒内可撤销。" = "Vous pouvez annuler pendant 5 secondes après la suppression.";
-"删除后 5 秒内可撤销。重复事件请进详情删除。" = "Vous pouvez annuler pendant 5 secondes après la suppression. Supprimez les événements récurrents depuis le détail.";
 "删除后 5 秒内可撤销。" = "Vous pouvez annuler dans les 5 secondes après la suppression.";
 "删除后 5 秒内可撤销。重复事件请进详情删除。" = "Annulation possible pendant 5 secondes. Pour les événements récurrents, supprimez depuis les détails.";
 "密码错误" = "Mot de passe incorrect";

@@ -98,6 +98,10 @@
     <string name="settings_language_title">Langue de l\'APP</string>
     <string name="settings_language_desc">Choisissez la langue de l\'APP, en remplaçant celle du système.</string>
     <string name="settings_language_follow_system">Suivre le système</string>
+    <string name="settings_appearance_section">Apparence</string>
+    <string name="settings_theme_title">Thème</string>
+    <string name="theme_light">Clair</string>
+    <string name="theme_dark">Sombre</string>
     <string name="settings_language_zh">简体中文</string>
     <string name="settings_language_en">English</string>
 
@@ -170,6 +174,10 @@
     <string name="booking_create_title">Nouveau lien de réservation</string>
     <string name="booking_created">Lien de réservation créé</string>
     <string name="booking_create_failed">Impossible de créer le lien de réservation</string>
+    <string name="booking_edit">Modifier</string>
+    <string name="booking_edit_title">Modifier le lien de réservation</string>
+    <string name="booking_save">Enregistrer</string>
+    <string name="booking_saved">Lien de réservation enregistré</string>
     <string name="booking_slug">Slug</string>
     <string name="booking_slug_hint">Le suffixe de l\'URL publique, p. ex. book/your-slug. Lettres minuscules, chiffres et traits d\'union uniquement.</string>
     <string name="booking_slug_invalid">Lettres minuscules, chiffres et traits d\'union uniquement, commençant par une lettre ou un chiffre, 31 caractères maximum.</string>
@@ -209,6 +217,8 @@
     <string name="copied_to_clipboard">Copié</string>
     <string name="quickadd_hint">Ex. : 明天 下午3点 牙医 (chinois)</string>
     <string name="quickadd_failed">Analyse impossible ; saisie manuelle</string>
+    <string name="quickadd_recurrence_label">Récurrence</string>
+    <string name="quickadd_recurrence_remove">Supprimer</string>
     <string name="quickadd_cd">Analyser</string>
     <string name="action_undo">Annuler</string>
     <string name="event_deleted">Supprimé</string>

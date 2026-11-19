@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -129,7 +130,10 @@ private val CELL_HEADER_HEIGHT = 30.dp
 @Composable
 private fun WeekdayHeader() {
     Row(
-        modifier = Modifier.fillMaxWidth().height(28.dp),
+        // min height, not fixed: at large font scales the weekday labels
+        // need more than 28dp or they clip top and bottom (the day cells
+        // below already adapt to fontScale; the header must too).
+        modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // Mon-anchored narrow weekday labels in the device's locale
@@ -170,7 +174,7 @@ private fun DayCell(
 ) {
     val isToday = day == LocalDate.now()
     val isInMonth = YearMonth.from(day) == monthAnchor
-    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
 
     Column(
         modifier = modifier
@@ -220,7 +224,7 @@ private fun DayCell(
                     .background(color.copy(alpha = 0.9f))
                     .padding(horizontal = 4.dp, vertical = 1.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
+                color = onCalendarColor(color),
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

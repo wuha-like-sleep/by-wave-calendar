@@ -23,6 +23,7 @@
     <string name="callist_title">カレンダーを管理</string>
     <string name="callist_empty">カレンダーがまだありません</string>
     <string name="callist_edit">編集</string>
+    <string name="callist_import_file">ファイルから .ics をインポート</string>
     <string name="callist_edit_title">カレンダーを編集</string>
     <string name="callist_saved">保存しました</string>
     <string name="callist_save_failed">保存に失敗しました</string>

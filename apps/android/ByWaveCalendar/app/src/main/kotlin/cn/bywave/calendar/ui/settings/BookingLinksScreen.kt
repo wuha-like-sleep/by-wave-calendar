@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -83,6 +84,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import cn.bywave.calendar.BywaveApp
@@ -121,6 +123,7 @@ fun BookingLinksScreen(
     var working by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<BookingLink?>(null) }
     var deleting by remember { mutableStateOf<BookingLink?>(null) }
 
     suspend fun reloadLinks() {
@@ -226,6 +229,7 @@ fun BookingLinksScreen(
                                 }
                             }
                         },
+                        onEdit = { editing = link },
                         onDelete = { deleting = link },
                     )
                 }
@@ -245,6 +249,19 @@ fun BookingLinksScreen(
             onDismiss = { creating = false },
             onCreated = {
                 creating = false
+                scope.launch { reloadLinks() }
+            },
+            snackbar = snackbar,
+        )
+    }
+
+    editing?.let { link ->
+        CreateBookingLinkSheet(
+            calendars = state.calendars,
+            existing = link,
+            onDismiss = { editing = null },
+            onCreated = {
+                editing = null
                 scope.launch { reloadLinks() }
             },
             snackbar = snackbar,
@@ -305,6 +322,7 @@ private fun BookingLinkCard(
     onCopy: () -> Unit,
     onOpen: () -> Unit,
     onToggleEnabled: (Boolean) -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit,
 ) {
     Column(
@@ -321,6 +339,8 @@ private fun BookingLinkCard(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (!link.enabled) {
                 AssistChip(
@@ -344,6 +364,8 @@ private fun BookingLinkCard(
             text = link.publicUrl ?: link.slug,
             style = MaterialTheme.typography.bodySmall,
             color = mutedTextColor(),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onCopy) {
@@ -366,6 +388,15 @@ private fun BookingLinkCard(
         }
         Row {
             Spacer(Modifier.weight(1f))
+            TextButton(onClick = onEdit, enabled = !working) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.size(4.dp))
+                Text(stringResource(R.string.booking_edit))
+            }
             TextButton(onClick = onDelete, enabled = !working) {
                 Icon(
                     Icons.Default.Delete,
@@ -389,6 +420,7 @@ private fun BookingLinkCard(
 @Composable
 private fun CreateBookingLinkSheet(
     calendars: List<CalendarMeta>,
+    existing: BookingLink? = null,
     onDismiss: () -> Unit,
     onCreated: () -> Unit,
     snackbar: SnackbarHostState,
@@ -397,16 +429,19 @@ private fun CreateBookingLinkSheet(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var slug by remember { mutableStateOf("") }
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var calendarId by remember { mutableStateOf(calendars.firstOrNull()?.id ?: "") }
-    var duration by remember { mutableStateOf("30") }
-    var minNotice by remember { mutableStateOf("4") }
-    var maxDays by remember { mutableStateOf("60") }
-    var bufferBefore by remember { mutableStateOf("0") }
-    var bufferAfter by remember { mutableStateOf("0") }
-    var notifyEmail by remember { mutableStateOf(false) }
+    // With `existing` set the sheet edits that link instead of creating a
+    // new one — updateBookingLink existed from the start but only the
+    // enable/pause toggle ever called it.
+    var slug by remember { mutableStateOf(existing?.slug ?: "") }
+    var title by remember { mutableStateOf(existing?.title ?: "") }
+    var description by remember { mutableStateOf(existing?.description ?: "") }
+    var calendarId by remember { mutableStateOf(existing?.calendarId ?: calendars.firstOrNull()?.id ?: "") }
+    var duration by remember { mutableStateOf(existing?.durationMinutes?.toString() ?: "30") }
+    var minNotice by remember { mutableStateOf(existing?.minNoticeHours?.toString() ?: "4") }
+    var maxDays by remember { mutableStateOf(existing?.maxDaysAhead?.toString() ?: "60") }
+    var bufferBefore by remember { mutableStateOf(existing?.bufferBeforeMin?.toString() ?: "0") }
+    var bufferAfter by remember { mutableStateOf(existing?.bufferAfterMin?.toString() ?: "0") }
+    var notifyEmail by remember { mutableStateOf(existing?.notifyEmail ?: false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -436,7 +471,7 @@ private fun CreateBookingLinkSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = stringResource(R.string.booking_create_title),
+                text = stringResource(if (existing != null) R.string.booking_edit_title else R.string.booking_create_title),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -578,25 +613,44 @@ private fun CreateBookingLinkSheet(
                                 val profile = BywaveApp.instance.profiles.active()
                                     ?: throw IllegalStateException(BywaveApp.instance.getString(R.string.cal_err_not_signed_in))
                                 val client = ApiClient.forProfile(profile, BywaveApp.instance.profiles)
-                                client.api.createBookingLink(
-                                    BookingLinkCreateRequest(
-                                        slug = slug.trim(),
-                                        title = title.trim(),
-                                        description = description.takeIf { it.isNotBlank() },
-                                        calendarId = calendarId,
-                                        durationMinutes = durationInt ?: 30,
-                                        minNoticeHours = minNoticeInt ?: 0,
-                                        maxDaysAhead = maxDaysInt ?: 60,
-                                        bufferBeforeMin = bufferBeforeInt?.takeIf { it > 0 },
-                                        bufferAfterMin = bufferAfterInt?.takeIf { it > 0 },
-                                        notifyEmail = notifyEmail.takeIf { it },
-                                    ),
-                                )
-                                snackbar.showSnackbar(context.getString(R.string.booking_created))
+                                if (existing != null) {
+                                    client.api.updateBookingLink(
+                                        existing.id,
+                                        BookingLinkUpdateInput(
+                                            slug = slug.trim(),
+                                            title = title.trim(),
+                                            description = description.takeIf { it.isNotBlank() },
+                                            calendarId = calendarId,
+                                            durationMinutes = durationInt ?: 30,
+                                            minNoticeHours = minNoticeInt ?: 0,
+                                            maxDaysAhead = maxDaysInt ?: 60,
+                                            bufferBeforeMin = bufferBeforeInt?.takeIf { it > 0 },
+                                            bufferAfterMin = bufferAfterInt?.takeIf { it > 0 },
+                                            notifyEmail = notifyEmail,
+                                        ),
+                                    )
+                                    snackbar.showSnackbar(context.getString(R.string.booking_saved))
+                                } else {
+                                    client.api.createBookingLink(
+                                        BookingLinkCreateRequest(
+                                            slug = slug.trim(),
+                                            title = title.trim(),
+                                            description = description.takeIf { it.isNotBlank() },
+                                            calendarId = calendarId,
+                                            durationMinutes = durationInt ?: 30,
+                                            minNoticeHours = minNoticeInt ?: 0,
+                                            maxDaysAhead = maxDaysInt ?: 60,
+                                            bufferBeforeMin = bufferBeforeInt?.takeIf { it > 0 },
+                                            bufferAfterMin = bufferAfterInt?.takeIf { it > 0 },
+                                            notifyEmail = notifyEmail.takeIf { it },
+                                        ),
+                                    )
+                                    snackbar.showSnackbar(context.getString(R.string.booking_created))
+                                }
                                 onCreated()
                             } catch (e: Exception) {
                                 error = serverErrorMessage(e)
-                                    ?: context.getString(R.string.booking_create_failed)
+                                    ?: context.getString(if (existing != null) R.string.booking_update_failed else R.string.booking_create_failed)
                             } finally {
                                 busy = false
                             }
@@ -610,7 +664,7 @@ private fun CreateBookingLinkSheet(
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
                     } else {
-                        Text(stringResource(R.string.booking_create))
+                        Text(stringResource(if (existing != null) R.string.booking_save else R.string.booking_create))
                     }
                 }
             }

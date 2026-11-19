@@ -23,6 +23,7 @@
     <string name="callist_title">캘린더 관리</string>
     <string name="callist_empty">아직 캘린더가 없습니다</string>
     <string name="callist_edit">편집</string>
+    <string name="callist_import_file">파일에서 .ics 가져오기</string>
     <string name="callist_edit_title">캘린더 편집</string>
     <string name="callist_saved">저장됨</string>
     <string name="callist_save_failed">저장 실패</string>

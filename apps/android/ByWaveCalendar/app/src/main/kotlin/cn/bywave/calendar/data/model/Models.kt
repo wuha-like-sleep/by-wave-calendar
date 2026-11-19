@@ -389,6 +389,12 @@ data class ParseEventResult(
     /** naive local wall-clock "YYYY-MM-DDTHH:mm:ss" */
     val startsAt: String,
     val endsAt: String,
+    // Optional fields the shared parser adds when the phrase carries
+    // them (same shape as the web ParsedEvent). Older servers omit
+    // them; all three default to "not said".
+    val location: String? = null,
+    val rrule: String? = null,
+    val allDay: Boolean? = null,
 )
 
 // ---- Edit / create ----

@@ -45,6 +45,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventDTO
@@ -228,17 +229,29 @@ private fun AgendaRow(
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = timeText,
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )
+            if (!event.location.isNullOrBlank()) {
+                Text(
+                    text = event.location!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedTextColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (cal != null) {
                 Text(
                     text = cal,
                     style = MaterialTheme.typography.labelSmall,
                     color = mutedTextColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

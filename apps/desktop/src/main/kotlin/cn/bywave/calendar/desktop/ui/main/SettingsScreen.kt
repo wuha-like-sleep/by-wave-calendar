@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -72,6 +73,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -332,11 +334,13 @@ private fun AccountSection(
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(p.email, fontWeight = FontWeight.Medium)
+                    Text(p.email, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         p.serverUrl,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (!isActive) {
@@ -535,12 +539,14 @@ private fun CalendarsSection(
                     )
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(cal.name, fontWeight = FontWeight.Medium)
+                        Text(cal.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         if (!cal.timezone.isNullOrEmpty()) {
                             Text(
                                 cal.timezone,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -788,6 +794,8 @@ private fun ShareLinksDialog(
                                 Text(
                                     tok.label?.ifBlank { null } ?: t("settings.share.unnamed"),
                                     fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Text(
                                     tok.url,
@@ -795,6 +803,7 @@ private fun ShareLinksDialog(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                                     maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(onClick = {
@@ -1209,6 +1218,7 @@ private fun BookingSection(
     // The id the user just copied — drives a transient "已复制" hint.
     var copied by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }            // create dialog open
+    var editing by remember { mutableStateOf<BookingLink?>(null) }  // edit dialog target
     var deleting by remember { mutableStateOf<BookingLink?>(null) } // delete confirm target
     // Bump to force a reload after create / toggle / delete.
     var reloadKey by remember { mutableStateOf(0) }
@@ -1275,7 +1285,7 @@ private fun BookingSection(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(link.title, fontWeight = FontWeight.Medium)
+                                Text(link.title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     cn.bywave.calendar.desktop.i18n.I18n.t(
                                         "booking.durationValue",
@@ -1310,6 +1320,13 @@ private fun BookingSection(
                                     }
                                 },
                             )
+                            IconButton(onClick = { editing = link }) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = t("booking.edit"),
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
                             IconButton(onClick = { deleting = link }) {
                                 Icon(
                                     Icons.Default.Delete,
@@ -1394,6 +1411,19 @@ private fun BookingSection(
         )
     }
 
+    editing?.let { link ->
+        BookingCreateDialog(
+            profile = profile,
+            calendars = calendars,
+            existing = link,
+            onDismiss = { editing = null },
+            onCreated = {
+                editing = null
+                reloadKey++
+            },
+        )
+    }
+
     deleting?.let { link ->
         BookingDeleteDialog(
             profile = profile,
@@ -1407,14 +1437,18 @@ private fun BookingSection(
     }
 }
 
-/** Create-a-booking-link dialog. Owns its own form state + a short-lived
- *  ApiClient for the POST, surfacing API errors inline (mirrors
- *  CalendarEditDialog). weeklyAvailability is left to the server default —
- *  no availability editor here for v1. */
+/** Create-or-edit booking-link dialog. Owns its own form state + a
+ *  short-lived ApiClient for the POST/PATCH, surfacing API errors inline
+ *  (mirrors CalendarEditDialog). With `existing` set the form is seeded
+ *  from that link and saving PATCHes it — the update endpoint existed
+ *  from the start; this dialog is what finally wires it up.
+ *  weeklyAvailability is left to the server default — no availability
+ *  editor here for v1. */
 @Composable
 private fun BookingCreateDialog(
     profile: Profile,
     calendars: List<CalendarMeta>,
+    existing: BookingLink? = null,
     onDismiss: () -> Unit,
     onCreated: () -> Unit,
 ) {
@@ -1422,18 +1456,19 @@ private fun BookingCreateDialog(
     val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
     val scope = rememberCoroutineScope()
 
-    var slug by remember { mutableStateOf("") }
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
+    var slug by remember { mutableStateOf(existing?.slug ?: "") }
+    var title by remember { mutableStateOf(existing?.title ?: "") }
+    var description by remember { mutableStateOf(existing?.description ?: "") }
     // Default the calendar picker to the first calendar (the caller only
-    // opens this dialog when calendars is non-empty).
-    var calendarId by remember { mutableStateOf(calendars.first().id) }
-    var duration by remember { mutableStateOf("30") }
-    var minNotice by remember { mutableStateOf("4") }
-    var maxDays by remember { mutableStateOf("30") }
-    var bufferBefore by remember { mutableStateOf("0") }
-    var bufferAfter by remember { mutableStateOf("0") }
-    var notifyEmail by remember { mutableStateOf(true) }
+    // opens this dialog when calendars is non-empty); editing keeps the
+    // link's own calendar.
+    var calendarId by remember { mutableStateOf(existing?.calendarId ?: calendars.first().id) }
+    var duration by remember { mutableStateOf(existing?.durationMinutes?.toString() ?: "30") }
+    var minNotice by remember { mutableStateOf(existing?.minNoticeHours?.toString() ?: "4") }
+    var maxDays by remember { mutableStateOf(existing?.maxDaysAhead?.toString() ?: "30") }
+    var bufferBefore by remember { mutableStateOf(existing?.bufferBeforeMin?.toString() ?: "0") }
+    var bufferAfter by remember { mutableStateOf(existing?.bufferAfterMin?.toString() ?: "0") }
+    var notifyEmail by remember { mutableStateOf(existing?.notifyEmail ?: true) }
 
     var saving by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -1454,7 +1489,7 @@ private fun BookingCreateDialog(
         onDismissRequest = { if (!saving) onDismiss() },
         title = {
             Text(
-                t("booking.createTitle"),
+                if (existing != null) t("booking.editTitle") else t("booking.createTitle"),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -1611,20 +1646,38 @@ private fun BookingCreateDialog(
                     scope.launch {
                         val api = ApiClient(profile)
                         runCatching {
-                            api.createBookingLink(
-                                BookingLinkCreateInput(
-                                    slug = slug.trim(),
-                                    title = title.trim(),
-                                    description = description.trim().ifBlank { null },
-                                    calendarId = calendarId,
-                                    durationMinutes = durationInt!!,
-                                    minNoticeHours = minNoticeInt!!,
-                                    maxDaysAhead = maxDaysInt!!,
-                                    bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
-                                    bufferAfterMin = bufferAfter.trim().toIntOrNull(),
-                                    notifyEmail = notifyEmail,
-                                ),
-                            )
+                            if (existing != null) {
+                                api.updateBookingLink(
+                                    existing.id,
+                                    BookingLinkUpdateInput(
+                                        slug = slug.trim(),
+                                        title = title.trim(),
+                                        description = description.trim().ifBlank { null },
+                                        calendarId = calendarId,
+                                        durationMinutes = durationInt!!,
+                                        minNoticeHours = minNoticeInt!!,
+                                        maxDaysAhead = maxDaysInt!!,
+                                        bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
+                                        bufferAfterMin = bufferAfter.trim().toIntOrNull(),
+                                        notifyEmail = notifyEmail,
+                                    ),
+                                )
+                            } else {
+                                api.createBookingLink(
+                                    BookingLinkCreateInput(
+                                        slug = slug.trim(),
+                                        title = title.trim(),
+                                        description = description.trim().ifBlank { null },
+                                        calendarId = calendarId,
+                                        durationMinutes = durationInt!!,
+                                        minNoticeHours = minNoticeInt!!,
+                                        maxDaysAhead = maxDaysInt!!,
+                                        bufferBeforeMin = bufferBefore.trim().toIntOrNull(),
+                                        bufferAfterMin = bufferAfter.trim().toIntOrNull(),
+                                        notifyEmail = notifyEmail,
+                                    ),
+                                )
+                            }
                         }.onSuccess {
                             api.close()
                             saving = false
@@ -1632,7 +1685,7 @@ private fun BookingCreateDialog(
                         }.onFailure {
                             api.close()
                             saving = false
-                            errorMsg = userFacingError(it, "booking.createFailed")
+                            errorMsg = userFacingError(it, if (existing != null) "booking.saveFailed" else "booking.createFailed")
                         }
                     }
                 },
@@ -1642,7 +1695,7 @@ private fun BookingCreateDialog(
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                 }
-                Text(t("booking.create"))
+                Text(if (existing != null) t("booking.save") else t("booking.create"))
             }
         },
         dismissButton = {
@@ -1803,6 +1856,8 @@ private fun SecuritySection(profile: Profile) {
         HorizontalDivider()
         OpenInWebRow(profile = profile, next = "/app/settings/security#mfa", title = t("settings.security.mfa"), subtitle = t("settings.security.mfa.sub"))
         HorizontalDivider()
+        OpenInWebRow(profile = profile, next = "/app/settings/devices#api-tokens", title = t("settings.security.apiTokens"), subtitle = t("settings.security.apiTokens.sub"))
+        HorizontalDivider()
         OpenInWebRow(profile = profile, next = "/app/logins", title = t("settings.security.loginHistory"), subtitle = t("settings.security.loginHistory.sub"))
     }
 
@@ -1866,7 +1921,14 @@ private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
                 }
             } else {
                 Column(
-                    modifier = Modifier.width(380.dp),
+                    // Scrollable as a safety net: a long server error
+                    // under a large system font must not push the
+                    // buttons out of the dialog (sibling dialogs in
+                    // this file already scroll their bodies).
+                    modifier = Modifier
+                        .width(380.dp)
+                        .heightIn(max = 480.dp)
+                        .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedTextField(
@@ -2037,7 +2099,7 @@ private fun DevicesSection(profile: Profile) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(device.label, fontWeight = FontWeight.Medium)
+                                Text(device.label, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                                 if (isCurrent) {
                                     Spacer(Modifier.width(8.dp))
                                     Text(
@@ -2410,6 +2472,23 @@ private fun AboutSection(profile: Profile, onCheckUpdate: () -> Unit) {
             Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
             Text(t("settings.about.github"))
+        }
+    }
+
+    // 帮助与支持 — the site's /support page (FAQ + contact channels),
+    // on the user's own server like the legal pages below, opened in
+    // the APP's current language.
+    Spacer(Modifier.height(24.dp))
+    SectionTitle(t("settings.about.help"))
+    SectionCard {
+        val langCode = cn.bywave.calendar.desktop.i18n.I18n.current.value.code
+        val base = profile.serverUrl.trimEnd('/')
+        TextButton(onClick = {
+            runCatching { Desktop.getDesktop().browse(URI("$base/support?lang=$langCode")) }
+        }) {
+            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(t("settings.about.help"))
         }
     }
 

@@ -23,6 +23,7 @@
     <string name="callist_title">管理行事曆</string>
     <string name="callist_empty">尚未有行事曆</string>
     <string name="callist_edit">編輯</string>
+    <string name="callist_import_file">從檔案匯入 .ics</string>
     <string name="callist_edit_title">編輯行事曆</string>
     <string name="callist_saved">已儲存</string>
     <string name="callist_save_failed">儲存失敗</string>

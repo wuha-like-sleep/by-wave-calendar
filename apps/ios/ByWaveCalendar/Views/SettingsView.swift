@@ -1002,6 +1002,23 @@ struct AboutSettingsPage: View {
                 Text("法律")
             }
 
+            // Help & support — the site's /support page (FAQ + contact
+            // channels) on the active server, in the app's language.
+            // Unlike the legal rows this opens in the free-navigating
+            // Safari sheet: the support page's job is to route people
+            // onward (FAQ anchors, contact links), so locking
+            // navigation would defeat it. Signed out → the project
+            // site, mirroring Android's legalUrl fallback.
+            Section {
+                projectRow(title: "帮助与支持",
+                           subtitle: "常见问题与联系方式",
+                           systemImage: "questionmark.circle.fill",
+                           tint: .orange,
+                           url: supportURL)
+            } header: {
+                Text("帮助")
+            }
+
             Section {
                 projectRow(title: "GitHub 仓库",
                            subtitle: "查看源码 / 提 issue / 加星支持",
@@ -1106,6 +1123,18 @@ struct AboutSettingsPage: View {
             }
             .padding(.vertical, 2)
         }
+    }
+
+    /// /support on the active server (project site when signed out),
+    /// with ?lang= in the app's current language, like the legal rows.
+    private var supportURL: URL {
+        let base = state.serverURL ?? URL(string: "https://rl.lz-ss.com")!
+        let plain = base.appendingPathComponent("/support")
+        guard let lang = Self.serverLangParam(LocaleManager.shared.current),
+              var comps = URLComponents(url: plain, resolvingAgainstBaseURL: false)
+        else { return plain }
+        comps.queryItems = [URLQueryItem(name: "lang", value: lang)]
+        return comps.url ?? plain
     }
 
     /// Legal-row dispatcher:
