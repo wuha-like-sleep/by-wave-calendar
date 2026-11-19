@@ -29,6 +29,12 @@ function extractPrefix(token: string): string | null {
   return m ? (m[1] ?? null) : null;
 }
 
+/** The 8-char public prefix of a token string (never the secret part).
+ *  For failure logging — the prefix is safe to record, the full token is not. */
+export function apiTokenPrefix(token: string): string | null {
+  return extractPrefix(token);
+}
+
 export type IssuedApiToken = {
   id: string;
   plain: string;

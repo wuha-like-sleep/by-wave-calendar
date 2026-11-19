@@ -43,6 +43,7 @@ import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type I
 import { buildIcsFeed } from "../services/ics.js";
 import { rawIcsStartIsUtc, timeZoneToPinOnCopy } from "../lib/event_zone.js";
 import { listRecentLogins, recordLoginEvent } from "../lib/login_history.js";
+import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { canEdit, canView, isOwner, listMembers, listPendingInvitations, listVisibleCalendarIds } from "../lib/calendar_access.js";
 import { randomBytes } from "node:crypto";
 // .ics 导入的大小上限放在 lib 里：单元测试要拿它和八门语言的文案对账，
@@ -510,6 +511,9 @@ export async function webRoutes(app: FastifyInstance) {
       // registered emails by measuring response time.
       await verifyPasswordTimingSafe(body.data.password);
       req.log.warn({ email: body.data.email, ip: req.ip }, "login_failed_no_user");
+      // 查无此人也要留痕（采样）：喷洒未注册邮箱在后台不可见的话，
+      // 「哪些邮箱正在被试」就永远查不到。见 lib/security_events.ts。
+      void recordLoginAuthFailure(req, body.data.email, null);
       return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     if (user.disabledAt) {
@@ -523,6 +527,8 @@ export async function webRoutes(app: FastifyInstance) {
     if (!(await verifyPassword(body.data.password, user.passwordHash))) {
       await recordFailedLogin(user);
       req.log.warn({ userId: user.id, email: body.data.email, ip: req.ip }, "login_failed");
+      // 与计入锁定的同一步留痕（采样写审计），后台才有登录失败聚合可看。
+      void recordLoginAuthFailure(req, user.email, user.id);
       return redirectWith(reply, "/login", { error: tr(req, "flash.login.badCredentials") });
     }
     await resetFailedLogin(user.id);

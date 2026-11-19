@@ -160,6 +160,7 @@ import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
 import { verifyPassword, verifyPasswordTimingSafe } from "../lib/password.js";
 import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { userIsActive } from "../lib/user_state.js";
 import { issueRefreshToken, signAccessToken } from "../lib/device_tokens.js";
 import {
@@ -383,6 +384,8 @@ export async function deviceRoutes(app: FastifyInstance) {
       // Burn the same bcrypt CPU as a real verify so the response time
       // doesn't leak whether the email is registered.
       await verifyPasswordTimingSafe(body.data.password);
+      // 查无此人也要留痕（采样写审计，见 lib/security_events.ts）。
+      void recordLoginAuthFailure(req, body.data.email, null);
       return reply.code(401).send({ error: "invalid_credentials" });
     }
     if (!userIsActive(user)) {
@@ -393,6 +396,7 @@ export async function deviceRoutes(app: FastifyInstance) {
     }
     if (!(await verifyPassword(body.data.password, user.passwordHash))) {
       await recordFailedLogin(user);
+      void recordLoginAuthFailure(req, user.email, user.id);
       return reply.code(401).send({ error: "invalid_credentials" });
     }
     await resetFailedLogin(user.id);
@@ -495,6 +499,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       // **验证码输错也算进账号锁定。** 以前这张票在输错之后还留着，5 分钟里只受
       // 每分钟 12 次的限流约束，输错不计入账号锁定。现在和密码错走同一套锁定。
       await recordFailedLogin(user);
+      void recordLoginAuthFailure(req, user.email, user.id, "mfa");
       const [fresh] = await db.select().from(schema.users).where(eq(schema.users.id, user.id)).limit(1);
       if (fresh && isLocked(fresh)) {
         mfaPendingTokens.delete(body.data.mfaToken);

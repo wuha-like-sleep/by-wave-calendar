@@ -8,6 +8,7 @@ import { userIsActive } from "../lib/user_state.js";
 import { ok, err } from "../lib/api_response.js";
 import { env } from "../env.js";
 import { isLocked, recordFailedLogin, resetFailedLogin } from "../lib/login_lockout.js";
+import { recordLoginAuthFailure } from "../lib/security_events.js";
 import { provisionAccount, type ProvisionDenial } from "../lib/account_provisioning.js";
 
 // Tightened schema — same length range as the web flow; the web routes
@@ -125,6 +126,8 @@ export async function authRoutes(app: FastifyInstance) {
       // Timing-safe: burn the same CPU as a real verify so the
       // does-this-email-exist channel is closed.
       await verifyPasswordTimingSafe(loginBody.password);
+      // 查无此人也要留痕（采样写审计，见 lib/security_events.ts）。
+      void recordLoginAuthFailure(req, loginBody.email, null);
       return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
     }
     // Account lockout — mirror the web /login path so the JSON API can't be
@@ -136,6 +139,7 @@ export async function authRoutes(app: FastifyInstance) {
     const passOk = await verifyPassword(loginBody.password, user.passwordHash);
     if (!passOk) {
       await recordFailedLogin(user);
+      void recordLoginAuthFailure(req, user.email, user.id);
       return err(req, reply, 401, "invalid_credentials", "邮箱或密码错误");
     }
     // Disabled-account gate: return the same 401 so we don't leak the

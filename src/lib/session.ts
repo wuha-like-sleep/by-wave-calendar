@@ -440,7 +440,7 @@ export async function requireUserOrSend(
       return null;
     }
 
-    const { looksLikeApiToken, verifyApiToken, touchApiToken } = await import("./api_token.js");
+    const { looksLikeApiToken, verifyApiToken, touchApiToken, apiTokenPrefix } = await import("./api_token.js");
     if (looksLikeApiToken(token)) {
       const verified = await verifyApiToken(token);
       if (verified) {
@@ -463,6 +463,11 @@ export async function requireUserOrSend(
           return u;
         }
       }
+      // 验证失败留痕（采样写审计，见 lib/security_events.ts）。在这之前
+      // 失败只回一个统一 401、什么都不记 —— 拿词表喷 token 猜测在服务端
+      // 完全不可见。只记 prefix，绝不记完整 token。
+      const { recordApiTokenAuthFailure } = await import("./security_events.js");
+      void recordApiTokenAuthFailure(req, apiTokenPrefix(token) ?? "");
       reply.code(401).send({ error: "invalid_token" });
       return null;
     }
