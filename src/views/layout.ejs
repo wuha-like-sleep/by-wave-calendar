@@ -73,6 +73,9 @@
     </script>
     <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/banners.js?v=<%= v %>" defer></script>
+    <%# 铃铛未读角标：脚本自己找 #bwc-notif-badge，没有这个元素（未登录页）
+        就直接退出。轮询走带 ETag 的计数端点，没新通知时是 304 空响应。 %>
+    <script src="<%= js %>/notifications-badge.js?v=<%= v %>" defer></script>
     <%# Inline critical splash styles. Inlined so the splash renders
         before app.css finishes downloading. The same .bwc-boot-splash
         rule lives in app.css for consistency, but having it inline
