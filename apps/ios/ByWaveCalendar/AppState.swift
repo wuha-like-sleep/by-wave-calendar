@@ -298,6 +298,10 @@ final class AppState: ObservableObject {
         // 兜底：凭据已经被收掉（不管是哪条路收的），就不能算登录着。
         isSignedIn = signedIn && Keychain.read(.refreshToken(profileId: activeId)) != nil
         isBootstrapping = false
+        // 推送 token 是在 APP 启动时向 iOS 注册的，那会儿多半还没登录、
+        // 传不到服务器；确认登录着之后补注册一次，iOS 会再发一次 token
+        // 回调，PushService 就能把它传上去了。
+        if isSignedIn { PushService.shared?.reregister() }
         // Fire-and-forget theme fetch for the active profile.
         Task { await self.refreshThemeFromServer() }
     }
@@ -411,6 +415,9 @@ final class AppState: ObservableObject {
         self.accessTokenExpiresAt = accessTokenExpiresAt
         isSignedIn = true
         isBootstrapping = false
+        // 刚登录成功：补一次推送注册，把启动时尚无会话、没传上去的
+        // device token 现在传给服务器（见 PushService.reregister）。
+        PushService.shared?.reregister()
         // 被登出的那个账号重新登进来了，「它被登出了」的提示就过期了。
         if accountNotice?.profileId == profileId { accountNotice = nil }
         persistProfiles()
@@ -447,6 +454,12 @@ final class AppState: ObservableObject {
         guard let profile = activeProfile else { return }
         // 人要回登录页了；别等他下次登进来，日历顶上又冒出一条早就过去的提示。
         accountNotice = nil
+        // 趁本地凭据还没收掉，先让服务器清掉这台设备会话的推送 token：
+        // 不然登出之后，服务器还会继续给这个账号发静默推送。请求在
+        // clearServerToken 里同步用凭据快照拼好，不受下面收凭据的影响。
+        if let accessToken, let serverURL = profile.serverURL {
+            PushService.shared?.clearServerToken(serverURL: serverURL, accessToken: accessToken)
+        }
         retireCredentials(of: profile)
         endActiveSession()
         isSignedIn = false

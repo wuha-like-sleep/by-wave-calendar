@@ -93,6 +93,44 @@ final class PushService: NSObject, UIApplicationDelegate {
         completionHandler(.noData)
     }
 
+    // Ask iOS to (re-)issue the device token. Registration first runs
+    // at launch — usually BEFORE the user has signed in, in which case
+    // uploadToken has no session to upload with and the token goes
+    // nowhere until the next cold launch. AppState calls this once a
+    // sign-in is known-good (bootstrap / completePairing); iOS answers
+    // with a fresh didRegisterForRemoteNotifications, which uploads.
+    func reregister() {
+        // registerForRemoteNotifications is main-thread API; callers
+        // sit in async contexts, so hop explicitly.
+        DispatchQueue.main.async {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
+    }
+
+    // Tell the server to drop this device session's push token
+    // (POST push-token with null — the unregister form of the same
+    // endpoint). Called on user-initiated sign-out: without it the
+    // server keeps addressing silent pushes to a signed-out account
+    // until the device row is revoked or APNs reports the token stale.
+    //
+    // The request is built synchronously from a credentials snapshot
+    // on purpose: sign-out immediately retires the local refresh token
+    // and access token, so an APIClient call deferred into a Task
+    // would find no session left to authenticate with. Best-effort —
+    // if the snapshotted access token has already expired the clear
+    // fails and APNs feedback cleans the stale token up later.
+    func clearServerToken(serverURL: URL, accessToken: String) {
+        guard let url = APIClient.makeURL(server: serverURL, path: "/devices/me/push-token") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{\"pushToken\":null}".utf8)
+        Task {
+            _ = try? await URLSession.shared.data(for: request)
+        }
+    }
+
     // POST /api/v1/devices/me/push-token. Best-effort; failures are
     // logged but never surface to the user — they don't know they
     // expected a push registration.
