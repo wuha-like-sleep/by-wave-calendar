@@ -163,6 +163,18 @@
 
     <!-- Main grid: use viewport-based height as a fallback when flex parent height collapses -->
     <section class="flex-1 min-h-0 min-w-0 bg-white flex flex-col">
+      <%# 一句话快速添加：主界面常驻，和新建弹窗里的 #nl-input 是同一个
+          解析器、同一套回填逻辑（calendar-app.js 的 NL 区块接线）。
+          输入时在下方实时预览解析结果，回车打开新建表单并回填，
+          保存仍走表单原来的流程。 %>
+      <div class="mx-3 sm:mx-5 mt-2 flex items-center gap-2 rounded-lg border border-brand-100 bg-gradient-to-r from-brand-50 to-violet-50 px-3 py-1.5">
+        <span class="text-base">🪄</span>
+        <input type="text" id="quick-add-input" placeholder="<%= t("app.event.nlPlaceholder") %>"
+               aria-label="<%= t("app.event.nlPlaceholder") %>"
+               class="flex-1 min-w-0 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none border-0" />
+        <kbd class="hidden sm:inline-block text-xs text-slate-400 bg-white/60 rounded px-1.5 py-0.5">Enter</kbd>
+      </div>
+      <div id="quick-add-hint" class="hidden mx-3 sm:mx-5 mt-1 text-xs text-brand-700"></div>
       <%# "Next event" banner. Hidden when no upcoming event in next 24h
           OR the next event is the one currently in progress. JS toggles
           the .hidden class + fills in #next-event-text. %>

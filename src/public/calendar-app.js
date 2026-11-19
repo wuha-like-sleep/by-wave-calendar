@@ -1472,10 +1472,15 @@
     // showParsed() below wants Date objects (it calls toDateString/getHours).
     // A date-time string with no zone is parsed as LOCAL by spec, which is
     // exactly the wall-clock reading we want — no timezone shift here.
+    // location / rrule / allDay ride along when the parser found them
+    // (older bundles simply leave them undefined).
     return {
       summary: r.summary,
       startsAt: new Date(r.startsAt),
       endsAt: new Date(r.endsAt),
+      location: r.location || null,
+      rrule: r.rrule || null,
+      allDay: !!r.allDay,
     };
   }
 
@@ -1490,6 +1495,18 @@
     // Localized "Aug 6"-style date (zh-CN renders as 8月6日 via Intl).
     const fmtDate = (d) => new Intl.DateTimeFormat(LOCALE, { month: "long", day: "numeric" }).format(d);
     const fmtTime = (d) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    // "7月4日 15:00–16:30 · 开会 · 星巴克" — collapse the end to just a time
+    // when it's the same calendar day, so the duration reads at a glance.
+    // All-day parses show just the date (00:00–23:59 would be noise).
+    // Shared by the modal preview and the main-screen quick-add preview.
+    function fmtParsed(parsed) {
+      const title = parsed.summary || T("app.js.nl.untitled");
+      const place = parsed.location ? ` · ${parsed.location}` : "";
+      if (parsed.allDay) return `✓ ${fmtDate(parsed.startsAt)} · ${title}${place}`;
+      const sameDay = parsed.startsAt.toDateString() === parsed.endsAt.toDateString();
+      const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
+      return `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${title}${place}`;
+    }
     function showParsed(parsed, commit) {
       if (!nlInput || !nlHint) return;
       if (!parsed) {
@@ -1508,14 +1525,20 @@
         if (parsed.summary) form.querySelector('[name="summary"]').value = parsed.summary;
         form.querySelector('[name="startsAt"]').value = toLocalDateTimeValue(parsed.startsAt);
         form.querySelector('[name="endsAt"]').value = toLocalDateTimeValue(parsed.endsAt);
+        // 地点 / 重复 / 全天：解析器给得出才填，给不出就不动表单现有的值。
+        if (parsed.location) form.querySelector('[name="location"]').value = parsed.location;
+        if (parsed.rrule) setRepeatValue(parsed.rrule);
+        if (parsed.allDay) {
+          form.querySelector('[name="allDay"]').checked = true;
+          form.querySelector('[name="startsAtDate"]').value = toLocalDateValue(parsed.startsAt);
+          form.querySelector('[name="endsAtDate"]').value = toLocalDateValue(parsed.endsAt);
+          syncAllDayUI();
+          switchReminderGroup(true);
+        }
       }
-      // "7月4日 15:00–16:30 · 开会" — collapse the end to just a time when it's
-      // the same calendar day, so the duration reads at a glance.
-      const sameDay = parsed.startsAt.toDateString() === parsed.endsAt.toDateString();
-      const endStr = sameDay ? fmtTime(parsed.endsAt) : `${fmtDate(parsed.endsAt)} ${fmtTime(parsed.endsAt)}`;
       nlHint.classList.remove("hidden");
       nlHint.style.color = "rgb(67 56 202)"; // brand-700
-      nlHint.textContent = `✓ ${fmtDate(parsed.startsAt)} ${fmtTime(parsed.startsAt)}–${endStr} · ${parsed.summary || T("app.js.nl.untitled")}`;
+      nlHint.textContent = fmtParsed(parsed);
     }
     function applyNl(commit) {
       if (!nlInput) return;
@@ -1531,6 +1554,45 @@
         if (e.key === "Enter") { e.preventDefault(); clearTimeout(debounce); applyNl(true); }
       });
       nlInput.addEventListener("blur", () => { clearTimeout(debounce); if (nlInput.value.trim()) applyNl(true); });
+    }
+
+    // 主界面常驻快速添加框（#quick-add-input）：和弹窗里那个输入框共用同一个
+    // 解析器和同一套回填（showParsed 的 commit 分支），不另起保存逻辑。
+    // 输入时只预览；回车才打开新建表单并回填。解析不出来时也打开表单，
+    // 原文放进标题和弹窗的 NL 输入框，用户接着手改即可，不丢字。
+    const qaInput = $("#quick-add-input");
+    const qaHint = $("#quick-add-hint");
+    if (qaInput && qaHint) {
+      let qaDebounce;
+      const showQa = (parsed) => {
+        if (!parsed) { qaHint.classList.add("hidden"); qaHint.textContent = ""; return; }
+        qaHint.classList.remove("hidden");
+        qaHint.textContent = fmtParsed(parsed);
+      };
+      qaInput.addEventListener("input", () => {
+        clearTimeout(qaDebounce);
+        qaDebounce = setTimeout(() => showQa(parseNaturalLanguageEvent(qaInput.value)), 200);
+      });
+      qaInput.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        clearTimeout(qaDebounce);
+        const text = qaInput.value.trim();
+        if (!text) return;
+        const parsed = parseNaturalLanguageEvent(text);
+        openNewEvent();
+        // openEventModal 会清掉弹窗 NL 输入框，所以原文要在打开之后再放回去。
+        if (nlInput) nlInput.value = text;
+        if (parsed) {
+          showParsed(parsed, true);
+        } else {
+          const form = $("#form-event");
+          if (form) form.querySelector('[name="summary"]').value = text;
+          showParsed(null, true);
+        }
+        qaInput.value = "";
+        showQa(null);
+      });
     }
   }
 

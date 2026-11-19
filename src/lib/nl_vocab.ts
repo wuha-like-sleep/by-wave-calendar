@@ -262,6 +262,108 @@ export const AND_A_HALF: readonly string[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
+// Recurrence ("every Friday", "每周五", "毎週金曜日", "매주 금요일")
+// ─────────────────────────────────────────────────────────────────────────
+// The parser turns these into an RRULE value in the exact shape the
+// create-event API stores ("FREQ=WEEKLY;BYDAY=FR"). Weekday forms are NOT
+// in RECUR_SIMPLE: they are rewritten to the bare weekday first (so the
+// ordinary date step still lands the start on the upcoming occurrence),
+// which is why the weekday characters get their own small tables here.
+
+/** BYDAY codes indexed by weekday number (0 = Sunday, like getUTCDay). */
+export const BYDAY_CODES: readonly string[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+
+/** Chinese weekday characters as they appear after 每周/每週. */
+export const RECUR_WEEKDAY_CHAR_ZH: Record<string, number> = {
+  "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "日": 0, "天": 0,
+};
+
+/** Japanese weekday characters as they appear after 毎週 (月曜日…). */
+export const RECUR_WEEKDAY_CHAR_JA: Record<string, number> = {
+  "月": 1, "火": 2, "水": 3, "木": 4, "金": 5, "土": 6, "日": 0,
+};
+
+/** Korean weekday characters as they appear after 매주 (월요일…). */
+export const RECUR_WEEKDAY_CHAR_KO: Record<string, number> = {
+  "월": 1, "화": 2, "수": 3, "목": 4, "금": 5, "토": 6, "일": 0,
+};
+
+/**
+ * Latin "every <weekday>" prefixes, tried against each WEEKDAYS pattern.
+ * Spanish/French plurals ("todos los lunes", "tous les lundis") are why the
+ * parser allows a trailing "s" on the weekday word.
+ */
+export const RECUR_WEEKDAY_PREFIX_LATIN =
+  "every|each|cada|todos\\s+los|todas\\s+las|chaque|tous\\s+les|jeden|jede|jeder";
+
+/**
+ * Whole-phrase recurrence markers that carry no weekday of their own.
+ * First match wins, so workday and two-week forms sit above the plain
+ * weekly ones they contain.
+ */
+export const RECUR_SIMPLE: ReadonlyArray<readonly [string, string]> = [
+  // Every workday (Mon–Fri)
+  ["每(?:个|個)?\\s*工作日", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"],
+  ["every\\s+weekday|on\\s+weekdays|weekdays", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"],
+  ["d[íi]as\\s+laborables|d[íi]as\\s+laborales", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"],
+  ["jours\\s+ouvr[ée]s", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"],
+  ["werktags|an\\s+werktagen", "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"],
+  // Every two weeks
+  ["每\\s*(?:两|兩|2)\\s*(?:周|週)", "FREQ=WEEKLY;INTERVAL=2"],
+  ["隔週", "FREQ=WEEKLY;INTERVAL=2"],
+  ["격주", "FREQ=WEEKLY;INTERVAL=2"],
+  ["every\\s+two\\s+weeks|every\\s+other\\s+week|biweekly", "FREQ=WEEKLY;INTERVAL=2"],
+  ["cada\\s+dos\\s+semanas", "FREQ=WEEKLY;INTERVAL=2"],
+  ["toutes\\s+les\\s+deux\\s+semaines", "FREQ=WEEKLY;INTERVAL=2"],
+  ["alle\\s+zwei\\s+wochen", "FREQ=WEEKLY;INTERVAL=2"],
+  // Daily
+  ["每天|每日", "FREQ=DAILY"],
+  ["毎日", "FREQ=DAILY"],
+  ["매일", "FREQ=DAILY"],
+  ["every\\s+day|daily", "FREQ=DAILY"],
+  ["cada\\s+d[íi]a|todos\\s+los\\s+d[íi]as|diariamente", "FREQ=DAILY"],
+  ["chaque\\s+jour|tous\\s+les\\s+jours|quotidien(?:ne)?", "FREQ=DAILY"],
+  ["jeden\\s+tag|t[äa]glich", "FREQ=DAILY"],
+  // Weekly, no weekday named (weekday forms are rewritten before this table)
+  ["每\\s*(?:周|週)", "FREQ=WEEKLY"],
+  ["毎週", "FREQ=WEEKLY"],
+  ["매주", "FREQ=WEEKLY"],
+  ["every\\s+week|weekly", "FREQ=WEEKLY"],
+  ["cada\\s+semana", "FREQ=WEEKLY"],
+  ["chaque\\s+semaine", "FREQ=WEEKLY"],
+  ["jede\\s+woche|w[öo]chentlich", "FREQ=WEEKLY"],
+  // Monthly
+  ["每\\s*(?:个|個)?\\s*月", "FREQ=MONTHLY"],
+  ["毎月", "FREQ=MONTHLY"],
+  ["매월|매달", "FREQ=MONTHLY"],
+  ["every\\s+month|monthly", "FREQ=MONTHLY"],
+  ["cada\\s+mes", "FREQ=MONTHLY"],
+  ["chaque\\s+mois", "FREQ=MONTHLY"],
+  ["jeden\\s+monat|monatlich", "FREQ=MONTHLY"],
+  // Yearly
+  ["每年", "FREQ=YEARLY"],
+  ["毎年", "FREQ=YEARLY"],
+  ["매년", "FREQ=YEARLY"],
+  ["every\\s+year|yearly|annually", "FREQ=YEARLY"],
+  ["cada\\s+a[ñn]o", "FREQ=YEARLY"],
+  ["chaque\\s+ann[ée]e", "FREQ=YEARLY"],
+  ["jedes\\s+jahr|j[äa]hrlich", "FREQ=YEARLY"],
+];
+
+// ─────────────────────────────────────────────────────────────────────────
+// All-day markers ("全天", "all day", "終日", "종일", "ganztägig")
+// ─────────────────────────────────────────────────────────────────────────
+export const ALL_DAY_WORDS: readonly string[] = [
+  "全天|一整天|全日",
+  "終日|一日中",
+  "종일",
+  "all[\\s-]?day",
+  "todo\\s+el\\s+d[íi]a",
+  "toute\\s+la\\s+journ[ée]e",
+  "ganzt[äa]gig|den\\s+ganzen\\s+tag",
+];
+
+// ─────────────────────────────────────────────────────────────────────────
 // Month names (for "March 5", "5 de marzo", "5. März", "5 mars")
 // ─────────────────────────────────────────────────────────────────────────
 export const MONTHS: ReadonlyArray<readonly [string, number]> = [
