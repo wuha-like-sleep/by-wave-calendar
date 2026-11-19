@@ -31,7 +31,7 @@
     <li><strong>Token de suscripción a notificaciones push</strong>:
       <ul>
         <li><strong>Web Push (navegador)</strong>: cuando autoriza las notificaciones push en el navegador, se almacena el endpoint de suscripción emitido por el navegador.</li>
-        <li><strong>APNs / FCM (móvil)</strong>: el servidor tiene la capacidad de enviar notificaciones push a dispositivos móviles; cuando un dispositivo registra el push, se almacena su token. <strong>La versión actual de la app de iOS no declara capacidad de push y no obtiene ni envía el token de APNs</strong>; solo utiliza la actualización en primer plano y el sondeo en segundo plano para sincronizar los eventos. Si una versión posterior activa el push, se anunciará por separado en las notas de actualización.</li>
+        <li><strong>APNs / FCM (móvil)</strong>: el servidor tiene la capacidad de enviar notificaciones push a dispositivos móviles; cuando un dispositivo registra el push, se almacena su token. <strong>La app de iOS se registra en APNs y envía su token de APNs al servidor</strong>, para que los cambios en los eventos puedan enviarse a su dispositivo; también utiliza la actualización en primer plano y el sondeo en segundo plano para sincronizar los eventos.</li>
       </ul>
     </li>
     <li><strong>Varios perfiles de cuenta (app de iOS)</strong>: cuando vincula varios servidores en la app de iOS, cada perfil de cuenta (dirección del servidor, correo, nombre visible) se almacena de forma independiente en el Keychain local del dispositivo. Estos perfiles no se sincronizan con el servidor; el Keychain de iCloud, cifrado de extremo a extremo, puede sincronizarlos opcionalmente con sus otros dispositivos Apple.</li>
@@ -43,6 +43,12 @@
     <li>Las operaciones de administración (activar/desactivar cuentas, revocar tokens, modificar ajustes, etc.) se registran en un log de auditoría que incluye el tipo de operación, el operador, el objeto y la IP.</li>
     <li>Registros de entrega de webhooks externos (estado HTTP, primer 1 KB del cuerpo de la respuesta y si tuvo éxito).</li>
     <li>Los registros de ejecución del servidor se usan para la resolución de problemas; las credenciales sensibles como tokens de acceso, tokens de push o contraseñas <strong>no se escriben en los registros</strong>.</li>
+  </ul>
+
+  <h3>1.5 Registros de notificaciones internas</h3>
+  <ul>
+    <li>Cuando algo requiere su atención — una reserva nueva o cancelada en uno de sus enlaces de reserva, una invitación a compartir un calendario, un cambio importante o una cancelación de un evento en un calendario compartido con usted, o un evento de seguridad de la cuenta (como la creación o revocación de un token de API, o un inicio de sesión desde un dispositivo nuevo) — el Servicio almacena un <strong>registro de notificación</strong> para su bandeja de notificaciones interna: el tipo de notificación, el título y el cuerpo, un enlace interno al objeto relacionado (reserva, invitación o evento), si la ha leído y la hora en que la leyó.</li>
+    <li>Estos registros existen únicamente para alimentar la bandeja de notificaciones (el icono de campana y la página de notificaciones); no se utilizan para elaborar perfiles ni para publicidad. Algunos tipos de notificación también pueden reflejarse en su navegador mediante Web Push; esa entrega utiliza la suscripción push descrita en la sección 1.3 y no almacena nada más.</li>
   </ul>
 
   <h2>2. Información que no recopilamos</h2>
@@ -108,6 +114,7 @@
     <li><strong>Cuenta + calendarios + eventos</strong>: se conservan mientras exista la cuenta, hasta que elimine los eventos o cancele la cuenta.</li>
     <li><strong>Eventos eliminados (borrado lógico)</strong>: se conservan 90 días para su restauración y se eliminan físicamente al vencer el plazo.</li>
     <li><strong>Historial de inicio de sesión / registros de auditoría</strong>: el operador los conserva según su política de operación, para fines de auditoría de seguridad.</li>
+    <li><strong>Notificaciones internas</strong>: las notificaciones leídas se eliminan automáticamente 90 días después de su lectura; las no leídas se conservan hasta que usted las atienda y se eliminan junto con su cuenta cuando la cancele.</li>
     <li><strong>Tras cancelar la cuenta</strong>: la cuenta y sus datos asociados se eliminan de forma permanente; las <strong>copias de seguridad periódicas de la base de datos</strong> del operador pueden conservar residuos hasta que esas copias venzan según su política de rotación.</li>
   </ul>
 

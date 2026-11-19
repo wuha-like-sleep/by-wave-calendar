@@ -24,6 +24,7 @@
         <tr><td>推送订阅 token</td><td>Web Push endpoint；移动端 APNs/FCM token（当推送启用且设备注册时）</td><td>向您的设备投递通知</td></tr>
         <tr><td>会话与安全</td><td>会话/CSRF cookie、登录历史（时间/IP/UA）、失败登录计数</td><td>维持登录态、防暴力破解、异常登录检测</td></tr>
         <tr><td>凭据派生</td><td>API token / 应用密码（仅哈希存储）</td><td>API / CalDAV 访问授权</td></tr>
+        <tr><td>站内通知记录</td><td>通知类型、标题与正文、指向关联对象的站内链接、已读状态与已读时间</td><td>提供站内通知收件箱（预约、日历邀请、事件变更、账号安全动态）</td></tr>
         <tr><td>审计日志</td><td>管理员操作记录、Webhook 投递记录</td><td>运维与安全审计</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>账号 + 日历 + 事件</strong>：账号存续期间持续保留，直至您删除或注销。</li>
     <li><strong>软删除事件</strong>：保留 90 天供恢复，到期物理删除。</li>
     <li><strong>登录历史 / 审计日志</strong>：由运营者按其运维策略保留。</li>
+    <li><strong>站内通知</strong>：已读通知在标记已读 90 天后自动删除；未读通知保留至您处理为止，注销时随账号一并删除。</li>
     <li><strong>注销后</strong>：账号及关联数据被永久清除；运营者的定期备份中可能残留至该备份按轮换策略到期。</li>
   </ul>
 

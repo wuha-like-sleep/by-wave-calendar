@@ -24,6 +24,7 @@
         <tr><td>Jeton d'abonnement aux notifications push</td><td>Endpoint Web Push ; jeton APNs/FCM mobile (lorsque les notifications push sont activées et l'appareil enregistré)</td><td>Acheminer les notifications vers votre appareil</td></tr>
         <tr><td>Session et sécurité</td><td>Cookies de session/CSRF, historique de connexion (heure/IP/UA), compteur de connexions échouées</td><td>Maintenir la session, prévenir les attaques par force brute, détecter les connexions anormales</td></tr>
         <tr><td>Identifiants dérivés</td><td>Jeton d'API / mot de passe d'application (stockés uniquement sous forme hachée)</td><td>Autorisation d'accès API / CalDAV</td></tr>
+        <tr><td>Enregistrements de notifications intégrées</td><td>Type de notification, titre et corps, lien intégré vers l'objet concerné, statut et heure de lecture</td><td>Fourniture de la boîte de réception intégrée (réservations, invitations de calendrier, modifications d'événements, événements de sécurité du compte)</td></tr>
         <tr><td>Journaux d'audit</td><td>Enregistrements des actions d'administration, enregistrements de livraison des webhooks</td><td>Exploitation et audit de sécurité</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>Compte + calendriers + événements</strong> : conservés pendant toute la durée de vie du compte, jusqu'à suppression ou résiliation de votre part.</li>
     <li><strong>Événements supprimés en douceur</strong> : conservés 90 jours en vue d'une restauration, puis physiquement supprimés à l'échéance.</li>
     <li><strong>Historique de connexion / journaux d'audit</strong> : conservés par l'exploitant selon sa politique d'exploitation.</li>
+    <li><strong>Notifications intégrées</strong> : les notifications lues sont automatiquement supprimées 90 jours après leur lecture ; les notifications non lues sont conservées jusqu'à ce que vous les traitiez et sont supprimées avec le compte lors de la résiliation.</li>
     <li><strong>Après résiliation</strong> : le compte et les données associées sont définitivement effacés ; ils peuvent subsister dans les sauvegardes régulières de l'exploitant jusqu'à expiration de celles-ci selon sa politique de rotation.</li>
   </ul>
 

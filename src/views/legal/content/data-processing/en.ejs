@@ -24,6 +24,7 @@
         <tr><td>Push subscription tokens</td><td>Web Push endpoint; mobile APNs/FCM token (when push is enabled and the device registers)</td><td>Delivering notifications to your device</td></tr>
         <tr><td>Session and security</td><td>Session/CSRF cookies, login history (time/IP/UA), failed login counts</td><td>Maintaining login state, preventing brute-force attacks, detecting anomalous logins</td></tr>
         <tr><td>Derived credentials</td><td>API tokens / application passwords (stored only as hashes)</td><td>API / CalDAV access authorization</td></tr>
+        <tr><td>In-app notification records</td><td>Notification type, title and body, in-app link to the related object, read status and read time</td><td>Providing the in-app notification inbox (bookings, calendar invitations, event changes, account security events)</td></tr>
         <tr><td>Audit logs</td><td>Administrator action records, webhook delivery records</td><td>Operations and security auditing</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>Account + calendars + events</strong>: retained for the duration of the account, until you delete them or close the account.</li>
     <li><strong>Soft-deleted events</strong>: retained for 90 days to allow recovery, then physically deleted upon expiry.</li>
     <li><strong>Login history / audit logs</strong>: retained by the operator according to their operational policy.</li>
+    <li><strong>In-app notifications</strong>: read notifications are automatically deleted 90 days after being read; unread notifications are kept until you deal with them, and are deleted together with the account upon closure.</li>
     <li><strong>After account closure</strong>: the account and associated data are permanently purged; they may remain in the operator's periodic backups until those backups expire under the rotation policy.</li>
   </ul>
 

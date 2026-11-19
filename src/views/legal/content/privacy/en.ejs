@@ -31,7 +31,7 @@
     <li><strong>Push subscription tokens</strong>:
       <ul>
         <li><strong>Web Push</strong>: when you consent to push notifications in your browser, the push subscription endpoint issued by the browser is stored.</li>
-        <li><strong>Mobile APNs / FCM</strong>: the server is capable of pushing to mobile devices; when a device registers for push, that device's push token is stored. <strong>The currently released iOS app does not declare push capability and does not obtain or upload an APNs token</strong>; it only uses foreground refresh and background polling to sync events. If a future version enables push, this will be announced separately in the upgrade notes.</li>
+        <li><strong>Mobile APNs / FCM</strong>: the server is capable of pushing to mobile devices; when a device registers for push, that device's push token is stored. <strong>The iOS app registers for APNs push and uploads its APNs token to the server</strong>, so that event changes can be pushed to your device; it also uses foreground refresh and background polling to sync events.</li>
       </ul>
     </li>
     <li><strong>Multi-account profiles (iOS app)</strong>: when you bind multiple servers in the iOS app, each account profile (server address, email, display name) is stored independently in the local Keychain. These profiles themselves are not synced to the server; iCloud Keychain end-to-end encryption optionally syncs them to your own other Apple devices.</li>
@@ -43,6 +43,12 @@
     <li>Administrator actions (enabling/disabling accounts, revoking tokens, changing settings, etc.) are written to an audit log, including the action type, actor, target, and IP.</li>
     <li>External webhook delivery records (HTTP status, the first 1KB of the response body, whether it succeeded).</li>
     <li>Server runtime logs are used for troubleshooting; sensitive credentials such as access tokens, push tokens, and passwords <strong>are not written to the logs</strong>.</li>
+  </ul>
+
+  <h3>1.5 In-App Notification Records</h3>
+  <ul>
+    <li>When something needs your attention — a new or cancelled booking on one of your booking links, a calendar sharing invitation, a meaningful change to or cancellation of an event on a calendar shared with you, or an account security event (such as an API token being created or revoked, or a sign-in from a new device) — the Service stores a <strong>notification record</strong> for your in-app notification inbox: the notification type, title and body text, an in-app link to the related object (booking, invitation, or event), whether you have read it, and the time you read it.</li>
+    <li>These records exist only to power the notification inbox (the bell icon and the notifications page); they are not used for profiling or advertising. Certain notification types can also be mirrored to your browser via Web Push — that delivery uses the push subscription described in Section 1.3 and stores nothing further.</li>
   </ul>
 
   <h2>2. Information We Do Not Collect</h2>
@@ -108,6 +114,7 @@
     <li><strong>Account + calendars + events</strong>: retained for the duration of the account, until you delete the events or close the account.</li>
     <li><strong>Soft-deleted events</strong>: retained for 90 days to allow recovery, then physically deleted upon expiry.</li>
     <li><strong>Login history / audit logs</strong>: retained by the operator according to their operational policy, for security auditing.</li>
+    <li><strong>In-app notifications</strong>: read notifications are automatically deleted 90 days after you read them; unread notifications are kept until you deal with them, and are deleted together with your account when you close it.</li>
     <li><strong>After account closure</strong>: the account and its associated data are permanently purged; they may still remain in the operator's <strong>periodic database backups</strong> until those backups expire under their rotation policy.</li>
   </ul>
 

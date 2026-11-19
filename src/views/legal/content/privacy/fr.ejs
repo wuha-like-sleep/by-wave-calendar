@@ -31,7 +31,7 @@
     <li><strong>Jeton d'abonnement aux notifications push</strong> :
       <ul>
         <li><strong>Web Push (navigateur)</strong> : lorsque vous acceptez les notifications push dans votre navigateur, l'endpoint d'abonnement push émis par le navigateur est stocké.</li>
-        <li><strong>APNs / FCM (mobile)</strong> : le serveur dispose de la capacité d'envoyer des notifications push aux appareils mobiles ; lorsqu'un appareil s'enregistre pour les notifications, son jeton push est stocké. <strong>L'application iOS actuellement publiée ne déclare aucune capacité push et n'obtient ni ne transmet aucun jeton APNs</strong> ; elle utilise uniquement le rafraîchissement au premier plan et une interrogation en arrière-plan pour synchroniser les événements ; si une future version active les notifications push, cela sera annoncé séparément dans les notes de mise à jour.</li>
+        <li><strong>APNs / FCM (mobile)</strong> : le serveur dispose de la capacité d'envoyer des notifications push aux appareils mobiles ; lorsqu'un appareil s'enregistre pour les notifications, son jeton push est stocké. <strong>L'application iOS s'enregistre auprès d'APNs et transmet son jeton APNs au serveur</strong>, afin que les modifications d'événements puissent être poussées vers votre appareil ; elle utilise également le rafraîchissement au premier plan et une interrogation en arrière-plan pour synchroniser les événements.</li>
       </ul>
     </li>
     <li><strong>Profils multi-comptes (application iOS)</strong> : lorsque vous associez plusieurs serveurs dans l'application iOS, chaque profil de compte (adresse du serveur, e-mail, nom d'affichage) est stocké de manière indépendante dans le trousseau (Keychain) local de l'appareil. Ces profils eux-mêmes ne sont pas synchronisés vers le serveur ; le trousseau iCloud chiffré de bout en bout peut, en option, les synchroniser vers vos autres appareils Apple.</li>
@@ -43,6 +43,12 @@
     <li>Les actions d'administration (activation/désactivation de comptes, révocation de jetons, modification de paramètres, etc.) sont consignées dans un journal d'audit comprenant le type d'action, l'auteur, l'objet et l'adresse IP.</li>
     <li>Les enregistrements de livraison des webhooks externes (statut HTTP, premier kilo-octet du corps de la réponse, succès ou non).</li>
     <li>Les journaux d'exploitation du serveur servent au dépannage ; les identifiants sensibles tels que les jetons d'accès, les jetons push et les mots de passe <strong>ne sont pas consignés dans les journaux</strong>.</li>
+  </ul>
+
+  <h3>1.5 Enregistrements de notifications intégrées</h3>
+  <ul>
+    <li>Lorsqu'un événement requiert votre attention — une réservation créée ou annulée via l'un de vos liens de réservation, une invitation au partage d'un calendrier, une modification importante ou une annulation d'événement dans un calendrier partagé avec vous, ou un événement de sécurité du compte (création ou révocation d'un jeton d'API, connexion depuis un nouvel appareil, etc.) — le Service conserve un <strong>enregistrement de notification</strong> pour votre boîte de réception intégrée : le type de notification, le titre et le corps du texte, un lien intégré vers l'objet concerné (réservation, invitation ou événement), le fait que vous l'ayez lue ou non, et l'heure de lecture.</li>
+    <li>Ces enregistrements n'existent que pour alimenter la boîte de réception des notifications (l'icône en forme de cloche et la page des notifications) ; ils ne sont utilisés ni à des fins de profilage ni à des fins publicitaires. Certains types de notifications peuvent également être reflétés vers votre navigateur via Web Push — cette livraison utilise l'abonnement push décrit à la section 1.3 et ne stocke rien de plus.</li>
   </ul>
 
   <h2>2. Informations que nous ne collectons pas</h2>
@@ -108,6 +114,7 @@
     <li><strong>Compte + calendriers + événements</strong> : conservés pendant toute la durée de vie du compte, jusqu'à ce que vous supprimiez un événement ou résiliiez votre compte.</li>
     <li><strong>Événements supprimés en douceur</strong> : conservés 90 jours en vue d'une restauration, puis physiquement supprimés à l'échéance.</li>
     <li><strong>Historique de connexion / journaux d'audit</strong> : conservés par l'exploitant selon sa politique d'exploitation, à des fins d'audit de sécurité.</li>
+    <li><strong>Notifications intégrées</strong> : les notifications lues sont automatiquement supprimées 90 jours après leur lecture ; les notifications non lues sont conservées jusqu'à ce que vous les traitiez, et sont supprimées avec votre compte lors de sa résiliation.</li>
     <li><strong>Après résiliation du compte</strong> : le compte et les données associées sont définitivement effacés ; ils peuvent toutefois subsister dans les <strong>sauvegardes régulières de la base de données</strong> de l'exploitant jusqu'à expiration de celles-ci selon sa politique de rotation.</li>
   </ul>
 

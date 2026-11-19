@@ -24,6 +24,7 @@
         <tr><td>Token de suscripción a push</td><td>Endpoint de Web Push; token de APNs/FCM móvil (cuando el push está activado y el dispositivo registrado)</td><td>Entregar notificaciones a su dispositivo</td></tr>
         <tr><td>Sesión y seguridad</td><td>Cookies de sesión/CSRF, historial de inicio de sesión (hora/IP/UA), contador de inicios de sesión fallidos</td><td>Mantener la sesión activa, prevenir la fuerza bruta y detectar inicios de sesión anómalos</td></tr>
         <tr><td>Credenciales derivadas</td><td>Token de API / contraseña de aplicación (solo se almacena el hash)</td><td>Autorización de acceso por API / CalDAV</td></tr>
+        <tr><td>Registros de notificaciones internas</td><td>Tipo de notificación, título y cuerpo, enlace interno al objeto relacionado, estado y hora de lectura</td><td>Proporcionar la bandeja de notificaciones interna (reservas, invitaciones de calendario, cambios en eventos, eventos de seguridad de la cuenta)</td></tr>
         <tr><td>Registros de auditoría</td><td>Registro de operaciones de administración, registro de entrega de webhooks</td><td>Operación y auditoría de seguridad</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>Cuenta + calendarios + eventos</strong>: se conservan mientras exista la cuenta, hasta que usted los elimine o cancele la cuenta.</li>
     <li><strong>Eventos eliminados (borrado lógico)</strong>: se conservan 90 días para su restauración y se eliminan físicamente al vencer el plazo.</li>
     <li><strong>Historial de inicio de sesión / registros de auditoría</strong>: el operador los conserva según su política de operación.</li>
+    <li><strong>Notificaciones internas</strong>: las notificaciones leídas se eliminan automáticamente 90 días después de su lectura; las no leídas se conservan hasta que usted las atienda y se eliminan junto con la cuenta al cancelarla.</li>
     <li><strong>Tras la cancelación</strong>: la cuenta y los datos asociados se eliminan de forma permanente; las copias de seguridad periódicas del operador pueden conservar residuos hasta que esa copia venza según su política de rotación.</li>
   </ul>
 

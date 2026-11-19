@@ -24,6 +24,7 @@
         <tr><td>推播訂閱 token</td><td>Web Push endpoint；行動端 APNs/FCM token（當推播啟用且裝置註冊時）</td><td>向您的裝置投遞通知</td></tr>
         <tr><td>工作階段與安全</td><td>工作階段/CSRF cookie、登入歷史（時間/IP/UA）、失敗登入計數</td><td>維持登入狀態、防暴力破解、異常登入偵測</td></tr>
         <tr><td>憑證衍生</td><td>API token / 應用程式密碼（僅雜湊儲存）</td><td>API / CalDAV 存取授權</td></tr>
+        <tr><td>站內通知紀錄</td><td>通知類型、標題與內文、指向關聯對象的站內連結、已讀狀態與已讀時間</td><td>提供站內通知收件匣（預約、日曆邀請、事件變更、帳號安全動態）</td></tr>
         <tr><td>稽核紀錄</td><td>管理員操作紀錄、Webhook 投遞紀錄</td><td>維運與安全稽核</td></tr>
       </tbody>
     </table>
@@ -45,6 +46,7 @@
     <li><strong>帳號 + 日曆 + 事件</strong>：帳號存續期間持續保留，直至您刪除或註銷。</li>
     <li><strong>軟刪除事件</strong>：保留 90 天供還原，到期實際刪除。</li>
     <li><strong>登入歷史 / 稽核紀錄</strong>：由營運者按其維運策略保留。</li>
+    <li><strong>站內通知</strong>：已讀通知在標記已讀 90 天後自動刪除；未讀通知保留至您處理為止，註銷時隨帳號一併刪除。</li>
     <li><strong>註銷後</strong>：帳號及關聯資料被永久清除；營運者的定期備份中可能殘留至該備份按輪替策略到期。</li>
   </ul>
 
