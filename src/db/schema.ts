@@ -540,6 +540,11 @@ export const apiTokens = pgTable("api_tokens", {
   scope: text("scope").notNull().default("write"),
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   lastUsedIp: text("last_used_ip"),
+  // Lifetime count of authenticated requests made with this token,
+  // bumped in the same UPDATE that stamps lastUsedAt (touchApiToken).
+  // Lets the owner see at a glance whether a token is actively used
+  // or dormant — the list-side counterpart of the 90-day idle mail.
+  useCount: integer("use_count").notNull().default(0),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

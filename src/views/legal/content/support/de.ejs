@@ -102,6 +102,47 @@
       </div>
     </details>
 
+    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> Per API auf meine Kalender zugreifen (Skripte / Automatisierung)</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <p class="mb-3">Mit einem Token kann jedes Werkzeug, das HTTPS-Anfragen senden kann (Skripte, n8n, Zapier, Kurzbefehle …), Ihre eigenen Kalender lesen und schreiben. Das hier ist die Kurzanleitung; die vollständige maschinenlesbare Spezifikation liegt unter <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a> und lässt sich z. B. in Postman importieren, um Aufrufcode zu erzeugen.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Authentifizierung & Basisadresse</p>
+        <p class="mb-3">Senden Sie bei jeder Anfrage den Header <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code>. Die Basisadresse ist <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>. Antworten unter /api/v1 sind einheitlich verpackt: Erfolg ist {"ok": true, "data": …}, Fehler ist {"ok": false, "error": {"code": "…", "message": "…"}}.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Wichtige Endpunkte</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars</code> — meine Kalender auflisten</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars</code> — Kalender erstellen (Schreib-Token)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /calendars/{id} · DELETE /calendars/{id}</code> — Kalender ändern / löschen (Schreib-Token)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events?from=…&amp;to=…</code> — Termine in einem Zeitraum (from und to sind Pflicht, ISO-Zeiten mit Offset; calendarIds optional, kommagetrennt)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/events</code> — Termine eines Kalenders</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events/{id}</code> — ein Termin im Volltext</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /events</code> — Termin erstellen (Schreib-Token; Pflicht: calendarId, summary, startsAt, endsAt)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /events/{id} · DELETE /events/{id}</code> — Termin ändern / löschen (Schreib-Token; Löschen ist weich — Wiederherstellen per POST /events/{id}/restore)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars/{id}/import/preview · POST /calendars/{id}/import</code> — ICS-Vorschau / -Import (Schreib-Token; JSON-Body {"text": "der komplette .ics-Text"}, max. 8 MB, gleiche Dublettenregeln wie der Web-Import)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/export.ics</code> — einen ganzen Kalender als .ics herunterladen (für Backups)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/subscriptions · POST</code> — externe ICS-Abonnements auflisten / hinzufügen (Hinzufügen braucht Schreib-Token); POST /calendars/{id}/subscriptions/{subId}/refresh aktualisiert sofort; DELETE entfernt eines</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /search?q=Suchwort</code> — Termine suchen</li>
+        </ul>
+        <p class="font-medium text-slate-800 mb-1.5">curl-Beispiele</p>
+        <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-900 text-slate-100 p-3 text-xs leading-relaxed">curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/calendars"
+curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/events?from=2026-01-05T00:00:00+11:00&amp;to=2026-01-12T00:00:00+11:00"
+curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>" -H "Content-Type: application/json" -d '{"calendarId":"&lt;calendar-id&gt;","summary":"Report","startsAt":"2026-01-05T14:00:00+11:00","endsAt":"2026-01-05T15:00:00+11:00"}'</pre>
+        <p class="font-medium text-slate-800 mb-1.5 mt-3">Fehlercodes & Grenzen</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — Token falsch, widerrufen oder abgelaufen, API deaktiviert oder Konto gesperrt (Prüfreihenfolge siehe Eintrag oben)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — ein Nur-Lesen-Token wollte schreiben; Nur-Lesen-Tokens dürfen nur GET</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400 invalid_body / bad_query / ends_before_starts</code> — Body oder Parameter fehlerhaft (Pflichtfelder fehlen, from/to fehlt, Ende vor Anfang)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404 not_found / calendar_not_found</code> — existiert nicht oder gehört Ihnen nicht (fremde Kalender und Termine wirken immer wie nicht vorhanden)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">413 file_too_large / 422 import_failed</code> — Import über 8 MB / ICS-Inhalt nicht lesbar</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429 too_many_requests</code> — seitenweites Ratenlimit erreicht (pro IP, Standard 120/Minute, vom Betreiber einstellbar); eine Minute warten und erneut versuchen</li>
+        </ul>
+        <p>Ein Token erreicht nur Ihre eigenen Kalender. Die Nutzung (letzte Verwendung, Quell-IP, Gesamtzahl der Aufrufe) steht neben jedem Token unter Einstellungen → Geräte → API-Tokens — widerrufen Sie Tokens, die Sie nicht mehr brauchen.</p>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> Registrierung und Bestätigungs-E-Mails</span>

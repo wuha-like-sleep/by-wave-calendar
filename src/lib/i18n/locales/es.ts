@@ -454,6 +454,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "settings.devices.apiTokenExpires": "Vence el {date}",
   "settings.devices.apiTokenExpiresLabel": "Vence el",
   "settings.devices.apiTokenNeverExpires": "nunca vence",
+  "settings.devices.apiTokenUseCount": "{count} llamadas",
   "settings.devices.apiTokenExpiryHint": "Por defecto: 365 días. Súbelo si necesitas más, o pon 0 para que nunca venza.",
   "settings.devices.apiTokenExpired": "Vencido",
   "settings.devices.apiTokenRevoke": "Revocar",

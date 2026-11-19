@@ -840,7 +840,7 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
     servers: [{ url: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/api/v1` }],
     components: {
       securitySchemes: {
-        bearerAuth: { type: "http", scheme: "bearer", description: "API token from /admin/api" },
+        bearerAuth: { type: "http", scheme: "bearer", description: "Personal API token — users create their own under Settings → Devices → API tokens (self-service); admins can also issue them from /admin/api" },
         cookieAuth: { type: "apiKey", in: "cookie", name: "bwc_sid", description: "Browser session" },
       },
       schemas: {
@@ -909,6 +909,13 @@ app.get("/api/v1/openapi.json", { config: { rateLimit: false } }, async (_req, r
         delete: { summary: "Soft-delete event + fire CANCEL emails" },
       },
       "/events/conflicts": { post: { summary: "Check for overlapping events" } },
+      "/events/{id}/attendees": {
+        get: { summary: "List an event's attendees" },
+        post: { summary: "Invite an attendee by email (sends an invitation)" },
+        delete: { summary: "Remove an attendee" },
+      },
+      "/events/{id}/restore": { post: { summary: "Restore a soft-deleted event" } },
+      "/parse-event": { post: { summary: "Parse a one-sentence natural-language event description into structured fields" } },
       "/search": { get: { summary: "Search events", parameters: [{ name: "q", in: "query", required: true, schema: { type: "string" } }] } },
       "/notifications/unread-count": { get: { summary: "Unread in-app notification count (ETag-aware, for the nav bell)" } },
       "/push/public-key": { get: { summary: "VAPID public key for browser PushManager" } },

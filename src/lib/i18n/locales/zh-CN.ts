@@ -445,6 +445,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "settings.devices.apiTokenExpires": "{date} 到期",
   "settings.devices.apiTokenExpiresLabel": "到期",
   "settings.devices.apiTokenNeverExpires": "不过期",
+  "settings.devices.apiTokenUseCount": "累计调用 {count} 次",
   "settings.devices.apiTokenExpiryHint": "默认 365 天，需要更久可以改大；填 0 表示不过期。",
   "settings.devices.apiTokenExpired": "已过期",
   "settings.devices.apiTokenRevoke": "撤销",

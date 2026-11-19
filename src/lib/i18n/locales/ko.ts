@@ -454,6 +454,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "settings.devices.apiTokenExpires": "{date} 만료",
   "settings.devices.apiTokenExpiresLabel": "만료일",
   "settings.devices.apiTokenNeverExpires": "만료 없음",
+  "settings.devices.apiTokenUseCount": "호출 {count}회",
   "settings.devices.apiTokenExpiryHint": "기본값은 365일입니다. 필요하면 늘리세요. 0 = 만료 없음.",
   "settings.devices.apiTokenExpired": "만료됨",
   "settings.devices.apiTokenRevoke": "해지",

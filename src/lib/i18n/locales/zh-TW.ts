@@ -444,6 +444,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "settings.devices.apiTokenExpires": "{date} 到期",
   "settings.devices.apiTokenExpiresLabel": "到期",
   "settings.devices.apiTokenNeverExpires": "不過期",
+  "settings.devices.apiTokenUseCount": "累計呼叫 {count} 次",
   "settings.devices.apiTokenExpiryHint": "預設 365 天，需要更久可以改大；填 0 表示不過期。",
   "settings.devices.apiTokenExpired": "已過期",
   "settings.devices.apiTokenRevoke": "撤銷",

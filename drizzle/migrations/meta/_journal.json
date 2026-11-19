@@ -463,6 +463,13 @@
       "when": 1795046400000,
       "tag": "0065_notification_prefs",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795132800000,
+      "tag": "0066_api_token_use_count",
+      "breakpoints": true
     }
   ]
 }

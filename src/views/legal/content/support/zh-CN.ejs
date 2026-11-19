@@ -102,6 +102,47 @@
       </div>
     </details>
 
+    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> 用 API 访问我的日历（脚本 / 自动化）</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <p class="mb-3">建好 Token 后，任何能发 HTTPS 请求的工具（脚本、n8n、Zapier、快捷指令等）都能用它读写你自己的日历。下面是最小可用说明；完整的机器可读接口定义在 <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a>，可导入 Postman 等工具自动生成调用代码。</p>
+        <p class="font-medium text-slate-800 mb-1.5">鉴权与地址</p>
+        <p class="mb-3">每个请求带请求头 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code>。基础地址是 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>。/api/v1 的响应统一包一层：成功是 {"ok": true, "data": …}，失败是 {"ok": false, "error": {"code": "…", "message": "…"}}。</p>
+        <p class="font-medium text-slate-800 mb-1.5">常用端点</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars</code> — 列出我的日历</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars</code> — 新建日历（需读写 Token）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /calendars/{id} · DELETE /calendars/{id}</code> — 改 / 删日历（需读写 Token）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events?from=…&amp;to=…</code> — 按时间窗列事件（from、to 必填，ISO 时间带时区偏移；calendarIds 可选，逗号分隔）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/events</code> — 只看一本日历的事件</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events/{id}</code> — 单个事件全文</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /events</code> — 新建事件（需读写 Token；必填 calendarId、summary、startsAt、endsAt）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /events/{id} · DELETE /events/{id}</code> — 改 / 删事件（需读写 Token；删除是软删除，可用 POST /events/{id}/restore 恢复）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars/{id}/import/preview · POST /calendars/{id}/import</code> — 预览 / 导入 ICS（需读写 Token；请求体是 JSON {"text": "整份 .ics 文本"}，上限 8 MB，与网页导入同一套去重规则）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/export.ics</code> — 把整本日历导出为 .ics 文件（备份用这个）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/subscriptions · POST</code> — 外部 ICS 订阅的列表 / 新增（新增需读写 Token）；POST /calendars/{id}/subscriptions/{subId}/refresh 立即刷新；DELETE 删除订阅</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /search?q=关键词</code> — 搜索事件</li>
+        </ul>
+        <p class="font-medium text-slate-800 mb-1.5">curl 示例</p>
+        <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-900 text-slate-100 p-3 text-xs leading-relaxed">curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/calendars"
+curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/events?from=2026-01-05T00:00:00+11:00&amp;to=2026-01-12T00:00:00+11:00"
+curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>" -H "Content-Type: application/json" -d '{"calendarId":"&lt;calendar-id&gt;","summary":"Report","startsAt":"2026-01-05T14:00:00+11:00","endsAt":"2026-01-05T15:00:00+11:00"}'</pre>
+        <p class="font-medium text-slate-800 mb-1.5 mt-3">错误码与限制</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — Token 写错、已撤销或过期，或 API 没开启，或账号被停用（排查顺序见上一条）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — 只读 Token 做了写操作；只读 Token 只能 GET</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400 invalid_body / bad_query / ends_before_starts</code> — 请求体或参数不对（缺必填字段、时间窗缺 from/to、结束早于开始）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404 not_found / calendar_not_found</code> — 对象不存在，或者不是你的（别人的日历、事件一律按不存在处理，不泄露）</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">413 file_too_large / 422 import_failed</code> — 导入文件超过 8 MB / ICS 内容解析失败</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429 too_many_requests</code> — 触发全站限流（按 IP 计算，默认每分钟 120 次，运营者可调），等一分钟再试</li>
+        </ul>
+        <p>Token 只能访问你自己的日历。用量（最近使用时间、来源 IP、累计调用次数）在「设置 → 设备 → API Token」列表里能看到，长期不用的 Token 建议撤销。</p>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 注册与验证邮件</span>

@@ -102,6 +102,47 @@
       </div>
     </details>
 
+    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
+      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> Acceder a mis calendarios por API (scripts / automatización)</span>
+        <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </summary>
+      <div class="px-4 pb-4 text-sm text-slate-600">
+        <p class="mb-3">Con un token, cualquier herramienta capaz de hacer peticiones HTTPS (scripts, n8n, Zapier, Atajos…) puede leer y escribir en tus propios calendarios. Esta es la guía mínima; la especificación completa legible por máquina está en <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a>, importable en Postman para generar el código de llamada.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Autenticación y dirección base</p>
+        <p class="mb-3">Envía la cabecera <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code> en cada petición. La dirección base es <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>. Las respuestas de /api/v1 vienen envueltas: éxito {"ok": true, "data": …}, error {"ok": false, "error": {"code": "…", "message": "…"}}.</p>
+        <p class="font-medium text-slate-800 mb-1.5">Endpoints habituales</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars</code> — listar mis calendarios</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars</code> — crear un calendario (token de escritura)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /calendars/{id} · DELETE /calendars/{id}</code> — modificar / eliminar un calendario (token de escritura)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events?from=…&amp;to=…</code> — listar eventos en un periodo (from y to obligatorios, horas ISO con desplazamiento; calendarIds opcional, separados por comas)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/events</code> — eventos de un calendario</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /events/{id}</code> — un evento completo</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /events</code> — crear un evento (token de escritura; obligatorio: calendarId, summary, startsAt, endsAt)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">PATCH /events/{id} · DELETE /events/{id}</code> — modificar / eliminar un evento (token de escritura; la eliminación es suave — se restaura con POST /events/{id}/restore)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">POST /calendars/{id}/import/preview · POST /calendars/{id}/import</code> — vista previa / importación ICS (token de escritura; cuerpo JSON {"text": "el texto .ics completo"}, máx. 8 MB, mismas reglas de deduplicación que la importación web)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/export.ics</code> — descargar un calendario entero como .ics (para copias de seguridad)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /calendars/{id}/subscriptions · POST</code> — listar / añadir suscripciones ICS externas (añadir requiere token de escritura); POST /calendars/{id}/subscriptions/{subId}/refresh actualiza al momento; DELETE elimina una</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">GET /search?q=palabra</code> — buscar eventos</li>
+        </ul>
+        <p class="font-medium text-slate-800 mb-1.5">Ejemplos con curl</p>
+        <pre class="mt-2 overflow-x-auto rounded-lg bg-slate-900 text-slate-100 p-3 text-xs leading-relaxed">curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/calendars"
+curl -H "Authorization: Bearer <redacted>" "<%= baseUrl %>/api/v1/events?from=2026-01-05T00:00:00+11:00&amp;to=2026-01-12T00:00:00+11:00"
+curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>" -H "Content-Type: application/json" -d '{"calendarId":"&lt;calendar-id&gt;","summary":"Report","startsAt":"2026-01-05T14:00:00+11:00","endsAt":"2026-01-05T15:00:00+11:00"}'</pre>
+        <p class="font-medium text-slate-800 mb-1.5 mt-3">Códigos de error y límites</p>
+        <ul class="list-disc pl-5 space-y-1.5 mb-3">
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — token erróneo, revocado o caducado, API desactivada o cuenta suspendida (orden de comprobación en la entrada anterior)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — un token de solo lectura intentó escribir; esos tokens solo pueden hacer GET</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">400 invalid_body / bad_query / ends_before_starts</code> — cuerpo o parámetros incorrectos (faltan campos obligatorios, falta from/to, el fin precede al inicio)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">404 not_found / calendar_not_found</code> — no existe, o no es tuyo (los calendarios y eventos ajenos siempre parecen inexistentes)</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">413 file_too_large / 422 import_failed</code> — importación de más de 8 MB / el contenido ICS no se pudo interpretar</li>
+          <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">429 too_many_requests</code> — límite global alcanzado (por IP, 120 por minuto por defecto, ajustable por el operador); espera un minuto y reinténtalo</li>
+        </ul>
+        <p>Un token solo accede a tus propios calendarios. El uso (última utilización, IP de origen, total de llamadas) aparece junto a cada token en Ajustes → Dispositivos → Tokens API — revoca los que ya no uses.</p>
+      </div>
+    </details>
+
     <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
       <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
         <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> Registro y correos de verificación</span>
