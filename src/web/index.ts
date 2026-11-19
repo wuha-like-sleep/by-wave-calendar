@@ -344,7 +344,7 @@ export async function webRoutes(app: FastifyInstance) {
     const [apkUrl, apkAltUrl] = await resolveApkUrls(origin, rel);
     const apkSize = rel
       ? `${(rel.sizeBytes / 1024 / 1024).toFixed(1)} MB`
-      : "~15 MB";
+      : "~24 MB";
 
     // 桌面端三个平台。清单缺失时模板渲染「即将推出」的分支。
     const { getLatestRelease: getDesktopRelease } = await import("../lib/desktop_release.js");
@@ -364,12 +364,15 @@ export async function webRoutes(app: FastifyInstance) {
       siteName: settings.siteName || "ByWave Calendar",
       // iOS — App Store proper is now live as of 2026-05-26 (app id
       // 6772655143). TestFlight public beta also stays open as the
-      // pre-release channel for v1.3.7+ builds we want to ship faster
-      // than App Store's review cadence. The download template promotes
-      // App Store to primary CTA when iosAppStoreUrl is non-empty and
-      // automatically demotes TestFlight to a small secondary "Beta"
-      // link below — no template change needed.
-      iosVersion: "1.3.7",
+      // pre-release channel for builds we want to ship faster than App
+      // Store's review cadence. The download template promotes App Store
+      // to primary CTA when iosAppStoreUrl is non-empty and automatically
+      // demotes TestFlight to a small secondary "Beta" link below — no
+      // template change needed.
+      // iosVersion 是写死值（iOS 没有本站 latest 接口可同源），必须与
+      // App Store 在架版本一致：2026-11-19 核对商店页为 1.7.3（工程里
+      // 的 MARKETING_VERSION 是下一版在研版本，不能拿来当在架版本）。
+      iosVersion: "1.7.3",
       iosAppStoreUrl: "https://apps.apple.com/us/app/bywavecalendar/id6772655143",
       iosTestFlightUrl: "https://testflight.apple.com/join/rkM3hkpX",
       iosEtaWeek: tr(req, "download.eta.thisWeek"),
@@ -379,10 +382,11 @@ export async function webRoutes(app: FastifyInstance) {
       // show the GitHub/Gitee Releases fallback links so users can still
       // find a build. The notes field, if present, surfaces below the
       // download button as a collapsible "本版更新内容" disclosure.
-      androidVersion: rel?.versionName || "0.8.0",
+      androidVersion: rel?.versionName || "0.13.2",
       androidApkUrl: apkUrl,
       androidApkAltUrl: apkAltUrl,
       androidApkSize: apkSize,
+      androidApkSha256: rel?.sha256 || "",
       androidNotes: rel?.notes || "",
       androidApkGitHub: "https://github.com/wuha-like-sleep/by-wave-calendar/releases",
       androidApkGitee: "https://gitee.com/zhaorunsen/by-wave-calendar/releases",
@@ -393,8 +397,14 @@ export async function webRoutes(app: FastifyInstance) {
       // are shared across platforms (one Kotlin codebase → one release
       // bundle), so we expose a single `desktopVersion` rather than
       // per-OS variants.
-      desktopVersion: desktop?.versionName || "v0.2",
+      // 回退值不带 "v" 前缀：模板统一渲染 `v<%= desktopVersion %>`，
+      // 以前写 "v0.2" 会显示成 "vv0.2"。数值与仓库内提交的清单一致。
+      desktopVersion: desktop?.versionName || "1.3.3",
       desktopNotes: desktop?.notes || "",
+      desktopMacSha256: desktop?.assets.mac?.sha256 || "",
+      desktopMacIntelSha256: desktop?.assets.macIntel?.sha256 || "",
+      desktopWinSha256: desktop?.assets.win?.sha256 || "",
+      desktopLinuxSha256: desktop?.assets.linux?.sha256 || "",
       desktopMacUrl, desktopMacIntelUrl, desktopMacIntelAltUrl,
       desktopMacSize: fmtSize(desktop?.assets.mac?.sizeBytes),
       desktopWinUrl,

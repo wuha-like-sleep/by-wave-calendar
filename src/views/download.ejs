@@ -31,7 +31,7 @@
     </div>
 
     <h2 class="text-xl font-semibold text-slate-900">iOS</h2>
-    <p class="text-sm text-slate-500 mt-0.5 mb-5">iPhone · iPad · macOS Catalyst</p>
+    <p class="text-sm text-slate-500 mt-0.5 mb-5">iPhone · iPad</p>
 
     <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
       <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.ios.feature1") %></li>
@@ -112,6 +112,12 @@
             <%= t("download.mirror.prefix") %>
             <a href="<%= androidApkAltUrl %>" target="_blank" rel="noopener"
                class="underline hover:text-slate-600"><%= t("download.mirror.github") %></a>
+          </p>
+        <% } %>
+        <% if (typeof androidApkSha256 !== 'undefined' && androidApkSha256) { %>
+          <p class="text-[11px] text-slate-400 pt-1 text-left">
+            <%= t("download.checksum") %>
+            <span class="block font-mono break-all mt-0.5"><%= androidApkSha256 %></span>
           </p>
         <% } %>
       <% } else { %>
@@ -212,6 +218,23 @@
           Linux
         </a>
       </div>
+
+      <%# 校验和：清单里每个安装包都带 sha256（更新器也在用它验包），
+          页面上一并给出，手动下载的用户能自己核对文件完整性。 %>
+      <% if (desktopMacSha256 || desktopMacIntelSha256 || desktopWinSha256 || desktopLinuxSha256) { %>
+        <details class="text-xs text-slate-500 group/sums pt-1">
+          <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+            <span class="transition-transform group-open/sums:rotate-90">▸</span>
+            <%= t("download.checksum") %>
+          </summary>
+          <ul class="mt-2 space-y-2 text-left">
+            <% if (desktopMacSha256) { %><li>macOS · Apple Silicon<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacSha256 %></span></li><% } %>
+            <% if (desktopMacIntelSha256) { %><li>macOS · Intel<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacIntelSha256 %></span></li><% } %>
+            <% if (desktopWinSha256) { %><li>Windows<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopWinSha256 %></span></li><% } %>
+            <% if (desktopLinuxSha256) { %><li>Linux<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopLinuxSha256 %></span></li><% } %>
+          </ul>
+        </details>
+      <% } %>
     </div>
   </div>
 </section>
