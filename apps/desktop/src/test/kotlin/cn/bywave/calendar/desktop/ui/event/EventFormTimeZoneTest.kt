@@ -139,6 +139,50 @@ class EventFormTimeZoneTest {
         assertEquals(Duration.ofMinutes(45), Duration.between(range(confirmed).first, range(confirmed).second))
     }
 
+    @Test fun `event zone resolution follows event then calendar then device`() {
+        assertEquals(melbourne, resolveEventZoneId("Australia/Melbourne", "Asia/Shanghai", shanghai))
+        assertEquals(shanghai, resolveEventZoneId(null, "Asia/Shanghai", melbourne))
+        assertEquals(melbourne, resolveEventZoneId(null, null, melbourne))
+        // 野值（导入数据里的城市名等）当没给，逐级往下回落。
+        assertEquals(shanghai, resolveEventZoneId("上海", "Asia/Shanghai", melbourne))
+        assertEquals(melbourne, resolveEventZoneId("Not/AZone", "Also/NotAZone", melbourne))
+        assertEquals(melbourne, resolveEventZoneId("", "  ", melbourne))
+    }
+
+    @Test fun `edit seeds the event zone from the event and sends it back`() {
+        val form = initialState(EventEditMode.Edit(source), listOf(calendar), shanghai, now)
+        assertEquals(melbourne, form.eventZone)
+        assertTrue(form.zoneTouched)
+        val (_, update) = buildBodies(form)
+        assertEquals("Australia/Melbourne", update!!.extra!!.timezone)
+    }
+
+    @Test fun `create inherits the calendar zone and switching calendars moves an untouched zone`() {
+        val zoned = CalendarMeta("cal", "Work", "#334455", timezone = "America/New_York")
+        val other = CalendarMeta("cal2", "Other", "#334455", timezone = "Asia/Shanghai")
+        val form = initialState(EventEditMode.Create(), listOf(zoned, other), melbourne, now)
+            .copy(summary = "T")
+        assertEquals(newYork, form.eventZone)
+        val (create, _) = buildBodies(form)
+        assertEquals("America/New_York", create!!.extra!!.timezone)
+        val switched = form.withCalendarSelection("cal2", listOf(zoned, other))
+        assertEquals(shanghai, switched.eventZone)
+        // 亲手选过之后，切换日历不再动时区。
+        val pinned = form.withZoneSelection(melbourne).withCalendarSelection("cal2", listOf(zoned, other))
+        assertEquals(melbourne, pinned.eventZone)
+    }
+
+    @Test fun `edit with unloaded extra never sends a guessed zone until the user picks one`() {
+        val bare = source.copy(extra = null)
+        val form = initialState(EventEditMode.Edit(bare), listOf(calendar), shanghai, now)
+        assertFalse(form.zoneTouched)
+        val (_, update) = buildBodies(form)
+        assertEquals(null, update!!.extra?.timezone)
+        val picked = form.withZoneSelection(newYork)
+        val (_, update2) = buildBodies(picked)
+        assertEquals("America/New_York", update2!!.extra!!.timezone)
+    }
+
     @Test fun `pending time confirmation is identical before or after the zone update effect`() {
         val local = LocalDateTime.parse("2026-11-01T01:30:00.123")
         val pending = EventPickerDraft(local, newYork, false, EventFormInstant("2026-11-01T06:30:00.123Z", local)).withTime(1, 45)
