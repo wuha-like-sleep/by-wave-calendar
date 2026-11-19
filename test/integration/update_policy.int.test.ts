@@ -189,6 +189,30 @@ describe("灰度分桶在 latest 接口上", () => {
     expect((await androidLatest("?deviceId=device-alpha&currentVersionCode=20")).status).toBe(404);
   });
 
+  it("后台快捷设置灰度 + 一键全量：只动比例，接口立刻按新比例分桶", async () => {
+    await writeAndroidManifest();
+    const admin = await makeUser("admin@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const setRollout = (percent: string) => app.inject({
+      method: "POST", url: "/admin/client-release/android/rollout",
+      headers: { cookie: s.cookie, "content-type": FORM_CT },
+      payload: formBody({ _csrf: s.csrf, percent }),
+    });
+    // 先全量可见 → 设 10% → 桶 73 的设备立刻不可见、桶 7 的仍可见。
+    expect((await androidLatest("?deviceId=device-alpha&currentVersionCode=25")).status).toBe(200);
+    const set = await setRollout("10");
+    expect(redirectFlash(set).success).toBeTruthy();
+    expect((await androidLatest("?deviceId=device-alpha&currentVersionCode=25")).status).toBe(404);
+    expect((await androidLatest("?deviceId=device-beta&currentVersionCode=25")).status).toBe(200);
+    // 一键全量（100）→ 原来不可见的设备立刻回来，且版本字段没被动过。
+    const full = await setRollout("100");
+    expect(redirectFlash(full).success).toBeTruthy();
+    const live = await androidLatest("?deviceId=device-alpha&currentVersionCode=25");
+    expect(live.status).toBe(200);
+    expect(live.body.versionCode).toBe(26);
+    expect(live.body.rolloutPercent).toBe(100);
+  });
+
   it("桌面同一口径：versionCode 31 时 11111111-… 桶 64，10% 下不可见、无标识可见", async () => {
     await writeDesktopManifest({ rolloutPercent: 10 });
     const out = await desktopLatest("?deviceId=11111111-2222-3333-4444-555555555555&currentVersionCode=30");

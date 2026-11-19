@@ -83,12 +83,36 @@
         <dd class="font-medium text-slate-900"><%= p.graceDays %> 天</dd>
       </div>
     </dl>
-    <p class="text-xs text-slate-500 mb-5 -mt-3">
+    <p class="text-xs text-slate-500 mb-3 -mt-3">
       灰度与宽限都写在清单里（<code class="bg-slate-100 px-1 rounded">rolloutPercent</code> /
       <code class="bg-slate-100 px-1 rounded">graceDays</code>）：灰度按设备分桶，没轮到的设备暂时看不到新版；
       宽限是被强制更新命中后先只提醒、过后才强升的天数。镜像下载地址写清单里的
       <code class="bg-slate-100 px-1 rounded">mirrorUrl</code>（桌面端写在每个资产里），主备都失败时客户端才会去试它。
     </p>
+    <%# 改比例是发布现场的高频动作，单独给一个小表单：只动 rolloutPercent，
+        不用为了一个数字重贴整份 JSON（顺手改坏别的字段的风险也随之消失）。 %>
+    <div class="flex flex-wrap items-end gap-2 mb-5">
+      <form method="post" action="/admin/client-release/<%= p.platform %>/rollout" class="flex items-end gap-2">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <label class="block">
+          <span class="text-xs text-slate-500">灰度比例（%）</span>
+          <input type="number" name="percent" min="0" max="100" step="1" value="<%= p.rolloutPercent %>"
+                 class="mt-1 w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
+        </label>
+        <button type="submit"
+                class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          设置灰度
+        </button>
+      </form>
+      <form method="post" action="/admin/client-release/<%= p.platform %>/rollout">
+        <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+        <input type="hidden" name="percent" value="100" />
+        <button type="submit"
+                class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
+          一键全量
+        </button>
+      </form>
+    </div>
 
     <%# 发布后自检：版本号对不等于链路通。地址是按「本站有没有这个文件」
         解析出来的，站长在这里亲眼看到 App 会被送去哪儿，就不用等用户

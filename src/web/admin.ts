@@ -3545,6 +3545,49 @@ export async function adminRoutes(app: FastifyInstance) {
     return back(`已保存${p.data === "android" ? "安卓" : "桌面端"}清单：${ok.versionName}（${ok.versionCode}）`, true);
   });
 
+  // 灰度比例的快捷设置（含「一键全量」= 设成 100）。放量是发布现场的
+  // 高频动作，让站长为了改一个数字去重贴整份 JSON，既慢又容易顺手
+  // 改坏别的字段。这里只动 rolloutPercent 一个字段：取当前生效的那
+  // 份（覆盖优先、否则随代码那份），改完照样过读取侧的 parse、照样
+  // 存规范化结果 —— 和整份保存同一条路，不另开后门。
+  app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/rollout", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const back = (msg: string, ok = false) =>
+      redirectWithFlash(reply, "/admin/client-release?" + (ok ? "success=" : "error=") + encodeURIComponent(msg));
+    const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
+    if (!p.success) return reply.code(400).send("bad_platform");
+    const body = z.object({ percent: z.coerce.number().int().min(0).max(100) }).safeParse(req.body);
+    if (!body.success) return back("灰度比例要是 0–100 的整数 —— 没有保存");
+    const lib = p.data === "android"
+      ? await import("../lib/android_release.js")
+      : await import("../lib/desktop_release.js");
+    const current = await lib.getLatestRelease();
+    if (!current) return back("还没有可放量的清单 —— 先发布一份再设灰度");
+    const now = new Date().toISOString();
+    const ok = p.data === "android"
+      ? (lib as typeof import("../lib/android_release.js")).parseAndroidManifest(
+          { ...current, rolloutPercent: body.data.percent }, now)
+      : (lib as typeof import("../lib/desktop_release.js")).parseDesktopManifest(
+          { ...current, rolloutPercent: body.data.percent }, now);
+    if (!ok) return back("当前清单读取侧认不出来 —— 没有保存");
+    await mkdir(path.dirname(CLIENT_MANIFEST_RUNTIME[p.data]), { recursive: true });
+    await writeFile(CLIENT_MANIFEST_RUNTIME[p.data], JSON.stringify(ok, null, 2) + "\n", "utf8");
+    await audit(req, u.id, "app_manifest.rollout_set", {
+      targetType: "client_release", targetId: p.data,
+      details: { rolloutPercent: body.data.percent, versionCode: ok.versionCode },
+    });
+    return back(
+      body.data.percent >= 100
+        ? `${p.data === "android" ? "安卓" : "桌面端"}已全量发布（100%）`
+        : `${p.data === "android" ? "安卓" : "桌面端"}灰度已设为 ${body.data.percent}%`,
+      true,
+    );
+  });
+
   app.post<{ Params: { platform: string } }>("/admin/client-release/:platform/clear", {
     config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "10 minutes" } },
   }, async (req, reply) => {
