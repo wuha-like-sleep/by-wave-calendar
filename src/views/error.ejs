@@ -3,4 +3,11 @@
   <h1 class="mt-4 text-xl font-semibold text-slate-900"><%= heading %></h1>
   <p class="mt-2 text-sm text-slate-500"><%= message %></p>
   <a href="/" class="mt-6 inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("error.backHome") %></a>
+  <% if (statusCode === 404) { %>
+    <div class="mt-5 flex items-center justify-center gap-4 text-sm">
+      <a href="/download" class="text-slate-600 hover:text-brand-700 hover:underline"><%= t("footer.linkDownload") %></a>
+      <span class="text-slate-300" aria-hidden="true">·</span>
+      <a href="/support" class="text-slate-600 hover:text-brand-700 hover:underline"><%= t("footer.linkSupport") %></a>
+    </div>
+  <% } %>
 </div>
