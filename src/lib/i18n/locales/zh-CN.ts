@@ -407,7 +407,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "完整 Token 只显示这一次，直接填到要用的工具里。",
   "settings.devices.apiTokenExpires": "{date} 到期",
   "settings.devices.apiTokenNeverExpires": "不过期",
-  "settings.devices.apiTokenExpiryHint": "小提示：只是试用的工具，建议设个期限（比如 90 天），不要选不过期。",
+  "settings.devices.apiTokenExpiryHint": "默认 365 天，需要更久可以改大；填 0 表示不过期。",
   "settings.devices.apiTokenExpired": "已过期",
   "settings.devices.apiTokenRevoke": "撤销",
   "settings.devices.apiTokenRevokeConfirm": "撤销后用这个 Token 的工具立刻失效，之后可以再建新的。",

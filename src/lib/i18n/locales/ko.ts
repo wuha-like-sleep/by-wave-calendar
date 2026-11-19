@@ -416,7 +416,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "전체 토큰은 이번 한 번만 표시됩니다. 사용할 도구에 바로 넣으세요.",
   "settings.devices.apiTokenExpires": "{date} 만료",
   "settings.devices.apiTokenNeverExpires": "만료 없음",
-  "settings.devices.apiTokenExpiryHint": "팁: 시험 삼아 쓰는 도구라면 만료 없음 대신 기한(예: 90일)을 정하는 편이 좋습니다.",
+  "settings.devices.apiTokenExpiryHint": "기본값은 365일입니다. 필요하면 늘리세요. 0 = 만료 없음.",
   "settings.devices.apiTokenExpired": "만료됨",
   "settings.devices.apiTokenRevoke": "해지",
   "settings.devices.apiTokenRevokeConfirm": "해지하면 이 토큰을 쓰는 도구는 즉시 멈춥니다. 나중에 새로 만들 수 있습니다.",

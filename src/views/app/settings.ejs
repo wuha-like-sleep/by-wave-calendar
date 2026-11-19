@@ -608,7 +608,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
                class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         <label class="flex items-center gap-2 text-sm text-slate-600">
           <%= t("settings.devices.apiTokenExpiryLabel") %>
-          <input type="number" name="expiresInDays" min="0" max="3650" value="0"
+          <input type="number" name="expiresInDays" min="0" max="3650" value="365"
                  class="w-24 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
         </label>
       </div>

@@ -416,7 +416,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "トークン全体が表示されるのはこの一度だけです。使うツールにそのまま入れてください。",
   "settings.devices.apiTokenExpires": "{date} に期限切れ",
   "settings.devices.apiTokenNeverExpires": "期限なし",
-  "settings.devices.apiTokenExpiryHint": "ヒント：試しに使うツールには、無期限ではなく期限（例：90日）を設定するのがおすすめです。",
+  "settings.devices.apiTokenExpiryHint": "既定値は 365 日です。必要な場合は増やせます（0 = 無期限）。",
   "settings.devices.apiTokenExpired": "期限切れ",
   "settings.devices.apiTokenRevoke": "取り消し",
   "settings.devices.apiTokenRevokeConfirm": "取り消すと、このトークンを使うツールはすぐに止まります。後で新しいものを作れます。",

@@ -216,4 +216,20 @@ describe("self-service API tokens", () => {
     expect(tokens).toHaveLength(2);
     expect(tokens.map((t) => t.scope).sort()).toEqual(["read", "write"]);
   });
+
+  it("defaults a new token to a 365-day expiry, and still honours an explicit 0 (never)", async () => {
+    const defaulted = await postSelfServiceToken(session, { label: "Defaulted", scope: "read", currentPassword: REAL_PASSWORD });
+    expect(defaulted.statusCode, defaulted.body).toBe(302);
+    const never = await postSelfServiceToken(session, { label: "Forever", scope: "read", expiresInDays: 0, currentPassword: REAL_PASSWORD });
+    expect(never.statusCode, never.body).toBe(302);
+    const tokens = await listApiTokensForUser(userId);
+    expect(tokens).toHaveLength(2);
+    const byLabel = new Map(tokens.map((t) => [t.label, t]));
+    const exp = byLabel.get("Defaulted")!.expiresAt;
+    expect(exp).not.toBeNull();
+    const days = (new Date(exp!).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(364);
+    expect(days).toBeLessThan(366);
+    expect(byLabel.get("Forever")!.expiresAt).toBeNull();
+  });
 });

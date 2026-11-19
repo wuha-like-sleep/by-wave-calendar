@@ -2299,7 +2299,7 @@ export async function webRoutes(app: FastifyInstance) {
       .object({
         label: z.string().min(1).max(80),
         scope: z.enum(["read", "write"]).default("read"),
-        expiresInDays: z.coerce.number().int().min(0).max(3650).default(0),
+        expiresInDays: z.coerce.number().int().min(0).max(3650).default(365),
         currentPassword: z.string().max(200).optional(),
         mfaCode: z.string().max(16).optional(),
       })

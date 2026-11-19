@@ -416,7 +416,7 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "C'est la seule fois où le jeton complet s'affiche. Mettez-le directement dans l'outil qui l'utilisera.",
   "settings.devices.apiTokenExpires": "Expire le {date}",
   "settings.devices.apiTokenNeverExpires": "n'expire jamais",
-  "settings.devices.apiTokenExpiryHint": "Conseil : pour un outil que vous essayez, mettez une expiration (par exemple 90 jours) plutôt que jamais.",
+  "settings.devices.apiTokenExpiryHint": "Par défaut : 365 jours. Augmentez si besoin, 0 = sans expiration.",
   "settings.devices.apiTokenExpired": "Expiré",
   "settings.devices.apiTokenRevoke": "Révoquer",
   "settings.devices.apiTokenRevokeConfirm": "La révocation arrête aussitôt tous les outils qui utilisent ce jeton. Vous pourrez en créer un nouveau ensuite.",

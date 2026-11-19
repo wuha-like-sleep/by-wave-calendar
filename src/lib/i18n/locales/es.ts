@@ -416,7 +416,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "Es la única vez que se muestra el token completo. Ponlo directamente en la herramienta que lo va a usar.",
   "settings.devices.apiTokenExpires": "Vence el {date}",
   "settings.devices.apiTokenNeverExpires": "nunca vence",
-  "settings.devices.apiTokenExpiryHint": "Consejo: para una herramienta que estás probando, pon un vencimiento (por ejemplo, 90 días) en lugar de nunca.",
+  "settings.devices.apiTokenExpiryHint": "Por defecto: 365 días. Súbelo si necesitas más, o pon 0 para que nunca venza.",
   "settings.devices.apiTokenExpired": "Vencido",
   "settings.devices.apiTokenRevoke": "Revocar",
   "settings.devices.apiTokenRevokeConfirm": "Al revocarlo, todas las herramientas que usan este token dejan de funcionar al momento. Después puedes crear uno nuevo.",

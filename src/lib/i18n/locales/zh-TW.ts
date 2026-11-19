@@ -406,7 +406,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "完整 Token 只顯示這一次，直接填到要用的工具裡。",
   "settings.devices.apiTokenExpires": "{date} 到期",
   "settings.devices.apiTokenNeverExpires": "不過期",
-  "settings.devices.apiTokenExpiryHint": "小提示：只是試用的工具，建議設個期限（比如 90 天），不要選不過期。",
+  "settings.devices.apiTokenExpiryHint": "預設 365 天，需要更久可以改大；填 0 表示不過期。",
   "settings.devices.apiTokenExpired": "已過期",
   "settings.devices.apiTokenRevoke": "撤銷",
   "settings.devices.apiTokenRevokeConfirm": "撤銷後用這個 Token 的工具立刻失效，之後可以再建新的。",

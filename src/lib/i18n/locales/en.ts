@@ -423,7 +423,7 @@ export const en = {
   "settings.devices.newApiTokenHint": "This is the only time the full token is shown. Put it straight into the tool that will use it.",
   "settings.devices.apiTokenExpires": "Expires {date}",
   "settings.devices.apiTokenNeverExpires": "never expires",
-  "settings.devices.apiTokenExpiryHint": "Tip: for a tool you are just trying out, set an expiry (for example 90 days) instead of never.",
+  "settings.devices.apiTokenExpiryHint": "Defaults to 365 days. Make it longer if you need to, or set 0 for no expiry.",
   "settings.devices.apiTokenExpired": "Expired",
   "settings.devices.apiTokenRevoke": "Revoke",
   "settings.devices.apiTokenRevokeConfirm": "Revoking stops every tool using this token right away. You can create a new one afterwards.",

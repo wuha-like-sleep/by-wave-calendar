@@ -416,7 +416,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "settings.devices.newApiTokenHint": "Das vollständige Token wird nur dieses eine Mal gezeigt. Tragen Sie es direkt in das Tool ein, das es nutzen wird.",
   "settings.devices.apiTokenExpires": "Läuft ab: {date}",
   "settings.devices.apiTokenNeverExpires": "läuft nie ab",
-  "settings.devices.apiTokenExpiryHint": "Tipp: Für ein Tool, das Sie nur ausprobieren, setzen Sie ein Ablaufdatum (z. B. 90 Tage) statt „nie“.",
+  "settings.devices.apiTokenExpiryHint": "Standard: 365 Tage. Bei Bedarf größer stellen, 0 = läuft nie ab.",
   "settings.devices.apiTokenExpired": "Abgelaufen",
   "settings.devices.apiTokenRevoke": "Widerrufen",
   "settings.devices.apiTokenRevokeConfirm": "Beim Widerruf stoppen alle Tools mit diesem Token sofort. Danach können Sie ein neues erstellen.",
