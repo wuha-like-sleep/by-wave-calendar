@@ -63,7 +63,37 @@ describe("photonSuggestions", () => {
         { properties: { name: "C", city: "Z" } },
       ],
     };
-    expect(photonSuggestions(body, 2)).toEqual([{ label: "A, X" }, { label: "B, Y" }]);
+    expect(photonSuggestions(body, 2)).toEqual([
+      { label: "A, X", name: "A", city: "X" },
+      { label: "B, Y", name: "B", city: "Y" },
+    ]);
+  });
+
+  it("组件与坐标一起带出（客户端要学进本地地址簿）", () => {
+    const body = {
+      features: [
+        {
+          properties: {
+            name: "Melbourne Central", street: "La Trobe Street", housenumber: "211",
+            district: "Melbourne CBD", city: "Melbourne", postcode: "3000",
+            state: "Victoria", country: "Australia",
+          },
+          geometry: { coordinates: [144.9628, -37.8104] },
+        },
+      ],
+    };
+    expect(photonSuggestions(body, 5)).toEqual([{
+      label: "Melbourne Central, La Trobe Street 211, Melbourne CBD, Melbourne 3000, Victoria, Australia",
+      name: "Melbourne Central",
+      street: "La Trobe Street 211",
+      suburb: "Melbourne CBD",
+      city: "Melbourne",
+      state: "Victoria",
+      postcode: "3000",
+      country: "Australia",
+      lat: -37.8104,
+      lon: 144.9628,
+    }]);
   });
 
   it("形状不对就空数组", () => {
@@ -85,7 +115,7 @@ describe("fetchPhotonSuggestions", () => {
       } as Response;
     }) as typeof fetch;
     const out = await fetchPhotonSuggestions({ ...base, lang: "zh-CN", fetchImpl });
-    expect(out).toEqual([{ label: "Melbourne Central, Melbourne" }]);
+    expect(out).toEqual([{ label: "Melbourne Central, Melbourne", name: "Melbourne Central", city: "Melbourne" }]);
     expect(seenUrl).toContain("lang=default");
     expect(seenUrl).toContain("q=Melbourne+Central");
   });

@@ -17,7 +17,7 @@ import { requireUserOrSend } from "../lib/session.js";
 import { env } from "../env.js";
 import {
   GeoSuggestCache,
-  fetchPhotonSuggestions,
+  fetchGeoSuggestions,
   type GeoSuggestion,
 } from "../lib/geo_suggest.js";
 
@@ -49,8 +49,9 @@ export async function geoRoutes(app: FastifyInstance) {
       const cached = cache.get(key);
       if (cached) return reply.send({ suggestions: cached });
 
-      const suggestions = await fetchPhotonSuggestions({
-        baseUrl: env.PHOTON_BASE_URL,
+      const suggestions = await fetchGeoSuggestions({
+        provider: env.GEO_PROVIDER,
+        baseUrl: env.GEO_PROVIDER_BASE_URL,
         query: q,
         lang,
         limit: 5,
