@@ -3,6 +3,7 @@ import { db, schema } from "../db/client.js";
 import { purgeStaleDeviceRows } from "./devices.js";
 import { purgeOldReadNotifications } from "./notifications.js";
 import { remindIdleApiTokens } from "./token_idle_reminders.js";
+import { purgeOldApiTokenUsage } from "./api_token.js";
 
 // Days after which soft-deleted events are physically purged. 90 days is
 // long enough that the user can recover via DB backup if they realize a
@@ -50,6 +51,12 @@ export function startHousekeepingScheduler(log: { info: (m: string) => void; war
       const notif = await purgeOldReadNotifications();
       if (notif.purged > 0) {
         log.info(`[housekeeping] purged ${notif.purged} read notification(s) older than 90d`);
+      }
+      // API Token 每日用量只留 90 天（页面只看 30 天，90 是全站统一的
+      // 保留口径，见 api_token.ts 的 API_TOKEN_USAGE_RETENTION_DAYS）。
+      const usage = await purgeOldApiTokenUsage();
+      if (usage.purged > 0) {
+        log.info(`[housekeeping] purged ${usage.purged} stale API token daily usage row(s)`);
       }
     } catch (err) {
       log.warn({ err });

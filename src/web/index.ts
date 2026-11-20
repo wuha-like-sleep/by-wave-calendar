@@ -40,7 +40,7 @@ import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
-import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
+import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
 import { verifyTotpCode } from "../lib/mfa.js";
 import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
@@ -2433,6 +2433,18 @@ export async function webRoutes(app: FastifyInstance) {
       apiEnabled: siteSettings.apiEnabled,
       apiTokenLimit: MAX_API_TOKENS_PER_USER,
       apiTokenLimitReached: apiTokens.length >= MAX_API_TOKENS_PER_USER,
+      // 近 30 天用量（每日条形 + 按 Token 分列）。pct 在这里算好，模板只管
+      // 把数字变成高度/宽度，不引任何图表库。
+      apiTokenUsage: await (async () => {
+        const u = await getApiTokenUsageSummary(user.id, 30);
+        const maxDay = Math.max(1, ...u.perDay.map((d) => d.count));
+        const maxToken = Math.max(1, ...u.perToken.map((t) => t.count));
+        return {
+          total: u.total,
+          days: u.perDay.map((d) => ({ ...d, pct: Math.round((d.count / maxDay) * 100) })),
+          perToken: u.perToken.map((t) => ({ ...t, pct: Math.round((t.count / maxToken) * 100) })),
+        };
+      })(),
       issuedToken: feedback.issuedToken ?? null,
       issuedLabel: feedback.issuedLabel ?? null,
       caldavBaseUrl,

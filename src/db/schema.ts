@@ -8,6 +8,8 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  date,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { desc, sql } from "drizzle-orm";
 
@@ -559,11 +561,33 @@ export const apiTokens = pgTable("api_tokens", {
   // or dormant — the list-side counterpart of the 90-day idle mail.
   useCount: integer("use_count").notNull().default(0),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
+  // Set when this token was replaced by a rotation. The grace window is
+  // expressed by compressing expiresAt (see rotateApiToken); this stamp is
+  // what lets the settings list tell "in rotation grace" apart from a
+  // token that simply has an expiry of its own.
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdx: index("api_tokens_user_idx").on(t.userId),
   prefixIdx: index("api_tokens_prefix_idx").on(t.prefix),
+}));
+
+// Per-token, per-day call totals — the data behind the settings page's
+// "last 30 days" usage view. Lifetime totals live on api_tokens.use_count;
+// this table exists because a lifetime number can't answer "is this token
+// still being used *lately*". One row per (token, UTC day), bumped by a
+// single upsert inside touchApiToken. Rows are purged after 90 days by
+// housekeeping (the house retention norm), well past the 30-day view.
+export const apiTokenDailyUsage = pgTable("api_token_daily_usage", {
+  tokenId: uuid("token_id").notNull().references(() => apiTokens.id, { onDelete: "cascade" }),
+  // UTC calendar day (YYYY-MM-DD). UTC, not the owner's timezone, so the
+  // bucket boundary is the same no matter where the server runs.
+  day: date("day").notNull(),
+  count: integer("count").notNull().default(0),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.tokenId, t.day] }),
+  dayIdx: index("api_token_daily_usage_day_idx").on(t.day),
 }));
 
 // Native app / desktop client registrations. Each row represents one
