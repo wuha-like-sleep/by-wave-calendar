@@ -43,6 +43,11 @@ data class EventDTO(
      *  start (the row's own startsAt stays the series start). Null when the
      *  series has ended or the event does not repeat. */
     val nextStartsAt: String? = null,
+    /** 本地标记，不上线：这条事件有还没同步到服务端的改动（离线队列
+     *  里有它的条目，含停在待处理里的）。由 EventRepository.observe
+     *  在读缓存时按队列现状打上，界面据此显示「待同步」。 */
+    @kotlinx.serialization.Transient
+    val pendingSync: Boolean = false,
 )
 
 @Serializable

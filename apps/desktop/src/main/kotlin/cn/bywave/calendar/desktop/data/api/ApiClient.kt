@@ -173,9 +173,17 @@ internal fun pairPollRetryDelayMs(consecutiveFailures: Int): Long? {
 class ApiClient(
     val serverUrl: String,
     val profileId: String? = null,
+    /** 账号键（serverUrl|email）。离线写队列按它归属：deviceId 在
+     *  重新配对时会换，账号键不变，攒着的待同步改动才能被重新
+     *  认领续传。匿名 client 为 null（没有队列）。 */
+    val accountKey: String? = null,
 ) {
     /** 绑定到一个已登录的账号。除了扫码配对，所有地方都该用这个。 */
-    constructor(profile: Profile) : this(profile.serverUrl, profile.deviceId)
+    constructor(profile: Profile) : this(
+        profile.serverUrl,
+        profile.deviceId,
+        "${profile.serverUrl}|${profile.email}",
+    )
 
     private val baseUrl: String = serverUrl.trimEnd('/')
 

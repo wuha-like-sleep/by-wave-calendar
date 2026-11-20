@@ -258,4 +258,21 @@ to match the development locale.
     <string name="booking_schedule_timezone">Scheduling zone: %1$s. Booked times use your device timezone.</string>
     <string name="event_detail_display_timezone">Display timezone</string>
     <string name="event_detail_source_timezone">Event timezone</string>
+    <string name="offline_title">Pending sync</string>
+    <string name="offline_back">Back</string>
+    <string name="offline_bar_pending">%1$d changes waiting to sync</string>
+    <string name="offline_bar_attention">%1$d changes need your decision</string>
+    <string name="offline_empty_title">All synced</string>
+    <string name="offline_empty_body">Changes you make offline are saved on this device first and sent automatically when you are back online.</string>
+    <string name="offline_kind_create">New event</string>
+    <string name="offline_kind_update">Edited event</string>
+    <string name="offline_kind_delete">Deleted event</string>
+    <string name="offline_state_pending">Waiting to sync — sent automatically when you are back online</string>
+    <string name="offline_attention_default_reason">The server rejected this change.</string>
+    <string name="offline_action_keep_mine">Keep mine</string>
+    <string name="offline_action_use_server">Use server version</string>
+    <string name="offline_action_discard">Discard</string>
+    <string name="offline_detail_label">Sync status</string>
+    <string name="offline_detail_value">Saved on this device — waiting to sync</string>
+    <string name="offline_block_badge">Pending sync</string>
 </resources>

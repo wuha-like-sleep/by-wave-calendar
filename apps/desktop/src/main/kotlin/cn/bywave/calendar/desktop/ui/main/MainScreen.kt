@@ -136,6 +136,8 @@ fun MainScreen(
         if (client == null) null else CalendarState(client, scope)
     }
 
+    var showOfflineQueue by remember { mutableStateOf(false) }
+
     LaunchedEffect(state) { state?.load() }
     val focused = LocalWindowInfo.current.isWindowFocused
     LaunchedEffect(state, focused) {
@@ -496,6 +498,19 @@ fun MainScreen(
                         ui.actionError?.let { msg ->
                             ActionErrorBanner(message = msg, onDismiss = { state.dismissActionError() })
                         }
+                        // 离线队列指示：有没送出去的改动就亮一条，
+                        // 待处理（被服务端拒绝、要用户裁决）优先。
+                        if (ui.pendingOps.isNotEmpty()) {
+                            PendingSyncBanner(
+                                pendingCount = ui.pendingOps.count {
+                                    it.state == cn.bywave.calendar.sync.PendingOpState.PENDING
+                                },
+                                attentionCount = ui.pendingOps.count {
+                                    it.state == cn.bywave.calendar.sync.PendingOpState.ATTENTION
+                                },
+                                onClick = { showOfflineQueue = true },
+                            )
+                        }
                     }
                     ui.undoDelete?.let { undo ->
                         UndoDeleteSnackbar(
@@ -519,10 +534,19 @@ fun MainScreen(
         }
     }
 
+    if (showOfflineQueue) {
+        OfflineQueueDialog(
+            ops = ui.pendingOps,
+            onResolve = { opId, resolution -> state.resolveAttention(opId, resolution) },
+            onDismiss = { showOfflineQueue = false },
+        )
+    }
+
     // ---- Sheets / dialogs ----
     when (val sheet = ui.activeSheet) {
         is ActiveSheet.Detail -> EventDetailDialog(
             event = sheet.event,
+            pendingSync = ui.pendingSyncIds.contains(sheet.event.id),
             calendars = ui.calendars,
             attendees = ui.detailAttendees?.takeIf { ui.detailAttendeesFor == sheet.event.id },
             onDecideProposal = { proposal, accept -> state.decideProposal(proposal, accept) },

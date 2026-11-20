@@ -140,6 +140,17 @@ final class APIClient {
         return try await request(method: "PATCH", path: path, body: data)
     }
 
+    // 离线队列重放专用：请求体在入队时就已经序列化好存着了，重放
+    // 直接发原始字节——保证发出去的和用户保存那一刻的一模一样，
+    // 不经过第二次编码。
+    func postRaw<T: Decodable>(_ path: String, bodyData: Data) async throws -> T {
+        try await request(method: "POST", path: path, body: bodyData)
+    }
+
+    func patchRaw<T: Decodable>(_ path: String, bodyData: Data) async throws -> T {
+        try await request(method: "PATCH", path: path, body: bodyData)
+    }
+
     // DELETE with no response body — server returns 204. We swallow the
     // empty response. Use this for `/events/:id`.
     func delete(_ path: String) async throws {

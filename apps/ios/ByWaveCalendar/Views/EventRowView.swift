@@ -18,6 +18,10 @@ struct EventRowView: View {
     var onDelete: (() -> Void)? = nil
     var onDuplicate: (() -> Void)? = nil
     var onCopySummary: (() -> Void)? = nil
+    // 这条事件有还没同步到服务端的改动（离线队列里有它的条目）。
+    // 调用方按队列现状算好传进来，行里只负责亮一个标记——本地已经
+    // 是改后的样子，但不能让用户以为别台设备上也能看到了。
+    var isPendingSync: Bool = false
 
     /// "Past" = the event has fully ended before now. Used to gray out
     /// + strike through the title so the user can tell at a glance
@@ -82,6 +86,11 @@ struct EventRowView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    }
+                    if isPendingSync {
+                        Text("待同步".loc)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.orange)
                     }
                 }
                 HStack(spacing: 6) {

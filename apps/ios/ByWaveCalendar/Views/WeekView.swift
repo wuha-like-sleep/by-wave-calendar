@@ -558,19 +558,21 @@ struct WeekView: View {
             scope: scope?.rawValue,
             recurrenceId: recIso,
         )
-        do {
-            let client = APIClient(state: state)
-            let _: EventDTO = try await client.patch("/events/\(m.event.id)", body: body)
-            onEventChanged()
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-        } catch let e as APIError {
-            moveErrorMessage = e.localizedDescription
-            // Trigger a reload to restore the original time visually.
-            onEventChanged()
-        } catch {
-            moveErrorMessage = error.localizedDescription
-            onEventChanged()
+        // 走离线队列：拖动改时间先落本地 + 入队，没网不再弹错把事件
+        // 弹回原位——新位置保留显示、标待同步，网络恢复自动送出。
+        // 被服务端明确拒绝（停进待处理）时，日历页顶上的待处理条
+        // 会让用户去裁决。
+        if let bodyData = try? JSONEncoder.iso().encode(AnyEncodable(body)) {
+            state.offlineSync.enqueueUpdate(
+                eventId: m.event.id, bodyData: bodyData,
+                scope: scope?.rawValue, recurrenceId: recIso,
+                baseStartsAt: f.string(from: m.event.startsAt),
+                snapshot: [m.event], summary: m.event.summary,
+            )
+            await state.offlineSync.replay()
         }
+        onEventChanged()
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
     }
 
     // MARK: - Current-time line (only on today's column)

@@ -170,6 +170,10 @@ final class AppState: ObservableObject {
     /// 锦上添花，失败必须静默，不能挡启动。
     @Published var pendingAnnouncement: IosAnnouncement?
 
+    /// 离线写队列（见 Sync/OfflineSync.swift）。建 / 改 / 删先经它
+    /// 落本地 + 入队再重放。按账号键存文件，退出登录不清队列。
+    let offlineSync = OfflineSyncService()
+
     func noteEventDeleted(id: String, summary: String) {
         pendingUndoDelete = PendingUndoDelete(eventId: id, summary: summary, token: UUID())
     }
@@ -224,6 +228,7 @@ final class AppState: ObservableObject {
 
     init() {
         loadProfiles()
+        offlineSync.bind(state: self)
         Task { await bootstrap() }
     }
 
@@ -334,6 +339,8 @@ final class AppState: ObservableObject {
         // 传不到服务器；确认登录着之后补注册一次，iOS 会再发一次 token
         // 回调，PushService 就能把它传上去了。
         if isSignedIn { PushService.shared?.reregister() }
+        // 登录态确认后把离线队列推一轮：上次离线攒的改动在这里续传。
+        if isSignedIn { Task { await offlineSync.replay() } }
         // Fire-and-forget theme fetch for the active profile.
         Task { await self.refreshThemeFromServer() }
         // 服务端公告同样是启动时顺手拉，不挡 bootstrap 收尾。
@@ -483,6 +490,8 @@ final class AppState: ObservableObject {
         // 被登出的那个账号重新登进来了，「它被登出了」的提示就过期了。
         if accountNotice?.profileId == profileId { accountNotice = nil }
         persistProfiles()
+        // 离线队列换成这个账号的那份（重新登录同账号 = 续传它攒的改动）。
+        offlineSync.accountChanged()
         Task { await self.refreshThemeFromServer() }
     }
 
@@ -499,6 +508,8 @@ final class AppState: ObservableObject {
             themeAccentHex = accent
         }
         persistProfiles()
+        // 离线队列换成新账号的那份（旧账号的留在它自己的文件里）。
+        offlineSync.accountChanged()
         // 提醒现在按账号分命名空间，切账号**不清**其它账号的 ——
         // 两个账号都是用户自己加上去的，切到 B 就把 A 的提醒静音掉会很意外，
         // 而通知正文里本来就带着日历名，分得清是哪一个。

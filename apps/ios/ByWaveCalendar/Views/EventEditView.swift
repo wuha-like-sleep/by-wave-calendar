@@ -1013,7 +1013,12 @@ struct EventEditView: View {
         }
 
         do {
-            let client = APIClient(state: state)
+            // 保存走离线队列：请求体先序列化存进队列、本地立刻按新值
+            // 显示，有网当场重放落定，没网排队等恢复——不再像以前那样
+            // 断网点保存只剩一个报错、编辑内容全丢。重放复用同一份
+            // 请求体字节和同一个 clientUid，服务端按 uid 幂等，
+            // 重试不会建出重复事件。
+            let service = state.offlineSync
             let saved: EventSaved
             switch mode {
             case .create, .duplicateOf:
@@ -1021,7 +1026,7 @@ struct EventEditView: View {
                 // empty recurrence editor (seeded in init) so the user
                 // doesn't accidentally spawn a parallel recurring
                 // series; a rule only goes out if they set one here.
-                saved = try await client.post("/events", body: EventCreateInput(
+                let input = EventCreateInput(
                     calendarId: calendarId,
                     summary: summary.trimmingCharacters(in: .whitespaces),
                     description: description.isEmpty ? nil : description,
@@ -1036,7 +1041,16 @@ struct EventEditView: View {
                     // the clientUid @State). Always set in create/duplicate
                     // mode; this branch only runs for those modes.
                     clientUid: clientUid,
-                ))
+                )
+                let bodyData = try JSONEncoder.iso().encode(AnyEncodable(input))
+                let tempId = PendingOpLogic.localEventId(clientUid: clientUid ?? "")
+                guard let localDTO = service.localDTO(forCreateBody: bodyData, tempId: tempId) else {
+                    throw APIError.decode(NSError(domain: "offline-local-dto", code: 0))
+                }
+                service.enqueueCreate(bodyData: bodyData, localDTO: localDTO, clientUid: clientUid)
+                // 落定了拿服务端那份（真实 id），没落定用本地那份——
+                // 「已创建」条和日历页都先按本地的显示，同步后自动换正。
+                saved = await service.replayCreate(tempId: tempId) ?? localDTO
             case .edit(let existing):
                 // Only send calendarId when it actually changed — otherwise
                 // server may treat the "no-op move" as a real move and reject
@@ -1047,7 +1061,7 @@ struct EventEditView: View {
                     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                     return f.string(from: $0)
                 }
-                saved = try await client.patch("/events/\(existing.id)", body: EventUpdateInput(
+                let input = EventUpdateInput(
                     calendarId: cidIfChanged,
                     summary: summary.trimmingCharacters(in: .whitespaces),
                     description: description,
@@ -1060,7 +1074,19 @@ struct EventEditView: View {
                     scope: scope?.rawValue,
                     recurrenceId: recIdIso,
                     exdates: exdatesToSend,
-                ))
+                )
+                let bodyData = try JSONEncoder.iso().encode(AnyEncodable(input))
+                let baseF = ISO8601DateFormatter()
+                baseF.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                service.enqueueUpdate(
+                    eventId: existing.id, bodyData: bodyData,
+                    scope: scope?.rawValue, recurrenceId: recIdIso,
+                    baseStartsAt: baseF.string(from: existing.startsAt),
+                    snapshot: [existing],
+                    summary: summary.trimmingCharacters(in: .whitespaces),
+                )
+                await service.replay()
+                saved = service.applyingUpdate(existing, payloadJson: String(data: bodyData, encoding: .utf8))
             }
             // Success buzz — mirrors WeekView.commitMove so every
             // create / edit / duplicate that lands on the server gives the

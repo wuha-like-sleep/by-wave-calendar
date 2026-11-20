@@ -41,6 +41,27 @@ interface EventDao {
 }
 
 @Dao
+interface PendingOpDao {
+    @Query("SELECT * FROM pending_ops WHERE accountKey = :accountKey ORDER BY seq ASC")
+    fun observeForAccount(accountKey: String): Flow<List<PendingOpEntity>>
+
+    @Query("SELECT * FROM pending_ops WHERE accountKey = :accountKey ORDER BY seq ASC")
+    suspend fun listForAccount(accountKey: String): List<PendingOpEntity>
+
+    @Query("SELECT MAX(seq) FROM pending_ops WHERE accountKey = :accountKey")
+    suspend fun maxSeq(accountKey: String): Long?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(row: PendingOpEntity)
+
+    @Query("DELETE FROM pending_ops WHERE id = :id")
+    suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM pending_ops WHERE accountKey = :accountKey")
+    suspend fun clearAccount(accountKey: String)
+}
+
+@Dao
 interface CalendarDao {
     @Query("SELECT * FROM calendars WHERE profileId = :profileId ORDER BY name ASC")
     fun observeForProfile(profileId: String): Flow<List<CalendarEntity>>

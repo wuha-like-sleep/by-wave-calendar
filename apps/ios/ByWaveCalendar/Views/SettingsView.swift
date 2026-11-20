@@ -62,6 +62,19 @@ struct SettingsView: View {
                                subtitle: "系统日历 · 提醒 · 当前服务器",
                                tint: .blue)
                     }
+                    // 离线队列：没网时攒下的改动在这里看进度，被服务端
+                    // 拒绝的（待处理）在这里逐条裁决。数量 0 时副标题
+                    // 就写已同步，不打扰。
+                    NavigationLink {
+                        PendingOpsPage()
+                    } label: {
+                        navRow(icon: "icloud.slash",
+                               title: "待同步",
+                               subtitle: state.offlineSync.ops.isEmpty
+                                   ? "全部已同步"
+                                   : "%lld 项改动未同步".locFormat(Int64(state.offlineSync.ops.count)),
+                               tint: .orange)
+                    }
                     // Added v1.3.7 — was a long-standing gap that left
                     // ICS-imported calendars stuck with "导入的日历" as
                     // their name and no way to change default timezone.

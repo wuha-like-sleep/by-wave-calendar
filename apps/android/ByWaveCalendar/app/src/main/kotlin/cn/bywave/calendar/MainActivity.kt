@@ -375,6 +375,7 @@ private fun AppRoot(
                 },
                 onOpenSearch = { nav.navigate("search") },
                 onOpenInvitations = { nav.navigate("invitations") },
+                onOpenOfflineQueue = { nav.navigate("offline_queue") },
             )
         }
 
@@ -391,6 +392,14 @@ private fun AppRoot(
             InvitationsScreen(
                 openToken = entry.arguments?.getString("token"),
                 onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable("offline_queue") {
+            val calVm: CalendarViewModel = viewModel()
+            cn.bywave.calendar.ui.offline.OfflineQueueScreen(
+                onBack = { nav.popBackStack() },
+                vm = calVm,
             )
         }
 

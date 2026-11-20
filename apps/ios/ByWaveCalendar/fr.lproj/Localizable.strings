@@ -672,3 +672,16 @@
 "rrule.end.count" = "Après un nombre de fois";
 "rrule.monthly.byDate" = "Par date";
 "rrule.monthly.byWeekday" = "Par jour de semaine";
+"待同步" = "Synchronisation en attente";
+"%lld 项改动待同步" = "%lld modifications en attente de synchronisation";
+"%lld 项改动需要你处理" = "%lld modifications requièrent votre décision";
+"%lld 项改动未同步" = "%lld modifications non synchronisées";
+"全部已同步" = "Tout est synchronisé";
+"离线时做的改动会先保存在这台设备上，网络恢复后自动发送。" = "Les modifications hors ligne sont d'abord enregistrées sur cet appareil, puis envoyées automatiquement au retour de la connexion.";
+"修改事件" = "Événement modifié";
+"服务端拒绝了这项改动。" = "Le serveur a refusé cette modification.";
+"保留我的修改" = "Garder la mienne";
+"采用服务端版本" = "Utiliser la version du serveur";
+"放弃" = "Abandonner";
+"待同步，网络恢复后自动发送" = "En attente de synchronisation — envoi automatique au retour de la connexion";
+"待同步 — 已保存在本机，网络恢复后自动发送" = "Synchronisation en attente — enregistré sur cet appareil, envoi automatique au retour de la connexion";

@@ -253,4 +253,21 @@
     <string name="booking_schedule_timezone">Zeitzone der Verfügbarkeit: %1$s. Gebuchte Termine erscheinen in der Gerätezeitzone.</string>
     <string name="event_detail_display_timezone">Anzeigezeitzone</string>
     <string name="event_detail_source_timezone">Terminzeitzone</string>
+    <string name="offline_title">Ausstehende Synchronisierung</string>
+    <string name="offline_back">Zurück</string>
+    <string name="offline_bar_pending">%1$d Änderungen warten auf Synchronisierung</string>
+    <string name="offline_bar_attention">%1$d Änderungen brauchen Ihre Entscheidung</string>
+    <string name="offline_empty_title">Alles synchronisiert</string>
+    <string name="offline_empty_body">Offline vorgenommene Änderungen werden zuerst auf diesem Gerät gespeichert und bei Wiederverbindung automatisch gesendet.</string>
+    <string name="offline_kind_create">Neuer Termin</string>
+    <string name="offline_kind_update">Geänderter Termin</string>
+    <string name="offline_kind_delete">Gelöschter Termin</string>
+    <string name="offline_state_pending">Wartet auf Synchronisierung — wird bei Wiederverbindung automatisch gesendet</string>
+    <string name="offline_attention_default_reason">Der Server hat diese Änderung abgelehnt.</string>
+    <string name="offline_action_keep_mine">Meine Änderung behalten</string>
+    <string name="offline_action_use_server">Serverversion verwenden</string>
+    <string name="offline_action_discard">Verwerfen</string>
+    <string name="offline_detail_label">Synchronisierungsstatus</string>
+    <string name="offline_detail_value">Auf diesem Gerät gespeichert — wartet auf Synchronisierung</string>
+    <string name="offline_block_badge">Nicht synchronisiert</string>
 </resources>

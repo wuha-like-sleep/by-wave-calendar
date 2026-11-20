@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LocationOn
@@ -157,6 +158,16 @@ private fun EventDetailContent(
                     tint = MaterialTheme.colorScheme.tertiary,
                 )
             }
+        }
+
+        if (event.pendingSync) {
+            // 本地已经改了、还没送到服务端：明说，别让用户以为
+            // 别台设备上也能看到这次改动了。
+            DetailRow(
+                icon = Icons.Default.CloudOff,
+                label = stringResource(R.string.offline_detail_label),
+                value = stringResource(R.string.offline_detail_value),
+            )
         }
 
         DetailRow(

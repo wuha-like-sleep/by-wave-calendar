@@ -39,6 +39,7 @@ struct CalendarView: View {
     @State private var lastSyncedAt: Date?
     @State private var errorMessage: String?
     @State private var showingCreate = false
+    @State private var showingPendingOps = false
     @State private var showingSettings = false
     @State private var showingFilter = false
     @State private var showingSearch = false
@@ -83,6 +84,11 @@ struct CalendarView: View {
                     }
                     .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                // 离线队列指示：有没送出去的改动就亮一条，待处理
+                //（被服务端拒绝、要用户裁决）优先。点开是队列页。
+                PendingSyncBarView(service: state.offlineSync) {
+                    showingPendingOps = true
+                }
                 navBar
                 ZStack(alignment: .top) {
                     contentForMode
@@ -125,6 +131,9 @@ struct CalendarView: View {
                 // On first appearance, hydrate from cache → instant render,
                 // then fetch fresh. Cache hit means an old `lastSyncedAt`
                 // appears in the footer until the new response replaces it.
+                state.offlineSync.onReplayFinished = {
+                    Task { await load(force: false) }
+                }
                 await loadFromCache()
                 await load(force: false)
                 await refreshInvitationBadge()
@@ -140,6 +149,9 @@ struct CalendarView: View {
                 if new == .active {
                     deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
                     Task { await load(force: false) }
+                    // 回前台也是离线队列的重放触发点：后台期间攒的 /
+                    // 退避到期的条目在这里续推。
+                    Task { await state.offlineSync.replay() }
                     startPolling()
                 } else {
                     stopPolling()
@@ -210,6 +222,9 @@ struct CalendarView: View {
                 }
             }
             .sheet(isPresented: $showingSettings) { SettingsView() }
+            .sheet(isPresented: $showingPendingOps) {
+                PendingOpsView(onResolved: { Task { await load(force: true) } })
+            }
             .sheet(isPresented: $showingFilter) {
                 CalendarFilterView(
                     calendars: calendars,
@@ -742,16 +757,19 @@ struct CalendarView: View {
     private func undoCreated(_ pending: AppState.PendingQuickCreated) async {
         undoingCreated = true
         defer { undoingCreated = false }
-        do {
-            try await APIClient(state: state).delete("/events/\(pending.event.id)")
-            withAnimation { state.clearQuickCreated() }
-            // 删除成功 → 既有撤销删除条接力（可恢复）。
-            state.noteEventDeleted(id: pending.event.id, summary: pending.event.summary)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            await load(force: true)
-        } catch {
-            errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
-        }
+        // 走离线队列：这个事件若是离线建的、还没同步出去，队列合并
+        // 会把「建」和这条「删」直接抵消，服务端根本不会见到它；
+        // 已同步的则正常排一条删除重放。
+        state.offlineSync.enqueueDelete(
+            eventId: pending.event.id, scope: nil, recurrenceId: nil,
+            snapshot: [pending.event], summary: pending.event.summary,
+        )
+        await state.offlineSync.replay()
+        withAnimation { state.clearQuickCreated() }
+        // 删除已在本地生效 → 既有撤销删除条接力（可恢复）。
+        state.noteEventDeleted(id: pending.event.id, summary: pending.event.summary)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        await load(force: true)
     }
 
     @ViewBuilder
@@ -800,6 +818,17 @@ struct CalendarView: View {
     private func restoreDeleted(_ pending: PendingUndoDelete) async {
         restoringDeleted = true
         defer { restoringDeleted = false }
+        // 删除若还躺在离线队列里（没网删的），直接抵消条目、把快照行
+        // 放回去就行，不需要网络；已经同步出去的才走服务端 restore。
+        if let restored = state.offlineSync.cancelPendingDelete(eventId: pending.eventId) {
+            let existing = Set(events.map { "\($0.id)|\($0.startsAt)" })
+            events += restored.filter { !existing.contains("\($0.id)|\($0.startsAt)") }
+            events.sort { $0.startsAt < $1.startsAt }
+            withAnimation { state.pendingUndoDelete = nil }
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            await load(force: true)
+            return
+        }
         do {
             try await APIClient(state: state).restoreEvent(id: pending.eventId)
             withAnimation { state.pendingUndoDelete = nil }
@@ -822,7 +851,9 @@ struct CalendarView: View {
         // different range. Server fetch updates within a moment anyway.
         let (start, end) = currentWindow()
         if payload.windowStart <= end && payload.windowEnd >= start {
-            self.events = payload.events
+            // 缓存里存的是上次展示的那一份；再套一次队列合并（幂等）
+            // 是为了把「缓存写入之后才入队」的改动也算进来。
+            self.events = state.offlineSync.overlay(payload.events)
             self.calendars = payload.calendars
             self.lastSyncedAt = payload.cachedAt
         }
@@ -895,6 +926,10 @@ struct CalendarView: View {
                 path: path, ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
             guard let resp = fetched else {
                 guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
+                // 304 = 服务端窗口没变，但本地队列可能刚有新条目
+                //（刚在详情页删了事件）：把队列合并重新套到现集上，
+                // 不然被删的事件要等下一次内容变化才消失。
+                self.events = state.offlineSync.overlay(self.events)
                 self.lastSyncedAt = Date()
                 self.lastFetchedWindow = (start: from, end: to)
                 return
@@ -912,14 +947,19 @@ struct CalendarView: View {
             // 这个视图本身也马上会被 RootView 按新账号重新挂载。
             guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
             self.calendars = resp.calendars
-            self.events = sortedEvents
+            // 服务端窗口是权威底稿，但还没同步出去的本地改动不能被
+            // 这次替换冲掉：待删的剔除、待改的套用、待建的保留
+            //（OfflineSync 的展示合并，幂等）。缓存里也存合并后的
+            // 这一份，和用户刚看到的保持一致。
+            let displayEvents = state.offlineSync.overlay(sortedEvents)
+            self.events = displayEvents
             self.lastSyncedAt = Date()
             // 取到了才算这个窗口覆盖过——失败的窗口要能被重试。
             self.lastFetchedWindow = (start: from, end: to)
             // Persist to disk async — EventCache.write returns immediately
             // (enqueues on its background queue), so no UI hitch.
             let payload = EventCachePayload(
-                events: sortedEvents,
+                events: displayEvents,
                 calendars: resp.calendars,
                 cachedAt: Date(),
                 windowStart: from,
@@ -930,7 +970,7 @@ struct CalendarView: View {
             // Fire EventKit mirror (no-op if disabled / no permission).
             Task {
                 guard generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId, let profileID = loadingProfileId else { return }
-                await EventKitMirror.shared.mirror(events: resp.events, windowStart: from, windowEnd: to, selectedCalendarIDs: EventKitMirror.shared.selectedCalendars(profileID: profileID))
+                await EventKitMirror.shared.mirror(events: displayEvents, windowStart: from, windowEnd: to, selectedCalendarIDs: EventKitMirror.shared.selectedCalendars(profileID: profileID))
             }
             // Re-schedule local notifications. No-op when feature disabled
             // or permission denied. Always uses the full event set so
@@ -943,13 +983,22 @@ struct CalendarView: View {
                 // 只给**看得见**的日历排提醒。以前传的是全部事件，于是用户在
                 // 「筛选日历」里隐藏掉的日历，界面上看不见了、到点照样弹 ——
                 // 而他关掉它正是因为不想再被它打扰。
-                let scheduled = state.visibleEvents(resp.events)
+                let scheduled = state.visibleEvents(displayEvents)
                 Task {
                     await LocalNotifications.shared.reschedule(
                         profileId: profileId, events: scheduled, calendars: resp.calendars)
                 }
             }
+            // 拉取成功 = 网络是通的：顺手把离线队列推一轮（回前台 /
+            // 轮询的兜底触发点之一）。有条目落定时 onReplayFinished
+            // 会再触发一次加载，把本地临时行换成服务端真实行。
+            Task { await state.offlineSync.replay() }
         } catch let e as APIError {
+            // 加载失败也要把队列合并套到现集上：离线删掉/改掉的事件
+            // 不能因为这次拉取失败就弹回原样（合并幂等，重复套无妨）。
+            if generation == loadGeneration, state.activeProfileId == loadingProfileId {
+                self.events = state.offlineSync.overlay(self.events)
+            }
             errorMessage = e.localizedDescription
         } catch is CancellationError {
             // 账号在请求途中换了（AppState.refreshIfNeeded 丢掉了上一个账号的令牌），
