@@ -172,6 +172,48 @@ describe("parseNaturalLanguageEvent", () => {
     expect(parseNaturalLanguageEvent("下班后 聚餐", NOW)).toBeNull();
   });
 
+  it("午饭前 → 结束卡在 12:00，默认 1h 即 11:00 开始", () => {
+    expect(parseNaturalLanguageEvent("午饭前 交材料", NOW)).toEqual({
+      summary: "交材料",
+      startsAt: "2026-07-03T11:00:00",
+      endsAt: "2026-07-03T12:00:00",
+    });
+  });
+
+  it("午餐前 同义；带时长时开始 = 12:00 − 时长；繁体午飯前一致", () => {
+    expect(parseNaturalLanguageEvent("午餐前 开会 2小时", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T10:00:00",
+      endsAt: "2026-07-03T12:00:00",
+    });
+    expect(parseNaturalLanguageEvent("午飯前 交材料", NOW)?.endsAt).toBe("2026-07-03T12:00:00");
+    expect(parseNaturalLanguageEvent("明天 午饭前 交材料", NOW)?.startsAt).toBe("2026-07-04T11:00:00");
+  });
+
+  it("午饭后/午餐后/午休后 → 13:00 开始，时长落在结束上", () => {
+    expect(parseNaturalLanguageEvent("午饭后 开会", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T13:00:00",
+      endsAt: "2026-07-03T14:00:00",
+    });
+    expect(parseNaturalLanguageEvent("午休后 散步 30分钟", NOW)).toEqual({
+      summary: "散步",
+      startsAt: "2026-07-03T13:00:00",
+      endsAt: "2026-07-03T13:30:00",
+    });
+    expect(parseNaturalLanguageEvent("午飯後 開會", NOW)?.startsAt).toBe("2026-07-03T13:00:00");
+  });
+
+  it("午饭后已过 13:00 → 顺延明天；显式时钟压过午餐锚点", () => {
+    expect(parseNaturalLanguageEvent("午饭后 开会", "2026-07-03T14:00:00")?.startsAt)
+      .toBe("2026-07-04T13:00:00");
+    expect(parseNaturalLanguageEvent("午饭后 15点 开会", NOW)).toEqual({
+      summary: "开会",
+      startsAt: "2026-07-03T15:00:00",
+      endsAt: "2026-07-03T16:00:00",
+    });
+  });
+
   it("in 30 minutes / in an hour / 2 hours from now", () => {
     expect(parseNaturalLanguageEvent("in 30 minutes standup", NOW)?.startsAt).toBe("2026-07-03T10:30:00");
     expect(parseNaturalLanguageEvent("call in an hour", NOW)?.startsAt).toBe("2026-07-03T11:00:00");
