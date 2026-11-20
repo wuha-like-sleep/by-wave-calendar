@@ -102,6 +102,10 @@ data class EventEditUiState(
     val calendarId: String = "",
     val summary: String = "",
     val location: String = "",
+    /** 地点联想下拉的内容：本地地址簿命中（输入时同步算）与在线兜底
+     *  结果（防抖查回）分开存，界面上要分组区分。 */
+    val localSuggestions: List<String> = emptyList(),
+    val onlineSuggestions: List<String> = emptyList(),
     val description: String = "",
     val url: String = "",
     val meetingPassword: String = "",
@@ -381,6 +385,16 @@ class EventEditViewModel : ViewModel() {
         bootstrapFields(mode, calendars)
         // 所有分支都已经把初始字段填好了，这里统一记一次基准指纹。
         _state.update { it.copy(pristine = it.fingerprint) }
+        // 地址簿首次播种：从本机 Room 缓存的已有事件地点收。失败
+        // 静默——没播上种照样能靠保存慢慢攒，下次打开编辑器再试。
+        if (!app.addressBook.isSeeded()) {
+            viewModelScope.launch {
+                runCatching {
+                    val profile = profiles.active() ?: return@runCatching
+                    app.addressBook.seed(app.repository.cachedLocations(profile))
+                }
+            }
+        }
     }
 
     private fun bootstrapFields(mode: EventEditMode, calendars: List<CalendarMeta>) {
@@ -505,7 +519,49 @@ class EventEditViewModel : ViewModel() {
     }
 
     fun onSummary(v: String) = _state.update { it.copy(summary = v, errorMessage = null, quickParsed = false) }
-    fun onLocation(v: String) = _state.update { it.copy(location = v) }
+
+    // ---- 地点联想：本地地址簿优先，在线兜底 ----
+    private val syncPrefs by lazy { cn.bywave.calendar.data.store.SyncPreferences(app) }
+    private var onlineSuggestJob: kotlinx.coroutines.Job? = null
+
+    fun onLocation(v: String) {
+        val local = cn.bywave.calendar.data.store.AddressBook.match(app.addressBook.entries(), v, limit = 5)
+        _state.update { it.copy(location = v, localSuggestions = local, onlineSuggestions = emptyList()) }
+        // 本地够用就不查在线；不够且查询够长才防抖查一次。
+        onlineSuggestJob?.cancel()
+        val q = v.trim()
+        if (local.size >= 3 || q.length < 3) return
+        onlineSuggestJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(300)
+            if (!syncPrefs.current().geoOnlineSuggestions) return@launch
+            val profile = profiles.active() ?: return@launch
+            val lang = java.util.Locale.getDefault().toLanguageTag()
+            val found = app.repository.geoSuggest(profile, q, lang)
+            // 输入已经变了就丢弃这批结果，别把旧建议盖到新输入上。
+            if (_state.value.location.trim() == q) {
+                _state.update { it.copy(onlineSuggestions = found) }
+            }
+        }
+    }
+
+    /** 地点框拿到焦点时按当前内容刷新一次本地建议；失去焦点收起。 */
+    fun onLocationFocusChanged(focused: Boolean) {
+        if (focused) {
+            val v = _state.value.location
+            val local = cn.bywave.calendar.data.store.AddressBook.match(app.addressBook.entries(), v, limit = 5)
+            _state.update { it.copy(localSuggestions = local) }
+        } else {
+            _state.update { it.copy(localSuggestions = emptyList(), onlineSuggestions = emptyList()) }
+        }
+    }
+
+    /** 选中一条建议：回填完整地址；在线结果同时写回本地地址簿。 */
+    fun onSuggestionPicked(address: String, online: Boolean) {
+        if (online) app.addressBook.recordUse(address)
+        _state.update {
+            it.copy(location = address, localSuggestions = emptyList(), onlineSuggestions = emptyList())
+        }
+    }
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
     fun onUrl(v: String) = _state.update { it.copy(url = v) }
     fun onMeetingPassword(v: String) = _state.update { it.copy(meetingPassword = v) }
@@ -744,6 +800,8 @@ class EventEditViewModel : ViewModel() {
             // starts on the calendar this save just used (for an
             // edit that moved the event, that's the target one).
             rememberCalendarId(s.calendarId)
+            // 地址簿记一次使用：下次输入这个地点就有联想了。
+            if (s.location.isNotBlank()) app.addressBook.recordUse(s.location)
             val viaQuick = saveViaQuick && !s.isEdit
             saveViaQuick = false
             _state.update {

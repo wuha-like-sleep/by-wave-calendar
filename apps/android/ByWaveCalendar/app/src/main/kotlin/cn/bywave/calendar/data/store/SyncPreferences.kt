@@ -43,6 +43,7 @@ object SyncPrefsKeys {
     val REMINDERS_ENABLED = booleanPreferencesKey("reminders_enabled")
     val REMINDER_LEAD_MIN = intPreferencesKey("reminder_lead_minutes")
     val THEME_MODE = stringPreferencesKey("theme_mode")
+    val GEO_ONLINE_SUGGESTIONS = booleanPreferencesKey("geo_online_suggestions")
 }
 
 /** 提醒的默认值。和桌面端对齐；两处默认值只有一个来源，省得再走歪。 */
@@ -59,6 +60,9 @@ data class SyncPrefs(
      *  three-state choice. Default stays "system" so existing users see
      *  no change. */
     val themeMode: String = "system",
+    /** 地点联想的在线兜底开关（默认开）。关掉后编辑器不再发任何
+     *  在线查询，本地地址簿不受影响。 */
+    val geoOnlineSuggestions: Boolean = true,
 )
 
 class SyncPreferences(private val context: Context) {
@@ -88,10 +92,15 @@ class SyncPreferences(private val context: Context) {
         context.syncDataStore.edit { it[SyncPrefsKeys.THEME_MODE] = mode }
     }
 
+    suspend fun setGeoOnlineSuggestions(enabled: Boolean) {
+        context.syncDataStore.edit { it[SyncPrefsKeys.GEO_ONLINE_SUGGESTIONS] = enabled }
+    }
+
     private fun Preferences.toModel(): SyncPrefs = SyncPrefs(
         mirrorToSystemCalendar = this[SyncPrefsKeys.MIRROR_TO_SYSTEM] ?: false,
         remindersEnabled = this[SyncPrefsKeys.REMINDERS_ENABLED] ?: REMINDERS_DEFAULT,
         reminderLeadMinutes = this[SyncPrefsKeys.REMINDER_LEAD_MIN] ?: 15,
         themeMode = this[SyncPrefsKeys.THEME_MODE] ?: "system",
+        geoOnlineSuggestions = this[SyncPrefsKeys.GEO_ONLINE_SUGGESTIONS] ?: true,
     )
 }

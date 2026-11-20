@@ -104,6 +104,19 @@ class EventRepository(
         return client.api.search(query, limit)
     }
 
+    /** 本机 Room 缓存里已有的全部地点（地址簿播种材料）。缓存窗口
+     *  之外的老事件不在里面——播种只是起点，之后靠保存慢慢攒。 */
+    suspend fun cachedLocations(profile: Profile): List<String> =
+        db.eventDao().listForProfile(profile.id).mapNotNull { it.location }
+
+    /** 地点联想在线兜底。任何失败都吞成空列表：在线建议拿不到就
+     *  当没有，绝不把本地建议也拖下水。 */
+    suspend fun geoSuggest(profile: Profile, query: String, lang: String?): List<String> =
+        runCatching {
+            val client = ApiClient.forProfile(profile, profiles)
+            client.api.geoSuggest(query, lang).suggestions.map { it.label }
+        }.getOrDefault(emptyList())
+
     /** Preview an ICS import for the active profile — the server runs
      *  the same dedupe judgement as the real import but writes
      *  nothing, so the user sees the counts before committing. */

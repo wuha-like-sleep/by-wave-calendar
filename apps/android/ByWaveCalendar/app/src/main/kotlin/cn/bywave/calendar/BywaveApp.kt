@@ -17,6 +17,9 @@ class BywaveApp : Application() {
 
     val profiles: ProfileStore by lazy { ProfileStore(this) }
     val repository: EventRepository by lazy { EventRepository(this, profiles) }
+    val addressBook: cn.bywave.calendar.data.store.AddressBookStore by lazy {
+        cn.bywave.calendar.data.store.AddressBookStore(this)
+    }
 
     // Android 12 及以下，APP 内语言是靠换 Context 的 Configuration 落地的
     // （13+ 交给平台 LocaleManager，wrap() 会原样返回）。Application 这一份

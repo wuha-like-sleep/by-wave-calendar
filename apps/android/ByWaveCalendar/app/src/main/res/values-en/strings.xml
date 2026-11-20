@@ -69,6 +69,9 @@ to match the development locale.
     <string name="eventedit_duration_2h">2 hours</string>
     <string name="event_location">Location</string>
     <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
+    <string name="location_online_suggestions">Online suggestions</string>
+    <string name="settings_online_address_title">Online address suggestions</string>
+    <string name="settings_online_address_desc">When local address matches are few, show online suggestions based on OpenStreetMap data. Picked addresses are saved to the local address book.</string>
     <string name="event_link">Link</string>
     <string name="event_link_hint">https://… (meeting link / document URL)</string>
     <string name="event_meeting_password">Meeting password</string>

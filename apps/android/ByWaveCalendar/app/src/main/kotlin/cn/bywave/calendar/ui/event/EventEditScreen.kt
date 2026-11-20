@@ -31,7 +31,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
@@ -193,7 +196,7 @@ fun EventEditScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Spacer(Modifier.size(4.dp))
 
@@ -408,14 +411,62 @@ fun EventEditScreen(
                 )
             }
 
-            OutlinedTextField(
-                value = state.location,
-                onValueChange = vm::onLocation,
-                label = { Text(stringResource(R.string.event_location)) },
-                placeholder = { Text(stringResource(R.string.event_location_hint)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-            )
+            // 地点 + 联想下拉：本地地址簿优先，在线兜底分组在下方、
+            // 带标题区分。下拉在表单流里展开（不做浮层），点行回填；
+            // 行本身不抢焦点，输入框不会因为点选先失焦把列表收掉。
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                OutlinedTextField(
+                    value = state.location,
+                    onValueChange = vm::onLocation,
+                    label = { Text(stringResource(R.string.event_location)) },
+                    placeholder = { Text(stringResource(R.string.event_location_hint)) },
+                    modifier = Modifier.fillMaxWidth()
+                        .onFocusChanged { vm.onLocationFocusChanged(it.isFocused) },
+                    singleLine = true,
+                )
+                if (state.localSuggestions.isNotEmpty() || state.onlineSuggestions.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                            .border(
+                                1.dp,
+                                MaterialTheme.colorScheme.outlineVariant,
+                                RoundedCornerShape(8.dp),
+                            )
+                            .padding(vertical = 4.dp),
+                    ) {
+                        state.localSuggestions.forEach { suggestion ->
+                            Text(
+                                suggestion,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.fillMaxWidth()
+                                    .clickable { vm.onSuggestionPicked(suggestion, online = false) }
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                        }
+                        if (state.onlineSuggestions.isNotEmpty()) {
+                            Text(
+                                stringResource(R.string.location_online_suggestions),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+                            )
+                            state.onlineSuggestions.forEach { suggestion ->
+                                Text(
+                                    suggestion,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
+                                        .clickable { vm.onSuggestionPicked(suggestion, online = true) }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = state.url,

@@ -458,6 +458,15 @@ fun SettingsScreen(
                         onPick = { m -> applySync { prefsStore.setReminderLeadMinutes(m) } },
                     )
                 }
+                HorizontalDivider()
+                SwitchRow(
+                    title = stringResource(R.string.settings_online_address_title),
+                    subtitle = stringResource(R.string.settings_online_address_desc),
+                    checked = prefs.geoOnlineSuggestions,
+                    onCheckedChange = { wanted ->
+                        applySync { prefsStore.setGeoOnlineSuggestions(wanted) }
+                    },
+                )
             }
 
             if (permissionWarning != null) {
