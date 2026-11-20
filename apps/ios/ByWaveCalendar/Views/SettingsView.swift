@@ -706,13 +706,17 @@ struct SyncSettingsPage: View {
                         Task { await handleNotifToggle(newValue) }
                     }
                 if notifEnabled {
+                    // 档位文案用无空格的键：带空格的「5 分钟」等键与提醒
+                    // 档位共用，日/韩译文带「前/전」后缀（提醒语境）。这里
+                    // 的「提前」语义由选择器标题本身承载，档位只报时长，
+                    // 与编辑器时长快捷片（EventEditView）同一套口径。
                     Picker("提前", selection: $notifLeadMinutes) {
-                        Text("5 分钟").tag(5)
-                        Text("10 分钟").tag(10)
-                        Text("15 分钟").tag(15)
-                        Text("30 分钟").tag(30)
-                        Text("1 小时").tag(60)
-                        Text("2 小时").tag(120)
+                        Text("5分钟").tag(5)
+                        Text("10分钟").tag(10)
+                        Text("15分钟").tag(15)
+                        Text("30分钟").tag(30)
+                        Text("1小时").tag(60)
+                        Text("2小时").tag(120)
                     }
                     .onChange(of: notifLeadMinutes) { _, newValue in
                         LocalNotifications.shared.leadMinutes = newValue
