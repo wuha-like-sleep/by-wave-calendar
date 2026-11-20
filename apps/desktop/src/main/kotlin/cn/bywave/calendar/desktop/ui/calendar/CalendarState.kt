@@ -12,6 +12,9 @@
 package cn.bywave.calendar.desktop.ui.calendar
 
 import cn.bywave.calendar.sync.ConfirmedEventDeletion
+import cn.bywave.calendar.desktop.data.AddressBook
+import cn.bywave.calendar.desktop.data.AddressBookStore
+import cn.bywave.calendar.desktop.data.GeoSuggestPrefs
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
@@ -337,6 +340,9 @@ class CalendarState(
                         // 网络切换后的兜底触发点，MainScreen 的焦点与
                         // 定时刷新都走 load）。
                         offline.kickReplay()
+                        // 地址簿首次播种也挂在这里：网络刚通、账号已定，
+                        // 后台拉一次宽窗口把已有地点收进本地簿。
+                        maybeSeedAddressBook()
                     }
                 }
             } catch (e: CancellationException) {
@@ -351,6 +357,50 @@ class CalendarState(
                     loading = false,
                     error = userFacingError(e, "error.loadFailed"),
                 )
+            }
+        }
+    }
+
+    // ---- 本地地址簿（地点联想）----
+
+    /** 编辑框输入时同步取本地建议：只读内存里的簿，够快。 */
+    fun localAddressSuggestions(query: String): List<String> =
+        AddressBook.match(AddressBookStore.entries(), query, limit = 5)
+
+    /** 在线兜底：开关关着、或请求失败，都回空列表（静默退回本地）。 */
+    suspend fun onlineAddressSuggestions(query: String): List<String> {
+        if (!GeoSuggestPrefs.enabled()) return emptyList()
+        return runCatching {
+            val lang = cn.bywave.calendar.desktop.i18n.I18n.current.value.code
+            client.geoSuggest(query, lang).suggestions.map { it.label }
+        }.getOrDefault(emptyList())
+    }
+
+    /** 保存成功 / 选中在线结果时记一次使用。 */
+    fun recordAddressUse(address: String?) {
+        if (!address.isNullOrBlank()) AddressBookStore.recordUse(address)
+    }
+
+    private var addressSeedInFlight = false
+
+    /** 首次播种：拉一次宽窗口（过去 24 个月到未来 12 个月）的事件，
+     *  只取 location。失败不置标记，下次 load 成功再试。 */
+    private fun maybeSeedAddressBook() {
+        if (addressSeedInFlight || AddressBookStore.isSeeded()) return
+        addressSeedInFlight = true
+        scope.launch {
+            try {
+                val now = Instant.now()
+                val from = ISO_INSTANT.format(now.minusSeconds(24L * 30 * 24 * 3600))
+                val to = ISO_INSTANT.format(now.plusSeconds(12L * 30 * 24 * 3600))
+                val resp = client.events(from, to)
+                AddressBookStore.seedIfNeeded(resp.events.mapNotNull { it.location })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 静默：没播上种地址簿照样能靠保存慢慢攒。
+            } finally {
+                addressSeedInFlight = false
             }
         }
     }
@@ -526,6 +576,7 @@ class CalendarState(
                 // 表单内容陪葬。clientUid 随请求体进队列，重放复用
                 // 同一个，服务端按 uid 幂等不会重复建。
                 val created = offline.submitCreate(body, clientUid)
+                recordAddressUse(body.location)
                 client.profileId?.let { EventCache.clear(it) }
                 val notice = if (quickSaveArmed) {
                     CreatedNotice(event = created, token = System.nanoTime())
@@ -674,6 +725,7 @@ class CalendarState(
                     snapshot = snapshot,
                 )
                 client.profileId?.let { EventCache.clear(it) }
+                if (dragged == null) recordAddressUse(body.location)
                 _ui.value = _ui.value.copy(events = offline.overlay(_ui.value.events))
                 if (dragged == null) _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load(useCache = false)

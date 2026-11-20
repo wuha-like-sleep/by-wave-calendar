@@ -62,6 +62,7 @@ import cn.bywave.calendar.desktop.data.model.IcsImportRequest
 import cn.bywave.calendar.desktop.data.model.IcsImportResult
 import cn.bywave.calendar.desktop.data.model.RefreshRequest
 import cn.bywave.calendar.desktop.data.model.RefreshResponse
+import cn.bywave.calendar.desktop.data.model.GeoSuggestResponse
 import cn.bywave.calendar.desktop.data.model.SearchResponse
 import cn.bywave.calendar.desktop.data.model.ShareToken
 import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
@@ -312,6 +313,16 @@ class ApiClient(
         return getAuthed("/api/v1/search", SearchResponse.serializer()) {
             parameter("q", query)
             parameter("limit", limit)
+        }
+    }
+
+    /** GET /api/v1/geo/suggest?q=&lang= —— 地点联想的在线兜底（服务端
+     *  代理 Photon）。只在本地地址簿命中太少时才调；服务端任何失败都
+     *  回空列表，调用方仍应 runCatching 兜底（断网时连本站都到不了）。 */
+    suspend fun geoSuggest(query: String, lang: String?): GeoSuggestResponse {
+        return getAuthed("/api/v1/geo/suggest", GeoSuggestResponse.serializer()) {
+            parameter("q", query)
+            if (!lang.isNullOrBlank()) parameter("lang", lang)
         }
     }
 

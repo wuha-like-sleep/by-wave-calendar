@@ -425,6 +425,20 @@ data class SearchResponse(
     val events: List<SearchResultDTO>,
 )
 
+/** GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
+ *  地址串，客户端只管展示与回填）。 */
+@Serializable
+data class GeoSuggestion(
+    val label: String,
+)
+
+/** GET /api/v1/geo/suggest response (envelope stripped). 上游失败时
+ *  服务端回空列表，所以这里永远能解出——在线建议拿不到就当没有。 */
+@Serializable
+data class GeoSuggestResponse(
+    val suggestions: List<GeoSuggestion> = emptyList(),
+)
+
 // ---- ICS import ----
 //
 // POST /api/v1/calendars/{id}/import[/preview]. `text` is the whole

@@ -569,6 +569,9 @@ fun MainScreen(
             onDismiss = { state.closeSheet() },
             onQuickParse = { state.parseEvent(it) },
             onQuickSaveDispatched = { state.armQuickSaveNotice() },
+            onLocalAddressSuggestions = { state.localAddressSuggestions(it) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onAddressPicked = { state.recordAddressUse(it) },
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -585,6 +588,9 @@ fun MainScreen(
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
+            onLocalAddressSuggestions = { state.localAddressSuggestions(it) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onAddressPicked = { state.recordAddressUse(it) },
         )
         is ActiveSheet.Edit -> EventEditDialog(
             mode = EventEditMode.Edit(sheet.event),
@@ -600,6 +606,9 @@ fun MainScreen(
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
+            onLocalAddressSuggestions = { state.localAddressSuggestions(it) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onAddressPicked = { state.recordAddressUse(it) },
         )
         null -> Unit
     }
