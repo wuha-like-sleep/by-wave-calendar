@@ -43,6 +43,11 @@ struct CalendarView: View {
     @State private var showingFilter = false
     @State private var showingSearch = false
     @State private var showingProfileSwitcher = false
+    // Invitations addressed to me: sheet visibility, the pending-count
+    // badge on the toolbar button, and the deep-link token to open on.
+    @State private var showingInvitations = false
+    @State private var pendingInvitationCount = 0
+    @State private var invitationOpenToken: String?
     // ICS import: the fileImporter toggle, plus the file (picked or
     // handed over by the system) whose confirmation sheet is showing.
     @State private var showingImportPicker = false
@@ -122,6 +127,7 @@ struct CalendarView: View {
                 // appears in the footer until the new response replaces it.
                 await loadFromCache()
                 await load(force: false)
+                await refreshInvitationBadge()
                 startPolling()
             }
             .environment(\.timeZone, deviceTimeZone)
@@ -142,8 +148,31 @@ struct CalendarView: View {
             // APNs silent push from the server posts this notification.
             // We reload immediately so the UI reflects whatever changed
             // on the server side (event created on another device, etc.).
-            .onReceive(NotificationCenter.default.publisher(for: .bwcRemoteDataChanged)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .bwcRemoteDataChanged)) { note in
                 Task { await load(force: true) }
+                // A push that carries an invitation routes straight to
+                // that invitation's respond screen.
+                if let userInfo = note.userInfo,
+                   let token = InvitationPushRouting.token(from: userInfo) {
+                    invitationOpenToken = token
+                    showingInvitations = true
+                }
+                Task { await refreshInvitationBadge() }
+            }
+            // Deep link bywave://invitations/<token> stashed by
+            // RootView before this view existed — consume it once.
+            .onChange(of: state.pendingInvitationToken) { _, token in
+                guard let token else { return }
+                state.pendingInvitationToken = nil
+                invitationOpenToken = token
+                showingInvitations = true
+            }
+            .sheet(isPresented: $showingInvitations, onDismiss: {
+                invitationOpenToken = nil
+                Task { await refreshInvitationBadge() }
+            }) {
+                InvitationsView(openToken: invitationOpenToken)
+                    .environmentObject(state)
             }
             .onChange(of: mode) { _, _ in
                 // Mode switch is pure UI now (filter window changes) —
@@ -313,6 +342,28 @@ struct CalendarView: View {
                 Image(systemName: "magnifyingglass")
             }
             .accessibilityLabel(Text("搜索"))
+        }
+        // 我收到的邀请：一级入口，徽章是还没回应的邀请数（和 Android
+        // 顶栏、桌面工具栏同一个位置口径）。
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                invitationOpenToken = nil
+                showingInvitations = true
+            } label: {
+                Image(systemName: "envelope")
+                    .overlay(alignment: .topTrailing) {
+                        if pendingInvitationCount > 0 {
+                            Text("\(pendingInvitationCount)")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.red))
+                                .offset(x: 8, y: -6)
+                        }
+                    }
+            }
+            .accessibilityLabel(Text("我收到的邀请"))
         }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
@@ -783,6 +834,25 @@ struct CalendarView: View {
     private func eventsETagKey(from: Date, to: Date) -> String {
         let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
         return "bwc.eventsETag.\(key).\(DateFormatters.isoPlain.string(from: from)).\(DateFormatters.isoPlain.string(from: to))"
+    }
+
+    /// 邀请徽章数：还没回应的、事件没取消、邀请没过期的条数。拉不到
+    /// 就保持原值 —— 徽章是提示性的，失败必须静默。
+    private func refreshInvitationBadge() async {
+        do {
+            struct Resp: Decodable { let invitations: [InvitationsView.Invitation] }
+            let resp: Resp = try await APIClient(state: state).get("/invitations")
+            let now = Date()
+            pendingInvitationCount = resp.invitations.filter { inv in
+                guard inv.responseStatus == "pending", !inv.event.cancelled else { return false }
+                if let expiry = InvitationTimeText.parse(inv.expiresAt) {
+                    return expiry > now
+                }
+                return true
+            }.count
+        } catch {
+            // keep the previous count
+        }
     }
 
     // MARK: - Fetch

@@ -158,6 +158,12 @@ final class AppState: ObservableObject {
     /// it. Same wait-for-sign-in shape as the Android handover.
     @Published var pendingImportURL: URL?
 
+    /// An invitation deep link (bywave://invitations/<token>) that
+    /// arrived before CalendarView was ready — same wait-for-sign-in
+    /// handover shape as pendingImportURL. CalendarView consumes it
+    /// once, opens the invitations sheet on that invitation.
+    @Published var pendingInvitationToken: String?
+
     /// 服务端公告（见 IosAnnouncement.swift）：比本机新、且这一轮发布
     /// 没被关掉过的那一条。CalendarView 顶部横幅展示，设置页的
     /// 「应用更新」行也读它。拉不到 / 没有公告时为 nil —— 公告是

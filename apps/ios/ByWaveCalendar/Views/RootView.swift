@@ -32,6 +32,16 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.2), value: state.isSignedIn)
         .animation(.easeOut(duration: 0.2), value: state.isBootstrapping)
         .onOpenURL { url in
+            // Invitation deep link: bywave://invitations/<token> —
+            // stash the token; CalendarView consumes it once the user
+            // is signed in and on screen.
+            if url.scheme == "bywave", url.host == "invitations" {
+                let token = url.pathComponents.last(where: { $0 != "/" })
+                if let token, !token.isEmpty {
+                    state.pendingInvitationToken = token
+                }
+                return
+            }
             // Only real files count as import handovers — the bywave://
             // auth callback is handled by ASWebAuthenticationSession,
             // never by URL, so nothing else should land here.

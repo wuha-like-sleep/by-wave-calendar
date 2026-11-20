@@ -189,6 +189,29 @@
 "接受并改时间" = "Annehmen & Termin verschieben";
 "拒绝提议" = "Ablehnen";
 "已被取代" = "Ersetzt";
+"我收到的邀请" = "Meine Einladungen";
+"还没有收到邀请" = "Noch keine Einladungen";
+"组织者" = "Organisator";
+"邀请名单（%lld 人）" = "Eingeladene (%lld)";
+"你" = "Du";
+"你的回复" = "Deine Antwort";
+"接受" = "Zusagen";
+"拒绝" = "Ablehnen";
+"提议新时间" = "Neue Zeit vorschlagen";
+"开始时间" = "Beginn";
+"结束时间" = "Ende";
+"备注（可选）" = "Notiz (optional)";
+"提交提议" = "Vorschlag senden";
+"待处理" = "Ausstehend";
+"提议已接受" = "Vorschlag angenommen";
+"提议已拒绝" = "Vorschlag abgelehnt";
+"这个事件已被取消" = "Dieser Termin wurde abgesagt";
+"邀请已过期，无法再回应" = "Diese Einladung ist abgelaufen";
+"加载邀请失败" = "Einladungen konnten nicht geladen werden";
+"回应失败，请稍后再试" = "Antwort konnte nicht gesendet werden — bitte erneut versuchen";
+"提议失败，请稍后再试" = "Vorschlag konnte nicht gesendet werden — bitte erneut versuchen";
+"结束时间必须晚于开始时间" = "Die Endzeit muss nach der Startzeit liegen";
+"时刻按事件时区（%@）显示" = "Zeiten werden in der Zeitzone des Termins (%@) angezeigt";
 "该参与者会从事件移除，待接受的邀请也会作废。" = "Entfernt den Teilnehmer und annulliert ausstehende Einladungen.";
 
 // MARK: - Recurring events

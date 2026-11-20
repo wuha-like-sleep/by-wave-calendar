@@ -189,6 +189,29 @@
 "接受并改时间" = "Accept & move event";
 "拒绝提议" = "Decline";
 "已被取代" = "Superseded";
+"我收到的邀请" = "My invitations";
+"还没有收到邀请" = "No invitations yet";
+"组织者" = "Organizer";
+"邀请名单（%lld 人）" = "Invitees (%lld)";
+"你" = "You";
+"你的回复" = "Your reply";
+"接受" = "Accept";
+"拒绝" = "Decline";
+"提议新时间" = "Propose a new time";
+"开始时间" = "Start";
+"结束时间" = "End";
+"备注（可选）" = "Note (optional)";
+"提交提议" = "Send proposal";
+"待处理" = "Pending";
+"提议已接受" = "Proposal accepted";
+"提议已拒绝" = "Proposal declined";
+"这个事件已被取消" = "This event was cancelled";
+"邀请已过期，无法再回应" = "This invitation has expired";
+"加载邀请失败" = "Couldn't load invitations";
+"回应失败，请稍后再试" = "Couldn't send your reply — please try again";
+"提议失败，请稍后再试" = "Couldn't send your proposal — please try again";
+"结束时间必须晚于开始时间" = "End time must be after start time";
+"时刻按事件时区（%@）显示" = "Times are shown in the event's timezone (%@)";
 "该参与者会从事件移除，待接受的邀请也会作废。" = "Removes the attendee and voids any pending invites.";
 
 // MARK: - Recurring events
