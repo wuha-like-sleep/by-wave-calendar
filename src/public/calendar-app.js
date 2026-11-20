@@ -1874,6 +1874,20 @@
         li.appendChild(btn);
         locationList.appendChild(li);
       });
+      if (suggestItems.some((item) => item.online)) {
+        // ODbL 署名：在线结果是 OpenStreetMap 数据，展示处须带版权
+        // 声明。版权行是固定文案，不做本地化。
+        const foot = document.createElement("li");
+        foot.className = "px-3 pt-1 pb-2 select-none";
+        const credit = document.createElement("a");
+        credit.href = "https://www.openstreetmap.org/copyright";
+        credit.target = "_blank";
+        credit.rel = "noopener noreferrer";
+        credit.className = "text-[11px] text-slate-400 hover:underline";
+        credit.textContent = "© OpenStreetMap contributors";
+        foot.appendChild(credit);
+        locationList.appendChild(foot);
+      }
       locationList.classList.remove("hidden");
     }
     function pickSuggest(idx) {

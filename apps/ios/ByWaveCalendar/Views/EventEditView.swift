@@ -590,6 +590,11 @@ struct EventEditView: View {
                         }
                         .buttonStyle(.plain)
                     }
+                    // ODbL 署名：在线结果是 OpenStreetMap 数据，展示
+                    // 处须带版权声明。版权行是固定文案，不做本地化。
+                    Text("© OpenStreetMap contributors")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
             }
 
