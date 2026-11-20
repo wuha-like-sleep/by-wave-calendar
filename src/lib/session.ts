@@ -456,6 +456,28 @@ export async function requireUserOrSend(
             reply.code(403).send({ error: "token_is_read_only" });
             return null;
           }
+          // 按 Token 限流（跨 IP 聚合）：全站按 IP 的额度挡不住一枚 Token
+          // 在很多 IP 后面被刷，也挡不住失控脚本以线速重试。判定走进程内
+          // 计数、不查库（见 lib/api_token_rate_limit.ts）。被拒的请求不
+          // 进 touch —— 既不算用量，窗口也才能正常滚过去。429 的形状与
+          // 全局限流保持一致（error + 本地化 message），另加 Retry-After。
+          const { checkApiTokenRateLimit } = await import("./api_token_rate_limit.js");
+          const rl = checkApiTokenRateLimit(verified.tokenId, env.RATE_LIMIT_API_TOKEN_PER_MINUTE);
+          if (!rl.allowed) {
+            const { translatePlain, resolveLocaleFromRequest } = await import("./i18n.js");
+            reply
+              .code(429)
+              .header("retry-after", String(rl.retryAfterSeconds))
+              .send({
+                error: "too_many_requests",
+                message: translatePlain(
+                  resolveLocaleFromRequest(req, u.locale, undefined),
+                  "error.tooManyRequests",
+                  { n: rl.retryAfterSeconds },
+                ),
+              });
+            return null;
+          }
           req.user = u;
           void touchApiToken(verified.tokenId, req.ip).catch(() => undefined);
           // Tag the request so downstream handlers can tell session vs API.
