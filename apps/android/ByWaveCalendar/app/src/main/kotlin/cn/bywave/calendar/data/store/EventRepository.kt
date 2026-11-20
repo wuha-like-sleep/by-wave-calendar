@@ -111,10 +111,14 @@ class EventRepository(
 
     /** 地点联想在线兜底。任何失败都吞成空列表：在线建议拿不到就
      *  当没有，绝不把本地建议也拖下水。 */
-    suspend fun geoSuggest(profile: Profile, query: String, lang: String?): List<String> =
+    suspend fun geoSuggest(
+        profile: Profile,
+        query: String,
+        lang: String?,
+    ): List<cn.bywave.calendar.data.model.GeoSuggestion> =
         runCatching {
             val client = ApiClient.forProfile(profile, profiles)
-            client.api.geoSuggest(query, lang).suggestions.map { it.label }
+            client.api.geoSuggest(query, lang).suggestions
         }.getOrDefault(emptyList())
 
     /** Preview an ICS import for the active profile — the server runs

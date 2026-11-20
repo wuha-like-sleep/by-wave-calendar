@@ -441,7 +441,7 @@ fun EventEditScreen(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.fillMaxWidth()
-                                    .clickable { vm.onSuggestionPicked(suggestion, online = false) }
+                                    .clickable { vm.onSuggestionPicked(suggestion) }
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                             )
                         }
@@ -454,12 +454,12 @@ fun EventEditScreen(
                             )
                             state.onlineSuggestions.forEach { suggestion ->
                                 Text(
-                                    suggestion,
+                                    suggestion.label,
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
-                                        .clickable { vm.onSuggestionPicked(suggestion, online = true) }
+                                        .clickable { vm.onSuggestionPicked(suggestion.label, online = suggestion) }
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
                                 )
                             }

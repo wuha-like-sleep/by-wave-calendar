@@ -93,6 +93,29 @@ data class PendingOpEntity(
     val payload: String,             // PendingOp 的 JSON 全文
 )
 
+/** 本地地址簿一条（v4 新增）。主键是规范键（小写/去标点/缩写展开），
+ *  变体写法天然并成一行。keywordsJson 是 {标题关键词: 次数} 的 JSON，
+ *  只用于排序加权，不按它查询，所以不拆表。地址簿不分 profile：
+ *  与其它三端一致，按设备存（播种只加不覆盖，换账号不丢）。 */
+@Entity(tableName = "address_entries")
+data class AddressEntryEntity(
+    @PrimaryKey val normalized: String,
+    val address: String,
+    val useCount: Int,
+    val lastUsedAt: Long,
+    val firstSeenAt: Long,
+    val source: String,              // seed | typed | online
+    val street: String? = null,
+    val suburb: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postcode: String? = null,
+    val country: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val keywordsJson: String = "{}",
+)
+
 @Entity(tableName = "calendars", primaryKeys = ["profileId", "id"])
 data class CalendarEntity(
     val profileId: String,
