@@ -21,6 +21,21 @@
     .embed-toolbar button:hover { background: #f8fafc; }
     .embed-toolbar .period { color: #475569; font-size: 12px; min-width: 0; padding: 0 4px; }
     #embed-cal { height: calc(100% - 41px); }
+    /* "Now" line: one fixed red in light and dark mode, above the event
+       blocks — same treatment as the main app (see app.css). Toast UI
+       colours the segments/bullet via inline styles, hence !important. */
+    .toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator {
+      z-index: 30;
+      pointer-events: none;
+    }
+    .toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-left,
+    .toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-today,
+    .toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-right {
+      border-top: 1px solid #e5484d !important;
+    }
+    .toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-marker {
+      background-color: #e5484d !important;
+    }
     .powered {
       position: fixed; bottom: 6px; right: 8px; font-size: 10px;
       color: #94a3b8; text-decoration: none; background: rgba(255,255,255,0.85);
@@ -120,6 +135,16 @@
       },
       month: { startDayOfWeek: 1, dayNames: BWC_I18N.dayShort, visibleWeeksCount: 0, isAlways6Weeks: false },
       calendars: [{ id: "embed", name: "", backgroundColor: CAL_COLOR, borderColor: CAL_COLOR, dragBackgroundColor: CAL_COLOR, color: textOn(CAL_COLOR) }],
+      // Same fixed-red "now" line as the main app (Toast UI's default is
+      // indigo, and its future segment has no border at all).
+      theme: {
+        week: {
+          nowIndicatorPast: { border: "1px solid #e5484d" },
+          nowIndicatorToday: { border: "1px solid #e5484d" },
+          nowIndicatorFuture: { border: "1px solid #e5484d" },
+          nowIndicatorBullet: { backgroundColor: "#e5484d" },
+        },
+      },
     });
     cal.createEvents(EVENTS.map(e => ({
       id: e.id, calendarId: "embed",

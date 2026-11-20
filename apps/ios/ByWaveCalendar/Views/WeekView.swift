@@ -587,10 +587,16 @@ struct WeekView: View {
                 let y = (CGFloat(hour) + CGFloat(minute) / 60.0) * hourHeight
                 let x = timeGutterWidth + CGFloat(todayIdx) * columnWidth
                 ZStack(alignment: .topLeading) {
-                    // Red dot on left + line across the column
-                    Circle().fill(Color.red).frame(width: 8, height: 8)
+                    // Dot on left + line across the column. The red is
+                    // pinned to the cross-client value (#E5484D, same as
+                    // web + Android + desktop) instead of Color.red,
+                    // whose system value shifts between light and dark
+                    // appearances — the line must be the identical red
+                    // in both. This view stays last in the grid ZStack
+                    // so event blocks never cover it.
+                    Circle().fill(Color(hex: "#E5484D") ?? .red).frame(width: 8, height: 8)
                         .offset(x: x - 4, y: y - 4)
-                    Rectangle().fill(Color.red).frame(width: columnWidth, height: 1.5)
+                    Rectangle().fill(Color(hex: "#E5484D") ?? .red).frame(width: columnWidth, height: 1.5)
                         .offset(x: x, y: y - 0.75)
                 }
             }
