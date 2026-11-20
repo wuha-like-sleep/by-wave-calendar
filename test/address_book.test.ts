@@ -1,92 +1,175 @@
-// 本地地址簿的纯逻辑口径（calendar-app.js 顶上的 bwcAddressBook）：
-// 归一化、记使用（计数 + 最近时间 + 封顶淘汰）、播种只加不覆盖、
-// 本地匹配排序、本地/在线合并去重。接线层（下拉 UI、localStorage、
-// 保存后记一次）只能对源码做检查——仓库里没有 jsdom，弹窗不在 node 里跑。
+// 本地地址簿 v2 的纯逻辑口径（calendar-app.js 顶上的 bwcAddressBook）：
+// 规范化（缩写/标点/大小写归一）、记使用（来源/首次出现/标题关键词）、
+// 播种、编辑学习、卫生合并与封顶、带打分的匹配（词元任意序 / 模糊 /
+// 拼音首字母 / 标题上下文）。接线层（下拉 UI、IndexedDB、保存后学习）
+// 只能对源码做检查——仓库里没有 jsdom，弹窗不在 node 里跑。
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import "../src/public/calendar-app.js";
 
-type Entry = { address: string; useCount: number; lastUsedAt: number };
+type Entry = {
+  address: string; normalized: string; useCount: number; lastUsedAt: number;
+  firstSeenAt: number; source: string; keywords: Record<string, number>;
+  street?: string; city?: string; lat?: number; lon?: number;
+};
 const AB = (globalThis as unknown as {
   bwcAddressBook: {
     normalizeAddress: (v: unknown) => string;
-    upsertEntry: (e: Entry[], a: string, now: number) => Entry[];
-    seedEntries: (e: Entry[], locs: string[]) => Entry[];
-    matchLocal: (e: Entry[], q: string, limit?: number) => string[];
-    mergeSuggestions: (l: string[], o: string[], limit?: number) => { address: string; online: boolean }[];
+    canonicalize: (v: unknown) => string;
+    editDistance: (a: string, b: string, m: number) => number;
+    pinyinInitials: (t: string) => string;
+    titleKeywords: (t: string) => string[];
+    upsertEntry: (e: Entry[], a: string, now: number, opts?: object) => Entry[];
+    seedEntries: (e: Entry[], locs: string[], now: number) => Entry[];
+    similarAddress: (a: string, b: string) => boolean;
+    learnFromSave: (e: Entry[], picked: string | null, saved: string, now: number, opts?: object) => Entry[];
+    matchLocal: (e: Entry[], q: string, opts?: object) => string[];
+    mergeSuggestions: (l: string[], o: unknown[], limit?: number) => { address: string; online: boolean; geo: unknown }[];
   };
 }).bwcAddressBook;
 
-describe("normalizeAddress", () => {
-  it("去首尾空白、内部连续空白压成一个", () => {
-    expect(AB.normalizeAddress("  7  Kitchen   Rd ")).toBe("7 Kitchen Rd");
-    expect(AB.normalizeAddress(null)).toBe("");
-    expect(AB.normalizeAddress("")).toBe("");
+const NOW = 1_800_000_000_000;
+const mk = (address: string, useCount = 1, lastUsedAt = 0, keywords: Record<string, number> = {}): Entry => ({
+  address,
+  normalized: AB.canonicalize(address),
+  useCount,
+  lastUsedAt,
+  firstSeenAt: lastUsedAt,
+  source: "typed",
+  keywords,
+});
+
+describe("canonicalize", () => {
+  it("缩写/标点/大小写都归到同一键", () => {
+    expect(AB.canonicalize("7 Kitchen Rd")).toBe(AB.canonicalize("7 Kitchen Road"));
+    expect(AB.canonicalize("  MELBOURNE  Central, ")).toBe("melbourne central");
+    expect(AB.canonicalize("1 Smith St.")).toBe(AB.canonicalize("1 Smith Street"));
+  });
+});
+
+describe("pinyinInitials / editDistance", () => {
+  it("常用汉字取首字母", () => {
+    expect(AB.pinyinInitials("北京站")).toBe("bjz");
+    expect(AB.pinyinInitials("上海")).toBe("sh");
+  });
+  it("编辑距离有界", () => {
+    expect(AB.editDistance("melbourne", "melborne", 2)).toBe(1);
+    expect(AB.editDistance("abc", "xyz", 1)).toBeGreaterThan(1);
+  });
+});
+
+describe("titleKeywords", () => {
+  it("英文词 + 汉字二元组，去停用词", () => {
+    expect(AB.titleKeywords("Team lunch with Sam")).toContain("lunch");
+    expect(AB.titleKeywords("Team lunch with Sam")).not.toContain("with");
+    expect(AB.titleKeywords("和老王开会")).toContain("老王");
   });
 });
 
 describe("upsertEntry", () => {
-  it("新地址新增，计数 1", () => {
-    expect(AB.upsertEntry([], "A St", 100)).toEqual([{ address: "A St", useCount: 1, lastUsedAt: 100 }]);
+  it("新条目带来源与首次出现；缩写变体并入同一条", () => {
+    let entries = AB.upsertEntry([], "7 Kitchen Rd", NOW, { source: "typed", title: "BBQ night" });
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({ address: "7 Kitchen Rd", useCount: 1, firstSeenAt: NOW, source: "typed" });
+    expect(entries[0]!.keywords["bbq"]).toBe(1);
+    entries = AB.upsertEntry(entries, "7 Kitchen Road", NOW + 1000, {});
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.useCount).toBe(2);
+    expect(entries[0]!.address).toBe("7 Kitchen Road");
   });
 
-  it("已存在（大小写/空白不同也算同一个）→ 计数 +1 并采用新写法", () => {
-    const before = [{ address: "a  st", useCount: 2, lastUsedAt: 50 }];
-    expect(AB.upsertEntry(before, "A St", 200)).toEqual([{ address: "A St", useCount: 3, lastUsedAt: 200 }]);
-  });
-
-  it("空地址不记", () => {
-    expect(AB.upsertEntry([], "   ", 1)).toEqual([]);
+  it("在线来源带回的组件/坐标被记下", () => {
+    const entries = AB.upsertEntry([], "Melbourne Central", NOW, {
+      source: "online",
+      geo: { street: "La Trobe Street", city: "Melbourne", lat: -37.8, lon: 144.9 },
+    });
+    expect(entries[0]).toMatchObject({ source: "online", street: "La Trobe Street", city: "Melbourne", lat: -37.8, lon: 144.9 });
   });
 });
 
 describe("seedEntries", () => {
-  it("只加不覆盖：已有条目的计数原样保留", () => {
-    const before = [{ address: "Home", useCount: 7, lastUsedAt: 999 }];
-    const out = AB.seedEntries(before, ["home", "Office", "Office"]);
-    expect(out).toContainEqual({ address: "Home", useCount: 7, lastUsedAt: 999 });
-    expect(out).toContainEqual({ address: "Office", useCount: 2, lastUsedAt: 0 });
-  });
-
-  it("空地址与重复地址不进簿", () => {
-    expect(AB.seedEntries([], ["", "  ", "X", "x"])).toEqual([{ address: "X", useCount: 2, lastUsedAt: 0 }]);
+  it("只加不覆盖，source=seed", () => {
+    const before = [mk("Home", 7, 999)];
+    const out = AB.seedEntries(before, ["home", "Office", "Office"], NOW);
+    expect(out.find((e) => e.address === "Home")!.useCount).toBe(7);
+    expect(out.find((e) => e.address === "Office")).toMatchObject({ useCount: 2, source: "seed", firstSeenAt: NOW });
   });
 });
 
-describe("matchLocal", () => {
-  const entries: Entry[] = [
-    { address: "Melbourne Central", useCount: 1, lastUsedAt: 10 },
-    { address: "Central Station, Sydney", useCount: 9, lastUsedAt: 20 },
-    { address: "Melbourne Zoo", useCount: 3, lastUsedAt: 30 },
+describe("learnFromSave（编辑学习）", () => {
+  it("选中后补全了地址再保存 → 原条目改成新写法，不裂成两条", () => {
+    const before = [mk("Melbourne Central", 3, 500)];
+    const out = AB.learnFromSave(before, "Melbourne Central", "Melbourne Central, La Trobe Street", NOW, {});
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ address: "Melbourne Central, La Trobe Street", useCount: 4, firstSeenAt: 500 });
+  });
+
+  it("改得面目全非 → 当新地址另记一条", () => {
+    const before = [mk("Melbourne Central", 3, 500)];
+    const out = AB.learnFromSave(before, "Melbourne Central", "Sydney Opera House", NOW, {});
+    expect(out).toHaveLength(2);
+  });
+
+  it("没选中过建议（picked 为空）→ 正常记使用", () => {
+    const out = AB.learnFromSave([], null, "Home", NOW, {});
+    expect(out).toHaveLength(1);
+    expect(out[0]!.useCount).toBe(1);
+  });
+});
+
+describe("matchLocal（打分匹配）", () => {
+  const entries = [
+    mk("Melbourne Central", 1, 10),
+    mk("Central Station, Sydney", 9, 20),
+    mk("Melbourne Zoo", 3, 30),
+    mk("北京站", 2, 40),
   ];
 
-  it("子串匹配，开头命中优先于高频的中间命中", () => {
-    expect(AB.matchLocal(entries, "central")).toEqual(["Central Station, Sydney", "Melbourne Central"]);
+  it("词元任意序都能命中", () => {
+    expect(AB.matchLocal(entries, "central melbourne", { now: NOW })).toContain("Melbourne Central");
   });
 
-  it("同为开头命中时，用得多的在前", () => {
-    expect(AB.matchLocal(entries, "melbourne")).toEqual(["Melbourne Zoo", "Melbourne Central"]);
+  it("打错一个字母（模糊）也能命中", () => {
+    expect(AB.matchLocal(entries, "melborne central", { now: NOW })).toContain("Melbourne Central");
   });
 
-  it("空查询返回最常用的几条", () => {
-    expect(AB.matchLocal(entries, "", 2)).toEqual(["Central Station, Sydney", "Melbourne Zoo"]);
+  it("拼音首字母命中中文地址", () => {
+    expect(AB.matchLocal(entries, "bjz", { now: NOW })).toEqual(["北京站"]);
   });
 
-  it("不匹配返回空", () => {
-    expect(AB.matchLocal(entries, "perth")).toEqual([]);
+  it("标题上下文能把常配的地址顶上来", () => {
+    const pair = [
+      mk("Office Park", 2, 10, { dentist: 4 }),
+      mk("Office Park North", 2, 10),
+    ];
+    // 无上下文时两者同分、按最近（相同）保持原序附近；带 dentist 上下文时第一条胜出
+    const withCtx = AB.matchLocal(pair, "office park", { now: NOW, title: "Dentist appointment" });
+    expect(withCtx[0]).toBe("Office Park");
+  });
+
+  it("完全不匹配返回空", () => {
+    expect(AB.matchLocal(entries, "perth airport", { now: NOW })).toEqual([]);
   });
 });
 
 describe("mergeSuggestions", () => {
-  it("本地在前，在线去重，总数封顶", () => {
-    const out = AB.mergeSuggestions(["A St", "B St"], ["a st", "C St", "D St"], 3);
+  it("本地在前，在线按规范键去重，在线对象带 geo", () => {
+    const out = AB.mergeSuggestions(["7 Kitchen Rd"], [{ label: "7 Kitchen Road" }, { label: "Other St", lat: 1 }], 8);
     expect(out).toEqual([
-      { address: "A St", online: false },
-      { address: "B St", online: false },
-      { address: "C St", online: true },
+      { address: "7 Kitchen Rd", online: false, geo: null },
+      { address: "Other St", online: true, geo: { label: "Other St", lat: 1 } },
     ]);
+  });
+});
+
+describe("卫生：封顶", () => {
+  it("超过 300 条按价值淘汰到 300", () => {
+    let entries: Entry[] = [];
+    for (let i = 0; i < 305; i++) entries.push(mk(`Place ${i}`, 1, i));
+    const out = AB.upsertEntry(entries, "New Place", NOW, {});
+    expect(out.length).toBeLessThanOrEqual(300);
   });
 });
 
@@ -99,19 +182,24 @@ describe("接线（源码检查）", () => {
     expect(ejs).toMatch(/name="location"[\s\S]{0,200}?autocomplete="off"/);
   });
 
-  it("保存在所有成功分支后记一次地点使用（含一句话直存）", () => {
-    expect(src.match(/recordLocationUse\(/g)?.length).toBeGreaterThanOrEqual(5); // 定义 1 + 调用 ≥4
-    expect(src).toContain("recordLocationUse(parsed.location)");
+  it("存储走 IndexedDB，旧 localStorage 只做一次性迁移", () => {
+    expect(src).toContain('indexedDB.open("bwc-address-book"');
+    expect(src).toContain("ADDR_LEGACY_KEY");
   });
 
-  it("在线兜底只在本地不足 3 条时查，且带防抖与开关", () => {
+  it("保存后走编辑学习（含一句话直存），且学习入口只有一个", () => {
+    expect(src).toContain("learnLocationOnSave(data)");
+    expect(src).toContain("learnLocationOnSave({ location: parsed.location, summary: parsed.summary })");
+    expect(src).not.toContain("recordLocationUse(");
+  });
+
+  it("在线兜底只在本地不足 3 条时查；选中在线结果带组件入库", () => {
     expect(src).toContain("local.length >= 3");
     expect(src).toContain("/api/geo/suggest");
-    expect(src).toContain("onlineSuggestEnabled()");
+    expect(src).toContain('source: "online"');
   });
 
-  it("播种走每历全量事件接口且只跑一次（标记位）", () => {
-    expect(src).toContain("/api/calendars/");
-    expect(src).toContain("bwc.addressBook.seeded.v1");
+  it("匹配带上事件标题做上下文", () => {
+    expect(src).toContain('title: summaryInput ? summaryInput.value : ""');
   });
 });
