@@ -87,6 +87,18 @@ struct EventsResponse: Decodable {
     let events: [EventDTO]
 }
 
+// GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
+// 地址串，客户端只管展示与回填）。
+struct GeoSuggestion: Decodable {
+    let label: String
+}
+
+// GET /api/v1/geo/suggest response。上游失败时服务端回空列表，
+// 所以永远能解出——在线建议拿不到就当没有。
+struct GeoSuggestResponse: Decodable {
+    let suggestions: [GeoSuggestion]
+}
+
 // Extra metadata bag that piggybacks on POST/PATCH /events. Mirrors
 // server extraSchema in src/routes/events.ts:
 //   - timezone: IANA tz name (e.g. "Asia/Shanghai") to interpret start/end in

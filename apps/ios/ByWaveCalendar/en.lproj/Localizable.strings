@@ -685,3 +685,7 @@
 "放弃" = "Discard";
 "待同步，网络恢复后自动发送" = "Waiting to sync — sent automatically when you are back online";
 "待同步 — 已保存在本机，网络恢复后自动发送" = "Pending sync — saved on this device, sent automatically when you are back online";
+"在线建议" = "Online suggestions";
+"在线地址建议" = "Online address suggestions";
+"地址建议" = "Address suggestions";
+"用过的地址会记在这台设备上，输入时自动给出建议；本地匹配较少时才会显示在线建议。" = "Addresses you use are remembered on this device and suggested as you type. Online suggestions appear only when local matches are few.";

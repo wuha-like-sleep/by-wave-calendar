@@ -78,6 +78,12 @@ struct EventEditView: View {
 
     @State private var summary: String
     @State private var location: String
+    // 地点联想：本地地址簿命中（输入时同步算）与在线兜底结果（防抖
+    // 查回）分开存，界面上要分组区分。
+    @State private var localSuggestions: [String] = []
+    @State private var onlineSuggestions: [String] = []
+    @FocusState private var locationFocused: Bool
+    @State private var suggestTask: Task<Void, Never>?
     @State private var description: String
     @State private var startsAt: Date
     @State private var endsAt: Date
@@ -547,6 +553,40 @@ struct EventEditView: View {
 
             Section("地点") {
                 TextField("可选 — 例如 上海 / Zoom 会议室", text: $location)
+                    .focused($locationFocused)
+                    .onChange(of: location) { _, _ in refreshSuggestions() }
+                    .onChange(of: locationFocused) { _, focused in
+                        if focused {
+                            refreshSuggestions()
+                        } else {
+                            localSuggestions = []
+                            onlineSuggestions = []
+                        }
+                    }
+                // 联想下拉（表单流内展开）：本地在上，在线兜底带标题
+                // 分组在下；点行回填，在线结果同时写回本地地址簿。
+                ForEach(localSuggestions, id: \.self) { suggestion in
+                    Button {
+                        location = suggestion
+                    } label: {
+                        Text(suggestion).lineLimit(1).foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                if !onlineSuggestions.isEmpty {
+                    Text("在线建议")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(onlineSuggestions, id: \.self) { suggestion in
+                        Button {
+                            location = suggestion
+                            AddressBookStore.recordUse(suggestion)
+                        } label: {
+                            Text(suggestion).lineLimit(1).foregroundStyle(.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
 
             // 邀请人 — matches the web flow: invites are managed on a
@@ -612,6 +652,16 @@ struct EventEditView: View {
                 Section {
                     Text(errorMessage).foregroundStyle(.red).font(.callout)
                 }
+            }
+        }
+        // 紧凑密度：表单行最小高度从系统默认收到 36——内容高的行
+        // （日期选择器等）不受影响，只是单行字段不再那么松散。
+        .environment(\.defaultMinListRowHeight, 36)
+        // 地址簿首次播种：拉一次宽窗口的事件，只取 location。
+        // 失败静默——没播上种照样能靠保存慢慢攒。
+        .task {
+            if !AddressBookStore.isSeeded() {
+                await seedAddressBook()
             }
         }
         .navigationTitle({
@@ -984,6 +1034,45 @@ struct EventEditView: View {
         #endif
     }
 
+    /// 地点联想刷新：本地同步算；本地不足 3 条、查询够长、开关开着
+    /// 才防抖查在线兜底。输入变了就丢弃在途结果。
+    private func refreshSuggestions() {
+        localSuggestions = AddressBook.match(AddressBookStore.entries(), query: location, limit: 5)
+        onlineSuggestions = []
+        suggestTask?.cancel()
+        let q = location.trimmingCharacters(in: .whitespaces)
+        guard locationFocused, localSuggestions.count < 3, q.count >= 3,
+              AddressBookStore.onlineEnabled() else { return }
+        suggestTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if Task.isCancelled { return }
+            let lang = LocaleManager.shared.current.isEmpty
+                ? (Locale.current.language.languageCode?.identifier ?? "en")
+                : LocaleManager.shared.current
+            let found = await APIClient(state: state).geoSuggest(query: q, lang: lang)
+            if Task.isCancelled { return }
+            if location.trimmingCharacters(in: .whitespaces) == q {
+                onlineSuggestions = found
+            }
+        }
+    }
+
+    /// 地址簿首次播种：宽窗口（过去 24 个月到未来 12 个月）拉一次
+    /// 事件列表，只取 location。失败不置标记，下次打开编辑器再试。
+    private func seedAddressBook() async {
+        do {
+            let now = Date()
+            let from = now.addingTimeInterval(-24 * 30 * 24 * 3600)
+            let to = now.addingTimeInterval(12 * 30 * 24 * 3600)
+            let fmt = DateFormatters.isoPlain
+            let path = "/events?from=\(fmt.string(from: from))&to=\(fmt.string(from: to))"
+            let resp: EventsResponse = try await APIClient(state: state).get(path)
+            AddressBookStore.seed(locations: resp.events.compactMap { $0.location })
+        } catch {
+            // 静默：见上。
+        }
+    }
+
     private func save() async {
         saving = true
         errorMessage = nil
@@ -1095,6 +1184,8 @@ struct EventEditView: View {
             // init): the next new event starts on the calendar this
             // save just used.
             UserDefaults.standard.set(calendarId, forKey: "lastUsedCalendarId")
+            // 地址簿记一次使用：下次输入这个地点就有联想了。
+            if !location.isEmpty { AddressBookStore.recordUse(location) }
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             // 一句话直接保存：记到 AppState，日历页弹「已创建」条
             // （打开 / 撤销）。普通保存不记。
