@@ -253,6 +253,97 @@ data class TimeProposal(
     val status: String,
 )
 
+// ---- Invitations addressed to me ----
+//
+// GET /api/v1/invitations — the invitee side: every invitation for the
+// signed-in account's email, carrying the detail payload the respond
+// dialog needs (display timezone resolved server-side with the web
+// invite page's fallback chain, the full invitee list with per-person
+// status, and my own time proposals).
+
+@Serializable
+data class InvitationsResponse(
+    val invitations: List<MyInvitation> = emptyList(),
+)
+
+@Serializable
+data class MyInvitation(
+    val token: String,
+    val responseStatus: String = "pending",
+    val respondedAt: String? = null,
+    val expiresAt: String,
+    val organizer: InvitationOrganizer? = null,
+    val event: InvitationEvent,
+    val invitees: List<InvitationInvitee> = emptyList(),
+    val myProposals: List<InvitationProposal> = emptyList(),
+)
+
+@Serializable
+data class InvitationOrganizer(
+    val email: String,
+    val name: String,
+)
+
+@Serializable
+data class InvitationEvent(
+    val id: String,
+    val summary: String,
+    val description: String? = null,
+    val location: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+    val allDay: Boolean = false,
+    val timeZone: String = "Asia/Shanghai",
+    val cancelled: Boolean = false,
+)
+
+@Serializable
+data class InvitationInvitee(
+    val email: String,
+    val name: String? = null,
+    val status: String = "pending",
+    val isMe: Boolean = false,
+)
+
+@Serializable
+data class InvitationProposal(
+    val id: String,
+    val proposedStartsAt: String,
+    val proposedEndsAt: String,
+    val note: String? = null,
+    val status: String,
+    val createdAt: String,
+    val decidedAt: String? = null,
+)
+
+@Serializable
+data class InvitationRespondRequest(val status: String)
+
+@Serializable
+data class InvitationRespondResponse(
+    val ok: Boolean = false,
+    val status: String = "",
+)
+
+@Serializable
+data class InvitationProposeRequest(
+    val startsAt: String,
+    val endsAt: String,
+    val note: String? = null,
+)
+
+@Serializable
+data class InvitationProposeResponse(
+    val ok: Boolean = false,
+    val proposal: InvitationProposalStub? = null,
+)
+
+@Serializable
+data class InvitationProposalStub(
+    val id: String,
+    val status: String = "pending",
+)
+
 // ---- Global search ----
 //
 // GET /api/v1/search?q=<needle>&limit=<n>. The server matches the needle

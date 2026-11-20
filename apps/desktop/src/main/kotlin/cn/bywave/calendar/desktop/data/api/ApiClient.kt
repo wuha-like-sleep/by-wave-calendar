@@ -52,6 +52,11 @@ import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.EventsResponse
+import cn.bywave.calendar.desktop.data.model.InvitationProposeRequest
+import cn.bywave.calendar.desktop.data.model.InvitationProposeResponse
+import cn.bywave.calendar.desktop.data.model.InvitationRespondRequest
+import cn.bywave.calendar.desktop.data.model.InvitationRespondResponse
+import cn.bywave.calendar.desktop.data.model.InvitationsResponse
 import cn.bywave.calendar.desktop.data.model.IcsImportPreview
 import cn.bywave.calendar.desktop.data.model.IcsImportRequest
 import cn.bywave.calendar.desktop.data.model.IcsImportResult
@@ -331,6 +336,42 @@ class ApiClient(
         if (!resp.status.isSuccess()) {
             throw errorFrom(resp, "proposal decision failed")
         }
+    }
+
+    /** GET /api/v1/invitations — invitations addressed to the
+     *  signed-in account's email, with the respond dialog's detail
+     *  payload (display timezone, invitee statuses, my proposals). */
+    suspend fun invitations(): InvitationsResponse {
+        return getAuthed("/api/v1/invitations", InvitationsResponse.serializer())
+    }
+
+    /** POST /api/v1/invitations/{token}/respond — the invite token is
+     *  the credential (same as the web invite page). */
+    suspend fun respondInvitation(token: String, status: String): InvitationRespondResponse {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/invitations/$token/respond",
+            body = InvitationRespondRequest(status),
+            bodySerializer = InvitationRespondRequest.serializer(),
+            respSerializer = InvitationRespondResponse.serializer(),
+        )
+    }
+
+    /** POST /api/v1/invitations/{token}/propose — propose a new time;
+     *  startsAt / endsAt are ISO instants. */
+    suspend fun proposeInvitation(
+        token: String,
+        startsAt: String,
+        endsAt: String,
+        note: String?,
+    ): InvitationProposeResponse {
+        return withBodyAuthed(
+            method = HttpMethod.POST,
+            path = "/api/v1/invitations/$token/propose",
+            body = InvitationProposeRequest(startsAt, endsAt, note),
+            bodySerializer = InvitationProposeRequest.serializer(),
+            respSerializer = InvitationProposeResponse.serializer(),
+        )
     }
 
     /** POST /api/v1/calendars/{id}/import/preview — counts only, the
