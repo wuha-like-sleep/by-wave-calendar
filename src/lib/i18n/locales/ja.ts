@@ -1050,6 +1050,8 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "nav.searchTitle": "イベントを検索（ショートカット ⌘K または /）",
   "nav.languageLabel": "言語 / Language",
   "app.toolbar.sidebar": "サイドバー",
+  "app.calendarLoadFailed": "カレンダーコンポーネントの読み込みに失敗しました。接続を確認して再試行してください",
+  "app.calendarLoadRetry": "再読み込み",
   "app.toolbar.today": "今日",
   "app.toolbar.prev": "前へ",
   "app.toolbar.next": "次へ",

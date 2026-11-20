@@ -1036,6 +1036,8 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "nav.searchTitle": "搜尋事件（快捷鍵 ⌘K 或 / ）",
   "nav.languageLabel": "語言 / Language",
   "app.toolbar.sidebar": "側欄",
+  "app.calendarLoadFailed": "日曆元件載入失敗，請檢查網路後重試",
+  "app.calendarLoadRetry": "重新載入",
   "app.toolbar.today": "今天",
   "app.toolbar.prev": "上一段",
   "app.toolbar.next": "下一段",

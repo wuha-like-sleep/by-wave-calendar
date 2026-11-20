@@ -1057,6 +1057,8 @@ export const en = {
   "nav.searchTitle": "Search events (shortcut ⌘K or /)",
   "nav.languageLabel": "Language",
   "app.toolbar.sidebar": "Sidebar",
+  "app.calendarLoadFailed": "The calendar component failed to load. Check your connection and try again.",
+  "app.calendarLoadRetry": "Reload",
   "app.toolbar.today": "Today",
   "app.toolbar.prev": "Previous",
   "app.toolbar.next": "Next",
