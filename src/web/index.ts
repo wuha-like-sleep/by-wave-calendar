@@ -2990,6 +2990,46 @@ export async function webRoutes(app: FastifyInstance) {
     });
   });
 
+  // The availability editor (views/app/_availability-editor.ejs) posts
+  // the weekly matrix as a JSON string in a hidden field — the same wire
+  // format the native editors produce via the JSON API: only bookable
+  // days, { "1": [["09:00","18:00"]] }, values are [start, end] HH:MM
+  // pairs or null. Validate with the same shape as routes/booking.ts;
+  // malformed input is a param error, never a silent fall back to the
+  // default matrix (which would quietly wipe a custom schedule).
+  const hhmmField = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+  const weeklyAvailabilityField = z.string().max(10000).transform((raw, ctx) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "availability_format" });
+      return z.NEVER;
+    }
+    const checked = z.record(
+      z.string(),
+      z.union([z.array(z.tuple([hhmmField, hhmmField])), z.null()]),
+    ).safeParse(parsed);
+    if (!checked.success) {
+      ctx.addIssue({ code: "custom", message: "availability_format" });
+      return z.NEVER;
+    }
+    return checked.data as WeeklyAvailability;
+  });
+  // Shared error rendering for the create/update booking-link forms.
+  function bookingFormError(req: FastifyRequest, reply: FastifyReply, error: z.ZodError) {
+    // Sentinel messages instead of prose so the human-readable text can
+    // be localized here; any other zod issue falls through with its own
+    // message.
+    const issue = error.issues[0];
+    const detail = issue?.message === "slug_format"
+      ? tr(req, "flash.bookingLink.slugFormat")
+      : issue?.message === "availability_format"
+        ? tr(req, "booking.availabilityInvalid")
+        : (issue?.message ?? "");
+    return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.paramInvalid", { error: detail }) });
+  }
+
   app.post("/app/booking-links", async (req, reply) => {
     const user = await loadAuthedUser(req, reply);
     if (!user) return reply;
@@ -3004,19 +3044,19 @@ export async function webRoutes(app: FastifyInstance) {
       maxDaysAhead: z.coerce.number().int().min(1).max(90),
       bufferBeforeMin: z.coerce.number().int().min(0).max(240).default(0),
       bufferAfterMin: z.coerce.number().int().min(0).max(240).default(0),
+      weeklyAvailability: weeklyAvailabilityField.optional(),
       // HTML checkbox sends "on" when checked, omits the key entirely
       // when unchecked. Map both to a boolean — default true so the
       // checkbox starts checked and unchecking it explicitly opts out.
+      // .optional() must wrap the transform: without it zod treats the
+      // piped field as required and an UNCHECKED checkbox (key absent
+      // from the form body) fails validation instead of opting out.
+      // Absent therefore reaches the handler as undefined = unchecked.
       notifyEmail: z.union([z.literal("on"), z.literal("off"), z.undefined()])
-        .transform((v) => v !== "off" && v !== undefined),
+        .transform((v) => v !== "off" && v !== undefined).optional(),
     }).safeParse(req.body);
     if (!body.success) {
-      // The slug regex carries a "slug_format" sentinel instead of prose so
-      // the human-readable text can be localized here; any other zod issue
-      // falls through with its own message.
-      const issue = body.error.issues[0];
-      const detail = issue?.message === "slug_format" ? tr(req, "flash.bookingLink.slugFormat") : (issue?.message ?? "");
-      return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.paramInvalid", { error: detail }) });
+      return bookingFormError(req, reply, body.error);
     }
     if (!(await ownsCalendar(body.data.calendarId, user.id))) {
       return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.calendarMissing") });
@@ -3029,12 +3069,12 @@ export async function webRoutes(app: FastifyInstance) {
         title: body.data.title,
         description: body.data.description ?? null,
         durationMinutes: body.data.durationMinutes,
-        weeklyAvailability: DEFAULT_AVAILABILITY,
+        weeklyAvailability: body.data.weeklyAvailability ?? DEFAULT_AVAILABILITY,
         minNoticeHours: body.data.minNoticeHours,
         maxDaysAhead: body.data.maxDaysAhead,
         bufferBeforeMin: body.data.bufferBeforeMin,
         bufferAfterMin: body.data.bufferAfterMin,
-        notifyEmail: body.data.notifyEmail,
+        notifyEmail: body.data.notifyEmail ?? false,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : tr(req, "common.unknownError");
@@ -3046,6 +3086,68 @@ export async function webRoutes(app: FastifyInstance) {
       success: tr(req, "flash.bookingLink.created"),
       createdBookingUrl: `${env.PUBLIC_BASE_URL.replace(/\/$/, "")}/book/${user.id}/${body.data.slug}`,
     });
+  });
+
+  // Full edit of an existing link — the web counterpart of the JSON
+  // API's PATCH /booking-links/:id (which the native clients use).
+  // Every field is rewritten from the form, availability included; the
+  // form is seeded from the stored row, so a save that only touches one
+  // field sends the rest back unchanged. Description is the exception
+  // that proves the rule: an emptied textarea must CLEAR the stored
+  // text (null), not round-trip the old value.
+  app.post<{ Params: { id: string } }>("/app/booking-links/:id/update", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/booking-links");
+    const [existing] = await db.select().from(schema.bookingLinks)
+      .where(and(eq(schema.bookingLinks.id, id.data), eq(schema.bookingLinks.userId, user.id))).limit(1);
+    if (!existing) return reply.redirect("/app/booking-links");
+    const body = z.object({
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug_format"),
+      title: z.string().min(1).max(120),
+      description: z.string().max(2000).optional().transform((v) => v?.trim() || null),
+      calendarId: z.string().uuid(),
+      durationMinutes: z.coerce.number().int().min(5).max(480),
+      minNoticeHours: z.coerce.number().int().min(0).max(720),
+      maxDaysAhead: z.coerce.number().int().min(1).max(90),
+      bufferBeforeMin: z.coerce.number().int().min(0).max(240),
+      bufferAfterMin: z.coerce.number().int().min(0).max(240),
+      weeklyAvailability: weeklyAvailabilityField,
+      // .optional() must wrap the transform: without it zod treats the
+      // piped field as required and an UNCHECKED checkbox (key absent
+      // from the form body) fails validation instead of opting out.
+      // Absent therefore reaches the handler as undefined = unchecked.
+      notifyEmail: z.union([z.literal("on"), z.literal("off"), z.undefined()])
+        .transform((v) => v !== "off" && v !== undefined).optional(),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return bookingFormError(req, reply, body.error);
+    }
+    if (!(await ownsCalendar(body.data.calendarId, user.id))) {
+      return redirectWith(reply, "/app/booking-links", { error: tr(req, "flash.bookingLink.calendarMissing") });
+    }
+    try {
+      await db.update(schema.bookingLinks).set({
+        slug: body.data.slug,
+        calendarId: body.data.calendarId,
+        title: body.data.title,
+        description: body.data.description,
+        durationMinutes: body.data.durationMinutes,
+        weeklyAvailability: body.data.weeklyAvailability,
+        minNoticeHours: body.data.minNoticeHours,
+        maxDaysAhead: body.data.maxDaysAhead,
+        bufferBeforeMin: body.data.bufferBeforeMin,
+        bufferAfterMin: body.data.bufferAfterMin,
+        notifyEmail: body.data.notifyEmail ?? false,
+        updatedAt: new Date(),
+      }).where(eq(schema.bookingLinks.id, id.data));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : tr(req, "common.unknownError");
+      return redirectWith(reply, "/app/booking-links", { error: msg.includes("duplicate") ? tr(req, "flash.bookingLink.slugTaken") : msg });
+    }
+    return redirectWith(reply, "/app/booking-links", { success: tr(req, "flash.bookingLink.updated") });
   });
 
   app.post<{ Params: { id: string } }>("/app/booking-links/:id/toggle", async (req, reply) => {

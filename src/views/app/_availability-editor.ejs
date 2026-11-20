@@ -1,0 +1,60 @@
+<%#
+  Weekly-availability editor for booking links (create + edit forms).
+  Locals: availSeed — the WeeklyAvailability matrix to seed from
+  ({ "1": [["09:00","18:00"]] , "0": null, ... }); availIdSuffix — unique
+  string per instance so multiple editors on one page don't collide.
+
+  Server-rendered from the seed so the values on screen are the link's
+  real matrix; src/public/app.js enhances it (per-day toggle, add/remove
+  windows, HH:MM + start<end validation, serialize on save). The wire
+  format matches desktop/Android exactly: only bookable days are sent,
+  as a JSON object in the hidden weeklyAvailability field. Without JS
+  the hidden field still carries the seed matrix unchanged, so editing
+  other fields can never reset a custom matrix back to the default.
+%>
+<%
+  var availDows = [[1, "app.weekday.mon"], [2, "app.weekday.tue"], [3, "app.weekday.wed"], [4, "app.weekday.thu"], [5, "app.weekday.fri"], [6, "app.weekday.sat"], [0, "app.weekday.sun"]];
+  var availWire = {};
+  Object.keys(availSeed || {}).forEach(function (k) {
+    var v = availSeed[k];
+    if (v && v.length) availWire[k] = v;
+  });
+%>
+<div data-avail-editor>
+  <span class="block font-medium text-slate-700 mb-1"><%= t("booking.availability") %></span>
+  <p class="text-xs text-slate-500 mb-2"><%= t("booking.availabilityHint") %></p>
+  <div class="divide-y divide-slate-100">
+    <% availDows.forEach(function (pair) {
+         var dow = pair[0];
+         var wins = (availSeed && availSeed[String(dow)]) || null;
+         var dayOn = !!(wins && wins.length);
+    %>
+      <div class="flex flex-wrap items-start gap-x-3 gap-y-1 py-1.5" data-avail-day="<%= dow %>">
+        <label class="inline-flex items-center gap-2 w-24 shrink-0 cursor-pointer pt-0.5">
+          <input type="checkbox" data-avail-toggle <%= dayOn ? "checked" : "" %>
+                 class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+          <span class="text-sm text-slate-700"><%= t(pair[1]) %></span>
+        </label>
+        <span class="text-xs text-slate-400 pt-1" data-avail-off <%= dayOn ? "hidden" : "" %>>—</span>
+        <div class="flex-1 min-w-[200px]" data-avail-body <%= dayOn ? "" : "hidden" %>>
+          <div class="space-y-1" data-avail-windows>
+            <% (wins || []).forEach(function (w) { %>
+              <div class="flex items-center gap-1.5" data-avail-window>
+                <input type="text" data-avail-start value="<%= w[0] %>" maxlength="5" inputmode="numeric" placeholder="09:00" autocomplete="off"
+                       class="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                <span class="text-slate-400">–</span>
+                <input type="text" data-avail-end value="<%= w[1] %>" maxlength="5" inputmode="numeric" placeholder="18:00" autocomplete="off"
+                       class="w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                <button type="button" data-avail-remove aria-label="×"
+                        class="rounded-md px-1.5 py-0.5 text-sm text-slate-400 hover:text-red-600 hover:bg-red-50">×</button>
+              </div>
+            <% }) %>
+          </div>
+          <button type="button" data-avail-add class="mt-1 text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline">+ <%= t("booking.availabilityAdd") %></button>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+  <p class="text-xs text-red-600 mt-1" data-avail-error hidden><%= t("booking.availabilityInvalid") %></p>
+  <input type="hidden" name="weeklyAvailability" data-avail-json value="<%= JSON.stringify(availWire) %>" />
+</div>
