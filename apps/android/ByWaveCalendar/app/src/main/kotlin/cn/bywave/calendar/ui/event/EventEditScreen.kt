@@ -463,6 +463,15 @@ fun EventEditScreen(
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
                                 )
                             }
+                            // ODbL 署名：在线结果是 OpenStreetMap 数据，
+                            // 展示处须带版权声明。版权行是固定文案，
+                            // 不走资源本地化。
+                            Text(
+                                "© OpenStreetMap contributors",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+                            )
                         }
                     }
                 }
