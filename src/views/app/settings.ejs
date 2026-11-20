@@ -179,6 +179,8 @@ JSON.stringify({
   agoDays: t("settings.devices.agoDays"),
   revoke: t("settings.devices.revoke"),
   copySuccess: t("settings.devices.copySuccess"),
+  apiTokenCopied: t("app.js.copy.token"),
+  appPasswordCopied: t("app.js.copy.appPassword"),
   copyFallback: t("settings.devices.copyFallback"),
   caldavCopied: t("settings.devices.caldavCopied"),
   pushUnsupported: t("settings.notifications.pushUnsupported"),
@@ -984,7 +986,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     if (!el) return;
     try {
       await navigator.clipboard.writeText(el.textContent.trim());
-      window.bwc.toast(BWC_I18N.copySuccess, "success");
+      window.bwc.toast(BWC_I18N.appPasswordCopied, "success");
     } catch {
       const r = document.createRange();
       r.selectNode(el);
@@ -999,7 +1001,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     if (!el) return;
     try {
       await navigator.clipboard.writeText(el.textContent.trim());
-      window.bwc.toast(BWC_I18N.copySuccess, "success");
+      window.bwc.toast(BWC_I18N.apiTokenCopied, "success");
     } catch {
       const r = document.createRange();
       r.selectNode(el);

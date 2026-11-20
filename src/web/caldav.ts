@@ -14,6 +14,7 @@ import { sendMail } from "../lib/mailer.js";
 import { eventInviteMail } from "../lib/email_templates.js";
 import { cancelEvent } from "../lib/event_cancel.js";
 import { notifyEventInvitation } from "../lib/invite_notify.js";
+import { notifyEventUpdated } from "../lib/event_change_notify.js";
 import { calendarCtags, etagOf } from "../lib/calendar_ctag.js";
 import { exportTimeZone } from "../lib/event_zone.js";
 
@@ -1095,7 +1096,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const ifNoneMatchHdr = req.headers["if-none-match"];
 
   type WriteOutcome =
-    | { kind: "ok"; stored: schema.Event; isCreate: boolean }
+    | { kind: "ok"; stored: schema.Event; isCreate: boolean; before: schema.Event | null }
     | { kind: "412" }
     | { kind: "500"; err: unknown };
 
@@ -1169,7 +1170,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         })
         .where(eq(schema.events.id, existing.id))
         .returning();
-      return { kind: "ok", stored: updated!, isCreate: false } as const;
+      return { kind: "ok", stored: updated!, isCreate: false, before: existing } as const;
     }
     if (ifNoneMatchHdr === "*") {
       // "Create only" precondition: but we just verified no existing row.
@@ -1192,7 +1193,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         rawIcs: rawVevent,
       })
       .returning();
-    return { kind: "ok", stored: inserted!, isCreate: true } as const;
+    return { kind: "ok", stored: inserted!, isCreate: true, before: null } as const;
   });
 
   if (outcome.kind === "412") return reply.code(412).send("Precondition Failed");
@@ -1341,6 +1342,16 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         eventId: stored.id,
       }, "caldav_put_invites");
     }
+  }
+
+  // PUT 编辑的事件变更站内通知：和网页/API 走同一个生产者 —— 实质变更
+  // 判据（时间/标题/地点/全天/日历/重复规则）、30 分钟合并窗口、
+  // notify_event_changes 偏好门控全在 notifyEventUpdated 里，不另造口径。
+  // CalDAV 客户端整库同步时常把没改动的事件原样 PUT 回来：before/after
+  // 无实质差异时生产者自己静默，这正是复用它的原因。新建不走这里
+  // （新事件的感知走邀请与同步，不发「已更新」）。
+  if (!isResurrectOrCreate && outcome.before) {
+    void notifyEventUpdated(outcome.before, stored, user).catch(() => undefined);
   }
 
   reply.header("ETag", etagOf(stored.updatedAt));

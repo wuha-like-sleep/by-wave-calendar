@@ -88,6 +88,15 @@ describe("Japanese", () => {
   it("時間半 → 90 minutes", () => {
     expect(parse("明日 10時 1時間半 研修", NOW)?.endsAt).toBe("2026-07-04T11:30:00");
   });
+  it("workday-boundary deadlines: 終業前/退勤前 end at 18:00, 出勤前/始業前/仕事前 at 9:00", () => {
+    // Same 9:00 / 18:00 anchors as the Chinese and English forms.
+    expectParse("明日 終業前 レポート提出", "2026-07-04T17:00:00", "2026-07-04T18:00:00", "レポート提出");
+    expectParse("退勤前 会議 120分", "2026-07-03T16:00:00", "2026-07-03T18:00:00", "会議");
+    // 08:00 start is already past at 10:00 → rolls to tomorrow.
+    expectParse("出勤前 ランニング", "2026-07-04T08:00:00", "2026-07-04T09:00:00", "ランニング");
+    expectParse("明日 始業前 全体会議", "2026-07-04T08:00:00", "2026-07-04T09:00:00", "全体会議");
+    expectParse("明日 仕事前 メール確認", "2026-07-04T08:00:00", "2026-07-04T09:00:00", "メール確認");
+  });
 });
 
 describe("Korean", () => {
@@ -99,6 +108,13 @@ describe("Korean", () => {
   });
   it("spaced minutes '10시 30분' are clock minutes, not a duration", () => {
     expectParse("회의 다음 주 금요일 10시 30분", "2026-07-10T10:30:00", "2026-07-10T11:30:00", "회의");
+  });
+  it("workday-boundary deadlines: 퇴근 전 ends at 18:00, 출근 전 at 9:00 (spaced or glued)", () => {
+    // Same 9:00 / 18:00 anchors as the Chinese and English forms.
+    expectParse("내일 퇴근 전 보고서 제출", "2026-07-04T17:00:00", "2026-07-04T18:00:00", "보고서 제출");
+    expectParse("퇴근전 회의", "2026-07-03T17:00:00", "2026-07-03T18:00:00", "회의");
+    // 08:00 start is already past at 10:00 → rolls to tomorrow.
+    expectParse("출근 전 운동", "2026-07-04T08:00:00", "2026-07-04T09:00:00", "운동");
   });
 });
 

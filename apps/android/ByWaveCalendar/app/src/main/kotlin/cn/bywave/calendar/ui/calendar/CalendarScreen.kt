@@ -39,6 +39,7 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -158,20 +159,58 @@ fun CalendarScreen(
 
     // 一句话直接保存后的反馈：「已创建：标题 · 撤销」。撤销走 deleteEvent，
     // 删完它自己还会再给一次恢复入口（和普通删除同一条链）。
+    //
+    // Snackbar 只有一个动作位，撤销与「查看」的取舍：撤销是限时的——
+    // 提示消失就没了，而一句话直存没经过表单复核，误解析的逃生口必须
+    // 在这几秒里够得着；查看不是限时的——事件就在身后的日历格子里，
+    // 随时点得开。所以动作位留给撤销，作为补偿把标题本身做成可点：
+    // 点标题经 detailRequest 打开详情（与搜索结果同一条路）。为此这条
+    // 提示用自己的 host + 自定义 Snackbar 渲染（消息区可点、动作按钮
+    // 照旧），删除撤销的那条仍走默认渲染，互不影响。
+    val createdSnackbarHostState = remember { SnackbarHostState() }
+    var createdTapTarget by remember { mutableStateOf<EventDTO?>(null) }
     val createdMsgTemplate = stringResource(R.string.event_created_notice)
     LaunchedEffect(state.createdNotice) {
         val notice = state.createdNotice ?: return@LaunchedEffect
-        val result = snackbarHostState.showSnackbar(
+        createdTapTarget = notice
+        val result = createdSnackbarHostState.showSnackbar(
             message = createdMsgTemplate.replace("%1\$s", notice.summary),
             actionLabel = undoLabel,
             duration = SnackbarDuration.Short,
         )
         if (result == SnackbarResult.ActionPerformed) vm.deleteEvent(notice.id)
+        createdTapTarget = null
         vm.clearCreatedNotice()
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            Column {
+                SnackbarHost(createdSnackbarHostState) { data ->
+                    val target = createdTapTarget
+                    Snackbar(
+                        action = {
+                            TextButton(onClick = { data.performAction() }) {
+                                Text(undoLabel)
+                            }
+                        },
+                    ) {
+                        Text(
+                            data.visuals.message,
+                            if (target != null) {
+                                Modifier.clickable {
+                                    vm.requestDetail(target)
+                                    data.dismiss()
+                                }
+                            } else {
+                                Modifier
+                            },
+                        )
+                    }
+                }
+                SnackbarHost(snackbarHostState)
+            }
+        },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(R.string.calendar_title)) },

@@ -9,7 +9,7 @@
     <div class="flex items-center gap-2">
       <code class="text-xs text-emerald-900 truncate flex-1 bg-white/70 px-2 py-1.5 rounded"><%= flash.createdBookingUrl %></code>
       <button type="button" class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-              data-bwc-copy="<%= flash.createdBookingUrl %>"><%= t("bookingLinks.copyLink") %></button>
+              data-bwc-copy="<%= flash.createdBookingUrl %>" data-bwc-copy-msg="<%= t("app.js.copy.booking") %>"><%= t("bookingLinks.copyLink") %></button>
     </div>
   </div>
 <% } %>
@@ -40,7 +40,7 @@
             <div class="mt-1 flex items-center gap-2">
               <code class="text-xs text-slate-500 truncate flex-1 bg-slate-50 px-2 py-1 rounded"><%= l.publicUrl %></code>
               <button type="button" class="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                      data-bwc-copy="<%= l.publicUrl %>">复制</button>
+                      data-bwc-copy="<%= l.publicUrl %>" data-bwc-copy-msg="<%= t("app.js.copy.booking") %>">复制</button>
             </div>
             <% if (l.description) { %><div class="mt-1 text-xs text-slate-500"><%= l.description %></div><% } %>
             <div class="mt-1 text-xs text-slate-500"><%= t("booking.public.hostTimezone", { tz: l.timezone }) %></div>

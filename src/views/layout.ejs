@@ -125,6 +125,18 @@
         ? jsonForScript(bwcUpdateStrings)
         : JSON.stringify(bwcUpdateStrings).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026") %>;
     </script>
+    <%# 同上：app.js 的 copy() 在所有页面跑，通用「链接已复制 / 复制失败」
+        文案在服务端按当前语言解析好递过去；具体复制对象的文案由各模板
+        用 data-bwc-copy-msg 自己带（t("app.js.copy.*")）。 %>
+    <% const bwcCopyStrings = {
+      link: t("app.js.copy.link"),
+      failed: t("app.js.copy.failed"),
+    }; %>
+    <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+      window.BWC_COPY_T = <%- typeof jsonForScript !== 'undefined'
+        ? jsonForScript(bwcCopyStrings)
+        : JSON.stringify(bwcCopyStrings).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026") %>;
+    </script>
     <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/banners.js?v=<%= v %>" defer></script>
     <%# 铃铛未读角标：脚本自己找 #bwc-notif-badge，没有这个元素（未登录页）
