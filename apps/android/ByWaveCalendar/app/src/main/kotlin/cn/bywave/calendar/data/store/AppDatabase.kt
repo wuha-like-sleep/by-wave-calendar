@@ -12,21 +12,40 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 
 @Database(
-    entities = [EventEntity::class, CalendarEntity::class, PendingOpEntity::class],
-    version = 3,  // v3: pending_ops（离线写队列）。仍走 destructive 回退：
-                  // 升级丢的是可重拉的事件缓存；队列在升级那一刻若非空
-                  // 会一并丢——与既有「未到 1.0 不写迁移」的取舍一致，
-                  // 且队列条目对应的本地改动本就只在缓存里，缓存清了
-                  // 条目留着反而会把不存在的事件往服务端推。
+    entities = [EventEntity::class, CalendarEntity::class, PendingOpEntity::class, AddressEntryEntity::class],
+    version = 4,  // v4: address_entries（本地地址簿）。这一版给了真迁移
+                  // （只有 CREATE TABLE，见 MIGRATION_3_4）：地址簿是
+                  // 用户长期攒的数据，不该陪事件缓存一起被 destructive
+                  // 回退清掉；且建表迁移本身零风险。其余版本跳跃仍走
+                  // 既有 destructive 回退口径。
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun calendarDao(): CalendarDao
     abstract fun pendingOpDao(): PendingOpDao
+    abstract fun addressDao(): AddressDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
+
+        /** v3 → v4：只新建地址簿表，不动任何既有数据。 */
+        val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS address_entries (" +
+                        "normalized TEXT NOT NULL PRIMARY KEY, " +
+                        "address TEXT NOT NULL, " +
+                        "useCount INTEGER NOT NULL, " +
+                        "lastUsedAt INTEGER NOT NULL, " +
+                        "firstSeenAt INTEGER NOT NULL, " +
+                        "source TEXT NOT NULL, " +
+                        "street TEXT, suburb TEXT, city TEXT, state TEXT, " +
+                        "postcode TEXT, country TEXT, lat REAL, lon REAL, " +
+                        "keywordsJson TEXT NOT NULL)",
+                )
+            }
+        }
 
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
@@ -34,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "bywave-cache-v1.db",
             )
+                .addMigrations(MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
                 .also { instance = it }

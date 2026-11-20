@@ -191,6 +191,9 @@ export const es: Partial<Record<TranslationKey, string>> = {
 
   // settings - language section
   "settings.languageTitle": "Idioma",
+  "settings.locationSuggest.title": "Sugerencias de dirección",
+  "settings.locationSuggest.desc": "Los lugares que uses se guardan en este dispositivo y se sugieren mientras escribes. Cuando hay pocas coincidencias locales, también se muestran sugerencias en línea basadas en datos de OpenStreetMap.",
+  "settings.locationSuggest.online": "Sugerencias de dirección en línea",
   "settings.languageDesc": "Elija el idioma de la interfaz web. Es por cuenta y prevalece sobre el valor predeterminado del sitio.",
   "settings.languageFollowSite": "Seguir el predeterminado del sitio",
   "settings.languageSaveSuccess": "Idioma actualizado",
@@ -1240,6 +1243,7 @@ export const es: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "Guardar directamente",
   "app.js.quickadd.openForm": "Revisar en el formulario",
   "app.js.quickadd.added": "Añadido: {title}",
+  "app.js.location.online": "Sugerencias en línea",
   "app.js.quickadd.open": "Abrir",
   "app.js.quickadd.undone": "Adición deshecha",
   "app.js.saving": "Guardando…",

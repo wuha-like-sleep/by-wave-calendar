@@ -64,6 +64,9 @@
     <string name="eventedit_duration_2h">2 h</string>
     <string name="event_location">Lieu</string>
     <string name="event_location_hint">Facultatif — p. ex. Shanghai / Zoom</string>
+    <string name="location_online_suggestions">Suggestions en ligne</string>
+    <string name="settings_online_address_title">Suggestions d\'adresse en ligne</string>
+    <string name="settings_online_address_desc">Quand les correspondances locales sont rares, affiche des suggestions en ligne basées sur les données OpenStreetMap. Les adresses choisies sont enregistrées dans le carnet local.</string>
     <string name="event_link">Lien</string>
     <string name="event_link_hint">https://… (lien de réunion / URL de document)</string>
     <string name="event_meeting_password">Code de la réunion</string>

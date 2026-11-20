@@ -661,6 +661,7 @@ struct SyncSettingsPage: View {
     @State private var notifEnabled: Bool = LocalNotifications.shared.isEnabled
     @State private var notifPermissionDenied = false
     @State private var notifLeadMinutes: Int = LocalNotifications.shared.leadMinutes
+    @State private var onlineSuggestEnabled: Bool = AddressBookStore.onlineEnabled()
 
     var body: some View {
         Form {
@@ -749,6 +750,19 @@ struct SyncSettingsPage: View {
                 }
             } header: {
                 Text("提醒通知")
+            }
+
+            // 地址建议：本地地址簿常开，这个开关只管在线兜底查不查。
+            Section {
+                Toggle("在线地址建议", isOn: $onlineSuggestEnabled)
+                    .onChange(of: onlineSuggestEnabled) { _, newValue in
+                        AddressBookStore.setOnlineEnabled(newValue)
+                    }
+            } header: {
+                Text("地址建议")
+            } footer: {
+                Text("用过的地址会记在这台设备上，输入时自动给出建议；本地匹配较少时才会显示在线建议。")
+                    .font(.footnote)
             }
         }
         .navigationTitle("同步与通知")

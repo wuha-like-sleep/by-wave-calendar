@@ -190,6 +190,9 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "login.qrAdminDisabled": "管理员已停用网页扫码登录，请用密码登录",
 
   "settings.languageTitle": "语言",
+  "settings.locationSuggest.title": "地址建议",
+  "settings.locationSuggest.desc": "用过的地址会记在这台设备上，输入时自动给出建议；本地匹配较少时，还会显示基于 OpenStreetMap 数据的在线建议。",
+  "settings.locationSuggest.online": "在线地址建议",
   "settings.languageDesc": "选择网页 UI 语言。仅当前账号生效，覆盖网站默认语言。",
   "settings.languageFollowSite": "跟随网站默认",
   "settings.languageSaveSuccess": "语言已更新",
@@ -1227,6 +1230,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "直接保存",
   "app.js.quickadd.openForm": "打开表单核对",
   "app.js.quickadd.added": "已添加：{title}",
+  "app.js.location.online": "在线建议",
   "app.js.quickadd.open": "打开",
   "app.js.quickadd.undone": "已撤销添加",
   "app.js.saving": "保存中…",

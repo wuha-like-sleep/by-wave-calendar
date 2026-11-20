@@ -62,6 +62,26 @@ interface PendingOpDao {
 }
 
 @Dao
+interface AddressDao {
+    @Query("SELECT * FROM address_entries")
+    suspend fun listAll(): List<AddressEntryEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(rows: List<AddressEntryEntity>)
+
+    @Query("DELETE FROM address_entries")
+    suspend fun clearAll()
+
+    /** 地址簿整表回写：条目 ≤300，写入路径（保存/选中）频率低，
+     *  整表替换比逐条 diff 简单且不会漏删合并掉的旧行。 */
+    @Transaction
+    suspend fun replaceAll(rows: List<AddressEntryEntity>) {
+        clearAll()
+        insertAll(rows)
+    }
+}
+
+@Dao
 interface CalendarDao {
     @Query("SELECT * FROM calendars WHERE profileId = :profileId ORDER BY name ASC")
     fun observeForProfile(profileId: String): Flow<List<CalendarEntity>>

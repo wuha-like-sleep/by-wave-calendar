@@ -569,6 +569,11 @@ fun MainScreen(
             onDismiss = { state.closeSheet() },
             onQuickParse = { state.parseEvent(it) },
             onQuickSaveDispatched = { state.armQuickSaveNotice() },
+            onLocalAddressSuggestions = { q, title -> state.localAddressSuggestions(q, title) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onSuggestionPicked = { address, online ->
+                if (online != null) state.learnOnlineSuggestion(online) else state.noteAddressPicked(address)
+            },
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -585,6 +590,11 @@ fun MainScreen(
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
+            onLocalAddressSuggestions = { q, title -> state.localAddressSuggestions(q, title) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onSuggestionPicked = { address, online ->
+                if (online != null) state.learnOnlineSuggestion(online) else state.noteAddressPicked(address)
+            },
         )
         is ActiveSheet.Edit -> EventEditDialog(
             mode = EventEditMode.Edit(sheet.event),
@@ -599,6 +609,11 @@ fun MainScreen(
             onDismiss = { state.closeSheet() },
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
+            },
+            onLocalAddressSuggestions = { q, title -> state.localAddressSuggestions(q, title) },
+            onOnlineAddressSuggestions = { state.onlineAddressSuggestions(it) },
+            onSuggestionPicked = { address, online ->
+                if (online != null) state.learnOnlineSuggestion(online) else state.noteAddressPicked(address)
             },
         )
         null -> Unit

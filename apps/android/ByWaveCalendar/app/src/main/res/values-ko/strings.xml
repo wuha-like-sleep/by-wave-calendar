@@ -64,6 +64,9 @@
     <string name="eventedit_duration_2h">2시간</string>
     <string name="event_location">위치</string>
     <string name="event_location_hint">선택 사항 — 예: 상하이 / Zoom</string>
+    <string name="location_online_suggestions">온라인 제안</string>
+    <string name="settings_online_address_title">온라인 주소 제안</string>
+    <string name="settings_online_address_desc">로컬 주소 일치 항목이 적을 때 OpenStreetMap 데이터 기반 온라인 제안을 표시합니다. 선택한 주소는 로컬 주소록에 저장됩니다.</string>
     <string name="event_link">링크</string>
     <string name="event_link_hint">https://… (회의 링크 / 문서 URL)</string>
     <string name="event_meeting_password">회의 비밀번호</string>

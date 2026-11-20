@@ -685,3 +685,7 @@
 "放弃" = "Abandonner";
 "待同步，网络恢复后自动发送" = "En attente de synchronisation — envoi automatique au retour de la connexion";
 "待同步 — 已保存在本机，网络恢复后自动发送" = "Synchronisation en attente — enregistré sur cet appareil, envoi automatique au retour de la connexion";
+"在线建议" = "Suggestions en ligne";
+"在线地址建议" = "Suggestions d'adresse en ligne";
+"地址建议" = "Suggestions d'adresse";
+"用过的地址会记在这台设备上，输入时自动给出建议；本地匹配较少时才会显示在线建议。" = "Les adresses utilisées sont mémorisées sur cet appareil et proposées pendant la saisie. Les suggestions en ligne n'apparaissent que lorsque les correspondances locales sont rares.";

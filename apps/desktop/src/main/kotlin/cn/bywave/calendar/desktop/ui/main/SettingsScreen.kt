@@ -3404,6 +3404,38 @@ private fun AppearanceSection(profile: Profile) {
 
     Spacer(Modifier.height(36.dp))
 
+    // -- Address suggestions: local address book is always on; this
+    // switch only gates the online fallback queries.
+    SectionTitle(t("settings.addressSuggest.title"))
+    Text(
+        t("settings.addressSuggest.desc"),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(bottom = 12.dp),
+    )
+    var onlineSuggest by remember { mutableStateOf(cn.bywave.calendar.desktop.data.GeoSuggestPrefs.enabled()) }
+    SectionCard {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                t("settings.onlineAddressSuggestions"),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = onlineSuggest,
+                onCheckedChange = { want ->
+                    onlineSuggest = want
+                    cn.bywave.calendar.desktop.data.GeoSuggestPrefs.setEnabled(want)
+                },
+            )
+        }
+    }
+
+    Spacer(Modifier.height(36.dp))
+
     // -- Theme / palette (web deep-link)
     SectionTitle(t("settings.appearance.title"))
     Text(

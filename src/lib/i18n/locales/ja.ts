@@ -191,6 +191,9 @@ export const ja: Partial<Record<TranslationKey, string>> = {
 
   // settings - language section
   "settings.languageTitle": "言語",
+  "settings.locationSuggest.title": "住所の候補",
+  "settings.locationSuggest.desc": "使った住所はこのデバイスに保存され、入力時に候補として表示されます。ローカルの候補が少ない場合は、OpenStreetMap データに基づくオンライン候補も表示されます。",
+  "settings.locationSuggest.online": "オンライン住所候補",
   "settings.languageDesc": "Web UI の言語を選択します。これはアカウントごとの設定で、サイトのデフォルトより優先されます。",
   "settings.languageFollowSite": "サイトのデフォルトに従う",
   "settings.languageSaveSuccess": "言語を更新しました",
@@ -1240,6 +1243,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "そのまま保存",
   "app.js.quickadd.openForm": "フォームで確認",
   "app.js.quickadd.added": "追加しました：{title}",
+  "app.js.location.online": "オンライン候補",
   "app.js.quickadd.open": "開く",
   "app.js.quickadd.undone": "追加を取り消しました",
   "app.js.saving": "保存中…",

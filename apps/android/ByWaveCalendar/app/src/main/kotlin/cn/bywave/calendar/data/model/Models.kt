@@ -93,6 +93,20 @@ data class SearchResponse(
     val bookingLinks: List<SearchBookingLinkHit> = emptyList(),
 )
 
+/** GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
+ *  地址串，客户端只管展示与回填）。 */
+@Serializable
+data class GeoSuggestion(
+    val label: String,
+)
+
+/** GET /api/v1/geo/suggest response (after the envelope is unwrapped).
+ *  上游失败时服务端回空列表，所以永远能解出。 */
+@Serializable
+data class GeoSuggestResponse(
+    val suggestions: List<GeoSuggestion> = emptyList(),
+)
+
 /** POST /api/v1/calendars/{id}/import(/preview) body. `text` is the
  *  whole .ics file decoded as UTF-8. `filename` only feeds the server's
  *  sourceTag (the same `file:<name>` shape the web upload produces) —

@@ -96,6 +96,11 @@ interface BywaveApi {
     @GET("api/v1/search")
     suspend fun search(@Query("q") q: String, @Query("limit") limit: Int = 100): SearchResponse
 
+    /** 地点联想的在线兜底（服务端代理 Photon）。只在本地地址簿命中
+     *  太少时才调；服务端任何失败都回空列表。 */
+    @GET("api/v1/geo/suggest")
+    suspend fun geoSuggest(@Query("q") q: String, @Query("lang") lang: String?): cn.bywave.calendar.data.model.GeoSuggestResponse
+
     /** Preview an ICS import into one calendar — counts only, the
      *  server writes nothing. Mirrors the web import dialog's first
      *  step (same judgement, same sourceTag). */

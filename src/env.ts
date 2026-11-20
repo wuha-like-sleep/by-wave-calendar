@@ -52,6 +52,14 @@ const schema = z.object({
   // 取的是宽松档：Google Calendar API 的单用户配额就是 600 次/分钟，
   // 正常同步脚本一个数量级也碰不到，只对失控循环和聚合滥用生效。
   RATE_LIMIT_API_TOKEN_PER_MINUTE: z.coerce.number().int().positive().default(600),
+  // 地址联想的在线兜底上游：GEO_PROVIDER 选适配器（目前只有 photon，
+  // Komoot 的 OSM 地理编码），GEO_PROVIDER_BASE_URL 是它的地址。
+  // 服务端代理它：客户端只打本站 /api/geo/suggest，不知道上游是谁。
+  // 将来换成自建地址库时，在 lib/geo_suggest.ts 加一个适配器 + 改
+  // 这两处配置即可，客户端一行不用动。只是建议来源，不是数据源——
+  // 查不到 / 超时一律静默退回本地地址簿，不影响保存。
+  GEO_PROVIDER: z.enum(["photon"]).default("photon"),
+  GEO_PROVIDER_BASE_URL: z.string().url().default("https://photon.komoot.io"),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
   // subscriptions, one-shot URL imports, and — defense-in-depth — outbound

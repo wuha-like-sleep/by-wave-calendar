@@ -383,6 +383,24 @@ extension APIClient {
     /// Same auth + one-shot 401 refresh as `request`, and HTTP
     /// errors still surface as APIError.server with the body text so
     /// callers get the server's error code, not a blob of ICS.
+    /// 地点联想的在线兜底（服务端代理 Photon）。只在本地地址簿命中
+    /// 太少时才调；任何失败都吞成空数组——在线建议拿不到就当没有，
+    /// 绝不把本地建议也拖下水。
+    func geoSuggest(query: String, lang: String?) async -> [GeoSuggestion] {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
+        let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
+        var path = "/geo/suggest?q=\(q)"
+        if let lang, !lang.isEmpty {
+            path += "&lang=\(lang.addingPercentEncoding(withAllowedCharacters: allowed) ?? lang)"
+        }
+        do {
+            let resp: GeoSuggestResponse = try await get(path)
+            return resp.suggestions
+        } catch {
+            return []
+        }
+    }
+
     func getData(_ path: String) async throws -> Data {
         try await requestData(path: path, isRetry: false)
     }
