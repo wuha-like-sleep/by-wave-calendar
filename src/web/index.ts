@@ -40,7 +40,7 @@ import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
-import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
+import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, rotateApiToken, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
 import { verifyTotpCode } from "../lib/mfa.js";
 import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
@@ -2429,6 +2429,10 @@ export async function webRoutes(app: FastifyInstance) {
         // Status display only — expired tokens stay listed (and revocable)
         // instead of being silently auto-revoked.
         expired: a.expiresAt ? a.expiresAt.getTime() < Date.now() : false,
+        // Replaced by a rotation and still inside its grace window: the
+        // row gets a "grace" badge and its expiry reads as the deadline
+        // after which the old secret stops working.
+        inGrace: !!a.rotatedAt && !(a.expiresAt && a.expiresAt.getTime() < Date.now()),
       })),
       apiEnabled: siteSettings.apiEnabled,
       apiTokenLimit: MAX_API_TOKENS_PER_USER,
@@ -2782,6 +2786,96 @@ export async function webRoutes(app: FastifyInstance) {
       }
     }
     return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
+  });
+
+  // Self-service rotation: mint a new secret for an existing token, old
+  // secret stays valid for a 7-day grace window. The step-up bar is the
+  // SAME as creation, evaluated against the rotated token's own scope —
+  // rotation hands out a fresh long-lived credential, so anything weaker
+  // than creation would make it the soft underbelly of the token system.
+  // Rotation is a replacement, not an addition: the per-user create cap
+  // does not apply (a user at the cap must still be able to rotate a
+  // leaked token — blocking that would punish exactly the right move).
+  app.post<{ Params: { id: string } }>("/app/settings/api-tokens/:id/rotate", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const settings = await getSettings();
+    if (!settings.apiEnabled) {
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token",
+        details: { reason: "api_disabled", via: "self_service" },
+      });
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.apiDisabled") });
+    }
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/settings/devices");
+    const body = z
+      .object({
+        currentPassword: z.string().max(200).optional(),
+        mfaCode: z.string().max(16).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.invalidInput") });
+    }
+    const own = (await listApiTokensForUser(user.id)).find((t) => t.id === id.data);
+    if (!own) {
+      // Not yours (or already revoked) — same opacity as revoke: don't
+      // confirm the id exists.
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.rotateFailed") });
+    }
+    if (own.expiresAt && own.expiresAt.getTime() < Date.now()) {
+      // Rotating a dead token would mint a live one out of an expired
+      // credential's authority. Create a fresh token instead (which goes
+      // through the full create flow and its cap).
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.rotateExpired") });
+    }
+    if (isLocked(user)) {
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token", targetId: own.id,
+        details: { reason: "account_locked", via: "self_service" },
+      });
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
+    }
+    const scope = own.scope === "read" ? "read" : "write";
+    const stepUp = await verifyTokenStepUp(user, body.data, scope);
+    if (stepUp !== "ok") {
+      if (stepUp === "failed") await recordFailedLogin(user);
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token", targetId: own.id,
+        details: { reason: stepUp === "need_admin" ? "step_up_unavailable" : "step_up_failed", scope, via: "self_service" },
+      });
+      if (stepUp === "need_admin") {
+        return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.needAdmin") });
+      }
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
+    }
+    let rotated: Awaited<ReturnType<typeof rotateApiToken>>;
+    try {
+      rotated = await rotateApiToken({ oldTokenId: own.id, graceDays: 7, inheritExpiry: true });
+    } catch {
+      return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.rotateFailed") });
+    }
+    await resetFailedLogin(user.id);
+    await audit(req, user.id, "api_token.rotate", {
+      targetType: "api_token", targetId: own.id,
+      details: { newTokenId: rotated.id, graceDays: 7, oldExpiresAt: rotated.oldExpiresAt.toISOString(), prefix: rotated.prefix, via: "self_service" },
+    });
+    // 安全变更通知，与创建/撤销同口径：邮件只带新 Token 的打码 prefix 和
+    // 旧 Token 的宽限截止，绝不带明文；站内镜像同步留一条。
+    void sendMail(securityChangeMail(user.email, {
+      kind: "api_token_rotated",
+      token: { label: own.label, prefix: rotated.prefix, scope, expiresAt: rotated.oldExpiresAt, via: "self_service" },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    void notifySecurityEvent(user.id, "token_rotated", { tokenLabel: own.label, tokenScope: scope, graceDays: 7 }).catch(() => undefined);
+    return redirectWith(reply, "/app/settings/devices#api-tokens", {
+      success: tr(req, "flash.apiToken.rotated"),
+      issuedToken: rotated.plain,
+      issuedLabel: own.label,
+    });
   });
 
   app.post("/app/settings/theme", async (req, reply) => {

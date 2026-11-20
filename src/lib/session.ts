@@ -456,6 +456,9 @@ export async function requireUserOrSend(
             reply.code(403).send({ error: "token_is_read_only" });
             return null;
           }
+          req.user = u;
+          // Tag the request so downstream handlers can tell session vs API.
+          (req as unknown as { authVia: string }).authVia = "api_token:" + verified.scope;
           // 按 Token 限流（跨 IP 聚合）：全站按 IP 的额度挡不住一枚 Token
           // 在很多 IP 后面被刷，也挡不住失控脚本以线速重试。判定走进程内
           // 计数、不查库（见 lib/api_token_rate_limit.ts）。被拒的请求不
@@ -478,10 +481,7 @@ export async function requireUserOrSend(
               });
             return null;
           }
-          req.user = u;
           void touchApiToken(verified.tokenId, req.ip).catch(() => undefined);
-          // Tag the request so downstream handlers can tell session vs API.
-          (req as unknown as { authVia: string }).authVia = "api_token:" + verified.scope;
           return u;
         }
       }

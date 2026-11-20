@@ -699,18 +699,43 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
             <div class="text-sm font-medium text-slate-900"><%= tok.label %>
               <% if (tok.scope === 'read') { %><span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.devices.apiTokenScopeRead") %></span><% } else { %><span class="ml-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700"><%= t("settings.devices.apiTokenScopeWrite") %></span><% } %>
               <% if (tok.expired) { %><span class="ml-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-normal text-red-600"><%= t("settings.devices.apiTokenExpired") %></span><% } %>
+              <% if (tok.inGrace) { %><span class="ml-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700"><%= t("settings.devices.apiTokenGraceBadge") %></span><% } %>
             </div>
             <div class="text-xs text-slate-500">
               <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= tok.prefix %></code> ·
               <%= t("settings.devices.appPasswordCreatedLabel") %> <%- tok.createdAtLocal %>
               <% if (tok.lastUsedAtLocal) { %> · <%= t("settings.devices.appPasswordLastUsedLabel") %> <%- tok.lastUsedAtLocal %><% if (tok.lastUsedIp) { %> · <span class="font-mono text-slate-400"><%= tok.lastUsedIp %></span><% } %><% if (tok.useCount > 0) { %> · <%= t("settings.devices.apiTokenUseCount", { count: tok.useCount }) %><% } %><% } else { %> · <%= t("settings.devices.appPasswordNeverUsed") %><% } %>
-              <% if (tok.expiresAtLocal) { %> · <%= t("settings.devices.apiTokenExpiresLabel") %> <%- tok.expiresAtLocal %><% } else { %> · <%= t("settings.devices.apiTokenNeverExpires") %><% } %>
+              <% if (tok.inGrace) { %> · <%= t("settings.devices.apiTokenGraceUntil", { date: tok.expiresAtLocal }) %><% } else if (tok.expiresAtLocal) { %> · <%= t("settings.devices.apiTokenExpiresLabel") %> <%- tok.expiresAtLocal %><% } else { %> · <%= t("settings.devices.apiTokenNeverExpires") %><% } %>
             </div>
           </div>
-          <form method="post" action="/app/settings/api-tokens/<%= tok.id %>/revoke" data-confirm="<%= t('settings.devices.apiTokenRevokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.devices.apiTokenRevoke') %>">
-            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-            <button type="submit" class="whitespace-nowrap text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.apiTokenRevoke") %></button>
-          </form>
+          <div class="flex shrink-0 items-start gap-1">
+            <% if (apiEnabled && !tok.expired && !tok.inGrace && !(user.passwordSet === false && !user.mfaEnabled)) { %>
+              <details class="relative">
+                <summary class="cursor-pointer list-none whitespace-nowrap px-2 py-1 text-xs text-brand-600 hover:text-brand-700"><%= t("settings.devices.apiTokenRotate") %></summary>
+                <form method="post" action="/app/settings/api-tokens/<%= tok.id %>/rotate" class="absolute right-0 z-10 mt-1 w-72 space-y-2 rounded-lg border border-slate-200 bg-white p-3 shadow-lg">
+                  <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                  <p class="text-xs leading-relaxed text-slate-500"><%= t("settings.devices.apiTokenRotateHint") %></p>
+                  <% if (user.passwordSet !== false) { %>
+                    <input type="password" name="currentPassword" autocomplete="current-password"<% if (user.passwordSet === true) { %> required<% } %>
+                           aria-label="<%= t('settings.devices.apiTokenCurrentPassword') %>"
+                           placeholder="<%= t('settings.devices.apiTokenCurrentPassword') %>"
+                           class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                  <% } %>
+                  <% if (user.mfaEnabled) { %>
+                    <input type="text" name="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="16"
+                           aria-label="<%= t('settings.devices.apiTokenMfaCode') %>"
+                           placeholder="<%= t('settings.devices.apiTokenMfaCode') %>"
+                           class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+                  <% } %>
+                  <button type="submit" class="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("settings.devices.apiTokenRotate") %></button>
+                </form>
+              </details>
+            <% } %>
+            <form method="post" action="/app/settings/api-tokens/<%= tok.id %>/revoke" data-confirm="<%= t('settings.devices.apiTokenRevokeConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.devices.apiTokenRevoke') %>">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="whitespace-nowrap text-xs text-red-600 hover:text-red-700 px-2 py-1"><%= t("settings.devices.apiTokenRevoke") %></button>
+            </form>
+          </div>
         </li>
       <% }) %>
     </ul>

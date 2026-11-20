@@ -79,6 +79,7 @@ export async function listAllApiTokens() {
       lastUsedIp: schema.apiTokens.lastUsedIp,
       useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
+      rotatedAt: schema.apiTokens.rotatedAt,
       createdAt: schema.apiTokens.createdAt,
       userEmail: schema.users.email,
       userId: schema.apiTokens.userId,
@@ -114,6 +115,7 @@ export async function listApiTokensForUser(userId: string) {
       lastUsedIp: schema.apiTokens.lastUsedIp,
       useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
+      rotatedAt: schema.apiTokens.rotatedAt,
       createdAt: schema.apiTokens.createdAt,
     })
     .from(schema.apiTokens)
@@ -171,6 +173,14 @@ export async function rotateApiToken(input: {
   /** Optional override of the new token's label. Defaults to old label
    *  (admins can keep their "n8n integration" label across rotations). */
   newLabel?: string;
+  /** Self-service rotation passes true: the NEW token inherits the old
+   *  token's expiry horizon (its remaining lifetime, or never-expire if
+   *  the old one never expired). Without it a user who deliberately
+   *  chose a 365-day token would silently end up with a never-expiring
+   *  one after rotating — rotation must never *lengthen* a credential's
+   *  life beyond what its owner originally picked. The admin path leaves
+   *  this off and keeps the historical "new token never expires". */
+  inheritExpiry?: boolean;
 }): Promise<IssuedApiToken & { oldExpiresAt: Date }> {
   const grace = input.graceDays ?? 7;
   const [old] = await db
@@ -187,6 +197,10 @@ export async function rotateApiToken(input: {
     ? old.expiresAt
     : proposedExpiry;
 
+  const newExpiresInDays = input.inheritExpiry && old.expiresAt
+    ? Math.max(1, Math.ceil((old.expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+    : null;
+
   // Mint the new token first. If this succeeds but the old-token update fails
   // (extremely unlikely but possible under DB hiccup), we have an extra valid
   // token — fail-safe direction for an integration-critical flow. The opposite
@@ -196,13 +210,18 @@ export async function rotateApiToken(input: {
     userId: old.userId,
     label: input.newLabel?.trim() || old.label,
     scope: old.scope === "read" ? "read" : "write",
-    expiresInDays: null,  // new token follows the org's standard "no expiry"
-                          // default; admin can rotate it again later
+    expiresInDays: newExpiresInDays,  // admin path: null = the org's standard
+                                      // "no expiry" default (see inheritExpiry)
   });
 
+  // rotatedAt is the marker the settings/admin lists use to show the old
+  // token as "in rotation grace" (its expiresAt is the grace deadline).
+  // Grace expiry itself is enforced by verifyApiToken's existing expiry
+  // check — no separate sweep needed: the moment expiresAt passes, the
+  // old secret stops verifying.
   await db
     .update(schema.apiTokens)
-    .set({ expiresAt: oldExpiresAt })
+    .set({ expiresAt: oldExpiresAt, rotatedAt: now })
     .where(eq(schema.apiTokens.id, input.oldTokenId));
 
   return { ...issued, oldExpiresAt };
