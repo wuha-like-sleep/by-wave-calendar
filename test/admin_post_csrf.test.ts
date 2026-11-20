@@ -70,7 +70,8 @@ function scan(file: string): Route[] {
       methods = [short[1] === "all" ? "ALL" : short[1]!.toUpperCase()];
       p = short[2]!;
       // app.post("/x", someHandler); —— 处理函数是个具名常量，去它的定义里看。
-      const named = /^ {2}app\.\w+(?:<[^>]*>)?\(\s*"[^"]+",\s*([A-Za-z_]\w*)\s*\);/.exec(line);
+      // 工厂调用同理：app.post("/x", makeHandler(true)); 看的是工厂函数本体的定义。
+      const named = /^ {2}app\.\w+(?:<[^>]*>)?\(\s*"[^"]+",\s*([A-Za-z_]\w*)(?:\([^)]*\))?\s*\);/.exec(line);
       if (named) {
         const j = lines.findIndex((l) => new RegExp(`^ {2}const ${named[1]}\\b`).test(l));
         if (j >= 0) {
