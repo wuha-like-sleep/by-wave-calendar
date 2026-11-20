@@ -146,10 +146,22 @@
   globalThis.bwcImportResult = { readImportResponse };
 })();
 
-(function () {
+(function __bwcCalendarApp() {
   "use strict";
   // 没有 DOM 就只是被 import 进来取上面那组纯函数（测试），不启动应用。
   if (typeof document === "undefined") return;
+
+  // toastui 改为动态加载（见 calendar-app.ejs 的内联加载器）：库还没到
+  // 就先等它就绪、再整段重跑本函数，期间页面上的静态骨架
+  // （#calendar-skeleton）保持显示；库已在场则直接继续，函数体只会
+  // 完整执行一次。库加载失败时加载器已把骨架切到错误态，这里静默
+  // 退出即可（重试按钮走整页刷新，会重新走一遍加载流程）。
+  if (!(window.tui && window.tui.Calendar)) {
+    if (window.__bwcTuiReady) {
+      window.__bwcTuiReady.then(function () { __bwcCalendarApp(); }, function () {});
+    }
+    return;
+  }
 
   const FORM = globalThis.bwcEventForm;
   const ctx = window.__bwc || { calendars: [], publicBaseUrl: "", csrfToken: "" };

@@ -96,6 +96,17 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <link rel="stylesheet" href="/static/css/styles.css?v=<%= v %>" />
     <link rel="stylesheet" href="/static/app.css?v=<%= v %>" />
+    <% if (typeof appShell !== 'undefined' && appShell) { %>
+    <%# 日历页专属资源（仅 /app 渲染时存在，其余页面零字节）：
+        toastui 样式表提前到 head——原先写在正文 partial 的第一行，
+        浏览器要解析到正文才发现它，网格样式因此迟到；
+        purify / toastui 两个大脚本只 preload 提前下载、不在此执行，
+        由 partial 末尾的内联加载器在壳渲染后按序注入，
+        避免 210KB 的库继续堵住 DOMContentLoaded 与 splash 退场。 %>
+    <link rel="stylesheet" href="/static/lib/toastui-calendar.min.css?v=<%= v %>" />
+    <link rel="preload" as="script" href="/static/lib/purify.min.js?v=<%= v %>" />
+    <link rel="preload" as="script" href="/static/lib/toastui-calendar.min.js?v=<%= v %>" />
+    <% } %>
     <% const js = typeof jsBasePath !== 'undefined' ? jsBasePath : '/static'; %>
     <%# auth-guard first: wraps window.fetch before any app script runs, so an
         expired-session 401 bounces the user to /login instead of silently
