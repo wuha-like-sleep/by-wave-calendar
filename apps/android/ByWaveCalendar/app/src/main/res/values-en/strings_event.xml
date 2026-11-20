@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">Accept &amp; move event</string>
     <string name="attendees_proposal_decline">Decline</string>
     <string name="attendees_proposal_superseded">Superseded</string>
+    <string name="invitations_title">Invitations</string>
+    <string name="invitations_empty_title">No invitations yet</string>
+    <string name="invitations_empty_subtitle">When someone invites you to an event, it will show up here</string>
+    <string name="invitations_organizer">Organizer</string>
+    <string name="invitations_you">You</string>
+    <string name="invitations_accept">Accept</string>
+    <string name="invitations_rsvp_heading">Your reply</string>
+    <string name="invitations_propose_title">Propose a new time</string>
+    <string name="invitations_propose_start">Start</string>
+    <string name="invitations_propose_end">End</string>
+    <string name="invitations_propose_note">Note (optional)</string>
+    <string name="invitations_propose_submit">Send proposal</string>
+    <string name="invitations_propose_bad_range">End time must be after start time</string>
+    <string name="invitations_my_proposals">My proposals</string>
+    <string name="invitations_proposal_pending">Pending</string>
+    <string name="invitations_cancelled">This event was cancelled</string>
+    <string name="invitations_expired">This invitation has expired</string>
+    <string name="invitations_err_load">Couldn't load invitations</string>
+    <string name="invitations_err_respond">Something went wrong — please try again</string>
+    <string name="invitations_time_in_tz">Times shown in the event's timezone (%1$s)</string>
 </resources>

@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">Aceptar y mover</string>
     <string name="attendees_proposal_decline">Rechazar</string>
     <string name="attendees_proposal_superseded">Reemplazada</string>
+    <string name="invitations_title">Invitaciones</string>
+    <string name="invitations_empty_title">Aún no tienes invitaciones</string>
+    <string name="invitations_empty_subtitle">Cuando alguien te invite a un evento, aparecerá aquí</string>
+    <string name="invitations_organizer">Organizador</string>
+    <string name="invitations_you">Tú</string>
+    <string name="invitations_accept">Aceptar</string>
+    <string name="invitations_rsvp_heading">Tu respuesta</string>
+    <string name="invitations_propose_title">Proponer otro horario</string>
+    <string name="invitations_propose_start">Inicio</string>
+    <string name="invitations_propose_end">Fin</string>
+    <string name="invitations_propose_note">Nota (opcional)</string>
+    <string name="invitations_propose_submit">Enviar propuesta</string>
+    <string name="invitations_propose_bad_range">La hora de fin debe ser posterior a la de inicio</string>
+    <string name="invitations_my_proposals">Mis propuestas</string>
+    <string name="invitations_proposal_pending">Pendiente</string>
+    <string name="invitations_cancelled">Este evento fue cancelado</string>
+    <string name="invitations_expired">Esta invitación ha caducado</string>
+    <string name="invitations_err_load">No se pudieron cargar las invitaciones</string>
+    <string name="invitations_err_respond">Algo salió mal; inténtalo de nuevo</string>
+    <string name="invitations_time_in_tz">Horas en la zona horaria del evento (%1$s)</string>
 </resources>

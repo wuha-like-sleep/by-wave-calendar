@@ -29,7 +29,10 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -93,6 +96,7 @@ fun CalendarScreen(
     /** 「某账号已被登出」提示条上的「重新登录」：登录页要预填这个账号，不是一张空白页。 */
     onSignInAgain: (SignedOutNotice) -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenInvitations: () -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
@@ -177,6 +181,22 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
+                    // 我收到的邀请 — 徽章数 = 未处理数（待回复且未取消、
+                    // 未过期），由 CalendarViewModel 随事件刷新同节拍更新。
+                    BadgedBox(
+                        badge = {
+                            if (state.pendingInvitations > 0) {
+                                Badge { Text(state.pendingInvitations.toString()) }
+                            }
+                        },
+                    ) {
+                        IconButton(onClick = onOpenInvitations) {
+                            Icon(
+                                Icons.Outlined.Email,
+                                contentDescription = stringResource(R.string.invitations_title),
+                            )
+                        }
+                    }
                     IconButton(onClick = onOpenSearch) {
                         Icon(Icons.Default.Search, contentDescription = stringResource(R.string.cal_cd_search))
                     }

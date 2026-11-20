@@ -49,6 +49,9 @@ data class CalendarUiState(
     /** Set right after a quick-add direct save succeeds → drives the
      *  "已创建 · 撤销" snackbar on CalendarScreen. One-shot. */
     val createdNotice: EventDTO? = null,
+    /** 未处理邀请数（待回复、事件未取消、未过期）→ 顶栏邀请按钮的徽章。
+     *  刷新失败静默保持旧值：徽章只是提示，不值得为它报错。 */
+    val pendingInvitations: Int = 0,
     val lastSyncedAt: Instant? = null,
     val fetchedFrom: LocalDate? = null,
     val fetchedTo: LocalDate? = null,
@@ -85,7 +88,7 @@ class CalendarViewModel : ViewModel() {
                 loadJob?.cancel()
                 undoProfileId = null
                 _state.update { it.copy(undoDeleteId = null, detailRequest = null, createdNotice = null,
-                    errorMessage = null, loading = false,
+                    errorMessage = null, loading = false, pendingInvitations = 0,
                     fetchedFrom = null, fetchedTo = null, lastSyncedAt = null) }
                 if (id != null) load()
             }
@@ -242,7 +245,24 @@ class CalendarViewModel : ViewModel() {
     private var loadJob: kotlinx.coroutines.Job? = null
     fun refreshIfIdle() { if (loadJob?.isActive != true) load() }
 
+    /** 邀请徽章计数。和事件加载同节拍（load 触发时顺带刷），单独一条
+     *  轻请求；失败不写 errorMessage、不清零旧值。 */
+    private fun refreshInvitationBadge() {
+        val profile = profiles.active() ?: return
+        viewModelScope.launch {
+            runCatching {
+                val resp = ApiClient.forProfile(profile, profiles).api.invitations()
+                val now = Instant.now()
+                resp.invitations.count { inv ->
+                    inv.responseStatus == "pending" && !inv.event.cancelled &&
+                        runCatching { Instant.parse(inv.expiresAt).isAfter(now) }.getOrDefault(false)
+                }
+            }.onSuccess { n -> _state.update { it.copy(pendingInvitations = n) } }
+        }
+    }
+
     private fun load() {
+        refreshInvitationBadge()
         if (profiles.active() == null) {
             _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_not_signed_in)) }
             return

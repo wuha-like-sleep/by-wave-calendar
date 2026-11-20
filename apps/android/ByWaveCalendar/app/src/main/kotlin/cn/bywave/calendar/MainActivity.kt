@@ -47,6 +47,7 @@ import cn.bywave.calendar.i18n.LocaleHelper
 import cn.bywave.calendar.ui.calendar.CalendarScreen
 import cn.bywave.calendar.ui.calendar.CalendarViewModel
 import cn.bywave.calendar.ui.event.AttendeesScreen
+import cn.bywave.calendar.ui.event.InvitationsScreen
 import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.importics.ImportIcsScreen
@@ -72,6 +73,31 @@ class MainActivity : ComponentActivity() {
             // Do not replay credentials on a later activity recreation.
             setIntent(Intent(this, MainActivity::class.java))
         }
+    }
+
+    private val invitationToken = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    /** bywave://invitations/<token> deep link (e.g. from a notification
+     *  or a shared link): park the token; AppRoot navigates to that
+     *  invitation's detail once someone is signed in — same waiting
+     *  pattern as the .ics handover below. The auth callback link
+     *  (host "auth") must never land here. */
+    private fun receiveInvitationIntent(intent: Intent?) {
+        if (intent == null) return
+        val fromExtra = intent.getStringExtra("invitation_token")
+            ?.takeIf { it.isNotBlank() && it.length <= 128 }
+        val data = intent.data
+        val fromLink = if (intent.action == Intent.ACTION_VIEW && data != null &&
+            data.host == "invitations"
+        ) {
+            data.pathSegments.firstOrNull()?.takeIf { it.isNotBlank() && it.length <= 128 }
+        } else {
+            null
+        }
+        val token = fromExtra ?: fromLink ?: return
+        invitationToken.value = token
+        // Do not replay the same link on a later activity recreation.
+        setIntent(Intent(this, MainActivity::class.java))
     }
 
     private val incomingImport = kotlinx.coroutines.flow.MutableStateFlow<Uri?>(null)
@@ -104,6 +130,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         receiveWebCallback(intent)
+        receiveInvitationIntent(intent)
         receiveImportIntent(intent)
     }
     // APP 内语言在 Android 12 及以下就是在这里生效的：Activity 的
@@ -117,6 +144,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         receiveWebCallback(intent)
+        receiveInvitationIntent(intent)
         receiveImportIntent(intent)
         enableEdgeToEdge()
         setContent {
@@ -136,11 +164,14 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val callback by webCallback.collectAsState()
                     val importUri by incomingImport.collectAsState()
+                    val inviteToken by invitationToken.collectAsState()
                     AppRoot(
                         webCallback = callback,
                         callbackHandled = { webCallback.value = null },
                         incomingImport = importUri,
                         importHandled = { incomingImport.value = null },
+                        invitationToken = inviteToken,
+                        invitationHandled = { invitationToken.value = null },
                     )
                 }
             }
@@ -164,6 +195,8 @@ private fun AppRoot(
     callbackHandled: () -> Unit,
     incomingImport: Uri?,
     importHandled: () -> Unit,
+    invitationToken: String?,
+    invitationHandled: () -> Unit,
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
     val activeId by profiles.activeId.collectAsState()
@@ -225,6 +258,25 @@ private fun AppRoot(
     LaunchedEffect(pendingImport, loggedIn) {
         if (pendingImport != null && loggedIn && nav.currentDestination?.route != "import_ics") {
             nav.navigate("import_ics") { launchSingleTop = true }
+        }
+    }
+
+    // An invitation deep link waits for sign-in the same way, then opens
+    // the invitations screen pre-selected to that invitation. Consumed
+    // exactly once (invitationHandled) so rotation doesn't re-navigate.
+    var pendingInvitation by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(invitationToken) {
+        if (invitationToken != null) {
+            pendingInvitation = invitationToken
+            invitationHandled()
+        }
+    }
+    LaunchedEffect(pendingInvitation, loggedIn) {
+        val token = pendingInvitation ?: return@LaunchedEffect
+        if (!loggedIn) return@LaunchedEffect
+        pendingInvitation = null
+        nav.navigate("invitations?token=${java.net.URLEncoder.encode(token, "UTF-8")}") {
+            launchSingleTop = true
         }
     }
 
@@ -322,6 +374,23 @@ private fun AppRoot(
                     }
                 },
                 onOpenSearch = { nav.navigate("search") },
+                onOpenInvitations = { nav.navigate("invitations") },
+            )
+        }
+
+        composable(
+            route = "invitations?token={token}",
+            arguments = listOf(
+                navArgument("token") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
+            InvitationsScreen(
+                openToken = entry.arguments?.getString("token"),
+                onBack = { nav.popBackStack() },
             )
         }
 

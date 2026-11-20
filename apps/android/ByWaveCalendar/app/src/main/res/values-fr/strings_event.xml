@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">Accepter et déplacer</string>
     <string name="attendees_proposal_decline">Refuser</string>
     <string name="attendees_proposal_superseded">Remplacée</string>
+    <string name="invitations_title">Invitations</string>
+    <string name="invitations_empty_title">Aucune invitation pour le moment</string>
+    <string name="invitations_empty_subtitle">Quand quelqu'un vous invite à un événement, il apparaîtra ici</string>
+    <string name="invitations_organizer">Organisateur</string>
+    <string name="invitations_you">Vous</string>
+    <string name="invitations_accept">Accepter</string>
+    <string name="invitations_rsvp_heading">Votre réponse</string>
+    <string name="invitations_propose_title">Proposer un autre horaire</string>
+    <string name="invitations_propose_start">Début</string>
+    <string name="invitations_propose_end">Fin</string>
+    <string name="invitations_propose_note">Remarque (facultatif)</string>
+    <string name="invitations_propose_submit">Envoyer la proposition</string>
+    <string name="invitations_propose_bad_range">L'heure de fin doit être après l'heure de début</string>
+    <string name="invitations_my_proposals">Mes propositions</string>
+    <string name="invitations_proposal_pending">En attente</string>
+    <string name="invitations_cancelled">Cet événement a été annulé</string>
+    <string name="invitations_expired">Cette invitation a expiré</string>
+    <string name="invitations_err_load">Impossible de charger les invitations</string>
+    <string name="invitations_err_respond">Échec de l'opération, réessayez plus tard</string>
+    <string name="invitations_time_in_tz">Heures dans le fuseau de l'événement (%1$s)</string>
 </resources>

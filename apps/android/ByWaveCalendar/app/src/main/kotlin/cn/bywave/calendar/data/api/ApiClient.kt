@@ -12,6 +12,11 @@ import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
+import cn.bywave.calendar.data.model.InvitationProposeRequest
+import cn.bywave.calendar.data.model.InvitationProposeResponse
+import cn.bywave.calendar.data.model.InvitationRespondRequest
+import cn.bywave.calendar.data.model.InvitationRespondResponse
+import cn.bywave.calendar.data.model.InvitationsResponse
 import cn.bywave.calendar.data.model.ProposalDecisionResponse
 import cn.bywave.calendar.data.model.Booking
 import cn.bywave.calendar.data.model.BookingCancelResult
@@ -314,6 +319,29 @@ interface BywaveApi {
         @Path("id") id: String,
         @Path("pid") pid: String,
     ): ProposalDecisionResponse
+
+    // ---- Invitations (invitee side) ----
+
+    /** Invitations addressed to my account email, newest first. Each
+     *  row already carries the invitee list + my proposals, so opening
+     *  the detail page needs no second fetch. */
+    @GET("api/v1/invitations")
+    suspend fun invitations(): InvitationsResponse
+
+    /** RSVP via my invite token — same semantics as the web page's
+     *  respond endpoint. 410 when the token expired / event cancelled. */
+    @POST("api/v1/invitations/{token}/respond")
+    suspend fun respondInvitation(
+        @Path("token") token: String,
+        @Body body: InvitationRespondRequest,
+    ): InvitationRespondResponse
+
+    /** Propose a new time (ISO instants) via my invite token. */
+    @POST("api/v1/invitations/{token}/propose")
+    suspend fun proposeInvitation(
+        @Path("token") token: String,
+        @Body body: InvitationProposeRequest,
+    ): InvitationProposeResponse
 
     // ---- Native account management ----
     //
