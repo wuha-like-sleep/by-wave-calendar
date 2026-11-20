@@ -24,6 +24,26 @@ extension Notification.Name {
     static let bwcRemoteDataChanged = Notification.Name("bwc.remoteDataChanged")
 }
 
+/// Pull an invitation token out of a push payload, if the payload
+/// carries one — either directly (`inviteToken`) or embedded in the
+/// web invite URL the server puts in `url` (/event-invite/<token>).
+/// CalendarView uses this to route a push tap / arrival straight to
+/// that invitation's respond screen.
+enum InvitationPushRouting {
+    static func token(from userInfo: [AnyHashable: Any]) -> String? {
+        if let direct = userInfo["inviteToken"] as? String, !direct.isEmpty {
+            return direct
+        }
+        if let url = userInfo["url"] as? String,
+           let marker = url.range(of: "/event-invite/") {
+            let rest = url[marker.upperBound...]
+            let token = rest.prefix { $0 != "/" && $0 != "?" && $0 != "#" }
+            if !token.isEmpty { return String(token) }
+        }
+        return nil
+    }
+}
+
 final class PushService: NSObject, UIApplicationDelegate {
     // Singleton — UIApplicationDelegateAdaptor needs a default-constructable
     // class but we want one instance for the app lifetime. Static var pulls

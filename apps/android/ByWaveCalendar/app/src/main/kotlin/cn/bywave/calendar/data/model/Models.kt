@@ -440,6 +440,105 @@ data class AttendeeInviteRequest(val email: String)
 @Serializable
 data class AttendeeRevokeRequest(val email: String)
 
+// ---- Invitations (invitee side) ----
+//
+// GET /api/v1/invitations — invitations addressed to MY account email.
+// Each row carries everything the detail page needs, in the same shape
+// as the web /event-invite/:token page: the event's display timezone,
+// the full invitee list with per-person RSVP status, and my own time
+// proposals. Respond / propose go through the token endpoints (the
+// token is the credential, exactly like the web page).
+
+@Serializable
+data class InvitationsResponse(
+    val invitations: List<Invitation> = emptyList(),
+)
+
+@Serializable
+data class Invitation(
+    val token: String,
+    /** pending / accepted / declined / tentative — my current reply. */
+    val responseStatus: String = "pending",
+    val respondedAt: String? = null,
+    val expiresAt: String,
+    val organizer: InvitationOrganizer? = null,
+    val event: InvitationEvent,
+    val invitees: List<InvitationInvitee> = emptyList(),
+    val myProposals: List<InvitationProposal> = emptyList(),
+)
+
+@Serializable
+data class InvitationOrganizer(
+    val email: String,
+    val name: String,
+)
+
+@Serializable
+data class InvitationEvent(
+    val id: String,
+    val summary: String,
+    val description: String? = null,
+    val location: String? = null,
+    val startsAt: String,
+    val endsAt: String,
+    val allDay: Boolean = false,
+    /** Display timezone resolved server-side (event → calendar → default). */
+    val timeZone: String = "Asia/Shanghai",
+    val cancelled: Boolean = false,
+)
+
+@Serializable
+data class InvitationInvitee(
+    val email: String,
+    val name: String? = null,
+    /** pending / accepted / declined / tentative. */
+    val status: String = "pending",
+    val isMe: Boolean = false,
+)
+
+/** 我通过这条邀请发出的「提议新时间」。status: pending / accepted / declined / superseded。 */
+@Serializable
+data class InvitationProposal(
+    val id: String,
+    val proposedStartsAt: String,
+    val proposedEndsAt: String,
+    val note: String? = null,
+    val status: String,
+    val createdAt: String,
+    val decidedAt: String? = null,
+)
+
+@Serializable
+data class InvitationRespondRequest(val status: String)
+
+@Serializable
+data class InvitationRespondResponse(
+    val ok: Boolean = true,
+    val status: String,
+)
+
+@Serializable
+data class InvitationProposeRequest(
+    val startsAt: String,
+    val endsAt: String,
+    /** 空备注就不发这个字段（explicitNulls=false 时 null 会被省略）。 */
+    val note: String? = null,
+)
+
+@Serializable
+data class InvitationProposeResponse(
+    val ok: Boolean = true,
+    val proposal: InvitationProposalStub,
+)
+
+@Serializable
+data class InvitationProposalStub(
+    val id: String,
+    val proposedStartsAt: String,
+    val proposedEndsAt: String,
+    val status: String,
+)
+
 // ---- Natural-language quick-add ----
 
 @Serializable

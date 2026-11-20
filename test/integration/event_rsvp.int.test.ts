@@ -134,6 +134,55 @@ describe("邀请到达", () => {
     const none = await app.inject({ method: "GET", url: "/api/invitations", headers: { cookie: strangerAuth } });
     expect(JSON.parse(none.body).invitations).toHaveLength(0);
   });
+
+  it("GET /api/invitations 带客户端详情页口径：展示时区、全名单状态、本人提议", async () => {
+    const { byEmail } = await makeInvitedEvent();
+    const tok = byEmail.get("invitee@example.com")!;
+    // 先提议一次，myProposals 要能看到这条 pending（且只有本人看得到）。
+    const prop = await app.inject({
+      method: "POST", url: `/api/invitations/${tok.token}/propose`,
+      payload: { startsAt: "2026-11-21T03:00:00.000Z", endsAt: "2026-11-21T04:00:00.000Z", note: "晚点开始" },
+    });
+    expect(prop.statusCode).toBe(200);
+    type Inv = {
+      event: { timeZone: string };
+      invitees: { email: string; name: string | null; status: string; isMe: boolean }[];
+      myProposals: { status: string; note: string | null }[];
+    };
+    const mine = await app.inject({ method: "GET", url: "/api/invitations", headers: { cookie: inviteeAuth } });
+    const inv = (JSON.parse(mine.body) as { invitations: Inv[] }).invitations[0]!;
+    // 事件没自带时区 → 回落日历时区（harness 日历是 UTC），与网页页同一条回落链。
+    expect(inv.event.timeZone).toBe("UTC");
+    // 全名单三人，状态都还是 pending，只有本人 isMe。
+    expect(inv.invitees.map((i) => i.email).sort()).toEqual(["external@example.com", "invitee@example.com", "second@example.com"]);
+    expect(inv.invitees.filter((i) => i.isMe).map((i) => i.email)).toEqual(["invitee@example.com"]);
+    expect(inv.invitees.every((i) => i.status === "pending")).toBe(true);
+    expect(inv.myProposals).toHaveLength(1);
+    expect(inv.myProposals[0]!.status).toBe("pending");
+    expect(inv.myProposals[0]!.note).toBe("晚点开始");
+    // 别人的提议不进我的 myProposals：second 的列表是空的。
+    const other = await app.inject({ method: "GET", url: "/api/invitations", headers: { cookie: (await loginAs(app, secondInvitee.id)) } });
+    const otherInv = (JSON.parse(other.body) as { invitations: Inv[] }).invitations[0]!;
+    expect(otherInv.myProposals).toHaveLength(0);
+    // 但全名单对 second 同样可见（受邀者互相可见，与网页页同口径）。
+    expect(otherInv.invitees).toHaveLength(3);
+  });
+
+  it("GET /api/invitations 的展示时区优先用事件自带时区", async () => {
+    const res = await app.inject({
+      method: "POST", url: "/api/events",
+      headers: { cookie: organizerAuth },
+      payload: {
+        calendarId: calendar.id, summary: "跨时区会",
+        startsAt: "2026-11-21T01:00:00.000Z", endsAt: "2026-11-21T02:00:00.000Z",
+        extra: { timezone: "America/New_York", attendees: ["invitee@example.com"] },
+      },
+    });
+    expect([200, 201]).toContain(res.statusCode);
+    const mine = await app.inject({ method: "GET", url: "/api/invitations", headers: { cookie: inviteeAuth } });
+    const inv = (JSON.parse(mine.body) as { invitations: { event: { timeZone: string } }[] }).invitations[0]!;
+    expect(inv.event.timeZone).toBe("America/New_York");
+  });
 });
 
 describe("RSVP 回复", () => {

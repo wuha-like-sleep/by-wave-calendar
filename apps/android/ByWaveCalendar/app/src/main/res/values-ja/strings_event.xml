@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">受け入れて変更</string>
     <string name="attendees_proposal_decline">却下</string>
     <string name="attendees_proposal_superseded">置き換え済み</string>
+    <string name="invitations_title">招待</string>
+    <string name="invitations_empty_title">招待はまだありません</string>
+    <string name="invitations_empty_subtitle">他の人からイベントに招待されると、ここに表示されます</string>
+    <string name="invitations_organizer">主催者</string>
+    <string name="invitations_you">あなた</string>
+    <string name="invitations_accept">承諾</string>
+    <string name="invitations_rsvp_heading">あなたの返信</string>
+    <string name="invitations_propose_title">新しい日時を提案</string>
+    <string name="invitations_propose_start">開始</string>
+    <string name="invitations_propose_end">終了</string>
+    <string name="invitations_propose_note">メモ（任意）</string>
+    <string name="invitations_propose_submit">提案を送信</string>
+    <string name="invitations_propose_bad_range">終了時刻は開始時刻より後にしてください</string>
+    <string name="invitations_my_proposals">自分の提案</string>
+    <string name="invitations_proposal_pending">保留中</string>
+    <string name="invitations_cancelled">このイベントはキャンセルされました</string>
+    <string name="invitations_expired">この招待は期限切れです</string>
+    <string name="invitations_err_load">招待を読み込めませんでした</string>
+    <string name="invitations_err_respond">操作に失敗しました。後でもう一度お試しください</string>
+    <string name="invitations_time_in_tz">時刻はイベントのタイムゾーン（%1$s）で表示</string>
 </resources>

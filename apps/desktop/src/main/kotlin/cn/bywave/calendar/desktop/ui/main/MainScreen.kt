@@ -66,6 +66,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
@@ -198,6 +199,31 @@ fun MainScreen(
     // Global search dialog visibility. Opened by the toolbar magnifier or
     // Cmd/Ctrl+F; Esc closes it (handled in the ShortcutAction.Escape arm).
     var showSearch by remember { mutableStateOf(false) }
+    // Invitations addressed to me: dialog visibility + the toolbar
+    // badge (invitations still awaiting my reply).
+    var showInvitations by remember { mutableStateOf(false) }
+    var invitationPending by remember { mutableStateOf(0) }
+
+    suspend fun refreshInvitationBadge(c: ApiClient) {
+        // Badge is advisory — a failed fetch keeps the previous count.
+        runCatching {
+            val now = java.time.Instant.now()
+            invitationPending = c.invitations().invitations.count { inv ->
+                inv.responseStatus == "pending" && !inv.event.cancelled &&
+                    (runCatching { java.time.Instant.parse(inv.expiresAt) }.getOrNull()?.isAfter(now) ?: true)
+            }
+        }
+    }
+
+    // Badge refresh: once per client (account) and then on a slow poll
+    // alongside the calendar's own refresh rhythm.
+    LaunchedEffect(client) {
+        val c = client ?: return@LaunchedEffect
+        while (true) {
+            refreshInvitationBadge(c)
+            kotlinx.coroutines.delay(60_000)
+        }
+    }
     // ICS import: the file picked in the toolbar's native file dialog.
     // Non-null → the import confirmation dialog is showing.
     var importFile by remember { mutableStateOf<java.io.File?>(null) }
@@ -354,6 +380,8 @@ fun MainScreen(
                 onRefresh = { state.load() },
                 onNew = { state.openCreate() },
                 onOpenSearch = { showSearch = true },
+                invitationPending = invitationPending,
+                onOpenInvitations = { showInvitations = true },
                 onOpenImport = { pickIcsFile()?.let { importFile = it } },
                 // Settings page hosts sign-out + all account / security /
                 // appearance / about controls. Previously the toolbar had
@@ -675,6 +703,21 @@ fun MainScreen(
         )
     }
 
+    // Invitations addressed to me — list + respond dialog, opened from
+    // the toolbar envelope. Closing it refreshes the toolbar badge.
+    if (showInvitations) {
+        val c = client
+        if (c != null) {
+            InvitationsDialog(
+                client = c,
+                onDismiss = {
+                    showInvitations = false
+                    scope.launch { refreshInvitationBadge(c) }
+                },
+            )
+        }
+    }
+
     // ICS import confirmation — the file was picked with the native
     // file dialog from the toolbar. A successful import reloads the
     // events fetch so the imported events (and the calendar list)
@@ -828,6 +871,8 @@ private fun TopBar(
     onRefresh: () -> Unit,
     onNew: () -> Unit,
     onOpenSearch: () -> Unit,
+    invitationPending: Int,
+    onOpenInvitations: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -914,6 +959,21 @@ private fun TopBar(
         WithTooltip(t("topbar.search"), "F") {
             IconButton(onClick = onOpenSearch) {
                 Icon(Icons.Outlined.Search, contentDescription = t("topbar.search"))
+            }
+        }
+        // Invitations addressed to me — badge counts the ones still
+        // awaiting my reply (same definition as Android / iOS).
+        WithTooltip(t("invitations.title")) {
+            IconButton(onClick = onOpenInvitations) {
+                androidx.compose.material3.BadgedBox(
+                    badge = {
+                        if (invitationPending > 0) {
+                            androidx.compose.material3.Badge { Text(invitationPending.toString()) }
+                        }
+                    },
+                ) {
+                    Icon(Icons.Outlined.Email, contentDescription = t("invitations.title"))
+                }
             }
         }
         WithTooltip(t("import.title"), "I") {

@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">수락하고 변경</string>
     <string name="attendees_proposal_decline">거절</string>
     <string name="attendees_proposal_superseded">대체됨</string>
+    <string name="invitations_title">초대</string>
+    <string name="invitations_empty_title">아직 받은 초대가 없습니다</string>
+    <string name="invitations_empty_subtitle">누군가 이벤트에 초대하면 여기에 표시됩니다</string>
+    <string name="invitations_organizer">주최자</string>
+    <string name="invitations_you">나</string>
+    <string name="invitations_accept">수락</string>
+    <string name="invitations_rsvp_heading">내 응답</string>
+    <string name="invitations_propose_title">새 시간 제안</string>
+    <string name="invitations_propose_start">시작</string>
+    <string name="invitations_propose_end">종료</string>
+    <string name="invitations_propose_note">메모(선택 사항)</string>
+    <string name="invitations_propose_submit">제안 보내기</string>
+    <string name="invitations_propose_bad_range">종료 시간은 시작 시간보다 뒤여야 합니다</string>
+    <string name="invitations_my_proposals">내 제안</string>
+    <string name="invitations_proposal_pending">대기 중</string>
+    <string name="invitations_cancelled">이 이벤트는 취소되었습니다</string>
+    <string name="invitations_expired">이 초대는 만료되었습니다</string>
+    <string name="invitations_err_load">초대를 불러오지 못했습니다</string>
+    <string name="invitations_err_respond">작업에 실패했습니다. 나중에 다시 시도하세요</string>
+    <string name="invitations_time_in_tz">시간은 이벤트 시간대(%1$s) 기준입니다</string>
 </resources>

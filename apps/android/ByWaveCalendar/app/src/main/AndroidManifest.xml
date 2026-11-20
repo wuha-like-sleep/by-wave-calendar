@@ -94,6 +94,17 @@
                 <data android:scheme="${appAuthRedirectScheme}" android:host="auth" android:path="/complete" />
             </intent-filter>
 
+            <!-- bywave://invitations/<token> — open one invitation's
+                 respond screen directly (notification / shared link).
+                 MainActivity.receiveInvitationIntent re-checks the host
+                 before routing, so the auth link above can't land here. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${appAuthRedirectScheme}" android:host="invitations" />
+            </intent-filter>
+
             <!-- .ics handovers: "Open with ByWave" from file managers,
                  mail and chat apps (VIEW), and the share sheet (SEND).
                  MainActivity.receiveImportIntent re-checks the type

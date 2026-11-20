@@ -25,6 +25,7 @@ import { ok, okList, err } from "../lib/api_response.js";
 import { parseNaturalLanguageEvent } from "../lib/nl_parse.js";
 import { MAX_ALARMS_PER_EVENT, normalizeAlarms, parseTrigger } from "../lib/reminder_triggers.js";
 import { attendeeEmails, normalizeExtraForClients } from "../lib/attendees.js";
+import { canonicalTimeZone } from "../lib/zoned_time.js";
 
 const isoDate = z.string().datetime({ offset: true });
 
@@ -1109,6 +1110,7 @@ export async function eventRoutes(app: FastifyInstance) {
     const cals = ownerIds.length > 0
       ? await db.select().from(schema.calendars).where(inArray(schema.calendars.id, ownerIds))
       : [];
+    const calById = new Map(cals.map((c) => [c.id, c]));
     const ownerByCal = new Map(cals.map((c) => [c.id, c.ownerId]));
     const owners = [...new Set(cals.map((c) => c.ownerId))];
     const ownerRows = owners.length > 0
@@ -1116,9 +1118,47 @@ export async function eventRoutes(app: FastifyInstance) {
           .from(schema.users).where(inArray(schema.users.id, owners))
       : [];
     const ownerById = new Map(ownerRows.map((o) => [o.id, o]));
+    // 客户端详情页与网页 /event-invite/:token 同口径的三件东西：展示时区、
+    // 全名单逐人状态、本人提议。都按「持 token 者即受邀者之一」的前提给
+    // （名单只对受邀者可见，与网页页同），列表接口一次带齐，客户端点开
+    // 详情不用再发一轮请求。
+    const eventIds = [...new Set(rows.map((r) => r.event.id))];
+    const allTokens = eventIds.length > 0
+      ? await db.select().from(schema.eventInviteTokens)
+          .where(inArray(schema.eventInviteTokens.sourceEventId, eventIds))
+          .orderBy(asc(schema.eventInviteTokens.createdAt))
+      : [];
+    const tokensByEvent = new Map<string, typeof allTokens>();
+    for (const t of allTokens) {
+      const list = tokensByEvent.get(t.sourceEventId) ?? [];
+      list.push(t);
+      tokensByEvent.set(t.sourceEventId, list);
+    }
+    const inviteeEmails = [...new Set(allTokens.map((t) => t.recipientEmail.toLowerCase()))];
+    const inviteeUsers = inviteeEmails.length > 0
+      ? await db.select({ email: schema.users.email, displayName: schema.users.displayName })
+          .from(schema.users).where(inArray(sql<string>`lower(${schema.users.email})`, inviteeEmails))
+      : [];
+    const nameByEmail = new Map(inviteeUsers.map((u) => [u.email.toLowerCase(), u.displayName]));
+    const myTokens = rows.map((r) => r.tok.token);
+    const proposals = myTokens.length > 0
+      ? await db.select().from(schema.eventTimeProposals)
+          .where(inArray(schema.eventTimeProposals.inviteToken, myTokens))
+          .orderBy(desc(schema.eventTimeProposals.createdAt))
+      : [];
+    const proposalsByToken = new Map<string, typeof proposals>();
+    for (const p of proposals) {
+      const list = proposalsByToken.get(p.inviteToken) ?? [];
+      list.push(p);
+      proposalsByToken.set(p.inviteToken, list);
+    }
     return reply.send({
       invitations: rows.map(({ tok, event }) => {
         const owner = ownerById.get(ownerByCal.get(event.calendarId) ?? "");
+        // 展示时区与网页页同一条回落链：事件自带 → 日历 → Asia/Shanghai。
+        const displayTz = canonicalTimeZone((event.extra as { timezone?: unknown } | null)?.timezone)
+          ?? canonicalTimeZone(calById.get(event.calendarId)?.timezone)
+          ?? "Asia/Shanghai";
         return {
           token: tok.token,
           responseStatus: tok.responseStatus,
@@ -1133,8 +1173,24 @@ export async function eventRoutes(app: FastifyInstance) {
             startsAt: event.startsAt.toISOString(),
             endsAt: event.endsAt.toISOString(),
             allDay: event.allDay,
+            timeZone: displayTz,
             cancelled: !!event.deletedAt,
           },
+          invitees: (tokensByEvent.get(event.id) ?? []).map((t) => ({
+            email: t.recipientEmail,
+            name: nameByEmail.get(t.recipientEmail.toLowerCase()) ?? null,
+            status: t.responseStatus,
+            isMe: t.token === tok.token,
+          })),
+          myProposals: (proposalsByToken.get(tok.token) ?? []).map((p) => ({
+            id: p.id,
+            proposedStartsAt: p.proposedStartsAt.toISOString(),
+            proposedEndsAt: p.proposedEndsAt.toISOString(),
+            note: p.note,
+            status: p.status,
+            createdAt: p.createdAt.toISOString(),
+            decidedAt: p.decidedAt?.toISOString() ?? null,
+          })),
         };
       }),
     });

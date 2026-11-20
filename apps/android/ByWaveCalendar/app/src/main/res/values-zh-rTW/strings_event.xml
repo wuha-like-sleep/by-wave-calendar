@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">接受並改時間</string>
     <string name="attendees_proposal_decline">拒絕</string>
     <string name="attendees_proposal_superseded">已被取代</string>
+    <string name="invitations_title">邀請</string>
+    <string name="invitations_empty_title">還沒有收到邀請</string>
+    <string name="invitations_empty_subtitle">別人邀請你參加事件時會出現在這裡</string>
+    <string name="invitations_organizer">主辦人</string>
+    <string name="invitations_you">你</string>
+    <string name="invitations_accept">接受</string>
+    <string name="invitations_rsvp_heading">你的回覆</string>
+    <string name="invitations_propose_title">提議新時間</string>
+    <string name="invitations_propose_start">開始</string>
+    <string name="invitations_propose_end">結束</string>
+    <string name="invitations_propose_note">備註（可選）</string>
+    <string name="invitations_propose_submit">提交提議</string>
+    <string name="invitations_propose_bad_range">結束時間必須晚於開始時間</string>
+    <string name="invitations_my_proposals">我的提議</string>
+    <string name="invitations_proposal_pending">待處理</string>
+    <string name="invitations_cancelled">這個事件已被取消</string>
+    <string name="invitations_expired">邀請已過期，無法再回應</string>
+    <string name="invitations_err_load">載入邀請失敗</string>
+    <string name="invitations_err_respond">操作失敗，請稍後再試</string>
+    <string name="invitations_time_in_tz">時間按事件時區（%1$s）顯示</string>
 </resources>

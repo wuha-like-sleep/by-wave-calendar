@@ -120,4 +120,24 @@
     <string name="attendees_proposal_accept">Annehmen &amp; verschieben</string>
     <string name="attendees_proposal_decline">Ablehnen</string>
     <string name="attendees_proposal_superseded">Ersetzt</string>
+    <string name="invitations_title">Einladungen</string>
+    <string name="invitations_empty_title">Noch keine Einladungen</string>
+    <string name="invitations_empty_subtitle">Wenn dich jemand zu einem Termin einlädt, erscheint er hier</string>
+    <string name="invitations_organizer">Organisator</string>
+    <string name="invitations_you">Du</string>
+    <string name="invitations_accept">Zusagen</string>
+    <string name="invitations_rsvp_heading">Deine Antwort</string>
+    <string name="invitations_propose_title">Neue Zeit vorschlagen</string>
+    <string name="invitations_propose_start">Beginn</string>
+    <string name="invitations_propose_end">Ende</string>
+    <string name="invitations_propose_note">Notiz (optional)</string>
+    <string name="invitations_propose_submit">Vorschlag senden</string>
+    <string name="invitations_propose_bad_range">Die Endzeit muss nach der Startzeit liegen</string>
+    <string name="invitations_my_proposals">Meine Vorschläge</string>
+    <string name="invitations_proposal_pending">Ausstehend</string>
+    <string name="invitations_cancelled">Dieser Termin wurde abgesagt</string>
+    <string name="invitations_expired">Diese Einladung ist abgelaufen</string>
+    <string name="invitations_err_load">Einladungen konnten nicht geladen werden</string>
+    <string name="invitations_err_respond">Das hat nicht geklappt — bitte später erneut versuchen</string>
+    <string name="invitations_time_in_tz">Zeiten in der Zeitzone des Termins (%1$s)</string>
 </resources>
