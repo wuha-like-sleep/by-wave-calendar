@@ -198,6 +198,9 @@ export const en = {
 
   // settings - language section
   "settings.languageTitle": "Language",
+  "settings.locationSuggest.title": "Address suggestions",
+  "settings.locationSuggest.desc": "Locations you have used are remembered on this device and suggested as you type. When local matches are few, online suggestions based on OpenStreetMap data are also shown.",
+  "settings.locationSuggest.online": "Online address suggestions",
   "settings.languageDesc": "Choose the language for the web UI. This is per-account and overrides the site default.",
   "settings.languageFollowSite": "Follow site default",
   "settings.languageSaveSuccess": "Language updated",
@@ -1247,6 +1250,7 @@ export const en = {
   "app.js.quickadd.saveDirectly": "Save directly",
   "app.js.quickadd.openForm": "Review in form",
   "app.js.quickadd.added": "Added: {title}",
+  "app.js.location.online": "Online suggestions",
   "app.js.quickadd.open": "Open",
   "app.js.quickadd.undone": "Add undone",
   "app.js.saving": "Saving…",

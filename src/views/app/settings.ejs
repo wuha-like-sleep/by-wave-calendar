@@ -12,7 +12,7 @@
      security:      ['passkey', 'mfa', 'password', 'login-methods'],
      devices:       ['devices', 'app-passwords', 'api-tokens', 'caldav-connect'],
      notifications: ['notif-prefs', 'push'],
-     appearance:    ['theme'],
+     appearance:    ['theme', 'location-suggest'],
    };
    const visibleSections = sectionsByTab[tab] || sectionsByTab.account;
    function isVisible(id){ return visibleSections.indexOf(id) !== -1; }
@@ -879,6 +879,27 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     </div>
   </form>
 </section>
+
+<%# 地址建议开关是纯本机偏好（localStorage，与日历页读的是同一把 key），
+    不走服务端表单——服务端没有对应的用户偏好列，为它加迁移不值当。 %>
+<section id="location-suggest" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('location-suggest')) { %> style="display:none"<% } %>>
+  <h2 class="text-lg font-semibold text-slate-900"><%= t("settings.locationSuggest.title") %></h2>
+  <p class="mt-1 text-sm text-slate-500"><%= t("settings.locationSuggest.desc") %></p>
+  <label class="mt-4 flex items-center justify-between gap-3">
+    <span class="text-sm font-medium text-slate-700"><%= t("settings.locationSuggest.online") %></span>
+    <input type="checkbox" id="toggle-online-suggest" class="h-5 w-5 rounded border-slate-300 accent-brand-600" />
+  </label>
+</section>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+  (function () {
+    var box = document.getElementById("toggle-online-suggest");
+    if (!box) return;
+    try { box.checked = localStorage.getItem("bwc.geo.onlineSuggestions") !== "0"; } catch (e) { box.checked = true; }
+    box.addEventListener("change", function () {
+      try { localStorage.setItem("bwc.geo.onlineSuggestions", box.checked ? "1" : "0"); } catch (e) { /* 隐私模式下改不动就算了 */ }
+    });
+  })();
+</script>
 
 <section id="password" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('password')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("settings.security.passwordTitle") %></h2>

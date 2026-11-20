@@ -191,6 +191,9 @@ export const ko: Partial<Record<TranslationKey, string>> = {
 
   // settings - language section
   "settings.languageTitle": "언어",
+  "settings.locationSuggest.title": "주소 제안",
+  "settings.locationSuggest.desc": "사용한 주소는 이 기기에 저장되어 입력할 때 제안됩니다. 로컬 일치 항목이 적으면 OpenStreetMap 데이터 기반 온라인 제안도 표시됩니다.",
+  "settings.locationSuggest.online": "온라인 주소 제안",
   "settings.languageDesc": "웹 UI에서 사용할 언어를 선택하세요. 계정별로 적용되며 사이트 기본값보다 우선합니다.",
   "settings.languageFollowSite": "사이트 기본값 따르기",
   "settings.languageSaveSuccess": "언어가 업데이트되었습니다",
@@ -1240,6 +1243,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "바로 저장",
   "app.js.quickadd.openForm": "폼에서 확인",
   "app.js.quickadd.added": "추가됨: {title}",
+  "app.js.location.online": "온라인 제안",
   "app.js.quickadd.open": "열기",
   "app.js.quickadd.undone": "추가를 취소했습니다",
   "app.js.saving": "저장 중…",

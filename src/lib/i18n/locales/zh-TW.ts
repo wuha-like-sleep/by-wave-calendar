@@ -189,6 +189,9 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "login.qrAdminDisabled": "管理員已停用網頁掃碼登入，請用密碼登入",
 
   "settings.languageTitle": "語言",
+  "settings.locationSuggest.title": "地址建議",
+  "settings.locationSuggest.desc": "用過的地址會記在這台裝置上，輸入時自動給出建議；本地符合較少時，還會顯示基於 OpenStreetMap 資料的線上建議。",
+  "settings.locationSuggest.online": "線上地址建議",
   "settings.languageDesc": "選擇網頁 UI 語言。僅目前帳號生效，覆蓋網站預設語言。",
   "settings.languageFollowSite": "跟隨網站預設",
   "settings.languageSaveSuccess": "語言已更新",
@@ -1226,6 +1229,7 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "直接儲存",
   "app.js.quickadd.openForm": "打開表單核對",
   "app.js.quickadd.added": "已新增：{title}",
+  "app.js.location.online": "線上建議",
   "app.js.quickadd.open": "打開",
   "app.js.quickadd.undone": "已撤銷新增",
   "app.js.saving": "儲存中…",

@@ -191,6 +191,9 @@ export const de: Partial<Record<TranslationKey, string>> = {
 
   // settings - language section
   "settings.languageTitle": "Sprache",
+  "settings.locationSuggest.title": "Adressvorschläge",
+  "settings.locationSuggest.desc": "Verwendete Orte werden auf diesem Gerät gespeichert und beim Tippen vorgeschlagen. Bei wenigen lokalen Treffern werden zusätzlich Online-Vorschläge auf Basis von OpenStreetMap-Daten angezeigt.",
+  "settings.locationSuggest.online": "Online-Adressvorschläge",
   "settings.languageDesc": "Wählen Sie die Sprache für die Web-Oberfläche. Diese Einstellung gilt pro Konto und überschreibt die Standardeinstellung der Website.",
   "settings.languageFollowSite": "Website-Standard folgen",
   "settings.languageSaveSuccess": "Sprache aktualisiert",
@@ -1240,6 +1243,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "app.js.quickadd.saveDirectly": "Direkt speichern",
   "app.js.quickadd.openForm": "Im Formular prüfen",
   "app.js.quickadd.added": "Hinzugefügt: {title}",
+  "app.js.location.online": "Online-Vorschläge",
   "app.js.quickadd.open": "Öffnen",
   "app.js.quickadd.undone": "Hinzufügen rückgängig gemacht",
   "app.js.saving": "Wird gespeichert…",

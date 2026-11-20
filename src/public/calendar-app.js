@@ -100,6 +100,147 @@
   };
 })();
 
+// ---- 本地地址簿：地点输入的联想来源（纯逻辑，node 里可直接打）----
+// 产品口径：地址只存在本机，靠「用过」一点点攒起来。
+//   - 首次使用时从账号已有事件的 location 播种（seedEntries，只加不覆盖）；
+//   - 每次保存带地点的事件就记一次使用（upsertEntry，计数 + 最近使用时间）；
+//   - 输入时按子串匹配本地条目，排序先看匹配位置（开头命中优先），
+//     再看用得多的、最近用的（matchLocal）。
+// 在线兜底（/api/geo/suggest）只是补充来源：本地命中太少时才查，选中
+// 在线结果同样走 upsertEntry 写回本地——攒得越多，在线查得越少。
+// 这一段只做数据变换，不碰 DOM / localStorage / 网络（那些在主 IIFE 里）。
+(function () {
+  "use strict";
+
+  const MAX_ENTRIES = 300;
+
+  /** 展示用归一化：去首尾空白、内部连续空白压成一个空格。 */
+  function normalizeAddress(value) {
+    return String(value == null ? "" : value).trim().replace(/\s+/g, " ");
+  }
+
+  /** 匹配 / 去重用键：归一化后小写。 */
+  function addressKey(value) {
+    return normalizeAddress(value).toLowerCase();
+  }
+
+  /**
+   * 记一次使用。条目已存在（按 key 认）→ 计数 +1、刷新最近使用时间，
+   * 并采用这次的写法作为展示串（用户刚改过的写法最可信）；不存在 →
+   * 新增一条。总数封顶 MAX_ENTRIES，超了淘汰最久没用的。
+   */
+  function upsertEntry(entries, address, now) {
+    const display = normalizeAddress(address);
+    if (!display) return entries.slice();
+    const key = addressKey(display);
+    const list = Array.isArray(entries) ? entries.slice() : [];
+    const idx = list.findIndex((e) => e && addressKey(e.address) === key);
+    if (idx >= 0) {
+      const prev = list[idx];
+      list[idx] = {
+        address: display,
+        useCount: (Number(prev.useCount) || 0) + 1,
+        lastUsedAt: now,
+      };
+    } else {
+      list.push({ address: display, useCount: 1, lastUsedAt: now });
+    }
+    if (list.length > MAX_ENTRIES) {
+      list.sort((a, b) => (a.lastUsedAt || 0) - (b.lastUsedAt || 0));
+      return list.slice(list.length - MAX_ENTRIES);
+    }
+    return list;
+  }
+
+  /**
+   * 播种：把一批已有地址并进来。已存在的条目一个字都不动（用户在本机
+   * 攒的计数不能被播种冲掉）；新条目的计数 = 它在播种材料里出现几次，
+   * lastUsedAt = 0（没在本机用过，排序时自然靠后）。
+   */
+  function seedEntries(entries, locations) {
+    const list = Array.isArray(entries) ? entries.slice() : [];
+    const known = new Set(list.map((e) => addressKey(e && e.address)));
+    const counts = new Map();
+    for (const raw of Array.isArray(locations) ? locations : []) {
+      const display = normalizeAddress(raw);
+      if (!display) continue;
+      const key = addressKey(display);
+      if (known.has(key)) continue;
+      const prev = counts.get(key);
+      // 展示串取第一次出现的写法，后面同 key 的不同大小写只加计数。
+      counts.set(key, { address: prev ? prev.address : display, useCount: (prev ? prev.useCount : 0) + 1, lastUsedAt: 0 });
+    }
+    for (const entry of counts.values()) list.push(entry);
+    if (list.length > MAX_ENTRIES) {
+      list.sort((a, b) => (b.useCount || 0) - (a.useCount || 0) || (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
+      return list.slice(0, MAX_ENTRIES);
+    }
+    return list;
+  }
+
+  /**
+   * 本地匹配：查询归一化后做子串匹配。排序口径：以查询开头的命中优先，
+   * 然后用得多的优先，然后最近用的优先。查询为空返回最常用的几条
+   * （聚焦输入框还没打字时也能给建议）。
+   */
+  function matchLocal(entries, query, limit) {
+    const cap = limit || 5;
+    const q = addressKey(query);
+    const list = (Array.isArray(entries) ? entries : []).filter(
+      (e) => e && normalizeAddress(e.address),
+    );
+    const matched = q
+      ? list.filter((e) => addressKey(e.address).includes(q))
+      : list.slice();
+    matched.sort((a, b) => {
+      if (q) {
+        const aHead = addressKey(a.address).startsWith(q) ? 0 : 1;
+        const bHead = addressKey(b.address).startsWith(q) ? 0 : 1;
+        if (aHead !== bHead) return aHead - bHead;
+      }
+      const byCount = (b.useCount || 0) - (a.useCount || 0);
+      if (byCount !== 0) return byCount;
+      return (b.lastUsedAt || 0) - (a.lastUsedAt || 0);
+    });
+    return matched.slice(0, cap).map((e) => e.address);
+  }
+
+  /**
+   * 合并本地与在线建议：本地在前，在线去掉与本地重复（按 key）的，
+   * 总数封顶。返回 [{ address, online }]，online 标记供 UI 区分样式。
+   */
+  function mergeSuggestions(localAddresses, onlineAddresses, limit) {
+    const cap = limit || 8;
+    const out = [];
+    const seen = new Set();
+    for (const address of Array.isArray(localAddresses) ? localAddresses : []) {
+      const display = normalizeAddress(address);
+      if (!display) continue;
+      seen.add(addressKey(display));
+      out.push({ address: display, online: false });
+    }
+    for (const address of Array.isArray(onlineAddresses) ? onlineAddresses : []) {
+      const display = normalizeAddress(address);
+      if (!display) continue;
+      const key = addressKey(display);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ address: display, online: true });
+    }
+    return out.slice(0, cap);
+  }
+
+  globalThis.bwcAddressBook = {
+    MAX_ENTRIES,
+    normalizeAddress,
+    addressKey,
+    upsertEntry,
+    seedEntries,
+    matchLocal,
+    mergeSuggestions,
+  };
+})();
+
 // ---- 导入弹窗：怎样才算「真的导入了」----
 // 同样不碰 DOM，node 里可以直接打（test/import_dialog_result.test.ts）。
 //
@@ -832,6 +973,8 @@
   $(`.view-btn[data-view="${currentView}"]`)?.classList.add("bg-brand-50", "text-brand-700", "font-semibold");
   // Initial position: scroll the week grid to the current hour on first paint.
   scrollGridToNow();
+  // 地址簿播种（只在首次）：不挡首屏，页面起来之后慢慢拉。
+  setTimeout(() => { void seedAddressBook(); }, 1500);
 
   // ---------- Sidebar: search box filters calendar list by name ----------
   const calSearchEl = document.getElementById("cal-search");
@@ -1264,6 +1407,157 @@
   $('#form-event [name="startsAt"]').addEventListener("input", syncTzHint);
   $('#form-event [name="timezone"]').addEventListener("input", syncTzHint);
   $('#form-event [name="timezone"]').addEventListener("change", syncTzHint);
+
+  // ---- 地点联想：本地地址簿优先，在线兜底 ----
+  // 纯逻辑在文件上方 bwcAddressBook；这里只管存储（localStorage）、
+  // 播种、网络和下拉 UI。地址簿按浏览器存，不按账号分——同一台机器
+  // 换账号播种会把新账号的地址并进来（seedEntries 只加不覆盖），
+  // 这是可接受的取舍：地址本身不是敏感数据，且合并只增不删。
+  const ADDR = globalThis.bwcAddressBook;
+  const ADDR_BOOK_KEY = "bwc.addressBook.v1";
+  const ADDR_SEEDED_KEY = "bwc.addressBook.seeded.v1";
+  const ADDR_ONLINE_KEY = "bwc.geo.onlineSuggestions";
+  let addressEntries = [];
+  try {
+    const raw = localStorage.getItem(ADDR_BOOK_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) addressEntries = parsed;
+  } catch (_e) { /* 隐私模式 / 坏数据：当空簿用 */ }
+  function persistAddressBook() {
+    try { localStorage.setItem(ADDR_BOOK_KEY, JSON.stringify(addressEntries)); } catch (_e) { /* 同上 */ }
+  }
+  function onlineSuggestEnabled() {
+    try { return localStorage.getItem(ADDR_ONLINE_KEY) !== "0"; } catch (_e) { return true; }
+  }
+  /** 保存成功后记一次使用（三个保存分支 + 一句话直存共用）。 */
+  function recordLocationUse(address) {
+    if (!ADDR) return;
+    const display = ADDR.normalizeAddress(address);
+    if (!display) return;
+    addressEntries = ADDR.upsertEntry(addressEntries, display, Date.now());
+    persistAddressBook();
+  }
+  // 播种：每个日历拉一次全量事件列表，只取 location。失败静默——
+  // 没播上种地址簿照样能靠保存慢慢攒，下次打开再试（不置标记）。
+  async function seedAddressBook() {
+    if (!ADDR) return;
+    try { if (localStorage.getItem(ADDR_SEEDED_KEY) === "1") return; } catch (_e) { return; }
+    const calendars = (ctx.calendars || []).filter((c) => c && c.id);
+    if (calendars.length === 0) return;
+    try {
+      const locations = [];
+      for (const cal of calendars) {
+        const resp = await fetch(`/api/calendars/${encodeURIComponent(cal.id)}/events`, fetchOpts());
+        if (!resp.ok) continue;
+        const rows = await resp.json().catch(() => null);
+        const list = Array.isArray(rows) ? rows : (rows && Array.isArray(rows.events) ? rows.events : []);
+        for (const ev of list) if (ev && ev.location) locations.push(ev.location);
+      }
+      if (locations.length > 0) {
+        addressEntries = ADDR.seedEntries(addressEntries, locations);
+        persistAddressBook();
+      }
+      try { localStorage.setItem(ADDR_SEEDED_KEY, "1"); } catch (_e) { /* 同上 */ }
+    } catch (_e) { /* 静默：见上 */ }
+  }
+  const locationInput = $('#form-event [name="location"]');
+  const locationList = $("#location-suggest");
+  if (ADDR && locationInput && locationList) {
+    let suggestItems = [];   // [{ address, online }]
+    let activeIdx = -1;
+    let onlineTimer = null;
+    let onlineSeq = 0;       // 丢弃过期响应：序号不对就当没收到
+
+    function closeSuggest() {
+      locationList.classList.add("hidden");
+      locationList.innerHTML = "";
+      suggestItems = [];
+      activeIdx = -1;
+    }
+    function renderSuggest() {
+      if (suggestItems.length === 0) { closeSuggest(); return; }
+      locationList.innerHTML = "";
+      let lastOnline = false;
+      suggestItems.forEach((item, idx) => {
+        if (item.online && !lastOnline) {
+          const head = document.createElement("li");
+          head.className = "px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-slate-400 select-none";
+          head.textContent = T("app.js.location.online");
+          locationList.appendChild(head);
+        }
+        lastOnline = item.online;
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "w-full truncate px-3 py-1.5 text-left text-sm " +
+          (idx === activeIdx ? "bg-brand-50 text-brand-900" : "text-slate-700 hover:bg-slate-50");
+        btn.textContent = item.address;
+        btn.addEventListener("mousedown", (ev) => {
+          ev.preventDefault(); // 抢在 blur 之前，别先被关掉
+          pickSuggest(idx);
+        });
+        li.appendChild(btn);
+        locationList.appendChild(li);
+      });
+      locationList.classList.remove("hidden");
+    }
+    function pickSuggest(idx) {
+      const item = suggestItems[idx];
+      if (!item) return;
+      locationInput.value = item.address;
+      // 在线结果选中即写回本地：下次同样的地址直接走本地，不再问在线。
+      if (item.online) recordLocationUse(item.address);
+      closeSuggest();
+      locationInput.focus();
+    }
+    async function refreshSuggest() {
+      const query = locationInput.value;
+      const local = ADDR.matchLocal(addressEntries, query, 5);
+      suggestItems = ADDR.mergeSuggestions(local, [], 8);
+      activeIdx = -1;
+      renderSuggest();
+      // 本地命中够多就到此为止；不够且开关开着、查询够长，才问在线。
+      if (local.length >= 3 || !onlineSuggestEnabled()) return;
+      const q = ADDR.normalizeAddress(query);
+      if (q.length < 3) return;
+      const seq = ++onlineSeq;
+      clearTimeout(onlineTimer);
+      onlineTimer = setTimeout(async () => {
+        try {
+          const resp = await fetch(
+            `/api/geo/suggest?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(LOCALE)}`,
+            fetchOpts(),
+          );
+          if (!resp.ok) return;
+          const data = await resp.json().catch(() => null);
+          const labels = data && Array.isArray(data.suggestions)
+            ? data.suggestions.map((s) => (s && s.label) || "").filter(Boolean)
+            : [];
+          // 输入已经变了 / 下拉已经关了：这批结果作废。
+          if (seq !== onlineSeq || locationInput.value !== query) return;
+          suggestItems = ADDR.mergeSuggestions(local, labels, 8);
+          renderSuggest();
+        } catch (_e) { /* 在线失败静默：本地建议已经在屏上了 */ }
+      }, 300);
+    }
+    locationInput.addEventListener("input", refreshSuggest);
+    locationInput.addEventListener("focus", refreshSuggest);
+    locationInput.addEventListener("blur", () => { setTimeout(closeSuggest, 120); });
+    locationInput.addEventListener("keydown", (ev) => {
+      if (locationList.classList.contains("hidden") || suggestItems.length === 0) return;
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+        ev.preventDefault();
+        const delta = ev.key === "ArrowDown" ? 1 : -1;
+        activeIdx = (activeIdx + delta + suggestItems.length) % suggestItems.length;
+        renderSuggest();
+      } else if (ev.key === "Enter" && activeIdx >= 0) {
+        ev.preventDefault(); // 选建议，不是提交表单
+        pickSuggest(activeIdx);
+      } else if (ev.key === "Escape") {
+        closeSuggest();
+      }
+    });
+  }
 
   // ---- "编辑" button in view-mode modal switches to edit mode ----
   const enterEditBtn = $("#btn-enter-edit");
@@ -1730,6 +2024,7 @@
           } catch (_e) { /* 软检查失败不挡保存，与表单口径一致 */ }
           const resp = await fetch("/api/events", fetchOpts({ method: "POST", body: JSON.stringify(body) }));
           if (!resp.ok) throw new Error(await resp.text());
+          recordLocationUse(parsed.location);
           const created = await resp.json().catch(() => null);
           qaInput.value = "";
           showQa(null);
@@ -2014,6 +2309,7 @@
         if (!resp.ok) throw new Error(await resp.text());
         closeModal("#modal-event");
         await loadEvents();
+        recordLocationUse(data.location);
         window.bwc && window.bwc.toast(T("app.js.toast.eventUpdated"), "success");
       } else if (window.bwcStore) {
         // Route through bwcStore when available — optimistic local update +
@@ -2027,6 +2323,7 @@
         await window.bwcStore.put(id ? { ...body, ...seriesRef, id } : body, body.calendarId);
         closeModal("#modal-event");
         await loadEvents();
+        recordLocationUse(data.location);
         const offline = !window.bwcStore.isOnline();
         window.bwc && window.bwc.toast(
           offline
@@ -2041,6 +2338,7 @@
         if (!resp.ok) throw new Error(await resp.text());
         closeModal("#modal-event");
         await loadEvents();
+        recordLocationUse(data.location);
         window.bwc && window.bwc.toast(id ? T("app.js.toast.eventUpdated") : T("app.js.toast.eventAdded"), "success");
       }
     } catch (err) {
