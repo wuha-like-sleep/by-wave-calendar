@@ -363,22 +363,40 @@ class CalendarState(
 
     // ---- 本地地址簿（地点联想）----
 
-    /** 编辑框输入时同步取本地建议：只读内存里的簿，够快。 */
-    fun localAddressSuggestions(query: String): List<String> =
-        AddressBook.match(AddressBookStore.entries(), query, limit = 5)
+    /** 编辑框输入时同步取本地建议：只读内存里的簿，够快。
+     *  title 是正在编辑的事件标题，用作上下文加权。 */
+    fun localAddressSuggestions(query: String, title: String?): List<String> =
+        AddressBook.match(AddressBookStore.entries(), query, title = title, limit = 5)
 
-    /** 在线兜底：开关关着、或请求失败，都回空列表（静默退回本地）。 */
-    suspend fun onlineAddressSuggestions(query: String): List<String> {
+    /** 在线兜底：开关关着、或请求失败，都回空列表（静默退回本地）。
+     *  返回整条建议（带组件/坐标），选中后要学进地址簿。 */
+    suspend fun onlineAddressSuggestions(query: String): List<cn.bywave.calendar.desktop.data.model.GeoSuggestion> {
         if (!GeoSuggestPrefs.enabled()) return emptyList()
         return runCatching {
             val lang = cn.bywave.calendar.desktop.i18n.I18n.current.value.code
-            client.geoSuggest(query, lang).suggestions.map { it.label }
+            client.geoSuggest(query, lang).suggestions
         }.getOrDefault(emptyList())
     }
 
-    /** 保存成功 / 选中在线结果时记一次使用。 */
-    fun recordAddressUse(address: String?) {
-        if (!address.isNullOrBlank()) AddressBookStore.recordUse(address)
+    /** 这次编辑里选中过的建议（本地/在线都算），保存时供编辑学习。 */
+    private var lastPickedAddress: String? = null
+
+    fun noteAddressPicked(address: String) {
+        lastPickedAddress = address
+    }
+
+    /** 选中在线结果：以 online 来源 + 组件/坐标学进地址簿。 */
+    fun learnOnlineSuggestion(suggestion: cn.bywave.calendar.desktop.data.model.GeoSuggestion) {
+        lastPickedAddress = suggestion.label
+        AddressBookStore.learnOnline(suggestion)
+    }
+
+    /** 保存成功后的学习：选中过又改了 → 编辑学习；否则正常记使用。 */
+    fun learnAddressOnSave(location: String?, title: String?) {
+        if (!location.isNullOrBlank()) {
+            AddressBookStore.learnFromSave(lastPickedAddress, location, title)
+        }
+        lastPickedAddress = null
     }
 
     private var addressSeedInFlight = false
@@ -576,7 +594,7 @@ class CalendarState(
                 // 表单内容陪葬。clientUid 随请求体进队列，重放复用
                 // 同一个，服务端按 uid 幂等不会重复建。
                 val created = offline.submitCreate(body, clientUid)
-                recordAddressUse(body.location)
+                learnAddressOnSave(body.location, body.summary)
                 client.profileId?.let { EventCache.clear(it) }
                 val notice = if (quickSaveArmed) {
                     CreatedNotice(event = created, token = System.nanoTime())
@@ -725,7 +743,7 @@ class CalendarState(
                     snapshot = snapshot,
                 )
                 client.profileId?.let { EventCache.clear(it) }
-                if (dragged == null) recordAddressUse(body.location)
+                if (dragged == null) learnAddressOnSave(body.location, body.summary)
                 _ui.value = _ui.value.copy(events = offline.overlay(_ui.value.events))
                 if (dragged == null) _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load(useCache = false)

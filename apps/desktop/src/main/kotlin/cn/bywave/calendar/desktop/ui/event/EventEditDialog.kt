@@ -198,13 +198,17 @@ fun EventEditDialog(
      *  创建打标，成功后弹「已创建 · 打开 / 撤销」反馈条）。普通保存
      *  不调用。 */
     onQuickSaveDispatched: (() -> Unit)? = null,
-    /** 地点联想的本地来源（本地地址簿）：按当前输入同步返回建议。 */
-    onLocalAddressSuggestions: (String) -> List<String> = { emptyList() },
+    /** 地点联想的本地来源（本地地址簿）：按（输入， 事件标题）同步
+     *  返回建议——标题用作上下文加权。 */
+    onLocalAddressSuggestions: (String, String) -> List<String> = { _, _ -> emptyList() },
     /** 地点联想的在线兜底：本地命中不足时才调；null = 在线不可用 /
-     *  已被用户在设置里关掉。失败由调用方吞成空列表。 */
-    onOnlineAddressSuggestions: (suspend (String) -> List<String>)? = null,
-    /** 选中一条在线建议时回调（调用方据此把它写回本地地址簿）。 */
-    onAddressPicked: (String) -> Unit = {},
+     *  已被用户在设置里关掉。失败由调用方吞成空列表。返回整条建议
+     *  （带组件/坐标），选中后要学进地址簿。 */
+    onOnlineAddressSuggestions: (suspend (String) -> List<cn.bywave.calendar.desktop.data.model.GeoSuggestion>)? = null,
+    /** 选中一条建议时回调：online 非空 = 在线结果（调用方以 online
+     *  来源 + 组件学进地址簿）；本地选中也报一声，供保存时的编辑
+     *  学习知道「这是从哪条改出来的」。 */
+    onSuggestionPicked: (address: String, online: cn.bywave.calendar.desktop.data.model.GeoSuggestion?) -> Unit = { _, _ -> },
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -591,9 +595,9 @@ fun EventEditDialog(
                 // （不做浮层）：滚动对话框里浮层定位容易错位，流内展开
                 // 简单可靠。
                 var locationFocused by remember { mutableStateOf(false) }
-                var onlineSuggestions by remember { mutableStateOf<List<String>>(emptyList()) }
+                var onlineSuggestions by remember { mutableStateOf<List<cn.bywave.calendar.desktop.data.model.GeoSuggestion>>(emptyList()) }
                 val localSuggestions = if (locationFocused) {
-                    onLocalAddressSuggestions(form.location)
+                    onLocalAddressSuggestions(form.location, form.summary)
                 } else {
                     emptyList()
                 }
@@ -632,7 +636,10 @@ fun EventEditDialog(
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
-                                        .clickable { form = form.copy(location = suggestion) }
+                                        .clickable {
+                                            form = form.copy(location = suggestion)
+                                            onSuggestionPicked(suggestion, null)
+                                        }
                                         .padding(horizontal = 12.dp, vertical = 8.dp),
                                 )
                             }
@@ -645,14 +652,14 @@ fun EventEditDialog(
                                 )
                                 onlineSuggestions.forEach { suggestion ->
                                     Text(
-                                        suggestion,
+                                        suggestion.label,
                                         style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1,
                                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                         modifier = Modifier.fillMaxWidth()
                                             .clickable {
-                                                form = form.copy(location = suggestion)
-                                                onAddressPicked(suggestion)
+                                                form = form.copy(location = suggestion.label)
+                                                onSuggestionPicked(suggestion.label, suggestion)
                                             }
                                             .padding(horizontal = 12.dp, vertical = 8.dp),
                                     )

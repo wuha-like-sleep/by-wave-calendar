@@ -425,11 +425,21 @@ data class SearchResponse(
     val events: List<SearchResultDTO>,
 )
 
-/** GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
- *  地址串，客户端只管展示与回填）。 */
+/** GET /api/v1/geo/suggest 的一条在线地址建议：label 是回填用的
+ *  完整地址串，其余是结构化组件与坐标——选中后要一起学进本地
+ *  地址簿，所以全都建模出来。 */
 @Serializable
 data class GeoSuggestion(
     val label: String,
+    val name: String? = null,
+    val street: String? = null,
+    val suburb: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postcode: String? = null,
+    val country: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
 )
 
 /** GET /api/v1/geo/suggest response (envelope stripped). 上游失败时
