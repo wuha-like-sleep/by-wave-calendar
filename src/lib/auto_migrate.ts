@@ -250,4 +250,13 @@ export const DEFENSIVE_SCHEMA_PATCHES: ReadonlyArray<{ why: string; statement: s
     why: "site_settings.ios_announcement_published_at（缺了 iOS 公告发不出去）",
     statement: `ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS ios_announcement_published_at timestamp with time zone`,
   },
+  {
+    // 0069。轮换（rotateApiToken）在旧 Token 上打的戳。缺列时轮换的那条
+    // UPDATE 直接报错、整个轮换失败 —— 不是静默降级，是功能不可用。
+    // 每日用量表（api_token_daily_usage）是新表，照 0068 的先例靠迁移器
+    // 本身落地，安全网只收列不收表；且 touch 里的用量 upsert 是旁路，
+    // 表不在也不会拖垮鉴权与 lastUsedAt。
+    why: "api_tokens.rotated_at（缺了 Token 轮换会直接失败）",
+    statement: `ALTER TABLE api_tokens ADD COLUMN IF NOT EXISTS rotated_at timestamp with time zone`,
+  },
 ];

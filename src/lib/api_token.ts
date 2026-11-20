@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { getSettings } from "./site_settings.js";
@@ -79,6 +79,7 @@ export async function listAllApiTokens() {
       lastUsedIp: schema.apiTokens.lastUsedIp,
       useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
+      rotatedAt: schema.apiTokens.rotatedAt,
       createdAt: schema.apiTokens.createdAt,
       userEmail: schema.users.email,
       userId: schema.apiTokens.userId,
@@ -114,6 +115,7 @@ export async function listApiTokensForUser(userId: string) {
       lastUsedIp: schema.apiTokens.lastUsedIp,
       useCount: schema.apiTokens.useCount,
       expiresAt: schema.apiTokens.expiresAt,
+      rotatedAt: schema.apiTokens.rotatedAt,
       createdAt: schema.apiTokens.createdAt,
     })
     .from(schema.apiTokens)
@@ -171,6 +173,14 @@ export async function rotateApiToken(input: {
   /** Optional override of the new token's label. Defaults to old label
    *  (admins can keep their "n8n integration" label across rotations). */
   newLabel?: string;
+  /** Self-service rotation passes true: the NEW token inherits the old
+   *  token's expiry horizon (its remaining lifetime, or never-expire if
+   *  the old one never expired). Without it a user who deliberately
+   *  chose a 365-day token would silently end up with a never-expiring
+   *  one after rotating — rotation must never *lengthen* a credential's
+   *  life beyond what its owner originally picked. The admin path leaves
+   *  this off and keeps the historical "new token never expires". */
+  inheritExpiry?: boolean;
 }): Promise<IssuedApiToken & { oldExpiresAt: Date }> {
   const grace = input.graceDays ?? 7;
   const [old] = await db
@@ -187,6 +197,10 @@ export async function rotateApiToken(input: {
     ? old.expiresAt
     : proposedExpiry;
 
+  const newExpiresInDays = input.inheritExpiry && old.expiresAt
+    ? Math.max(1, Math.ceil((old.expiresAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)))
+    : null;
+
   // Mint the new token first. If this succeeds but the old-token update fails
   // (extremely unlikely but possible under DB hiccup), we have an extra valid
   // token — fail-safe direction for an integration-critical flow. The opposite
@@ -196,13 +210,18 @@ export async function rotateApiToken(input: {
     userId: old.userId,
     label: input.newLabel?.trim() || old.label,
     scope: old.scope === "read" ? "read" : "write",
-    expiresInDays: null,  // new token follows the org's standard "no expiry"
-                          // default; admin can rotate it again later
+    expiresInDays: newExpiresInDays,  // admin path: null = the org's standard
+                                      // "no expiry" default (see inheritExpiry)
   });
 
+  // rotatedAt is the marker the settings/admin lists use to show the old
+  // token as "in rotation grace" (its expiresAt is the grace deadline).
+  // Grace expiry itself is enforced by verifyApiToken's existing expiry
+  // check — no separate sweep needed: the moment expiresAt passes, the
+  // old secret stops verifying.
   await db
     .update(schema.apiTokens)
-    .set({ expiresAt: oldExpiresAt })
+    .set({ expiresAt: oldExpiresAt, rotatedAt: now })
     .where(eq(schema.apiTokens.id, input.oldTokenId));
 
   return { ...issued, oldExpiresAt };
@@ -244,13 +263,108 @@ export async function verifyApiToken(token: string): Promise<VerifiedToken | nul
 }
 
 export async function touchApiToken(tokenId: string, ip: string): Promise<void> {
+  const now = new Date();
   await db
     .update(schema.apiTokens)
     .set({
-      lastUsedAt: new Date(),
+      lastUsedAt: now,
       lastUsedIp: ip,
       // Same UPDATE, so the lifetime call count costs no extra write.
       useCount: sql`${schema.apiTokens.useCount} + 1`,
     })
     .where(eq(schema.apiTokens.id, tokenId));
+  // Daily rollup for the settings page's 30-day usage view. One extra
+  // indexed upsert per authenticated request — the same order of write
+  // cost as the UPDATE above. The increment is a single atomic statement
+  // (INSERT … ON CONFLICT DO UPDATE … count = count + 1), so concurrent
+  // requests can't lose counts the way a read-modify-write would.
+  //
+  // Deliberately decoupled from the UPDATE above: if the rollup table is
+  // ever missing (migration bookkeeping desync), last-used tracking must
+  // keep working — the caller already treats touch as best-effort, and a
+  // stats gap is recoverable while a broken touch is not.
+  try {
+    await db
+      .insert(schema.apiTokenDailyUsage)
+      .values({ tokenId, day: apiTokenDayKey(now), count: 1 })
+      .onConflictDoUpdate({
+        target: [schema.apiTokenDailyUsage.tokenId, schema.apiTokenDailyUsage.day],
+        set: { count: sql`${schema.apiTokenDailyUsage.count} + 1` },
+      });
+  } catch {
+    // best-effort stats — see above
+  }
+}
+
+/** UTC calendar day (YYYY-MM-DD) used as the daily-usage bucket key. */
+export function apiTokenDayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export type ApiTokenUsageSummary = {
+  /** Total calls across the user's live tokens in the window. */
+  total: number;
+  /** One entry per day in the window, oldest first, zero-filled. */
+  perDay: { day: string; count: number }[];
+  /** Per-token totals in the window, in token creation order. */
+  perToken: { tokenId: string; label: string; count: number }[];
+};
+
+/**
+ * The settings page's "last N days" usage view model. Only the caller's
+ * own, non-revoked tokens are counted (a revoked token's history goes
+ * with it — the view answers "what are my live integrations doing").
+ * Rows are tiny (≤ 5 tokens × N days), so aggregation happens in JS
+ * rather than with a GROUP BY over a join.
+ */
+export async function getApiTokenUsageSummary(userId: string, days = 30): Promise<ApiTokenUsageSummary> {
+  const now = new Date();
+  const dayKeys: string[] = [];
+  for (let i = days - 1; i >= 0; i--) {
+    dayKeys.push(apiTokenDayKey(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
+  }
+  const since = dayKeys[0]!;
+  const tokens = await listApiTokensForUser(userId);
+  const rows = await db
+    .select({
+      tokenId: schema.apiTokenDailyUsage.tokenId,
+      day: schema.apiTokenDailyUsage.day,
+      count: schema.apiTokenDailyUsage.count,
+    })
+    .from(schema.apiTokenDailyUsage)
+    .innerJoin(schema.apiTokens, eq(schema.apiTokens.id, schema.apiTokenDailyUsage.tokenId))
+    .where(and(eq(schema.apiTokens.userId, userId), gte(schema.apiTokenDailyUsage.day, since)));
+  const byDay = new Map<string, number>(dayKeys.map((d) => [d, 0]));
+  const byToken = new Map<string, number>();
+  // Rows belonging to since-revoked tokens are skipped entirely, so the
+  // three numbers always reconcile: total = Σ perDay = Σ perToken.
+  const liveIds = new Set(tokens.map((t) => t.id));
+  let total = 0;
+  for (const r of rows) {
+    if (!liveIds.has(r.tokenId)) continue;
+    if (byDay.has(r.day)) byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.count);
+    byToken.set(r.tokenId, (byToken.get(r.tokenId) ?? 0) + r.count);
+    total += r.count;
+  }
+  return {
+    total,
+    perDay: dayKeys.map((day) => ({ day, count: byDay.get(day) ?? 0 })),
+    perToken: tokens.map((t) => ({ tokenId: t.id, label: t.label, count: byToken.get(t.id) ?? 0 })),
+  };
+}
+
+// How long daily usage rows are kept. The view only ever shows 30 days;
+// 90 matches the house retention norm (soft-deleted events, read
+// notifications) and leaves slack for month-boundary questions without
+// letting a stats table grow forever (≤ 90 rows per token).
+export const API_TOKEN_USAGE_RETENTION_DAYS = 90;
+
+/** Housekeeping: drop daily-usage rows older than the retention window. */
+export async function purgeOldApiTokenUsage(now = new Date()): Promise<{ purged: number }> {
+  const cutoff = apiTokenDayKey(new Date(now.getTime() - (API_TOKEN_USAGE_RETENTION_DAYS - 1) * 24 * 60 * 60 * 1000));
+  const rows = await db
+    .delete(schema.apiTokenDailyUsage)
+    .where(lt(schema.apiTokenDailyUsage.day, cutoff))
+    .returning({ tokenId: schema.apiTokenDailyUsage.tokenId });
+  return { purged: rows.length };
 }

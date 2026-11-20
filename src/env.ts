@@ -46,6 +46,12 @@ const schema = z.object({
   REGISTRATION_OPEN: boolFlag.default(true),
   RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().positive().default(120),
   RATE_LIMIT_AUTH_PER_MINUTE: z.coerce.number().int().positive().default(10),
+  // 每枚个人 API Token 每分钟的调用上限（跨 IP 聚合）。全站按 IP 的
+  // 120/分钟挡不住「一枚 Token 在很多 IP 后面被刷」；这一层按 Token 记，
+  // 泄漏的 Token 被机器人网络轮着 IP 打也会在 Token 维度封顶。默认 600
+  // 取的是宽松档：Google Calendar API 的单用户配额就是 600 次/分钟，
+  // 正常同步脚本一个数量级也碰不到，只对失控循环和聚合滥用生效。
+  RATE_LIMIT_API_TOKEN_PER_MINUTE: z.coerce.number().int().positive().default(600),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
   // subscriptions, one-shot URL imports, and — defense-in-depth — outbound

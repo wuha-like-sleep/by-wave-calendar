@@ -16,7 +16,10 @@ const pg = new PGlite();
 
 type ColShape = { table_name: string; column_name: string; data_type: string; is_nullable: string; column_default: string | null };
 
-const TABLES = ["site_settings", "users", "booking_links", "app_passwords", "calendar_sync_pairs"];
+// api_tokens 是 0066 起才进安全网的（use_count），当时这份名单漏了它 ——
+// 结果那两条断言对 api_tokens 的补丁永远查无此列、基线直接红，而红的原因
+// 和补丁本身无关。名单必须覆盖安全网碰到的每一张表，否则新补丁加了也白加。
+const TABLES = ["site_settings", "users", "booking_links", "app_passwords", "calendar_sync_pairs", "api_tokens"];
 
 /**
  * 从 idx 46 起新增的列必须被安全网收着。

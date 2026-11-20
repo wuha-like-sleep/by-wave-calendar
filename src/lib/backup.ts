@@ -44,6 +44,9 @@ export const EXPORT_TABLES = [
   { name: "webauthn_credentials", table: schema.webauthnCredentials },
   { name: "app_passwords",        table: schema.appPasswords },
   { name: "api_tokens",           table: schema.apiTokens },
+  // 每 Token 每日用量：丢了设置页的 30 天用量视图就归零，用户会发现；
+  // 挂在 api_tokens 下面，排在它之后。
+  { name: "api_token_daily_usage", table: schema.apiTokenDailyUsage },
   { name: "calendars",            table: schema.calendars },
   { name: "calendar_sync_accounts", table: schema.calendarSyncAccounts },
   { name: "calendar_sync_pairs", table: schema.calendarSyncPairs },

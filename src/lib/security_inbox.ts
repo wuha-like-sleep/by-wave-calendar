@@ -20,7 +20,7 @@ import { getSettings } from "./site_settings.js";
 //   · 旁路：写失败只记日志，绝不挡住发信和触发它的安全操作本身。
 
 export type SecurityInboxKind =
-  | "token_created" | "token_revoked"
+  | "token_created" | "token_revoked" | "token_rotated"
   | "password_changed"
   | "mfa_enabled" | "mfa_disabled"
   | "passkey_added"
@@ -31,6 +31,8 @@ export type SecurityInboxContext = {
   tokenLabel?: string | null;
   /** Token 场景：权限原文（read / write）。 */
   tokenScope?: string | null;
+  /** Token 轮换场景：旧 Token 的宽限天数。 */
+  graceDays?: number | null;
   /** 新设备登录场景：设备描述（UA 摘要）。 */
   device?: string | null;
   /** 新设备登录场景：来源 IP。 */
@@ -57,6 +59,14 @@ function bodyFor(locale: LocaleCode, kind: SecurityInboxKind, ctx: SecurityInbox
         ? translate(locale, "notif.security.scopeRead")
         : translate(locale, "notif.security.scopeWrite");
       return translate(locale, key, { label: ctx.tokenLabel || "API Token", scope });
+    }
+    case "token_rotated": {
+      const scope = ctx.tokenScope === "read"
+        ? translate(locale, "notif.security.scopeRead")
+        : translate(locale, "notif.security.scopeWrite");
+      return translate(locale, "notif.security.tokenRotated", {
+        label: ctx.tokenLabel || "API Token", scope, days: ctx.graceDays ?? 7,
+      });
     }
     case "password_changed": return translate(locale, "notif.security.passwordChanged");
     case "mfa_enabled": return translate(locale, "notif.security.mfaEnabled");
