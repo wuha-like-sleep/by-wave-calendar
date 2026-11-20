@@ -187,6 +187,11 @@ data class CalendarUiState(
      *  主界面顶部提示条显示，用户点 × 关掉。和 [formError] 分开：那个只在
      *  编辑弹窗里渲染，弹窗外的失败写进去等于没写。 */
     val actionError: String? = null,
+    /** 离线队列现状（待同步 + 待处理全部条目）。主界面指示条与
+     *  队列弹窗读它。 */
+    val pendingOps: List<cn.bywave.calendar.sync.PendingOp> = emptyList(),
+    /** 有未同步改动的事件 id 集：详情弹窗据此显示「待同步」。 */
+    val pendingSyncIds: Set<String> = emptySet(),
 )
 
 class CalendarState(
@@ -202,6 +207,23 @@ class CalendarState(
     private var displayZone = initialDisplayZone
     private var zoneRefreshPending = false
     private val deletionsInFlight = mutableSetOf<ConfirmedEventDeletion>()
+
+    /** 离线写队列：建 / 改 / 删先经它落本地再重放（见 data/offline）。
+     *  队列状态同步进 ui state 供指示条 / 队列弹窗 / 详情标记读。 */
+    val offline = cn.bywave.calendar.desktop.data.offline.OfflineQueue(client, scope)
+
+    init {
+        // 有条目落定 = 服务端状态变了：再拉一次，把本地临时行换成真实行。
+        offline.onDrained = { load(useCache = false) }
+        scope.launch {
+            offline.ops.collect { ops ->
+                _ui.value = _ui.value.copy(
+                    pendingOps = ops,
+                    pendingSyncIds = ops.map { it.eventId }.toSet(),
+                )
+            }
+        }
+    }
 
     /** Re-query civil-day boundaries in the new zone without replacing an open
      * editor. A mutation finishes before this refresh so its old snapshot cannot
@@ -256,7 +278,9 @@ class CalendarState(
             if (cached != null) {
                 loadedWindow = queryWindow
                 _ui.value = _ui.value.copy(
-                    events = cached.events,
+                    // 缓存文件里存的是服务端原始响应：画之前先套离线
+                    // 队列合并，没同步出去的改动不能被缓存画没了。
+                    events = offline.overlay(cached.events),
                     calendars = cached.calendars,
                     loading = true,   // still revalidating
                     error = null,
@@ -282,23 +306,37 @@ class CalendarState(
                     is ApiClient.EventsFetch.NotModified -> {
                         currentCoroutineContext().ensureActive()
                         loadedWindow = queryWindow
-                        _ui.value = _ui.value.copy(loading = false, error = null)
+                        // 304 = 服务端没变，但队列可能刚有新条目（刚删了
+                        // 一个事件）：合并重套到现集上（幂等）。
+                        _ui.value = _ui.value.copy(
+                            events = offline.overlay(_ui.value.events),
+                            loading = false, error = null,
+                        )
+                        // 网络是通的（304 也是响应）：顺手推一轮队列。
+                        offline.kickReplay()
                     }
                     is ApiClient.EventsFetch.Fresh -> {
                         val resp = fetch.resp
                         currentCoroutineContext().ensureActive()
+                        // 展示集 = 服务端窗口 + 未同步条目合并；缓存文件
+                        // 里仍存原始响应，合并只发生在展示这一层。
+                        val displayEvents = offline.overlay(resp.events)
                         _ui.value = _ui.value.copy(
-                            events = resp.events,
+                            events = displayEvents,
                             calendars = resp.calendars,
                             // Absence only means deletion within the same query window.
                             // A timezone switch can move a still-open event to another day.
-                            activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, resp.events,
+                            activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, displayEvents,
                                 allowMissingAsDeletion = loadedWindow == queryWindow),
                             loading = false,
                             error = null,
                         )
                         loadedWindow = queryWindow
                         if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp, fetch.etag)
+                        // 拉取成功 = 网络通：推一轮离线队列（休眠唤醒 /
+                        // 网络切换后的兜底触发点，MainScreen 的焦点与
+                        // 定时刷新都走 load）。
+                        offline.kickReplay()
                     }
                 }
             } catch (e: CancellationException) {
@@ -307,6 +345,9 @@ class CalendarState(
                 throw e
             } catch (e: Exception) {
                 _ui.value = _ui.value.copy(
+                    // 拉取失败也把队列合并套到现集上：离线删/改的事件
+                    // 不能因为这次失败就弹回原样（合并幂等）。
+                    events = offline.overlay(_ui.value.events),
                     loading = false,
                     error = userFacingError(e, "error.loadFailed"),
                 )
@@ -480,7 +521,11 @@ class CalendarState(
             // 新的一次操作开始，上一次的失败提示就过时了（见 dismissActionError 的说明）。
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
-                val created = client.createEvent(body, clientUid = clientUid)
+                // 走离线队列：本地先立行 + 入队，有网当场重放落定，
+                // 没网排队等恢复——不再像以前那样断网保存直接失败、
+                // 表单内容陪葬。clientUid 随请求体进队列，重放复用
+                // 同一个，服务端按 uid 幂等不会重复建。
+                val created = offline.submitCreate(body, clientUid)
                 client.profileId?.let { EventCache.clear(it) }
                 val notice = if (quickSaveArmed) {
                     CreatedNotice(event = created, token = System.nanoTime())
@@ -583,7 +628,7 @@ class CalendarState(
             )
             return
         }
-        sendUpdate(sourceId, body, dragged)
+        sendUpdate(sourceId, body, dragged, sourceStartsAt)
     }
 
     /** Scope picker callback for edits. scope=null means "user cancelled". */
@@ -597,10 +642,15 @@ class CalendarState(
             scope = scope,
             recurrenceId = pending.sourceStartsAt,
         )
-        sendUpdate(pending.sourceId, body, pending.dragged)
+        sendUpdate(pending.sourceId, body, pending.dragged, pending.sourceStartsAt)
     }
 
-    private fun sendUpdate(sourceId: String, body: EventUpdateInput, dragged: DraggedEvent? = null) {
+    private fun sendUpdate(
+        sourceId: String,
+        body: EventUpdateInput,
+        dragged: DraggedEvent? = null,
+        sourceStartsAt: String? = null,
+    ) {
         if (dragged != null) {
             // 先画在松手的位置，别让它弹回原处、等请求回来再跳过去。
             _ui.value = _ui.value.copy(events = replaceEvent(_ui.value.events, dragged.original, dragged.moved))
@@ -611,8 +661,20 @@ class CalendarState(
             // 编辑弹窗被莫名其妙地置灰或清掉提示。
             if (dragged == null) _ui.value = _ui.value.copy(saving = true, formError = null)
             try {
-                client.updateEvent(sourceId, body)
+                // 走离线队列：入队后把合并套到现集上即时显示新值，
+                // 有网当场重放，没网排队——拖动不再因为断网弹回原位，
+                // 表单保存也不再因为断网丢内容。被服务端明确拒绝的
+                // 条目停进待处理，由主界面指示条让用户裁决。
+                val snapshot = _ui.value.events.filter { it.id == sourceId }
+                offline.submitUpdate(
+                    eventId = sourceId,
+                    input = body,
+                    summary = snapshot.firstOrNull()?.summary ?: "",
+                    baseStartsAt = sourceStartsAt ?: dragged?.original?.startsAt,
+                    snapshot = snapshot,
+                )
                 client.profileId?.let { EventCache.clear(it) }
+                _ui.value = _ui.value.copy(events = offline.overlay(_ui.value.events))
                 if (dragged == null) _ui.value = _ui.value.copy(saving = false, activeSheet = null)
                 load(useCache = false)
                 ReminderFeed.requestRefresh()
@@ -622,7 +684,8 @@ class CalendarState(
                 if (dragged == null) {
                     reportFormFailure(e)
                 } else {
-                    // 弹回原位 + 说清楚。以前写进 formError，而拖动根本没有弹窗。
+                    // 入队本身失败（极少：落盘/编码问题）才弹回原位 +
+                    // 说清楚。以前写进 formError，而拖动根本没有弹窗。
                     _ui.value = _ui.value.copy(
                         events = replaceEvent(_ui.value.events, dragged.moved, dragged.original),
                         actionError = actionFailureText("action.moveFailed", dragged.original.summary, e),
@@ -719,7 +782,11 @@ class CalendarState(
         this.scope.launch {
             _ui.value = _ui.value.copy(saving = true, formError = null, actionError = null)
             try {
-                client.deleteEvent(id, scope, recurrenceId)
+                // 走离线队列：本地行立刻删掉、条目入队，没网排队等
+                // 恢复，不再像以前那样断网删除直接失败、事件还留在
+                // 原地。快照随条目存，撤销未同步的删除靠它原样放回。
+                val snapshot = _ui.value.events.filter { deletion.removes(it.id, it.startsAt) }
+                offline.submitDelete(id, scope, recurrenceId, snapshot, summary ?: "")
                 client.profileId?.let { EventCache.clear(it) }
                 // Whole-event (series) deletes are plain soft-deletes the
                 // /restore endpoint can reverse — offer undo. Instance/
@@ -758,6 +825,21 @@ class CalendarState(
         this.scope.launch {
             _ui.value = _ui.value.copy(actionError = null)
             try {
+                // 删除若还躺在离线队列里（没网删的），直接抵消条目、
+                // 把快照行放回去，不需要网络；已经同步出去的才走
+                // 服务端 restore。
+                val restored = offline.cancelPendingDelete(undo.eventId)
+                if (restored != null) {
+                    val existing = _ui.value.events.map { it.id to it.startsAt }.toSet()
+                    _ui.value = _ui.value.copy(
+                        undoDelete = null,
+                        events = _ui.value.events +
+                            restored.filterNot { (it.id to it.startsAt) in existing },
+                    )
+                    load(useCache = false)
+                    ReminderFeed.requestRefresh()
+                    return@launch
+                }
                 client.restoreEvent(undo.eventId)
                 client.profileId?.let { EventCache.clear(it) }
                 _ui.value = _ui.value.copy(undoDelete = null)
@@ -779,6 +861,19 @@ class CalendarState(
     fun dismissUndoDelete(token: Long) {
         if (_ui.value.undoDelete?.token == token) {
             _ui.value = _ui.value.copy(undoDelete = null)
+        }
+    }
+
+    /** 队列弹窗里逐条裁决待处理条目。裁决后刷新一次：采用服务端
+     *  版本 / 放弃要靠窗口拉取把本地行覆盖回正，保留我的修改靠
+     *  队列自己的重放。 */
+    fun resolveAttention(
+        opId: String,
+        resolution: cn.bywave.calendar.desktop.data.offline.AttentionResolution,
+    ) {
+        scope.launch {
+            offline.resolveAttention(opId, resolution)
+            load(useCache = false)
         }
     }
 

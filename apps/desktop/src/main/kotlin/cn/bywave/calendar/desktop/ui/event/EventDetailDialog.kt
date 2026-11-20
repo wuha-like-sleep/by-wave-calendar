@@ -58,6 +58,8 @@ fun EventDetailDialog(
     /** 组织者视角的参与者数据（RSVP 状态 + 时间提议）；拉不到时为 null，
      *  名单回落到 extra 里的纯邮箱列表。 */
     attendees: cn.bywave.calendar.desktop.data.model.AttendeesResponse? = null,
+    /** 这条事件有还没同步到服务端的改动（离线队列里有它的条目）。 */
+    pendingSync: Boolean = false,
     onDecideProposal: (cn.bywave.calendar.desktop.data.model.TimeProposal, Boolean) -> Unit = { _, _ -> },
 ) {
     // Observe locale so all labels + formatted strings re-render on switch.
@@ -112,6 +114,11 @@ fun EventDetailDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                if (pendingSync) {
+                    // 本地已经改了、还没送到服务端：明说，别让用户以为
+                    // 别台设备上也能看到这次改动了。
+                    MetaRow(label = t("offline.detail.label"), value = t("offline.detail.value"))
+                }
                 MetaRow(label = t("event.detail.time"), value = timeBlock)
                 if (cal != null) MetaRow(label = t("event.detail.calendar"), value = cal)
                 event.location?.takeIf { it.isNotBlank() }?.let {
