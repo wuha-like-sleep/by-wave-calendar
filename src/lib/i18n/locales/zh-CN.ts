@@ -1022,6 +1022,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "nav.searchTitle": "搜索事件（快捷键 ⌘K 或 / ）",
   "nav.languageLabel": "语言 / Language",
   "app.toolbar.sidebar": "侧栏",
+  "app.calendarLoadFailed": "日历组件加载失败，请检查网络后重试",
+  "app.calendarLoadRetry": "重新加载",
   "app.toolbar.today": "今天",
   "app.toolbar.prev": "上一段",
   "app.toolbar.next": "下一段",

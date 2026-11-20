@@ -1035,6 +1035,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "nav.searchTitle": "Rechercher des événements (raccourci ⌘K ou /)",
   "nav.languageLabel": "Langue / Language",
   "app.toolbar.sidebar": "Barre latérale",
+  "app.calendarLoadFailed": "Échec du chargement du composant de calendrier. Vérifiez votre connexion, puis réessayez.",
+  "app.calendarLoadRetry": "Recharger",
   "app.toolbar.today": "Aujourd'hui",
   "app.toolbar.prev": "Précédent",
   "app.toolbar.next": "Suivant",

@@ -1035,6 +1035,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "nav.searchTitle": "일정 검색 (단축키 ⌘K 또는 /)",
   "nav.languageLabel": "언어 / Language",
   "app.toolbar.sidebar": "사이드바",
+  "app.calendarLoadFailed": "캘린더 구성 요소를 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도하세요",
+  "app.calendarLoadRetry": "다시 불러오기",
   "app.toolbar.today": "오늘",
   "app.toolbar.prev": "이전",
   "app.toolbar.next": "다음",
