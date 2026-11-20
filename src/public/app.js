@@ -61,12 +61,19 @@
     setTimeout(dismiss, durationMs);
   }
 
-  async function copy(text) {
+  // Copy with per-object feedback: callers say WHAT was copied (a booking
+  // link is not a subscription link — the old single "已复制订阅链接" text
+  // was simply wrong for most entry points). The generic link/failed
+  // strings come from window.BWC_COPY_T, injected by layout.ejs in the
+  // page's locale; the hardcoded fallbacks only fire on pages that render
+  // without the layout.
+  async function copy(text, successMsg) {
+    const msgs = window.BWC_COPY_T || {};
     try {
       await navigator.clipboard.writeText(text);
-      toast("已复制订阅链接", "success");
+      toast(successMsg || msgs.link || "链接已复制", "success");
     } catch (err) {
-      toast("复制失败，请手动选中链接", "error");
+      toast(msgs.failed || "复制失败，请手动复制", "error");
     }
   }
 
@@ -250,11 +257,13 @@
   // one of the attributes below, or a nonce'd <script>, instead.
 
   // data-bwc-copy="text" — copy to clipboard (toast feedback via copy()).
+  // data-bwc-copy-msg="…" — optional localized success toast naming the
+  // copied object (templates render it with t("app.js.copy.*")).
   document.body.addEventListener("click", function (e) {
     const el = e.target.closest && e.target.closest("[data-bwc-copy]");
     if (!el) return;
     e.preventDefault();
-    copy(el.dataset.bwcCopy);
+    copy(el.dataset.bwcCopy, el.dataset.bwcCopyMsg);
   });
 
   // data-bwc-toggle="#id" — toggle .hidden on the target.

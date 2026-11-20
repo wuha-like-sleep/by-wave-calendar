@@ -2657,7 +2657,7 @@
           </div>
         </li>
       `;}).join("");
-      list.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => window.bwc.copy(b.dataset.copy)));
+      list.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", () => window.bwc.copy(b.dataset.copy, T("app.js.copy.subscription"))));
       list.querySelectorAll("[data-revoke]").forEach((b) => b.addEventListener("click", async () => {
         if (!(await window.bwc.confirm({ message: T("app.js.share.revokeConfirm"), danger: true, confirmLabel: T("app.js.share.revoke") }))) return;
         await fetch(`/api/calendars/${calId}/share-tokens/${b.dataset.revoke}`, fetchOpts({ method: "DELETE" }));

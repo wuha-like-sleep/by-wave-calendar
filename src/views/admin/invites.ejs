@@ -104,7 +104,7 @@
                 <div class="flex flex-wrap items-center justify-end gap-2">
                   <% if (st.key === "active") { %>
                     <button type="button"
-                            data-bwc-copy="<%= url %>"
+                            data-bwc-copy="<%= url %>" data-bwc-copy-msg="<%= t("app.js.copy.invite") %>"
                             class="rounded-md border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">复制链接</button>
                     <form method="post" action="/admin/invites/<%= inv.token %>/email" class="inline-flex items-center gap-1">
                       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
