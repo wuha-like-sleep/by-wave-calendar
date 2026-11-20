@@ -360,5 +360,170 @@
     });
   });
 
+  // ---- Booking-link weekly availability editors -------------------------
+  // Markup is server-rendered from the link's real matrix (see
+  // views/app/_availability-editor.ejs); this block only enhances it:
+  // per-day toggle, add/remove windows, HH:MM filtering and start<end
+  // validation, and serialization into the hidden weeklyAvailability
+  // field. It mirrors the desktop/Android editors exactly — same wire
+  // format (JSON object carrying ONLY bookable days; an absent day means
+  // "not bookable that day"), same "new window starts as (lastEnd,
+  // lastEnd) and stays invalid until fixed" behavior, and saving is
+  // blocked while any window is invalid.
+  const AVAIL_HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+  const AVAIL_INPUT_CLS =
+    "w-20 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
+
+  function availSerialize(editor) {
+    const matrix = {};
+    editor.querySelectorAll("[data-avail-day]").forEach(function (dayEl) {
+      const toggle = dayEl.querySelector("[data-avail-toggle]");
+      if (!toggle || !toggle.checked) return;
+      const wins = [];
+      dayEl.querySelectorAll("[data-avail-window]").forEach(function (w) {
+        const s = w.querySelector("[data-avail-start]");
+        const e = w.querySelector("[data-avail-end]");
+        wins.push([s ? s.value : "", e ? e.value : ""]);
+      });
+      if (wins.length) matrix[dayEl.getAttribute("data-avail-day")] = wins;
+    });
+    const hidden = editor.querySelector("[data-avail-json]");
+    if (hidden) hidden.value = JSON.stringify(matrix);
+    return matrix;
+  }
+
+  function availValidate(editor) {
+    let valid = true;
+    editor.querySelectorAll("[data-avail-day]").forEach(function (dayEl) {
+      const toggle = dayEl.querySelector("[data-avail-toggle]");
+      if (!toggle || !toggle.checked) return;
+      dayEl.querySelectorAll("[data-avail-window]").forEach(function (w) {
+        const s = w.querySelector("[data-avail-start]");
+        const e = w.querySelector("[data-avail-end]");
+        const ok = !!(s && e && AVAIL_HHMM.test(s.value) && AVAIL_HHMM.test(e.value) && s.value < e.value);
+        if (!ok) valid = false;
+        [s, e].forEach(function (input) {
+          if (input) input.classList.toggle("border-red-400", !ok);
+        });
+      });
+    });
+    const err = editor.querySelector("[data-avail-error]");
+    if (err) err.hidden = valid;
+    const form = editor.closest && editor.closest("form");
+    if (form) {
+      form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (b) {
+        b.disabled = !valid;
+        b.classList.toggle("opacity-50", !valid);
+      });
+    }
+    return valid;
+  }
+
+  function availRefresh(editor) {
+    availSerialize(editor);
+    availValidate(editor);
+  }
+
+  function availMakeWindow(start, end) {
+    const row = document.createElement("div");
+    row.className = "flex items-center gap-1.5";
+    row.setAttribute("data-avail-window", "");
+    const mk = function (attr, value, placeholder) {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.setAttribute(attr, "");
+      input.value = value;
+      input.maxLength = 5;
+      input.setAttribute("inputmode", "numeric");
+      input.placeholder = placeholder;
+      input.setAttribute("autocomplete", "off");
+      input.className = AVAIL_INPUT_CLS;
+      return input;
+    };
+    const dash = document.createElement("span");
+    dash.className = "text-slate-400";
+    dash.textContent = "–";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.setAttribute("data-avail-remove", "");
+    remove.setAttribute("aria-label", "×");
+    remove.className = "rounded-md px-1.5 py-0.5 text-sm text-slate-400 hover:text-red-600 hover:bg-red-50";
+    remove.textContent = "×";
+    row.appendChild(mk("data-avail-start", start, "09:00"));
+    row.appendChild(dash);
+    row.appendChild(mk("data-avail-end", end, "18:00"));
+    row.appendChild(remove);
+    return row;
+  }
+
+  function availSetDayOpen(dayEl, open) {
+    const body = dayEl.querySelector("[data-avail-body]");
+    const off = dayEl.querySelector("[data-avail-off]");
+    if (body) body.hidden = !open;
+    if (off) off.hidden = open;
+  }
+
+  document.body.addEventListener("change", function (e) {
+    const toggle = e.target;
+    if (!toggle || !toggle.hasAttribute || !toggle.hasAttribute("data-avail-toggle")) return;
+    const dayEl = toggle.closest("[data-avail-day]");
+    const editor = toggle.closest("[data-avail-editor]");
+    if (!dayEl || !editor) return;
+    if (toggle.checked && !dayEl.querySelector("[data-avail-window]")) {
+      dayEl.querySelector("[data-avail-windows]").appendChild(availMakeWindow("09:00", "18:00"));
+    }
+    availSetDayOpen(dayEl, toggle.checked);
+    availRefresh(editor);
+  });
+
+  document.body.addEventListener("click", function (e) {
+    const btn = e.target && e.target.closest && e.target.closest("[data-avail-add], [data-avail-remove]");
+    if (!btn) return;
+    const editor = btn.closest("[data-avail-editor]");
+    const dayEl = btn.closest("[data-avail-day]");
+    if (!editor || !dayEl) return;
+    if (btn.hasAttribute("data-avail-add")) {
+      const rows = dayEl.querySelectorAll("[data-avail-window]");
+      const lastEnd = rows.length ? rows[rows.length - 1].querySelector("[data-avail-end]").value : "09:00";
+      dayEl.querySelector("[data-avail-windows]").appendChild(availMakeWindow(lastEnd, lastEnd));
+    } else {
+      const row = btn.closest("[data-avail-window]");
+      if (row) row.remove();
+      if (!dayEl.querySelector("[data-avail-window]")) {
+        const toggle = dayEl.querySelector("[data-avail-toggle]");
+        if (toggle) toggle.checked = false;
+        availSetDayOpen(dayEl, false);
+      }
+    }
+    availRefresh(editor);
+  });
+
+  document.body.addEventListener("input", function (e) {
+    const input = e.target;
+    if (!input || !input.hasAttribute) return;
+    if (!input.hasAttribute("data-avail-start") && !input.hasAttribute("data-avail-end")) return;
+    // Same input discipline as the native editors: digits + colon, max 5.
+    const filtered = input.value.replace(/[^\d:]/g, "").slice(0, 5);
+    if (filtered !== input.value) input.value = filtered;
+    const editor = input.closest("[data-avail-editor]");
+    if (editor) availRefresh(editor);
+  });
+
+  // Belt-and-braces on top of the disabled submit button: never let an
+  // invalid matrix leave the browser.
+  document.body.addEventListener("submit", function (e) {
+    const form = e.target;
+    if (!form || !form.querySelectorAll) return;
+    form.querySelectorAll("[data-avail-editor]").forEach(function (editor) {
+      if (!availValidate(editor)) e.preventDefault();
+    });
+  }, true);
+
+  function availInit() {
+    document.querySelectorAll("[data-avail-editor]").forEach(availRefresh);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", availInit);
+  else availInit();
+
   window.bwc = { toast, copy, confirm: confirmDialog };
 })();
