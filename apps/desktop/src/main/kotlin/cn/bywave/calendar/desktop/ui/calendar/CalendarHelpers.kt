@@ -24,6 +24,11 @@ import java.time.temporal.TemporalAdjusters
 
 internal val FALLBACK_COLOR = Color(0xFF6640E9)
 
+/** "Now" indicator line + dot in WeekView: one fixed red in light and
+ *  dark themes alike, matching Android's NowLineRed token and the web
+ *  time grid (#E5484D everywhere). */
+internal val NOW_LINE_RED = Color(0xFFE5484D)
+
 internal fun parseHex(hex: String?): Color {
     if (hex.isNullOrBlank()) return FALLBACK_COLOR
     val cleaned = hex.removePrefix("#")

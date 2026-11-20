@@ -143,7 +143,6 @@ fun WeekView(
 
                 HourLines()
                 ColumnSeparators(columnWidth = columnWidth)
-                NowLine(dayStarts = dayStarts, columnWidth = columnWidth)
 
                 // Tap layer for empty time-slot clicks. Placed BEFORE
                 // chips in the draw order so chips intercept their own
@@ -187,6 +186,12 @@ fun WeekView(
                         }
                     }
                 }
+
+                // Now-line LAST in the draw order so event chips can
+                // never cover it — the line must stay on top of the
+                // events it crosses. It carries no pointer input, so
+                // sitting on top does not change tap/drag behaviour.
+                NowLine(dayStarts = dayStarts, columnWidth = columnWidth)
             }
         }
     }
@@ -430,14 +435,14 @@ private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
                 .offset(x = x - 4.dp, y = y - 4.dp)
                 .size(8.dp)
                 .clip(CircleShape)
-                .background(Color.Red),
+                .background(NOW_LINE_RED),
         )
         Box(
             modifier = Modifier
                 .offset(x = x, y = y - 0.75.dp)
                 .width(columnWidth)
                 .height(1.5.dp)
-                .background(Color.Red),
+                .background(NOW_LINE_RED),
         )
     }
 }

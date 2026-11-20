@@ -117,12 +117,6 @@ fun WeekView(
                 // Vertical column separators
                 ColumnSeparators(columnWidth = columnWidth)
 
-                // Now-line (only when today is in this week)
-                NowLine(
-                    dayStarts = dayStarts,
-                    columnWidth = columnWidth,
-                )
-
                 // Event chips
                 for ((dayIdx, day) in dayStarts.withIndex()) {
                     val onDay = remember(timedEvents, day) {
@@ -149,6 +143,16 @@ fun WeekView(
                         }
                     }
                 }
+
+                // Now-line LAST in the draw order so event chips can
+                // never cover it — the line must stay on top of the
+                // events it crosses (only drawn when today is in this
+                // week). It carries no pointer input, so sitting on
+                // top does not change tap/long-press behaviour.
+                NowLine(
+                    dayStarts = dayStarts,
+                    columnWidth = columnWidth,
+                )
             }
         }
     }

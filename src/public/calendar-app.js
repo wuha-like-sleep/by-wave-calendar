@@ -935,6 +935,20 @@
       isAlways6Weeks: false,
     },
     calendars: tuiCalendars,
+    // The "now" line is one fixed red in light and dark mode alike.
+    // Toast UI's default theme paints it indigo (#515ce6) and gives the
+    // future segment no border at all, so the line stopped at today's
+    // column; pin every segment + the bullet to the same red the native
+    // clients use (#E5484D). app.css additionally pins the colour and
+    // lifts the indicator above the event layer.
+    theme: {
+      week: {
+        nowIndicatorPast: { border: "1px solid #e5484d" },
+        nowIndicatorToday: { border: "1px solid #e5484d" },
+        nowIndicatorFuture: { border: "1px solid #e5484d" },
+        nowIndicatorBullet: { backgroundColor: "#e5484d" },
+      },
+    },
     template: {
       monthDayName(model) { return `<span class="text-xs text-slate-500">${model.label}</span>`; },
       // Week header. Toast UI's default puts the weekday name and the date

@@ -15,6 +15,26 @@
   overflow: hidden;
 }
 
+/* "Now" line in the week/day time grid: one fixed red (#e5484d, the
+   same red the native clients use) in light and dark mode, always drawn
+   above the event blocks. Toast UI sets the segment borders and the
+   bullet colour through inline styles, so the colour is pinned here
+   with !important; z-index lifts the whole indicator over the event
+   layer, and pointer-events: none keeps it from ever intercepting taps
+   meant for events underneath. */
+.toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator {
+  z-index: 30;
+  pointer-events: none;
+}
+.toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-left,
+.toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-today,
+.toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-right {
+  border-top: 1px solid #e5484d !important;
+}
+.toastui-calendar-timegrid .toastui-calendar-timegrid-now-indicator-marker {
+  background-color: #e5484d !important;
+}
+
 /* Toast animation */
 @keyframes bwc-toast-in {
   from { opacity: 0; transform: translateY(8px); }
