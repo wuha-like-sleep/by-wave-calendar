@@ -13,7 +13,7 @@
   other fields can never reset a custom matrix back to the default.
 %>
 <%
-  var availDows = [[1, "mon"], [2, "tue"], [3, "wed"], [4, "thu"], [5, "fri"], [6, "sat"], [0, "sun"]];
+  var availDows = [[1, "app.weekday.mon"], [2, "app.weekday.tue"], [3, "app.weekday.wed"], [4, "app.weekday.thu"], [5, "app.weekday.fri"], [6, "app.weekday.sat"], [0, "app.weekday.sun"]];
   var availWire = {};
   Object.keys(availSeed || {}).forEach(function (k) {
     var v = availSeed[k];
@@ -33,7 +33,7 @@
         <label class="inline-flex items-center gap-2 w-24 shrink-0 cursor-pointer pt-0.5">
           <input type="checkbox" data-avail-toggle <%= dayOn ? "checked" : "" %>
                  class="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-          <span class="text-sm text-slate-700"><%= t("app.weekday." + pair[1]) %></span>
+          <span class="text-sm text-slate-700"><%= t(pair[1]) %></span>
         </label>
         <span class="text-xs text-slate-400 pt-1" data-avail-off <%= dayOn ? "hidden" : "" %>>—</span>
         <div class="flex-1 min-w-[200px]" data-avail-body <%= dayOn ? "" : "hidden" %>>
