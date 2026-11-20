@@ -52,6 +52,7 @@ export async function geoRoutes(app: FastifyInstance) {
       const suggestions = await fetchGeoSuggestions({
         provider: env.GEO_PROVIDER,
         baseUrl: env.GEO_PROVIDER_BASE_URL,
+        packDir: env.GEO_PACK_DIR,
         query: q,
         lang,
         limit: 5,

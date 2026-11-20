@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, ne, or, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink, mkdtemp, rm } from "node:fs/promises";
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -41,6 +41,7 @@ import {
   RestoreNeedsConfirmationError, RESTORE_BLOCKED_AUDIT_ACTION, type BackupBundle, type TableAtRisk,
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
+import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
 import { getMicrosoftCalendarConfig, microsoftClientIdSchema, setMicrosoftCalendarClientId } from "../lib/calendar_sync/config.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
@@ -1885,6 +1886,39 @@ export async function adminRoutes(app: FastifyInstance) {
   // 页面上「包含 / 不包含哪些表」直接从代码里的两张清单渲染。以前写在语言包里，
   // 清单加了十几张表、八门语言的那句话还停在最早的 15 张 —— 站长照着页面判断
   // 「我的预约在不在备份里」，得到的是错的答案。
+  // ---------- 地址包（自建地址库） ----------
+  // GEO_PACK_DIR 里的包由 DGX 侧管线产出、经单独同步通道落盘；这里只读：
+  // 列表页把 manifest 的行数 / sha256 / 生成时间摆出来，下载走白名单 +
+  // 流式响应（全国包 9.47 GiB，绝不整包读进内存），每次下载记审计。
+  app.get("/admin/geo-packs", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const listing = await listGeoPacks(env.GEO_PACK_DIR);
+    return reply.view("admin/geo-packs", {
+      title: "地址包 · 管理后台",
+      user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
+      activeNav: "/admin/geo-packs",
+      listing,
+      provider: env.GEO_PROVIDER,
+    });
+  });
+
+  app.get("/admin/geo-packs/download", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    const parsed = z.object({ file: z.string().min(1).max(200) }).safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send("bad file");
+    const hit = await resolveGeoPackDownload(env.GEO_PACK_DIR, parsed.data.file);
+    if (!hit) return reply.code(404).send("not found");
+    await audit(req, u.id, "geo_pack.download", {
+      targetType: "geo_pack", targetId: hit.name, details: { bytes: hit.bytes },
+    });
+    reply.header("Content-Type", "application/octet-stream");
+    reply.header("Content-Length", String(hit.bytes));
+    reply.header("Content-Disposition", `attachment; filename="${path.basename(hit.name)}"`);
+    return reply.send(createReadStream(hit.full));
+  });
+
   const backupPage = (req: FastifyRequest, reply: FastifyReply, u: schema.User, extra: {
     flash?: { error?: string; success?: string };
     restoreBlocked?: { tables: TableAtRisk[]; confirmValue: string } | null;

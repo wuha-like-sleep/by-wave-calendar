@@ -28,6 +28,12 @@ export interface GeoSuggestion {
   country?: string;
   lat?: number;
   lon?: number;
+  /** 自建地址包专用：这条建议命中的具体单元号（用户在查询里点名了
+   *  某个单元时才带）。 */
+  unit?: string;
+  /** 自建地址包专用：同一基础地址折叠进来的全部单元号（响应层折叠，
+   *  客户端可展开选具体单元）。 */
+  units?: string[];
 }
 
 const PHOTON_LANGS = new Set(["de", "en", "fr"]);
@@ -110,15 +116,27 @@ export interface FetchGeoArgs {
   limit: number;
   timeoutMs: number;
   fetchImpl?: typeof fetch;
+  /** provider = "pack" 时的本地包目录（GEO_PACK_DIR）。 */
+  packDir?: string | null;
 }
 
-/** 上游分发：目前只有 photon 一个适配器。未知 provider 返回空数组
- *  （而不是抛错）——配置写错时在线建议静默消失，本地建议不受影响，
- *  和「上游挂了」的降级口径一致。 */
+/** 上游分发。未知 provider 返回空数组（而不是抛错）——配置写错时
+ *  在线建议静默消失，本地建议不受影响，和「上游挂了」的降级口径一致。
+ *  provider = "pack"：先查自建地址包；包没配 / 打不开 / 查不到时
+ *  回落 Photon（baseUrl）——部署上没放包的环境行为与纯 photon 一致。 */
 export async function fetchGeoSuggestions(args: FetchGeoArgs): Promise<GeoSuggestion[]> {
   switch (args.provider) {
     case "photon":
       return fetchPhotonSuggestions(args);
+    case "pack": {
+      const { fetchPackSuggestions } = await import("./geo_pack.js");
+      const local = await fetchPackSuggestions({
+        packDir: args.packDir,
+        query: args.query,
+        limit: args.limit,
+      });
+      return local.length > 0 ? local : fetchPhotonSuggestions(args);
+    }
     default:
       return [];
   }
