@@ -33,6 +33,7 @@ import { pushRoutes } from "./routes/push.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { bookingRoutes } from "./routes/booking.js";
 import { accountRoutes } from "./routes/accounts.js";
+import { geoRoutes } from "./routes/geo.js";
 import { oauthServerRoutes } from "./web/oauth_server.js";
 import { icsRoutes } from "./routes/ics.js";
 import { webRoutes } from "./web/index.js";
@@ -788,6 +789,7 @@ for (const prefix of ["/api", "/api/v1"]) {
   await app.register(notificationRoutes, { prefix });
   await app.register(bookingRoutes, { prefix });
   await app.register(accountRoutes, { prefix });
+  await app.register(geoRoutes, { prefix });
 }
 // QR scan-login approve pages (/desktop-pair/:code and /web-pair/:code)
 // MUST be at root — phone cameras open the QR-encoded URL verbatim and

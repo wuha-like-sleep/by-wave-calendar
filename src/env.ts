@@ -52,6 +52,10 @@ const schema = z.object({
   // 取的是宽松档：Google Calendar API 的单用户配额就是 600 次/分钟，
   // 正常同步脚本一个数量级也碰不到，只对失控循环和聚合滥用生效。
   RATE_LIMIT_API_TOKEN_PER_MINUTE: z.coerce.number().int().positive().default(600),
+  // 地址联想的在线兜底（Photon / OpenStreetMap）上游地址。默认走
+  // Komoot 的公共实例；自托管想换自建 Photon 时改这里。只是建议来源，
+  // 不是数据源——查不到 / 超时一律静默退回本地地址簿，不影响保存。
+  PHOTON_BASE_URL: z.string().url().default("https://photon.komoot.io"),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
   // subscriptions, one-shot URL imports, and — defense-in-depth — outbound
