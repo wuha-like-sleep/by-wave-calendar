@@ -31,7 +31,7 @@ import { eq } from "drizzle-orm";
 import { ensureSchema, resetDb, db, schema, makeUser, makeCalendar, loginAs } from "./harness.js";
 
 process.env.PUBLIC_BASE_URL ??= "http://localhost:3000";
-process.env.DATABASE_URL ??=<redacted>
+process.env.DATABASE_URL ??= "postgres://integration-test/unused";
 process.env.SESSION_SECRET ??= "0123456789abcdef0123456789abcdef0123456789";
 
 const { webRoutes } = await import("../../src/web/index.js");
