@@ -253,4 +253,21 @@
     <string name="booking_schedule_timezone">Fuseau des disponibilités : %1$s. Les réservations utilisent le fuseau de votre appareil.</string>
     <string name="event_detail_display_timezone">Fuseau affiché</string>
     <string name="event_detail_source_timezone">Fuseau de l’événement</string>
+    <string name="offline_title">Synchronisation en attente</string>
+    <string name="offline_back">Retour</string>
+    <string name="offline_bar_pending">%1$d modifications en attente de synchronisation</string>
+    <string name="offline_bar_attention">%1$d modifications requièrent votre décision</string>
+    <string name="offline_empty_title">Tout est synchronisé</string>
+    <string name="offline_empty_body">Les modifications hors ligne sont d'abord enregistrées sur cet appareil, puis envoyées automatiquement au retour de la connexion.</string>
+    <string name="offline_kind_create">Nouvel événement</string>
+    <string name="offline_kind_update">Événement modifié</string>
+    <string name="offline_kind_delete">Événement supprimé</string>
+    <string name="offline_state_pending">En attente de synchronisation — envoi automatique au retour de la connexion</string>
+    <string name="offline_attention_default_reason">Le serveur a refusé cette modification.</string>
+    <string name="offline_action_keep_mine">Garder la mienne</string>
+    <string name="offline_action_use_server">Utiliser la version du serveur</string>
+    <string name="offline_action_discard">Abandonner</string>
+    <string name="offline_detail_label">État de synchronisation</string>
+    <string name="offline_detail_value">Enregistré sur cet appareil — en attente de synchronisation</string>
+    <string name="offline_block_badge">Non synchronisé</string>
 </resources>

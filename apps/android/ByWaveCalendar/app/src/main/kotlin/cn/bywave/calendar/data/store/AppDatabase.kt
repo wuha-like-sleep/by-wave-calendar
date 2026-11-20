@@ -12,13 +12,18 @@ import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 
 @Database(
-    entities = [EventEntity::class, CalendarEntity::class],
-    version = 2,  // v2: added profileId column + composite key on calendars
+    entities = [EventEntity::class, CalendarEntity::class, PendingOpEntity::class],
+    version = 3,  // v3: pending_ops（离线写队列）。仍走 destructive 回退：
+                  // 升级丢的是可重拉的事件缓存；队列在升级那一刻若非空
+                  // 会一并丢——与既有「未到 1.0 不写迁移」的取舍一致，
+                  // 且队列条目对应的本地改动本就只在缓存里，缓存清了
+                  // 条目留着反而会把不存在的事件往服务端推。
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun calendarDao(): CalendarDao
+    abstract fun pendingOpDao(): PendingOpDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null

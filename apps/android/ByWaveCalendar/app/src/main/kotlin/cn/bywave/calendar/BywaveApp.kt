@@ -40,6 +40,19 @@ class BywaveApp : Application() {
         profiles.onPassiveRemoval = { gone ->
             appScope.launch { runCatching { repository.wipeProfileFully(gone) } }
         }
+        // 离线队列的「网络恢复」触发点：系统告诉我们有可用网络了，
+        // 就把当前账号攒着的待同步改动推一轮。回前台（日历页轮询）
+        // 和每次拉取成功后也会各踢一脚，这里是最及时的那一路。
+        val connectivity = getSystemService(android.net.ConnectivityManager::class.java)
+        connectivity?.registerDefaultNetworkCallback(
+            object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    appScope.launch {
+                        runCatching { profiles.active()?.let { repository.offline.replay(it) } }
+                    }
+                }
+            },
+        )
     }
 
     /** 不跟任何页面同生共死的后台活儿（清理被踢掉的账号这种）。 */

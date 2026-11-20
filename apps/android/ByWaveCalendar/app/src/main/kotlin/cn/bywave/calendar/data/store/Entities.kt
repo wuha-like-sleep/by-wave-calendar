@@ -71,6 +71,28 @@ data class EventEntity(
     }
 }
 
+/**
+ * 离线写队列的一条。整条 PendingOp 序列化成 JSON 存 payload 一列，
+ * 表结构不随队列字段演进而变；accountKey / seq / state / eventId
+ * 冗余成列是为了能直接按账号查、按顺序读、按状态计数，不必把整表
+ * 解出来再过滤。
+ *
+ * 这张表**不**跟随账号的事件缓存一起清：退出登录清的是 events /
+ * calendars（见 AppDatabase.wipeProfile），队列是用户还没送出去的
+ * 改动，清掉等于丢数据。账号被彻底移除时由队列引擎按 accountKey
+ * 单独清（见 EventRepository）。
+ */
+@Entity(tableName = "pending_ops")
+data class PendingOpEntity(
+    @PrimaryKey val id: String,
+    val accountKey: String,
+    val seq: Long,
+    val eventId: String,
+    val state: String,               // PendingOpState.name
+    val summary: String,
+    val payload: String,             // PendingOp 的 JSON 全文
+)
+
 @Entity(tableName = "calendars", primaryKeys = ["profileId", "id"])
 data class CalendarEntity(
     val profileId: String,

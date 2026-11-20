@@ -23,6 +23,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import cn.bywave.calendar.ui.offline.PendingSyncBar
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
@@ -93,6 +94,8 @@ fun CalendarScreen(
     /** 「某账号已被登出」提示条上的「重新登录」：登录页要预填这个账号，不是一张空白页。 */
     onSignInAgain: (SignedOutNotice) -> Unit,
     onOpenSearch: () -> Unit,
+    /** 离线队列页：待同步指示条点进去逐条看 / 裁决待处理。 */
+    onOpenOfflineQueue: () -> Unit,
     vm: CalendarViewModel = viewModel(),
 ) {
     val profiles = remember { BywaveApp.instance.profiles }
@@ -103,6 +106,7 @@ fun CalendarScreen(
     val signedOutNotices by profiles.signedOutNotices.collectAsState()
 
     val state by vm.state.collectAsState()
+    val pendingOps by vm.pendingOps.collectAsState()
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(vm, lifecycleOwner, activeId) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -267,6 +271,17 @@ fun CalendarScreen(
                         currentEmail = active?.email,
                         onSignInAgain = { onSignInAgain(notice) },
                         onDismiss = { profiles.dismissSignedOutNotice(notice) },
+                    )
+                }
+                if (pendingOps.isNotEmpty()) {
+                    PendingSyncBar(
+                        pendingCount = pendingOps.count {
+                            it.state == cn.bywave.calendar.sync.PendingOpState.PENDING
+                        },
+                        attentionCount = pendingOps.count {
+                            it.state == cn.bywave.calendar.sync.PendingOpState.ATTENTION
+                        },
+                        onClick = onOpenOfflineQueue,
                     )
                 }
             },

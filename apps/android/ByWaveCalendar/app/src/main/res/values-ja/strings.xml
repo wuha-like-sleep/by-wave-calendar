@@ -253,4 +253,21 @@
     <string name="booking_schedule_timezone">予約枠のタイムゾーン：%1$s。予約時刻は端末のタイムゾーンで表示します。</string>
     <string name="event_detail_display_timezone">表示タイムゾーン</string>
     <string name="event_detail_source_timezone">予定のタイムゾーン</string>
+    <string name="offline_title">同期待ち</string>
+    <string name="offline_back">戻る</string>
+    <string name="offline_bar_pending">%1$d 件の変更が同期待ちです</string>
+    <string name="offline_bar_attention">%1$d 件の変更に判断が必要です</string>
+    <string name="offline_empty_title">すべて同期済み</string>
+    <string name="offline_empty_body">オフラインでの変更はまずこのデバイスに保存され、接続が回復すると自動で送信されます。</string>
+    <string name="offline_kind_create">新規イベント</string>
+    <string name="offline_kind_update">イベントの編集</string>
+    <string name="offline_kind_delete">イベントの削除</string>
+    <string name="offline_state_pending">同期待ち — 接続回復時に自動送信されます</string>
+    <string name="offline_attention_default_reason">サーバーがこの変更を拒否しました。</string>
+    <string name="offline_action_keep_mine">自分の変更を保持</string>
+    <string name="offline_action_use_server">サーバー側を採用</string>
+    <string name="offline_action_discard">破棄</string>
+    <string name="offline_detail_label">同期状態</string>
+    <string name="offline_detail_value">このデバイスに保存済み — 同期待ち</string>
+    <string name="offline_block_badge">同期待ち</string>
 </resources>

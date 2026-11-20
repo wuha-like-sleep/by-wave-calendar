@@ -716,19 +716,29 @@ class EventEditViewModel : ViewModel() {
     private suspend fun doSave(s: EventEditUiState, scope: String?, recurrenceId: String?) {
         try {
             val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
-            val client = ApiClient.forProfile(profile, profiles)
 
             val zone = ZoneId.systemDefault()
 
             var created: EventDTO? = null
             if (s.isEdit) {
                 val body = s.buildUpdateInput(scope, recurrenceId, zone)
-                client.api.updateEvent(s.sourceId!!, body)
+                // 走离线队列：本地先改 + 入队，有网当场重放。baseStartsAt
+                // 是编辑打开时那一次发生的 startsAt，重放合并时靠它把
+                // 时间字段对准正确的那一行。
+                app.repository.offline.submitUpdate(
+                    profile, s.sourceId!!, body,
+                    summary = s.summary,
+                    baseStartsAt = s.sourceStartsAt,
+                )
             } else {
                 // buildCreateInput carries the once-per-open clientUid
                 // (retried saves collapse onto the first server row)
                 // and the recurrence rule — duplicates keep repeating.
-                created = client.api.createEvent(s.buildCreateInput(zone))
+                // 队列重放同样复用这个 clientUid，服务端按 uid 幂等，
+                // 断网重试不会建出重复事件。
+                created = app.repository.offline.submitCreate(
+                    profile, s.buildCreateInput(zone), s.clientUid ?: newClientUid(),
+                )
             }
             // Feed the create-default memory: the next new event
             // starts on the calendar this save just used (for an
@@ -763,8 +773,8 @@ class EventEditViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
-                val client = ApiClient.forProfile(profile, profiles)
-                client.api.deleteEvent(id, scope, recurrenceId)
+                // 同样走离线队列：本地立刻消失，没网排队等恢复。
+                app.repository.offline.submitDelete(profile, id, scope, recurrenceId)
                 _state.update { it.copy(deleting = false, finished = true) }
             } catch (e: CancellationException) {
                 throw e

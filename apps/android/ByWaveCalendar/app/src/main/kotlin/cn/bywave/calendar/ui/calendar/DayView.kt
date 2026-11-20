@@ -142,6 +142,14 @@ private fun EventRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )
+            if (event.pendingSync) {
+                Text(
+                    text = stringResource(cn.bywave.calendar.R.string.offline_block_badge),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                    maxLines = 1,
+                )
+            }
             if (cal != null) {
                 Text(
                     text = cal,

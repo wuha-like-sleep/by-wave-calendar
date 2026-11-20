@@ -263,4 +263,21 @@
     <string name="booking_schedule_timezone">排期時區：%1$s；預約時間依裝置時區顯示。</string>
     <string name="event_detail_display_timezone">顯示時區</string>
     <string name="event_detail_source_timezone">行程時區</string>
+    <string name="offline_title">待同步</string>
+    <string name="offline_back">返回</string>
+    <string name="offline_bar_pending">%1$d 項變更待同步</string>
+    <string name="offline_bar_attention">%1$d 項變更需要你處理</string>
+    <string name="offline_empty_title">全部已同步</string>
+    <string name="offline_empty_body">離線時做的變更會先保存在這台裝置上，網路恢復後自動傳送。</string>
+    <string name="offline_kind_create">新建事件</string>
+    <string name="offline_kind_update">修改事件</string>
+    <string name="offline_kind_delete">刪除事件</string>
+    <string name="offline_state_pending">待同步，網路恢復後自動傳送</string>
+    <string name="offline_attention_default_reason">伺服器拒絕了這項變更。</string>
+    <string name="offline_action_keep_mine">保留我的修改</string>
+    <string name="offline_action_use_server">採用伺服器版本</string>
+    <string name="offline_action_discard">放棄</string>
+    <string name="offline_detail_label">同步狀態</string>
+    <string name="offline_detail_value">已保存在本機，待同步</string>
+    <string name="offline_block_badge">待同步</string>
 </resources>

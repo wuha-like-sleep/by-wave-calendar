@@ -253,4 +253,21 @@
     <string name="booking_schedule_timezone">Zona de disponibilidad: %1$s. Las reservas se muestran en la zona horaria del dispositivo.</string>
     <string name="event_detail_display_timezone">Zona de visualización</string>
     <string name="event_detail_source_timezone">Zona del evento</string>
+    <string name="offline_title">Sincronización pendiente</string>
+    <string name="offline_back">Atrás</string>
+    <string name="offline_bar_pending">%1$d cambios en espera de sincronización</string>
+    <string name="offline_bar_attention">%1$d cambios necesitan tu decisión</string>
+    <string name="offline_empty_title">Todo sincronizado</string>
+    <string name="offline_empty_body">Los cambios sin conexión se guardan primero en este dispositivo y se envían automáticamente al recuperar la conexión.</string>
+    <string name="offline_kind_create">Evento nuevo</string>
+    <string name="offline_kind_update">Evento editado</string>
+    <string name="offline_kind_delete">Evento eliminado</string>
+    <string name="offline_state_pending">En espera de sincronización: se enviará automáticamente al recuperar la conexión</string>
+    <string name="offline_attention_default_reason">El servidor rechazó este cambio.</string>
+    <string name="offline_action_keep_mine">Conservar el mío</string>
+    <string name="offline_action_use_server">Usar la versión del servidor</string>
+    <string name="offline_action_discard">Descartar</string>
+    <string name="offline_detail_label">Estado de sincronización</string>
+    <string name="offline_detail_value">Guardado en este dispositivo: en espera de sincronización</string>
+    <string name="offline_block_badge">Sin sincronizar</string>
 </resources>

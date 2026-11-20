@@ -322,6 +322,15 @@ private fun AppRoot(
                     }
                 },
                 onOpenSearch = { nav.navigate("search") },
+                onOpenOfflineQueue = { nav.navigate("offline_queue") },
+            )
+        }
+
+        composable("offline_queue") {
+            val calVm: CalendarViewModel = viewModel()
+            cn.bywave.calendar.ui.offline.OfflineQueueScreen(
+                onBack = { nav.popBackStack() },
+                vm = calVm,
             )
         }
 

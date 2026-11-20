@@ -15,6 +15,8 @@ import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
@@ -150,6 +152,16 @@ class CalendarViewModel : ViewModel() {
      *  the occurrence's startsAt as recurrenceId — server defaults a
      *  missing scope to "series", which would silently nuke the whole
      *  recurring set. (Was the v0.8.2 silent-data-loss bug.) */
+    /** 当前账号的离线队列全部条目（含待处理）。日历页的待同步指示
+     *  和队列页都读它。 */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val pendingOps: StateFlow<List<cn.bywave.calendar.sync.PendingOp>> =
+        profiles.activeId.flatMapLatest { activeId ->
+            val profile = profiles.profiles.value.firstOrNull { it.id == activeId }
+            if (profile == null) flowOf(emptyList())
+            else repository.offline.observeFor(profile)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     fun deleteEvent(id: String, scope: String? = null, recurrenceId: String? = null) {
         val profile = profiles.active() ?: return
         val deletion = ConfirmedEventDeletion(id, scope, recurrenceId)
@@ -158,21 +170,17 @@ class CalendarViewModel : ViewModel() {
         _state.update { it.copy(errorMessage = null) }
         viewModelScope.launch {
             try {
-                val client = ApiClient.forProfile(profile, profiles)
-                client.api.deleteEvent(id, scope, recurrenceId)
-                // A subsequent refresh may be slow/offline; the acknowledged
-                // deletion should disappear now, without waiting for that GET.
-                try {
-                    repository.applyConfirmedDeletion(profile, deletion)
-                } catch (e: kotlinx.coroutines.CancellationException) { throw e
-                } catch (_: Exception) { /* Refresh retries a failed cache write. */ }
+                // 走离线队列：本地行立刻删掉、条目入队，有网当场重放
+                // 掉，没网等恢复。以前这里直连 API，断网删事件只会
+                // 弹一个报错、事件还留在原地——用户以为删了其实没删，
+                // 或者反过来根本删不动。
+                repository.offline.submitDelete(profile, id, scope, recurrenceId)
                 if (profiles.activeId.value != profile.id) return@launch
                 undoProfileId = profile.id
                 // Offer undo only for plain (non-recurring) deletes; restoring a
                 // scoped recurring delete (EXDATE / split) by id wouldn't cleanly
                 // reverse it, so we don't tempt the user with a broken undo.
                 if (scope == null) _state.update { it.copy(undoDeleteId = id) }
-                load()
             } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) {
                 if (profiles.activeId.value != profile.id) return@launch
@@ -183,13 +191,16 @@ class CalendarViewModel : ViewModel() {
         }
     }
 
-    /** Undo the last non-recurring delete via the restore endpoint. */
+    /** Undo the last non-recurring delete. Still queued locally → just
+     *  cancel the queue entry and put the rows back, no network at all.
+     *  Already synced → the restore endpoint (server soft delete). */
     fun restoreLastDelete() {
         val id = _state.value.undoDeleteId ?: return
         val profile = profiles.active()?.takeIf { it.id == undoProfileId } ?: return
         _state.update { it.copy(undoDeleteId = null) }
         viewModelScope.launch {
             try {
+                if (repository.offline.cancelPendingDelete(profile, id)) return@launch
                 val client = ApiClient.forProfile(profile, profiles)
                 client.api.restoreEvent(id)
                 if (profiles.activeId.value == profile.id) load()
@@ -198,6 +209,19 @@ class CalendarViewModel : ViewModel() {
                 if (profiles.activeId.value != profile.id) return@launch
                 _state.update { it.copy(errorMessage = app.getString(R.string.cal_err_undo_failed)) }
             }
+        }
+    }
+
+    /** 队列页逐条裁决待处理条目。裁决后刷新一次：采用服务端版本 /
+     *  放弃要靠窗口拉取把本地行覆盖回正，保留我的修改靠重放本身。 */
+    fun resolveAttention(
+        opId: String,
+        resolution: cn.bywave.calendar.data.store.AttentionResolution,
+    ) {
+        val profile = profiles.active() ?: return
+        viewModelScope.launch {
+            runCatching { repository.offline.resolveAttention(profile, opId, resolution) }
+            if (profiles.activeId.value == profile.id) load()
         }
     }
 
@@ -264,6 +288,12 @@ class CalendarViewModel : ViewModel() {
                     fromIso = ISO.format(fromInstant.atZone(zone)),
                     toIso = ISO.format(toInstant.atZone(zone)),
                 )
+
+                // 拉取成功 = 网络是通的：顺手把离线队列往前推一轮
+                //（回前台轮询兜底触发点之一）。
+                profiles.active()?.let { activeProfile ->
+                    runCatching { repository.offline.replay(activeProfile) }
+                }
 
                 if (profiles.activeId.value != loadingProfile) return@launch
                 _state.update {

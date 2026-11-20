@@ -66,12 +66,26 @@ class EventRepository(
         if (activeId == null) {
             flowOf(CacheSnapshot(emptyList(), emptyList()))
         } else {
+            val profile = profiles.profiles.value.firstOrNull { it.id == activeId }
+            val pendingFlow = if (profile != null) {
+                offline.observeFor(profile)
+            } else {
+                flowOf(emptyList())
+            }
             combine(
                 db.eventDao().observeForProfile(activeId),
                 db.calendarDao().observeForProfile(activeId),
-            ) { eventRows, calendarRows ->
+                pendingFlow,
+            ) { eventRows, calendarRows, pendingOps ->
+                // 有未同步条目的事件打上 pendingSync，界面据此显示
+                // 「待同步」——本地行已经是改后的样子，但不能让用户
+                // 以为它已经到了服务端。
+                val pendingIds = pendingOps.map { it.eventId }.toSet()
                 CacheSnapshot(
-                    events = eventRows.map { it.toDto(json) },
+                    events = eventRows.map { row ->
+                        val dto = row.toDto(json)
+                        if (dto.id in pendingIds) dto.copy(pendingSync = true) else dto
+                    },
                     calendars = calendarRows.map { it.toDto() },
                 )
             }
@@ -122,6 +136,10 @@ class EventRepository(
     private val fetchMutex = Mutex()
     private val snapshotGate = SnapshotMutationGate()
 
+    /** 离线写队列引擎。建 / 改 / 删先经它落本地再重放，窗口拉取
+     *  时也由它把未同步条目合并回展示集。 */
+    val offline: OfflineQueue = OfflineQueue(db, profiles, snapshotGate, json)
+
     suspend fun fetchAndCache(fromIso: String, toIso: String): Unit = fetchMutex.withLock {
         val profile = profiles.active() ?: error("not signed in")
         val revision = snapshotGate.capture()
@@ -143,6 +161,12 @@ class EventRepository(
         httpResp.headers()["ETag"]?.let { etagPrefs.edit().putString(key, it).apply() }
         snapshotGate.applySnapshot(revision, relevant = { profiles.active()?.id == profile.id }) {
             currentCoroutineContext().ensureActive()
+            // 未同步条目合并：服务端窗口是权威底稿，但本地还没送出去的
+            // 改动不能被这次替换冲掉（新建会消失、改的会弹回、删的会
+            // 复活）。合并规则在 OfflineQueue.mergeServerEvents。
+            val pendingOps = offline.pendingFor(profile)
+            val previousFull = db.eventDao().listForProfile(profile.id).map { it.toDto(json) }
+            val mergedEvents = offline.mergeServerEvents(resp.events, pendingOps, previousFull)
             val previousEvents = db.withTransaction {
                 // Alarm identity needs no optional metadata. A corrupt old
                 // extraJson must not prevent replacing the cache.
@@ -150,7 +174,7 @@ class EventRepository(
                     .map { it.copy(extraJson = null).toDto(json) }
                 db.eventDao().replaceForProfile(
                     profile.id,
-                    resp.events.map { EventEntity.from(it, profile.id, json) },
+                    mergedEvents.map { EventEntity.from(it, profile.id, json) },
                 )
                 db.calendarDao().replaceForProfile(
                     profile.id,
@@ -171,11 +195,11 @@ class EventRepository(
             currentCoroutineContext().ensureActive()
             if (profiles.active()?.id != profile.id) return@applySnapshot
             if (current.mirrorToSystemCalendar) {
-                runCatching { mirror.mirror(profile, resp.calendars, resp.events, selectedCalendars) }
+                runCatching { mirror.mirror(profile, resp.calendars, mergedEvents, selectedCalendars) }
             }
             if (current.remindersEnabled) {
                 runCatching {
-                    reminders.reschedule(profile, resp.events, current.reminderLeadMinutes, resp.calendars)
+                    reminders.reschedule(profile, mergedEvents, current.reminderLeadMinutes, resp.calendars)
                 }
             }
         }
