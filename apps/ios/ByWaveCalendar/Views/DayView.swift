@@ -45,6 +45,7 @@ struct DayView: View {
                                 } : nil,
                                 onDuplicate: { pendingDuplicate = ev },
                                 onCopySummary: {},
+                                isPendingSync: state.offlineSync.pendingIds.contains(ev.id),
                             )
                         }
                     }
@@ -96,18 +97,20 @@ struct DayView: View {
     }
 
     private func delete(id: String) async {
-        do {
-            try await APIClient(state: state).delete("/events/\(id)")
-            // Swipe-delete is only offered for non-recurring events
-            // (onDelete is nil when rrule != nil), so this is always a
-            // restorable soft-delete → offer undo.
-            if let ev = events.first(where: { $0.id == id }) {
-                state.noteEventDeleted(id: id, summary: ev.summary)
-            }
-            onEventChanged()
-        } catch {
-            // Silent — parent reload will surface any inconsistency.
-        }
+        // 走离线队列（本地立刻消失，没网排队）。滑动删除只对非重复
+        // 事件开放，所以快照就是这一行本身，撤销时原样放回。
+        let rows = events.filter { $0.id == id }
+        guard let ev = rows.first else { return }
+        state.offlineSync.enqueueDelete(
+            eventId: id, scope: nil, recurrenceId: nil,
+            snapshot: rows, summary: ev.summary,
+        )
+        await state.offlineSync.replay()
+        // Swipe-delete is only offered for non-recurring events
+        // (onDelete is nil when rrule != nil), so this is always a
+        // restorable soft-delete → offer undo.
+        state.noteEventDeleted(id: id, summary: ev.summary)
+        onEventChanged()
     }
 }
 

@@ -79,6 +79,16 @@ struct EventDetailView: View {
                 }
             }
 
+            // 有还没同步出去的改动时明说：本地已经是改后的样子，
+            // 但别台设备上还看不到，别让用户误以为已经同步了。
+            if state.offlineSync.pendingIds.contains(current.id) {
+                Section {
+                    Label("待同步 — 已保存在本机，网络恢复后自动发送".loc, systemImage: "icloud.slash")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            }
+
             // Time
             Section("时间") {
                 if current.allDay {
@@ -359,30 +369,30 @@ struct EventDetailView: View {
     private func doDelete(scope: RecurringScope?) async {
         deleting = true
         defer { deleting = false }
-        do {
-            let client = APIClient(state: state)
-            // For recurring instance/future scope, the server expects
-            // ?scope=&recurrenceId= as a query string (DELETE has no body).
-            var path = "/events/\(current.id)"
-            if let scope, scope != .series {
-                let f = ISO8601DateFormatter()
-                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-                let recId = f.string(from: current.startsAt)
-                let encoded = recId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? recId
-                path += "?scope=\(scope.rawValue)&recurrenceId=\(encoded)"
-            }
-            try await client.delete(path)
-            // Offer undo only for whole-event (series) deletes — those are
-            // plain soft-deletes the /restore endpoint can reverse.
-            if scope == nil || scope == .series {
-                state.noteEventDeleted(id: current.id, summary: current.summary)
-            }
-            onChanged()
-            dismiss()
-        } catch let e as APIError {
-            errorMessage = e.localizedDescription
-        } catch {
-            errorMessage = error.localizedDescription
+        // 走离线队列：本地立刻消失、条目入队，有网当场重放，没网等
+        // 恢复。以前直连 API，断网删事件只会报错、事件还留在原地。
+        // 作用域参数（instance/future 的 recurrenceId）随条目存，
+        // 重放时按同一口径拼 DELETE 路径。
+        let recId: String? = scope.flatMap { s in
+            guard s != .series else { return nil }
+            let f = ISO8601DateFormatter()
+            f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            return f.string(from: current.startsAt)
         }
+        state.offlineSync.enqueueDelete(
+            eventId: current.id,
+            scope: scope?.rawValue,
+            recurrenceId: recId,
+            snapshot: [current],
+            summary: current.summary,
+        )
+        await state.offlineSync.replay()
+        // Offer undo only for whole-event (series) deletes — those are
+        // plain soft-deletes the /restore endpoint can reverse.
+        if scope == nil || scope == .series {
+            state.noteEventDeleted(id: current.id, summary: current.summary)
+        }
+        onChanged()
+        dismiss()
     }
 }

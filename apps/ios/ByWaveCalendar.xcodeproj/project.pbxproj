@@ -31,6 +31,8 @@
 		1F0001000000000000000046 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000046 /* DevicesView.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
+		1F0001000000000000000047 /* OfflineSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000047 /* OfflineSync.swift */; };
+		1F0001000000000000000048 /* PendingOpsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000048 /* PendingOpsView.swift */; };
 		1F0001000000000000000012 /* EventRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000012 /* EventRowView.swift */; };
 		1F0001000000000000000013 /* DayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000013 /* DayView.swift */; };
 		1F0001000000000000000014 /* WeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000014 /* WeekView.swift */; };
@@ -86,6 +88,8 @@
 		1B0001000000000000000046 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
+		1B0001000000000000000047 /* OfflineSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineSync.swift; sourceTree = "<group>"; };
+		1B0001000000000000000048 /* PendingOpsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingOpsView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000012 /* EventRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRowView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000013 /* DayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DayView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000014 /* WeekView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeekView.swift; sourceTree = "<group>"; };
@@ -191,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				1B0001000000000000000007 /* RootView.swift */,
+				1B0001000000000000000048 /* PendingOpsView.swift */,
 				1B0001000000000000000008 /* SetupView.swift */,
 				1B0001000000000000000009 /* ScannerView.swift */,
 				1B000100000000000000002B /* DesktopPairScannerView.swift */,
@@ -236,6 +241,7 @@
 				1B0001000000000000000010 /* EventKitMirror.swift */,
 				1B0001000000000000000011 /* EventCache.swift */,
 				1B0001000000000000000019 /* LocalNotifications.swift */,
+				1B0001000000000000000047 /* OfflineSync.swift */,
 				1B000100000000000000001A /* PushService.swift */,
 			);
 			path = Sync;
@@ -352,6 +358,8 @@
 				1F000100000000000000002D /* AppleSignIn.swift in Sources */,
 				1F0001000000000000000010 /* EventKitMirror.swift in Sources */,
 				1F0001000000000000000011 /* EventCache.swift in Sources */,
+				1F0001000000000000000047 /* OfflineSync.swift in Sources */,
+				1F0001000000000000000048 /* PendingOpsView.swift in Sources */,
 				1F0001000000000000000012 /* EventRowView.swift in Sources */,
 				1F0001000000000000000013 /* DayView.swift in Sources */,
 				1F0001000000000000000014 /* WeekView.swift in Sources */,
