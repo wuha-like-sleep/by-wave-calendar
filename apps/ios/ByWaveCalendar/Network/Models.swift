@@ -91,6 +91,15 @@ struct EventsResponse: Decodable {
 // 地址串，客户端只管展示与回填）。
 struct GeoSuggestion: Decodable {
     let label: String
+    let name: String?
+    let street: String?
+    let suburb: String?
+    let city: String?
+    let state: String?
+    let postcode: String?
+    let country: String?
+    let lat: Double?
+    let lon: Double?
 }
 
 // GET /api/v1/geo/suggest response。上游失败时服务端回空列表，

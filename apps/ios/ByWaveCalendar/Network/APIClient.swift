@@ -386,7 +386,7 @@ extension APIClient {
     /// 地点联想的在线兜底（服务端代理 Photon）。只在本地地址簿命中
     /// 太少时才调；任何失败都吞成空数组——在线建议拿不到就当没有，
     /// 绝不把本地建议也拖下水。
-    func geoSuggest(query: String, lang: String?) async -> [String] {
+    func geoSuggest(query: String, lang: String?) async -> [GeoSuggestion] {
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         let q = query.addingPercentEncoding(withAllowedCharacters: allowed) ?? query
         var path = "/geo/suggest?q=\(q)"
@@ -395,7 +395,7 @@ extension APIClient {
         }
         do {
             let resp: GeoSuggestResponse = try await get(path)
-            return resp.suggestions.map { $0.label }
+            return resp.suggestions
         } catch {
             return []
         }

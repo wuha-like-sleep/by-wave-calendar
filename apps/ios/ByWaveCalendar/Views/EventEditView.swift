@@ -81,9 +81,11 @@ struct EventEditView: View {
     // 地点联想：本地地址簿命中（输入时同步算）与在线兜底结果（防抖
     // 查回）分开存，界面上要分组区分。
     @State private var localSuggestions: [String] = []
-    @State private var onlineSuggestions: [String] = []
+    @State private var onlineSuggestions: [GeoSuggestion] = []
     @FocusState private var locationFocused: Bool
     @State private var suggestTask: Task<Void, Never>?
+    // 最近一次选中的建议：保存时与最终地点做编辑学习。
+    @State private var pickedLocation: String? = nil
     @State private var description: String
     @State private var startsAt: Date
     @State private var endsAt: Date
@@ -568,6 +570,7 @@ struct EventEditView: View {
                 ForEach(localSuggestions, id: \.self) { suggestion in
                     Button {
                         location = suggestion
+                        pickedLocation = suggestion
                     } label: {
                         Text(suggestion).lineLimit(1).foregroundStyle(.primary)
                     }
@@ -577,12 +580,13 @@ struct EventEditView: View {
                     Text("在线建议")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    ForEach(onlineSuggestions, id: \.self) { suggestion in
+                    ForEach(onlineSuggestions, id: \.label) { suggestion in
                         Button {
-                            location = suggestion
-                            AddressBookStore.recordUse(suggestion)
+                            location = suggestion.label
+                            AddressBookStore.learnOnline(suggestion)
+                            pickedLocation = suggestion.label
                         } label: {
-                            Text(suggestion).lineLimit(1).foregroundStyle(.primary)
+                            Text(suggestion.label).lineLimit(1).foregroundStyle(.primary)
                         }
                         .buttonStyle(.plain)
                     }
@@ -1037,7 +1041,7 @@ struct EventEditView: View {
     /// 地点联想刷新：本地同步算；本地不足 3 条、查询够长、开关开着
     /// 才防抖查在线兜底。输入变了就丢弃在途结果。
     private func refreshSuggestions() {
-        localSuggestions = AddressBook.match(AddressBookStore.entries(), query: location, limit: 5)
+        localSuggestions = AddressBook.match(AddressBookStore.entries(), query: location, title: summary, limit: 5)
         onlineSuggestions = []
         suggestTask?.cancel()
         let q = location.trimmingCharacters(in: .whitespaces)
@@ -1184,8 +1188,12 @@ struct EventEditView: View {
             // init): the next new event starts on the calendar this
             // save just used.
             UserDefaults.standard.set(calendarId, forKey: "lastUsedCalendarId")
-            // 地址簿记一次使用：下次输入这个地点就有联想了。
-            if !location.isEmpty { AddressBookStore.recordUse(location) }
+            // 地址簿学习：选中又改了就更新原条目（编辑学习），
+            // 没选过就按新地址记一次使用。
+            if !location.isEmpty {
+                AddressBookStore.learnFromSave(picked: pickedLocation, saved: location, title: summary)
+            }
+            pickedLocation = nil
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             // 一句话直接保存：记到 AppState，日历页弹「已创建」条
             // （打开 / 撤销）。普通保存不记。
