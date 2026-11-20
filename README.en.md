@@ -2,25 +2,24 @@
 
 <div align="center">
 
-<img src="src/public/icons/icon-512.png" alt="ByWave Calendar" width="96" height="96" />
+<img src="src/public/icons/icon-512.png" alt="ByWave Calendar" width="104" height="104" />
 
 # ByWave Calendar
 
-**A self-hosted calendar-sharing platform · one domain serves Web / PWA / iOS / Android / Desktop / ICS feeds / CalDAV / SSO / third-party API**
+**A self-hosted calendar-sharing platform**
 
-<br/>
+One domain serves **Web / PWA / iOS / Android / Desktop**,
+plus standard **CalDAV · ICS feeds · SSO · third-party API** endpoints — your data stays on your own server, locked into no SaaS.
 
-[![CI](https://github.com/wuha-like-sleep/by-wave-calendar/actions/workflows/ci.yml/badge.svg)](https://github.com/wuha-like-sleep/by-wave-calendar/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/github/package-json/v/wuha-like-sleep/by-wave-calendar?label=server&color=2563eb)](package.json)
 [![Platforms](https://img.shields.io/badge/platforms-Web%20·%20iOS%20·%20Android%20·%20macOS%20·%20Windows%20·%20Linux-6366f1.svg)](#-download)
 [![Node](https://img.shields.io/badge/Node-≥22.12.0-43853d?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](https://github.com/wuha-like-sleep/by-wave-calendar/pulls)
 
-[Live Demo](https://rl.lz-ss.com) · [Download](#-download) · [Features](#-features) · [Self-host](#-self-host-on-aapanel) · [Architecture](#-tech-stack)
+[Live Demo](https://rl.lz-ss.com) · [Download](#-download) · [Features](#-features) · [Self-host](#-self-host-on-aapanel) · [Architecture](#-tech-stack) · [Gitee mirror](https://gitee.com/zhaorunsen/by-wave-calendar)
 
 </div>
 
@@ -30,8 +29,8 @@
 
 ByWave Calendar is a **calendar-sharing platform that runs on your own server**. A single domain serves all of:
 
-- A modern **web calendar** (installable as a PWA)
-- Native **iOS / Android / macOS / Windows** clients
+- A modern **web calendar** (installable as a PWA), with an in-app notification inbox, one-sentence event creation, and dark mode
+- Native **iOS / Android / macOS / Windows / Linux** clients, with offline editing
 - Standard protocol endpoints: two-way **CalDAV** sync, **ICS** feed publishing, and a **REST API**
 
 It is built for individuals, teams, and small organisations who want a calendar that **depends on no external SaaS, stays under their control, and is easy to back up**. All third-party front-end assets are bundled locally, so it **installs directly on servers in mainland China with no foreign CDN dependency**. MIT-licensed.
@@ -42,11 +41,15 @@ It is built for individuals, teams, and small organisations who want a calendar 
 
 <table>
 <tr>
-<td width="62%"><img src="docs/screenshots/landing.png" alt="Web" /><br/><sub>Web · landing</sub></td>
-<td width="38%"><img src="docs/screenshots/ios-day.png" alt="iOS" /><br/><sub>Native iOS app</sub></td>
+<td colspan="2"><img src="docs/screenshots/calendar-week.png" alt="Web calendar, week view" /><br/><sub><b>Web calendar · week view</b> — one-sentence quick add at the top (just say the time and place), notification bell with an unread count</sub></td>
 </tr>
 <tr>
-<td colspan="2"><img src="docs/screenshots/embed-widget.png" alt="Embed" /><br/><sub>Embeddable read-only widget (<code>/embed/&lt;token&gt;</code>, drop into any page via iframe)</sub></td>
+<td width="55%"><img src="docs/screenshots/landing.png" alt="Landing page" /><br/><sub><b>Landing page</b> — features and downloads on one screen</sub></td>
+<td width="45%" align="center"><img src="docs/screenshots/ios-day.png" alt="iOS app" width="270" /><br/><sub><b>Native iOS app</b> — day view; the system calendar syncs two-way over CalDAV</sub></td>
+</tr>
+<tr>
+<td width="55%"><img src="docs/screenshots/notifications.png" alt="Notification inbox" /><br/><sub><b>Notification inbox (dark mode)</b> — bookings, invitations, event changes, and security events in one place, each click opening the relevant page</sub></td>
+<td width="45%"><img src="docs/screenshots/embed-widget.png" alt="Embed widget" /><br/><sub><b>Embeddable read-only widget</b> (<code>/embed/&lt;token&gt;</code>), drop into any page via iframe</sub></td>
 </tr>
 </table>
 
@@ -61,22 +64,27 @@ Current client versions:
 | Platform | Version | Download |
 |---|---|---|
 | 🌐 Web / PWA | — | Just open your ByWave server in a browser; can be installed to the desktop / home screen |
-| 📱 iOS | v1.7.1 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
-| 🤖 Android | v0.12.1 | [Direct APK](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk) · [All releases](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
-| 🍎 macOS | v1.1.2 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.2/ByWaveCalendar-1.1.2-arm64.dmg) — Apple-notarised |
-| 🪟 Windows | v1.1.2 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.2/ByWaveCalendar-1.1.2-x64.msi) |
-| 🐧 Linux | v1.1.2 | [DEB (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.2/bywave-calendar_1.1.2_amd64.deb) |
+| 📱 iOS | v1.8.0 | [App Store](https://apps.apple.com/us/app/bywavecalendar/id6772655143) · [TestFlight Beta](https://testflight.apple.com/join/rkM3hkpX) |
+| 🤖 Android | v0.13.2 | [Direct APK](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.2/bywave-calendar-0.13.2.apk) · [All releases](https://github.com/wuha-like-sleep/by-wave-calendar/releases) |
+| 🍎 macOS | v1.3.3 | [DMG (Apple Silicon)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.3/ByWaveCalendar-1.3.3-arm64-signed.dmg) / [DMG (Intel)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.3/ByWaveCalendar-1.3.3-x64-signed.dmg) |
+| 🪟 Windows | v1.3.3 | [MSI (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.3/ByWaveCalendar-1.3.3-x64.msi) |
+| 🐧 Linux | v1.2.0 | [DEB (x64)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.2.0/bywave-calendar_1.2.0_amd64.deb) |
+
+Downloads and SHA-256 checklists for desktop 1.3.3 are on the [GitHub release page](https://github.com/wuha-like-sleep/by-wave-calendar/releases/tag/desktop-v1.3.3). Both macOS builds are signed and notarised; the Windows installer is not yet signed.
+
+Gitee mirror: [Desktop 1.3.3](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-desktop-v1.3.3) · [Android 0.13.2](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-android-v0.13.2) · [Server 1.9.2](https://gitee.com/zhaorunsen/by-wave-calendar/releases#release-v1.9.2). Every release ships a SHA-256 checklist. Linux stays at 1.2.0 this round.
+Two-way sync with the Windows / macOS system calendars is covered in [System calendar setup](docs/system-calendar-sync.md).
 
 <div align="center">
 
 [![App Store](https://img.shields.io/badge/iOS-App%20Store-000000?logo=apple&logoColor=white&style=for-the-badge)](https://apps.apple.com/us/app/bywavecalendar/id6772655143)
-[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.12.1/bywave-calendar-0.12.1.apk)
-[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.2/ByWaveCalendar-1.1.2-arm64.dmg)
-[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.1.2/ByWaveCalendar-1.1.2-x64.msi)
+[![Download APK](https://img.shields.io/badge/Android-APK-22c55e?logo=android&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/android-v0.13.2/bywave-calendar-0.13.2.apk)
+[![Download DMG](https://img.shields.io/badge/macOS-DMG-000000?logo=apple&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.3/ByWaveCalendar-1.3.3-arm64-signed.dmg)
+[![Download MSI](https://img.shields.io/badge/Windows-MSI-0078d4?logo=windows&logoColor=white&style=for-the-badge)](https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/desktop-v1.3.3/ByWaveCalendar-1.3.3-x64.msi)
 
 </div>
 
-**Android first-install note**: on first install you must allow "install unknown apps from this source" once in system settings — a one-time grant. After that, the app updates itself in-app, with no re-download needed.
+**Android first-install note**: on first install you must allow installs from the corresponding source in system settings; afterwards the app can check for and download updates in-app, with the system still confirming each install.
 
 **Desktop**: built with [Compose Multiplatform](apps/desktop/README.md), **not a browser wrapper** — native Skia rendering, one Kotlin codebase producing Mac / Windows / Linux builds, with Sparkle-style in-place auto-update. See [apps/desktop/README.md](apps/desktop/README.md) for details.
 
@@ -84,38 +92,48 @@ Current client versions:
 
 ## ✨ Features
 
-**Calendars & events**
-- 📅 Web calendar (Toast UI Calendar) with month / week / day views, drag-to-create events, click-a-cell quick add, and a responsive mobile layout
+### Calendars & events
+
+- 📅 Web calendar (Toast UI Calendar) with month / week / day views, drag-to-create events, click-a-cell quick add, a compact editor, and a responsive mobile layout
+- 🗣 **One-sentence event creation**: type "meeting tomorrow at 3pm for two hours" and the time, duration, and recurrence are parsed for you — in Chinese, English, Japanese, and Korean
 - 🔁 Recurring events (RRULE / RFC 5545 expansion) and event reminders
 - 🔍 Global search + a `Cmd+K` command palette that finds events across your own and shared calendars
+- 📍 **Address suggestions**: the location field autocompletes — a local address book remembers places you have used and ranks them by your habits, with online suggestions (based on OpenStreetMap data) as a fallback when local matches run out
+- 📴 **Offline editing**: the iOS / Android / desktop clients keep working offline — creates, edits, and deletes land locally first and replay in order on reconnect, with conflicts resolved item by item
 - 📲 PWA: install to desktop / home screen in one click, offline shell caching, automatic prompt when a new version is available
 
-**Sync & interop**
-- 🔄 **Two-way CalDAV sync** (RFC 4791): add an account directly at `https://your-domain/caldav/` from the iOS system calendar, Apple Calendar.app, or Synology
+### Sync & interop
+
+- 🔄 **Two-way CalDAV sync** (RFC 4791 + RFC 6578 incremental sync): add an account directly at `https://your-domain/caldav/` from the iOS system calendar, Apple Calendar.app, or Synology
 - 📤 **ICS feed publishing** (RFC 5545): every calendar gets a stable read-only link you can drop into Google / Apple / Outlook as a "subscribed calendar"
 - 📥 **ICS import**: four ways — file, one-off URL, recurring URL subscription, or pasted text
+- 🧩 **Embed widget**: a read-only calendar widget (`/embed/<token>`) you can iframe into any web page
 
-**Collaboration**
+### Collaboration & notifications
+
 - 👥 **Calendar invites**: invite collaborators by email; once accepted, the calendar appears in their account
-- 🙋 **Event RSVP**: invites carry "Yes / No / Maybe" plus one-click add to Google / Apple / ByWave
-- 🗓 **Booking links**: publish weekly available slots; others pick a time on a public page to book you, automatically creating an event with attendees
+- 🙋 **Event invitations & RSVP**: invitees reply Yes / Maybe / No from email or the invitations inbox in every client, and can **propose a new time** that the organiser accepts in one click; one-click add to Google / Apple / ByWave
+- 🗓 **Booking links**: publish weekly available slots (edited visually on the web); others pick a time on a public page to book you, automatically creating an event with attendees; bookings can be viewed and cancelled
+- 🔔 **In-app notifications**: a nav bell + inbox collects bookings, invitations, event changes, and security events, each click going to the relevant page; important ones are also delivered as browser push (Web Push / iOS APNs)
 
-**Auth & security**
+### Auth & security
+
 - 🔐 Email + password, plus **Passkey (WebAuthn)**, **TOTP MFA**, and multiple **SSO** providers (OIDC / Keycloak / Okta / Google Workspace)
 - 🛡 Lockout on failed attempts, email verification codes for unrecognised devices, email alerts on Passkey/MFA/password changes, login history, and audit logs
 - 🔑 **App passwords**: CalDAV / client logins never expose your main password
 
-**Integrations & API**
-- 🔌 **Third-party REST API**: admin issues Bearer tokens so Zoom / Notion / n8n / internal systems can read and write calendars directly
+### Integrations & API
+
+- 🔌 **Third-party REST API + self-service tokens**: any user can create their own token under Settings → API Token (password + MFA step-up, read-only by default, with usage statistics, per-token rate limiting, and secure rotation) — no admin round-trip; Zoom / Notion / n8n / internal systems can then read and write calendars directly
 - 🔓 **OAuth 2.0 authorization server** (authorization code + PKCE): let external apps call the API on a user's behalf with their consent
 - 🪝 **Webhooks**: push event changes to external endpoints, with delivery records
-- 🔔 **Web Push** (VAPID / RFC 8030) + iOS APNs push notifications
 
-**Ops & customization**
+### Ops & customization
+
 - ⚙️ **Admin console**: site name / logo / SMTP / SSO / security policy / themes / API / webhooks / audit
-- ♻️ **One-click self-update**: check + update right from the console, with a live progress bar plus automatic restart and refresh
+- ♻️ **One-click self-update**: check + update right from the console, with a live progress bar plus automatic restart and refresh; supports staged rollout and a minimum supported version
 - 💾 **Data backup / restore**: full-table export / import from the console, with a round-trip self-check script
-- 🎨 **Multiple themes**: 7 brand colours + 2 densities, configurable **per user**
+- 🎨 **Themes & dark mode**: 7 brand colours + 2 densities + dark mode (follow system / light / dark, no white flash on switch), configurable **per user**
 - 🌐 **i18n**: the server, iOS, Android, and desktop clients all support **8 languages** with runtime switching — Simplified Chinese / Traditional Chinese / English / Japanese / Korean / Spanish / French / German
 - 🇨🇳 **China-friendly**: third-party front-end assets (HTMX / Toast UI / SimpleWebAuthn / Tailwind) are fully bundled locally, with no foreign CDN
 
@@ -144,7 +162,8 @@ After that, all future updates are done from the web UI: **Admin console -> Upda
 
 📖 The full aaPanel deployment guide (SSL, hot certificate reload, backup/restore verification, CI deploy) is in **[deploy/bt-panel/README.md](deploy/bt-panel/README.md)**.
 
-**First-time configuration order** (configured in the web UI after deploy, not in the code repo):
+<details>
+<summary><b>First-time configuration order</b> (configured in the web UI after deploy, not in the code repo)</summary>
 
 1. Database connection — set once in `.env`
 2. Email SMTP — `/admin/smtp`
@@ -153,9 +172,13 @@ After that, all future updates are done from the web UI: **Admin console -> Upda
 5. Security policy — `/admin/security`
 6. Third-party API / OAuth — `/admin/api`, `/admin/oauth-apps`
 
+</details>
+
 <br/>
 
 ## 🔌 API example
+
+Create a token yourself under Settings → API Token (admins can also issue them from `/admin/api`):
 
 ```bash
 # List all calendars for the user bound to the current token
@@ -195,7 +218,7 @@ The full list of endpoints + curl examples is at the bottom of the `/admin/api` 
 │  /oauth/*     ├─ OAuth 2.0 authorization server (PKCE)     │          │
 │  /admin/*     └─ Admin console (incl. /admin/update)       │          │
 │                                  ▼                                    │
-│              PostgreSQL 16 + Drizzle ORM (~20 tables)               │
+│              PostgreSQL 16 + Drizzle ORM (39 tables)                 │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -253,6 +276,12 @@ by-wave-calendar/
 - [x] i18n (8 languages) across server + iOS + Android + desktop
 - [x] Web Push + iOS APNs notifications
 - [x] Native iOS / Android / desktop clients (macOS DMG / Windows MSI / Linux DEB)
+- [x] In-app notification inbox + browser push
+- [x] Self-service API tokens (usage statistics / per-token rate limiting / rotation)
+- [x] Event-invitation time proposals + invitation inbox in the clients
+- [x] Offline editing queue in the clients
+- [x] Address suggestions (local address book + online fallback)
+- [x] Dark mode (follow system / light / dark)
 - [ ] Full complex RRULE / VTIMEZONE support
 - [ ] OAuth refresh tokens
 
@@ -290,6 +319,7 @@ Code style: TypeScript strict + ESM-only + Drizzle for SQL. Per-client build ins
 
 <sub>This is <strong>our own open-source project</strong>, not a fork. If you find it useful, a ⭐ is appreciated.<br/>
 GitHub: <a href="https://github.com/wuha-like-sleep/by-wave-calendar">wuha-like-sleep/by-wave-calendar</a>
- · Gitee mirror: <a href="https://gitee.com/zhaorunsen/by-wave-calendar">zhaorunsen/by-wave-calendar</a></sub>
+ · Gitee mirror: <a href="https://gitee.com/zhaorunsen/by-wave-calendar">zhaorunsen/by-wave-calendar</a>
+ · Live demo: <a href="https://rl.lz-ss.com">rl.lz-ss.com</a></sub>
 
 </div>
