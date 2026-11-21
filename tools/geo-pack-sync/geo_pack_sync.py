@@ -23,6 +23,7 @@
   python3 geo_pack_sync.py --url https://your-instance.example.com \
       --packs-dir ./packs --token-file ./geo-sync-token \
       [--packs au-tas,au-nt] [--national] [--force] [--chunk-mib 8]
+      [--chunk-kib N]           # 覆盖 --chunk-mib（KiB 粒度，前置 WAF/代理有请求体上限时用）
       [--stop-after-chunks N]   # 测试用：传 N 片后主动停下
 
 环境变量可代替常用参数：BYWAVE_SYNC_URL / BYWAVE_SYNC_TOKEN_FILE。
@@ -104,6 +105,14 @@ def upload_file(client, packs_dir, name, chunk_bytes, meta=None, stop_after=None
     status, session = client.request("POST", "/api/geo-sync/uploads", manifest)
     if status != 201:
         raise RuntimeError(f"open session for {name}: HTTP {status} {session}")
+    if session.get("chunkSize") != chunk_bytes:
+        # 找回的旧会话分片计划与本次要求不一致（例如旧会话是大分片、
+        # 而本次因服务器前置 WAF/代理的请求体上限必须用小分片）：
+        # 中止旧会话并以本次分片大小重开，否则会永远按旧计划续传。
+        client.request("DELETE", f"/api/geo-sync/uploads/{session['uploadId']}")
+        status, session = client.request("POST", "/api/geo-sync/uploads", manifest)
+        if status != 201:
+            raise RuntimeError(f"reopen session for {name}: HTTP {status} {session}")
     upload_id = session["uploadId"]
     chunk_size = session["chunkSize"]
     total = session["chunkCount"]
@@ -176,6 +185,7 @@ def main(argv=None):
     ap.add_argument("--national", action="store_true", help="also sync the national pack (pack-au.sqlite, ~9.5 GiB)")
     ap.add_argument("--force", action="store_true", help="re-upload even if the server sha matches")
     ap.add_argument("--chunk-mib", type=int, default=8)
+    ap.add_argument("--chunk-kib", type=int, default=0, help="chunk size in KiB (overrides --chunk-mib; for servers behind a WAF/proxy with a small request-body limit)")
     ap.add_argument("--stop-after-chunks", type=int, default=0, help="test aid: stop after N pack chunks")
     args = ap.parse_args(argv)
 
@@ -208,7 +218,7 @@ def main(argv=None):
     server_packs = {p["file"]: p for p in listing.get("packs", [])}
     print(f"server {args.url}: {len(server_packs)} active pack(s)")
 
-    chunk_bytes = max(1, args.chunk_mib) * 1024 * 1024
+    chunk_bytes = args.chunk_kib * 1024 if args.chunk_kib else max(1, args.chunk_mib) * 1024 * 1024
     counter = [0]
     results = {}
 
