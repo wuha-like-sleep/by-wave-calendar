@@ -205,6 +205,66 @@ describe("后台获取官方地址包", () => {
     expect(getGeoPackFetchState()).toBeNull();
   });
 
+  it("预检：未装包时每包大小/总下载量与清单一致，非管理员看不到", async () => {
+    const admin = await makeUser("admin2@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const res = await app.inject({
+      method: "GET", url: "/admin/geo-packs/preview",
+      headers: { cookie: s.cookie },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body) as {
+      ok: boolean;
+      preview: {
+        release: string; fileCount: number; pendingFileCount: number;
+        totalBytes: number; totalDownloadBytes: number;
+        packs: Array<{ file: string; bytes: number; rows: number | null; parts: number; installed: boolean; downloadBytes: number }>;
+      };
+    };
+    expect(body.ok).toBe(true);
+    const total = packBuf.length + companion.length + licenceText.length;
+    expect(body.preview.release).toBe("geo-packs-au-vTest");
+    expect(body.preview.fileCount).toBe(3);
+    expect(body.preview.pendingFileCount).toBe(3);
+    expect(body.preview.totalBytes).toBe(total);
+    expect(body.preview.totalDownloadBytes).toBe(total);
+    expect(body.preview.packs).toHaveLength(1);
+    expect(body.preview.packs[0]).toMatchObject({
+      file: "pack-au-ot.sqlite", bytes: packBuf.length, rows: 1, parts: 2, installed: false,
+      downloadBytes: packBuf.length + companion.length,
+    });
+
+    const plain = await makeUser("plain2@example.com");
+    const ps = await loginAs(plain.id);
+    const denied = await app.inject({
+      method: "GET", url: "/admin/geo-packs/preview",
+      headers: { cookie: ps.cookie },
+    });
+    expect(denied.statusCode).not.toBe(200);
+    expect(denied.body).not.toContain("totalDownloadBytes");
+  });
+
+  it("预检：发布清单损坏 → 502 + kind=invalid，页面接口不挂", async () => {
+    const admin = await makeUser("admin3@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const manifestPath = path.join(releaseDir, "geo-pack-release.json");
+    const original = readFileSync(manifestPath, "utf8");
+    try {
+      writeFileSync(manifestPath, "{ this is not a manifest");
+      const res = await app.inject({
+        method: "GET", url: "/admin/geo-packs/preview",
+        headers: { cookie: s.cookie },
+      });
+      expect(res.statusCode).toBe(502);
+      const body = JSON.parse(res.body) as { ok: boolean; kind: string; code: string };
+      expect(body.ok).toBe(false);
+      expect(body.kind).toBe("invalid");
+      expect(body.code).toBe("release_manifest_invalid");
+    } finally {
+      writeFileSync(manifestPath, original);
+    }
+  });
+
   it("管理员一键获取：分卷落位 → suggest 命中 → 再获取全跳过", async () => {
     const admin = await makeUser("admin@example.com", { isAdmin: true });
     const s = await loginAs(admin.id);
@@ -245,5 +305,38 @@ describe("后台获取官方地址包", () => {
     const job2 = await waitForJob();
     expect(job2.status).toBe("done");
     expect(job2.files.find((f) => f.file === "pack-au-ot.sqlite")!.status).toBe("skipped");
+  });
+
+  it("预检：装包后再看，全部已安装、总下载量归零", async () => {
+    const admin = await makeUser("admin4@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    // 先确保包已落位（已装过则任务以跳过完成，幂等）。
+    const res = await app.inject({
+      method: "POST", url: "/admin/geo-packs/fetch",
+      headers: { cookie: s.cookie, "x-csrf-token": s.csrf, "content-type": "application/x-www-form-urlencoded" },
+      payload: `_csrf=${s.csrf}`,
+    });
+    expect(res.statusCode).toBe(302);
+    const job = await waitForJob();
+    expect(job.status).toBe("done");
+
+    const pv = await app.inject({
+      method: "GET", url: "/admin/geo-packs/preview",
+      headers: { cookie: s.cookie },
+    });
+    expect(pv.statusCode).toBe(200);
+    const body = JSON.parse(pv.body) as {
+      ok: boolean;
+      preview: {
+        pendingFileCount: number; totalBytes: number; totalDownloadBytes: number;
+        packs: Array<{ installed: boolean; downloadBytes: number }>;
+      };
+    };
+    expect(body.ok).toBe(true);
+    expect(body.preview.packs[0]!.installed).toBe(true);
+    expect(body.preview.packs[0]!.downloadBytes).toBe(0);
+    expect(body.preview.pendingFileCount).toBe(0);
+    expect(body.preview.totalDownloadBytes).toBe(0);
+    expect(body.preview.totalBytes).toBe(packBuf.length + companion.length + licenceText.length);
   });
 });

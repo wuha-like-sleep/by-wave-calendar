@@ -482,6 +482,109 @@ export async function fetchGeoReleaseFile(args: {
 }
 
 // ---------------------------------------------------------------------------
+// 发布预检（只拉清单，不下载任何包文件）
+// ---------------------------------------------------------------------------
+// 管理员点「获取」之前先看清：这个发布里有哪些包、每个多大、多少
+// 行、本地是否已经装了同版本、这一趟总共还要下多少字节。清单本身
+// 是小文件，走与正式获取完全相同的拉取与严格解析；「已安装」判定
+// 也与获取时的跳过判定同口径（大小 + 整文件 SHA-256 都对得上）。
+// 预检失败不抛裸网络错误：源不可达统一归 release_unreachable，
+// HTTP 与清单非法保留各自的错误码，页面据此给明确文案。
+
+export interface GeoReleasePreviewPack {
+  packId: string;
+  file: string;
+  region: string | null;
+  rows: number | null;
+  /** 包本体（sqlite）的精确字节数。 */
+  bytes: number;
+  /** 分卷数；0 = 单资产发布。 */
+  parts: number;
+  /** 包本体已在本地且大小 + SHA 都对得上。 */
+  installed: boolean;
+  /** 这个包（含其配套文件）还需下载的字节数。 */
+  downloadBytes: number;
+}
+
+export interface GeoReleasePreview {
+  release: string;
+  generatedAt: string | null;
+  baseUrl: string;
+  packs: GeoReleasePreviewPack[];
+  /** 发布计划里的文件总数（共享 + 配套 + 包本体）。 */
+  fileCount: number;
+  /** 其中尚未安装、这次要下载的文件数。 */
+  pendingFileCount: number;
+  /** 全部文件的字节数合计。 */
+  totalBytes: number;
+  /** 未安装部分的字节数合计——点「获取」真正要传的量。 */
+  totalDownloadBytes: number;
+}
+
+async function geoFileInstalled(full: string, bytes: number, sha256: string): Promise<boolean> {
+  return (await fileSize(full)) === bytes && (await sha256File(full)) === sha256;
+}
+
+export async function previewGeoPackRelease(args: {
+  baseUrl?: string;
+  packDir?: string;
+  fetchImpl?: GeoFetchImpl;
+} = {}): Promise<GeoReleasePreview> {
+  const baseUrl = (args.baseUrl ?? resolveGeoPackReleaseBaseUrl()).replace(/\/+$/, "");
+  const packDir = args.packDir ?? resolveGeoPackDir();
+  const fetchImpl = args.fetchImpl ?? defaultFetchImpl;
+  let manifest: GeoReleaseManifest;
+  try {
+    manifest = await readManifest(baseUrl, fetchImpl);
+  } catch (err) {
+    if (err instanceof GeoReleaseError) throw err;
+    throw new GeoReleaseError(
+      "release_unreachable",
+      `release source unreachable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  const plan = releaseFilePlan(manifest);
+  const installedByFile = new Map<string, boolean>();
+  let totalBytes = 0;
+  let totalDownloadBytes = 0;
+  let pendingFileCount = 0;
+  for (const item of plan) {
+    totalBytes += item.bytes;
+    const installed = await geoFileInstalled(finalPathIn(packDir, item.file), item.bytes, item.sha256);
+    installedByFile.set(item.file, installed);
+    if (!installed) {
+      totalDownloadBytes += item.bytes;
+      pendingFileCount += 1;
+    }
+  }
+  const packs: GeoReleasePreviewPack[] = manifest.packs.map((p) => {
+    let downloadBytes = 0;
+    for (const c of p.companions) if (!installedByFile.get(c.name)) downloadBytes += c.bytes;
+    if (!installedByFile.get(p.file)) downloadBytes += p.bytes;
+    return {
+      packId: p.packId,
+      file: p.file,
+      region: p.region,
+      rows: p.rows,
+      bytes: p.bytes,
+      parts: p.parts.length,
+      installed: installedByFile.get(p.file) ?? false,
+      downloadBytes,
+    };
+  });
+  return {
+    release: manifest.release,
+    generatedAt: manifest.generatedAt,
+    baseUrl,
+    packs,
+    fileCount: plan.length,
+    pendingFileCount,
+    totalBytes,
+    totalDownloadBytes,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 获取任务（进程内存状态，后台页轮询/刷新可见）
 // ---------------------------------------------------------------------------
 

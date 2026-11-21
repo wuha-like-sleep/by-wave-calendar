@@ -42,7 +42,7 @@ import {
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
-import { getGeoPackFetchState, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
+import { GeoReleaseError, getGeoPackFetchState, previewGeoPackRelease, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
 import {
   createGeoSyncToken,
   latestGeoSyncUploadByFile,
@@ -1995,6 +1995,34 @@ export async function adminRoutes(app: FastifyInstance) {
       });
     }
     return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(revoked ? "同步令牌已吊销，立即生效" : "该令牌已是吊销状态"));
+  });
+
+  // 获取前预检（JSON）：只拉发布清单本身（小文件），把每个包的
+  // 大小 / 行数 / 是否已安装与总下载量先摆给管理员看，不能点下去
+  // 才知道要下多少。失败按 kind 分三类（源不可达 / 清单非法 / 源
+  // 返回 HTTP 错误），页面据此显示明确文案，页面本身不受影响。
+  app.get("/admin/geo-packs/preview", {
+    config: { rateLimit: { max: 20, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    try {
+      const preview = await previewGeoPackRelease({});
+      return reply.send({ ok: true, preview });
+    } catch (err) {
+      const code = err instanceof GeoReleaseError ? err.code : "release_unreachable";
+      const httpMatch = /^release_manifest_http_(\d+)$/.exec(code);
+      const kind = code === "release_manifest_invalid"
+        ? "invalid"
+        : httpMatch
+          ? "http"
+          : code === "release_unreachable"
+            ? "unreachable"
+            : "error";
+      return reply.code(502).send({
+        ok: false, kind, code, httpStatus: httpMatch ? Number(httpMatch[1]) : null,
+      });
+    }
   });
 
   // 一键获取官方包：从 GEO_PACK_RELEASE_BASE_URL 拉发布清单，按清
