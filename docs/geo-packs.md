@@ -41,21 +41,21 @@ mtime 自动重开新包，不需要重启。
 
 | 文件 | 行数 | 精确字节 | 大小 | 分卷 |
 |---|---:|---:|---:|:---:|
-| pack-au-act.sqlite | 294,439 | 174,305,280 | 166.2 MiB | — |
-| pack-au-nsw.sqlite | 5,133,392 | 3,086,860,288 | 2.87 GiB | 2 卷 |
-| pack-au-nt.sqlite | 123,433 | 69,799,936 | 66.6 MiB | — |
-| pack-au-ot.sqlite | 5,174 | 3,317,760 | 3.2 MiB | — |
-| pack-au-qld.sqlite | 3,474,437 | 2,134,990,848 | 1.99 GiB | 2 卷 |
-| pack-au-sa.sqlite | 1,292,374 | 766,693,376 | 731.2 MiB | — |
-| pack-au-tas.sqlite | 386,491 | 224,645,120 | 214.2 MiB | — |
-| pack-au-vic.sqlite | 4,510,693 | 2,702,671,872 | 2.52 GiB | 2 卷 |
-| pack-au-wa.sqlite | 1,680,494 | 958,611,456 | 914.2 MiB | — |
-| **合计（9 个包）** | **16,900,927** | **10,121,895,936** | **≈ 9.43 GiB** | |
+| pack-au-act.sqlite | 294,439 | 132,349,952 | 126.2 MiB | — |
+| pack-au-nsw.sqlite | 5,133,392 | 2,320,072,704 | 2.16 GiB | 2 卷 |
+| pack-au-nt.sqlite | 123,433 | 52,641,792 | 50.2 MiB | — |
+| pack-au-ot.sqlite | 5,174 | 2,637,824 | 2.5 MiB | — |
+| pack-au-qld.sqlite | 3,474,437 | 1,606,647,808 | 1.50 GiB | — |
+| pack-au-sa.sqlite | 1,292,374 | 575,602,688 | 548.9 MiB | — |
+| pack-au-tas.sqlite | 386,491 | 169,345,024 | 161.5 MiB | — |
+| pack-au-vic.sqlite | 4,510,693 | 2,032,222,208 | 1.89 GiB | — |
+| pack-au-wa.sqlite | 1,680,494 | 720,240,640 | 686.8 MiB | — |
+| **合计（9 个包）** | **16,900,927** | **7,611,760,640** | **≈ 7.09 GiB** | |
 
-全套总下载量：包本体 10,121,895,936 B，加上每包 3 个配套文件
-（manifest / licence-manifest / ATTRIBUTION，共 33,327 B）与共享
+全套总下载量：包本体 7,611,760,640 B，加上每包 3 个配套文件
+（manifest / licence-manifest / ATTRIBUTION，共 33,804 B）与共享
 文件（顶层 manifest、许可全文等，共 60,988 B），合计
-**10,121,990,251 B ≈ 9.43 GiB**。已经装过的同版本文件会自动跳
+**7,611,855,432 B ≈ 7.09 GiB**。已经装过的同版本文件会自动跳
 过，实际下载量以预检显示的「本次需下载」为准。磁盘上请按整包大
 小预留空间，分卷包拼接时还需要一份同大小的临时空间。
 
@@ -102,12 +102,12 @@ python3 tools/geo-pack-sync/geo_pack_sync.py \
 一个目录可以放多个包：全国包 `pack-<country>.sqlite` 与分州/分
 区包并存时，provider 优先用全国包，没有全国包则合并查所有分区包。
 
-### 2.2 SQLite 结构（schema 1）
+### 2.2 SQLite 结构（schema 2）
 
 ```sql
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 -- 必备键：pack_id（与文件名 id 一致）、country（如 AU）、
--- region、schema（"1"）、built_unix（构建时间戳）
+-- region、schema（"2"）、built_unix（构建时间戳）
 
 CREATE TABLE addresses (
   cid INTEGER PRIMARY KEY,
@@ -123,10 +123,14 @@ CREATE TABLE addresses (
   sources TEXT         -- 溯源标记（如 gnaf / gnaf,osm / geonames）
 );
 
+-- 检索文本只存一份，两张 FTS 表都是它的 external-content 视图
+CREATE TABLE search_texts (cid INTEGER PRIMARY KEY, search_text TEXT);
 CREATE VIRTUAL TABLE addr_fts USING fts5(
-  search_text, tokenize="unicode61 remove_diacritics 2");
+  search_text, content=search_texts, content_rowid=cid,
+  tokenize="unicode61 remove_diacritics 2", columnsize=0);
 CREATE VIRTUAL TABLE addr_tri USING fts5(
-  search_text, tokenize="trigram");
+  search_text, content=search_texts, content_rowid=cid,
+  tokenize="trigram");
 ```
 
 `addr_fts` / `addr_tri` 的 rowid 与 `addresses.cid` 对齐；
@@ -135,6 +139,20 @@ CREATE VIRTUAL TABLE addr_tri USING fts5(
 AND 召回，再在 `addr_tri` 做三元组 OR 救援（容错拼写），最后在
 服务端按名称匹配层级、类别显著度与 `weight` 综合排序；同一地址
 的多个单元行会折叠成一行并带 `units[]` 返回。
+
+schema 2 相对 schema 1 的体积优化（数据内容逐行不变，官方 AU 包
+实测整体约小 25%，且经金门禁逐格比对与 schema 1 结果一致）：
+
+- `search_text` 只在 `search_texts` 里存一份（schema 1 在两张 FTS
+  表里各存一份）；两张 FTS 改为 external-content 指向它。
+- `addr_fts` 加 `columnsize=0`，不存每列长度统计。
+- `addresses` 上不再建 suburb / postcode 索引：检索只走 FTS，这
+  两列只是结果载荷，索引纯占体积。
+- 整库建议 `page_size = 16384` 建库并在收尾 `VACUUM` 重整。
+
+兼容性：provider 只要求 `addresses` / `addr_fts` / `addr_tri` 三
+张表存在并按 rowid=cid 对齐读取，schema 1 的旧包同样可读；
+schema 2 是新的推荐产出格式。
 
 落位前的服务端自检：文件头必须是 `SQLite format 3`，且
 `meta.pack_id` 必须与文件名 id 一致——SHA 对得上但串了包也进不来。

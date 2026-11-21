@@ -32,6 +32,7 @@ python3 geo_pack_sync.py \
 | `--national` | 额外同步全国包 `pack-au.sqlite` 与顶层共享文件 |
 | `--force` | 服务端 SHA 已一致也强制重传 |
 | `--chunk-mib` | 分片大小（MiB），默认 8 |
+| `--chunk-kib` | 分片大小（KiB），覆盖 `--chunk-mib`；服务器前置 WAF/代理有请求体上限时用小分片。若找回的旧会话分片大小与本次要求不一致，脚本会先中止旧会话再按新大小重开 |
 | `--stop-after-chunks N` | 测试用：传 N 片后主动停下（退出码 3） |
 
 行为：服务端已激活且 SHA-256 一致的包整包跳过；中断后重跑自动续传
