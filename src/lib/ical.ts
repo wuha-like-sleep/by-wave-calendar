@@ -77,6 +77,30 @@ export function extractVeventBlock(ics: string): string | null {
   return lines.slice(start, end + 1).join(CRLF);
 }
 
+// Extract EVERY "BEGIN:VEVENT…END:VEVENT" block, in payload order.
+// A CalDAV resource is one UID, but it can legitimately carry several
+// VEVENTs: the master plus one RECURRENCE-ID override per edited
+// occurrence (RFC 4791 §4.1). extractVeventBlock above keeps only the
+// first — fine for single-event callers, but a PUT that stores only the
+// first block silently throws the client's overrides away. The PUT path
+// uses this to validate the whole payload and to store it whole.
+export function extractVeventBlocks(ics: string): string[] {
+  const unfolded = ics.replace(/\r?\n[\t ]/g, "");
+  const lines = unfolded.split(/\r?\n/);
+  const blocks: string[] = [];
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const up = (lines[i] ?? "").toUpperCase();
+    if (start < 0) {
+      if (up === "BEGIN:VEVENT") start = i;
+    } else if (up === "END:VEVENT") {
+      blocks.push(lines.slice(start, i + 1).join(CRLF));
+      start = -1;
+    }
+  }
+  return blocks;
+}
+
 const CRLF = "\r\n";
 
 function pad(n: number): string { return String(n).padStart(2, "0"); }

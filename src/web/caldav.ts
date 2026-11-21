@@ -5,8 +5,8 @@ import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 
 import { db, schema } from "../db/client.js";
 import { getSettings } from "../lib/site_settings.js";
 import { basicAuth, calDavCalendarAllowed } from "../lib/caldav_auth.js";
-import { extractVeventBlock, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
-import { mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
+import { extractVeventBlock, extractVeventBlocks, invitationIcs, parseEvent, prodIdLine, serializeEvent, wrapSingleEvent, type IcalEvent } from "../lib/ical.js";
+import { ifMatchAllows, ifNoneMatchAllows, mergeExdatesIntoVevent, overlayPartstat } from "../lib/caldav_helpers.js";
 import { normalizeAlarms } from "../lib/reminder_triggers.js";
 import { attendeeDetails, attendeeEmails, type AttendeeLike } from "../lib/attendees.js";
 import { newInvitationToken } from "../lib/ids.js";
@@ -1046,6 +1046,32 @@ export function applyAlarmsFromPut(
   // 否则什么都不做：保留库里的提醒（见上面「窗口」那段）。
 }
 
+// ---------- PUT 的冲突模型 ----------
+//
+// 一句话：客户端明示的前置条件（If-Match / If-None-Match）无条件严格
+// 执行；没带前置条件的写（盲写）照常接受，但服务端自己那份状态按
+// 保守合并、不当删除证据。
+//
+// 为什么不是「盲写一律 412」：
+//   · RFC 4791 §5.3.2 对客户端只是 SHOULD 带 If-Match；主流服务端
+//     （SabreDAV / Radicale / Cyrus）都是「带了就严格判、没带就接受」。
+//   · 本仓库有实证：客户端手里可能存着旧年代的副本（合成 VEVENT 还不带
+//     VALARM 那阵子抓的；etag/ctag 都没变，它不会重拉，见 applyAlarmsFromPut
+//     的注释）。对这种副本的第一次编辑回 412，Apple 的表现是弹「无法更新
+//     日历」并把本地修改整个丢掉——数据照样丢，只是从服务端挪到了客户端，
+//     还更难被发现。412 防的是「静默覆盖」，不该拿它制造「静默丢弃」。
+//   · 真正想要并发保护的客户端一分不少：带 If-Match 的写，etag 不命中
+//     就是 412。主流客户端（iOS/macOS 日历、Thunderbird、DAVx⁵）的正常
+//     更新流程本来就带 If-Match。
+// 盲写的数据安全靠合并层兜底（都是既有代码，本批不削弱）：EXDATE 取
+// 并集、VALARM 无「当前副本」证据不算删除、extra 的键有才覆盖、参与者
+// 摊不出邮箱就不动那个键。
+//
+// 资源存在性：软删行对客户端不存在（GET 回 404），前置条件按「不存在」
+// 判——无条件 PUT / If-None-Match 可以复活它（既有 iOS 流程）；If-Match
+// 则 412（删除时 cancelEvent 已 bump 过 updatedAt，拿旧 etag 来今天
+// 本来也是 412，无回归）。
+//
 // PUT /caldav/<userId>/<calId>/<uid>.ics — create or update
 async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   const user = await basicAuth(req, reply);
@@ -1073,12 +1099,34 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     bodyHead: bodyStr.slice(0, 200),
     ifMatch: req.headers["if-match"], ifNoneMatch: req.headers["if-none-match"],
   }, "caldav_put");
-  const parsed = parseEvent(bodyStr);
+  // 多 VEVENT 载荷：一个资源 = 一个 UID。合法形状是「一个主事件 +
+  // 若干同 UID 的 RECURRENCE-ID 覆盖实例」，整体存取；其余形状按
+  // RFC 4791 §5.3.2.1 的 valid-calendar-object-resource 前置条件拒绝
+  // （403 + <D:error>，和 sync-collection 的 valid-sync-token 同一种回法）。
+  // 在这之前 parseEvent / extractVeventBlock 只取第一个 VEVENT：
+  // 覆盖实例会被静默丢掉，多 UID 载荷里其余的事件也一样。
+  const veventBlocks = extractVeventBlocks(bodyStr);
+  let parsed: IcalEvent | null;
+  let rawVevent: string | null;
+  if (veventBlocks.length > 1) {
+    const parts = veventBlocks.map((b) => parseEvent(b));
+    const masters = parts.filter((p): p is IcalEvent => !!p && !p.recurrenceId);
+    const distinctUids = new Set(parts.map((p) => p?.uid));
+    if (parts.some((p) => !p) || distinctUids.size > 1 || masters.length !== 1) {
+      req.log.warn({ caldav: "put", blocks: veventBlocks.length }, "caldav_put_multi_vevent_rejected");
+      return sendXml(reply, `${XML_DECL}\n<D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><C:valid-calendar-object-resource/></D:error>`, 403);
+    }
+    // 结构化列由主事件驱动；覆盖实例不单独成行，靠 rawIcs 整体往返。
+    parsed = masters[0]!;
+    rawVevent = veventBlocks.join("\r\n");
+  } else {
+    parsed = parseEvent(bodyStr);
+    rawVevent = extractVeventBlock(bodyStr);
+  }
   if (!parsed) {
     req.log.warn({ caldav: "put", bodyHead: bodyStr.slice(0, 400) }, "caldav_put_parse_failed");
     return reply.code(400).send("Invalid iCalendar");
   }
-  const rawVevent = extractVeventBlock(bodyStr);
 
   // The UID in the URL might differ from the UID in the body — use body UID as authoritative,
   // but match against URL for existing lookup.
@@ -1092,12 +1140,12 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
   //     the same etag, and silently last-write-wins
   // Inside the tx we re-read existing with the lock implied by the
   // upcoming UPDATE on the same row, then commit atomically.
-  const ifMatchHdr = req.headers["if-match"];
-  const ifNoneMatchHdr = req.headers["if-none-match"];
+  const ifMatchHdr = typeof req.headers["if-match"] === "string" ? req.headers["if-match"] : undefined;
+  const ifNoneMatchHdr = typeof req.headers["if-none-match"] === "string" ? req.headers["if-none-match"] : undefined;
 
   type WriteOutcome =
     | { kind: "ok"; stored: schema.Event; isCreate: boolean; before: schema.Event | null }
-    | { kind: "412" }
+    | { kind: "412"; etag: string | null }
     | { kind: "500"; err: unknown };
 
   const outcome: WriteOutcome = await db.transaction(async (tx) => {
@@ -1106,6 +1154,18 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
       .from(schema.events)
       .where(and(eq(schema.events.calendarId, cal.id), eq(schema.events.uid, urlUid)))
       .limit(1);
+
+    // 前置条件闸门（冲突模型的第一层）：客户端明示的条件在这里一票
+    // 否决，排在算 extraPatch 之前，省得白干。资源存在性只认活行——
+    // 软删行对客户端不存在（见 putEvent 上方的模型注释）。在这之前
+    // If-None-Match 根本不查：带 `If-None-Match: *` 来更新会被当普通
+    // 更新静默覆盖，带 If-Match 来新建会照样插入——都是「客户端明示了
+    // 条件、服务端没听」。
+    const liveExisting = existing && !existing.deletedAt ? existing : null;
+    const currentEtag = liveExisting ? etagOf(liveExisting.updatedAt) : null;
+    if (!ifMatchAllows(ifMatchHdr, currentEtag) || !ifNoneMatchAllows(ifNoneMatchHdr, currentEtag)) {
+      return { kind: "412", etag: currentEtag } as const;
+    }
 
     // Anything the client sent that we can't fold into structured columns (TRANSP,
     // ATTENDEE list, VALARM reminders, CATEGORIES, ORGANIZER, custom X-*) is preserved
@@ -1121,9 +1181,12 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     const putAttendees = attendeeEmails(parsed.attendees);
     if (putAttendees.length) extraPatch.attendees = putAttendees;
     // 「客户端手上是不是当前这一版」——只有带 If-Match 且命中当前 etag 才算数。
-    // 库里没有这一行时无所谓：删不掉任何东西。
+    // 库里没有这一行时无所谓：删不掉任何东西。etag 比对走 ifMatchAllows 的
+    // 归一化（列表 / 弱前缀），与闸门口径一致：反代把 etag 改写成 W/ 形式时，
+    // 证据不该因为一个前缀就不算数。
     const clientHasCurrentCopy = !existing || (
-      typeof ifMatchHdr === "string" && ifMatchHdr !== "*" && ifMatchHdr === etagOf(existing.updatedAt)
+      ifMatchHdr !== undefined && ifMatchHdr.trim() !== "*" &&
+      ifMatchAllows(ifMatchHdr, etagOf(existing.updatedAt))
     );
     applyAlarmsFromPut(extraPatch, parsed, { clientHasCurrentCopy });
     if (parsed.organizer) extraPatch.organizer = parsed.organizer;
@@ -1146,9 +1209,7 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     const mergedExdates = Array.from(new Set([...existingExdates, ...incomingExdates]));
 
     if (existing) {
-      if (ifMatchHdr && ifMatchHdr !== "*" && ifMatchHdr !== etagOf(existing.updatedAt)) {
-        return { kind: "412" } as const;
-      }
+      // 前置条件已经在事务开头的闸门判过了，这里不再重复判。
       const [updated] = await tx
         .update(schema.events)
         .set({
@@ -1172,10 +1233,9 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
         .returning();
       return { kind: "ok", stored: updated!, isCreate: false, before: existing } as const;
     }
-    if (ifNoneMatchHdr === "*") {
-      // "Create only" precondition: but we just verified no existing row.
-      // This branch is unreachable in practice but kept for explicitness.
-    }
+    // 能走到插入这一步，说明闸门已经放行：没有这一行，且客户端带的
+    // If-None-Match（若有）不构成冲突。软删行不在这条路上——它在上面的
+    // existing 分支里被复活。
     const [inserted] = await tx
       .insert(schema.events)
       .values({
@@ -1196,7 +1256,12 @@ async function putEvent(req: FastifyRequest, reply: FastifyReply) {
     return { kind: "ok", stored: inserted!, isCreate: true, before: null } as const;
   });
 
-  if (outcome.kind === "412") return reply.code(412).send("Precondition Failed");
+  if (outcome.kind === "412") {
+    // 把当前 etag 随 412 一起回给客户端：它不用再 GET 一次，拿着正确
+    // 的 etag 就能重试，冲突恢复一轮往返就完成。
+    if (outcome.etag) reply.header("ETag", outcome.etag);
+    return reply.code(412).send("Precondition Failed");
+  }
   const stored = outcome.stored;
   const isResurrectOrCreate = outcome.isCreate;
 
@@ -1378,8 +1443,13 @@ async function deleteEvent(req: FastifyRequest, reply: FastifyReply) {
     .limit(1);
   if (!event) return reply.code(404).send("Not Found");
 
-  const ifMatch = req.headers["if-match"];
-  if (ifMatch && ifMatch !== "*" && ifMatch !== etagOf(event.updatedAt)) {
+  // DELETE 的 If-Match 与 PUT 同一把尺（ifMatchAllows，含列表 / 弱前缀
+  // 归一化）：带了就必须命中，不带则照常删——删除没有「覆盖内容」的
+  // 合并歧义，主流客户端的删除也多半不带条件，把无条件删除收紧只伤
+  // 流程、不护数据。软删行按行本身的 etag 判：重复删带删除前的旧
+  // etag 仍是 412，与旧行为一致。
+  const ifMatch = typeof req.headers["if-match"] === "string" ? req.headers["if-match"] : undefined;
+  if (!ifMatchAllows(ifMatch, etagOf(event.updatedAt))) {
     return reply.code(412).send("Precondition Failed");
   }
 
