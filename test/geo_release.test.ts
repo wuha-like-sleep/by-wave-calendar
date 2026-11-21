@@ -20,6 +20,12 @@ const {
   fetchGeoReleaseFile,
   downloadGeoAsset,
   previewGeoPackRelease,
+  startGeoPackFetch,
+  resumePersistedGeoPackFetch,
+  getGeoPackFetchState,
+  geoFetchRetryDelayMs,
+  isTransientHttpStatus,
+  GEO_FETCH_STAGING_SCOPE,
   GeoReleaseError,
   MAX_RELEASE_PART_BYTES,
 } = await import("../src/lib/geo_release.js");
@@ -380,6 +386,327 @@ describe("downloadGeoAsset", () => {
       expect(readFileSync(dest)).toEqual(packBuf);
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("重试策略（纯函数）", () => {
+  it("退避：5s 起指数翻倍、60s 封顶；可注入基数/上限", () => {
+    expect(geoFetchRetryDelayMs(1)).toBe(5_000);
+    expect(geoFetchRetryDelayMs(2)).toBe(10_000);
+    expect(geoFetchRetryDelayMs(3)).toBe(20_000);
+    expect(geoFetchRetryDelayMs(4)).toBe(40_000);
+    expect(geoFetchRetryDelayMs(5)).toBe(60_000);
+    expect(geoFetchRetryDelayMs(30)).toBe(60_000);
+    expect(geoFetchRetryDelayMs(1, 100, 250)).toBe(100);
+    expect(geoFetchRetryDelayMs(2, 100, 250)).toBe(200);
+    expect(geoFetchRetryDelayMs(3, 100, 250)).toBe(250);
+  });
+
+  it("瞬时状态：408/429/5xx 算瞬时，其余 4xx 是硬失败", () => {
+    for (const s of [408, 429, 500, 502, 503, 504]) expect(isTransientHttpStatus(s)).toBe(true);
+    for (const s of [400, 401, 403, 404, 410, 416]) expect(isTransientHttpStatus(s)).toBe(false);
+  });
+});
+
+describe("releaseFilePlan 顺序", () => {
+  it("共享先行，其余包按体积从小到大；配套紧贴自己的包、在 sqlite 之前", () => {
+    const big = Buffer.alloc(4096, 1);
+    const small = Buffer.alloc(1024, 2);
+    const compBig = Buffer.from("comp-big");
+    const compSmall = Buffer.from("comp-small");
+    const m = parseGeoReleaseManifest({
+      format: 1,
+      release: "r-order",
+      packs: [
+        {
+          pack_id: "au-nsw", file: "pack-au-nsw.sqlite", bytes: big.length, sha256: sha(big),
+          companions: [{ name: "manifest-au-nsw.json", bytes: compBig.length, sha256: sha(compBig) }],
+        },
+        {
+          pack_id: "au-ot", file: "pack-au-ot.sqlite", bytes: small.length, sha256: sha(small),
+          companions: [{ name: "manifest-au-ot.json", bytes: compSmall.length, sha256: sha(compSmall) }],
+        },
+      ],
+      shared: [{ name: "ATTRIBUTION.txt", bytes: 3, sha256: sha("abc") }],
+    });
+    expect(releaseFilePlan(m).map((p) => p.file)).toEqual([
+      "ATTRIBUTION.txt",
+      "manifest-au-ot.json",
+      "pack-au-ot.sqlite",
+      "manifest-au-nsw.json",
+      "pack-au-nsw.sqlite",
+    ]);
+  });
+});
+
+// 烂网络下载夹具：数据按尝试切段/掐断/停滞，验证续传语义。
+const FLAKY_TUNING = { stallMs: 250, retryBaseMs: 5, retryMaxMs: 10 };
+
+function chunkedResponse(chunks: Buffer[], opts: { status?: number; rangeStart?: number; total?: number; failAtEnd?: boolean } = {}): Response {
+  const queue = [...chunks];
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      const next = queue.shift();
+      if (next) {
+        controller.enqueue(new Uint8Array(next));
+        return;
+      }
+      if (opts.failAtEnd) {
+        // 稍等再报错：让客户端有机会把已收到的块刷进暂存文件，
+        // 模拟真实网络里「数据先到、RST 后到」的时序，避免测试抖动。
+        setTimeout(() => {
+          try { controller.error(new Error("connection reset by peer")); } catch { /* 已关 */ }
+        }, 25);
+      } else controller.close();
+    },
+  });
+  const headers: Record<string, string> = {};
+  if (opts.rangeStart !== undefined && opts.total !== undefined) {
+    headers["content-range"] = `bytes ${opts.rangeStart}-${opts.total - 1}/${opts.total}`;
+  }
+  return new Response(stream, { status: opts.status ?? 200, headers });
+}
+
+describe("downloadGeoAsset 烂网络", () => {
+  const data = Buffer.from(Array.from({ length: 6000 }, (_, i) => i % 251));
+
+  it("每次尝试都在中途断连 → Range 续传跨尝试累积，最终完整", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bywave-dl-"));
+    try {
+      const dest = path.join(dir, "a.bin");
+      const rangesSeen: Array<string | null> = [];
+      let calls = 0;
+      const impl = async (_url: string, init: { headers?: Record<string, string> }) => {
+        calls += 1;
+        const range = init.headers?.range ?? null;
+        rangesSeen.push(range);
+        const start = range ? Number(/^bytes=(\d+)-$/.exec(range)![1]) : 0;
+        const slice = data.subarray(start, start + 2000);
+        const isLast = start + slice.length >= data.length;
+        return chunkedResponse([slice], {
+          status: start > 0 ? 206 : 200,
+          rangeStart: start > 0 ? start : undefined,
+          total: data.length,
+          failAtEnd: !isLast, // 没传完就掐断——模拟中间设备杀长连接
+        });
+      };
+      const retries: string[] = [];
+      await downloadGeoAsset({
+        url: "http://stub/a.bin", dest, expectedBytes: data.length, fetchImpl: impl,
+        tuning: FLAKY_TUNING, hooks: { onRetry: (_a, msg) => retries.push(msg) },
+      });
+      expect(readFileSync(dest)).toEqual(data);
+      expect(calls).toBe(3);
+      expect(rangesSeen).toEqual([null, "bytes=2000-", "bytes=4000-"]);
+      expect(retries).toHaveLength(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("先 500 一次再恢复 → 退避重试后成功，不判死", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bywave-dl-"));
+    try {
+      const dest = path.join(dir, "a.bin");
+      let calls = 0;
+      const impl = async () => {
+        calls += 1;
+        if (calls === 1) return new Response("boom", { status: 500 });
+        return chunkedResponse([data]);
+      };
+      await downloadGeoAsset({
+        url: "http://stub/a.bin", dest, expectedBytes: data.length, fetchImpl: impl, tuning: FLAKY_TUNING,
+      });
+      expect(calls).toBe(2);
+      expect(readFileSync(dest)).toEqual(data);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("404 → 硬失败 download_http_404，只尝试一次", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bywave-dl-"));
+    try {
+      const dest = path.join(dir, "a.bin");
+      let calls = 0;
+      const impl = async () => {
+        calls += 1;
+        return new Response("nope", { status: 404 });
+      };
+      await expect(downloadGeoAsset({
+        url: "http://stub/a.bin", dest, expectedBytes: data.length, fetchImpl: impl, tuning: FLAKY_TUNING,
+      })).rejects.toMatchObject({ code: "download_http_404" });
+      expect(calls).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("连接建起后永不给数据 → 停滞超时中止、续传重试后成功", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bywave-dl-"));
+    try {
+      const dest = path.join(dir, "a.bin");
+      let calls = 0;
+      const retryMessages: string[] = [];
+      const impl = async (_url: string, init: { signal?: AbortSignal }) => {
+        calls += 1;
+        if (calls === 1) {
+          // 永不 enqueue、永不 close；只听 abort（与真实 undici 行为一致）。
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              init.signal?.addEventListener("abort", () => {
+                try { controller.error(new Error("AbortError")); } catch { /* 已关 */ }
+              });
+            },
+          });
+          return new Response(stream, { status: 200 });
+        }
+        return chunkedResponse([data]);
+      };
+      await downloadGeoAsset({
+        url: "http://stub/a.bin", dest, expectedBytes: data.length, fetchImpl: impl,
+        tuning: FLAKY_TUNING, hooks: { onRetry: (_a, msg) => retryMessages.push(msg) },
+      });
+      expect(calls).toBe(2);
+      expect(retryMessages).toEqual(["stall_timeout"]);
+      expect(readFileSync(dest)).toEqual(data);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("服务端给多了 → 体积溢出是硬失败，不无限重试", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bywave-dl-"));
+    try {
+      const dest = path.join(dir, "a.bin");
+      let calls = 0;
+      const impl = async () => {
+        calls += 1;
+        return chunkedResponse([Buffer.alloc(100, 9)]);
+      };
+      await expect(downloadGeoAsset({
+        url: "http://stub/a.bin", dest, expectedBytes: 10, fetchImpl: impl, tuning: FLAKY_TUNING,
+      })).rejects.toMatchObject({ code: "download_size_overflow" });
+      expect(calls).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("跨轮 / 跨重启续传", () => {
+  function manifestSingleAsset() {
+    const m = manifestWithParts();
+    delete (m.packs[0] as Record<string, unknown>).parts;
+    return m;
+  }
+
+  async function waitForJob(pred: (s: NonNullable<ReturnType<typeof getGeoPackFetchState>>) => boolean, timeoutMs = 30_000) {
+    const t0 = Date.now();
+    for (;;) {
+      const s = getGeoPackFetchState();
+      if (s && pred(s)) return s;
+      if (Date.now() - t0 > timeoutMs) throw new Error("fetch job did not finish in time");
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  it("上一轮死在半路的暂存文件，下一轮同名接着续（固定 scope）", async () => {
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const stagingDir = path.join(packDir, ".incoming");
+      mkdirSync(stagingDir, { recursive: true });
+      const tag = sha("pack-au-ot.sqlite").slice(0, 16);
+      writeFileSync(path.join(stagingDir, `fetch-${GEO_FETCH_STAGING_SCOPE}-${tag}.part`), part0);
+      lastRangeHeader = null;
+      const plan = { file: "pack-au-ot.sqlite", bytes: packBuf.length, sha256: packSha, parts: [] };
+      const res = await fetchGeoReleaseFile({ baseUrl, plan, packDir, fetchImpl, scope: GEO_FETCH_STAGING_SCOPE });
+      expect(res.status).toBe("done");
+      expect(lastRangeHeader).toBe(`bytes=${part0.length}-`);
+      expect(readFileSync(path.join(packDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("任务级：包文件先 500 两次——不判死，attempts 记到 3，最终完成且状态文件清掉", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestSingleAsset()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      let packCalls = 0;
+      const flaky = async (url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) => {
+        if (url.endsWith("/pack-au-ot.sqlite")) {
+          packCalls += 1;
+          if (packCalls <= 2) return new Response("boom", { status: 500 });
+        }
+        return fetch(url, init);
+      };
+      const { started } = startGeoPackFetch({
+        actorUserId: null, packDir, baseUrl, fetchImpl: flaky, tuning: FLAKY_TUNING,
+      });
+      expect(started).toBe(true);
+      const job = await waitForJob((s) => s.finishedAt !== null);
+      expect(job.status).toBe("done");
+      const packState = job.files.find((f) => f.file === "pack-au-ot.sqlite")!;
+      expect(packState.status).toBe("done");
+      expect(packState.attempts).toBe(3);
+      expect(readFileSync(path.join(packDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+      expect(existsSync(path.join(packDir, ".incoming", "fetch-job-state.json"))).toBe(false);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("重启恢复：落盘状态 + 半截暂存 → 自动恢复续传，recovered=true，包落位", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestSingleAsset()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const stagingDir = path.join(packDir, ".incoming");
+      mkdirSync(stagingDir, { recursive: true });
+      const tag = sha("pack-au-ot.sqlite").slice(0, 16);
+      writeFileSync(path.join(stagingDir, `fetch-${GEO_FETCH_STAGING_SCOPE}-${tag}.part`), part0);
+      writeFileSync(path.join(stagingDir, "fetch-job-state.json"), JSON.stringify({
+        version: 1,
+        actorUserId: null,
+        job: {
+          id: "00000000-0000-4000-8000-000000000001",
+          status: "running",
+          baseUrl,
+          release: "geo-packs-au-vTest",
+          startedAt: new Date().toISOString(),
+          finishedAt: null,
+          recovered: false,
+          files: [],
+          error: null,
+          lastError: null,
+        },
+      }));
+      lastRangeHeader = null;
+      const resumed = await resumePersistedGeoPackFetch({ packDir, fetchImpl, tuning: FLAKY_TUNING });
+      expect(resumed).toBe(true);
+      const job = await waitForJob((s) => s.recovered && s.finishedAt !== null);
+      expect(job.status).toBe("done");
+      // 半截暂存被 Range 续上（包是计划里最后一个文件，range 记录停在它身上）。
+      expect(lastRangeHeader).toBe(`bytes=${part0.length}-`);
+      expect(readFileSync(path.join(packDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+      expect(existsSync(path.join(stagingDir, "fetch-job-state.json"))).toBe(false);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("没有落盘状态 / 状态已损坏 → 不恢复", async () => {
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      expect(await resumePersistedGeoPackFetch({ packDir, fetchImpl })).toBe(false);
+      const stagingDir = path.join(packDir, ".incoming");
+      mkdirSync(stagingDir, { recursive: true });
+      writeFileSync(path.join(stagingDir, "fetch-job-state.json"), "{ not json");
+      expect(await resumePersistedGeoPackFetch({ packDir, fetchImpl })).toBe(false);
+      expect(existsSync(path.join(stagingDir, "fetch-job-state.json"))).toBe(false);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
     }
   });
 });
