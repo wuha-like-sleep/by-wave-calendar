@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { overlayPartstat, mergeExdatesIntoVevent } from "../src/lib/caldav_helpers.js";
+import { overlayPartstat, mergeExdatesIntoVevent, ifMatchAllows, ifNoneMatchAllows } from "../src/lib/caldav_helpers.js";
 
 const CRLF = "\r\n";
 
@@ -115,5 +115,51 @@ describe("mergeExdatesIntoVevent", () => {
     ]);
     const out = mergeExdatesIntoVevent(ics, { exdates: [], allDay: false });
     expect(out).not.toContain("EXDATE:");
+  });
+});
+
+describe("ifMatchAllows / ifNoneMatchAllows（条件请求判定）", () => {
+  const ETAG = '"abc123"';
+
+  it("没带头 = 不约束，两种资源状态都放行", () => {
+    expect(ifMatchAllows(undefined, ETAG)).toBe(true);
+    expect(ifMatchAllows(undefined, null)).toBe(true);
+    expect(ifNoneMatchAllows(undefined, ETAG)).toBe(true);
+    expect(ifNoneMatchAllows(undefined, null)).toBe(true);
+  });
+
+  it("If-Match 命中当前 etag 放行、不命中拒绝", () => {
+    expect(ifMatchAllows(ETAG, ETAG)).toBe(true);
+    expect(ifMatchAllows('"other"', ETAG)).toBe(false);
+  });
+
+  it("If-Match: * 只要求资源存在", () => {
+    expect(ifMatchAllows("*", ETAG)).toBe(true);
+    expect(ifMatchAllows("*", null)).toBe(false);
+  });
+
+  it("资源不存在时任何 If-Match 都不成立（新建带 If-Match 必须被拒）", () => {
+    expect(ifMatchAllows(ETAG, null)).toBe(false);
+  });
+
+  it("If-Match 列表里含当前 etag 即成立", () => {
+    expect(ifMatchAllows('"old", "abc123"', ETAG)).toBe(true);
+    expect(ifMatchAllows('"old", "older"', ETAG)).toBe(false);
+  });
+
+  it("弱前缀 W/ 剥掉再比（反代 gzip 改写过 etag 的情形）", () => {
+    expect(ifMatchAllows('W/"abc123"', ETAG)).toBe(true);
+    expect(ifNoneMatchAllows('W/"abc123"', ETAG)).toBe(false);
+  });
+
+  it("If-None-Match: * 是 create-only：资源在就拒、不在就放", () => {
+    expect(ifNoneMatchAllows("*", ETAG)).toBe(false);
+    expect(ifNoneMatchAllows("*", null)).toBe(true);
+  });
+
+  it("If-None-Match 带具体 etag：等于当前值才拒", () => {
+    expect(ifNoneMatchAllows(ETAG, ETAG)).toBe(false);
+    expect(ifNoneMatchAllows('"other"', ETAG)).toBe(true);
+    expect(ifNoneMatchAllows(ETAG, null)).toBe(true);
   });
 });
