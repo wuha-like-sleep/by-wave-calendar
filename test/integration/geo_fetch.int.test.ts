@@ -133,7 +133,7 @@ process.env.GEO_PACK_RELEASE_ALLOW_PRIVATE_NETWORK = "true";
 
 const { adminRoutes } = await import("../../src/web/admin.js");
 const { geoRoutes } = await import("../../src/routes/geo.js");
-const { getGeoPackFetchState } = await import("../../src/lib/geo_release.js");
+const { getGeoPackFetchState, startGeoPackFetch } = await import("../../src/lib/geo_release.js");
 
 let app: FastifyInstance;
 
@@ -338,5 +338,133 @@ describe("后台获取官方地址包", () => {
     expect(body.preview.pendingFileCount).toBe(0);
     expect(body.preview.totalDownloadBytes).toBe(0);
     expect(body.preview.totalBytes).toBe(packBuf.length + companion.length + licenceText.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 烂网络发布源（2026-11-21 生产实测的复刻）：包文件慢速滴流、每次传
+// 输都在中途被掐断（模拟中间设备杀长连接），配套文件第一次请求先
+// 回 500。获取必须靠停滞超时 + Range 续传 + 瞬时重试最终把包完整
+// 下完并激活——字节逐字一致、SHA 复核通过才算数。这里直接调任务
+// 层（startGeoPackFetch）并注入小号调参，HTTP 路由口径由上面的用
+// 例覆盖；服务端到服务端的真实 HTTP + Range + 原子落位全走真路。
+// ---------------------------------------------------------------------------
+describe("烂网络下获取仍能完成", () => {
+  const flakyDir = mkdtempSync(path.join(tmpdir(), "bywave-flaky-release-"));
+  const flakyPackDir = mkdtempSync(path.join(tmpdir(), "bywave-flaky-packdir-"));
+  writeFileSync(path.join(flakyDir, "pack-au-ot.sqlite"), packBuf);
+  writeFileSync(path.join(flakyDir, "manifest-au-ot.json"), companion);
+  writeFileSync(path.join(flakyDir, "geo-pack-release.json"), JSON.stringify({
+    format: 1,
+    release: "geo-packs-au-vFlaky",
+    packs: [{
+      pack_id: "au-ot",
+      file: "pack-au-ot.sqlite",
+      bytes: packBuf.length,
+      sha256: packSha,
+      rows_total: 1,
+      companions: [{ name: "manifest-au-ot.json", bytes: companion.length, sha256: sha(companion) }],
+    }],
+    shared: [],
+  }));
+
+  let companionHits = 0;
+  const flakyServer: Server = createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://stub");
+    const rel = decodeURIComponent(url.pathname.replace(/^\//, ""));
+    const full = path.join(flakyDir, rel);
+    if (!full.startsWith(flakyDir) || !existsSync(full)) {
+      res.writeHead(404).end("nope");
+      return;
+    }
+    if (rel === "manifest-au-ot.json") {
+      companionHits += 1;
+      if (companionHits === 1) {
+        res.writeHead(500).end("boom");
+        return;
+      }
+    }
+    const data = readFileSync(full);
+    if (rel !== "pack-au-ot.sqlite") {
+      res.writeHead(200, { "content-length": String(data.length) });
+      res.end(data);
+      return;
+    }
+    // 包文件：认 Range，但慢速滴流，且每次传输 400 ms 后直接毁连接
+    // ——一趟永远传不完，只能靠续传一段段啃。
+    const m = req.headers.range ? /^bytes=(\d+)-$/.exec(req.headers.range) : null;
+    const start = m ? Number(m[1]) : 0;
+    if (m) {
+      res.writeHead(206, {
+        "content-range": `bytes ${start}-${data.length - 1}/${data.length}`,
+        "content-length": String(data.length - start),
+      });
+    } else {
+      res.writeHead(200, { "content-length": String(data.length) });
+    }
+    let off = start;
+    const drip = setInterval(() => {
+      if (res.destroyed) {
+        clearInterval(drip);
+        return;
+      }
+      if (off >= data.length) {
+        clearInterval(drip);
+        res.end();
+        return;
+      }
+      const n = Math.min(512, data.length - off);
+      res.write(data.subarray(off, off + n));
+      off += n;
+    }, 10);
+    const killer = setTimeout(() => {
+      clearInterval(drip);
+      res.destroy();
+    }, 400);
+    res.on("close", () => {
+      clearInterval(drip);
+      clearTimeout(killer);
+    });
+  });
+
+  let flakyBase = "";
+  beforeAll(async () => {
+    await new Promise<void>((r) => flakyServer.listen(0, "127.0.0.1", r));
+    flakyBase = `http://127.0.0.1:${(flakyServer.address() as { port: number }).port}`;
+  });
+  afterAll(async () => {
+    await new Promise<void>((r) => flakyServer.close(() => r()));
+    rmSync(flakyDir, { recursive: true, force: true });
+    rmSync(flakyPackDir, { recursive: true, force: true });
+  });
+
+  it("每次传输都被掐断 + 配套先 500：小包仍完整下载、SHA 复核通过并激活", async () => {
+    const { started, job } = startGeoPackFetch({
+      actorUserId: null,
+      packDir: flakyPackDir,
+      baseUrl: flakyBase,
+      fetchImpl: (url, init) => fetch(url, init),
+      tuning: { stallMs: 2_000, retryBaseMs: 10, retryMaxMs: 20 },
+    });
+    expect(started).toBe(true);
+
+    const t0 = Date.now();
+    let state = getGeoPackFetchState();
+    while (!(state && state.id === job.id && state.finishedAt)) {
+      if (Date.now() - t0 > 60_000) throw new Error("flaky fetch job did not finish in time");
+      await new Promise((r) => setTimeout(r, 100));
+      state = getGeoPackFetchState();
+    }
+    expect(state.status).toBe("done");
+    const packState = state.files.find((f) => f.file === "pack-au-ot.sqlite")!;
+    // 每次传输 400ms 就被掐断，一趟传不完 → 至少续传过一次。
+    expect(packState.attempts).toBeGreaterThanOrEqual(2);
+    expect(packState.status).toBe("done");
+    expect(state.files.find((f) => f.file === "manifest-au-ot.json")!.status).toBe("done");
+    // 落位字节逐字一致（激活路径里还有整文件 SHA 复核兜底）。
+    expect(readFileSync(path.join(flakyPackDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+    expect(existsSync(path.join(flakyPackDir, "manifest-au-ot.json"))).toBe(true);
+    // 终态任务的落盘状态已清除。
+    expect(existsSync(path.join(flakyPackDir, ".incoming", "fetch-job-state.json"))).toBe(false);
   });
 });

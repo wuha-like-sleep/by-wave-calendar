@@ -129,6 +129,8 @@
   <div class="text-sm mb-4">
     <% if (fetchJob.status === "running") { %>
       <p class="text-amber-600 font-medium"><%= t("adminGeoPacks.fetch.running") %></p>
+      <% if (fetchJob.recovered) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.recovered") %></p><% } %>
+      <% if (fetchJob.lastError) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.lastError") %>: <span class="font-mono text-xs"><%= fetchJob.lastError %></span></p><% } %>
     <% } else if (fetchJob.status === "done") { %>
       <p class="text-emerald-600 font-medium"><%= t("adminGeoPacks.fetch.done", { time: fetchJob.finishedAt ? fetchJob.finishedAt.slice(0, 19).replace("T", " ") : "" }) %></p>
     <% } else { %>
@@ -148,6 +150,7 @@
           <% } else if (f.status === "activating") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileActivating") %></span>
           <% } else if (f.status === "verifying") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileVerifying") %></span>
           <% } else if (f.status === "downloading") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileDownloading") %></span>
+          <% } else if (f.status === "retrying") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileRetrying", { attempt: f.attempts }) %><% if (f.error) { %> · <%= f.error %><% } %></span>
           <% } else { %><%= t("adminGeoPacks.fetch.filePending") %><% } %>
         </span>
       </li>

@@ -1107,6 +1107,19 @@ app.addHook("onClose", async () => { stopCalendarSync(); });
   }
 }
 
+// 地址包获取任务的重启恢复：上一程进程若在获取中途退出（部署重
+// 启 / 崩溃），暂存区里留有落盘的任务状态，开机在这里把它恢复成
+// 继续跑的任务——小包先行 + Range 续传让恢复的实际代价很低。恢复
+// 失败不许影响开机（函数本身永不抛错，这里再兜一层）。
+try {
+  const { resumePersistedGeoPackFetch } = await import("./lib/geo_release.js");
+  if (await resumePersistedGeoPackFetch()) {
+    app.log.info("[startup] 已恢复上次未完成的地址包获取任务，继续后台下载");
+  }
+} catch (err) {
+  app.log.warn({ err }, "[startup] 地址包获取任务恢复失败，跳过（不影响开机）");
+}
+
 try {
   if (env.USE_HTTPS) {
     await app.listen({ host: "0.0.0.0", port: env.HTTPS_PORT });

@@ -18,17 +18,35 @@
 //     GeoFile（大小 / 整体 SHA / sqlite 内容自检 / 原子 rename），
 //     与同步通道同一条落位路径；
 //   - 已在本地且大小 + SHA 都对得上的文件直接跳过，重复点获取是
-//     幂等的；下载支持 HTTP Range 续传 + 失败重试，大文件全程流式
-//     落盘，不进内存。
+//     幂等的；下载支持 HTTP Range 续传，大文件全程流式落盘，不进
+//     内存。
 //
-// 任务状态只在进程内存里（与 suggest 缓存同性质）：重启后状态丢
-// 失，但每个文件落位都是原子的、重跑可续，不会留下半成品。开始由
-// 后台路由记审计，完成 / 失败在这里直插审计台账（无请求上下文，
-// 沿用系统动作 ip="-" 的既有做法）。
+// 下载的健壮性（2026-11-21 生产实测教训：境外发布源到国内服务器的
+// 长连接会被中间设备周期性掐断，几十 MiB 一断、偶尔连接直接建不
+// 起来，原先「4 次尝试、亚秒退避、失败即判死」在这种网络下永远下
+// 不完一个大包）：
+//   - 没有总时长超时：只有「停滞超时」——连续 ~60 s 收不到任何字
+//     节才中止本次尝试，每收到一块数据就重置计时；下得慢没关系，
+//     断了才重来；
+//   - 瞬时错误（超时 / 连接重置 / 5xx / 429 / 短读）无限续传重试，
+//     指数退避 5 s 起、60 s 封顶，暂存进度跨尝试累积，直到文件完
+//     整为止；只有硬失败才判死：4xx（404 等）、完整下载后 SHA 对
+//     不上、体积溢出；
+//   - 下载顺序：共享文件先行，然后按包体积从小到大——小包先进服
+//     务，大包在烂网络上慢慢磨也不挡别人的路；
+//   - 暂存文件名与任务无关（固定 scope），换一轮任务、乃至进程重
+//     启，半截文件都还在原地接着续。
+//
+// 任务状态以内存注册表为实时视图，同时把计划与逐文件进度落盘到
+// 暂存区（fetch-job-state.json，临时文件 + rename 原子写）：进程
+// 重启后开机自检会自动恢复未完成的任务，后台页能看到「已恢复」
+// 的任务在继续跑；任务完成或硬失败后状态文件清除。开始由后台路
+// 由记审计，完成 / 失败在这里直插审计台账（无请求上下文，沿用系
+// 统动作 ip="-" 的既有做法）。
 
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, stat, truncate, unlink } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, truncate, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -49,7 +67,37 @@ export const MAX_RELEASE_PART_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_RELEASE_PACKS = 64;
 const MAX_RELEASE_PARTS = 1000;
 const MAX_MANIFEST_BYTES = 4 * 1024 * 1024;
-const DOWNLOAD_ATTEMPTS = 4;
+/** 停滞超时：连续这么久收不到任何字节，才认为连接已死、中止重续。
+ *  它是「无进展」超时，不是总时长超时——再慢的连接只要还在滴数据
+ *  就不会被掐。 */
+export const GEO_FETCH_STALL_MS = 60_000;
+/** 瞬时失败后的退避：第一次重试等这么久，之后指数翻倍到上限。 */
+export const GEO_FETCH_RETRY_BASE_MS = 5_000;
+export const GEO_FETCH_RETRY_MAX_MS = 60_000;
+
+/** 纯函数：第 attempt 次尝试失败后、下一次尝试前等多久（指数退避
+ *  + 上限）。attempt 从 1 计（第一次失败 → 等 base）。 */
+export function geoFetchRetryDelayMs(
+  attempt: number,
+  baseMs: number = GEO_FETCH_RETRY_BASE_MS,
+  maxMs: number = GEO_FETCH_RETRY_MAX_MS,
+): number {
+  const a = Math.max(1, Math.floor(attempt));
+  return Math.min(maxMs, baseMs * 2 ** (a - 1));
+}
+
+/** 纯函数：这个 HTTP 状态是瞬时错误（值得退避后用 Range 续传重试）
+ *  还是硬失败。408/429/5xx 瞬时；其余非成功状态（404 等 4xx）硬失败。 */
+export function isTransientHttpStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+/** 下载调参（生产用默认值；测试注入小数值以便快速跑完）。 */
+export interface GeoDownloadTuning {
+  stallMs?: number;
+  retryBaseMs?: number;
+  retryMaxMs?: number;
+}
 
 export class GeoReleaseError extends Error {
   constructor(
@@ -250,13 +298,16 @@ export function parseGeoReleaseManifest(input: unknown): GeoReleaseManifest {
   return { release, generatedAt: optText(rec.generated_at, 64), packs, shared };
 }
 
-/** 把清单摊平成下载顺序：共享文件先行；每个包先配套、sqlite 最后
- *  （与同步发送端的纪律一致——sqlite 落位即激活，激活时配套必须
- *  已经就位）。 */
+/** 把清单摊平成下载顺序：共享文件先行；然后按包体积从小到大排
+ *  （同体积保持清单原序）；每个包先配套、sqlite 最后（与同步发送
+ *  端的纪律一致——sqlite 落位即激活，激活时配套必须已经就位）。
+ *  小包先行是烂网络下的价值排序：几十 MiB 的小包几分钟就能激活
+ *  上线，GiB 级大包排在后面慢慢磨，不挡别人的路。 */
 export function releaseFilePlan(manifest: GeoReleaseManifest): GeoReleaseFilePlan[] {
   const plan: GeoReleaseFilePlan[] = [];
   for (const s of manifest.shared) plan.push({ file: s.name, bytes: s.bytes, sha256: s.sha256, parts: [] });
-  for (const pack of manifest.packs) {
+  const packsBySize = [...manifest.packs].sort((a, b) => a.bytes - b.bytes);
+  for (const pack of packsBySize) {
     for (const c of pack.companions) plan.push({ file: c.name, bytes: c.bytes, sha256: c.sha256, parts: [] });
     plan.push({ file: pack.file, bytes: pack.bytes, sha256: pack.sha256, parts: pack.parts });
   }
@@ -294,20 +345,54 @@ async function fileSize(full: string): Promise<number> {
   return st?.isFile() ? st.size : 0;
 }
 
-/** 把一个资产下载到 dest：已有部分文件时用 Range 续，服务端不认
- *  Range（回 200）就整文件重下；长度必须精确等于 expectedBytes，
- *  多一个字节都判失败。网络错误 / 5xx / 短读自动重试（续传语义让
- *  重试便宜），4xx 直接失败。 */
+/** 下载过程回调（任务层据此更新逐文件状态与落盘进度）。 */
+export interface GeoDownloadHooks {
+  /** 每次尝试开始时调（attempt 从 1 计）。 */
+  onAttempt?: (attempt: number) => void;
+  /** 一次尝试瞬时失败、决定退避续传后调（在等待之前）。 */
+  onRetry?: (attempt: number, error: string) => void;
+}
+
+/** 把一个资产下载到 dest，直到完整或硬失败：
+ *  - 已有部分文件时用 Range 续传；服务端不认 Range（回 200）就整
+ *    文件重下；206 的 content-range 起点必须与本地长度严丝合缝，
+ *    对不上就截断重来（绝不把错位字节拼进文件）；
+ *  - 没有总时长超时：只有停滞超时——连续 stallMs 收不到任何字节
+ *    才中止本次尝试，每收到一块数据重置计时。慢连接只要在滴数据
+ *    就能一直下；被中间设备掐断的连接最多浪费 stallMs；
+ *  - 瞬时失败（停滞 / 连接重置 / 408 / 429 / 5xx / 短读）无限退避
+ *    重试（geoFetchRetryDelayMs），暂存字节跨尝试累积，文件终将
+ *    下完；硬失败立即抛 GeoReleaseError：其余 4xx
+ *    （download_http_<status>）、体积溢出（download_size_overflow）；
+ *  - 长度必须精确等于 expectedBytes，多一个字节都判溢出。 */
 export async function downloadGeoAsset(args: {
   url: string;
   dest: string;
   expectedBytes: number;
   fetchImpl?: GeoFetchImpl;
   onProgress?: (bytesDone: number) => void;
+  hooks?: GeoDownloadHooks;
+  tuning?: GeoDownloadTuning;
 }): Promise<void> {
   const fetchImpl = args.fetchImpl ?? defaultFetchImpl;
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < DOWNLOAD_ATTEMPTS; attempt++) {
+  const stallMs = args.tuning?.stallMs ?? GEO_FETCH_STALL_MS;
+  const retryBaseMs = args.tuning?.retryBaseMs ?? GEO_FETCH_RETRY_BASE_MS;
+  const retryMaxMs = args.tuning?.retryMaxMs ?? GEO_FETCH_RETRY_MAX_MS;
+
+  for (let attempt = 1; ; attempt++) {
+    args.hooks?.onAttempt?.(attempt);
+    // 停滞看门狗：arm 一次后，每收到一块数据重新 arm；触发即 abort
+    // 本次尝试（请求头阶段同样受管——连接半天不给响应头也是停滞）。
+    const controller = new AbortController();
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    let stalled = false;
+    const armStall = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => {
+        stalled = true;
+        controller.abort();
+      }, stallMs);
+    };
     try {
       let existing = await fileSize(args.dest);
       if (existing === args.expectedBytes) {
@@ -320,8 +405,11 @@ export async function downloadGeoAsset(args: {
       }
       const headers: Record<string, string> = {};
       if (existing > 0) headers["range"] = `bytes=${existing}-`;
-      const resp = await fetchImpl(args.url, { headers });
+      armStall();
+      const resp = await fetchImpl(args.url, { headers, signal: controller.signal });
       if (resp.status === 416) {
+        // 本地长度已等于期望时上面就返回了；走到这里说明服务端眼里
+        // 的文件比本地暂存还短——暂存不可信，截断后从头续。
         await truncate(args.dest, 0);
         throw new Error("range_not_satisfiable");
       }
@@ -338,7 +426,7 @@ export async function downloadGeoAsset(args: {
       } else if (resp.status === 200) {
         base = 0;
         flags = "w";
-      } else if (resp.status === 408 || resp.status === 429 || resp.status >= 500) {
+      } else if (isTransientHttpStatus(resp.status)) {
         throw new Error(`http_${resp.status}`);
       } else {
         throw new GeoReleaseError(`download_http_${resp.status}`, `download failed: HTTP ${resp.status} for ${args.url}`);
@@ -347,9 +435,10 @@ export async function downloadGeoAsset(args: {
       let written = 0;
       const counter = new Transform({
         transform(chunk: Buffer, _enc, cb) {
+          armStall();
           written += chunk.length;
           if (base + written > args.expectedBytes) {
-            cb(new Error("download_size_overflow"));
+            cb(new GeoReleaseError("download_size_overflow", `download exceeds expected size for ${args.url}`));
             return;
           }
           args.onProgress?.(base + written);
@@ -366,14 +455,17 @@ export async function downloadGeoAsset(args: {
       return;
     } catch (err) {
       if (err instanceof GeoReleaseError) throw err;
-      lastError = err;
-      if (attempt < DOWNLOAD_ATTEMPTS - 1) await sleep(400 * 2 ** attempt);
+      const message = stalled
+        ? "stall_timeout"
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      args.hooks?.onRetry?.(attempt, message);
+      await sleep(geoFetchRetryDelayMs(attempt, retryBaseMs, retryMaxMs));
+    } finally {
+      if (stallTimer) clearTimeout(stallTimer);
     }
   }
-  throw new GeoReleaseError(
-    "download_failed",
-    `download failed after ${DOWNLOAD_ATTEMPTS} attempts: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
-  );
 }
 
 function assetUrl(baseUrl: string, name: string): string {
@@ -388,6 +480,12 @@ function finalPathIn(packDir: string, fileName: string): string {
   return full;
 }
 
+/** 获取任务专属的暂存命名空间：固定值，不随任务变——换一轮任务
+ *  乃至进程重启后，上一轮下了一半的暂存文件还在同一个名字下，新
+ *  一轮直接 Range 续上（这正是跨轮续传成立的前提）。同步通道的暂
+ *  存是另一套命名（会话 id），互不相撞。 */
+export const GEO_FETCH_STAGING_SCOPE = "release";
+
 /** 获取一个文件：跳过已就位的 → 下载（分卷逐卷验 SHA 后拼接）→
  *  走 activateStagedGeoFile 原子落位。scope 用来隔离暂存文件名
  *  （同一包目录可能同时有同步通道的暂存，命名空间互不相撞）。 */
@@ -398,6 +496,8 @@ export async function fetchGeoReleaseFile(args: {
   fetchImpl?: GeoFetchImpl;
   scope?: string;
   onProgress?: (bytesDone: number) => void;
+  hooks?: GeoDownloadHooks;
+  tuning?: GeoDownloadTuning;
 }): Promise<{ status: "done" | "skipped"; bytes: number }> {
   const packDir = args.packDir ?? resolveGeoPackDir();
   const plan = args.plan;
@@ -424,6 +524,8 @@ export async function fetchGeoReleaseFile(args: {
       expectedBytes: plan.bytes,
       fetchImpl,
       onProgress: args.onProgress,
+      hooks: args.hooks,
+      tuning: args.tuning,
     });
   } else {
     // 已拼好的前缀必须正好落在卷边界上，否则截断到上一个卷边界。
@@ -449,6 +551,8 @@ export async function fetchGeoReleaseFile(args: {
         expectedBytes: part.bytes,
         fetchImpl,
         onProgress: (n) => args.onProgress?.(partStart + n),
+        hooks: args.hooks,
+        tuning: args.tuning,
       });
       if ((await sha256File(partTemp)) !== part.sha256) {
         await unlink(partTemp).catch(() => {});
@@ -585,12 +689,13 @@ export async function previewGeoPackRelease(args: {
 }
 
 // ---------------------------------------------------------------------------
-// 获取任务（进程内存状态，后台页轮询/刷新可见）
+// 获取任务（内存注册表为实时视图 + 暂存区落盘状态，重启可恢复）
 // ---------------------------------------------------------------------------
 
 export type GeoFetchFileStatus =
   | "pending"
   | "downloading"
+  | "retrying"
   | "verifying"
   | "activating"
   | "done"
@@ -602,6 +707,8 @@ export interface GeoPackFetchFileState {
   status: GeoFetchFileStatus;
   bytesTotal: number;
   bytesDone: number;
+  /** 已尝试次数（含正在进行的这次）；瞬时失败会一直涨，直到下完。 */
+  attempts: number;
   error: string | null;
 }
 
@@ -612,8 +719,12 @@ export interface GeoPackFetchJobState {
   release: string | null;
   startedAt: string;
   finishedAt: string | null;
+  /** 本任务是进程重启后从落盘状态自动恢复的（不是管理员刚点的）。 */
+  recovered: boolean;
   files: GeoPackFetchFileState[];
   error: string | null;
+  /** 最近一次瞬时失败的说明（任务级汇总，给后台页一眼看到在卡什么）。 */
+  lastError: string | null;
 }
 
 let activeFetchJob: GeoPackFetchJobState | null = null;
@@ -621,6 +732,41 @@ let lastFetchJob: GeoPackFetchJobState | null = null;
 
 export function getGeoPackFetchState(): GeoPackFetchJobState | null {
   return activeFetchJob ?? lastFetchJob;
+}
+
+// --- 任务状态落盘（重启恢复） -------------------------------------------
+// 只存恢复所需的最小集：任务本体（含逐文件状态）+ 发起人（收尾审
+// 计要用）。原子写：先写 .tmp 再 rename，进程在写的半途被杀也只会
+// 留下旧的一份完整状态。落盘失败永远不许拖垮任务本身。
+
+const FETCH_JOB_STATE_NAME = "fetch-job-state.json";
+
+interface PersistedFetchJob {
+  version: 1;
+  job: GeoPackFetchJobState;
+  actorUserId: string | null;
+}
+
+function fetchJobStatePath(packDir: string): string {
+  return path.join(geoSyncStagingDir(packDir), FETCH_JOB_STATE_NAME);
+}
+
+async function persistFetchJob(job: GeoPackFetchJobState, packDir: string, actorUserId: string | null): Promise<void> {
+  try {
+    const dir = geoSyncStagingDir(packDir);
+    await mkdir(dir, { recursive: true });
+    const full = fetchJobStatePath(packDir);
+    const tmp = `${full}.tmp`;
+    const payload: PersistedFetchJob = { version: 1, job, actorUserId };
+    await writeFile(tmp, JSON.stringify(payload));
+    await rename(tmp, full);
+  } catch {
+    /* 落盘失败：任务照跑，只是这次重启后恢复不了 */
+  }
+}
+
+async function clearPersistedFetchJob(packDir: string): Promise<void> {
+  await unlink(fetchJobStatePath(packDir)).catch(() => {});
 }
 
 async function readManifest(baseUrl: string, fetchImpl: GeoFetchImpl): Promise<GeoReleaseManifest> {
@@ -671,8 +817,9 @@ async function auditFetchFinished(job: GeoPackFetchJobState, actorUserId: string
 
 async function runFetchJob(
   job: GeoPackFetchJobState,
-  args: { packDir: string; fetchImpl: GeoFetchImpl; actorUserId: string | null },
+  args: { packDir: string; fetchImpl: GeoFetchImpl; actorUserId: string | null; tuning?: GeoDownloadTuning },
 ): Promise<void> {
+  const persist = () => persistFetchJob(job, args.packDir, args.actorUserId);
   try {
     const manifest = await readManifest(job.baseUrl, args.fetchImpl);
     job.release = manifest.release;
@@ -682,31 +829,56 @@ async function runFetchJob(
       status: "pending" as GeoFetchFileStatus,
       bytesTotal: p.bytes,
       bytesDone: 0,
+      attempts: 0,
       error: null,
     }));
+    await persist();
     let anyFailed = false;
     for (let i = 0; i < plan.length; i++) {
       const state = job.files[i]!;
       const item = plan[i]!;
       state.status = "downloading";
+      const hooks: GeoDownloadHooks = {
+        onAttempt: (attempt) => {
+          state.attempts = attempt;
+          if (attempt > 1) {
+            state.status = "retrying";
+            void persist();
+          }
+        },
+        onRetry: (_attempt, message) => {
+          state.error = message;
+          job.lastError = `${item.file}: ${message}`;
+          void persist();
+        },
+      };
       try {
         const res = await fetchGeoReleaseFile({
           baseUrl: job.baseUrl,
           plan: item,
           packDir: args.packDir,
           fetchImpl: args.fetchImpl,
-          scope: job.id,
+          // 固定 scope：暂存名跨任务 / 跨重启稳定，半截文件能被下一轮续上。
+          scope: GEO_FETCH_STAGING_SCOPE,
+          hooks,
+          tuning: args.tuning,
           onProgress: (n) => {
             state.bytesDone = n;
+            if (state.status === "retrying") state.status = "downloading";
           },
         });
         state.status = res.status === "skipped" ? "skipped" : "done";
         state.bytesDone = item.bytes;
+        state.error = null;
       } catch (err) {
+        // 走到这里的都是硬失败（瞬时失败在 downloadGeoAsset 里无限
+        // 续传，不会上抛）：本文件判死，但不拖累后面的文件。
         state.status = "failed";
         state.error = err instanceof GeoReleaseError ? err.code : err instanceof Error ? err.message : String(err);
+        job.lastError = `${item.file}: ${state.error}`;
         anyFailed = true;
       }
+      await persist();
     }
     job.status = anyFailed ? "failed" : "done";
   } catch (err) {
@@ -716,6 +888,9 @@ async function runFetchJob(
     job.finishedAt = new Date().toISOString();
     activeFetchJob = null;
     lastFetchJob = job;
+    // 终态任务没有恢复价值：清掉落盘状态，下次开机不会「恢复」一个
+    // 已经结束的任务。
+    await clearPersistedFetchJob(args.packDir);
     await auditFetchFinished(job, args.actorUserId);
   }
 }
@@ -727,6 +902,7 @@ export function startGeoPackFetch(args: {
   packDir?: string;
   baseUrl?: string;
   fetchImpl?: GeoFetchImpl;
+  tuning?: GeoDownloadTuning;
 }): { started: boolean; job: GeoPackFetchJobState } {
   if (activeFetchJob) return { started: false, job: activeFetchJob };
   const job: GeoPackFetchJobState = {
@@ -736,14 +912,67 @@ export function startGeoPackFetch(args: {
     release: null,
     startedAt: new Date().toISOString(),
     finishedAt: null,
+    recovered: false,
     files: [],
     error: null,
+    lastError: null,
   };
   activeFetchJob = job;
   void runFetchJob(job, {
     packDir: args.packDir ?? resolveGeoPackDir(),
     fetchImpl: args.fetchImpl ?? defaultFetchImpl,
     actorUserId: args.actorUserId,
+    tuning: args.tuning,
   });
   return { started: true, job };
+}
+
+/** 开机自检：暂存区里有未完成任务的落盘状态，就把它恢复成一个继续
+ *  跑的任务（标记 recovered，后台页据此显示「重启后已恢复」）。恢
+ *  复时按当前清单重建计划——已落位的文件会被跳过判定认出来，半截
+ *  文件靠固定 scope 的暂存名 Range 续上，所以重跑的代价只有重新
+ *  验一遍已完成文件的 SHA。状态文件缺失 / 损坏 / 已是终态 → 不恢
+ *  复（损坏的顺手清掉）。返回是否恢复了一个任务；永不抛错。 */
+export async function resumePersistedGeoPackFetch(args: {
+  packDir?: string;
+  fetchImpl?: GeoFetchImpl;
+  tuning?: GeoDownloadTuning;
+} = {}): Promise<boolean> {
+  if (activeFetchJob) return false;
+  const packDir = args.packDir ?? resolveGeoPackDir();
+  let raw: string;
+  try {
+    raw = await readFile(fetchJobStatePath(packDir), "utf8");
+  } catch {
+    return false;
+  }
+  let saved: PersistedFetchJob | null = null;
+  try {
+    saved = JSON.parse(raw) as PersistedFetchJob;
+  } catch {
+    saved = null;
+  }
+  if (
+    !saved || saved.version !== 1 || !saved.job ||
+    saved.job.status !== "running" || typeof saved.job.baseUrl !== "string"
+  ) {
+    await clearPersistedFetchJob(packDir);
+    return false;
+  }
+  const job: GeoPackFetchJobState = {
+    ...saved.job,
+    status: "running",
+    finishedAt: null,
+    recovered: true,
+    files: Array.isArray(saved.job.files) ? saved.job.files : [],
+    error: null,
+  };
+  activeFetchJob = job;
+  void runFetchJob(job, {
+    packDir,
+    fetchImpl: args.fetchImpl ?? defaultFetchImpl,
+    actorUserId: saved.actorUserId ?? null,
+    tuning: args.tuning,
+  });
+  return true;
 }
