@@ -42,6 +42,7 @@ import {
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
+import { getGeoPackFetchState, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
 import {
   createGeoSyncToken,
   latestGeoSyncUploadByFile,
@@ -1929,6 +1930,8 @@ export async function adminRoutes(app: FastifyInstance) {
       syncByFile,
       syncTokens,
       recentUploads,
+      releaseBaseUrl: resolveGeoPackReleaseBaseUrl(),
+      fetchJob: getGeoPackFetchState(),
     });
   };
 
@@ -1964,16 +1967,16 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!body.success) {
       return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent("标签格式不对"));
     }
-    const issued = await createGeoSyncToken({ label: body.data.label || "DGX 同步", createdBy: u.id });
+    const issued = await createGeoSyncToken({ label: body.data.label || "打包机同步", createdBy: u.id });
     await audit(req, u.id, "geo_sync_token.create", {
       targetType: "geo_sync_token", targetId: issued.id,
       // 只记 prefix——明文只出现在下面这次加密 flash 里，绝不进审计。
-      details: { label: body.data.label || "DGX 同步", prefix: issued.prefix },
+      details: { label: body.data.label || "打包机同步", prefix: issued.prefix },
     });
     return redirectWithFlash(reply, "/admin/geo-packs", {
       success: "同步令牌已生成，只显示这一次，请立即保存",
       issuedToken: issued.plain,
-      issuedLabel: body.data.label || "DGX 同步",
+      issuedLabel: body.data.label || "打包机同步",
     });
   });
 
@@ -1992,6 +1995,27 @@ export async function adminRoutes(app: FastifyInstance) {
       });
     }
     return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(revoked ? "同步令牌已吊销，立即生效" : "该令牌已是吊销状态"));
+  });
+
+  // 一键获取官方包：从 GEO_PACK_RELEASE_BASE_URL 拉发布清单，按清
+  // 单下载（分卷拼接 + 逐文件 SHA-256 复核）后走与同步通道同一条
+  // 原子落位路径激活。任务在后台跑（大包要传很久，不能占着请求），
+  // 进度读进程内存里的任务状态，开始记审计、完成由任务收尾时记。
+  app.post("/admin/geo-packs/fetch", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const { started, job } = startGeoPackFetch({ actorUserId: u.id });
+    if (!started) {
+      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent("已有获取任务在运行中，请等它结束"));
+    }
+    await audit(req, u.id, "geo_pack.fetch_start", {
+      targetType: "geo_pack_release", targetId: job.id,
+      details: { baseUrl: job.baseUrl },
+    });
+    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent("已开始获取官方地址包，刷新页面查看进度"));
   });
 
   const backupPage = (req: FastifyRequest, reply: FastifyReply, u: schema.User, extra: {

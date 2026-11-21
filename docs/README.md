@@ -6,6 +6,7 @@
 | 本地开发与检查命令 | [贡献指南](../CONTRIBUTING.md) |
 | 数据库迁移约定 | [迁移指南](../drizzle/README.md) |
 | 宝塔部署 | [安装说明](../deploy/bt-panel/README.md) |
+| 地址包（自建地址库）运营与格式 | [地址包指南](geo-packs.md) |
 | 安全策略与报告方式 | [SECURITY.md](../SECURITY.md) |
 | 桌面端开发与分发 | [Desktop README](../apps/desktop/README.md) |
 | Passkey 设计 | [架构说明](design/passkey-architecture.md) |

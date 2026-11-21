@@ -514,6 +514,40 @@ async function verifyPackContent(partFile: string, expectedPackId: string): Prom
   return null;
 }
 
+export interface GeoActivateOutcome {
+  ok: boolean;
+  error?: string;
+}
+
+/** 原子落位的唯一实现：暂存文件 → 大小核对 → 整体 SHA-256 复核 →
+ *  （包）内容自检 → rename 落位。同步通道的 complete 和后台「获取官方
+ *  包」（lib/geo_release.ts）共用这一条路径——任何入口想把包放进包目
+ *  录，都必须过同样的校验，不存在第二条宽松的落位通道。校验失败时
+ *  暂存文件原样保留，删不删由调用方按自己的台账语义决定。 */
+export async function activateStagedGeoFile(args: {
+  stagingFile: string;
+  fileName: string;
+  bytes: number;
+  sha256: string;
+  packDir?: string;
+}): Promise<GeoActivateOutcome> {
+  const packDir = args.packDir ?? resolveGeoPackDir();
+  const cls = classifyGeoSyncFile(args.fileName);
+  if (!cls) return { ok: false, error: "file_not_allowed" };
+  const st = await stat(args.stagingFile).catch(() => null);
+  if (!st || st.size !== args.bytes) return { ok: false, error: "staging_size_mismatch" };
+  const actual = await sha256File(args.stagingFile);
+  if (actual !== args.sha256.toLowerCase()) return { ok: false, error: "sha256_mismatch" };
+  if (cls.kind === "pack" && cls.packId) {
+    const contentError = await verifyPackContent(args.stagingFile, cls.packId);
+    if (contentError) return { ok: false, error: contentError };
+  }
+  const target = finalPathFor(packDir, args.fileName);
+  await mkdir(path.dirname(target), { recursive: true });
+  await rename(args.stagingFile, target);
+  return { ok: true };
+}
+
 export interface GeoSyncCompleteResult {
   ok: boolean;
   /** active = 已落位；failed = 已判失败（暂存已删）；receiving = 还缺片，会话原样保留等补传。 */
@@ -545,19 +579,15 @@ export async function completeGeoSyncUpload(
     return { ok: false, status: "failed", error };
   };
 
-  const st = await stat(part).catch(() => null);
-  if (!st || st.size !== row.bytes) return fail("staging_size_mismatch");
-  const actual = await sha256File(part);
-  if (actual !== row.sha256) return fail("sha256_mismatch");
+  const outcome = await activateStagedGeoFile({
+    stagingFile: part,
+    fileName: row.fileName,
+    bytes: row.bytes,
+    sha256: row.sha256,
+    packDir,
+  });
+  if (!outcome.ok) return fail(outcome.error ?? "activate_failed");
 
-  if (row.kind === "pack" && row.packId) {
-    const contentError = await verifyPackContent(part, row.packId);
-    if (contentError) return fail(contentError);
-  }
-
-  const target = finalPathFor(packDir, row.fileName);
-  await mkdir(path.dirname(target), { recursive: true });
-  await rename(part, target);
   await db
     .update(schema.geoSyncUploads)
     .set({ status: "active", completedAt: new Date(), updatedAt: new Date(), error: null })
