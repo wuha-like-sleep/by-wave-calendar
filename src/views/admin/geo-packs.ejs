@@ -119,6 +119,47 @@
 <% } %>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.fetch.heading") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.fetch.lead", { base: releaseBaseUrl }) %></p>
+  <% if (fetchJob) { %>
+  <div class="text-sm mb-4">
+    <% if (fetchJob.status === "running") { %>
+      <p class="text-amber-600 font-medium"><%= t("adminGeoPacks.fetch.running") %></p>
+    <% } else if (fetchJob.status === "done") { %>
+      <p class="text-emerald-600 font-medium"><%= t("adminGeoPacks.fetch.done", { time: fetchJob.finishedAt ? fetchJob.finishedAt.slice(0, 19).replace("T", " ") : "" }) %></p>
+    <% } else { %>
+      <p class="text-red-600 font-medium"><%= t("adminGeoPacks.fetch.failed", { time: fetchJob.finishedAt ? fetchJob.finishedAt.slice(0, 19).replace("T", " ") : "" }) %><% if (fetchJob.error) { %> · <span class="font-mono text-xs"><%= fetchJob.error %></span><% } %></p>
+    <% } %>
+    <% if (fetchJob.release) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.release") %>: <span class="font-mono"><%= fetchJob.release %></span></p><% } %>
+    <% if (fetchJob.files.length > 0) { %>
+    <ul class="divide-y divide-slate-100 mt-2">
+      <% fetchJob.files.forEach(function (f) { %>
+      <li class="flex flex-wrap items-center justify-between gap-3 py-2">
+        <span class="font-mono text-slate-700"><%= f.file %></span>
+        <span class="text-slate-400">
+          <%= fmtBytes(f.bytesDone) %> / <%= fmtBytes(f.bytesTotal) %> ·
+          <% if (f.status === "done") { %><span class="text-emerald-600"><%= t("adminGeoPacks.fetch.fileDone") %></span>
+          <% } else if (f.status === "skipped") { %><span class="text-slate-500"><%= t("adminGeoPacks.fetch.fileSkipped") %></span>
+          <% } else if (f.status === "failed") { %><span class="text-red-600"><%= t("adminGeoPacks.fetch.fileFailed") %><% if (f.error) { %> · <%= f.error %><% } %></span>
+          <% } else if (f.status === "activating") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileActivating") %></span>
+          <% } else if (f.status === "verifying") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileVerifying") %></span>
+          <% } else if (f.status === "downloading") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileDownloading") %></span>
+          <% } else { %><%= t("adminGeoPacks.fetch.filePending") %><% } %>
+        </span>
+      </li>
+      <% }); %>
+    </ul>
+    <% } %>
+  </div>
+  <% } %>
+  <form method="post" action="/admin/geo-packs/fetch">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <% var fetchRunning = fetchJob && fetchJob.status === "running"; %>
+    <button type="submit"<% if (fetchRunning) { %> disabled<% } %> class="rounded-lg px-4 py-2 text-sm font-medium text-white <%= fetchRunning ? "bg-slate-300 cursor-not-allowed" : "bg-brand-600 hover:bg-brand-700" %>"><%= t("adminGeoPacks.fetch.button") %></button>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.tokens.heading") %></h2>
   <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.tokens.lead") %></p>
   <% if (syncTokens.length === 0) { %>
@@ -151,7 +192,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="block">
       <span class="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1"><%= t("adminGeoPacks.tokens.createLabel") %></span>
-      <input type="text" name="label" maxlength="100" placeholder="DGX"
+      <input type="text" name="label" maxlength="100" placeholder="打包机"
              class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 w-56" />
     </label>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminGeoPacks.tokens.create") %></button>

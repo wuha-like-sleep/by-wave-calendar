@@ -61,6 +61,11 @@ const schema = z.object({
   // 服务端代理它：客户端只打本站 /api/geo/suggest，不知道来源是谁，
   // 客户端一行不用动。只是建议来源，不是数据源——查不到 / 超时
   // 一律静默退回本地地址簿，不影响保存。
+  // 注意默认端点 photon.komoot.io 是 Komoot 提供的公共演示实例：
+  // 适合试用和轻量使用，没有可用性承诺、有用量政策，把它当生产
+  // 依赖不合适。自托管部署建议二选一：装好下面的官方地址包（本地
+  // 查询、无外部依赖），或自建 Photon（开源、基于 OSM 数据）/ 任何
+  // Photon 兼容端点，再把 GEO_PROVIDER_BASE_URL 指过去。
   GEO_PROVIDER: z.enum(["photon", "pack"]).default("pack"),
   GEO_PROVIDER_BASE_URL: z.string().url().default("https://photon.komoot.io"),
   // 自建地址包目录（含 pack-*.sqlite 与 manifest / ATTRIBUTION 等
@@ -72,6 +77,23 @@ const schema = z.object({
   // 部署行为与纯 photon 逐字节一致；显式设 GEO_PROVIDER=photon
   // 可强制关掉本地包。
   GEO_PACK_DIR: z.string().optional(),
+  // 后台「获取官方地址包」的发布基地址：一个目录式前缀，其下放
+  // geo-pack-release.json（发布清单）和清单里列的资产文件。默认是
+  // 本项目在 GitHub Releases 上的澳洲包发布；运营者可以镜像到自己
+  // 的静态站点后改指过去（格式见 docs/geo-packs.md）。下载回来的
+  // 每个文件都按清单里的 SHA-256 复核后才经同步通道同一条原子落
+  // 位路径激活，清单本身按不可信输入处理（文件名白名单 + 大小上
+  // 限与 ingest 一致）。
+  GEO_PACK_RELEASE_BASE_URL: z
+    .string()
+    .url()
+    .default(
+      "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/geo-packs-au-v1",
+    ),
+  // 与 ICS_ALLOW_PRIVATE_NETWORK 同性质的逃生口：发布基地址指向内
+  // 网镜像（或本机测试）时才需要打开。默认关——基地址即使被改成内
+  // 网地址，SSRF 守卫也会挡下解析到内网的下载。
+  GEO_PACK_RELEASE_ALLOW_PRIVATE_NETWORK: boolFlag.default(false),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
   // subscriptions, one-shot URL imports, and — defense-in-depth — outbound
