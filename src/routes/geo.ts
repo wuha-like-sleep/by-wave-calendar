@@ -15,6 +15,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUserOrSend } from "../lib/session.js";
 import { env } from "../env.js";
+import { resolveGeoPackDir } from "../lib/geo_sync.js";
 import {
   GeoSuggestCache,
   fetchGeoSuggestions,
@@ -52,7 +53,7 @@ export async function geoRoutes(app: FastifyInstance) {
       const suggestions = await fetchGeoSuggestions({
         provider: env.GEO_PROVIDER,
         baseUrl: env.GEO_PROVIDER_BASE_URL,
-        packDir: env.GEO_PACK_DIR,
+        packDir: resolveGeoPackDir(),
         query: q,
         lang,
         limit: 5,

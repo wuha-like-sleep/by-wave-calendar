@@ -42,6 +42,14 @@ import {
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
+import {
+  createGeoSyncToken,
+  latestGeoSyncUploadByFile,
+  listGeoSyncTokens,
+  listRecentGeoSyncUploads,
+  resolveGeoPackDir,
+  revokeGeoSyncToken,
+} from "../lib/geo_sync.js";
 import { getMicrosoftCalendarConfig, microsoftClientIdSchema, setMicrosoftCalendarClientId } from "../lib/calendar_sync/config.js";
 import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
@@ -1887,20 +1895,47 @@ export async function adminRoutes(app: FastifyInstance) {
   // 清单加了十几张表、八门语言的那句话还停在最早的 15 张 —— 站长照着页面判断
   // 「我的预约在不在备份里」，得到的是错的答案。
   // ---------- 地址包（自建地址库） ----------
-  // GEO_PACK_DIR 里的包由 DGX 侧管线产出、经单独同步通道落盘；这里只读：
-  // 列表页把 manifest 的行数 / sha256 / 生成时间摆出来，下载走白名单 +
-  // 流式响应（全国包 9.47 GiB，绝不整包读进内存），每次下载记审计。
-  app.get("/admin/geo-packs", async (req, reply) => {
-    const u = await requireAdmin(req, reply);
-    if (!u) return reply;
-    const listing = await listGeoPacks(env.GEO_PACK_DIR);
+  // 包目录由 resolveGeoPackDir() 统一解析（同步通道写、provider 读、
+  // 这里列，同一个目录）。列表页把 manifest 的行数 / sha256 / 生成时间
+  // 摆出来，下载走白名单 + 流式响应（全国包 9.47 GiB，绝不整包读进
+  // 内存），每次下载记审计。同步状态读 geo_sync_uploads 台账（每个文件
+  // 最近一次上传）；同步令牌也在这页签发 / 吊销——令牌与个人 API
+  // Token、管理员会话完全分开，只存哈希，明文只在签发时经加密 flash
+  // 展示一次（与个人 Token 的一次性展示同一套机制）。
+  const geoPacksPage = async (req: FastifyRequest, reply: FastifyReply, u: schema.User) => {
+    const packDir = resolveGeoPackDir();
+    const [listing, syncTokens, latestByFile, recentUploads] = await Promise.all([
+      listGeoPacks(packDir),
+      listGeoSyncTokens(),
+      latestGeoSyncUploadByFile(),
+      listRecentGeoSyncUploads(20),
+    ]);
+    const syncByFile: Record<string, {
+      status: string; received: number; total: number; updatedAt: Date; error: string | null;
+    }> = {};
+    for (const [file, up] of latestByFile) {
+      const received = Array.isArray(up.receivedChunks) ? up.receivedChunks.length : 0;
+      syncByFile[file] = {
+        status: up.status, received, total: up.chunkCount, updatedAt: up.updatedAt, error: up.error,
+      };
+    }
     return reply.view("admin/geo-packs", {
       title: "地址包 · 管理后台",
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/geo-packs",
       listing,
       provider: env.GEO_PROVIDER,
+      packDir,
+      syncByFile,
+      syncTokens,
+      recentUploads,
     });
+  };
+
+  app.get("/admin/geo-packs", async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    return geoPacksPage(req, reply, u);
   });
 
   app.get("/admin/geo-packs/download", async (req, reply) => {
@@ -1908,7 +1943,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!u) return reply;
     const parsed = z.object({ file: z.string().min(1).max(200) }).safeParse(req.query);
     if (!parsed.success) return reply.code(400).send("bad file");
-    const hit = await resolveGeoPackDownload(env.GEO_PACK_DIR, parsed.data.file);
+    const hit = await resolveGeoPackDownload(resolveGeoPackDir(), parsed.data.file);
     if (!hit) return reply.code(404).send("not found");
     await audit(req, u.id, "geo_pack.download", {
       targetType: "geo_pack", targetId: hit.name, details: { bytes: hit.bytes },
@@ -1917,6 +1952,46 @@ export async function adminRoutes(app: FastifyInstance) {
     reply.header("Content-Length", String(hit.bytes));
     reply.header("Content-Disposition", `attachment; filename="${path.basename(hit.name)}"`);
     return reply.send(createReadStream(hit.full));
+  });
+
+  app.post("/admin/geo-packs/sync-tokens", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({ label: z.string().trim().max(100).optional() }).safeParse(req.body ?? {});
+    if (!body.success) {
+      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent("标签格式不对"));
+    }
+    const issued = await createGeoSyncToken({ label: body.data.label || "DGX 同步", createdBy: u.id });
+    await audit(req, u.id, "geo_sync_token.create", {
+      targetType: "geo_sync_token", targetId: issued.id,
+      // 只记 prefix——明文只出现在下面这次加密 flash 里，绝不进审计。
+      details: { label: body.data.label || "DGX 同步", prefix: issued.prefix },
+    });
+    return redirectWithFlash(reply, "/admin/geo-packs", {
+      success: "同步令牌已生成，只显示这一次，请立即保存",
+      issuedToken: issued.plain,
+      issuedLabel: body.data.label || "DGX 同步",
+    });
+  });
+
+  app.post("/admin/geo-packs/sync-tokens/:id/revoke", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse((req.params as { id: string }).id);
+    if (!id.success) return reply.redirect("/admin/geo-packs");
+    const revoked = await revokeGeoSyncToken(id.data);
+    if (revoked) {
+      await audit(req, u.id, "geo_sync_token.revoke", {
+        targetType: "geo_sync_token", targetId: id.data,
+      });
+    }
+    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(revoked ? "同步令牌已吊销，立即生效" : "该令牌已是吊销状态"));
   });
 
   const backupPage = (req: FastifyRequest, reply: FastifyReply, u: schema.User, extra: {

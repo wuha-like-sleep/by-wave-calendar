@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   jsonb,
   date,
+  bigint,
   primaryKey,
 } from "drizzle-orm/pg-core";
 import { desc, sql } from "drizzle-orm";
@@ -993,3 +994,54 @@ export const calendarSyncLogins = pgTable("calendar_sync_logins", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   nextPollAt: timestamp("next_poll_at", { withTimezone: true }).notNull(),
 });
+
+// 地址包同步通道（DGX → 本站）的机器令牌。与个人 API Token、管理员会话
+// 完全分开：只存 bcrypt 哈希、明文只在后台生成时展示一次；吊销写
+// revoked_at，校验路径每次都查，吊销立即生效。created_by 只记签发的
+// 管理员，令牌本身不绑用户身份。见 drizzle/migrations/0070 的说明。
+export const geoSyncTokens = pgTable("geo_sync_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  label: text("label").notNull(),
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  lastUsedIp: text("last_used_ip"),
+  useCount: integer("use_count").notNull().default(0),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  prefixIdx: index("geo_sync_tokens_prefix_idx").on(t.prefix),
+}));
+
+// 一次分片上传一行的会话台账：manifest 开会话 → 逐片落暂存区 →
+// received_chunks 记已确认分片（断点续传凭它）→ 整体 SHA-256 与
+// manifest 对上才原子落位并置 active。后台「地址包」页的同步状态读
+// 这张表（每个文件名取最近一行）。
+// status: receiving / active / failed / aborted。
+export const geoSyncUploads = pgTable("geo_sync_uploads", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tokenId: uuid("token_id").notNull().references(() => geoSyncTokens.id, { onDelete: "cascade" }),
+  fileName: text("file_name").notNull(),
+  kind: text("kind").notNull(),
+  packId: text("pack_id"),
+  bytes: bigint("bytes", { mode: "number" }).notNull(),
+  sha256: text("sha256").notNull(),
+  rowsTotal: bigint("rows_total", { mode: "number" }),
+  region: text("region"),
+  packVersion: text("pack_version"),
+  chunkSize: integer("chunk_size").notNull(),
+  chunkCount: integer("chunk_count").notNull(),
+  receivedChunks: jsonb("received_chunks").notNull().default([]),
+  status: text("status").notNull().default("receiving"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (t) => ({
+  fileIdx: index("geo_sync_uploads_file_idx").on(t.fileName, t.createdAt),
+  statusIdx: index("geo_sync_uploads_status_idx").on(t.status, t.updatedAt),
+}));
+
+export type GeoSyncToken = typeof geoSyncTokens.$inferSelect;
+export type GeoSyncUpload = typeof geoSyncUploads.$inferSelect;
