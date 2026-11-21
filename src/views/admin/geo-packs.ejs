@@ -14,6 +14,14 @@
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminGeoPacks.heading") %></h1>
 <p class="text-sm text-slate-500 mb-6"><%= t("adminGeoPacks.lead") %></p>
 
+<% if (flash && flash.issuedToken) { %>
+<section class="rounded-2xl border border-amber-300 bg-amber-50 p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.tokens.issuedHeading") %></h2>
+  <p class="text-sm text-slate-600 mb-3"><%= t("adminGeoPacks.tokens.issuedLead") %></p>
+  <p class="font-mono text-sm break-all rounded-lg bg-white border border-amber-200 px-3 py-2 text-slate-900"><%= flash.issuedToken %></p>
+</section>
+<% } %>
+
 <% if (!listing.configured) { %>
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.notConfigured.heading") %></h2>
@@ -21,6 +29,7 @@
 </section>
 <% } else { %>
 <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.providerNote", { provider: provider }) %></p>
+<p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.dirNote", { dir: packDir }) %></p>
 
 <% if (listing.packs.length === 0) { %>
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
@@ -36,6 +45,21 @@
       <p class="text-sm text-slate-500">
         <%= pack.region || "—" %> · <%= fmtBytes(pack.bytes) %>
         <% if (pack.packVersion) { %> · v<%= pack.packVersion %><% } %>
+      </p>
+      <% var sync = syncByFile[pack.file]; %>
+      <p class="text-sm mt-1">
+        <span class="text-slate-400"><%= t("adminGeoPacks.sync.colStatus") %>:</span>
+        <% if (!sync) { %>
+          <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusNone") %></span>
+        <% } else if (sync.status === "active") { %>
+          <span class="text-emerald-600 font-medium"><%= t("adminGeoPacks.sync.statusActive") %></span>
+        <% } else if (sync.status === "receiving") { %>
+          <span class="text-amber-600 font-medium"><%= t("adminGeoPacks.sync.statusReceiving") %> · <%= t("adminGeoPacks.sync.progress", { received: sync.received, total: sync.total }) %></span>
+        <% } else if (sync.status === "failed") { %>
+          <span class="text-red-600 font-medium"><%= t("adminGeoPacks.sync.statusFailed") %><% if (sync.error) { %> · <span class="font-mono text-xs"><%= sync.error %></span><% } %></span>
+        <% } else { %>
+          <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusAborted") %></span>
+        <% } %>
       </p>
     </div>
     <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(pack.file) %>"
@@ -92,6 +116,66 @@
   </ul>
 </section>
 <% } %>
+<% } %>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.tokens.heading") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.tokens.lead") %></p>
+  <% if (syncTokens.length === 0) { %>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.tokens.empty") %></p>
+  <% } else { %>
+  <ul class="divide-y divide-slate-100 text-sm mb-4">
+    <% syncTokens.forEach(function (tok) { %>
+    <li class="flex flex-wrap items-center justify-between gap-3 py-2">
+      <span class="min-w-0">
+        <span class="font-medium text-slate-900"><%= tok.label %></span>
+        <span class="font-mono text-xs text-slate-400">bwgs_<%= tok.prefix %>_…</span>
+        <span class="text-slate-400">· <%= t("adminGeoPacks.tokens.colLastUsed") %>: <%= tok.lastUsedAt ? tok.lastUsedAt.toISOString().slice(0, 19).replace("T", " ") : "—" %></span>
+      </span>
+      <% if (tok.revokedAt) { %>
+        <span class="text-slate-400"><%= t("adminGeoPacks.tokens.statusRevoked") %></span>
+      <% } else { %>
+        <span class="flex items-center gap-3">
+          <span class="text-emerald-600 font-medium"><%= t("adminGeoPacks.tokens.statusActive") %></span>
+          <form method="post" action="/admin/geo-packs/sync-tokens/<%= tok.id %>/revoke" class="inline">
+            <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+            <button type="submit" class="text-red-600 hover:underline"><%= t("adminGeoPacks.tokens.revoke") %></button>
+          </form>
+        </span>
+      <% } %>
+    </li>
+    <% }); %>
+  </ul>
+  <% } %>
+  <form method="post" action="/admin/geo-packs/sync-tokens" class="flex flex-wrap items-end gap-3">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="block">
+      <span class="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1"><%= t("adminGeoPacks.tokens.createLabel") %></span>
+      <input type="text" name="label" maxlength="100" placeholder="DGX"
+             class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 w-56" />
+    </label>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminGeoPacks.tokens.create") %></button>
+  </form>
+</section>
+
+<% if (recentUploads.length > 0) { %>
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("adminGeoPacks.recent.heading") %></h2>
+  <ul class="divide-y divide-slate-100 text-sm">
+    <% recentUploads.forEach(function (up) { %>
+    <li class="flex flex-wrap items-center justify-between gap-3 py-2">
+      <span class="font-mono text-slate-700"><%= up.fileName %></span>
+      <span class="text-slate-400">
+        <%= up.createdAt.toISOString().slice(0, 19).replace("T", " ") %> ·
+        <% if (up.status === "active") { %><span class="text-emerald-600"><%= t("adminGeoPacks.sync.statusActive") %></span>
+        <% } else if (up.status === "receiving") { %><span class="text-amber-600"><%= t("adminGeoPacks.sync.statusReceiving") %> · <%= t("adminGeoPacks.sync.progress", { received: Array.isArray(up.receivedChunks) ? up.receivedChunks.length : 0, total: up.chunkCount }) %></span>
+        <% } else if (up.status === "failed") { %><span class="text-red-600"><%= t("adminGeoPacks.sync.statusFailed") %><% if (up.error) { %> · <%= up.error %><% } %></span>
+        <% } else { %><%= t("adminGeoPacks.sync.statusAborted") %><% } %>
+      </span>
+    </li>
+    <% }); %>
+  </ul>
+</section>
 <% } %>
 
 <%- include('_nav_end') %>

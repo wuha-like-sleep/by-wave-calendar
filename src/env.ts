@@ -54,17 +54,23 @@ const schema = z.object({
   RATE_LIMIT_API_TOKEN_PER_MINUTE: z.coerce.number().int().positive().default(600),
   // 地址联想的在线兜底来源：GEO_PROVIDER 选适配器——photon 是
   // Komoot 的 OSM 地理编码（GEO_PROVIDER_BASE_URL 是它的地址）；
-  // pack 是自建地址包（DGX 管线产出的 pack-*.sqlite，放在
-  // GEO_PACK_DIR 里），包没配 / 打不开 / 查不到时自动回落 photon。
+  // pack 是自建地址包（DGX 管线产出的 pack-*.sqlite，放在包目录
+  // 里），包没配 / 打不开 / 查不到时自动回落 photon。默认 pack：
+  // 没包的部署全部回落 photon，行为与之前默认 photon 时一致；有
+  // 包经同步通道落盘后自动生效，不需要改配置重启。
   // 服务端代理它：客户端只打本站 /api/geo/suggest，不知道来源是谁，
   // 客户端一行不用动。只是建议来源，不是数据源——查不到 / 超时
   // 一律静默退回本地地址簿，不影响保存。
-  GEO_PROVIDER: z.enum(["photon", "pack"]).default("photon"),
+  GEO_PROVIDER: z.enum(["photon", "pack"]).default("pack"),
   GEO_PROVIDER_BASE_URL: z.string().url().default("https://photon.komoot.io"),
   // 自建地址包目录（含 pack-*.sqlite 与 manifest / ATTRIBUTION 等
-  // 配套文件）。不设 = 没有包：provider=pack 时全部回落 photon，
-  // 后台「地址包」页显示未配置。包由 DGX 侧管线产出、经单独的同步
-  // 通道落到这个目录，服务只读不写。
+  // 配套文件）。不设时由 resolveGeoPackDir()（lib/geo_sync.ts）落到
+  // 仓库既有数据目录惯例的位置：cwd 下 data/geo-packs。同步通道
+  // （/api/geo-sync）往这个目录写、provider 从这个目录读、后台从
+  // 这个目录列，三方共用同一个解析函数，不会漂移。provider=pack
+  // 时包缺失 / 打不开 / 无命中一律自动回落 photon，所以没有包的
+  // 部署行为与纯 photon 逐字节一致；显式设 GEO_PROVIDER=photon
+  // 可强制关掉本地包。
   GEO_PACK_DIR: z.string().optional(),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
