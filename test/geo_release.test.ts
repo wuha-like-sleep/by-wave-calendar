@@ -19,6 +19,7 @@ const {
   releaseFilePlan,
   fetchGeoReleaseFile,
   downloadGeoAsset,
+  previewGeoPackRelease,
   GeoReleaseError,
   MAX_RELEASE_PART_BYTES,
 } = await import("../src/lib/geo_release.js");
@@ -260,6 +261,101 @@ describe("fetchGeoReleaseFile", () => {
       const plan = { file: "../pack-au-ot.sqlite", bytes: 1, sha256: sha("x"), parts: [] };
       await expect(fetchGeoReleaseFile({ baseUrl, plan, packDir, fetchImpl })).rejects.toMatchObject({
         code: "file_not_allowed",
+      });
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("previewGeoPackRelease", () => {
+  it("只拉清单：每包大小/行数/分卷数与清单一致，未装时总下载量 = 全部字节", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestWithParts()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const pv = await previewGeoPackRelease({ baseUrl, packDir, fetchImpl });
+      const total = packBuf.length + companion.length + licenceText.length;
+      expect(pv.release).toBe("geo-packs-au-vTest");
+      expect(pv.fileCount).toBe(3);
+      expect(pv.pendingFileCount).toBe(3);
+      expect(pv.totalBytes).toBe(total);
+      expect(pv.totalDownloadBytes).toBe(total);
+      expect(pv.packs).toHaveLength(1);
+      const p = pv.packs[0]!;
+      expect(p.file).toBe("pack-au-ot.sqlite");
+      expect(p.bytes).toBe(packBuf.length);
+      expect(p.rows).toBe(1);
+      expect(p.region).toBe("Other Territories, Australia");
+      expect(p.parts).toBe(2);
+      expect(p.installed).toBe(false);
+      // 包的待下载量含它自己的配套文件，不含共享文件。
+      expect(p.downloadBytes).toBe(packBuf.length + companion.length);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("全部落位后：已安装判定与获取跳过同口径，总下载量归零", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestWithParts()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const plan = releaseFilePlan(parseGeoReleaseManifest(manifestWithParts()));
+      for (const item of plan) {
+        await fetchGeoReleaseFile({ baseUrl, plan: item, packDir, fetchImpl });
+      }
+      const pv = await previewGeoPackRelease({ baseUrl, packDir, fetchImpl });
+      expect(pv.packs[0]!.installed).toBe(true);
+      expect(pv.packs[0]!.downloadBytes).toBe(0);
+      expect(pv.pendingFileCount).toBe(0);
+      expect(pv.totalDownloadBytes).toBe(0);
+      expect(pv.totalBytes).toBe(packBuf.length + companion.length + licenceText.length);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("本地文件大小对但内容被换 → 不算已安装（SHA 同口径）", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestWithParts()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      writeFileSync(path.join(packDir, "pack-au-ot.sqlite"), Buffer.alloc(packBuf.length, 7));
+      const pv = await previewGeoPackRelease({ baseUrl, packDir, fetchImpl });
+      expect(pv.packs[0]!.installed).toBe(false);
+      expect(pv.totalDownloadBytes).toBe(pv.totalBytes);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("清单非法 → release_manifest_invalid；源返回 404 → release_manifest_http_404", async () => {
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const notJson = async () => new Response("<html>nope</html>", { status: 200 });
+      await expect(previewGeoPackRelease({ baseUrl, packDir, fetchImpl: notJson })).rejects.toMatchObject({
+        code: "release_manifest_invalid",
+      });
+      const wrongFormat = async () =>
+        new Response(JSON.stringify({ format: 99, release: "x", packs: [] }), { status: 200 });
+      await expect(previewGeoPackRelease({ baseUrl, packDir, fetchImpl: wrongFormat })).rejects.toMatchObject({
+        code: "release_manifest_invalid",
+      });
+      const notFound = async () => new Response("nope", { status: 404 });
+      await expect(previewGeoPackRelease({ baseUrl, packDir, fetchImpl: notFound })).rejects.toMatchObject({
+        code: "release_manifest_http_404",
+      });
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("源不可达（fetch 直接抛错）→ release_unreachable，不漏裸网络错误", async () => {
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const boom = async () => {
+        throw new Error("connect ECONNREFUSED 127.0.0.1:9");
+      };
+      await expect(previewGeoPackRelease({ baseUrl, packDir, fetchImpl: boom })).rejects.toMatchObject({
+        code: "release_unreachable",
       });
     } finally {
       rmSync(packDir, { recursive: true, force: true });

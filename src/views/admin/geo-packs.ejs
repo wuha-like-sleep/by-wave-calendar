@@ -121,6 +121,10 @@
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.fetch.heading") %></h2>
   <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.fetch.lead", { base: releaseBaseUrl }) %></p>
+  <div class="mb-4">
+    <button type="button" id="geo-preview-btn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"><%= t("adminGeoPacks.fetch.previewButton") %></button>
+    <div id="geo-preview" class="mt-3 hidden"></div>
+  </div>
   <% if (fetchJob) { %>
   <div class="text-sm mb-4">
     <% if (fetchJob.status === "running") { %>
@@ -155,7 +159,7 @@
   <form method="post" action="/admin/geo-packs/fetch">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <% var fetchRunning = fetchJob && fetchJob.status === "running"; %>
-    <button type="submit"<% if (fetchRunning) { %> disabled<% } %> class="rounded-lg px-4 py-2 text-sm font-medium text-white <%= fetchRunning ? "bg-slate-300 cursor-not-allowed" : "bg-brand-600 hover:bg-brand-700" %>"><%= t("adminGeoPacks.fetch.button") %></button>
+    <button type="submit" id="geo-fetch-btn"<% if (fetchRunning) { %> disabled<% } %> class="rounded-lg px-4 py-2 text-sm font-medium text-white <%= fetchRunning ? "bg-slate-300 cursor-not-allowed" : "bg-brand-600 hover:bg-brand-700" %>"><%= t("adminGeoPacks.fetch.button") %></button>
   </form>
 </section>
 
@@ -218,5 +222,115 @@
   </ul>
 </section>
 <% } %>
+
+<script>
+(function () {
+  var btn = document.getElementById("geo-preview-btn");
+  var box = document.getElementById("geo-preview");
+  var fetchBtn = document.getElementById("geo-fetch-btn");
+  if (!btn || !box) return;
+  var T = {
+    loading: <%- JSON.stringify(t("adminGeoPacks.fetch.previewLoading")) %>,
+    release: <%- JSON.stringify(t("adminGeoPacks.fetch.release")) %>,
+    colPack: <%- JSON.stringify(t("adminGeoPacks.fetch.previewColPack")) %>,
+    colRows: <%- JSON.stringify(t("adminGeoPacks.colRows")) %>,
+    colSize: <%- JSON.stringify(t("adminGeoPacks.fetch.previewColSize")) %>,
+    colStatus: <%- JSON.stringify(t("adminGeoPacks.fetch.previewColStatus")) %>,
+    installed: <%- JSON.stringify(t("adminGeoPacks.fetch.previewInstalled")) %>,
+    pending: <%- JSON.stringify(t("adminGeoPacks.fetch.previewPending")) %>,
+    parts: <%- JSON.stringify(t("adminGeoPacks.fetch.previewParts")) %>,
+    summary: <%- JSON.stringify(t("adminGeoPacks.fetch.previewSummary")) %>,
+    allInstalled: <%- JSON.stringify(t("adminGeoPacks.fetch.previewAllInstalled")) %>,
+    buttonWithSize: <%- JSON.stringify(t("adminGeoPacks.fetch.buttonWithSize")) %>,
+    errUnreachable: <%- JSON.stringify(t("adminGeoPacks.fetch.previewErrorUnreachable")) %>,
+    errInvalid: <%- JSON.stringify(t("adminGeoPacks.fetch.previewErrorInvalid")) %>,
+    errHttp: <%- JSON.stringify(t("adminGeoPacks.fetch.previewErrorHttp")) %>,
+    errGeneric: <%- JSON.stringify(t("adminGeoPacks.fetch.previewErrorGeneric")) %>
+  };
+  function fmtBytes(n) {
+    if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
+    if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MiB";
+    if (n >= 1024) return (n / 1024).toFixed(1) + " KiB";
+    return n + " B";
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function showError(kind, data) {
+    box.textContent = "";
+    var msg = T.errGeneric;
+    if (kind === "unreachable") msg = T.errUnreachable;
+    else if (kind === "invalid") msg = T.errInvalid;
+    else if (kind === "http") msg = T.errHttp.replace("{status}", String(data && data.httpStatus != null ? data.httpStatus : "?"));
+    var p = el("p", "text-sm text-red-600 font-medium", msg);
+    if (data && data.code) p.appendChild(el("span", "font-mono text-xs", " · " + data.code));
+    box.appendChild(p);
+  }
+  function render(pv) {
+    box.textContent = "";
+    var head = el("p", "text-sm text-slate-500 mb-2");
+    head.appendChild(document.createTextNode(T.release + ": "));
+    head.appendChild(el("span", "font-mono text-slate-700", pv.release));
+    box.appendChild(head);
+    var table = el("table", "w-full text-sm mb-2");
+    var thead = el("thead");
+    var hr = el("tr", "text-left text-xs uppercase tracking-wider text-slate-400");
+    hr.appendChild(el("th", "py-1 pr-3 font-medium", T.colPack));
+    hr.appendChild(el("th", "py-1 pr-3 font-medium", T.colRows));
+    hr.appendChild(el("th", "py-1 pr-3 font-medium", T.colSize));
+    hr.appendChild(el("th", "py-1 font-medium", T.colStatus));
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    var tbody = el("tbody", "divide-y divide-slate-100");
+    pv.packs.forEach(function (p) {
+      var tr = el("tr");
+      var tdPack = el("td", "py-2 pr-3");
+      tdPack.appendChild(el("span", "font-mono text-slate-700", p.file));
+      if (p.region) tdPack.appendChild(el("span", "block text-xs text-slate-400", p.region));
+      tr.appendChild(tdPack);
+      tr.appendChild(el("td", "py-2 pr-3 tabular-nums text-slate-700", p.rows == null ? "—" : p.rows.toLocaleString("en-US")));
+      var tdSize = el("td", "py-2 pr-3 tabular-nums text-slate-700", fmtBytes(p.bytes));
+      tdSize.appendChild(el("span", "block text-xs text-slate-400", p.bytes.toLocaleString("en-US") + " B"));
+      tr.appendChild(tdSize);
+      var tdStatus = el("td", "py-2");
+      if (p.installed) tdStatus.appendChild(el("span", "text-emerald-600 font-medium", T.installed));
+      else tdStatus.appendChild(el("span", "text-slate-500", T.pending));
+      if (p.parts > 0) tdStatus.appendChild(el("span", "block text-xs text-slate-400", T.parts.replace("{count}", String(p.parts))));
+      tr.appendChild(tdStatus);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    box.appendChild(table);
+    if (pv.totalDownloadBytes > 0) {
+      box.appendChild(el("p", "text-sm text-slate-600", T.summary
+        .replace("{files}", String(pv.fileCount))
+        .replace("{total}", fmtBytes(pv.totalBytes))
+        .replace("{download}", fmtBytes(pv.totalDownloadBytes))));
+      if (fetchBtn && !fetchBtn.disabled) {
+        fetchBtn.textContent = T.buttonWithSize.replace("{size}", fmtBytes(pv.totalDownloadBytes));
+      }
+    } else {
+      box.appendChild(el("p", "text-sm text-emerald-600 font-medium", T.allInstalled));
+    }
+  }
+  btn.addEventListener("click", function () {
+    btn.disabled = true;
+    box.classList.remove("hidden");
+    box.textContent = "";
+    box.appendChild(el("p", "text-sm text-slate-400", T.loading));
+    fetch("/admin/geo-packs/preview", { credentials: "same-origin", headers: { accept: "application/json" } })
+      .then(function (resp) { return resp.json().catch(function () { return null; }).then(function (data) { return { resp: resp, data: data }; }); })
+      .then(function (r) {
+        if (r.data && r.data.ok && r.data.preview) render(r.data.preview);
+        else showError(r.data && r.data.kind ? r.data.kind : "error", r.data);
+      })
+      .catch(function () { showError("unreachable", null); })
+      .finally(function () { btn.disabled = false; });
+  });
+})();
+</script>
 
 <%- include('_nav_end') %>
