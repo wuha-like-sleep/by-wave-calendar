@@ -231,7 +231,7 @@
 
 <!-- Modal: New / Edit Event -->
 <div id="modal-event" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:w-[440px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
+  <div class="bg-white w-full sm:w-[440px] sm:max-w-[calc(100vw-2rem)] sm:rounded-2xl rounded-t-2xl shadow-xl overflow-y-auto" style="max-height: 90vh; max-height: 90dvh">
     <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 id="modal-event-title" class="text-lg font-semibold text-slate-900"><%= t("app.toolbar.newEvent") %></h3>
       <div class="flex items-center gap-2">
@@ -512,7 +512,7 @@
     UTC offset; selecting commits a known-valid IANA id to the hidden
     <input name="timezone"> in the picker that opened the modal. %>
 <div id="modal-tz" class="hidden fixed inset-0 z-[60] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col style="max-height: 85vh; max-height: 85dvh"">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-xl flex flex-col" style="max-height: 85vh; max-height: 85dvh">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
       <h3 class="text-base font-semibold text-slate-900"><%= t("app.tz.title") %></h3>
       <button type="button" data-tz-close class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -545,7 +545,7 @@
     each conflict with original timestamp + last error + retry/discard
     buttons. %>
 <div id="modal-conflicts" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 85vh; max-height: 85dvh" overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-2xl sm:rounded-2xl rounded-t-2xl shadow-xl overflow-y-auto" style="max-height: 85vh; max-height: 85dvh">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 class="text-lg font-semibold text-slate-900"><%= t("app.conflicts.title") %></h3>
       <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -566,7 +566,7 @@
 
 <!-- Modal: Import calendar (file / URL / subscription / paste, into new or existing) -->
 <div id="modal-import" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-y-auto" style="max-height: 90vh; max-height: 90dvh">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <h3 class="text-lg font-semibold text-slate-900"><%= t("app.import.title") %></h3>
       <button type="button" class="modal-close p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t("app.common.close") %>">
@@ -686,7 +686,7 @@
 
 <!-- Modal: Calendar context menu (share, edit, delete) -->
 <div id="modal-cal-menu" class="hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl style="max-height: 90vh; max-height: 90dvh" overflow-y-auto">
+  <div class="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl shadow-xl overflow-y-auto" style="max-height: 90vh; max-height: 90dvh">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
       <div class="flex items-center gap-2 min-w-0">
         <span id="cal-menu-color" class="inline-block h-4 w-4 rounded-full flex-shrink-0"></span>
