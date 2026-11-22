@@ -117,6 +117,13 @@ struct SettingsView: View {
                                subtitle: "查看并解绑已登录设备",
                                tint: .teal)
                     }
+                    NavigationLink {
+                        ApiTokensView()
+                    } label: {
+                        navRow(icon: "key.fill", title: "API Token",
+                               subtitle: "创建 / 撤销，供程序调用",
+                               tint: .yellow)
+                    }
                     // Scan a desktop's pair-init QR to approve it from
                     // the logged-in APP — no browser bounce required.
                     // The phone reads <server>/desktop-pair/<CODE> from

@@ -40,8 +40,7 @@ import { evictAllCredentials } from "../lib/user_state.js";
 import { createReset, loadValidReset, consumeReset } from "../lib/password_reset.js";
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
-import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, rotateApiToken, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
-import { verifyTotpCode } from "../lib/mfa.js";
+import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, rotateApiToken, verifyApiTokenStepUp, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
 import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
@@ -2635,43 +2634,6 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/app/settings/devices", { success: tr(req, "flash.device.appPasswordRevoked") });
   });
 
-  // Step-up check before minting a self-service API token. A token is a
-  // long-lived account-level credential, so a live session alone is not
-  // enough. passwordSet tells us which factor the account actually has:
-  // true = the user set a password themselves, false = SSO-created with an
-  // unusable random hash, null = legacy row we cannot tell apart — for null
-  // we accept whichever factor verifies and fail closed otherwise.
-  async function verifyTokenStepUp(
-    user: { passwordSet: boolean | null; passwordHash: string; mfaEnabled: boolean; mfaTotpSecret: string | null },
-    input: { currentPassword?: string; mfaCode?: string },
-    scope: "read" | "write",
-  ): Promise<"ok" | "failed" | "need_admin"> {
-    const mfaOk = !!(user.mfaEnabled && user.mfaTotpSecret && input.mfaCode && verifyTotpCode(user.mfaTotpSecret, input.mfaCode));
-    if (user.passwordSet === true) {
-      // Password is always required, read or write. A write token on an
-      // MFA account additionally needs a fresh TOTP code — it is the
-      // closest thing to handing out the account itself.
-      if (!input.currentPassword || !(await verifyPassword(input.currentPassword, user.passwordHash))) return "failed";
-      if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
-      return "ok";
-    }
-    if (user.passwordSet === false) {
-      // SSO-created account: the stored hash is unusable by design, so the
-      // only self-service factor is MFA. Without MFA there is nothing to
-      // step up with — an operator has to issue the token instead.
-      if (user.mfaEnabled && user.mfaTotpSecret) return mfaOk ? "ok" : "failed";
-      return "need_admin";
-    }
-    // passwordSet === null (legacy row): accept a verified password (with
-    // the same write+MFA rule as above), or a verified MFA code on its own.
-    if (input.currentPassword && (await verifyPassword(input.currentPassword, user.passwordHash))) {
-      if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
-      return "ok";
-    }
-    if (mfaOk) return "ok";
-    return "failed";
-  }
-
   app.post("/app/settings/api-tokens", {
     config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
   }, async (req, reply) => {
@@ -2705,7 +2667,7 @@ export async function webRoutes(app: FastifyInstance) {
       });
       return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
     }
-    const stepUp = await verifyTokenStepUp(user, body.data, body.data.scope);
+    const stepUp = await verifyApiTokenStepUp(user, body.data, body.data.scope);
     if (stepUp !== "ok") {
       // A wrong password / TOTP here is a failed authentication, same as
       // at login or MFA verify — feed it into the shared lockout counter
@@ -2841,7 +2803,7 @@ export async function webRoutes(app: FastifyInstance) {
       return redirectWith(reply, "/app/settings/devices#api-tokens", { error: tr(req, "flash.apiToken.stepUpFailed") });
     }
     const scope = own.scope === "read" ? "read" : "write";
-    const stepUp = await verifyTokenStepUp(user, body.data, scope);
+    const stepUp = await verifyApiTokenStepUp(user, body.data, scope);
     if (stepUp !== "ok") {
       if (stepUp === "failed") await recordFailedLogin(user);
       await audit(req, user.id, "api_token.rotate_denied", {

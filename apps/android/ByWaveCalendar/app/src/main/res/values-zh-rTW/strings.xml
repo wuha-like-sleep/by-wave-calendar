@@ -284,4 +284,50 @@
     <string name="offline_detail_label">同步狀態</string>
     <string name="offline_detail_value">已保存在本機，待同步</string>
     <string name="offline_block_badge">待同步</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">API Token</string>
+    <string name="api_tokens_desc">給 n8n、Zapier 或你自己的腳本用。Token 能以你的身分呼叫介面，要像密碼一樣保管。</string>
+    <string name="api_tokens_loading">正在載入權杖…</string>
+    <string name="api_tokens_load_failed">權杖載入失敗。</string>
+    <string name="api_tokens_disabled">本站還沒開啟 API，暫時建不了 Token。請找本站營運者開啟。</string>
+    <string name="api_tokens_need_admin">這個帳號沒有自己的密碼、也沒開 MFA，沒法在這裡建 Token。請找本站營運者幫你簽發。</string>
+    <string name="api_tokens_limit_reached">你已經有 %1$d 個未撤銷的 Token，先撤銷一個再建新的。</string>
+    <string name="api_tokens_empty">還沒有 API Token。</string>
+    <string name="api_tokens_label_placeholder">備註（比如 n8n 同步）</string>
+    <string name="api_tokens_scope">權限</string>
+    <string name="api_tokens_scope_read">唯讀</string>
+    <string name="api_tokens_scope_write">讀寫</string>
+    <string name="api_tokens_scope_write_hint">讀寫 Token 能以你的身分新增、修改和刪除行程。工具確實需要寫入時再選它。</string>
+    <string name="api_tokens_expiry_label">有效天數（0 = 不過期）</string>
+    <string name="api_tokens_expiry_hint">預設 365 天，需要更久可以改大；填 0 表示不過期。</string>
+    <string name="api_tokens_current_password">目前密碼</string>
+    <string name="api_tokens_mfa_code">MFA 驗證碼</string>
+    <string name="api_tokens_step_up_hint">建 Token 前要再驗一次身分，免得借來的登入工作階段偷偷簽發。</string>
+    <string name="api_tokens_step_up_failed">密碼或驗證碼沒對上，Token 沒有建立。</string>
+    <string name="api_tokens_create">建立 Token</string>
+    <string name="api_tokens_create_failed">權杖建立失敗。</string>
+    <string name="api_tokens_created">建立於 %1$s</string>
+    <string name="api_tokens_last_used">最近使用 %1$s</string>
+    <string name="api_tokens_never_used">從未使用</string>
+    <string name="api_tokens_use_count">累計呼叫 %1$d 次</string>
+    <string name="api_tokens_expires">%1$s 到期</string>
+    <string name="api_tokens_never_expires">不過期</string>
+    <string name="api_tokens_expired">已過期</string>
+    <string name="api_tokens_grace_badge">寬限中</string>
+    <string name="api_tokens_grace_until">舊金鑰將於 %1$s 失效</string>
+    <string name="api_tokens_usage_title">近 30 天用量</string>
+    <string name="api_tokens_usage_total">近 30 天呼叫 %1$d 次</string>
+    <string name="api_tokens_usage_empty">近 30 天還沒有呼叫紀錄。</string>
+    <string name="api_tokens_new_token_heading">新 Token「%1$s」——現在就複製</string>
+    <string name="api_tokens_new_token_hint">完整 Token 只顯示這一次，直接填到要用的工具裡。</string>
+    <string name="api_tokens_copy">複製</string>
+    <string name="api_tokens_copied">已複製到剪貼簿</string>
+    <string name="api_tokens_revoke">撤銷</string>
+    <string name="api_tokens_revoke_confirm">撤銷後用這個 Token 的工具立刻失效，之後可以再建新的。</string>
+    <string name="api_tokens_revoke_failed">權杖撤銷失敗。</string>
+    <string name="api_tokens_rotate">輪換</string>
+    <string name="api_tokens_rotate_hint">為這個 Token 產生新的金鑰。舊金鑰在 7 天內仍可使用，你可以從容地把工具切換過去，不會中斷。</string>
+    <string name="api_tokens_rotate_expired">這個 Token 已經過期了，請直接新建一個。</string>
+    <string name="api_tokens_rotate_failed">這個 Token 無法輪換。</string>
 </resources>

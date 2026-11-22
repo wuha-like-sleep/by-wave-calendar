@@ -123,6 +123,7 @@ fun SettingsScreen(
     var showCalendarConnections by remember { mutableStateOf(false) }
     var showMfaSettings by remember { mutableStateOf(false) }
     var showDevices by remember { mutableStateOf(false) }
+    var showApiTokens by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -168,6 +169,10 @@ fun SettingsScreen(
             // 退出登录 instead of stranding a zombie session.
             onSignOut = onSignOut,
         )
+        return
+    }
+    if (showApiTokens && active != null) {
+        ApiTokensScreen(onBack = { showApiTokens = false })
         return
     }
     Scaffold(
@@ -224,6 +229,15 @@ fun SettingsScreen(
                 ActionRow(
                     label = stringResource(R.string.settings_devices_row),
                     onClick = { showDevices = true },
+                    trailingIcon = Icons.Default.ChevronRight,
+                )
+                HorizontalDivider()
+                // Personal API tokens — list / create / rotate / revoke
+                // with the same step-up rules as the Web settings page
+                // (the /account/api-tokens JSON endpoints).
+                ActionRow(
+                    label = stringResource(R.string.api_tokens_title),
+                    onClick = { showApiTokens = true },
                     trailingIcon = Icons.Default.ChevronRight,
                 )
             }

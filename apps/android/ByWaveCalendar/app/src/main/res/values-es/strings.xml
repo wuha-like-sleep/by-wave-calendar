@@ -274,4 +274,50 @@
     <string name="offline_detail_label">Estado de sincronización</string>
     <string name="offline_detail_value">Guardado en este dispositivo: en espera de sincronización</string>
     <string name="offline_block_badge">Sin sincronizar</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">Tokens de API</string>
+    <string name="api_tokens_desc">Para herramientas como n8n, Zapier o tus propios scripts. Un token actúa como tu cuenta, así que trátalo como una contraseña.</string>
+    <string name="api_tokens_loading">Cargando tokens…</string>
+    <string name="api_tokens_load_failed">No se pudieron cargar tus tokens.</string>
+    <string name="api_tokens_disabled">Este sitio aún no ha activado la API, así que no se pueden crear tokens. Pide al operador del sitio que la active.</string>
+    <string name="api_tokens_need_admin">Esta cuenta no tiene contraseña propia ni MFA, así que no se pueden crear tokens aquí. Pide al operador del sitio que emita uno.</string>
+    <string name="api_tokens_limit_reached">Ya tienes %1$d tokens activos. Revoca uno antes de crear otro.</string>
+    <string name="api_tokens_empty">Aún no hay tokens de API.</string>
+    <string name="api_tokens_label_placeholder">Etiqueta (p. ej., sincronización con n8n)</string>
+    <string name="api_tokens_scope">Acceso</string>
+    <string name="api_tokens_scope_read">Solo lectura</string>
+    <string name="api_tokens_scope_write">Lectura y escritura</string>
+    <string name="api_tokens_scope_write_hint">Un token de lectura y escritura puede crear, cambiar y borrar eventos en tu nombre. Elígelo solo si la herramienta realmente necesita escribir.</string>
+    <string name="api_tokens_expiry_label">Vence en días (0 = nunca)</string>
+    <string name="api_tokens_expiry_hint">Por defecto: 365 días. Súbelo si necesitas más, o pon 0 para que nunca venza.</string>
+    <string name="api_tokens_current_password">Contraseña actual</string>
+    <string name="api_tokens_mfa_code">Código MFA</string>
+    <string name="api_tokens_step_up_hint">Crear un token pide una comprobación más, para que una sesión prestada no pueda emitir uno a escondidas.</string>
+    <string name="api_tokens_step_up_failed">Esa contraseña o código no coincidió, así que no se creó ningún token.</string>
+    <string name="api_tokens_create">Crear token</string>
+    <string name="api_tokens_create_failed">No se pudo crear el token.</string>
+    <string name="api_tokens_created">Creado el %1$s</string>
+    <string name="api_tokens_last_used">Último uso: %1$s</string>
+    <string name="api_tokens_never_used">Nunca usado</string>
+    <string name="api_tokens_use_count">%1$d llamadas</string>
+    <string name="api_tokens_expires">Vence el %1$s</string>
+    <string name="api_tokens_never_expires">nunca vence</string>
+    <string name="api_tokens_expired">Vencido</string>
+    <string name="api_tokens_grace_badge">En periodo de gracia</string>
+    <string name="api_tokens_grace_until">el secreto anterior deja de funcionar el %1$s</string>
+    <string name="api_tokens_usage_title">Uso en los últimos 30 días</string>
+    <string name="api_tokens_usage_total">%1$d llamadas en los últimos 30 días</string>
+    <string name="api_tokens_usage_empty">Aún no hay llamadas en los últimos 30 días.</string>
+    <string name="api_tokens_new_token_heading">Token nuevo «%1$s»: cópialo ahora</string>
+    <string name="api_tokens_new_token_hint">Es la única vez que se muestra el token completo. Ponlo directamente en la herramienta que lo va a usar.</string>
+    <string name="api_tokens_copy">Copiar</string>
+    <string name="api_tokens_copied">Copiado al portapapeles</string>
+    <string name="api_tokens_revoke">Revocar</string>
+    <string name="api_tokens_revoke_confirm">Al revocarlo, todas las herramientas que usan este token dejan de funcionar al momento. Después puedes crear uno nuevo.</string>
+    <string name="api_tokens_revoke_failed">No se pudo revocar el token.</string>
+    <string name="api_tokens_rotate">Rotar</string>
+    <string name="api_tokens_rotate_hint">Emite un secreto nuevo para este token. El anterior sigue funcionando durante 7 días, para que puedas actualizar tus herramientas sin interrupciones.</string>
+    <string name="api_tokens_rotate_expired">Ese token ya caducó: crea uno nuevo.</string>
+    <string name="api_tokens_rotate_failed">Ese token no se puede rotar.</string>
 </resources>

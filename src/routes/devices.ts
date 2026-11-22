@@ -176,6 +176,17 @@ import {
   listDevicesForUser,
   revokeDevice,
 } from "../lib/devices.js";
+import { audit } from "../lib/audit.js";
+import {
+  createApiToken,
+  listApiTokensForUser,
+  revokeApiTokenForUser,
+  countActiveApiTokensForUser,
+  getApiTokenUsageSummary,
+  rotateApiToken,
+  verifyApiTokenStepUp,
+  MAX_API_TOKENS_PER_USER,
+} from "../lib/api_token.js";
 
 /**
  * 苹果登录建号被拒 → 这条路的错误形态。导出是为了能单独钉住这张表。
@@ -1005,6 +1016,280 @@ export async function deviceRoutes(app: FastifyInstance) {
     await destroyAllUserSessions(user.id);
     await db.delete(schema.users).where(eq(schema.users.id, user.id));
     return reply.send({ ok: true });
+  });
+
+  // -------- personal API tokens (native JSON twin of the web flow) ----
+  // The web settings page manages personal API tokens through form posts
+  // at /app/settings/api-tokens (src/web/index.ts). These endpoints are
+  // the same flow over JSON for the native apps: same lib calls, same
+  // step-up bar (verifyApiTokenStepUp, shared verbatim), same cap, same
+  // audit actions and the same security mail + inbox notifications. Only
+  // the transport and the error encoding differ (JSON codes instead of
+  // flash redirects; wrong step-up factors are 403, never 401 — see the
+  // MFA verify handler above for why).
+  //
+  // Who may call these: a signed-in app (device token) or a web session.
+  // A personal API token itself (authVia "api_token:*") must NEVER manage
+  // tokens — a credential that can mint credentials is a persistence
+  // primitive — and neither may an IdP service client. OAuth is already
+  // denied by the oauthScope config on every route here.
+  function apiTokenSelfServiceDenied(req: FastifyRequest): boolean {
+    const via = (req as unknown as { authVia?: string }).authVia;
+    return !!via && !via.startsWith("device:");
+  }
+
+  // The list-row shape shared by GET and the create/rotate responses —
+  // the same fields (and the same expired / in-grace derivation) the web
+  // settings view model builds in src/web/index.ts.
+  function apiTokenView(a: Awaited<ReturnType<typeof listApiTokensForUser>>[number]) {
+    const now = Date.now();
+    return {
+      id: a.id,
+      label: a.label,
+      prefix: a.prefix,
+      scope: a.scope === "read" ? ("read" as const) : ("write" as const),
+      lastUsedAt: a.lastUsedAt,
+      lastUsedIp: a.lastUsedIp,
+      useCount: a.useCount,
+      expiresAt: a.expiresAt,
+      rotatedAt: a.rotatedAt,
+      createdAt: a.createdAt,
+      expired: a.expiresAt ? a.expiresAt.getTime() < now : false,
+      inGrace: !!a.rotatedAt && !(a.expiresAt && a.expiresAt.getTime() < now),
+    };
+  }
+
+  app.get("/account/api-tokens", {
+    // 第三方 OAuth 一律不许碰:API Token 管理。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const settings = await getSettings();
+    const tokens = await listApiTokensForUser(user.id);
+    return reply.send({
+      apiEnabled: settings.apiEnabled,
+      limit: MAX_API_TOKENS_PER_USER,
+      limitReached: tokens.length >= MAX_API_TOKENS_PER_USER,
+      // The create form's shape depends on which factors the account
+      // actually has — the clients render the same conditional fields
+      // (and the same "ask an admin" dead end) as the web page.
+      passwordSet: user.passwordSet,
+      mfaEnabled: user.mfaEnabled,
+      tokens: tokens.map(apiTokenView),
+      usage: await getApiTokenUsageSummary(user.id, 30),
+    });
+  });
+
+  app.post("/account/api-tokens", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const settings = await getSettings();
+    if (!settings.apiEnabled) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "api_disabled", via: "app" },
+      });
+      return reply.code(412).send({ error: "api_disabled" });
+    }
+    const body = z
+      .object({
+        label: z.string().min(1).max(80),
+        scope: z.enum(["read", "write"]).default("read"),
+        expiresInDays: z.coerce.number().int().min(0).max(3650).default(365),
+        currentPassword: z.string().max(200).optional(),
+        mfaCode: z.string().max(16).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    if (isLocked(user)) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "account_locked", via: "app" },
+      });
+      return reply.code(403).send({ error: "step_up_failed" });
+    }
+    const stepUp = await verifyApiTokenStepUp(user, body.data, body.data.scope);
+    if (stepUp !== "ok") {
+      // Same as the web flow: a wrong password / TOTP feeds the shared
+      // lockout counter, and denied attempts are audited (never with the
+      // attempted password/code in the details).
+      if (stepUp === "failed") await recordFailedLogin(user);
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: stepUp === "need_admin" ? "step_up_unavailable" : "step_up_failed", scope: body.data.scope, via: "app" },
+      });
+      if (stepUp === "need_admin") {
+        return reply.code(412).send({ error: "step_up_unavailable" });
+      }
+      return reply.code(403).send({ error: "step_up_failed" });
+    }
+    if ((await countActiveApiTokensForUser(user.id)) >= MAX_API_TOKENS_PER_USER) {
+      await audit(req, user.id, "api_token.create_denied", {
+        targetType: "api_token",
+        details: { reason: "limit_reached", via: "app" },
+      });
+      return reply.code(409).send({ error: "limit_reached", limit: MAX_API_TOKENS_PER_USER });
+    }
+    await resetFailedLogin(user.id);
+    const issued = await createApiToken({
+      userId: user.id,
+      label: body.data.label,
+      scope: body.data.scope,
+      expiresInDays: body.data.expiresInDays > 0 ? body.data.expiresInDays : null,
+    });
+    await audit(req, user.id, "api_token.create", {
+      targetType: "api_token", targetId: issued.id,
+      // Prefix only — the audit log must never carry the plain token.
+      details: { label: body.data.label, scope: body.data.scope, expiresInDays: body.data.expiresInDays, prefix: issued.prefix, via: "app" },
+    });
+    // 安全变更通知，与网页流程同口径：邮件只带 prefix / 权限 / 到期，
+    // 绝不带明文（明文只在下面这次响应里出现一次）。
+    const { sendMail } = await import("../lib/mailer.js");
+    const { securityChangeMail } = await import("../lib/email_templates.js");
+    void sendMail(securityChangeMail(user.email, {
+      kind: "api_token_created",
+      token: {
+        label: body.data.label, prefix: issued.prefix, scope: body.data.scope,
+        expiresAt: body.data.expiresInDays > 0 ? new Date(Date.now() + body.data.expiresInDays * 24 * 60 * 60 * 1000) : null,
+        via: "self_service",
+      },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    const { notifySecurityEvent } = await import("../lib/security_inbox.js");
+    void notifySecurityEvent(user.id, "token_created", { tokenLabel: body.data.label, tokenScope: body.data.scope }).catch(() => undefined);
+    const created = (await listApiTokensForUser(user.id)).find((t) => t.id === issued.id);
+    return reply.code(201).send({
+      token: created ? apiTokenView(created) : null,
+      // One-shot: the secret is never stored or shown again anywhere.
+      plain: issued.plain,
+    });
+  });
+
+  app.post<{ Params: { id: string } }>("/account/api-tokens/:id/revoke", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.code(400).send({ error: "bad_request" });
+    const own = (await listApiTokensForUser(user.id)).find((t) => t.id === id.data);
+    const revoked = await revokeApiTokenForUser(user.id, id.data);
+    if (revoked) {
+      await audit(req, user.id, "api_token.revoke", {
+        targetType: "api_token", targetId: id.data,
+        details: { prefix: own?.prefix ?? null, via: "app" },
+      });
+      if (own) {
+        const { sendMail } = await import("../lib/mailer.js");
+        const { securityChangeMail } = await import("../lib/email_templates.js");
+        void sendMail(securityChangeMail(user.email, {
+          kind: "api_token_revoked",
+          token: { label: own.label, prefix: own.prefix, scope: own.scope === "read" ? "read" : "write", expiresAt: own.expiresAt, via: "self_service" },
+        })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+        const { notifySecurityEvent } = await import("../lib/security_inbox.js");
+        void notifySecurityEvent(user.id, "token_revoked", { tokenLabel: own.label, tokenScope: own.scope === "read" ? "read" : "write" }).catch(() => undefined);
+      }
+    }
+    return reply.send({ ok: true });
+  });
+
+  // Self-service rotation — the step-up bar is the SAME as creation,
+  // evaluated against the rotated token's own scope, and the per-user
+  // create cap does not apply (rotation is a replacement, not an
+  // addition). Mirrors the web handler's checks in the same order.
+  app.post<{ Params: { id: string } }>("/account/api-tokens/:id/rotate", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const settings = await getSettings();
+    if (!settings.apiEnabled) {
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token",
+        details: { reason: "api_disabled", via: "app" },
+      });
+      return reply.code(412).send({ error: "api_disabled" });
+    }
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.code(400).send({ error: "bad_request" });
+    const body = z
+      .object({
+        currentPassword: z.string().max(200).optional(),
+        mfaCode: z.string().max(16).optional(),
+      })
+      .safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "bad_request" });
+    const own = (await listApiTokensForUser(user.id)).find((t) => t.id === id.data);
+    if (!own) {
+      // Not yours (or already revoked) — same opacity as the web flow:
+      // don't confirm the id exists.
+      return reply.code(404).send({ error: "not_found" });
+    }
+    if (own.expiresAt && own.expiresAt.getTime() < Date.now()) {
+      // Rotating a dead token would mint a live one out of an expired
+      // credential's authority. Create a fresh token instead.
+      return reply.code(400).send({ error: "rotate_expired" });
+    }
+    if (isLocked(user)) {
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token", targetId: own.id,
+        details: { reason: "account_locked", via: "app" },
+      });
+      return reply.code(403).send({ error: "step_up_failed" });
+    }
+    const scope = own.scope === "read" ? "read" : "write";
+    const stepUp = await verifyApiTokenStepUp(user, body.data, scope);
+    if (stepUp !== "ok") {
+      if (stepUp === "failed") await recordFailedLogin(user);
+      await audit(req, user.id, "api_token.rotate_denied", {
+        targetType: "api_token", targetId: own.id,
+        details: { reason: stepUp === "need_admin" ? "step_up_unavailable" : "step_up_failed", scope, via: "app" },
+      });
+      if (stepUp === "need_admin") {
+        return reply.code(412).send({ error: "step_up_unavailable" });
+      }
+      return reply.code(403).send({ error: "step_up_failed" });
+    }
+    let rotated: Awaited<ReturnType<typeof rotateApiToken>>;
+    try {
+      rotated = await rotateApiToken({ oldTokenId: own.id, graceDays: 7, inheritExpiry: true });
+    } catch {
+      return reply.code(400).send({ error: "rotate_failed" });
+    }
+    await resetFailedLogin(user.id);
+    await audit(req, user.id, "api_token.rotate", {
+      targetType: "api_token", targetId: own.id,
+      details: { newTokenId: rotated.id, graceDays: 7, oldExpiresAt: rotated.oldExpiresAt.toISOString(), prefix: rotated.prefix, via: "app" },
+    });
+    const { sendMail } = await import("../lib/mailer.js");
+    const { securityChangeMail } = await import("../lib/email_templates.js");
+    void sendMail(securityChangeMail(user.email, {
+      kind: "api_token_rotated",
+      token: { label: own.label, prefix: rotated.prefix, scope, expiresAt: rotated.oldExpiresAt, via: "self_service" },
+    })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
+    const { notifySecurityEvent } = await import("../lib/security_inbox.js");
+    void notifySecurityEvent(user.id, "token_rotated", { tokenLabel: own.label, tokenScope: scope, graceDays: 7 }).catch(() => undefined);
+    const created = (await listApiTokensForUser(user.id)).find((t) => t.id === rotated.id);
+    return reply.send({
+      token: created ? apiTokenView(created) : null,
+      // One-shot, exactly like creation.
+      plain: rotated.plain,
+      oldExpiresAt: rotated.oldExpiresAt,
+    });
   });
 
   // -------- mint a web-session token (Bearer auth required) --------

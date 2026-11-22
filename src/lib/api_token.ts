@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
+import { verifyTotpCode } from "./mfa.js";
 import { getSettings } from "./site_settings.js";
 import { userIsActive } from "./user_state.js";
 
@@ -358,6 +359,49 @@ export async function getApiTokenUsageSummary(userId: string, days = 30): Promis
 // notifications) and leaves slack for month-boundary questions without
 // letting a stats table grow forever (≤ 90 rows per token).
 export const API_TOKEN_USAGE_RETENTION_DAYS = 90;
+
+/**
+ * Step-up check before minting or rotating a self-service API token. A
+ * token is a long-lived account-level credential, so a live session alone
+ * is not enough. passwordSet tells us which factor the account actually
+ * has: true = the user set a password themselves, false = SSO-created
+ * with an unusable random hash, null = legacy row we cannot tell apart —
+ * for null we accept whichever factor verifies and fail closed otherwise.
+ *
+ * Shared verbatim by the web settings flow (form posts) and the native
+ * apps' JSON endpoints — the bar must be identical on every surface, so
+ * it lives here rather than being copy-pasted per transport.
+ */
+export async function verifyApiTokenStepUp(
+  user: { passwordSet: boolean | null; passwordHash: string; mfaEnabled: boolean; mfaTotpSecret: string | null },
+  input: { currentPassword?: string; mfaCode?: string },
+  scope: "read" | "write",
+): Promise<"ok" | "failed" | "need_admin"> {
+  const mfaOk = !!(user.mfaEnabled && user.mfaTotpSecret && input.mfaCode && verifyTotpCode(user.mfaTotpSecret, input.mfaCode));
+  if (user.passwordSet === true) {
+    // Password is always required, read or write. A write token on an
+    // MFA account additionally needs a fresh TOTP code — it is the
+    // closest thing to handing out the account itself.
+    if (!input.currentPassword || !(await verifyPassword(input.currentPassword, user.passwordHash))) return "failed";
+    if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
+    return "ok";
+  }
+  if (user.passwordSet === false) {
+    // SSO-created account: the stored hash is unusable by design, so the
+    // only self-service factor is MFA. Without MFA there is nothing to
+    // step up with — an operator has to issue the token instead.
+    if (user.mfaEnabled && user.mfaTotpSecret) return mfaOk ? "ok" : "failed";
+    return "need_admin";
+  }
+  // passwordSet === null (legacy row): accept a verified password (with
+  // the same write+MFA rule as above), or a verified MFA code on its own.
+  if (input.currentPassword && (await verifyPassword(input.currentPassword, user.passwordHash))) {
+    if (scope === "write" && user.mfaEnabled && !mfaOk) return "failed";
+    return "ok";
+  }
+  if (mfaOk) return "ok";
+  return "failed";
+}
 
 /** Housekeeping: drop daily-usage rows older than the retention window. */
 export async function purgeOldApiTokenUsage(now = new Date()): Promise<{ purged: number }> {

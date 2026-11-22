@@ -274,4 +274,50 @@
     <string name="offline_detail_label">同期状態</string>
     <string name="offline_detail_value">このデバイスに保存済み — 同期待ち</string>
     <string name="offline_block_badge">同期待ち</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">API トークン</string>
+    <string name="api_tokens_desc">n8n、Zapier、自作スクリプト用です。トークンはあなたのアカウントとして動作するので、パスワードと同じように扱ってください。</string>
+    <string name="api_tokens_loading">トークンを読み込み中…</string>
+    <string name="api_tokens_load_failed">トークンを読み込めませんでした。</string>
+    <string name="api_tokens_disabled">このサイトでは API がまだ有効になっていないため、トークンを作成できません。サイト運営者に有効化を依頼してください。</string>
+    <string name="api_tokens_need_admin">このアカウントには独自のパスワードも MFA もないため、ここではトークンを作成できません。サイト運営者に発行を依頼してください。</string>
+    <string name="api_tokens_limit_reached">有効なトークンがすでに %1$d 件あります。新しいものを作る前に1件取り消してください。</string>
+    <string name="api_tokens_empty">API トークンはまだありません。</string>
+    <string name="api_tokens_label_placeholder">ラベル（例：n8n 同期）</string>
+    <string name="api_tokens_scope">権限</string>
+    <string name="api_tokens_scope_read">読み取りのみ</string>
+    <string name="api_tokens_scope_write">読み書き</string>
+    <string name="api_tokens_scope_write_hint">読み書きトークンは、あなたとして予定の作成・変更・削除ができます。ツールが本当に書き込む必要がある場合だけ選んでください。</string>
+    <string name="api_tokens_expiry_label">有効日数（0 = 無期限）</string>
+    <string name="api_tokens_expiry_hint">既定値は 365 日です。必要な場合は増やせます（0 = 無期限）。</string>
+    <string name="api_tokens_current_password">現在のパスワード</string>
+    <string name="api_tokens_mfa_code">MFA コード</string>
+    <string name="api_tokens_step_up_hint">トークン作成前にもう一度本人確認をします。借りたセッションで勝手に発行されないようにするためです。</string>
+    <string name="api_tokens_step_up_failed">パスワードまたはコードが一致しなかったため、トークンは作成されませんでした。</string>
+    <string name="api_tokens_create">トークンを作成</string>
+    <string name="api_tokens_create_failed">トークンを作成できませんでした。</string>
+    <string name="api_tokens_created">作成：%1$s</string>
+    <string name="api_tokens_last_used">最終使用 %1$s</string>
+    <string name="api_tokens_never_used">未使用</string>
+    <string name="api_tokens_use_count">呼び出し %1$d 回</string>
+    <string name="api_tokens_expires">%1$s に期限切れ</string>
+    <string name="api_tokens_never_expires">期限なし</string>
+    <string name="api_tokens_expired">期限切れ</string>
+    <string name="api_tokens_grace_badge">猶予期間中</string>
+    <string name="api_tokens_grace_until">旧シークレットは %1$s に無効になります</string>
+    <string name="api_tokens_usage_title">過去 30 日間の使用状況</string>
+    <string name="api_tokens_usage_total">過去 30 日間の呼び出し %1$d 回</string>
+    <string name="api_tokens_usage_empty">過去 30 日間の呼び出しはまだありません。</string>
+    <string name="api_tokens_new_token_heading">新しいトークン「%1$s」— 今すぐコピーしてください</string>
+    <string name="api_tokens_new_token_hint">トークン全体が表示されるのはこの一度だけです。使うツールにそのまま入れてください。</string>
+    <string name="api_tokens_copy">コピー</string>
+    <string name="api_tokens_copied">クリップボードにコピーしました</string>
+    <string name="api_tokens_revoke">取り消し</string>
+    <string name="api_tokens_revoke_confirm">取り消すと、このトークンを使うツールはすぐに止まります。後で新しいものを作れます。</string>
+    <string name="api_tokens_revoke_failed">トークンを取り消せませんでした。</string>
+    <string name="api_tokens_rotate">ローテーション</string>
+    <string name="api_tokens_rotate_hint">このトークンに新しいシークレットを発行します。旧シークレットは 7 日間使えるので、ツールを止めずに切り替えられます。</string>
+    <string name="api_tokens_rotate_expired">そのトークンはすでに期限切れです。代わりに新規作成してください。</string>
+    <string name="api_tokens_rotate_failed">そのトークンはローテーションできません。</string>
 </resources>
