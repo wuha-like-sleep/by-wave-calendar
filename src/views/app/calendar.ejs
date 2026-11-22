@@ -13,7 +13,7 @@
         <% if (calendar.description) { %>
           <p class="mt-1 text-sm text-slate-500"><%= calendar.description %></p>
         <% } %>
-        <p class="mt-1 text-xs text-slate-400"><%= t("calendar.timezone", { tz: calendar.timezone }) %></p>
+        <p class="mt-1 text-xs text-slate-500"><%= t("calendar.timezone", { tz: calendar.timezone }) %></p>
       </div>
     </div>
     <div class="flex flex-wrap gap-2">
@@ -44,9 +44,9 @@
       <option value="editor"><%= t("calendar.invite.roleEditor") %></option>
     </select>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.invite.send") %></button>
+    <textarea name="message" placeholder="<%= t('calendar.invite.messagePlaceholder') %>" maxlength="500" rows="2"
+              class="sm:col-span-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
   </form>
-  <textarea name="message" placeholder="<%= t('calendar.invite.messagePlaceholder') %>" maxlength="500" rows="2"
-            class="hidden w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
 
   <% if (members && members.length > 0) { %>
     <div class="mt-2">
@@ -115,7 +115,7 @@
   </form>
 
   <% if (shareTokens.length === 0) { %>
-    <p class="text-sm text-slate-400 text-center py-4"><%= t("calendar.share.empty") %></p>
+    <p class="text-sm text-slate-500 text-center py-4"><%= t("calendar.share.empty") %></p>
   <% } else { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100">
       <%
@@ -175,7 +175,7 @@
              class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:text-slate-700 hover:file:bg-slate-200" />
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.fileSubmit") %></button>
     </form>
-    <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.fileHint") %></p>
+    <p class="mt-2 text-xs text-slate-500"><%= t("calendar.import.fileHint") %></p>
   </div>
 
   <div data-pane="url" class="import-pane hidden">
@@ -185,7 +185,7 @@
              class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.urlSubmit") %></button>
     </form>
-    <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.urlHint") %></p>
+    <p class="mt-2 text-xs text-slate-500"><%= t("calendar.import.urlHint") %></p>
   </div>
 
   <div data-pane="sub" class="import-pane hidden">
@@ -209,7 +209,7 @@
         </select>
       </div>
     </form>
-    <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.subHint") %></p>
+    <p class="mt-2 text-xs text-slate-500"><%= t("calendar.import.subHint") %></p>
 
     <% if (subscriptions && subscriptions.length > 0) { %>
       <ul class="mt-4 divide-y divide-slate-100 border-t border-slate-100">
@@ -252,7 +252,7 @@
                 class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"></textarea>
       <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("calendar.import.pasteSubmit") %></button>
     </form>
-    <p class="mt-2 text-xs text-slate-400"><%= t("calendar.import.pasteHint") %></p>
+    <p class="mt-2 text-xs text-slate-500"><%= t("calendar.import.pasteHint") %></p>
   </div>
   </details>
 </section>
@@ -328,7 +328,7 @@
   </form>
 
   <% if (events.length === 0) { %>
-    <p class="text-sm text-slate-400 text-center py-8"><%= t("calendar.events.empty") %></p>
+    <p class="text-sm text-slate-500 text-center py-8"><%= t("calendar.events.empty") %></p>
   <% } else { %>
     <ul id="event-list" class="divide-y divide-slate-100">
       <% events.forEach(function(ev){ %>
@@ -352,7 +352,7 @@
         </li>
       <% }) %>
     </ul>
-    <p id="event-empty-msg" class="hidden text-sm text-slate-400 text-center py-8"><%= t("calendar.events.emptyFiltered") %></p>
+    <p id="event-empty-msg" class="hidden text-sm text-slate-500 text-center py-8"><%= t("calendar.events.emptyFiltered") %></p>
   <% } %>
 </section>
 
