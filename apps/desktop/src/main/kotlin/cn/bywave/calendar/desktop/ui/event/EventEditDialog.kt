@@ -651,18 +651,38 @@ fun EventEditDialog(
                                     modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
                                 )
                                 onlineSuggestions.forEach { suggestion ->
-                                    Text(
-                                        suggestion.label,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    Column(
                                         modifier = Modifier.fillMaxWidth()
                                             .clickable {
                                                 form = form.copy(location = suggestion.label)
                                                 onSuggestionPicked(suggestion.label, suggestion)
                                             }
                                             .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    )
+                                    ) {
+                                        Text(
+                                            suggestion.label,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        )
+                                        // 折叠行：label 是不带单元前缀的
+                                        // 基础地址，全部单元号挂在副行里；
+                                        // 想选具体单元，把单元号打进查询
+                                        // 即可命中带 unit 的那一行。unit
+                                        // 已点名时 label 自带前缀，不重复。
+                                        if (suggestion.unit == null && suggestion.units.isNotEmpty()) {
+                                            Text(
+                                                cn.bywave.calendar.desktop.i18n.I18n.t(
+                                                    "event.edit.locationUnits",
+                                                    mapOf("units" to suggestion.units.joinToString(", ")),
+                                                ),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
                                 }
                                 // ODbL 署名：在线结果是 OpenStreetMap 数据，
                                 // 展示处须带版权声明。版权行是固定文案，

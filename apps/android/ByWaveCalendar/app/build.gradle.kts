@@ -20,9 +20,11 @@ android {
         targetSdk = 34
         // versionCode = monotonic counter, must increment for every build
         // we hand out to anyone (even pre-release). versionName = the human
-        // string we show in About. We keep these in sync with iOS:
-        //   MARKETING_VERSION 1.3.3   ↔   versionName "1.3.3"
-        //   CURRENT_PROJECT_VERSION 1 ↔   versionCode 1  (Android starts fresh)
+        // string we show in About. Each client tracks its OWN version line
+        // (desktop 1.3.3 / code 30, iOS 1.8.0 / build 26 — not synced with
+        // these). The pair below must match the committed Android release
+        // manifest (apps/android/releases/latest.json), which is what the
+        // in-app updater compares against.
         versionCode = 25
         versionName = "0.13.2"
         // The setup screen URL scheme — server's QR-pair flow sends an

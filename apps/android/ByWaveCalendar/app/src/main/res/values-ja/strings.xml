@@ -65,6 +65,7 @@
     <string name="event_location">場所</string>
     <string name="event_location_hint">任意 — 例: 上海 / Zoom</string>
     <string name="location_online_suggestions">オンライン候補</string>
+    <string name="location_units">ユニット：%1$s</string>
     <string name="settings_online_address_title">オンライン住所候補</string>
     <string name="settings_online_address_desc">ローカルの住所候補が少ないとき、OpenStreetMap データに基づくオンライン候補を表示します。選んだ住所はローカルのアドレス帳に保存されます。</string>
     <string name="event_link">リンク</string>

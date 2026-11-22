@@ -70,6 +70,7 @@ to match the development locale.
     <string name="event_location">Location</string>
     <string name="event_location_hint">Optional — e.g. Shanghai / Zoom</string>
     <string name="location_online_suggestions">Online suggestions</string>
+    <string name="location_units">Units: %1$s</string>
     <string name="settings_online_address_title">Online address suggestions</string>
     <string name="settings_online_address_desc">When local address matches are few, show online suggestions based on OpenStreetMap data. Picked addresses are saved to the local address book.</string>
     <string name="event_link">Link</string>

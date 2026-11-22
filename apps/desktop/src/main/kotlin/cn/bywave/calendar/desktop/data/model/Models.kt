@@ -440,6 +440,12 @@ data class GeoSuggestion(
     val country: String? = null,
     val lat: Double? = null,
     val lon: Double? = null,
+    /** 自建地址包专用：同一基础地址折叠进来的全部单元号（响应层
+     *  折叠，Photon 来源不带）。unit 是用户在查询里点名某个单元时
+     *  代表行命中的那个单元号，此时 label 已含单元前缀。两个字段
+     *  都追加在最后：本地地址簿按位置构造本类的地方不受影响。 */
+    val unit: String? = null,
+    val units: List<String> = emptyList(),
 )
 
 /** GET /api/v1/geo/suggest response (envelope stripped). 上游失败时
