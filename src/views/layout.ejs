@@ -148,6 +148,17 @@
         ? jsonForScript(bwcCopyStrings)
         : JSON.stringify(bwcCopyStrings).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026") %>;
     </script>
+    <%# 同上：app.js 的 bwc.confirm 在调用方没给按钮文案时需要本地化的
+        缺省「确认 / 取消」，否则非中文界面会冒出中文按钮。 %>
+    <% const bwcConfirmStrings = {
+      confirm: t("common.confirm"),
+      cancel: t("common.cancel"),
+    }; %>
+    <script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+      window.BWC_CONFIRM_T = <%- typeof jsonForScript !== 'undefined'
+        ? jsonForScript(bwcConfirmStrings)
+        : JSON.stringify(bwcConfirmStrings).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026") %>;
+    </script>
     <script src="<%= js %>/version-check.js?v=<%= v %>" defer></script>
     <script src="<%= js %>/banners.js?v=<%= v %>" defer></script>
     <%# 铃铛未读角标：脚本自己找 #bwc-notif-badge，没有这个元素（未登录页）

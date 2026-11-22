@@ -134,8 +134,8 @@
         <span class="block text-sm text-slate-500"><%= t("settings.notifications.inboxPushDesc") %></span>
       </span>
     </label>
-    <p class="text-xs text-slate-400"><%= t("settings.notifications.securityMailNote") %></p>
-    <p class="text-xs text-slate-400"><%= t("settings.notifications.securityInboxNote") %></p>
+    <p class="text-xs text-slate-500"><%= t("settings.notifications.securityMailNote") %></p>
+    <p class="text-xs text-slate-500"><%= t("settings.notifications.securityInboxNote") %></p>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
   </form>
 </section>
@@ -401,13 +401,13 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
     </div>
   <% } else { %>
     <ul id="device-list" class="divide-y divide-slate-100 border-t border-slate-100">
-      <li class="py-6 text-center text-sm text-slate-400"><%= t("settings.devices.loading") %></li>
+      <li class="py-6 text-center text-sm text-slate-500"><%= t("settings.devices.loading") %></li>
     </ul>
   <% } %>
 </section>
 
 <!-- Modal: pair new device. Shows a QR + the 6-char code as fallback. -->
-<div id="modal-pair-device" class="hidden fixed inset-0 z-[70] bg-slate-900/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+<div id="modal-pair-device" class="hidden fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
   <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl">
     <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
       <h3 class="text-base font-semibold text-slate-900"><%= t("settings.devices.pairNew") %></h3>
@@ -459,6 +459,24 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   // null-deref. addEventListener calls below would throw otherwise.
   if (!list || !btnPair) return;
 
+  // The shared modal CSS (input.css "Modal motion") keeps every
+  // [id^="modal-"] element transparent until `.is-open` is added, so
+  // toggling `hidden` alone leaves this modal invisible — mirror the
+  // openModal/closeModal pair from calendar-app.js (that bundle does
+  // not run on this page).
+  function openPairModal() {
+    modal.classList.remove("hidden");
+    void modal.offsetWidth; // reflow so the enter transition starts closed
+    modal.classList.add("is-open");
+  }
+  function closePairModal() {
+    if (modal.classList.contains("hidden")) return;
+    modal.classList.remove("is-open"); // play the leave transition
+    setTimeout(function () {
+      if (!modal.classList.contains("is-open")) modal.classList.add("hidden");
+    }, 340);
+  }
+
   function fmtAgo(iso) {
     if (!iso) return BWC_I18N.agoNever;
     const diff = Date.now() - new Date(iso).getTime();
@@ -480,7 +498,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       const data = await resp.json();
       const devs = (data && (data.devices || data.data?.devices)) || [];
       if (devs.length === 0) {
-        list.innerHTML = '<li class="py-6 text-center text-sm text-slate-400">' + escapeHtml(BWC_I18N.empty) + '</li>';
+        list.innerHTML = '<li class="py-6 text-center text-sm text-slate-500">' + escapeHtml(BWC_I18N.empty) + '</li>';
         return;
       }
       list.innerHTML = devs.map(function(d) {
@@ -526,7 +544,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   });
 
   btnPair.addEventListener("click", async function() {
-    modal.classList.remove("hidden");
+    openPairModal();
     qrBox.innerHTML = '<span class="text-xs text-slate-400">' + escapeHtml(BWC_I18N.modalGenerating) + '</span>';
     try {
       const resp = await fetch("/api/v1/devices/pair-init", {
@@ -556,8 +574,8 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
       qrBox.innerHTML = '<span class="text-xs text-red-500">' + escapeHtml(BWC_I18N.pairInitFailed) + '</span>';
     }
   });
-  btnClose.addEventListener("click", function() { modal.classList.add("hidden"); loadDevices(); });
-  modal.addEventListener("click", function(e) { if (e.target === modal) { modal.classList.add("hidden"); loadDevices(); } });
+  btnClose.addEventListener("click", function() { closePairModal(); loadDevices(); });
+  modal.addEventListener("click", function(e) { if (e.target === modal) { closePairModal(); loadDevices(); } });
 
   loadDevices();
 })();
@@ -903,7 +921,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
 <section id="password" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('password')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("settings.security.passwordTitle") %></h2>
-  <p class="text-xs text-slate-500 mb-3"><%= t("settings.security.passwordDesc") %></p>
+  <p class="text-sm text-slate-500 mb-3"><%= t("settings.security.passwordDesc") %></p>
   <form method="post" action="/app/settings/password" class="space-y-3 max-w-md">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <div>
@@ -922,7 +940,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
 <section id="login-methods" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('login-methods')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("settings.loginMethods.title") %></h2>
-  <p class="text-xs text-slate-500 mb-4"><%- t("settings.loginMethods.desc") %></p>
+  <p class="text-sm text-slate-500 mb-4"><%- t("settings.loginMethods.desc") %></p>
 
   <% if (linkedIdentities && linkedIdentities.length > 0) { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100 mb-4">
@@ -930,7 +948,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
         <li class="py-3 flex items-center justify-between gap-3">
           <div class="min-w-0">
             <div class="text-sm font-medium text-slate-900">🔗 <%= idn.provider %></div>
-            <div class="text-xs text-slate-400 truncate"><%= idn.email || '—' %> · <%= t("settings.loginMethods.linkedOn") %> <%- idn.createdAtLocal %></div>
+            <div class="text-xs text-slate-500 truncate"><%= idn.email || '—' %> · <%= t("settings.loginMethods.linkedOn") %> <%- idn.createdAtLocal %></div>
           </div>
           <form method="post" action="/app/settings/identities/<%= idn.id %>/unlink" class="m-0"
                 data-confirm="<%= t('settings.loginMethods.unbindConfirm') %>" data-confirm-danger="1" data-confirm-ok="<%= t('settings.loginMethods.unbind') %>">

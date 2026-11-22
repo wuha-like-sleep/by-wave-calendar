@@ -93,10 +93,14 @@
   //   if (!await bwc.confirm({ message: "永久删除", danger: true })) return;
   function confirmDialog(opts) {
     const o = opts || {};
+    // Button defaults come from window.BWC_CONFIRM_T (layout.ejs resolves
+    // common.confirm / common.cancel in the page's locale); the hardcoded
+    // fallbacks only fire on pages that render without the layout.
+    const confirmT = window.BWC_CONFIRM_T || {};
     const message = o.message || "确定？";
     const title = o.title || null;
-    const confirmLabel = o.confirmLabel || "确定";
-    const cancelLabel = o.cancelLabel || "取消";
+    const confirmLabel = o.confirmLabel || confirmT.confirm || "确定";
+    const cancelLabel = o.cancelLabel || confirmT.cancel || "取消";
     const danger = !!o.danger;
     return new Promise(function (resolve) {
       const overlay = document.createElement("div");
