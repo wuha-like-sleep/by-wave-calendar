@@ -3,47 +3,47 @@
   // back to the original single-row horizontal strip. This partial OPENS the
   // shell + content column; every admin view closes it via include('_nav_end').
   const adminGroups = [
-    { label: '总览', items: [
-      { href: '/admin', label: '概览' },
+    { label: t('adminNav.group.overview'), items: [
+      { href: '/admin', label: t('adminNav.overview') },
     ] },
-    { label: '站点', items: [
-      { href: '/admin/site',  label: '站点' },
+    { label: t('adminNav.group.site'), items: [
+      { href: '/admin/site',  label: t('adminNav.site') },
       { href: '/admin/logo',  label: 'Logo' },
-      { href: '/admin/theme', label: '外观' },
+      { href: '/admin/theme', label: t('adminNav.theme') },
     ] },
-    { label: '用户 & 注册', items: [
-      { href: '/admin/users',   label: '用户' },
+    { label: t('adminNav.group.users'), items: [
+      { href: '/admin/users',   label: t('adminNav.users') },
       { href: '/admin/signups', label: t('adminSignups.navLabel') },
-      { href: '/admin/invites', label: '邀请注册' },
+      { href: '/admin/invites', label: t('adminNav.invites') },
     ] },
-    { label: '邮件', items: [
-      { href: '/admin/smtp',            label: '邮件 SMTP' },
-      { href: '/admin/email-templates', label: '邮件模板' },
+    { label: t('adminNav.group.mail'), items: [
+      { href: '/admin/smtp',            label: t('adminNav.smtp') },
+      { href: '/admin/email-templates', label: t('adminNav.emailTemplates') },
     ] },
-    { label: '安全 & 接入', items: [
-      { href: '/admin/security',   label: '安全' },
+    { label: t('adminNav.group.security'), items: [
+      { href: '/admin/security',   label: t('adminNav.security') },
       { href: '/admin/idp',        label: 'SSO' },
       { href: '/admin/api',        label: 'API' },
       { href: '/admin/calendar-sync', label: t('adminCalendar.title') },
-      { href: '/admin/oauth-apps', label: 'OAuth 应用' },
+      { href: '/admin/oauth-apps', label: t('adminNav.oauthApps') },
       { href: '/admin/webhooks',   label: 'Webhooks' },
     ] },
-    { label: '运维', items: [
+    { label: t('adminNav.group.ops'), items: [
       { href: '/admin/caldav', label: t('adminCaldav.navLabel') },
-      { href: '/admin/backup', label: '备份' },
+      { href: '/admin/backup', label: t('adminNav.backup') },
       { href: '/admin/geo-packs', label: t('adminGeoPacks.navLabel') },
-      { href: '/admin/audit',  label: '审计日志' },
-      { href: '/admin/update', label: '更新' },
-      { href: '/admin/client-release', label: '客户端更新' },
+      { href: '/admin/audit',  label: t('adminNav.audit') },
+      { href: '/admin/update', label: t('adminNav.update') },
+      { href: '/admin/client-release', label: t('adminNav.clientRelease') },
     ] },
   ];
   const adminFlat = adminGroups.reduce(function (a, g) { return a.concat(g.items); }, []);
   const _active = typeof activeNav !== 'undefined' ? activeNav : '';
 %>
 <div class="text-sm text-slate-500 mb-4 lg:mb-6">
-  <a href="/app" class="hover:text-slate-700">日历</a>
+  <a href="/app" class="hover:text-slate-700"><%= t("nav.calendar") %></a>
   <span class="px-2">/</span>
-  <span class="text-slate-900">管理后台</span>
+  <span class="text-slate-900"><%= t("adminNav.breadcrumb") %></span>
 </div>
 
 <div class="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-8">

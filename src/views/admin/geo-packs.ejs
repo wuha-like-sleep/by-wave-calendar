@@ -6,8 +6,9 @@
     if (n >= 1024) return (n / 1024).toFixed(1) + " KiB";
     return n + " B";
   }
+  var pageLocale = (typeof currentLocale !== "undefined" && currentLocale) || "en-US";
   function fmtRows(n) {
-    return n == null ? "—" : n.toLocaleString("en-US");
+    return n == null ? "—" : n.toLocaleString(pageLocale);
   }
 %>
 
@@ -146,7 +147,7 @@
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.fetch.heading") %></h2>
   <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.fetch.lead", { base: releaseBaseUrl }) %></p>
   <div class="mb-4">
-    <button type="button" id="geo-preview-btn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"><%= t("adminGeoPacks.fetch.previewButton") %></button>
+    <button type="button" id="geo-preview-btn" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-wait"><%= t("adminGeoPacks.fetch.previewButton") %></button>
     <div id="geo-preview" class="mt-3 hidden"></div>
   </div>
   <% if (fetchJob) { %>
@@ -202,7 +203,7 @@
       <span class="min-w-0">
         <span class="font-medium text-slate-900"><%= tok.label %></span>
         <span class="font-mono text-xs text-slate-400">bwgs_<%= tok.prefix %>_…</span>
-        <span class="text-slate-400">· <%= t("adminGeoPacks.tokens.colLastUsed") %>: <%= tok.lastUsedAt ? tok.lastUsedAt.toISOString().slice(0, 19).replace("T", " ") : "—" %></span>
+        <span class="text-slate-400">· <%= t("adminGeoPacks.tokens.colLastUsed") %>: <% if (tok.lastUsedAt) { %><time data-tz datetime="<%= tok.lastUsedAt.toISOString() %>" data-style="datetime"><%= tok.lastUsedAt.toISOString().slice(0, 19).replace("T", " ") %></time><% } else { %>—<% } %></span>
       </span>
       <% if (tok.revokedAt) { %>
         <span class="text-slate-400"><%= t("adminGeoPacks.tokens.statusRevoked") %></span>
@@ -223,7 +224,7 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="block">
       <span class="block text-xs font-medium uppercase tracking-wider text-slate-400 mb-1"><%= t("adminGeoPacks.tokens.createLabel") %></span>
-      <input type="text" name="label" maxlength="100" placeholder="打包机"
+      <input type="text" name="label" maxlength="100" placeholder="<%= t('adminGeoPacks.tokens.createPlaceholder') %>"
              class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 w-56" />
     </label>
     <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminGeoPacks.tokens.create") %></button>
@@ -238,7 +239,7 @@
     <li class="flex flex-wrap items-center justify-between gap-3 py-2">
       <span class="font-mono text-slate-700"><%= up.fileName %></span>
       <span class="text-slate-400">
-        <%= up.createdAt.toISOString().slice(0, 19).replace("T", " ") %> ·
+        <time data-tz datetime="<%= up.createdAt.toISOString() %>" data-style="datetime"><%= up.createdAt.toISOString().slice(0, 19).replace("T", " ") %></time> ·
         <% if (up.status === "active") { %><span class="text-emerald-600"><%= t("adminGeoPacks.sync.statusActive") %></span>
         <% } else if (up.status === "receiving") { %><span class="text-amber-600"><%= t("adminGeoPacks.sync.statusReceiving") %> · <%= t("adminGeoPacks.sync.progress", { received: Array.isArray(up.receivedChunks) ? up.receivedChunks.length : 0, total: up.chunkCount }) %></span>
         <% } else if (up.status === "failed") { %><span class="text-red-600"><%= t("adminGeoPacks.sync.statusFailed") %><% if (up.error) { %> · <%= up.error %><% } %></span>
@@ -280,6 +281,7 @@
     if (n >= 1024) return (n / 1024).toFixed(1) + " KiB";
     return n + " B";
   }
+  var LOCALE = document.documentElement.lang || undefined;
   function el(tag, cls, text) {
     var e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -318,9 +320,9 @@
       tdPack.appendChild(el("span", "font-mono text-slate-700", p.file));
       if (p.region) tdPack.appendChild(el("span", "block text-xs text-slate-400", p.region));
       tr.appendChild(tdPack);
-      tr.appendChild(el("td", "py-2 pr-3 tabular-nums text-slate-700", p.rows == null ? "—" : p.rows.toLocaleString("en-US")));
+      tr.appendChild(el("td", "py-2 pr-3 tabular-nums text-slate-700", p.rows == null ? "—" : p.rows.toLocaleString(LOCALE)));
       var tdSize = el("td", "py-2 pr-3 tabular-nums text-slate-700", fmtBytes(p.bytes));
-      tdSize.appendChild(el("span", "block text-xs text-slate-400", p.bytes.toLocaleString("en-US") + " B"));
+      tdSize.appendChild(el("span", "block text-xs text-slate-400", p.bytes.toLocaleString(LOCALE) + " B"));
       tr.appendChild(tdSize);
       var tdStatus = el("td", "py-2");
       if (p.installed) tdStatus.appendChild(el("span", "text-emerald-600 font-medium", T.installed));
