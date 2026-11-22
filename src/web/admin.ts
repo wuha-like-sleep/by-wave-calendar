@@ -42,6 +42,7 @@ import {
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
 import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
+import { attachEmbeddedAttribution } from "../lib/geo_pack_attribution.js";
 import { GeoReleaseError, getGeoPackFetchState, previewGeoPackRelease, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
 import {
   createGeoSyncToken,
@@ -1911,6 +1912,10 @@ export async function adminRoutes(app: FastifyInstance) {
       latestGeoSyncUploadByFile(),
       listRecentGeoSyncUploads(20),
     ]);
+    // 包内嵌许可/署名（2026.11.4 起的包把 attribution/licence_manifest/
+    // licences 写在 meta 里）：清单页从包内补读，读不到（旧包）就回落
+    // 到配套文件的展示。只查 meta、失败静默，不拖累列表页。
+    await attachEmbeddedAttribution(listing, packDir);
     const syncByFile: Record<string, {
       status: string; received: number; total: number; updatedAt: Date; error: string | null;
     }> = {};

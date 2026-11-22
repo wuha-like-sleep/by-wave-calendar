@@ -88,7 +88,7 @@ const schema = z.object({
     .string()
     .url()
     .default(
-      "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/geo-packs-au-v1",
+      "https://github.com/wuha-like-sleep/by-wave-calendar/releases/download/geo-packs-au-v2",
     ),
   // 与 ICS_ALLOW_PRIVATE_NETWORK 同性质的逃生口：发布基地址指向内
   // 网镜像（或本机测试）时才需要打开。默认关——基地址即使被改成内

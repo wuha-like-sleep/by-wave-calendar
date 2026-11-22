@@ -40,7 +40,7 @@ import time
 import urllib.error
 import urllib.request
 
-# 官方 AU 发布包的默认集合（与 GitHub Releases 上的 geo-packs-au-v1
+# 官方 AU 发布包的默认集合（与 GitHub Releases 上的 geo-packs-au-v2
 # 一致）。自产其它国家/地区包时用 --packs 显式给出自己的包 id 列表。
 STATE_PACKS = ["au-nsw", "au-vic", "au-qld", "au-wa", "au-sa", "au-tas", "au-act", "au-nt", "au-ot"]
 

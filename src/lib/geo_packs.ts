@@ -5,10 +5,13 @@
 // 安全口径：下载只认扫描时真实存在、且文件名命中包文件命名规则的
 // 条目，请求里的文件名只做白名单查表，永远不拼路径——目录穿越在
 // 这一层就被挡掉。元数据（行数 / sha256 / 生成时间）取自 manifest，
-// 清单页不打开 sqlite（9.47 GiB 的包更不该为列表页读一遍）。
+// 本模块不打开 sqlite（9.47 GiB 的包更不该为列表页读一遍）；包内嵌
+// 的许可/署名由 lib/geo_pack_attribution.ts 在清单页单独补读（只查
+// meta 三个键），填充到 GeoPackInfo.embedded。
 
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import type { EmbeddedPackAttribution } from "./geo_pack_attribution.js";
 
 export interface GeoPackFileEntry {
   /** 下载用的文件名（相对包目录，licences/ 下的带 licences/ 前缀）。 */
@@ -29,6 +32,9 @@ export interface GeoPackInfo {
   region: string | null;
   /** 这个包的配套文件（manifest / licence-manifest / ATTRIBUTION）。 */
   companions: GeoPackFileEntry[];
+  /** 包内嵌的许可/署名（meta 三键）；listGeoPacks 本身不读 sqlite，
+   *  由 attachEmbeddedAttribution 填充，旧包/未填充时为 null。 */
+  embedded: EmbeddedPackAttribution | null;
 }
 
 export interface GeoPackListing {
@@ -159,6 +165,7 @@ export async function listGeoPacks(dir: string | undefined | null): Promise<GeoP
       packVersion: typeof manifest?.pack_version === "string" ? manifest.pack_version : null,
       region: typeof manifest?.region === "string" ? manifest.region : null,
       companions: companionsById.get(id) ?? [],
+      embedded: null,
     });
   }
   return { configured: true, packs, sharedFiles };
