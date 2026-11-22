@@ -794,6 +794,98 @@ data class CurrentDevice(
     val hasPushToken: Boolean = false,
 )
 
+// ---- API tokens (GET/POST /api/v1/account/api-tokens …) ----
+//
+// The JSON twin of the Web settings form flow, with the same view
+// model: token rows carry the public prefix only (the full secret is a
+// hash server-side and comes back exactly ONCE, as `plain` in the
+// create / rotate response), plus the step-up context that tells the
+// UI which confirmation fields to render. `passwordSet` is tri-state:
+// true = account has its own password, false = SSO-only (no usable
+// password), null = legacy row.
+
+@Serializable
+data class ApiTokenItem(
+    val id: String,
+    val label: String,
+    val prefix: String,
+    /** "read" | "write" (server normalizes anything else to "read"). */
+    val scope: String = "read",
+    val lastUsedAt: String? = null,
+    val lastUsedIp: String? = null,
+    val useCount: Int = 0,
+    val expiresAt: String? = null,
+    val rotatedAt: String? = null,
+    val createdAt: String? = null,
+    val expired: Boolean = false,
+    /** True while a rotated token's old secret is in its 7-day grace. */
+    val inGrace: Boolean = false,
+)
+
+@Serializable
+data class ApiTokenUsageDay(
+    val day: String,
+    val count: Int = 0,
+)
+
+@Serializable
+data class ApiTokenUsagePerToken(
+    val tokenId: String,
+    val label: String,
+    val count: Int = 0,
+)
+
+@Serializable
+data class ApiTokenUsage(
+    val total: Int = 0,
+    val perDay: List<ApiTokenUsageDay> = emptyList(),
+    val perToken: List<ApiTokenUsagePerToken> = emptyList(),
+)
+
+@Serializable
+data class ApiTokensResponse(
+    val apiEnabled: Boolean = false,
+    val limit: Int = 5,
+    val limitReached: Boolean = false,
+    val passwordSet: Boolean? = null,
+    val mfaEnabled: Boolean = false,
+    val tokens: List<ApiTokenItem> = emptyList(),
+    val usage: ApiTokenUsage = ApiTokenUsage(),
+)
+
+/** Create body. Null step-up fields are omitted on the wire
+ *  (explicitNulls = false on the shared Json config). */
+@Serializable
+data class CreateApiTokenRequest(
+    val label: String,
+    val scope: String,
+    val expiresInDays: Int,
+    val currentPassword: String? = null,
+    val mfaCode: String? = null,
+)
+
+/** Rotate body — step-up fields only; the scope comes from the token. */
+@Serializable
+data class ApiTokenStepUpRequest(
+    val currentPassword: String? = null,
+    val mfaCode: String? = null,
+)
+
+/** Create success (201). `plain` is shown ONCE and never persisted. */
+@Serializable
+data class ApiTokenCreatedResponse(
+    val token: ApiTokenItem,
+    val plain: String,
+)
+
+/** Rotate success. `oldExpiresAt` = when the old secret stops working. */
+@Serializable
+data class ApiTokenRotatedResponse(
+    val token: ApiTokenItem,
+    val plain: String,
+    val oldExpiresAt: String? = null,
+)
+
 // ---- Conflict check (POST /api/v1/events/conflicts) ----
 
 @Serializable

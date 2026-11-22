@@ -518,6 +518,36 @@ extension APIClient {
     }
 }
 
+// MARK: - API Token 管理
+
+extension APIClient {
+    // GET /account/api-tokens → list + step-up context + 30-day usage.
+    func listApiTokens() async throws -> ApiTokensResponse {
+        try await get("/account/api-tokens")
+    }
+
+    // POST /account/api-tokens → 201 { token, plain }. Same step-up
+    // contract as the Web settings page, enforced server-side: create
+    // needs the account password; a WRITE token on an MFA account
+    // additionally needs a fresh TOTP code; SSO-only accounts without
+    // MFA get 412 step_up_unavailable. `plain` is shown once.
+    func createApiToken(_ input: CreateApiTokenInput) async throws -> ApiTokenCreatedResponse {
+        try await post("/account/api-tokens", body: input)
+    }
+
+    // POST /account/api-tokens/:id/rotate → new secret for the same
+    // token; the old secret keeps working for 7 days (grace).
+    func rotateApiToken(id: String, _ input: ApiTokenStepUpInput) async throws -> ApiTokenRotatedResponse {
+        try await post("/account/api-tokens/\(id)/rotate", body: input)
+    }
+
+    // POST /account/api-tokens/:id/revoke → { ok: true }. Immediate;
+    // revoking an id that isn't the caller's is a silent no-op.
+    func revokeApiToken(id: String) async throws {
+        let _: OkResponse = try await post("/account/api-tokens/\(id)/revoke", body: EmptyJSONBody())
+    }
+}
+
 // MARK: - 冲突检测
 
 extension APIClient {

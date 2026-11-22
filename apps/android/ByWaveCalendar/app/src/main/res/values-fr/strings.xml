@@ -273,4 +273,50 @@
     <string name="offline_detail_label">État de synchronisation</string>
     <string name="offline_detail_value">Enregistré sur cet appareil — en attente de synchronisation</string>
     <string name="offline_block_badge">Non synchronisé</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">Jetons d\'API</string>
+    <string name="api_tokens_desc">Pour des outils comme n8n, Zapier ou vos propres scripts. Un jeton agit comme votre compte : traitez-le comme un mot de passe.</string>
+    <string name="api_tokens_loading">Chargement des jetons…</string>
+    <string name="api_tokens_load_failed">Impossible de charger vos jetons.</string>
+    <string name="api_tokens_disabled">Ce site n\'a pas encore activé l\'API, impossible de créer des jetons. Demandez à l\'opérateur du site de l\'activer.</string>
+    <string name="api_tokens_need_admin">Ce compte n\'a ni mot de passe propre ni MFA, impossible de créer des jetons ici. Demandez à l\'opérateur du site d\'en émettre un.</string>
+    <string name="api_tokens_limit_reached">Vous avez déjà %1$d jetons actifs. Révoquez-en un avant d\'en créer un autre.</string>
+    <string name="api_tokens_empty">Aucun jeton d\'API pour le moment.</string>
+    <string name="api_tokens_label_placeholder">Libellé (p. ex. synchro n8n)</string>
+    <string name="api_tokens_scope">Accès</string>
+    <string name="api_tokens_scope_read">Lecture seule</string>
+    <string name="api_tokens_scope_write">Lecture et écriture</string>
+    <string name="api_tokens_scope_write_hint">Un jeton en lecture et écriture peut créer, modifier et supprimer des événements en votre nom. Ne le choisissez que si l\'outil doit vraiment écrire.</string>
+    <string name="api_tokens_expiry_label">Expire dans (jours, 0 = jamais)</string>
+    <string name="api_tokens_expiry_hint">Par défaut : 365 jours. Augmentez si besoin, 0 = sans expiration.</string>
+    <string name="api_tokens_current_password">Mot de passe actuel</string>
+    <string name="api_tokens_mfa_code">Code MFA</string>
+    <string name="api_tokens_step_up_hint">Créer un jeton demande une vérification de plus, pour qu\'une session empruntée ne puisse pas en émettre en douce.</string>
+    <string name="api_tokens_step_up_failed">Ce mot de passe ou ce code n\'a pas correspondu, aucun jeton n\'a été créé.</string>
+    <string name="api_tokens_create">Créer un jeton</string>
+    <string name="api_tokens_create_failed">Impossible de créer le jeton.</string>
+    <string name="api_tokens_created">Créé le %1$s</string>
+    <string name="api_tokens_last_used">Dernière utilisation : %1$s</string>
+    <string name="api_tokens_never_used">Jamais utilisé</string>
+    <string name="api_tokens_use_count">%1$d appels</string>
+    <string name="api_tokens_expires">Expire le %1$s</string>
+    <string name="api_tokens_never_expires">n\'expire jamais</string>
+    <string name="api_tokens_expired">Expiré</string>
+    <string name="api_tokens_grace_badge">En période de grâce</string>
+    <string name="api_tokens_grace_until">l\'ancien secret cessera de fonctionner le %1$s</string>
+    <string name="api_tokens_usage_title">Utilisation des 30 derniers jours</string>
+    <string name="api_tokens_usage_total">%1$d appels au cours des 30 derniers jours</string>
+    <string name="api_tokens_usage_empty">Aucun appel au cours des 30 derniers jours pour le moment.</string>
+    <string name="api_tokens_new_token_heading">Nouveau jeton « %1$s » — copiez-le maintenant</string>
+    <string name="api_tokens_new_token_hint">C\'est la seule fois où le jeton complet s\'affiche. Mettez-le directement dans l\'outil qui l\'utilisera.</string>
+    <string name="api_tokens_copy">Copier</string>
+    <string name="api_tokens_copied">Copié dans le presse-papiers</string>
+    <string name="api_tokens_revoke">Révoquer</string>
+    <string name="api_tokens_revoke_confirm">La révocation arrête aussitôt tous les outils qui utilisent ce jeton. Vous pourrez en créer un nouveau ensuite.</string>
+    <string name="api_tokens_revoke_failed">Impossible de révoquer le jeton.</string>
+    <string name="api_tokens_rotate">Renouveler</string>
+    <string name="api_tokens_rotate_hint">Émet un nouveau secret pour ce jeton. L\'ancien reste valable 7 jours, le temps de mettre vos outils à jour sans interruption.</string>
+    <string name="api_tokens_rotate_expired">Ce jeton a déjà expiré — créez-en un nouveau à la place.</string>
+    <string name="api_tokens_rotate_failed">Ce jeton ne peut pas être renouvelé.</string>
 </resources>

@@ -707,6 +707,98 @@ data class DevicesResponse(
     val devices: List<DeviceDTO>,
 )
 
+// ---- API tokens (native self-service, mirrors the Web settings page) ----
+//
+// GET /api/v1/account/api-tokens returns the same view model the Web
+// settings page renders: the token list (prefix only — the full secret
+// exists server-side as a hash and is shown exactly once, in the create /
+// rotate RESPONSE), the step-up context (passwordSet / mfaEnabled) that
+// tells the UI which confirmation fields to ask for, and the 30-day
+// usage summary. `passwordSet` is tri-state on the server: true = the
+// account has its own password, false = SSO-only (no usable password),
+// null = legacy row where the server couldn't tell.
+
+@Serializable
+data class ApiTokenDTO(
+    val id: String,
+    val label: String,
+    val prefix: String,
+    /** "read" | "write" (the server normalizes anything else to "read"). */
+    val scope: String,
+    val lastUsedAt: String? = null,
+    val lastUsedIp: String? = null,
+    val useCount: Int = 0,
+    val expiresAt: String? = null,
+    val rotatedAt: String? = null,
+    val createdAt: String,
+    val expired: Boolean = false,
+    /** True while a rotated token's old secret is still in its 7-day grace. */
+    val inGrace: Boolean = false,
+)
+
+@Serializable
+data class ApiTokenUsageDayDTO(
+    val day: String,
+    val count: Int = 0,
+)
+
+@Serializable
+data class ApiTokenUsagePerTokenDTO(
+    val tokenId: String,
+    val label: String,
+    val count: Int = 0,
+)
+
+@Serializable
+data class ApiTokenUsageDTO(
+    val total: Int = 0,
+    val perDay: List<ApiTokenUsageDayDTO> = emptyList(),
+    val perToken: List<ApiTokenUsagePerTokenDTO> = emptyList(),
+)
+
+@Serializable
+data class ApiTokensResponse(
+    val apiEnabled: Boolean,
+    val limit: Int,
+    val limitReached: Boolean,
+    val passwordSet: Boolean? = null,
+    val mfaEnabled: Boolean = false,
+    val tokens: List<ApiTokenDTO> = emptyList(),
+    val usage: ApiTokenUsageDTO = ApiTokenUsageDTO(),
+)
+
+/** Create / rotate success: `plain` is the full secret, shown ONCE.
+ *  It is never written to disk anywhere in this client — the dialog
+ *  holds it in memory only until the user dismisses the notice. */
+@Serializable
+data class ApiTokenCreatedResponse(
+    val token: ApiTokenDTO,
+    val plain: String,
+)
+
+@Serializable
+data class ApiTokenRotatedResponse(
+    val token: ApiTokenDTO,
+    val plain: String,
+    /** When the replaced (old) token stops working — end of the grace. */
+    val oldExpiresAt: String? = null,
+)
+
+@Serializable
+data class CreateApiTokenInput(
+    val label: String,
+    val scope: String,
+    val expiresInDays: Int,
+    val currentPassword: String? = null,
+    val mfaCode: String? = null,
+)
+
+@Serializable
+data class ApiTokenStepUpInput(
+    val currentPassword: String? = null,
+    val mfaCode: String? = null,
+)
+
 // ---- Profile / persistence ----
 
 /** On-disk profile written to ~/.bywave-calendar/profile.json after a

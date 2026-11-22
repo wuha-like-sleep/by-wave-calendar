@@ -44,6 +44,11 @@ import cn.bywave.calendar.desktop.data.model.ConflictDTO
 import cn.bywave.calendar.desktop.data.model.ConflictsResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairInitResponse
 import cn.bywave.calendar.desktop.data.model.DesktopPairStatusResponse
+import cn.bywave.calendar.desktop.data.model.ApiTokenCreatedResponse
+import cn.bywave.calendar.desktop.data.model.ApiTokenRotatedResponse
+import cn.bywave.calendar.desktop.data.model.ApiTokenStepUpInput
+import cn.bywave.calendar.desktop.data.model.ApiTokensResponse
+import cn.bywave.calendar.desktop.data.model.CreateApiTokenInput
 import cn.bywave.calendar.desktop.data.model.DevicesResponse
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
@@ -99,6 +104,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -867,6 +873,103 @@ class ApiClient(
         if (!resp.status.isSuccess()) {
             throw errorFrom(resp, "revoke device failed")
         }
+    }
+
+    // ---- API tokens (native self-service) ----
+    //
+    // JSON twins of the Web settings form flow, same step-up rules:
+    // creating needs the account password (password accounts), a WRITE
+    // token on an MFA account additionally needs a fresh TOTP code, and
+    // SSO-only accounts without MFA get 412 step_up_unavailable (an
+    // operator has to issue the token). The full secret comes back ONCE
+    // in the create / rotate response — callers must not persist it.
+    //
+    // Error bodies on these routes carry a machine code and no human
+    // message (flat { error: "<code>" } at the route, re-wrapped by the
+    // /api/v1 envelope hook into { ok: false, error: { code, ... } }),
+    // so instead of unwrap()/errorFrom() (which would collapse
+    // everything to "HTTP nnn") the helpers below surface the machine
+    // code as the ApiException message. The settings
+    // UI maps the codes it knows (step_up_failed, limit_reached,
+    // api_disabled, step_up_unavailable, rotate_expired, not_found) to
+    // localized copy and falls back to userFacingError for the rest —
+    // a snake_case code reads as "internal" there and is never shown raw.
+
+    /** GET /api/v1/account/api-tokens — list + step-up context + usage. */
+    suspend fun listApiTokens(): ApiTokensResponse {
+        return getAuthed("/api/v1/account/api-tokens", ApiTokensResponse.serializer())
+    }
+
+    /** POST /api/v1/account/api-tokens — create after step-up. 201. */
+    suspend fun createApiToken(input: CreateApiTokenInput): ApiTokenCreatedResponse {
+        val resp = withRefresh {
+            val token = accessToken()
+            val jsonBody = jsonCfg.encodeToString(CreateApiTokenInput.serializer(), input)
+            client.post("$baseUrl/api/v1/account/api-tokens") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        return unwrapTokenResponse(resp, ApiTokenCreatedResponse.serializer())
+    }
+
+    /** POST /api/v1/account/api-tokens/{id}/rotate — new secret for the
+     *  same token; the old secret keeps working for 7 days (grace). */
+    suspend fun rotateApiToken(id: String, input: ApiTokenStepUpInput): ApiTokenRotatedResponse {
+        val resp = withRefresh {
+            val token = accessToken()
+            val jsonBody = jsonCfg.encodeToString(ApiTokenStepUpInput.serializer(), input)
+            client.post("$baseUrl/api/v1/account/api-tokens/$id/rotate") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        return unwrapTokenResponse(resp, ApiTokenRotatedResponse.serializer())
+    }
+
+    /** POST /api/v1/account/api-tokens/{id}/revoke — immediate. The
+     *  server replies with a bare { ok: true } (same story as
+     *  changePassword), so this is a status-only call. Revoking an id
+     *  that isn't the caller's is a silent no-op server-side. */
+    suspend fun revokeApiToken(id: String) {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.post("$baseUrl/api/v1/account/api-tokens/$id/revoke") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        }
+        if (!resp.status.isSuccess()) {
+            throw tokenErrorFrom(resp)
+        }
+    }
+
+    /** Success → envelope-unwrap like unwrap(); failure → ApiException
+     *  whose message is the server's flat error CODE (see the section
+     *  comment above for why the code, not a human sentence). */
+    private suspend fun <T> unwrapTokenResponse(resp: HttpResponse, serializer: KSerializer<T>): T {
+        if (resp.status.isSuccess()) return unwrap(resp, serializer)
+        throw tokenErrorFrom(resp)
+    }
+
+    private suspend fun tokenErrorFrom(resp: HttpResponse): ApiException {
+        val raw = runCatching { resp.bodyAsText() }.getOrDefault("")
+        // Two shapes reach the client: the bare route body
+        // { error: "<code>" } and — after the server's /api/v1 envelope
+        // hook — { ok: false, error: { code: "<code>", message: ... } }.
+        val code = runCatching {
+            val errEl = jsonCfg.parseToJsonElement(raw).jsonObject["error"]
+            when {
+                errEl == null -> null
+                errEl is kotlinx.serialization.json.JsonObject ->
+                    errEl["code"]?.jsonPrimitive?.contentOrNull
+                else -> errEl.jsonPrimitive.contentOrNull
+            }
+        }.getOrNull()
+        return ApiException(resp.status.value, code ?: "HTTP ${resp.status.value}")
     }
 
     fun calendarConnectionApi() = object : cn.bywave.calendar.connect.CalendarConnectionApi {

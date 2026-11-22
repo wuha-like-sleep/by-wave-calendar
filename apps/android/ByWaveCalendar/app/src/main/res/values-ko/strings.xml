@@ -273,4 +273,50 @@
     <string name="offline_detail_label">동기화 상태</string>
     <string name="offline_detail_value">이 기기에 저장됨 — 동기화 대기 중</string>
     <string name="offline_block_badge">동기화 대기</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">API 토큰</string>
+    <string name="api_tokens_desc">n8n, Zapier 또는 직접 만든 스크립트용입니다. 토큰은 내 계정으로 동작하니 비밀번호처럼 다루세요.</string>
+    <string name="api_tokens_loading">토큰을 불러오는 중…</string>
+    <string name="api_tokens_load_failed">토큰을 불러오지 못했습니다.</string>
+    <string name="api_tokens_disabled">이 사이트는 아직 API를 켜지 않아 토큰을 만들 수 없습니다. 사이트 운영자에게 켜 달라고 요청하세요.</string>
+    <string name="api_tokens_need_admin">이 계정은 자체 비밀번호도 MFA도 없어서 여기에서 토큰을 만들 수 없습니다. 사이트 운영자에게 발급을 요청하세요.</string>
+    <string name="api_tokens_limit_reached">활성 토큰이 이미 %1$d개 있습니다. 새 토큰을 만들기 전에 하나를 해지하세요.</string>
+    <string name="api_tokens_empty">아직 API 토큰이 없습니다.</string>
+    <string name="api_tokens_label_placeholder">라벨 (예: n8n 동기화)</string>
+    <string name="api_tokens_scope">권한</string>
+    <string name="api_tokens_scope_read">읽기 전용</string>
+    <string name="api_tokens_scope_write">읽기·쓰기</string>
+    <string name="api_tokens_scope_write_hint">읽기·쓰기 토큰은 내 이름으로 일정을 만들고, 바꾸고, 지울 수 있습니다. 도구가 정말 써야 할 때만 선택하세요.</string>
+    <string name="api_tokens_expiry_label">만료 일수 (0 = 만료 없음)</string>
+    <string name="api_tokens_expiry_hint">기본값은 365일입니다. 필요하면 늘리세요. 0 = 만료 없음.</string>
+    <string name="api_tokens_current_password">현재 비밀번호</string>
+    <string name="api_tokens_mfa_code">MFA 코드</string>
+    <string name="api_tokens_step_up_hint">토큰을 만들기 전에 신원을 한 번 더 확인합니다. 빌린 세션으로 몰래 발급하는 일을 막기 위해서입니다.</string>
+    <string name="api_tokens_step_up_failed">비밀번호나 코드가 맞지 않아 토큰이 만들어지지 않았습니다.</string>
+    <string name="api_tokens_create">토큰 만들기</string>
+    <string name="api_tokens_create_failed">토큰을 만들지 못했습니다.</string>
+    <string name="api_tokens_created">생성일 %1$s</string>
+    <string name="api_tokens_last_used">마지막 사용 %1$s</string>
+    <string name="api_tokens_never_used">사용 안 함</string>
+    <string name="api_tokens_use_count">호출 %1$d회</string>
+    <string name="api_tokens_expires">%1$s 만료</string>
+    <string name="api_tokens_never_expires">만료 없음</string>
+    <string name="api_tokens_expired">만료됨</string>
+    <string name="api_tokens_grace_badge">유예 기간 중</string>
+    <string name="api_tokens_grace_until">기존 시크릿은 %1$s에 만료됩니다</string>
+    <string name="api_tokens_usage_title">최근 30일 사용량</string>
+    <string name="api_tokens_usage_total">최근 30일 호출 %1$d회</string>
+    <string name="api_tokens_usage_empty">최근 30일 동안 호출 기록이 없습니다.</string>
+    <string name="api_tokens_new_token_heading">새 토큰 \'%1$s\' — 지금 복사하세요</string>
+    <string name="api_tokens_new_token_hint">전체 토큰은 이번 한 번만 표시됩니다. 사용할 도구에 바로 넣으세요.</string>
+    <string name="api_tokens_copy">복사</string>
+    <string name="api_tokens_copied">클립보드에 복사됨</string>
+    <string name="api_tokens_revoke">해지</string>
+    <string name="api_tokens_revoke_confirm">해지하면 이 토큰을 쓰는 도구는 즉시 멈춥니다. 나중에 새로 만들 수 있습니다.</string>
+    <string name="api_tokens_revoke_failed">토큰을 취소하지 못했습니다.</string>
+    <string name="api_tokens_rotate">교체</string>
+    <string name="api_tokens_rotate_hint">이 토큰의 새 시크릿을 발급합니다. 기존 시크릿은 7일 동안 계속 사용할 수 있어 중단 없이 도구를 전환할 수 있습니다.</string>
+    <string name="api_tokens_rotate_expired">그 토큰은 이미 만료되었습니다. 새로 만들어 주세요.</string>
+    <string name="api_tokens_rotate_failed">그 토큰은 교체할 수 없습니다.</string>
 </resources>

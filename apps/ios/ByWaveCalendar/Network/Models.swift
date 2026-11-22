@@ -758,6 +758,113 @@ struct OkResponse: Decodable {
     let ok: Bool
 }
 
+// MARK: - API Token (account/api-tokens)
+
+/// One row of GET /account/api-tokens. The full secret is NOT here —
+/// the server stores only a hash; `plain` comes back exactly once in
+/// the create / rotate response. Dates decode through JSONDecoder.iso().
+struct ApiTokenDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let prefix: String
+    /// "read" | "write" (the server normalizes anything else to "read").
+    let scope: String
+    let lastUsedAt: Date?
+    let lastUsedIp: String?
+    let useCount: Int
+    let expiresAt: Date?
+    let rotatedAt: Date?
+    let createdAt: Date
+    let expired: Bool
+    /// True while a rotated token's old secret is in its 7-day grace.
+    let inGrace: Bool
+}
+
+struct ApiTokenUsageDayDTO: Decodable, Hashable {
+    let day: String
+    let count: Int
+}
+
+struct ApiTokenUsagePerTokenDTO: Decodable, Hashable {
+    let tokenId: String
+    let label: String
+    let count: Int
+}
+
+struct ApiTokenUsageDTO: Decodable, Hashable {
+    let total: Int
+    let perDay: [ApiTokenUsageDayDTO]
+    let perToken: [ApiTokenUsagePerTokenDTO]
+}
+
+/// GET /account/api-tokens — the same view model the Web settings page
+/// renders: token list + step-up context + 30-day usage. `passwordSet`
+/// is tri-state: true = has own password, false = SSO-only, nil =
+/// legacy row where the server couldn't tell.
+struct ApiTokensResponse: Decodable {
+    let apiEnabled: Bool
+    let limit: Int
+    let limitReached: Bool
+    let passwordSet: Bool?
+    let mfaEnabled: Bool
+    let tokens: [ApiTokenDTO]
+    let usage: ApiTokenUsageDTO
+}
+
+/// POST /account/api-tokens body. Custom encoding so absent step-up
+/// fields are OMITTED, not sent as null — the server schema treats
+/// null and missing differently (null fails validation).
+struct CreateApiTokenInput: Encodable {
+    let label: String
+    let scope: String
+    let expiresInDays: Int
+    let currentPassword: String?
+    let mfaCode: String?
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(label, forKey: .label)
+        try c.encode(scope, forKey: .scope)
+        try c.encode(expiresInDays, forKey: .expiresInDays)
+        try c.encodeIfPresent(currentPassword, forKey: .currentPassword)
+        try c.encodeIfPresent(mfaCode, forKey: .mfaCode)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case label, scope, expiresInDays, currentPassword, mfaCode
+    }
+}
+
+/// POST /account/api-tokens/:id/rotate body — step-up fields only;
+/// the scope comes from the token being rotated.
+struct ApiTokenStepUpInput: Encodable {
+    let currentPassword: String?
+    let mfaCode: String?
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(currentPassword, forKey: .currentPassword)
+        try c.encodeIfPresent(mfaCode, forKey: .mfaCode)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case currentPassword, mfaCode
+    }
+}
+
+/// Create success (201). `plain` is shown ONCE and never persisted.
+struct ApiTokenCreatedResponse: Decodable {
+    let token: ApiTokenDTO
+    let plain: String
+}
+
+/// Rotate success. `oldExpiresAt` = when the old secret stops working.
+struct ApiTokenRotatedResponse: Decodable {
+    let token: ApiTokenDTO
+    let plain: String
+    let oldExpiresAt: Date?
+}
+
 // MARK: - 冲突检测 (POST /events/conflicts)
 
 struct ConflictCheckInput: Encodable {

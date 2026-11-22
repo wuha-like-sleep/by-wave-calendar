@@ -2807,6 +2807,7 @@ private fun SecuritySection(profile: Profile) {
     // richer native UI (WebAuthn ceremony, TOTP enrollment, irreversible
     // confirmation) than this client warrants yet.
     var changePassword by remember { mutableStateOf(false) }
+    var apiTokens by remember { mutableStateOf(false) }
 
     SectionTitle(t("settings.security.title"))
     Text(
@@ -2828,7 +2829,13 @@ private fun SecuritySection(profile: Profile) {
         HorizontalDivider()
         OpenInWebRow(profile = profile, next = "/app/settings/security#mfa", title = t("settings.security.mfa"), subtitle = t("settings.security.mfa.sub"))
         HorizontalDivider()
-        OpenInWebRow(profile = profile, next = "/app/settings/devices#api-tokens", title = t("settings.security.apiTokens"), subtitle = t("settings.security.apiTokens.sub"))
+        // Native API-token management — list / create / rotate / revoke
+        // with the same step-up rules as the Web settings page.
+        ActionRow(
+            title = t("settings.security.apiTokens"),
+            subtitle = t("settings.security.apiTokens.sub"),
+            onClick = { apiTokens = true },
+        )
         HorizontalDivider()
         OpenInWebRow(profile = profile, next = "/app/logins", title = t("settings.security.loginHistory"), subtitle = t("settings.security.loginHistory.sub"))
     }
@@ -2843,6 +2850,13 @@ private fun SecuritySection(profile: Profile) {
         ChangePasswordDialog(
             profile = profile,
             onDismiss = { changePassword = false },
+        )
+    }
+
+    if (apiTokens) {
+        ApiTokensDialog(
+            profile = profile,
+            onDismiss = { apiTokens = false },
         )
     }
 }
@@ -2987,6 +3001,755 @@ private fun ChangePasswordDialog(profile: Profile, onDismiss: () -> Unit) {
                 TextButton(onClick = onDismiss, enabled = !working) {
                     Text(t("settings.security.changePassword.cancel"))
                 }
+            }
+        },
+    )
+}
+
+/** Map a token-endpoint failure to localized copy. The ApiClient token
+ *  methods surface the server's flat error CODE as the exception message
+ *  (see ApiClient), so the codes the user can actually act on get their
+ *  own strings here; anything else falls back to userFacingError. */
+private fun apiTokenErrorText(e: Throwable, fallbackKey: String, limit: Int = 5): String {
+    val code = (e as? cn.bywave.calendar.desktop.data.api.ApiException)?.message
+    return when (code) {
+        "step_up_failed" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.stepUpFailed")
+        "limit_reached" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.limitReached", mapOf("limit" to limit))
+        "api_disabled" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.disabled")
+        "step_up_unavailable" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.needAdmin")
+        "rotate_expired" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.rotateExpired")
+        "not_found", "rotate_failed" -> cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.rotateFailed")
+        else -> userFacingError(e, fallbackKey)
+    }
+}
+
+/** Native API-token management, mirroring the Web settings page: list
+ *  with scope / expiry / last-used / use-count, 30-day usage, create
+ *  with password (+ MFA for write tokens) step-up, rotate with a 7-day
+ *  grace for the old secret, and immediate revoke. The full secret is
+ *  shown exactly once after create / rotate and is kept in memory only
+ *  — nothing about it is ever written to disk. */
+@Composable
+private fun ApiTokensDialog(profile: Profile, onDismiss: () -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val displayZone = cn.bywave.calendar.desktop.ui.calendar.rememberDisplayTimeZone()
+
+    var data by remember { mutableStateOf<cn.bywave.calendar.desktop.data.model.ApiTokensResponse?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+    // The one-time secret notice: (label, plain). Memory only.
+    var freshSecret by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var revoking by remember { mutableStateOf<cn.bywave.calendar.desktop.data.model.ApiTokenDTO?>(null) }
+    var rotating by remember { mutableStateOf<cn.bywave.calendar.desktop.data.model.ApiTokenDTO?>(null) }
+
+    androidx.compose.runtime.LaunchedEffect(reloadKey) {
+        loading = true
+        loadError = null
+        val api = ApiClient(profile)
+        runCatching { api.listApiTokens() }
+            .onSuccess {
+                api.close()
+                data = it
+                loading = false
+            }
+            .onFailure {
+                api.close()
+                loadError = userFacingError(it, "settings.apiTokens.loadFailed")
+                loading = false
+            }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                t("settings.apiTokens.title"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .width(520.dp)
+                    .heightIn(max = 560.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    t("settings.apiTokens.desc"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                when {
+                    loading -> {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(t("settings.apiTokens.loading"), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    loadError != null -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(loadError!!, color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { reloadKey++ }) { Text(t("error.retry")) }
+                        }
+                    }
+                    data != null -> {
+                        val d = data!!
+                        if (freshSecret != null) {
+                            NewApiTokenNotice(
+                                label = freshSecret!!.first,
+                                plain = freshSecret!!.second,
+                                onDone = { freshSecret = null },
+                            )
+                        }
+                        if (!d.apiEnabled) {
+                            Text(
+                                t("settings.apiTokens.disabled"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            if (d.tokens.isEmpty()) {
+                                Text(
+                                    t("settings.apiTokens.empty"),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            } else {
+                                d.tokens.forEach { token ->
+                                    ApiTokenRow(
+                                        token = token,
+                                        displayZone = displayZone,
+                                        onRotate = { rotating = token },
+                                        onRevoke = { revoking = token },
+                                    )
+                                    if (token != d.tokens.last()) HorizontalDivider()
+                                }
+                            }
+                            ApiTokenUsageBlock(usage = d.usage)
+                            when {
+                                d.passwordSet == false && !d.mfaEnabled -> {
+                                    Text(
+                                        t("settings.apiTokens.needAdmin"),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                d.limitReached -> {
+                                    Text(
+                                        cn.bywave.calendar.desktop.i18n.I18n.t(
+                                            "settings.apiTokens.limitReached",
+                                            mapOf("limit" to d.limit),
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                else -> {
+                                    CreateApiTokenForm(
+                                        profile = profile,
+                                        data = d,
+                                        onCreated = { label, plain ->
+                                            freshSecret = label to plain
+                                            reloadKey++
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(t("common.close")) }
+        },
+    )
+
+    revoking?.let { token ->
+        RevokeApiTokenDialog(
+            profile = profile,
+            token = token,
+            onDismiss = { revoking = null },
+            onRevoked = {
+                revoking = null
+                reloadKey++
+            },
+        )
+    }
+
+    rotating?.let { token ->
+        RotateApiTokenDialog(
+            profile = profile,
+            token = token,
+            passwordSet = data?.passwordSet,
+            mfaEnabled = data?.mfaEnabled == true,
+            onDismiss = { rotating = null },
+            onRotated = { label, plain ->
+                rotating = null
+                freshSecret = label to plain
+                reloadKey++
+            },
+        )
+    }
+}
+
+/** One token row: label + scope badge (+ expired / grace badges), the
+ *  public prefix, created / last-used / use-count meta, the expiry or
+ *  grace line, and the rotate / revoke actions. Rotate hides for
+ *  expired tokens and for tokens already in their rotation grace —
+ *  the same rule the Web page applies. */
+@Composable
+private fun ApiTokenRow(
+    token: cn.bywave.calendar.desktop.data.model.ApiTokenDTO,
+    displayZone: java.time.ZoneId,
+    onRotate: () -> Unit,
+    onRevoke: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val tv = remember(locale) { { key: String, vars: Map<String, Any> -> cn.bywave.calendar.desktop.i18n.I18n.t(key, vars) } }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                token.label,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (token.scope == "write") t("settings.apiTokens.scopeWrite") else t("settings.apiTokens.scopeRead"),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (token.scope == "write") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+            if (token.expired) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    t("settings.apiTokens.expired"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (token.inGrace) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    t("settings.apiTokens.graceBadge"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+        Text(
+            token.prefix + "…",
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val meta = buildString {
+            append(tv("settings.apiTokens.created", mapOf("date" to formatTimestamp(token.createdAt, displayZone))))
+            append(" · ")
+            if (token.lastUsedAt != null) {
+                append(tv("settings.apiTokens.lastUsed", mapOf("date" to formatTimestamp(token.lastUsedAt, displayZone))))
+                if (!token.lastUsedIp.isNullOrBlank()) {
+                    append(" · ")
+                    append(token.lastUsedIp)
+                }
+            } else {
+                append(t("settings.apiTokens.neverUsed"))
+            }
+            append(" · ")
+            append(tv("settings.apiTokens.useCount", mapOf("count" to token.useCount)))
+        }
+        Text(
+            meta,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val expiryLine = when {
+            token.inGrace && token.expiresAt != null ->
+                tv("settings.apiTokens.graceUntil", mapOf("date" to formatTimestamp(token.expiresAt, displayZone)))
+            token.expiresAt != null ->
+                tv("settings.apiTokens.expires", mapOf("date" to formatTimestamp(token.expiresAt, displayZone)))
+            else -> t("settings.apiTokens.neverExpires")
+        }
+        Text(
+            expiryLine,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row {
+            if (!token.expired && !token.inGrace) {
+                TextButton(onClick = onRotate) { Text(t("settings.apiTokens.rotate")) }
+            }
+            TextButton(onClick = onRevoke) {
+                Text(t("settings.apiTokens.revoke"), color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+/** The 30-day usage view from the same GET response the Web page uses:
+ *  a total line, a simple per-day bar strip, and per-token counts. */
+@Composable
+private fun ApiTokenUsageBlock(usage: cn.bywave.calendar.desktop.data.model.ApiTokenUsageDTO) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val tv = remember(locale) { { key: String, vars: Map<String, Any> -> cn.bywave.calendar.desktop.i18n.I18n.t(key, vars) } }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            t("settings.apiTokens.usageTitle"),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        if (usage.total == 0) {
+            Text(
+                t("settings.apiTokens.usageEmpty"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                tv("settings.apiTokens.usageTotal", mapOf("count" to usage.total)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            val maxCount = usage.perDay.maxOfOrNull { it.count } ?: 0
+            Row(
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                usage.perDay.forEach { day ->
+                    val frac = if (maxCount > 0) day.count.toFloat() / maxCount else 0f
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height((44f * frac).dp.coerceAtLeast(if (day.count > 0) 3.dp else 1.dp))
+                            .background(
+                                if (day.count > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.surfaceVariant,
+                                RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp),
+                            ),
+                    )
+                }
+            }
+            usage.perToken.filter { it.count > 0 }.forEach { row ->
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        row.label,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        tv("settings.apiTokens.useCount", mapOf("count" to row.count)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The show-once secret notice after a create / rotate. The plain token
+ *  sits in a read-only text field (selectable, copyable) with a Copy
+ *  button; pressing Done drops the only in-memory copy. */
+@Composable
+private fun NewApiTokenNotice(label: String, plain: String, onDone: () -> Unit) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    var copied by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            cn.bywave.calendar.desktop.i18n.I18n.t("settings.apiTokens.newTokenHeading", mapOf("label" to label)),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        OutlinedTextField(
+            value = plain,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = false,
+            textStyle = MaterialTheme.typography.bodySmall.copy(
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+            ),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            t("settings.apiTokens.newTokenHint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = {
+                copyToClipboard(plain)
+                copied = true
+            }) {
+                Text(if (copied) t("settings.apiTokens.copied") else t("settings.apiTokens.copy"))
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onDone) { Text(t("common.close")) }
+        }
+    }
+}
+
+/** The create form. Which step-up fields render follows the GET
+ *  response, exactly like the Web page: the password field shows when
+ *  the account has (or may have) a password, the MFA field when MFA is
+ *  on. Scope defaults to read-only; expiry defaults to 365 days with
+ *  0 = never. */
+@Composable
+private fun CreateApiTokenForm(
+    profile: Profile,
+    data: cn.bywave.calendar.desktop.data.model.ApiTokensResponse,
+    onCreated: (label: String, plain: String) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var label by remember { mutableStateOf("") }
+    var writeScope by remember { mutableStateOf(false) }
+    var expiryDays by remember { mutableStateOf("365") }
+    var password by remember { mutableStateOf("") }
+    var mfaCode by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val expiryValue = expiryDays.toIntOrNull()
+    val expiryValid = expiryValue != null && expiryValue in 0..3650
+    // Local gating mirrors the server's step-up rules so the common
+    // "field left blank" case doesn't cost a round-trip; the server
+    // remains the authority and its verdicts surface via errorMsg.
+    val stepUpReady = when {
+        data.passwordSet == true ->
+            password.isNotBlank() && (!writeScope || !data.mfaEnabled || mfaCode.isNotBlank())
+        data.passwordSet == false -> mfaCode.isNotBlank()
+        else -> password.isNotBlank() || mfaCode.isNotBlank()
+    }
+    val canSubmit = !working && label.isNotBlank() && expiryValid && stepUpReady
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            t("settings.apiTokens.create"),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        OutlinedTextField(
+            value = label,
+            onValueChange = { label = it },
+            label = { Text(t("settings.apiTokens.labelPlaceholder")) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            t("settings.apiTokens.scope"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(selected = !writeScope, onClick = { writeScope = false })
+            Text(t("settings.apiTokens.scopeRead"))
+            Spacer(Modifier.width(16.dp))
+            RadioButton(selected = writeScope, onClick = { writeScope = true })
+            Text(t("settings.apiTokens.scopeWrite"))
+        }
+        if (writeScope) {
+            Text(
+                t("settings.apiTokens.scopeWriteHint"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        OutlinedTextField(
+            value = expiryDays,
+            onValueChange = { v -> expiryDays = v.filter { it.isDigit() }.take(4) },
+            label = { Text(t("settings.apiTokens.expiryLabel")) },
+            singleLine = true,
+            isError = expiryDays.isNotEmpty() && !expiryValid,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            t("settings.apiTokens.expiryHint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (data.passwordSet != false) {
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text(t("settings.apiTokens.currentPassword")) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (data.mfaEnabled) {
+            OutlinedTextField(
+                value = mfaCode,
+                onValueChange = { mfaCode = it },
+                label = { Text(t("settings.apiTokens.mfaCode")) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Text(
+            t("settings.apiTokens.stepUpHint"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (errorMsg != null) {
+            Text(
+                errorMsg!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        Button(
+            onClick = {
+                working = true
+                errorMsg = null
+                scope.launch {
+                    val api = ApiClient(profile)
+                    runCatching {
+                        api.createApiToken(
+                            cn.bywave.calendar.desktop.data.model.CreateApiTokenInput(
+                                label = label.trim(),
+                                scope = if (writeScope) "write" else "read",
+                                expiresInDays = expiryValue ?: 365,
+                                currentPassword = password.ifBlank { null },
+                                mfaCode = mfaCode.trim().ifBlank { null },
+                            ),
+                        )
+                    }.onSuccess {
+                        api.close()
+                        working = false
+                        onCreated(it.token.label, it.plain)
+                    }.onFailure {
+                        api.close()
+                        working = false
+                        errorMsg = apiTokenErrorText(it, "settings.apiTokens.createFailed", data.limit)
+                    }
+                }
+            },
+            enabled = canSubmit,
+        ) {
+            if (working) {
+                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(t("settings.apiTokens.create"))
+        }
+    }
+}
+
+/** Rotate step-up dialog: same confirmation rules as create, evaluated
+ *  against the token's own scope server-side (a write token on an MFA
+ *  account needs password + TOTP). On success the parent shows the new
+ *  secret once; the old secret keeps working for 7 days. */
+@Composable
+private fun RotateApiTokenDialog(
+    profile: Profile,
+    token: cn.bywave.calendar.desktop.data.model.ApiTokenDTO,
+    passwordSet: Boolean?,
+    mfaEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onRotated: (label: String, plain: String) -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var password by remember { mutableStateOf("") }
+    var mfaCode by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val stepUpReady = when {
+        passwordSet == true ->
+            password.isNotBlank() && (token.scope != "write" || !mfaEnabled || mfaCode.isNotBlank())
+        passwordSet == false -> mfaCode.isNotBlank()
+        else -> password.isNotBlank() || mfaCode.isNotBlank()
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                token.label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.width(380.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    t("settings.apiTokens.rotateHint"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (passwordSet != false) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(t("settings.apiTokens.currentPassword")) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (mfaEnabled) {
+                    OutlinedTextField(
+                        value = mfaCode,
+                        onValueChange = { mfaCode = it },
+                        label = { Text(t("settings.apiTokens.mfaCode")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    working = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile)
+                        runCatching {
+                            api.rotateApiToken(
+                                token.id,
+                                cn.bywave.calendar.desktop.data.model.ApiTokenStepUpInput(
+                                    currentPassword = password.ifBlank { null },
+                                    mfaCode = mfaCode.trim().ifBlank { null },
+                                ),
+                            )
+                        }.onSuccess {
+                            api.close()
+                            working = false
+                            onRotated(it.token.label, it.plain)
+                        }.onFailure {
+                            api.close()
+                            working = false
+                            errorMsg = apiTokenErrorText(it, "settings.apiTokens.rotateFailed")
+                        }
+                    }
+                },
+                enabled = !working && stepUpReady,
+            ) {
+                if (working) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("settings.apiTokens.rotate"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(t("common.cancel"))
+            }
+        },
+    )
+}
+
+/** Revoke confirmation. Revocation is immediate and can't be undone
+ *  (the user can mint a fresh token afterwards) — same copy and danger
+ *  styling as the Web page's confirm. */
+@Composable
+private fun RevokeApiTokenDialog(
+    profile: Profile,
+    token: cn.bywave.calendar.desktop.data.model.ApiTokenDTO,
+    onDismiss: () -> Unit,
+    onRevoked: () -> Unit,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val scope = rememberCoroutineScope()
+
+    var working by remember { mutableStateOf(false) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!working) onDismiss() },
+        title = {
+            Text(
+                token.label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(t("settings.apiTokens.revokeConfirm"))
+                if (errorMsg != null) {
+                    Text(
+                        errorMsg!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    working = true
+                    errorMsg = null
+                    scope.launch {
+                        val api = ApiClient(profile)
+                        runCatching { api.revokeApiToken(token.id) }
+                            .onSuccess {
+                                api.close()
+                                working = false
+                                onRevoked()
+                            }
+                            .onFailure {
+                                api.close()
+                                working = false
+                                errorMsg = apiTokenErrorText(it, "settings.apiTokens.revokeFailed")
+                            }
+                    }
+                },
+                enabled = !working,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                if (working) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(t("settings.apiTokens.revoke"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !working) {
+                Text(t("common.cancel"))
             }
         },
     )

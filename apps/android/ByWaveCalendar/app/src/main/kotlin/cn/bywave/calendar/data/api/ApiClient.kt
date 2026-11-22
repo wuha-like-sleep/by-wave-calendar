@@ -9,6 +9,10 @@ import cn.bywave.calendar.BuildConfig
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
+import cn.bywave.calendar.data.model.ApiTokenCreatedResponse
+import cn.bywave.calendar.data.model.ApiTokenRotatedResponse
+import cn.bywave.calendar.data.model.ApiTokenStepUpRequest
+import cn.bywave.calendar.data.model.ApiTokensResponse
 import cn.bywave.calendar.data.model.AttendeeInviteRequest
 import cn.bywave.calendar.data.model.AttendeeRevokeRequest
 import cn.bywave.calendar.data.model.AttendeesResponse
@@ -27,6 +31,7 @@ import cn.bywave.calendar.data.model.CalendarCreateRequest
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.CalendarUpdateInput
 import cn.bywave.calendar.data.model.ChangePasswordRequest
+import cn.bywave.calendar.data.model.CreateApiTokenRequest
 import cn.bywave.calendar.data.model.DeleteAccountRequest
 import cn.bywave.calendar.data.model.DesktopPairApproveRequest
 import cn.bywave.calendar.data.model.EventCreateInput
@@ -390,6 +395,35 @@ interface BywaveApi {
      *  Wrong password or code → 403. */
     @POST("api/v1/account/mfa/disable")
     suspend fun mfaDisable(@Body body: MfaDisableRequest)
+
+    // ---- API tokens (self-service) ----
+    //
+    // Same step-up contract as the Web settings page, enforced
+    // server-side: create needs the account password (password
+    // accounts); a WRITE token on an MFA account additionally needs a
+    // fresh TOTP code; SSO-only accounts without MFA get
+    // 412 step_up_unavailable. Errors arrive (after the envelope
+    // interceptor) as HttpException with a `{ code, message }` body —
+    // the settings page maps `code` to localized copy. The full secret
+    // returns ONCE in the create / rotate response (`plain`).
+
+    /** List tokens + step-up context + 30-day usage summary. */
+    @GET("api/v1/account/api-tokens")
+    suspend fun apiTokens(): ApiTokensResponse
+
+    /** Create a token after step-up. 201 on success. */
+    @POST("api/v1/account/api-tokens")
+    suspend fun createApiToken(@Body body: CreateApiTokenRequest): ApiTokenCreatedResponse
+
+    /** Rotate: new secret for the same token; the old secret keeps
+     *  working for 7 days (grace). */
+    @POST("api/v1/account/api-tokens/{id}/rotate")
+    suspend fun rotateApiToken(@Path("id") id: String, @Body body: ApiTokenStepUpRequest): ApiTokenRotatedResponse
+
+    /** Revoke — immediate. Bare `{ ok: true }` reply, like
+     *  changePassword; revoking someone else's id is a silent no-op. */
+    @POST("api/v1/account/api-tokens/{id}/revoke")
+    suspend fun revokeApiToken(@Path("id") id: String, @Body body: EmptyBodyRequest = EmptyBodyRequest())
 
     // ---- Devices ----
 

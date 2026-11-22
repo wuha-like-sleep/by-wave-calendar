@@ -278,4 +278,50 @@ to match the development locale.
     <string name="offline_detail_label">Sync status</string>
     <string name="offline_detail_value">Saved on this device — waiting to sync</string>
     <string name="offline_block_badge">Pending sync</string>
+
+    <!-- API tokens (native self-service, mirrors the Web settings page) -->
+    <string name="api_tokens_title">API tokens</string>
+    <string name="api_tokens_desc">For tools like n8n, Zapier or your own scripts. A token can act as your account, so treat it like a password.</string>
+    <string name="api_tokens_loading">Loading tokens…</string>
+    <string name="api_tokens_load_failed">Couldn\'t load your tokens.</string>
+    <string name="api_tokens_disabled">This site hasn\'t enabled the API yet, so tokens can\'t be created. Ask the site operator to turn it on.</string>
+    <string name="api_tokens_need_admin">This account signs in without its own password or MFA, so tokens can\'t be created here. Ask the site operator to issue one for you.</string>
+    <string name="api_tokens_limit_reached">You already have %1$d active tokens. Revoke one before creating another.</string>
+    <string name="api_tokens_empty">No API tokens yet.</string>
+    <string name="api_tokens_label_placeholder">Label (e.g. n8n sync)</string>
+    <string name="api_tokens_scope">Access</string>
+    <string name="api_tokens_scope_read">Read only</string>
+    <string name="api_tokens_scope_write">Read &amp; write</string>
+    <string name="api_tokens_scope_write_hint">A read &amp; write token can create, change and delete events as you. Only choose it if the tool really needs to write.</string>
+    <string name="api_tokens_expiry_label">Expires in days (0 = never)</string>
+    <string name="api_tokens_expiry_hint">Defaults to 365 days. Make it longer if you need to, or set 0 for no expiry.</string>
+    <string name="api_tokens_current_password">Current password</string>
+    <string name="api_tokens_mfa_code">MFA code</string>
+    <string name="api_tokens_step_up_hint">Creating a token asks for one more check, so a borrowed session can\'t quietly mint one.</string>
+    <string name="api_tokens_step_up_failed">That password or code didn\'t check out, so no token was created.</string>
+    <string name="api_tokens_create">Create token</string>
+    <string name="api_tokens_create_failed">Couldn\'t create the token.</string>
+    <string name="api_tokens_created">Created %1$s</string>
+    <string name="api_tokens_last_used">Last used %1$s</string>
+    <string name="api_tokens_never_used">Never used</string>
+    <string name="api_tokens_use_count">%1$d calls</string>
+    <string name="api_tokens_expires">Expires %1$s</string>
+    <string name="api_tokens_never_expires">never expires</string>
+    <string name="api_tokens_expired">Expired</string>
+    <string name="api_tokens_grace_badge">In grace period</string>
+    <string name="api_tokens_grace_until">old secret stops working %1$s</string>
+    <string name="api_tokens_usage_title">Usage in the last 30 days</string>
+    <string name="api_tokens_usage_total">%1$d calls in the last 30 days</string>
+    <string name="api_tokens_usage_empty">No calls in the last 30 days yet.</string>
+    <string name="api_tokens_new_token_heading">New token \"%1$s\" — copy it now</string>
+    <string name="api_tokens_new_token_hint">This is the only time the full token is shown. Put it straight into the tool that will use it.</string>
+    <string name="api_tokens_copy">Copy</string>
+    <string name="api_tokens_copied">Copied to clipboard</string>
+    <string name="api_tokens_revoke">Revoke</string>
+    <string name="api_tokens_revoke_confirm">Revoking stops every tool using this token right away. You can create a new one afterwards.</string>
+    <string name="api_tokens_revoke_failed">Couldn\'t revoke the token.</string>
+    <string name="api_tokens_rotate">Rotate</string>
+    <string name="api_tokens_rotate_hint">Issues a new secret for this token. The old secret keeps working for 7 days, so you can update your tools without downtime.</string>
+    <string name="api_tokens_rotate_expired">That token has already expired — create a new one instead.</string>
+    <string name="api_tokens_rotate_failed">That token can\'t be rotated.</string>
 </resources>
