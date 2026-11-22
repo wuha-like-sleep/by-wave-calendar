@@ -1,4 +1,4 @@
-<div class="max-w-3xl mx-auto py-6 px-4">
+<div class="max-w-3xl mx-auto">
   <header class="mb-4 flex items-center gap-3">
     <a href="/app" class="text-sm text-slate-500 hover:text-slate-700"><%= t("search.backToCalendar") %></a>
     <h1 class="text-xl font-semibold text-slate-900 flex-1"><%= t("search.heading") %></h1>
@@ -14,10 +14,10 @@
              placeholder="<%= t('search.inputPlaceholder') %>"
              class="w-full rounded-lg border border-slate-300 bg-white pl-9 pr-3 py-2.5 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </div>
-    <p class="mt-1 text-xs text-slate-400"><%- t("search.hint") %></p>
+    <p class="mt-1 text-xs text-slate-500"><%- t("search.hint") %></p>
   </div>
 
-  <div id="search-status" class="text-xs text-slate-400 mb-2 hidden"></div>
+  <div id="search-status" class="text-xs text-slate-500 mb-2 hidden"></div>
   <ul id="search-results" class="space-y-2"></ul>
   <div id="search-empty" class="hidden rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
     <div class="text-4xl mb-2">🔍</div>
@@ -81,7 +81,7 @@
       return;
     }
     status.textContent = BWC_I18N.searching || "";
-    status.classList.remove("hidden");
+    status.classList.remove("hidden", "text-red-600");
     try {
       const resp = await fetch("/api/v1/search?limit=100&q=" + encodeURIComponent(query), {
         credentials: "same-origin",
@@ -97,6 +97,7 @@
     } catch (err) {
       console.error(err);
       status.textContent = BWC_I18N.failed || "";
+      status.classList.add("text-red-600");
     }
   }
 
