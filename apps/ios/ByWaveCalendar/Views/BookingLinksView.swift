@@ -102,7 +102,7 @@ struct BookingLinksView: View {
             }
             Button("取消", role: .cancel) {}
         } message: {
-            Text("删除「\(pendingDelete?.title ?? "")」？删除后该预约页面立即失效；已经确认的预约会保留在对方日历里。")
+            Text("删除「%@」？删除后该预约页面立即失效；已经确认的预约会保留在对方日历里。".locFormat(pendingDelete?.title ?? ""))
         }
         .sheet(isPresented: $showingCreate) {
             NavigationStack {
