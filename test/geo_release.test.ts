@@ -162,6 +162,23 @@ describe("parseGeoReleaseManifest", () => {
     expect(plan[2]!.parts).toHaveLength(2);
   });
 
+  it("没有 shared 字段（v2 发布：许可全文内嵌在包内，不再有独立许可资产）→ 解析通过", () => {
+    const raw = manifestWithParts() as Record<string, unknown>;
+    delete raw.shared;
+    const m = parseGeoReleaseManifest(raw);
+    expect(m.shared).toEqual([]);
+    expect(releaseFilePlan(m).map((p) => p.file)).toEqual([
+      "manifest-au-ot.json",
+      "pack-au-ot.sqlite",
+    ]);
+  });
+
+  it("shared 为空数组 → 解析通过", () => {
+    const raw = manifestWithParts();
+    raw.shared = [];
+    expect(parseGeoReleaseManifest(raw).shared).toEqual([]);
+  });
+
   it("format 不是 1、pack_id 与文件名对不上 → 拒", () => {
     const bad1 = manifestWithParts() as Record<string, unknown>;
     bad1.format = 2;

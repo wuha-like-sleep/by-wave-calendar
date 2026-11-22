@@ -82,6 +82,30 @@
       <dd class="mt-1 font-mono text-xs text-slate-900 break-all"><%= pack.sha256 || "—" %></dd>
     </div>
   </dl>
+  <% if (pack.embedded) { %>
+  <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.attribution.heading") %></h3>
+  <% if (pack.embedded.licenceManifest && pack.embedded.licenceManifest.derivedDatabaseNotice) { %>
+  <p class="text-sm text-slate-500 mb-2"><%= pack.embedded.licenceManifest.derivedDatabaseNotice %></p>
+  <% } %>
+  <% if (pack.embedded.licenceManifest && pack.embedded.licenceManifest.sources.length > 0) { %>
+  <ul class="divide-y divide-slate-100 text-sm mb-3">
+    <% pack.embedded.licenceManifest.sources.forEach(function (s) { %>
+    <li class="py-2">
+      <span class="font-medium text-slate-900"><%= s.name %></span>
+      <span class="text-slate-500"> · <%= s.licence %><% if (s.dataVersion) { %> · <%= s.dataVersion %><% } %><% if (s.included === false) { %> · <%= t("adminGeoPacks.attribution.notIncluded") %><% } %></span>
+      <% if (s.attributionText) { %><span class="block text-slate-400"><%= s.attributionText %></span><% } %>
+      <% s.restrictions.forEach(function (r) { %><span class="block text-amber-600"><%= r %></span><% }); %>
+    </li>
+    <% }); %>
+  </ul>
+  <% } %>
+  <% if (pack.embedded.attribution) { %>
+  <details class="mb-4">
+    <summary class="text-sm text-brand-700 cursor-pointer hover:underline"><%= t("adminGeoPacks.attribution.showText") %></summary>
+    <pre class="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-700"><%= pack.embedded.attribution %></pre>
+  </details>
+  <% } %>
+  <% } %>
   <% if (pack.companions.length > 0) { %>
   <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.companions") %></h3>
   <ul class="divide-y divide-slate-100 text-sm">

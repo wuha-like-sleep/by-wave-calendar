@@ -18,10 +18,16 @@ mtime 自动重开新包，不需要重启。
 ### 方式 1：后台一键获取官方包（推荐）
 
 项目在 GitHub Releases 上发布官方地址包（当前为澳洲包
-`geo-packs-au-v1`）。管理后台 →「地址包」→「获取官方地址包」点一
+`geo-packs-au-v2`）。管理后台 →「地址包」→「获取官方地址包」点一
 下即可：服务端拉取发布清单、逐文件下载、按清单里的 SHA-256 逐
 个复核、复核通过才原子落位激活；已经是最新版的文件自动跳过。
 进度与结果在同一页可见，操作记审计。
+
+自 pack_version 2026.11.4（v2 发布）起，许可全文与署名不再作为
+独立资产随发布分发，而是**内嵌在每个包文件自身**（sqlite `meta`
+表，见 2.2）：包走到哪，许可跟到哪，不会散失；后台「地址包」页
+会直接从包内读出许可清单与署名全文展示。发布清单的 `shared` 里
+因此不再有 `licences/*` 条目（该字段本身仍是可选的）。
 
 下载是按「烂网络也能最终下完」设计的（跨国链路、被中间设备周期
 性掐断的长连接都算在内）：
@@ -51,10 +57,12 @@ mtime 自动重开新包，不需要重启。
 单本身（小文件），把每个包的大小、行数、是否已安装和**总下载量**
 先列出来，确认了再开始下载，不会点下去才发现要传几个 GiB。
 
-#### 官方澳洲包（geo-packs-au-v1）大小一览
+#### 官方澳洲包大小一览
 
-数据取自该发布的 `geo-pack-release.json`（字节数为清单里的精确
-值）：
+下表为 v1 发布（pack_version 2026.11.3）的实测值，取自该发布的
+`geo-pack-release.json`（字节数为清单里的精确值）。v2
+（2026.11.4）数据内容与 v1 逐行相同，仅每包多内嵌了许可与署名
+文本（约 +57 KB/包），精确字节以 v2 发布清单为准：
 
 | 文件 | 行数 | 精确字节 | 大小 | 分卷 |
 |---|---:|---:|---:|:---:|
@@ -114,7 +122,7 @@ python3 tools/geo-pack-sync/geo_pack_sync.py \
 | `licence-manifest-<id>.json` | 该包的许可清单（每个数据源的许可与署名） |
 | `ATTRIBUTION-<id>.txt` | 该包的署名全文 |
 | `manifest.json` / `licence-manifest.json` / `ATTRIBUTION.txt` | 跨包共享版本（单包部署时用） |
-| `licences/<name>.txt` | 许可全文（如 `odbl-1.0.txt`、`cc-by-4.0.txt`） |
+| `licences/<name>.txt` | 许可全文（如 `odbl-1.0.txt`、`cc-by-4.0.txt`）；手动放文件/同步通道仍可用此布局，官方发布自 2026.11.4 起改走包内嵌（2.2），不再附独立许可资产 |
 
 一个目录可以放多个包：全国包 `pack-<country>.sqlite` 与分州/分
 区包并存时，provider 优先用全国包，没有全国包则合并查所有分区包。
@@ -125,6 +133,10 @@ python3 tools/geo-pack-sync/geo_pack_sync.py \
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
 -- 必备键：pack_id（与文件名 id 一致）、country（如 AU）、
 -- region、schema（"2"）、built_unix（构建时间戳）
+-- 可选键（许可内嵌，官方包自 pack_version 2026.11.4 起携带）：
+-- attribution（署名全文，纯文本）、licence_manifest（许可清单
+-- JSON 字符串，形状同 licence-manifest-<id>.json）、licences
+-- （许可全文 JSON 对象 {"odbl-1.0.txt": "<全文>", …}）
 
 CREATE TABLE addresses (
   cid INTEGER PRIMARY KEY,
@@ -171,6 +183,16 @@ schema 2 相对 schema 1 的体积优化（数据内容逐行不变，官方 AU 
 张表存在并按 rowid=cid 对齐读取，schema 1 的旧包同样可读；
 schema 2 是新的推荐产出格式。
 
+内嵌许可三键（`attribution` / `licence_manifest` / `licences`）
+全部可选、互相独立：没有它们的包（schema 1/2 旧包、自产包）照
+常工作，后台「地址包」页读不到内嵌数据时回落到配套文件
+（`ATTRIBUTION-<id>.txt` 等）的展示；带内嵌的包则以后台从包内
+读出的许可清单与署名全文为准。自产包若要携带内嵌许可，三个键
+的语义与配套文件一一对应：`attribution` 的内容就是
+`ATTRIBUTION-<id>.txt` 的全文，`licence_manifest` 是
+`licence-manifest-<id>.json` 的原文，`licences` 把
+`licences/` 目录下每个全文按文件名收进一个 JSON 对象。
+
 落位前的服务端自检：文件头必须是 `SQLite format 3`，且
 `meta.pack_id` 必须与文件名 id 一致——SHA 对得上但串了包也进不来。
 
@@ -208,7 +230,7 @@ schema 2 是新的推荐产出格式。
 ```json
 {
   "format": 1,
-  "release": "geo-packs-au-v1",
+  "release": "geo-packs-au-v2",
   "generated_at": "2026-11-21T00:00:00Z",
   "packs": [
     {
@@ -231,7 +253,7 @@ schema 2 是新的推荐产出格式。
     }
   ],
   "shared": [
-    { "name": "licences/odbl-1.0.txt", "bytes": 0, "sha256": "…" }
+    { "name": "ATTRIBUTION.txt", "bytes": 1151, "sha256": "…" }
   ]
 }
 ```
@@ -245,6 +267,9 @@ schema 2 是新的推荐产出格式。
   原子落位——任何一步对不上，整包不落位；
 - 清单里的每个名字都过 2.1 的白名单与路径包含校验，清单按不可
   信输入处理（即使发布源被篡改，也写不出包目录、覆盖不了别的文件）。
+- `shared` 可选、可为空：官方包自 2026.11.4 起许可全文内嵌在包
+  内（见 2.2），`shared` 不再列 `licences/*` 独立资产；获取端不
+  依赖任何 `shared` 条目存在。
 
 ## 三、自产包的数据来源与许可红线
 
@@ -263,9 +288,11 @@ schema 2 是新的推荐产出格式。
   - **OpenStreetMap**：ODbL 1.0，衍生数据库再分发必须同协议
     share-alike，并署名 © OpenStreetMap contributors；
   - **GeoNames**：CC BY 4.0，署名 GeoNames；
-- 署名不是装饰：包内 `ATTRIBUTION` 与许可全文必须随包分发，
-  产品内的《数据处理政策》页面也应包含地址数据的来源署名（本
-  仓库已内置对应章节）。
+- 署名不是装饰：`ATTRIBUTION` 与许可全文必须随包分发——官方包
+  的做法是把它们内嵌进包文件自身的 `meta`（见 2.2），文件走到
+  哪署名跟到哪；用配套文件分发时同理必须齐全。产品内的《数据
+  处理政策》页面也应包含地址数据的来源署名（本仓库已内置对应
+  章节）。
 
 ## 四、Photon 回落与自建 Photon
 

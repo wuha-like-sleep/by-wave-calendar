@@ -5,7 +5,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { listGeoPacks, resolveGeoPackDownload } from "../src/lib/geo_packs.js";
+import { attachEmbeddedAttribution } from "../src/lib/geo_pack_attribution.js";
 
 let dir = "";
 beforeAll(() => {
@@ -51,6 +53,46 @@ describe("listGeoPacks", () => {
       "licences/odbl-1.0.txt",
       "manifest.json",
     ]);
+  });
+});
+
+describe("attachEmbeddedAttribution（清单页从包内读许可/署名）", () => {
+  let embDir = "";
+  beforeAll(() => {
+    embDir = mkdtempSync(path.join(tmpdir(), "bywave-geopacks-embedded-"));
+    const mk = (file: string, meta: Record<string, string>) => {
+      const db = new DatabaseSync(path.join(embDir, file));
+      db.exec("CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT)");
+      const ins = db.prepare("INSERT INTO meta VALUES (?,?)");
+      for (const [k, v] of Object.entries(meta)) ins.run(k, v);
+      db.close();
+    };
+    mk("pack-au-ot.sqlite", {
+      pack_id: "au-ot",
+      schema: "2",
+      attribution: "Embedded attribution text",
+      licence_manifest: JSON.stringify({
+        pack_id: "au-ot",
+        sources: [{ name: "GeoNames", licence: "CC BY 4.0" }],
+      }),
+      licences: JSON.stringify({ "cc-by-4.0.txt": "full text" }),
+    });
+    mk("pack-au-legacy.sqlite", { pack_id: "au-legacy", schema: "1" });
+  });
+  afterAll(() => rmSync(embDir, { recursive: true, force: true }));
+
+  it("listGeoPacks 本身不读 sqlite（embedded 恒为 null），attach 后新包有内嵌、旧包仍 null", async () => {
+    const listing = await listGeoPacks(embDir);
+    expect(listing.packs.map((p) => p.embedded)).toEqual([null, null]);
+    await attachEmbeddedAttribution(listing, embDir);
+    const ot = listing.packs.find((p) => p.id === "au-ot")!;
+    expect(ot.embedded?.attribution).toBe("Embedded attribution text");
+    expect(ot.embedded?.licenceManifest?.sources).toEqual([
+      expect.objectContaining({ name: "GeoNames", licence: "CC BY 4.0" }),
+    ]);
+    expect(ot.embedded?.licences).toEqual({ "cc-by-4.0.txt": "full text" });
+    const legacy = listing.packs.find((p) => p.id === "au-legacy")!;
+    expect(legacy.embedded).toBeNull();
   });
 });
 
