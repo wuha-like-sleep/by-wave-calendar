@@ -113,7 +113,7 @@ final class LocaleManager: ObservableObject {
             // "ja" → 日本語, …) so every shipped language reads naturally.
             let sys = Locale.current.language.languageCode?.identifier ?? "?"
             let sysLabel = Self.supported.first { !$0.code.isEmpty && $0.code.hasPrefix(sys) }?.label ?? sys
-            return "跟随系统 · \(sysLabel)"
+            return "跟随系统".loc + " · " + sysLabel
         }
         return Self.supported.first(where: { $0.code == current })?.label ?? current
     }
