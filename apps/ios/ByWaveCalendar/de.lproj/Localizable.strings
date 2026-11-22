@@ -686,6 +686,7 @@
 "待同步，网络恢复后自动发送" = "Wartet auf Synchronisierung — wird bei Wiederverbindung automatisch gesendet";
 "待同步 — 已保存在本机，网络恢复后自动发送" = "Nicht synchronisiert — auf diesem Gerät gespeichert, wird bei Wiederverbindung automatisch gesendet";
 "在线建议" = "Online-Vorschläge";
+"单元：%@" = "Einheiten: %@";
 "在线地址建议" = "Online-Adressvorschläge";
 "地址建议" = "Adressvorschläge";
 "用过的地址会记在这台设备上，输入时自动给出建议；本地匹配较少时才会显示在线建议。" = "Verwendete Adressen werden auf diesem Gerät gespeichert und beim Tippen vorgeschlagen. Online-Vorschläge erscheinen nur, wenn es wenige lokale Treffer gibt.";

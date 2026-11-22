@@ -65,6 +65,7 @@
     <string name="event_location">Ubicación</string>
     <string name="event_location_hint">Opcional — p. ej. Shanghái / Zoom</string>
     <string name="location_online_suggestions">Sugerencias en línea</string>
+    <string name="location_units">Unidades: %1$s</string>
     <string name="settings_online_address_title">Sugerencias de dirección en línea</string>
     <string name="settings_online_address_desc">Cuando hay pocas coincidencias locales, muestra sugerencias en línea basadas en datos de OpenStreetMap. Las direcciones elegidas se guardan en la libreta local.</string>
     <string name="event_link">Enlace</string>

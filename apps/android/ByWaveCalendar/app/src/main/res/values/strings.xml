@@ -72,6 +72,7 @@
     <string name="event_location">地点</string>
     <string name="event_location_hint">可选 — 例如 上海 / Zoom 会议室</string>
     <string name="location_online_suggestions">在线建议</string>
+    <string name="location_units">单元：%1$s</string>
     <string name="settings_online_address_title">在线地址建议</string>
     <string name="settings_online_address_desc">本地地址匹配较少时，显示基于 OpenStreetMap 数据的在线建议；选中的地址会存入本地地址簿。</string>
     <string name="event_link">链接</string>

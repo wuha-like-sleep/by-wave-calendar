@@ -586,7 +586,19 @@ struct EventEditView: View {
                             AddressBookStore.learnOnline(suggestion)
                             pickedLocation = suggestion.label
                         } label: {
-                            Text(suggestion.label).lineLimit(1).foregroundStyle(.primary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suggestion.label).lineLimit(1).foregroundStyle(.primary)
+                                // 折叠行：label 是不带单元前缀的基础地址，
+                                // 全部单元号挂在副行里；想选具体单元，把
+                                // 单元号打进查询即可命中带 unit 的那一行。
+                                // unit 已点名时 label 自带前缀，不重复展示。
+                                if suggestion.unit == nil, let units = suggestion.units, !units.isEmpty {
+                                    Text("单元：%@".locFormat(units.joined(separator: ", ")))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
                         }
                         .buttonStyle(.plain)
                     }

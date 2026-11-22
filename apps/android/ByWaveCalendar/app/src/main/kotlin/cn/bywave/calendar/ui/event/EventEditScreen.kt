@@ -453,15 +453,32 @@ fun EventEditScreen(
                                 modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
                             )
                             state.onlineSuggestions.forEach { suggestion ->
-                                Text(
-                                    suggestion.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                Column(
                                     modifier = Modifier.fillMaxWidth()
                                         .clickable { vm.onSuggestionPicked(suggestion.label, online = suggestion) }
                                         .padding(horizontal = 12.dp, vertical = 10.dp),
-                                )
+                                ) {
+                                    Text(
+                                        suggestion.label,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    // 折叠行：label 是不带单元前缀的基础
+                                    // 地址，全部单元号挂在副行里；想选具体
+                                    // 单元，把单元号打进查询即可命中带
+                                    // unit 的那一行。unit 已点名时 label
+                                    // 自带前缀，不再重复展示。
+                                    if (suggestion.unit == null && suggestion.units.isNotEmpty()) {
+                                        Text(
+                                            stringResource(R.string.location_units, suggestion.units.joinToString(", ")),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
                             }
                             // ODbL 署名：在线结果是 OpenStreetMap 数据，
                             // 展示处须带版权声明。版权行是固定文案，

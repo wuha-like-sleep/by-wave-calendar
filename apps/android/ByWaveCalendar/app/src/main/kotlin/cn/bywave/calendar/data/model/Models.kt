@@ -93,11 +93,27 @@ data class SearchResponse(
     val bookingLinks: List<SearchBookingLinkHit> = emptyList(),
 )
 
-/** GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
- *  地址串，客户端只管展示与回填）。 */
+/** GET /api/v1/geo/suggest 的一条在线地址建议：label 是回填用的
+ *  完整地址串，其余是结构化组件与坐标——选中后要一起学进本地
+ *  地址簿，所以全都建模出来（与桌面 / iOS 同一形状）。
+ *  unit / units 是自建地址包的单元折叠字段：服务端把同一基础地址
+ *  的多个单元行折叠成一行，units 挂全部单元号；用户在查询里点名
+ *  了某个单元时，代表行就是那一行、unit 带它的单元号且 label 已
+ *  含单元前缀。Photon 来源永远不带这两个字段。 */
 @Serializable
 data class GeoSuggestion(
     val label: String,
+    val name: String? = null,
+    val street: String? = null,
+    val suburb: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postcode: String? = null,
+    val country: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val unit: String? = null,
+    val units: List<String> = emptyList(),
 )
 
 /** GET /api/v1/geo/suggest response (after the envelope is unwrapped).
