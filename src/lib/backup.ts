@@ -89,6 +89,7 @@ export const BACKUP_EXCLUDED_TABLES = new Set([
   "webhook_deliveries",         // 投递日志，会自己重新积累；而且它挂在 webhooks 下面
   "geo_sync_tokens",            // 站点级地址包同步凭据（bcrypt 哈希）：不是用户数据，备份文件不该携带凭据材料；恢复后在后台重新签发即可
   "geo_sync_uploads",           // 同步上传会话台账，48 小时自动清理，恢复后自然重新积累
+  "event_changes",              // 事件增量同步的变更日志：纯派生数据，由 events 上的触发器生成。事件本身在备份里；恢复时事件逐行插回、触发器当场把日志重新长出来，客户端手里的旧令牌落在裁剪线之外会吃 410 并全量重同步 —— 用户不会发现丢了什么，只多一次全量拉取
 ]);
 
 export const BACKUP_VERSION = 1;

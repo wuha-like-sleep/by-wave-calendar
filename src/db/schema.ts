@@ -700,6 +700,26 @@ export const events = pgTable("events", {
   // gin_trgm_ops 的声明反而是错的。索引清单以迁移为准。
 }));
 
+// 事件变更日志（0072）：增量同步（syncToken 模型）的事实源。只由 events 表上的
+// 触发器 record_event_change 写入（见迁移 0072 —— 全仓三十来处写路径逐处手写
+// 必漏，漏一处同步就静默地错），应用代码只读它和裁剪它。三列 id 都**不设外键**：
+// 日志的职责是在事件/日历/账号被删之后还能把「它没了」告诉客户端，挂 CASCADE
+// 会让删除把自己的墓碑一起带走。change_seq 是全表统一水位（序列发号），
+// kind 只有 upsert / delete（软删在客户端眼里就是 delete）。
+export const eventChanges = pgTable("event_changes", {
+  changeSeq: bigint("change_seq", { mode: "number" }).primaryKey(),
+  eventId: uuid("event_id").notNull(),
+  calendarId: uuid("calendar_id").notNull(),
+  // 写入那一刻日历的所有者。成员看共享日历的变化靠 calendarId 那一路过滤。
+  userId: uuid("user_id").notNull(),
+  kind: text("kind").notNull(), // upsert / delete
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userSeqIdx: index("event_changes_user_seq_idx").on(t.userId, t.changeSeq),
+  calendarSeqIdx: index("event_changes_calendar_seq_idx").on(t.calendarId, t.changeSeq),
+  atIdx: index("event_changes_at_idx").on(t.at),
+}));
+
 export const calendarMembers = pgTable("calendar_members", {
   id: uuid("id").primaryKey().defaultRandom(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),

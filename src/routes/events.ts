@@ -20,6 +20,10 @@ import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { etagMatches, eventsWindowEtag } from "../lib/calendar_ctag.js";
 import { invitationsEtag } from "../lib/invitations.js";
+import {
+  MAX_DELTA_MASTERS, changedEventIdsSince, decodeSyncToken, encodeSyncToken,
+  syncTokenExpired, syncWatermark,
+} from "../lib/event_sync.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -216,6 +220,51 @@ function forClient<T extends { extra: unknown; rawIcs?: unknown }>(row: T): Omit
   const { rawIcs: _rawIcs, ...rest } = row;
   const extra = normalizeExtraForClients(row.extra);
   return (extra === row.extra ? rest : { ...rest, extra }) as Omit<T, "rawIcs">;
+}
+
+type VisibleCalendarRow = { id: string; name: string; color: string | null; timezone: string | null };
+
+/**
+ * 把主事件行在窗口内展开成给客户端的行：重复事件按事件自己的时区展开
+ * （没有就用日历的，见 event_zone.ts），每一次各占一行、id 仍是主事件的。
+ * GET /events（全量窗口）与 GET /events/sync（初始/增量）共用这一份，
+ * 两条路吐出去的形状必须一字不差，客户端才不用分两套解析。
+ */
+function expandRowsForClient(
+  rows: Array<typeof schema.events.$inferSelect>,
+  visible: VisibleCalendarRow[],
+  fromDate: Date,
+  toDate: Date,
+) {
+  const calTz = new Map(visible.map((c) => [c.id, c.timezone]));
+  const expanded: Array<Omit<(typeof rows)[number], "rawIcs"> & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
+  for (const row of rows) {
+    const occurrences = expandEvent(
+      {
+        id: row.id,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        rrule: row.rrule ?? null,
+        exdates: (row.exdates as string[] | null) ?? null,
+        allDay: row.allDay,
+        updatedAt: row.updatedAt,
+        timeZone: expansionTimeZone({
+          allDay: row.allDay,
+          extra: row.extra,
+          calendarTimezone: calTz.get(row.calendarId),
+          rawStartIsUtc: rawIcsStartIsUtc(row.rawIcs),
+        }),
+      },
+      fromDate,
+      toDate,
+    );
+    if (occurrences.length === 0) continue;
+    const shared = forClient(row);
+    for (const occ of occurrences) {
+      expanded.push({ ...shared, startsAt: occ.startsAt, endsAt: occ.endsAt, isOccurrence: occ.isOccurrence });
+    }
+  }
+  return expanded;
 }
 
 /**
@@ -416,42 +465,109 @@ export async function eventRoutes(app: FastifyInstance) {
     // See fetchEventMastersInWindow for the (subtle) recurring-vs-non-recurring
     // predicate; expandEvent() below trims/materializes each row.
     const rows = await fetchEventMastersInWindow(allowed, fromDate, toDate);
-    // 重复事件按事件自己的时区展开（没有就用日历的），见 event_zone.ts。
-    // 日历时区就在上面那两个查询里，不用再查一次库。
-    const calTz = new Map(visible.map((c) => [c.id, c.timezone]));
+    return reply.send({ calendars: visible, events: expandRowsForClient(rows, visible, fromDate, toDate) });
+  });
 
-    // Expand RRULE master rows into per-occurrence entries. Non-recurring
-    // events come through unchanged. Each occurrence carries the same id
-    // as its master so the client can route edits/deletes consistently.
-    const expanded: Array<Omit<typeof rows[number], "rawIcs"> & { startsAt: Date; endsAt: Date; isOccurrence: boolean }> = [];
-    for (const row of rows) {
-      const occurrences = expandEvent(
-        {
-          id: row.id,
-          startsAt: row.startsAt,
-          endsAt: row.endsAt,
-          rrule: row.rrule ?? null,
-          exdates: (row.exdates as string[] | null) ?? null,
-          allDay: row.allDay,
-          updatedAt: row.updatedAt,
-          timeZone: expansionTimeZone({
-            allDay: row.allDay,
-            extra: row.extra,
-            calendarTimezone: calTz.get(row.calendarId),
-            rawStartIsUtc: rawIcsStartIsUtc(row.rawIcs),
-          }),
-        },
-        fromDate,
-        toDate,
-      );
-      if (occurrences.length === 0) continue;
-      const shared = forClient(row);
-      for (const occ of occurrences) {
-        expanded.push({ ...shared, startsAt: occ.startsAt, endsAt: occ.endsAt, isOccurrence: occ.isOccurrence });
-      }
+  // 增量同步（syncToken 模型，Google Calendar API 同款语义）。窗口语义与
+  // GET /events 一致（from/to 必填），变的只是「传什么」：
+  //   · 不带 syncToken → 初始同步：这个窗口的全量（形状与 GET /events 相同）
+  //     + nextSyncToken；
+  //   · 带 syncToken → 只回令牌之后的变化：变了的主事件按**当前状态**在窗口内
+  //     展开进 events，并逐个列进 upsertedIds（客户端据此先删掉该主事件在本地
+  //     镜像里的旧行再写入 —— 主事件改到窗口外时 events 里没有它，也必须靠
+  //     这个名单清行）；删掉的（软删/物理删/日历已不可见）只给 deletedIds。
+  //   · 令牌解不开、或指向的序号已被日志裁剪（保留 30 天）→ 410 Gone，
+  //     客户端全量重建。变更量大到增量比全量还贵（> MAX_DELTA_MASTERS 个
+  //     主事件）时同样回 410。
+  // 每次响应都带 calendars 全量：日历改名/改色不在事件变更日志里，靠这一份
+  // 每次刷新；某个日历从名单里消失（被删/被取消共享）也是客户端清掉它
+  // 全部本地行的信号 —— 删日历的级联删除里事件行先于日历行消失、日志的
+  // DELETE 那一路可能记不到所有者，正靠这一路兜底。
+  app.get("/events/sync", { config: { oauthScope: "read:events" } }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    const q = z
+      .object({
+        from: z.string().datetime({ offset: true }),
+        to: z.string().datetime({ offset: true }),
+        syncToken: z.string().max(200).optional(),
+      })
+      .safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: "bad_query" });
+    const fromDate = new Date(q.data.from);
+    const toDate = new Date(q.data.to);
+
+    // 可见日历与 GET /events 同口径：自己的 + 共享给自己的。
+    const [owned, shared] = await Promise.all([
+      db
+        .select({
+          id: schema.calendars.id,
+          name: schema.calendars.name,
+          color: schema.calendars.color,
+          timezone: schema.calendars.timezone,
+        })
+        .from(schema.calendars)
+        .where(eq(schema.calendars.ownerId, user.id)),
+      db
+        .select({
+          id: schema.calendars.id,
+          name: schema.calendars.name,
+          color: schema.calendars.color,
+          timezone: schema.calendars.timezone,
+        })
+        .from(schema.calendars)
+        .innerJoin(schema.calendarMembers, eq(schema.calendarMembers.calendarId, schema.calendars.id))
+        .where(eq(schema.calendarMembers.userId, user.id)),
+    ]);
+    const ownedIds = new Set(owned.map((c) => c.id));
+    const visibleIds = new Set([...ownedIds, ...shared.map((c) => c.id)]);
+    const visible = [...owned, ...shared.filter((c) => !ownedIds.has(c.id))];
+    const allowed = Array.from(visibleIds);
+
+    // 先读水位再读数据：水位之后提交的变化留给下一次增量，不会被令牌跳过；
+    // 水位与读数据之间提交的变化最多被重复投递一次（upsert 幂等，无害）。
+    const { high, floor } = await syncWatermark();
+    const nextSyncToken = encodeSyncToken(high);
+
+    if (q.data.syncToken === undefined) {
+      const rows = allowed.length === 0 ? [] : await fetchEventMastersInWindow(allowed, fromDate, toDate);
+      return reply.send({ calendars: visible, events: expandRowsForClient(rows, visible, fromDate, toDate), nextSyncToken });
     }
 
-    return reply.send({ calendars: visible, events: expanded });
+    const seq = decodeSyncToken(q.data.syncToken);
+    if (seq === null || syncTokenExpired(seq, floor, high)) {
+      return reply.code(410).send({ error: "sync_token_expired" });
+    }
+    if (allowed.length === 0) {
+      return reply.send({ calendars: visible, events: [], upsertedIds: [], deletedIds: [], nextSyncToken });
+    }
+
+    const changedIds = await changedEventIdsSince(user.id, allowed, seq, high);
+    if (changedIds.length > MAX_DELTA_MASTERS) {
+      return reply.code(410).send({ error: "sync_token_expired" });
+    }
+    // 按当前状态复核每一个变更：日志只说「它动过」，是死是活以现在的行
+    // 为准 —— 改了又删只报 delete，删了又恢复只报 upsert，不让客户端
+    // 按日志的先后顺序自己拼状态。
+    const current = changedIds.length === 0
+      ? []
+      : await db.select().from(schema.events).where(inArray(schema.events.id, changedIds));
+    const rowById = new Map(current.map((r) => [r.id, r]));
+    const liveRows: Array<typeof schema.events.$inferSelect> = [];
+    const deletedIds: string[] = [];
+    for (const id of changedIds) {
+      const row = rowById.get(id);
+      if (row && !row.deletedAt && visibleIds.has(row.calendarId)) liveRows.push(row);
+      else deletedIds.push(id);
+    }
+    liveRows.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+    return reply.send({
+      calendars: visible,
+      events: expandRowsForClient(liveRows, visible, fromDate, toDate),
+      upsertedIds: liveRows.map((r) => r.id),
+      deletedIds,
+      nextSyncToken,
+    });
   });
 
   app.get("/calendars/:id/events", { config: { oauthScope: "read:events" } }, async (req, reply) => {
