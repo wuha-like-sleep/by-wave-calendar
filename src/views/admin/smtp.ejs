@@ -1,20 +1,20 @@
 <%- include('_nav', { activeNav: '/admin/smtp' }) %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">SMTP 邮件配置</h1>
-<p class="text-sm text-slate-500 mb-6">注册验证码、登录提醒、日历邀请的发件配置 —— 请填入<strong>你自己的</strong> SMTP 服务器（如腾讯企业邮、阿里云邮、SendGrid、自建 postfix 等）。空 → 邮件功能停用。</p>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminSmtp.heading") %></h1>
+<p class="text-sm text-slate-500 mb-6"><%- t("adminSmtp.lead") %></p>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <form method="post" action="/admin/smtp" class="space-y-4 max-w-2xl">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div class="sm:col-span-2">
-        <label class="block text-sm font-medium text-slate-700">SMTP 主机</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.host") %></label>
         <input type="text" name="host" maxlength="200" value="<%= settings.smtpHost || '' %>"
                placeholder="smtp.example.com"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
-        <label class="block text-sm font-medium text-slate-700">端口</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.port") %></label>
         <input type="number" name="port" value="<%= settings.smtpPort %>" min="1" max="65535"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
@@ -22,67 +22,67 @@
     <label class="flex items-center gap-2">
       <input type="checkbox" name="secure" <%= settings.smtpSecure ? "checked" : "" %>
              class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-sm text-slate-700">使用 SSL/TLS（端口 465 通常勾选；587 通常不勾，靠 STARTTLS）</span>
+      <span class="text-sm text-slate-700"><%= t("adminSmtp.secure") %></span>
     </label>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
-        <label class="block text-sm font-medium text-slate-700">SMTP 用户名</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.user") %></label>
         <input type="text" name="smtpUser" maxlength="200" value="<%= settings.smtpUser || '' %>"
                autocomplete="off"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
-        <label class="block text-sm font-medium text-slate-700">SMTP 密码 <span class="text-xs text-slate-400">(留空不修改)</span></label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.pass") %> <span class="text-xs text-slate-400"><%= t("adminSmtp.passKeep") %></span></label>
         <input type="password" name="smtpPass" placeholder="•••••••" autocomplete="new-password" maxlength="400"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div>
-        <label class="block text-sm font-medium text-slate-700">发件人邮箱</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.from") %></label>
         <input type="email" name="fromAddress" maxlength="254" value="<%= settings.mailFromAddress || '' %>"
                placeholder="noreply@your-domain.com"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
       <div>
-        <label class="block text-sm font-medium text-slate-700">发件人显示名</label>
+        <label class="block text-sm font-medium text-slate-700"><%= t("adminSmtp.field.fromName") %></label>
         <input type="text" name="fromName" maxlength="100" value="<%= settings.mailFromName %>"
                class="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </div>
     </div>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存 SMTP 配置</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminSmtp.save") %></button>
   </form>
 </section>
 
 <section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">邮件样式预览</h2>
-  <p class="text-sm text-slate-500 mb-4">用当前 SMTP 配置一次性发送 5 封样式邮件到指定邮箱 —— 验证码、密码重置、新登录提醒、日历邀请、欢迎邮件，方便对照查看真实长相。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminSmtp.preview.title") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminSmtp.preview.desc") %></p>
   <form method="post" action="/admin/smtp/preview" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="email" name="to" required value="<%= user.email %>"
            class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-    <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700">发送 5 封样式邮件</button>
+    <button type="submit" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"><%= t("adminSmtp.preview.send") %></button>
   </form>
 </section>
 
 <section id="bimi" class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-1">BIMI · 收件箱品牌 Logo</h2>
-  <p class="text-sm text-slate-500 mb-4">让支持 BIMI 的邮箱在「发件人头像」位置显示你的品牌 Logo。前提:发件域已配置 SPF + DKIM,且 DMARC 策略为 <code class="px-1 bg-slate-100 rounded">p=quarantine</code> 或 <code class="px-1 bg-slate-100 rounded">p=reject</code>。</p>
+  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminSmtp.bimi.title") %></h2>
+  <p class="text-sm text-slate-500 mb-4"><%- t("adminSmtp.bimi.lead") %></p>
 
   <div class="flex items-start gap-4 mb-4">
     <div class="shrink-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <img src="<%= bimi.previewUrl %>" alt="BIMI logo" width="56" height="56" class="block h-14 w-14 rounded-lg" />
     </div>
     <div class="text-sm text-slate-600 min-w-0">
-      <div>当前使用:<strong><%= bimi.hasCustom ? "你上传的 Logo" : "内置默认 Logo" %></strong></div>
+      <div><%= t("adminSmtp.bimi.current") %><strong><%= bimi.hasCustom ? t("adminSmtp.bimi.custom") : t("adminSmtp.bimi.builtin") %></strong></div>
       <div class="text-xs text-slate-400 mt-1 break-all"><%= bimi.svgUrl %></div>
     </div>
   </div>
 
   <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 mb-4 text-xs text-slate-500 space-y-0.5">
-    <div class="font-medium text-slate-600">存储位置</div>
-    <div>内置默认图标(随安装自带,无需配置):<code class="px-1 bg-white rounded border border-slate-200 break-all"><%= bimi.defaultUrl %></code></div>
-    <div>你上传的图标会存到服务器本地:<code class="px-1 bg-white rounded border border-slate-200"><%= bimi.uploadDiskPath %></code></div>
+    <div class="font-medium text-slate-600"><%= t("adminSmtp.bimi.storage") %></div>
+    <div><%= t("adminSmtp.bimi.storageDefault") %><code class="px-1 bg-white rounded border border-slate-200 break-all"><%= bimi.defaultUrl %></code></div>
+    <div><%= t("adminSmtp.bimi.storageUpload") %><code class="px-1 bg-white rounded border border-slate-200"><%= bimi.uploadDiskPath %></code></div>
   </div>
 
   <form method="post" action="/admin/bimi/logo" enctype="multipart/form-data" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
@@ -90,43 +90,43 @@
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="file" name="file" accept=".svg,image/svg+xml" required
            class="flex-1 text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100" />
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">上传 SVG</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminSmtp.bimi.upload") %></button>
   </form>
-  <p class="text-xs text-slate-400 mt-2">只接受 <strong>SVG</strong>(矢量)。PNG/JPG 等位图做不了 BIMI。上传后会自动补全 <code class="px-1 bg-slate-100 rounded">baseProfile</code> / <code class="px-1 bg-slate-100 rounded">version</code> / <code class="px-1 bg-slate-100 rounded">&lt;title&gt;</code>,并校验是否含脚本、外链、动画、非正方形等不合规内容。</p>
+  <p class="text-xs text-slate-400 mt-2"><%- t("adminSmtp.bimi.svgNote") %></p>
   <% if (bimi.hasCustom) { %>
-    <form method="post" action="/admin/bimi/logo/delete" class="m-0 mt-2" data-confirm="恢复为内置默认 Logo?" data-confirm-ok="恢复默认">
+    <form method="post" action="/admin/bimi/logo/delete" class="m-0 mt-2" data-confirm="<%= t("adminSmtp.bimi.restoreConfirm") %>" data-confirm-ok="<%= t("adminSmtp.bimi.restoreOk") %>">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-      <button type="submit" class="text-xs text-red-600 hover:text-red-700">恢复默认 Logo</button>
+      <button type="submit" class="text-xs text-red-600 hover:text-red-700"><%= t("adminSmtp.bimi.restore") %></button>
     </form>
   <% } %>
 
   <div class="mt-5 border-t border-slate-100 pt-4">
-    <h3 class="text-sm font-semibold text-slate-800 mb-2">第 1 步 · 在 DNS 加这条记录</h3>
+    <h3 class="text-sm font-semibold text-slate-800 mb-2"><%= t("adminSmtp.bimi.step1") %></h3>
     <% if (bimi.record) { %>
       <div class="overflow-x-auto rounded-lg border border-slate-200 bg-slate-50">
         <table class="min-w-full text-xs">
           <tbody>
-            <tr class="border-b border-slate-100"><td class="px-3 py-2 text-slate-400 w-20">类型</td><td class="px-3 py-2 font-mono text-slate-800">TXT</td></tr>
-            <tr class="border-b border-slate-100"><td class="px-3 py-2 text-slate-400">主机记录</td><td class="px-3 py-2 font-mono text-slate-800 break-all"><%= bimi.record.host %></td></tr>
-            <tr><td class="px-3 py-2 text-slate-400">记录值</td><td class="px-3 py-2 font-mono text-slate-800 break-all"><%= bimi.record.value %></td></tr>
+            <tr class="border-b border-slate-100"><td class="px-3 py-2 text-slate-400 w-20"><%= t("adminSmtp.bimi.type") %></td><td class="px-3 py-2 font-mono text-slate-800">TXT</td></tr>
+            <tr class="border-b border-slate-100"><td class="px-3 py-2 text-slate-400"><%= t("adminSmtp.bimi.host") %></td><td class="px-3 py-2 font-mono text-slate-800 break-all"><%= bimi.record.host %></td></tr>
+            <tr><td class="px-3 py-2 text-slate-400"><%= t("adminSmtp.bimi.value") %></td><td class="px-3 py-2 font-mono text-slate-800 break-all"><%= bimi.record.value %></td></tr>
           </tbody>
         </table>
       </div>
       <button type="button" class="mt-2 rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"
-              data-bwc-copy="<%= bimi.record.value %>" data-bwc-copy-msg="<%= t("app.js.copy.record") %>">复制记录值</button>
+              data-bwc-copy="<%= bimi.record.value %>" data-bwc-copy-msg="<%= t("app.js.copy.record") %>"><%= t("adminSmtp.bimi.copy") %></button>
     <% } else { %>
-      <p class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">请先在上方「发件人邮箱」填入<strong>你自己域名</strong>的地址(如 <code class="px-1 bg-white/60 rounded">noreply@your-domain.com</code>),保存后这里会自动算出该添加的 DNS 记录。</p>
+      <p class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3"><%- t("adminSmtp.bimi.noFrom") %></p>
     <% } %>
   </div>
 
   <div class="mt-5 border-t border-slate-100 pt-4">
-    <h3 class="text-sm font-semibold text-slate-800 mb-1">第 2 步 · VMC / CMC 证书(可选)</h3>
-    <p class="text-xs text-slate-400 mb-2">Gmail / Apple Mail 等必须有证书才会显示 Logo(向 DigiCert / Entrust 申请,约 $1000+/年;VMC 需注册商标,CMC 不需要)。不填:少数邮箱仍可显示。填证书的 https 公开地址即可,系统会把 <code class="px-1 bg-slate-100 rounded">a=</code> 自动加进上面的记录。</p>
+    <h3 class="text-sm font-semibold text-slate-800 mb-1"><%= t("adminSmtp.bimi.step2") %></h3>
+    <p class="text-xs text-slate-400 mb-2"><%- t("adminSmtp.bimi.step2desc") %></p>
     <form method="post" action="/admin/bimi/vmc" class="flex flex-col sm:flex-row gap-2 max-w-2xl">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <input type="url" name="vmcUrl" value="<%= bimi.vmcUrl || '' %>" placeholder="https://your-domain.com/bimi/vmc.pem"
              class="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
-      <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">保存证书地址</button>
+      <button type="submit" class="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"><%= t("adminSmtp.bimi.saveVmc") %></button>
     </form>
   </div>
 </section>

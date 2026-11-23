@@ -1,27 +1,27 @@
 <%- include('_nav') %>
 
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">Webhooks</h1>
-<p class="text-sm text-slate-500 mb-6">事件变更时 POST 到外部 URL（Zapier / n8n / Make / 自建服务）。失败自动重试 1 次，所有结果在下方记录里可查。</p>
+<p class="text-sm text-slate-500 mb-6"><%= t("adminWebhooks.lead") %></p>
 
 <!-- Create new webhook -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-3">添加 Webhook</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminWebhooks.create.title") %></h2>
   <form method="post" action="/admin/webhooks" class="space-y-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <label class="text-sm">
-        <span class="block font-medium text-slate-700 mb-1">备注名</span>
-        <input type="text" name="label" required maxlength="120" placeholder="如：Zapier 排班同步"
+        <span class="block font-medium text-slate-700 mb-1"><%= t("adminWebhooks.field.label") %></span>
+        <input type="text" name="label" required maxlength="120" placeholder="<%= t("adminWebhooks.labelPlaceholder") %>"
                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
       </label>
       <label class="text-sm">
-        <span class="block font-medium text-slate-700 mb-1">目标 URL</span>
+        <span class="block font-medium text-slate-700 mb-1"><%= t("adminWebhooks.field.url") %></span>
         <input type="url" name="url" required maxlength="500" placeholder="https://hooks.zapier.com/..."
                class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 font-mono" />
       </label>
     </div>
     <div>
-      <span class="block text-sm font-medium text-slate-700 mb-2">订阅事件</span>
+      <span class="block text-sm font-medium text-slate-700 mb-2"><%= t("adminWebhooks.field.events") %></span>
       <div class="flex flex-wrap gap-3 text-sm text-slate-700">
         <% ["event.created", "event.updated", "event.deleted", "booking.created", "booking.cancelled"].forEach(function(ev){ %>
           <label class="inline-flex items-center gap-1.5">
@@ -32,22 +32,22 @@
       </div>
     </div>
     <label class="text-sm block">
-      <span class="block font-medium text-slate-700 mb-1">签名密钥（可选）</span>
-      <input type="text" name="secret" maxlength="200" placeholder="如果设了，请求会带 X-Bywave-Signature: sha256=<hex>"
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminWebhooks.field.secret") %></span>
+      <input type="text" name="secret" maxlength="200" placeholder="<%= t("adminWebhooks.secretPlaceholder") %>"
              class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100 font-mono" />
-      <span class="block text-xs text-slate-400 mt-1">接收方用同一个 key 对请求体做 HMAC-SHA256 校验来防伪造（格式同 GitHub / Stripe webhooks）</span>
+      <span class="block text-xs text-slate-400 mt-1"><%= t("adminWebhooks.secretHint") %></span>
     </label>
-    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">添加</button>
+    <button type="submit" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminWebhooks.add") %></button>
   </form>
 </section>
 
 <!-- Existing webhooks -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-3">已配置（<%= hooks.length %>）</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminWebhooks.list.title", { count: hooks.length }) %></h2>
   <% if (hooks.length === 0) { %>
     <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
       <div class="text-3xl mb-2">🪝</div>
-      <div class="text-sm text-slate-500">还没有 Webhook</div>
+      <div class="text-sm text-slate-500"><%= t("adminWebhooks.list.empty") %></div>
     </div>
   <% } else { %>
     <ul class="divide-y divide-slate-100">
@@ -57,11 +57,11 @@
             <div class="flex items-center gap-2 mb-0.5">
               <span class="text-sm font-medium text-slate-800"><%= h.label %></span>
               <% if (!h.enabled) { %>
-                <span class="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">已暂停</span>
+                <span class="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded"><%= t("adminWebhooks.badge.paused") %></span>
               <% } else { %>
-                <span class="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">启用中</span>
+                <span class="text-xs bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded"><%= t("adminWebhooks.badge.active") %></span>
               <% } %>
-              <% if (h.secret) { %><span class="text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">已签名</span><% } %>
+              <% if (h.secret) { %><span class="text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded"><%= t("adminWebhooks.badge.signed") %></span><% } %>
             </div>
             <code class="text-xs text-slate-500 truncate block"><%= h.url %></code>
             <div class="text-xs text-slate-400 mt-1">
@@ -69,18 +69,18 @@
             </div>
           </div>
           <div class="flex gap-1.5 flex-shrink-0">
-            <a href="/admin/webhooks/<%= h.id %>/deliveries" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">详情</a>
+            <a href="/admin/webhooks/<%= h.id %>/deliveries" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= t("adminWebhooks.details") %></a>
             <form method="post" action="/admin/webhooks/<%= h.id %>/test" class="m-0">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50">测试</button>
+              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= t("adminWebhooks.test") %></button>
             </form>
             <form method="post" action="/admin/webhooks/<%= h.id %>/toggle" class="m-0">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= h.enabled ? '暂停' : '启用' %></button>
+              <button type="submit" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50"><%= h.enabled ? t("adminWebhooks.pause") : t("adminWebhooks.enable") %></button>
             </form>
-            <form method="post" action="/admin/webhooks/<%= h.id %>/delete" class="m-0" data-confirm="删除这个 Webhook？历史记录也会一起删。" data-confirm-danger="1" data-confirm-ok="删除">
+            <form method="post" action="/admin/webhooks/<%= h.id %>/delete" class="m-0" data-confirm="<%= t("adminWebhooks.deleteConfirm") %>" data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-              <button type="submit" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50">删除</button>
+              <button type="submit" class="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs text-red-700 hover:bg-red-50"><%= t("common.delete") %></button>
             </form>
           </div>
         </li>
@@ -91,32 +91,32 @@
 
 <!-- Recent deliveries -->
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-3">最近 50 次请求</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-3"><%= t("adminWebhooks.recent.title") %></h2>
   <% if (deliveries.length === 0) { %>
-    <p class="text-sm text-slate-400 text-center py-6">还没有任何 webhook 调用过</p>
+    <p class="text-sm text-slate-400 text-center py-6"><%= t("adminWebhooks.recent.empty") %></p>
   <% } else { %>
     <div class="overflow-x-auto -mx-5 sm:mx-0">
       <table class="min-w-full text-sm">
         <thead>
           <tr class="text-left text-xs text-slate-400 border-b border-slate-100">
-            <th class="px-3 py-2 font-medium">时间</th>
+            <th class="px-3 py-2 font-medium"><%= t("adminWebhooks.col.time") %></th>
             <th class="px-3 py-2 font-medium">Webhook</th>
-            <th class="px-3 py-2 font-medium">事件</th>
-            <th class="px-3 py-2 font-medium">状态</th>
-            <th class="px-3 py-2 font-medium">尝试</th>
+            <th class="px-3 py-2 font-medium"><%= t("adminWebhooks.col.event") %></th>
+            <th class="px-3 py-2 font-medium"><%= t("adminWebhooks.col.status") %></th>
+            <th class="px-3 py-2 font-medium"><%= t("adminWebhooks.col.attempts") %></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-50">
           <% deliveries.forEach(function(d){ %>
             <tr>
               <td class="px-3 py-2 text-xs text-slate-500"><%- d.createdAtLocal %></td>
-              <td class="px-3 py-2 text-slate-700"><%= d.hookLabel || '<已删除>' %></td>
+              <td class="px-3 py-2 text-slate-700"><%= d.hookLabel || t("adminWebhooks.deletedHook") %></td>
               <td class="px-3 py-2"><code class="text-xs bg-slate-50 px-1.5 py-0.5 rounded"><%= d.eventName %></code></td>
               <td class="px-3 py-2">
                 <% if (d.ok) { %>
                   <span class="text-emerald-700 text-xs">✓ <%= d.statusCode %></span>
                 <% } else { %>
-                  <span class="text-red-700 text-xs">✗ <%= d.statusCode || '网络错' %></span>
+                  <span class="text-red-700 text-xs">✗ <%= d.statusCode || t("adminWebhooks.networkError") %></span>
                   <% if (d.errorMessage) { %><span class="text-xs text-slate-400 ml-1 truncate inline-block max-w-xs align-middle"><%= d.errorMessage %></span><% } %>
                 <% } %>
               </td>

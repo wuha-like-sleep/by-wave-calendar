@@ -2,12 +2,12 @@
 
 <header class="mb-6 flex flex-wrap items-end justify-between gap-3">
   <div>
-    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900">概览</h1>
-    <p class="mt-1 text-sm text-slate-500">站点关键指标 + 服务状态 · 实时统计</p>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900"><%= t("adminOverview.heading") %></h1>
+    <p class="mt-1 text-sm text-slate-500"><%= t("adminOverview.sub") %></p>
   </div>
   <div class="text-right text-xs text-slate-500 leading-relaxed">
     <div>Node <code class="font-mono text-slate-700"><%= runtime.nodeVersion %></code></div>
-    <div>启动 <%= Math.floor(runtime.uptimeSec / 3600) %>h <%= Math.floor((runtime.uptimeSec % 3600) / 60) %>m · 内存 <%= runtime.memMb %> MB</div>
+    <div><%= t("adminOverview.runtime", { h: Math.floor(runtime.uptimeSec / 3600), m: Math.floor((runtime.uptimeSec % 3600) / 60), mem: runtime.memMb }) %></div>
   </div>
 </header>
 
@@ -15,29 +15,29 @@
 <section class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
   <a href="/admin/users" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 hover:shadow-sm transition">
     <div class="text-2xl font-bold text-slate-900"><%= stats.users %></div>
-    <div class="text-xs text-slate-500 mt-1">用户</div>
-    <div class="mt-2 text-[11px] text-slate-500">活跃 <span class="text-emerald-700"><%= stats.usersActive %></span> · 停用 <span class="text-amber-700"><%= stats.usersDisabled %></span> · 管理员 <%= stats.admins %></div>
+    <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.stat.users") %></div>
+    <div class="mt-2 text-[11px] text-slate-500"><%= t("adminOverview.users.active") %> <span class="text-emerald-700"><%= stats.usersActive %></span> · <%= t("adminOverview.users.disabled") %> <span class="text-amber-700"><%= stats.usersDisabled %></span> · <%= t("adminOverview.users.admins", { n: stats.admins }) %></div>
   </a>
   <div class="rounded-xl border border-slate-200 bg-white p-4">
     <div class="text-2xl font-bold text-slate-900"><%= stats.calendars %></div>
-    <div class="text-xs text-slate-500 mt-1">日历</div>
-    <div class="mt-2 text-[11px] text-slate-500">人均 <%= stats.users > 0 ? (stats.calendars / stats.users).toFixed(1) : '0' %> 本</div>
+    <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.stat.calendars") %></div>
+    <div class="mt-2 text-[11px] text-slate-500"><%= t("adminOverview.calendarsPerUser", { n: stats.users > 0 ? (stats.calendars / stats.users).toFixed(1) : '0' }) %></div>
   </div>
   <div class="rounded-xl border border-slate-200 bg-white p-4">
-    <div class="text-2xl font-bold text-slate-900"><%= stats.events.toLocaleString('zh-CN') %></div>
-    <div class="text-xs text-slate-500 mt-1">事件</div>
-    <div class="mt-2 text-[11px] text-slate-500">含重复 <%= stats.recurringEvents %> 个 · 软删除 <%= stats.deletedEvents %></div>
+    <div class="text-2xl font-bold text-slate-900"><%= stats.events.toLocaleString(currentLocale) %></div>
+    <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.stat.events") %></div>
+    <div class="mt-2 text-[11px] text-slate-500"><%= t("adminOverview.eventsDetail", { recurring: stats.recurringEvents, deleted: stats.deletedEvents }) %></div>
   </div>
   <div class="rounded-xl border border-slate-200 bg-white p-4">
     <div class="text-2xl font-bold text-slate-900"><%= stats.loginsDay %></div>
-    <div class="text-xs text-slate-500 mt-1">24h 登录</div>
-    <div class="mt-2 text-[11px] text-slate-500">本周 <%= stats.loginsWeek %> 次</div>
+    <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.stat.loginsDay") %></div>
+    <div class="mt-2 text-[11px] text-slate-500"><%= t("adminOverview.loginsWeek", { n: stats.loginsWeek }) %></div>
   </div>
 </section>
 
 <!-- ========== Service status ========== -->
 <section class="mb-6">
-  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">服务状态</h2>
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2"><%= t("adminOverview.section.status") %></h2>
   <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
     <% function statusCard(href, label, ok, detail) { %>
       <a href="<%= href %>" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
@@ -45,22 +45,22 @@
           <div class="text-sm font-medium text-slate-900"><%= label %></div>
           <span class="inline-flex items-center gap-1 text-xs <%= ok ? 'text-emerald-700' : 'text-amber-700' %>">
             <span class="inline-block h-1.5 w-1.5 rounded-full <%= ok ? 'bg-emerald-500' : 'bg-amber-500' %>"></span>
-            <%= ok ? '正常' : '未配置' %>
+            <%= ok ? t("adminOverview.status.ok") : t("adminOverview.status.unconfigured") %>
           </span>
         </div>
         <div class="mt-1.5 text-xs text-slate-500 truncate"><%= detail %></div>
       </a>
     <% } %>
-    <%- statusCard('/admin/smtp', 'SMTP 邮件', !!settings.smtpHost, settings.smtpHost || '未配置 — 邀请 / 提醒 / 验证邮件不会发出') %>
-    <%- statusCard('/admin/idp',  'SSO',       !!settings.ssoKeycloakEnabled, settings.ssoKeycloakEnabled ? '已启用第三方登录' : '仅密码 / Passkey 登录') %>
-    <%- statusCard('/admin/security', '安全策略', true, '密码策略 / 锁定阈值 / MFA 控制') %>
-    <%- statusCard('/admin/webhooks', 'Webhooks', stats.activeWebhooks > 0, stats.activeWebhooks > 0 ? `${stats.activeWebhooks} 个启用` + (stats.failedDeliveriesDay > 0 ? ` · 24h 失败 ${stats.failedDeliveriesDay}` : '') : '未配置 — 事件不会推送到外部系统') %>
+    <%- statusCard('/admin/smtp', t("adminOverview.status.smtp"), !!settings.smtpHost, settings.smtpHost || t("adminOverview.smtp.unconfigured")) %>
+    <%- statusCard('/admin/idp',  'SSO',       !!settings.ssoKeycloakEnabled, settings.ssoKeycloakEnabled ? t("adminOverview.sso.on") : t("adminOverview.sso.off")) %>
+    <%- statusCard('/admin/security', t("adminOverview.status.security"), true, t("adminOverview.security.detail")) %>
+    <%- statusCard('/admin/webhooks', 'Webhooks', stats.activeWebhooks > 0, stats.activeWebhooks > 0 ? t("adminOverview.webhooks.active", { n: stats.activeWebhooks }) + (stats.failedDeliveriesDay > 0 ? t("adminOverview.webhooks.failed", { n: stats.failedDeliveriesDay }) : '') : t("adminOverview.webhooks.unconfigured")) %>
   </div>
 </section>
 
 <!-- ========== Operational signals ========== -->
 <section class="mb-6">
-  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">运营信号</h2>
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2"><%= t("adminOverview.section.signals") %></h2>
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
     <!-- CalDAV 认证缓存命中率 — iPhone/Mac/DAVx⁵ 每次同步会打 10-20
          个请求，每个请求都跑 bcrypt 是慢得吓人的（每个 200-500ms）。
@@ -68,13 +68,13 @@
          触发。命中率 0% 或低于 50% 提示有客户端在反复用错误密码尝试，
          或多个不同设备同时首次连接。 -->
     <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500 mb-1">CalDAV 认证缓存</div>
+      <div class="text-xs text-slate-500 mb-1"><%= t("adminOverview.caldavCache.title") %></div>
       <div class="flex items-baseline gap-2">
         <span class="text-lg font-semibold text-slate-900"><%= (caldavCache.hitRate * 100).toFixed(0) %>%</span>
-        <span class="text-xs text-slate-500">命中率</span>
+        <span class="text-xs text-slate-500"><%= t("adminOverview.caldavCache.hitRate") %></span>
       </div>
       <div class="text-xs text-slate-500 mt-0.5">
-        <%= caldavCache.hits %> 命中 / <%= caldavCache.misses %> bcrypt / <%= caldavCache.coalesced %> 合并 · <%= caldavCache.size %> session
+        <%= t("adminOverview.caldavCache.detail", { hits: caldavCache.hits, misses: caldavCache.misses, coalesced: caldavCache.coalesced, size: caldavCache.size }) %>
       </div>
     </div>
     <!-- CalDAV 认证失败节流。这一块**没数据时也要在** —— 整块消失的话，
@@ -83,50 +83,50 @@
          被挡次数持续上涨 = 有人在猜密码，去日志里搜 caldav_auth_failed
          能看到是哪个 IP、哪个邮箱。 -->
     <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500 mb-1">CalDAV 认证失败</div>
+      <div class="text-xs text-slate-500 mb-1"><%= t("adminOverview.throttle.title") %></div>
       <div class="flex items-baseline gap-2">
         <span class="text-lg font-semibold <%= caldavThrottle.blockedRequests > 0 ? "text-amber-600" : "text-slate-900" %>">
           <%= caldavThrottle.blockedRequests > 0 ? caldavThrottle.blockedRequests : "—" %>
         </span>
-        <span class="text-xs text-slate-500">次被挡下</span>
+        <span class="text-xs text-slate-500"><%= t("adminOverview.throttle.blockedLabel") %></span>
       </div>
       <div class="text-xs text-slate-500 mt-0.5">
-        <%= caldavThrottle.lockedAccounts %> 个账号被猜到上限 · <%= caldavThrottle.cpuRejections %> 次算力拒绝 · 跟踪中 <%= caldavThrottle.trackedAccounts %> 账号 / <%= caldavThrottle.trackedIps %> IP
+        <%= t("adminOverview.throttle.detail", { locked: caldavThrottle.lockedAccounts, cpu: caldavThrottle.cpuRejections, accounts: caldavThrottle.trackedAccounts, ips: caldavThrottle.trackedIps }) %>
       </div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">
-      <div class="text-xs text-slate-500 mb-1">事件邀请</div>
+      <div class="text-xs text-slate-500 mb-1"><%= t("adminOverview.invites.title") %></div>
       <div class="flex items-baseline gap-2">
         <span class="text-lg font-semibold text-slate-900"><%= stats.invitesAccepted %></span>
-        <span class="text-xs text-slate-500">已回执</span>
+        <span class="text-xs text-slate-500"><%= t("adminOverview.invites.responded") %></span>
       </div>
-      <div class="text-xs text-amber-700 mt-0.5"><%= stats.invitesOpen %> 个邀请未回应</div>
+      <div class="text-xs text-amber-700 mt-0.5"><%= t("adminOverview.invites.open", { n: stats.invitesOpen }) %></div>
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-4">
       <div class="text-xs text-slate-500 mb-1">API · OAuth</div>
       <div class="flex items-baseline gap-2">
         <span class="text-lg font-semibold text-slate-900"><%= stats.apiTokensLive %></span>
-        <span class="text-xs text-slate-500">活跃 API token</span>
+        <span class="text-xs text-slate-500"><%= t("adminOverview.api.tokensLabel") %></span>
       </div>
-      <div class="text-xs text-slate-500 mt-0.5"><%= stats.oauthApps %> 个 OAuth 应用</div>
+      <div class="text-xs text-slate-500 mt-0.5"><%= t("adminOverview.api.oauthApps", { n: stats.oauthApps }) %></div>
     </div>
     <% if (stats.failedDeliveriesDay > 0) { %>
       <a href="/admin/webhooks" class="rounded-xl border border-red-200 bg-red-50 p-4 hover:bg-red-100 transition">
-        <div class="text-xs text-red-700 mb-1">⚠ 需要注意</div>
-        <div class="text-sm text-red-900 font-medium">Webhook 24h 失败 <%= stats.failedDeliveriesDay %> 次</div>
-        <div class="text-xs text-red-700 mt-0.5">点击查看送达记录</div>
+        <div class="text-xs text-red-700 mb-1"><%= t("adminOverview.alert.webhookTitle") %></div>
+        <div class="text-sm text-red-900 font-medium"><%= t("adminOverview.alert.webhookBody", { n: stats.failedDeliveriesDay }) %></div>
+        <div class="text-xs text-red-700 mt-0.5"><%= t("adminOverview.alert.webhookHint") %></div>
       </a>
     <% } else if (stats.deletedEvents > 1000) { %>
       <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
-        <div class="text-xs text-amber-700 mb-1">软删除堆积</div>
-        <div class="text-sm text-amber-900 font-medium"><%= stats.deletedEvents %> 个已删事件未回收</div>
-        <div class="text-xs text-amber-700 mt-0.5">日常 cron 会清 90 天前的</div>
+        <div class="text-xs text-amber-700 mb-1"><%= t("adminOverview.alert.deletedTitle") %></div>
+        <div class="text-sm text-amber-900 font-medium"><%= t("adminOverview.alert.deletedBody", { n: stats.deletedEvents }) %></div>
+        <div class="text-xs text-amber-700 mt-0.5"><%= t("adminOverview.alert.deletedHint") %></div>
       </div>
     <% } else { %>
       <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-        <div class="text-xs text-emerald-700 mb-1">✓ 一切正常</div>
-        <div class="text-sm text-emerald-900 font-medium">最近 24h 无告警</div>
-        <div class="text-xs text-emerald-700 mt-0.5">服务、邀请、Webhook、登录全部健康</div>
+        <div class="text-xs text-emerald-700 mb-1"><%= t("adminOverview.alert.okTitle") %></div>
+        <div class="text-sm text-emerald-900 font-medium"><%= t("adminOverview.alert.okBody") %></div>
+        <div class="text-xs text-emerald-700 mt-0.5"><%= t("adminOverview.alert.okHint") %></div>
       </div>
     <% } %>
   </div>
@@ -136,8 +136,8 @@
 <% if (recentAudit && recentAudit.length > 0) { %>
   <section class="mb-6">
     <div class="flex items-center justify-between mb-2">
-      <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide">最近管理操作</h2>
-      <a href="/admin/audit" class="text-xs text-brand-700 hover:underline">查看全部 →</a>
+      <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide"><%= t("adminOverview.section.recent") %></h2>
+      <a href="/admin/audit" class="text-xs text-brand-700 hover:underline"><%= t("adminOverview.recent.viewAll") %></a>
     </div>
     <ul class="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
       <% recentAudit.forEach(function(a){ %>
@@ -154,47 +154,47 @@
 
 <!-- ========== Branding & config quick links ========== -->
 <section>
-  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2">配置入口</h2>
+  <h2 class="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-2"><%= t("adminOverview.section.config") %></h2>
   <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
     <a href="/admin/site" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">站点 · 注册策略</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.site") %></div>
       <div class="text-xs text-slate-500 mt-1 truncate"><%= settings.siteName %> · <%= settings.registrationMode %></div>
     </a>
     <a href="/admin/logo" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">Logo · 外观</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.logo") %></div>
       <div class="text-xs text-slate-500 mt-1 flex items-center gap-2">
         <% if (settings.logoUrl) { %>
           <img src="<%= settings.logoUrl %>" alt="" class="h-5 w-5 rounded object-cover border border-slate-200" />
-          <span class="text-emerald-700">自定义</span>
+          <span class="text-emerald-700"><%= t("adminOverview.config.logoCustom") %></span>
         <% } else { %>
           <img src="/static/brand/logo-small.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" alt="" width="20" height="20" class="h-5 w-5" />
-          <span>默认标识</span>
+          <span><%= t("adminOverview.config.logoDefault") %></span>
         <% } %>
       </div>
     </a>
     <a href="/admin/theme" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">主题色</div>
-      <div class="text-xs text-slate-500 mt-1 truncate">用户可在设置里覆盖</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.theme") %></div>
+      <div class="text-xs text-slate-500 mt-1 truncate"><%= t("adminOverview.config.themeHint") %></div>
     </a>
     <a href="/admin/api" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
       <div class="text-sm font-semibold text-slate-900">API tokens</div>
-      <div class="text-xs text-slate-500 mt-1"><%= stats.apiTokensLive %> 个活跃</div>
+      <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.config.apiTokensHint", { n: stats.apiTokensLive }) %></div>
     </a>
     <a href="/admin/oauth-apps" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">OAuth 应用</div>
-      <div class="text-xs text-slate-500 mt-1"><%= stats.oauthApps %> 个已登记</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.oauth") %></div>
+      <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.config.oauthHint", { n: stats.oauthApps }) %></div>
     </a>
     <a href="/admin/backup" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">备份 / 恢复</div>
-      <div class="text-xs text-slate-500 mt-1">JSON 导出 + 上传恢复</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.backup") %></div>
+      <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.config.backupHint") %></div>
     </a>
     <a href="/admin/audit" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">审计日志</div>
-      <div class="text-xs text-slate-500 mt-1">所有管理操作 / 安全事件</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.audit") %></div>
+      <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.config.auditHint") %></div>
     </a>
     <a href="/admin/update" class="rounded-xl border border-slate-200 bg-white p-4 hover:border-brand-300 transition">
-      <div class="text-sm font-semibold text-slate-900">更新 / 重启</div>
-      <div class="text-xs text-slate-500 mt-1">检查新版本 · 重启进程</div>
+      <div class="text-sm font-semibold text-slate-900"><%= t("adminOverview.config.update") %></div>
+      <div class="text-xs text-slate-500 mt-1"><%= t("adminOverview.config.updateHint") %></div>
     </a>
   </div>
 </section>

@@ -76,13 +76,13 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   }
   if (!s.user.isAdmin) {
     reply.code(403).view("error", {
-      title: "无权访问",
+      title: tr(req, "adminGate.title"),
       user: s.user,
       csrfToken: csrfTokenFor(req),
       flash: {},
       statusCode: 403,
-      heading: "权限不足",
-      message: "你不是管理员。",
+      heading: tr(req, "adminGate.heading"),
+      message: tr(req, "adminGate.message"),
     });
     return null;
   }
@@ -90,7 +90,7 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   // can read but must enable MFA before they can touch anything.
   const settings = await getSettings();
   if (settings.forceAdminMfa && !s.user.mfaEnabled) {
-    redirectWithFlash(reply, "/app/settings/mfa/setup?error=" + encodeURIComponent("管理员账号必须启用 MFA 才能进入后台"));
+    redirectWithFlash(reply, "/app/settings/mfa/setup?error=" + encodeURIComponent(tr(req, "adminGate.mfaRequired")));
     return null;
   }
   return s.user;
@@ -104,6 +104,11 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
 const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" data-style="datetime">${d.toISOString()}</time>`;
 
 /** 请求内翻译,给 flash / 页面标题用。口径跟 web/sso.ts 的 tr() 一致。 */
+const OAUTH_SCOPE_DESC_KEYS: Record<string, string> = {
+  "read:events": "adminOauthApps.scope.readEvents",
+  "write:events": "adminOauthApps.scope.writeEvents",
+  "read:profile": "adminOauthApps.scope.readProfile",
+};
 function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
   return tForRequest(req)(key, vars);
 }
@@ -626,7 +631,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .limit(5);
 
     return reply.view("admin/index", {
-      title: "管理后台",
+      title: tr(req, "admin.consoleTitle"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -677,7 +682,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/site", {
-      title: "站点设置 · 管理后台",
+      title: tr(req, "adminSite.heading") + tr(req, "admin.titleSuffix"),
       user, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply), settings,
     });
   });
@@ -687,7 +692,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/logo", {
-      title: "Logo · 管理后台",
+      title: tr(req, "adminLogo.title") + tr(req, "admin.titleSuffix"),
       user, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply), settings,
     });
   });
@@ -715,7 +720,7 @@ export async function adminRoutes(app: FastifyInstance) {
       uploadDiskPath: "src/public/uploads/bimi.svg",
     };
     return reply.view("admin/smtp", {
-      title: "SMTP 邮件 · 管理后台",
+      title: tr(req, "adminSmtp.title") + tr(req, "admin.titleSuffix"),
       user, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply), settings, bimi,
     });
   });
@@ -726,29 +731,29 @@ export async function adminRoutes(app: FastifyInstance) {
     const user = await requireAdmin(req, reply);
     if (!user) return reply;
     const file = await req.file();
-    if (!file) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("请选择 SVG 文件") + "#bimi");
+    if (!file) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.pickSvg")) + "#bimi");
     // 这个 logo 会出现在收件人邮箱里本站每一封信的旁边。以前不校验令牌 ——
     // 表单里压根没放 _csrf —— 同站的别的页面能替管理员把它换掉。
     if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
     const isSvg = file.mimetype.toLowerCase().includes("svg") || /\.svg$/i.test(file.filename || "");
     if (!isSvg) {
-      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("BIMI logo 必须是 SVG（矢量）文件，位图无法用于 BIMI") + "#bimi");
+      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.notSvg")) + "#bimi");
     }
     const buf = await file.toBuffer();
     if (buf.length > 64 * 1024) {
-      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("文件过大") + "#bimi");
+      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.tooBig")) + "#bimi");
     }
     const settings = await getSettings();
     const result = normalizeBimiSvg(buf.toString("utf8"), { title: settings.siteName });
     if (!result.ok) {
-      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("SVG 不符合 BIMI 规范：" + result.errors.join("；")) + "#bimi");
+      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.svgInvalid", { errors: result.errors.join(tr(req, "adminSmtp.flash.listSep")) })) + "#bimi");
     }
     const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
     await mkdir(uploadsDir, { recursive: true });
     await writeFile(path.join(uploadsDir, "bimi.svg"), result.svg, "utf8");
     await updateSettings({ bimiSvgUrl: "/static/uploads/bimi.svg" });
-    const note = result.normalized ? `（已自动补全 ${result.notes.join("、")}）` : "";
-    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent("BIMI logo 已上传" + note) + "#bimi");
+    const note = result.normalized ? tr(req, "adminSmtp.flash.uploadedNote", { notes: result.notes.join(tr(req, "adminSmtp.flash.enumSep")) }) : "";
+    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent(tr(req, "adminSmtp.flash.uploaded") + note) + "#bimi");
   });
 
   app.post("/admin/bimi/logo/delete", async (req, reply) => {
@@ -758,7 +763,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const p = path.join(process.cwd(), "src", "public", "uploads", "bimi.svg");
     await unlink(p).catch(() => undefined);
     await updateSettings({ bimiSvgUrl: null });
-    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent("已恢复为内置默认 logo") + "#bimi");
+    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent(tr(req, "adminSmtp.flash.restored")) + "#bimi");
   });
 
   app.post("/admin/bimi/vmc", async (req, reply) => {
@@ -766,13 +771,13 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ vmcUrl: z.string().max(500).optional() }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("参数无效") + "#bimi");
+    if (!body.success) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")) + "#bimi");
     const raw = (body.data.vmcUrl || "").trim();
     if (raw && !/^https:\/\//i.test(raw)) {
-      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("VMC 证书 URL 必须以 https:// 开头") + "#bimi");
+      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.vmcHttps")) + "#bimi");
     }
     await updateSettings({ bimiVmcUrl: raw || null });
-    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent("已保存证书地址") + "#bimi");
+    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent(tr(req, "adminSmtp.flash.vmcSaved")) + "#bimi");
   });
 
   // SSO management. Dual-registered at /admin/sso and /admin/idp because
@@ -785,7 +790,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const providers = await listAllProviders();
     return reply.view("admin/sso", {
-      title: "SSO · 管理后台",
+      title: tr(req, "adminSso.title") + tr(req, "admin.titleSuffix"),
       user, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/idp",
       providers,
@@ -802,7 +807,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({
-      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, "slug 只能包含 a-z 0-9 和 -"),
+      slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/, tr(req, "adminSso.flash.slugInvalid")),
       issuerUrl: z.string().url(),
       clientId: z.string().min(1).max(200),
       clientSecret: z.string().min(1).max(400),
@@ -811,15 +816,15 @@ export async function adminRoutes(app: FastifyInstance) {
       sortOrder: z.coerce.number().int().default(0),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent("参数无效：" + body.error.issues[0]?.message));
+      return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(tr(req, "adminSso.flash.invalidParamsWith", { msg: String(body.error.issues[0]?.message ?? "") })));
     }
     try {
       await createProvider(body.data);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "未知错误";
-      return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(`新增失败：${msg.includes("duplicate") ? "slug 已存在" : msg}`));
+      const msg = err instanceof Error ? err.message : tr(req, "adminCommon.unknownError");
+      return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(tr(req, "adminSso.flash.addFailed", { msg: msg.includes("duplicate") ? tr(req, "adminSso.flash.slugExists") : msg })));
     }
-    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(`已添加「${body.data.label}」`));
+    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(tr(req, "adminSso.flash.added", { label: body.data.label })));
   };
   app.post("/admin/sso/providers", ssoCreateProvider);
   app.post("/admin/idp/providers", ssoCreateProvider);
@@ -831,7 +836,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/idp");
     const prov = await getProviderById(id.data);
-    if (!prov) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent("提供方不存在"));
+    if (!prov) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(tr(req, "adminSso.flash.notFound")));
     const body = z.object({
       issuerUrl: z.string().url(),
       clientId: z.string().min(1).max(200),
@@ -840,7 +845,7 @@ export async function adminRoutes(app: FastifyInstance) {
       enabled: z.string().optional().transform((v) => v === "on"),
       sortOrder: z.coerce.number().int().default(0),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     const patch: Parameters<typeof updateProvider>[1] = {
       issuerUrl: body.data.issuerUrl,
       clientId: body.data.clientId,
@@ -850,7 +855,7 @@ export async function adminRoutes(app: FastifyInstance) {
     };
     if (body.data.clientSecret && body.data.clientSecret.trim()) patch.clientSecret = body.data.clientSecret.trim();
     await updateProvider(id.data, patch);
-    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(`已更新「${body.data.label}」`));
+    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(tr(req, "adminSso.flash.updated", { label: body.data.label })));
   };
   app.post<{ Params: { id: string } }>("/admin/sso/providers/:id", ssoUpdateProvider);
   app.post<{ Params: { id: string } }>("/admin/idp/providers/:id", ssoUpdateProvider);
@@ -862,7 +867,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse(req.params.id);
     if (!id.success) return reply.redirect("/admin/idp");
     await deleteProvider(id.data);
-    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent("已删除"));
+    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(tr(req, "adminSso.flash.deleted")));
   };
   app.post<{ Params: { id: string } }>("/admin/sso/providers/:id/delete", ssoDeleteProvider);
   app.post<{ Params: { id: string } }>("/admin/idp/providers/:id/delete", ssoDeleteProvider);
@@ -877,14 +882,14 @@ export async function adminRoutes(app: FastifyInstance) {
       icpNumber: z.string().max(100).optional().transform((v) => (v?.trim() ? v.trim() : null)),
       icpUrl: z.string().url().optional().transform((v) => (v?.trim() ? v.trim() : "https://beian.miit.gov.cn/")),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/site?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/site?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     await updateSettings({
       siteName: body.data.siteName,
       registrationMode: body.data.registrationMode,
       icpNumber: body.data.icpNumber,
       icpUrl: body.data.icpUrl,
     });
-    return redirectWithFlash(reply, "/admin/site?success=" + encodeURIComponent("站点设置已保存"));
+    return redirectWithFlash(reply, "/admin/site?success=" + encodeURIComponent(tr(req, "adminSite.flash.saved")));
   });
 
   // -------- 网站默认语言 -------- (site-wide; user-level overrides)
@@ -898,7 +903,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { isValidSiteLocale } = await import("../lib/i18n.js");
     const body = z.object({ defaultLocale: z.string().max(20) }).safeParse(req.body);
     if (!body.success || !isValidSiteLocale(body.data.defaultLocale)) {
-      return redirectWithFlash(reply, "/admin/site?error=" + encodeURIComponent("不支持的语言"));
+      return redirectWithFlash(reply, "/admin/site?error=" + encodeURIComponent(tr(req, "adminSite.flash.badLanguage")));
     }
     await updateSettings({ defaultLocale: body.data.defaultLocale });
     await audit(req, u.id, "site.locale.update", { targetType: "site_settings", details: { locale: body.data.defaultLocale } });
@@ -918,7 +923,7 @@ export async function adminRoutes(app: FastifyInstance) {
       fromAddress: z.string().email().optional().or(z.literal("")).transform((v) => v?.trim() || null),
       fromName: z.string().max(100).optional().transform((v) => v?.trim() || "ByWave-Calendar"),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("SMTP 参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.invalidParams")));
     const patch: Parameters<typeof updateSettings>[0] = {
       smtpHost: body.data.host,
       smtpPort: body.data.port,
@@ -930,7 +935,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Only update password when submitted
     if (body.data.smtpPass) patch.smtpPass = body.data.smtpPass;
     await updateSettings(patch);
-    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent("SMTP 配置已保存"));
+    return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent(tr(req, "adminSmtp.flash.saved")));
   });
 
   const ssoKeycloakLegacy = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -942,9 +947,9 @@ export async function adminRoutes(app: FastifyInstance) {
       issuerUrl: z.string().url().optional().transform((v) => v?.trim() || null),
       clientId: z.string().max(200).optional().transform((v) => v?.trim() || null),
       clientSecret: z.string().max(400).optional().transform((v) => v?.trim() || null),
-      label: z.string().max(100).optional().transform((v) => v?.trim() || "使用 SSO 登录"),
+      label: z.string().max(100).optional().transform((v) => v?.trim() || tr(req, "adminSso.flash.defaultLabel")),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent("SSO 参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/idp?error=" + encodeURIComponent(tr(req, "adminSso.flash.invalidParams")));
     const patch: Parameters<typeof updateSettings>[0] = {
       ssoKeycloakEnabled: body.data.enabled,
       ssoKeycloakIssuerUrl: body.data.issuerUrl,
@@ -953,7 +958,7 @@ export async function adminRoutes(app: FastifyInstance) {
     };
     if (body.data.clientSecret) patch.ssoKeycloakClientSecret = body.data.clientSecret;
     await updateSettings(patch);
-    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent("SSO 设置已保存"));
+    return redirectWithFlash(reply, "/admin/idp?success=" + encodeURIComponent(tr(req, "adminSso.flash.saved")));
   };
   app.post("/admin/sso/keycloak", ssoKeycloakLegacy);
   app.post("/admin/idp/keycloak", ssoKeycloakLegacy);
@@ -967,14 +972,14 @@ export async function adminRoutes(app: FastifyInstance) {
     // 的其它站点在浏览器眼里是「同站」，那道兜底拦不住它们。
 
     const file = await req.file();
-    if (!file) return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent("请选择文件"));
+    if (!file) return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent(tr(req, "adminLogo.flash.pickFile")));
     if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
 
     const allowed = new Set([
       "image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp",
     ]);
     if (!allowed.has(file.mimetype.toLowerCase())) {
-      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent("仅支持 PNG / JPG / SVG / WEBP"));
+      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent(tr(req, "adminLogo.flash.badType")));
     }
 
     const uploadsDir = path.join(process.cwd(), "src", "public", "uploads");
@@ -982,7 +987,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
     const buf = await file.toBuffer();
     if (buf.length > 2 * 1024 * 1024) {
-      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent("文件超过 2MB"));
+      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent(tr(req, "adminLogo.flash.tooBig")));
     }
 
     // Normalize: center-crop square + resize to 512×512 PNG for consistent display.
@@ -994,12 +999,12 @@ export async function adminRoutes(app: FastifyInstance) {
         .toBuffer();
       await writeFile(path.join(uploadsDir, "logo.png"), processed);
     } catch (err) {
-      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent("图片无法解析，请换一张"));
+      return redirectWithFlash(reply, "/admin/logo?error=" + encodeURIComponent(tr(req, "adminLogo.flash.unparseable")));
     }
 
     const url = `/static/uploads/logo.png?v=${Date.now()}`;
     await updateSettings({ logoUrl: url });
-    return redirectWithFlash(reply, "/admin/logo?success=" + encodeURIComponent("Logo 已上传"));
+    return redirectWithFlash(reply, "/admin/logo?success=" + encodeURIComponent(tr(req, "adminLogo.flash.uploaded")));
   });
 
   app.post("/admin/logo/delete", async (req, reply) => {
@@ -1015,7 +1020,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     }
     await updateSettings({ logoUrl: null });
-    return redirectWithFlash(reply, "/admin/logo?success=" + encodeURIComponent("已删除 Logo"));
+    return redirectWithFlash(reply, "/admin/logo?success=" + encodeURIComponent(tr(req, "adminLogo.flash.deleted")));
   });
 
   // ---------- Merge duplicate accounts ----------
@@ -1032,17 +1037,17 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!req.query.source && !req.query.target) {
       error = null; // initial blank form
     } else if (!source || !target) {
-      error = "源账号或目标账号未找到（用邮箱或用户 ID）";
+      error = tr(req, "adminMerge.err.notFound");
     } else if (source.id === target.id) {
-      error = "源账号和目标账号相同";
+      error = tr(req, "adminMerge.err.same");
     } else if (source.isAdmin) {
-      error = "源账号是管理员，不允许被合并（请先取消其管理员身份）";
+      error = tr(req, "adminMerge.err.sourceIsAdmin");
     } else {
       summary = await mergeSummary(source.id);
       deleteCounts = await mergeDeleteCounts(source.id);
     }
     return reply.view("admin/merge", {
-      title: "合并账号 · 管理后台",
+      title: tr(req, "adminMerge.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/users",
       sourceInput: req.query.source || "",
@@ -1058,7 +1063,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!u) return reply;
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ sourceId: z.string().uuid(), targetId: z.string().uuid() }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     const { mergeAccounts } = await import("../lib/account_merge.js");
     const res = await mergeAccounts(body.data.sourceId, body.data.targetId);
     if (!res.ok) return redirectWithFlash(reply, "/admin/users/merge?error=" + encodeURIComponent(res.error));
@@ -1066,7 +1071,7 @@ export async function adminRoutes(app: FastifyInstance) {
       targetType: "user", targetId: body.data.targetId,
       details: { source: body.data.sourceId, ...res.summary },
     });
-    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent("账号已合并，源账号已删除"));
+    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(tr(req, "adminMerge.flash.merged")));
   });
 
   // 一页多少个。用户上万之后，原来那种「一次查出全部、一次渲染全部」会让
@@ -1455,19 +1460,19 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
     if (id.data === me.id) {
-      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("不能修改自己的管理员身份"));
+      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.selfAdmin")));
     }
     const [target] = await db.select({ isAdmin: schema.users.isAdmin }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
-    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("用户不存在"));
+    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.notFound")));
     // Last-admin guard: refuse to demote the only remaining admin —
     // otherwise the system ends up with zero admins and recovery
     // requires manual DB surgery (UPDATE users SET is_admin = true...).
     if (target.isAdmin && (await countActiveAdmins()) <= 1) {
-      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("拒绝：这是最后一个管理员，撤销后系统将无人可管理"));
+      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.lastAdminDemote")));
     }
     await db.update(schema.users).set({ isAdmin: !target.isAdmin, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
     await audit(req, me.id, target.isAdmin ? "user.demote_admin" : "user.promote_admin", { targetType: "user", targetId: id.data });
-    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(target.isAdmin ? "已撤销管理员" : "已设为管理员"));
+    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(target.isAdmin ? tr(req, "adminUsers.flash.adminRevoked") : tr(req, "adminUsers.flash.adminGranted")));
   });
 
   app.post("/admin/users/:id/toggle-disabled", async (req, reply) => {
@@ -1477,21 +1482,21 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
     if (id.data === me.id) {
-      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("不能停用自己的账号"));
+      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.selfDisable")));
     }
     const [target] = await db.select({ disabledAt: schema.users.disabledAt, isAdmin: schema.users.isAdmin, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
-    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("用户不存在"));
+    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.notFound")));
     if (target.disabledAt) {
       await db.update(schema.users).set({ disabledAt: null, updatedAt: new Date() }).where(eq(schema.users.id, id.data));
       await audit(req, me.id, "user.enable", { targetType: "user", targetId: id.data, details: { email: target.email } });
-      return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(`已重新启用 ${target.email}`));
+      return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(tr(req, "adminUsers.flash.reenabled", { email: target.email })));
     }
     // Last-admin guard: refuse to disable the only remaining admin.
     if (target.isAdmin && (await countActiveAdmins()) <= 1) {
-      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("拒绝：这是最后一个管理员，停用后系统将无人可管理"));
+      return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.lastAdminDisable")));
     }
     await disableUserAccount(req, me.id, { id: id.data, email: target.email });
-    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(`已停用 ${target.email}（所有设备已下线，API Token 和应用密码已撤销）`));
+    return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(tr(req, "adminUsers.flash.disabled", { email: target.email })));
   });
 
   // ---------- 批量停用 ----------
@@ -1597,7 +1602,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/users");
     const [target] = await db.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, id.data)).limit(1);
-    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent("用户不存在"));
+    if (!target) return redirectWithFlash(reply, "/admin/users?error=" + encodeURIComponent(tr(req, "adminUsers.flash.notFound")));
     // 「踢出登录」= 这个人所有的钥匙一起作废。以前这里只清了浏览器会话、
     // API Token 和应用密码，**手机和桌面 App 照常能用**，第三方授权也照常能用 ——
     // 而提示语说的是「已踢出」。
@@ -1609,8 +1614,7 @@ export async function adminRoutes(app: FastifyInstance) {
       details: { email: target.email, sessionsKilled: sessionsBefore.length, devicesRevoked },
     });
     return redirectWithFlash(reply, "/admin/users?success=" + encodeURIComponent(
-      `已踢出 ${target.email}：${sessionsBefore.length} 个网页登录、${devicesRevoked} 台 App 设备，` +
-      `并撤销了 API Token、应用密码和第三方授权`));
+      tr(req, "adminUsers.flash.kicked", { email: target.email, sessions: sessionsBefore.length, devices: devicesRevoked })));
   });
 
   // ---------- 开通记录(账号是从哪条路进来的) ----------
@@ -1750,18 +1754,18 @@ export async function adminRoutes(app: FastifyInstance) {
     // in the EJS or the colours won't be generated.
     const catMeta = (prefix: string): { label: string; badge: string } => {
       switch (prefix) {
-        case "site": case "settings": case "signup_gates": return { label: "配置", badge: "bg-slate-100 text-slate-700" };
+        case "site": case "settings": case "signup_gates": return { label: tr(req, "adminAudit.category.config"), badge: "bg-slate-100 text-slate-700" };
         case "api_token": case "api": case "oauth": return { label: "API", badge: "bg-violet-100 text-violet-700" };
-        case "backup": return { label: "数据", badge: "bg-amber-100 text-amber-700" };
+        case "backup": return { label: tr(req, "adminAudit.category.data"), badge: "bg-amber-100 text-amber-700" };
         // signup.* 是建号收口函数写的(目前只有 signup.quota_blocked ——
         // 撞上每日配额被挡下来的那一条)。不认领的话它会掉进「其它」,
         // 而这正是管理员来查「谁注册不了」时要找的那一行。
-        case "user": case "users": case "signup": return { label: "用户", badge: "bg-sky-100 text-sky-700" };
+        case "user": case "users": case "signup": return { label: tr(req, "adminAudit.category.user"), badge: "bg-sky-100 text-sky-700" };
         case "sso": case "idp": return { label: "SSO", badge: "bg-emerald-100 text-emerald-700" };
-        case "update": case "self_update": return { label: "更新", badge: "bg-indigo-100 text-indigo-700" };
-        case "invite": return { label: "邀请", badge: "bg-teal-100 text-teal-700" };
-        case "mfa": case "passkey": case "password": case "session": case "login": return { label: "安全", badge: "bg-rose-100 text-rose-700" };
-        default: return { label: prefix || "其它", badge: "bg-slate-100 text-slate-600" };
+        case "update": case "self_update": return { label: tr(req, "adminAudit.category.update"), badge: "bg-indigo-100 text-indigo-700" };
+        case "invite": return { label: tr(req, "adminAudit.category.invite"), badge: "bg-teal-100 text-teal-700" };
+        case "mfa": case "passkey": case "password": case "session": case "login": return { label: tr(req, "adminAudit.category.security"), badge: "bg-rose-100 text-rose-700" };
+        default: return { label: prefix || tr(req, "adminAudit.category.other"), badge: "bg-slate-100 text-slate-600" };
       }
     };
 
@@ -1878,7 +1882,7 @@ export async function adminRoutes(app: FastifyInstance) {
     };
 
     return reply.view("admin/audit", {
-      title: "审计日志 · 管理后台",
+      title: tr(req, "adminAudit.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/audit",
       filter: { cat, actor, q: term },
@@ -1929,7 +1933,7 @@ export async function adminRoutes(app: FastifyInstance) {
       };
     }
     return reply.view("admin/geo-packs", {
-      title: "地址包 · 管理后台",
+      title: tr(req, "adminGeoPacks.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/geo-packs",
       listing,
@@ -1973,18 +1977,18 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ label: z.string().trim().max(100).optional() }).safeParse(req.body ?? {});
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent("标签格式不对"));
+      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent(tr(req, "adminGeoPacks.flash.badLabel")));
     }
-    const issued = await createGeoSyncToken({ label: body.data.label || "打包机同步", createdBy: u.id });
+    const issued = await createGeoSyncToken({ label: body.data.label || tr(req, "adminGeoPacks.flash.tokenDefaultLabel"), createdBy: u.id });
     await audit(req, u.id, "geo_sync_token.create", {
       targetType: "geo_sync_token", targetId: issued.id,
       // 只记 prefix——明文只出现在下面这次加密 flash 里，绝不进审计。
-      details: { label: body.data.label || "打包机同步", prefix: issued.prefix },
+      details: { label: body.data.label || tr(req, "adminGeoPacks.flash.tokenDefaultLabel"), prefix: issued.prefix },
     });
     return redirectWithFlash(reply, "/admin/geo-packs", {
-      success: "同步令牌已生成，只显示这一次，请立即保存",
+      success: tr(req, "adminGeoPacks.flash.tokenIssued"),
       issuedToken: issued.plain,
-      issuedLabel: body.data.label || "打包机同步",
+      issuedLabel: body.data.label || tr(req, "adminGeoPacks.flash.tokenDefaultLabel"),
     });
   });
 
@@ -2002,7 +2006,7 @@ export async function adminRoutes(app: FastifyInstance) {
         targetType: "geo_sync_token", targetId: id.data,
       });
     }
-    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(revoked ? "同步令牌已吊销，立即生效" : "该令牌已是吊销状态"));
+    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(revoked ? tr(req, "adminGeoPacks.flash.tokenRevoked") : tr(req, "adminGeoPacks.flash.tokenAlreadyRevoked")));
   });
 
   // 获取前预检（JSON）：只拉发布清单本身（小文件），把每个包的
@@ -2045,20 +2049,20 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const { started, job } = startGeoPackFetch({ actorUserId: u.id });
     if (!started) {
-      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent("已有获取任务在运行中，请等它结束"));
+      return redirectWithFlash(reply, "/admin/geo-packs?error=" + encodeURIComponent(tr(req, "adminGeoPacks.flash.fetchRunning")));
     }
     await audit(req, u.id, "geo_pack.fetch_start", {
       targetType: "geo_pack_release", targetId: job.id,
       details: { baseUrl: job.baseUrl },
     });
-    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent("已开始获取官方地址包，刷新页面查看进度"));
+    return redirectWithFlash(reply, "/admin/geo-packs?success=" + encodeURIComponent(tr(req, "adminGeoPacks.flash.fetchStarted")));
   });
 
   const backupPage = (req: FastifyRequest, reply: FastifyReply, u: schema.User, extra: {
     flash?: { error?: string; success?: string };
     restoreBlocked?: { tables: TableAtRisk[]; confirmValue: string } | null;
   } = {}) => ({
-    title: "数据备份 · 管理后台",
+    title: tr(req, "adminBackup.title") + tr(req, "admin.titleSuffix"),
     user: u, csrfToken: csrfTokenFor(req), flash: extra.flash ?? readFlash(req, reply),
     activeNav: "/admin/backup",
     bundleVersion: BACKUP_VERSION,
@@ -2106,15 +2110,15 @@ export async function adminRoutes(app: FastifyInstance) {
     } catch (err) {
       const e = err as { code?: string };
       if (e.code === "FST_REQ_FILE_TOO_LARGE") {
-        return back(`文件过大（上限 ${Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576)}MB）`);
+        return back(tr(req, "adminBackup.flash.tooBig", { mb: Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576) }));
       }
       throw err;
     }
-    if (!file) return back("请选择备份文件");
+    if (!file) return back(tr(req, "adminBackup.flash.pickFile"));
     // **任何读文件、改库之前。** 表单里 _csrf 排在文件框前面，所以已经在 fields 里了。
     if (!verifyMultipartCsrf(req, reply, file.fields as Record<string, unknown>)) return reply;
     if (file.mimetype && !file.mimetype.toLowerCase().includes("json") && file.mimetype !== "application/octet-stream") {
-      return back("文件类型应为 JSON");
+      return back(tr(req, "adminBackup.flash.badType"));
     }
     let buf: Buffer;
     try {
@@ -2123,17 +2127,17 @@ export async function adminRoutes(app: FastifyInstance) {
       // toBuffer() 才是真正触顶的地方 —— 上面的 req.file() 只是拿到 part。
       const e = err as { code?: string };
       if (e.code === "FST_REQ_FILE_TOO_LARGE") {
-        return back(`文件过大（上限 ${Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576)}MB）`);
+        return back(tr(req, "adminBackup.flash.tooBig", { mb: Math.round(MAX_BACKUP_IMPORT_BYTES / 1048576) }));
       }
       throw err;
     }
-    if (buf.length === 0) return back("空文件");
+    if (buf.length === 0) return back(tr(req, "adminBackup.flash.emptyFile"));
 
     let bundle: BackupBundle;
     try {
       bundle = JSON.parse(buf.toString("utf8")) as BackupBundle;
     } catch (err) {
-      return redirectWithFlash(reply, "/admin/backup?error=" + encodeURIComponent("JSON 解析失败：" + (err instanceof Error ? err.message : "")));
+      return redirectWithFlash(reply, "/admin/backup?error=" + encodeURIComponent(tr(req, "adminBackup.flash.jsonFailed", { msg: err instanceof Error ? err.message : "" })));
     }
     // 拦截页上勾过的确认框：值是「确认可以清空的表名」，逗号分隔。
     // 只认文件框之前的字段（模板里它排在文件框前面）。
@@ -2162,7 +2166,7 @@ export async function adminRoutes(app: FastifyInstance) {
         })));
       }
       return redirectWithFlash(reply, "/admin/backup?success=" + encodeURIComponent(
-        `恢复完成 —— 共 ${result.totalInserted} 行（${summary}）。建议立即重启服务。`
+        tr(req, "adminBackup.flash.restored", { total: result.totalInserted, summary })
       ));
     } catch (err) {
       if (err instanceof RestoreNeedsConfirmationError) {
@@ -2182,7 +2186,7 @@ export async function adminRoutes(app: FastifyInstance) {
       }
       const msg = err instanceof Error ? err.message : String(err);
       await audit(req, u.id, "backup.restore_failed", { details: { error: msg.slice(0, 500) } });
-      return redirectWithFlash(reply, "/admin/backup?error=" + encodeURIComponent("恢复失败（已回滚）：" + msg));
+      return redirectWithFlash(reply, "/admin/backup?error=" + encodeURIComponent(tr(req, "adminBackup.flash.restoreFailed", { msg })));
     }
   });
 
@@ -2230,7 +2234,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!u) return reply;
     const settings = await getSettings();
     return reply.view("admin/caldav", {
-      title: `${tr(req, "adminCaldav.heading")} · 管理后台`,
+      title: tr(req, "adminCaldav.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/caldav",
       epoch: describeCaldavEpoch(settings.caldavSyncEpoch),
@@ -2244,7 +2248,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
     return reply.view("admin/caldav-resync-confirm", {
-      title: `${tr(req, "adminCaldav.confirm.heading")} · 管理后台`,
+      title: tr(req, "adminCaldav.confirm.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/caldav",
     });
@@ -2301,7 +2305,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .from(schema.devices)
       .where(isNull(schema.devices.revokedAt));
     return reply.view("admin/api", {
-      title: "API · 管理后台",
+      title: tr(req, "adminApi.title") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/api",
       apiEnabled: settings.apiEnabled,
@@ -2349,7 +2353,7 @@ export async function adminRoutes(app: FastifyInstance) {
       serviceClients: z.string().max(2000).optional(),
       autoProvision: z.string().optional(),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("参数无效") + "#idp");
+    if (!body.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")) + "#idp");
     // Normalize the client list to a clean comma-separated string.
     const clients = (body.data.serviceClients || "")
       .split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).join(", ");
@@ -2359,7 +2363,7 @@ export async function adminRoutes(app: FastifyInstance) {
       idpApiAutoProvision: body.data.autoProvision === "on",
     });
     await audit(req, u.id, "idp_api.update", { targetType: "site_settings" });
-    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent("外部 IdP API 设置已保存") + "#idp");
+    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(tr(req, "adminApi.flash.idpSaved")) + "#idp");
   });
 
   app.post("/admin/api/toggle", async (req, reply) => {
@@ -2371,7 +2375,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // 这是止血阀:出事时它被按下的时刻,是事后复盘里最要紧的一条时间线。
     // 隔壁 apps.toggle / qr-login.toggle 都记,只有它漏了。
     await audit(req, u.id, enabled ? "api.enable" : "api.disable", { targetType: "site_settings" });
-    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? "API 已启用" : "API 已关闭（现存 token 暂停工作）"));
+    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? tr(req, "adminApi.flash.apiEnabled") : tr(req, "adminApi.flash.apiDisabled")));
   });
 
   // Master switch for the native iOS / Android / desktop APP feature.
@@ -2385,7 +2389,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ appsEnabled: enabled });
     await audit(req, u.id, enabled ? "apps.enable" : "apps.disable", { targetType: "site_settings" });
-    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? "原生 APP 同步已启用" : "原生 APP 同步已关闭（已绑定的 APP 立即失效）") + "#apps");
+    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? tr(req, "adminApi.flash.appSyncEnabled") : tr(req, "adminApi.flash.appSyncDisabled")) + "#apps");
   });
 
   // Master switch for the web 扫码登录 feature on the /login page. When
@@ -2399,7 +2403,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const enabled = (req.body as { enabled?: string } | undefined)?.enabled === "on";
     await updateSettings({ qrLoginEnabled: enabled });
     await audit(req, u.id, enabled ? "qr_login.enable" : "qr_login.disable", { targetType: "site_settings" });
-    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? "网页扫码登录已启用" : "网页扫码登录已关闭（/login 不再显示扫码标签）") + "#qr-login");
+    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(enabled ? tr(req, "adminApi.flash.qrEnabled") : tr(req, "adminApi.flash.qrDisabled")) + "#qr-login");
   });
 
   app.post("/admin/api/tokens", {
@@ -2414,9 +2418,9 @@ export async function adminRoutes(app: FastifyInstance) {
       scope: z.enum(["read", "write"]).default("write"),
       expiresInDays: z.coerce.number().int().min(0).max(3650).default(0),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     const targetRows = await db.select({ id: schema.users.id, email: schema.users.email }).from(schema.users).where(eq(schema.users.id, body.data.userId)).limit(1);
-    if (targetRows.length === 0) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("目标用户不存在"));
+    if (targetRows.length === 0) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminApi.flash.targetNotFound")));
     const issued = await createApiToken({
       userId: body.data.userId,
       label: body.data.label,
@@ -2438,7 +2442,7 @@ export async function adminRoutes(app: FastifyInstance) {
       },
     })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
     void notifySecurityEvent(body.data.userId, "token_created", { tokenLabel: body.data.label, tokenScope: body.data.scope }).catch(() => undefined);
-    return redirectWithFlash(reply, "/admin/api", { issuedToken: issued.plain, issuedLabel: body.data.label, success: "Token 已生成，仅显示一次，请立即复制" });
+    return redirectWithFlash(reply, "/admin/api", { issuedToken: issued.plain, issuedLabel: body.data.label, success: tr(req, "adminApi.flash.tokenIssued") });
   });
 
   app.post<{ Params: { id: string } }>("/admin/api/tokens/:id/revoke", async (req, reply) => {
@@ -2469,7 +2473,7 @@ export async function adminRoutes(app: FastifyInstance) {
       })).catch((err) => req.log.warn({ err }, "api_token_security_mail_failed"));
       void notifySecurityEvent(victim.ownerId, "token_revoked", { tokenLabel: victim.label, tokenScope: victim.scope === "read" ? "read" : "write" }).catch(() => undefined);
     }
-    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent("Token 已撤销"));
+    return redirectWithFlash(reply, "/admin/api?success=" + encodeURIComponent(tr(req, "adminApi.flash.tokenRevoked")));
   });
 
   // Rotate a token: mint a fresh secret, keep the old one valid for `graceDays`
@@ -2485,14 +2489,14 @@ export async function adminRoutes(app: FastifyInstance) {
       if (!u) return reply;
       if (!verifyCsrf(req, reply)) return;
       const id = z.string().uuid().safeParse(req.params.id);
-      if (!id.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("Token id 无效"));
+      if (!id.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminApi.flash.badTokenId")));
       // Optional override; default 7 days. Capped at 30 to prevent admins
       // accidentally setting "rotate but never expire" — that defeats the
       // point of rotation. Min 0 = revoke-immediately if the new key has
       // already been deployed and we want to cut the old one off.
       const graceRaw = (req.body?.graceDays ?? 7).toString();
       const grace = z.coerce.number().int().min(0).max(30).safeParse(graceRaw);
-      if (!grace.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent("grace 天数无效（0–30）"));
+      if (!grace.success) return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminApi.flash.badGrace")));
       try {
         // 轮换 = 给主人新签一个 Token，同样要通知主人（先查归属再轮换）。
         const [oldRow] = await db
@@ -2525,12 +2529,12 @@ export async function adminRoutes(app: FastifyInstance) {
         const feedback = {
           issuedToken: issued.plain,
           issuedLabel: "Rotated token",
-          success: `Token 已轮换，旧 token 还有 ${grace.data} 天有效期。立即复制新 token，仅显示一次。`,
+          success: tr(req, "adminApi.flash.tokenRotated", { days: grace.data }),
         };
         return redirectWithFlash(reply, "/admin/api", feedback);
       } catch (e) {
         const msg = e instanceof Error ? e.message : "rotate failed";
-        return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(`轮换失败：${msg}`));
+        return redirectWithFlash(reply, "/admin/api?error=" + encodeURIComponent(tr(req, "adminApi.flash.rotateFailed", { msg })));
       }
     },
   );
@@ -2541,7 +2545,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/security", {
-      title: "安全设置",
+      title: tr(req, "adminSecurity.heading"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -2564,7 +2568,7 @@ export async function adminRoutes(app: FastifyInstance) {
       captchaBuiltinMode: z.string().optional(),
     }).safeParse(req.body);
     if (!body.success || !isCaptchaProvider(body.data.captchaProvider)) {
-      return redirectWithFlash(reply, "/admin/security?error=" + encodeURIComponent("无效的人机验证配置") + "#captcha");
+      return redirectWithFlash(reply, "/admin/security?error=" + encodeURIComponent(tr(req, "adminSecurity.flash.badCaptcha")) + "#captcha");
     }
     const patch: { captchaProvider: string; captchaSiteKey: string | null; captchaSecret?: string | null; captchaBuiltinMode: string } = {
       captchaProvider: body.data.captchaProvider,
@@ -2578,7 +2582,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (secret) patch.captchaSecret = secret;
     await updateSettings(patch);
     await audit(req, u.id, "site.captcha.update", { targetType: "site_settings", details: { provider: body.data.captchaProvider } });
-    return redirectWithFlash(reply, "/admin/security?success=" + encodeURIComponent("人机验证设置已保存") + "#captcha");
+    return redirectWithFlash(reply, "/admin/security?success=" + encodeURIComponent(tr(req, "adminSecurity.flash.captchaSaved")) + "#captcha");
   });
 
   app.post("/admin/security", async (req, reply) => {
@@ -2598,7 +2602,7 @@ export async function adminRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/security?error=" + encodeURIComponent("无效的数值（次数 1-100；时长 1-10080 分钟）"));
+      return redirectWithFlash(reply, "/admin/security?error=" + encodeURIComponent(tr(req, "adminSecurity.flash.badNumbers")));
     }
     await updateSettings({
       riskLoginEnabled: body.data.riskLoginEnabled === "on",
@@ -2610,7 +2614,7 @@ export async function adminRoutes(app: FastifyInstance) {
       ssoSatisfiesMfa: body.data.ssoSatisfiesMfa === "on",
       embedEnabled: body.data.embedEnabled === "on",
     });
-    return redirectWithFlash(reply, "/admin/security?success=" + encodeURIComponent("安全设置已保存"));
+    return redirectWithFlash(reply, "/admin/security?success=" + encodeURIComponent(tr(req, "adminSecurity.flash.saved")));
   });
 
   // ---------- Invite-based registration (registrationMode === "invite") ----------
@@ -2622,7 +2626,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const settings = await getSettings();
     const invites = await listInvites();
     return reply.view("admin/invites", {
-      title: "邀请注册 · 管理后台",
+      title: tr(req, "adminInvites.heading") + tr(req, "admin.titleSuffix"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -2645,17 +2649,17 @@ export async function adminRoutes(app: FastifyInstance) {
       sendEmail: z.string().optional(),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("参数无效") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")) + "#list");
     }
     const rawEmail = body.data.email?.trim().toLowerCase() || "";
     // An email is optional, but if present it must be valid (it then binds the invite).
     if (rawEmail && !z.string().email().safeParse(rawEmail).success) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("收件邮箱格式不正确") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.badEmail")) + "#list");
     }
     const email = rawEmail || null;
     const wantsEmail = body.data.sendEmail === "on";
     if (wantsEmail && !email) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("勾选「立即发送邮件」时必须填写收件邮箱") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.sendNeedsEmail")) + "#list");
     }
     const invite = await createInvite({
       createdBy: user.id,
@@ -2674,13 +2678,13 @@ export async function adminRoutes(app: FastifyInstance) {
       try {
         await sendMail(inviteSignupMail({ to: email, inviteUrl, siteName: settings.siteName, inviterName: user.displayName ?? undefined }));
         await audit(req, user.id, "invite.email", { targetType: "signup_invite", targetId: invite.token, details: { to: email } });
-        return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(`邀请已创建并发送到 ${email}`) + "#list");
+        return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(tr(req, "adminInvites.flash.createdSent", { email })) + "#list");
       } catch (err) {
         req.log.warn({ err }, "invite_email_send_failed");
-        return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("邀请已创建，但邮件发送失败（请检查 SMTP 设置）") + "#list");
+        return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.createdMailFailed")) + "#list");
       }
     }
-    return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent("邀请链接已生成") + "#list");
+    return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(tr(req, "adminInvites.flash.created")) + "#list");
   });
 
   app.post<{ Params: { token: string } }>("/admin/invites/:token/revoke", async (req, reply) => {
@@ -2689,7 +2693,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     await revokeInvite(req.params.token);
     await audit(req, user.id, "invite.revoke", { targetType: "signup_invite", targetId: req.params.token });
-    return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent("邀请已撤销") + "#list");
+    return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(tr(req, "adminInvites.flash.revoked")) + "#list");
   });
 
   app.post<{ Params: { token: string } }>("/admin/invites/:token/email", async (req, reply) => {
@@ -2699,25 +2703,25 @@ export async function adminRoutes(app: FastifyInstance) {
     const body = z.object({ to: z.string().max(254).optional() }).safeParse(req.body);
     const v = await validateInvite(req.params.token);
     if (!v.ok) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("该邀请已失效，无法发送") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.expired")) + "#list");
     }
     const to = ((body.success && body.data.to?.trim().toLowerCase()) || v.invite.email || "").trim();
     if (!to || !z.string().email().safeParse(to).success) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("请填写合法的收件邮箱") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.badRecipient")) + "#list");
     }
     // If the invite is email-bound, only send to that address.
     if (v.invite.email && to !== v.invite.email) {
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("该邀请仅限指定邮箱，不能发往其他地址") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.boundEmail")) + "#list");
     }
     const settings = await getSettings();
     const inviteUrl = `${inviteBaseUrl}/register?invite=${encodeURIComponent(req.params.token)}`;
     try {
       await sendMail(inviteSignupMail({ to, inviteUrl, siteName: settings.siteName, inviterName: user.displayName ?? undefined }));
       await audit(req, user.id, "invite.email", { targetType: "signup_invite", targetId: req.params.token, details: { to } });
-      return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(`邀请已发送到 ${to}`) + "#list");
+      return redirectWithFlash(reply, "/admin/invites?success=" + encodeURIComponent(tr(req, "adminInvites.flash.sent", { to })) + "#list");
     } catch (err) {
       req.log.warn({ err }, "invite_email_send_failed");
-      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent("邮件发送失败（请检查 SMTP 设置）") + "#list");
+      return redirectWithFlash(reply, "/admin/invites?error=" + encodeURIComponent(tr(req, "adminInvites.flash.mailFailed")) + "#list");
     }
   });
 
@@ -2728,24 +2732,24 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!verifyCsrf(req, reply)) return;
     const body = z.object({ to: z.string().email() }).safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent("请输入合法的邮箱地址"));
+      return redirectWithFlash(reply, "/admin/smtp?error=" + encodeURIComponent(tr(req, "adminSmtp.flash.badEmail")));
     }
     const to = body.data.to;
     const sent: string[] = [];
     const failed: string[] = [];
     const tasks: { label: string; build: () => ReturnType<typeof verificationCodeMail> }[] = [
-      { label: "1. 邮箱验证码（注册）", build: () => verificationCodeMail(to, "123456") },
-      { label: "2. 密码重置", build: () => passwordResetMail(to, "demo-token-not-real-zG7yQpKxL3mN9vBdE2hRsT4uW6f") },
-      { label: "3. 新登录提醒", build: () => loginAlertMail(to, {
+      { label: tr(req, "adminSmtp.demo.1"), build: () => verificationCodeMail(to, "123456") },
+      { label: tr(req, "adminSmtp.demo.2"), build: () => passwordResetMail(to, "demo-token-not-real-zG7yQpKxL3mN9vBdE2hRsT4uW6f") },
+      { label: tr(req, "adminSmtp.demo.3"), build: () => loginAlertMail(to, {
         email: to, displayName: "示例用户", loginAt: new Date(), ip: "203.0.113.42",
         userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15",
         method: "password", location: "上海",
       }) },
-      { label: "4. 日历邀请协作", build: () => calendarInviteMail(to, {
+      { label: tr(req, "adminSmtp.demo.4"), build: () => calendarInviteMail(to, {
         calendarName: "工作日历", inviterName: "示例管理员", role: "editor",
         message: "把这个加进你的日历，每周一会议都在这里。", token: "demo-invitation-token",
       }) },
-      { label: "5. 欢迎邮件", build: () => welcomeMail(to, "示例用户") },
+      { label: tr(req, "adminSmtp.demo.5"), build: () => welcomeMail(to, "示例用户") },
     ];
     for (const t of tasks) {
       try {
@@ -2757,8 +2761,8 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     }
     const msg = failed.length
-      ? `已发 ${sent.length} 封，失败 ${failed.length} 封（${failed.join(", ")}）—— 检查 SMTP 设置`
-      : `已发送 5 封样式邮件到 ${to}，请查收`;
+      ? tr(req, "adminSmtp.flash.styleSentPartial", { sent: sent.length, failed: failed.length, list: failed.join(", ") })
+      : tr(req, "adminSmtp.flash.styleSentOk", { to });
     return redirectWithFlash(reply, "/admin/smtp?success=" + encodeURIComponent(msg));
   });
 
@@ -2777,7 +2781,7 @@ export async function adminRoutes(app: FastifyInstance) {
       html: renderPreviewHtml(t.key, "you@example.com", now, {}) ?? "",
     }));
     return reply.view("admin/email-templates", {
-      title: "邮件模板 · 管理后台",
+      title: tr(req, "adminEmailTemplates.heading") + tr(req, "admin.titleSuffix"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -2817,22 +2821,22 @@ export async function adminRoutes(app: FastifyInstance) {
       emailFooterNote: z.string().max(100).optional(),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent("参数无效"));
+      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     }
     const color = normalizeHexColor(body.data.emailBrandColor);
     if (body.data.emailBrandColor && !color) {
-      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent("主题色必须是合法的十六进制颜色，例如 #4f46e5"));
+      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent(tr(req, "adminEmailTemplates.flash.badColor")));
     }
     const patch: { siteName?: string; emailBrandColor?: string; emailFooterNote?: string } = {};
     if (body.data.siteName?.trim()) patch.siteName = body.data.siteName.trim();
     if (color) patch.emailBrandColor = color;
-    if (body.data.emailFooterNote != null) patch.emailFooterNote = body.data.emailFooterNote.trim() || "日历共享平台";
+    if (body.data.emailFooterNote != null) patch.emailFooterNote = body.data.emailFooterNote.trim() || tr(req, "adminEmailTemplates.footerDefault");
     await updateSettings(patch);
     await audit(req, user.id, "site.email_branding.update", {
       targetType: "site_settings",
       details: { brandColor: patch.emailBrandColor ?? null, footerNote: patch.emailFooterNote ?? null },
     });
-    return redirectWithFlash(reply, "/admin/email-templates?success=" + encodeURIComponent("邮件品牌已保存，下一封邮件即生效"));
+    return redirectWithFlash(reply, "/admin/email-templates?success=" + encodeURIComponent(tr(req, "adminEmailTemplates.flash.saved")));
   });
 
   app.post("/admin/email-templates/send", async (req, reply) => {
@@ -2845,7 +2849,7 @@ export async function adminRoutes(app: FastifyInstance) {
       templates: z.union([z.string(), z.array(z.string())]).optional(),
     }).safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent("请输入合法的邮箱地址"));
+      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent(tr(req, "adminEmailTemplates.flash.badEmail")));
     }
     const to = body.data.to;
     // Selective send: only the checked templates. No selection = nothing to do.
@@ -2854,7 +2858,7 @@ export async function adminRoutes(app: FastifyInstance) {
     );
     const chosen = EMAIL_PREVIEW_TEMPLATES.filter((t) => wanted.has(t.key));
     if (chosen.length === 0) {
-      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent("请至少勾选一种要发送的模板"));
+      return redirectWithFlash(reply, "/admin/email-templates?error=" + encodeURIComponent(tr(req, "adminEmailTemplates.flash.pickTemplate")));
     }
     const now = new Date();
     let sent = 0;
@@ -2869,8 +2873,8 @@ export async function adminRoutes(app: FastifyInstance) {
       }
     }
     const msg = failed.length
-      ? `已发 ${sent} 封，失败 ${failed.length} 封（${failed.join("、")}）—— 检查 SMTP 设置`
-      : `已把 ${sent} 种模板邮件发送到 ${to}，请查收`;
+      ? tr(req, "adminEmailTemplates.flash.sentPartial", { sent, failed: failed.length, list: failed.join(tr(req, "adminEmailTemplates.flash.enumSep")) })
+      : tr(req, "adminEmailTemplates.flash.sentOk", { sent, to });
     return redirectWithFlash(reply, "/admin/email-templates?success=" + encodeURIComponent(msg));
   });
 
@@ -2880,7 +2884,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     const settings = await getSettings();
     return reply.view("admin/theme", {
-      title: "外观",
+      title: tr(req, "adminTheme.title"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -2901,10 +2905,10 @@ export async function adminRoutes(app: FastifyInstance) {
       })
       .safeParse(req.body);
     if (!body.success) {
-      return redirectWithFlash(reply, "/admin/theme?error=" + encodeURIComponent("无效的选项"));
+      return redirectWithFlash(reply, "/admin/theme?error=" + encodeURIComponent(tr(req, "adminTheme.flash.badOption")));
     }
     await updateSettings({ themePalette: body.data.palette, themeDensity: body.data.density });
-    return redirectWithFlash(reply, "/admin/theme?success=" + encodeURIComponent("外观已更新"));
+    return redirectWithFlash(reply, "/admin/theme?success=" + encodeURIComponent(tr(req, "adminTheme.flash.saved")));
   });
 
   // ---------- Self-update (admin only) ----------
@@ -2927,7 +2931,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const hasGitee = remotes.some((r) => r.url.includes("gitee.com"));
     const hasGithub = remotes.some((r) => r.url.includes("github.com"));
     return reply.view("admin/update", {
-      title: "系统更新",
+      title: tr(req, "adminUpdate.heading"),
       user,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -2964,7 +2968,7 @@ export async function adminRoutes(app: FastifyInstance) {
       const status = await checkForUpdates(await resolveRemoteParam(req));
       return reply.send({ ok: true, status });
     } catch (err) {
-      return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : "未知错误" });
+      return reply.code(500).send({ ok: false, error: err instanceof Error ? err.message : tr(req, "adminUpdate.err.unknown") });
     }
   });
 
@@ -2983,14 +2987,14 @@ export async function adminRoutes(app: FastifyInstance) {
     const name = String(req.body?.name || "").trim();
     const url = String(req.body?.url || "").trim();
     if (!/^[a-zA-Z0-9_-]{1,32}$/.test(name)) {
-      return reply.code(400).send({ ok: false, error: "remote 名称不合法（只允许字母/数字/-/_，1-32 字符）" });
+      return reply.code(400).send({ ok: false, error: tr(req, "adminUpdate.err.badRemoteName") });
     }
     if (url && !/^https?:\/\//i.test(url)) {
-      return reply.code(400).send({ ok: false, error: "URL 必须以 http(s):// 开头" });
+      return reply.code(400).send({ ok: false, error: tr(req, "adminUpdate.err.badUrl") });
     }
     const result = await addRemote(name, url || undefined);
     if (!result.ok) {
-      return reply.code(500).send({ ok: false, error: result.error || "git remote 操作失败" });
+      return reply.code(500).send({ ok: false, error: result.error || tr(req, "adminUpdate.err.remoteFailed") });
     }
     await audit(req, user.id, "update.add_remote", { details: { name, url: result.url } });
     return reply.send({ ok: true, name, url: result.url });
@@ -3010,7 +3014,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     if (updateInFlight) {
-      return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 于 ${updateInFlight.startedAt.toISOString()} 启动）` });
+      return reply.code(409).send({ ok: false, error: tr(req, "adminUpdate.err.inFlight", { actor: updateInFlight.actorEmail, at: updateInFlight.startedAt.toISOString() }) });
     }
     updateInFlight = { startedAt: new Date(), actorEmail: user.email };
     const remote = await resolveRemoteParam(req);
@@ -3034,7 +3038,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
     if (!verifyCsrf(req, reply)) return;
     if (updateInFlight) {
-      reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 启动）` });
+      reply.code(409).send({ ok: false, error: tr(req, "adminUpdate.err.inFlightNoTime", { actor: updateInFlight.actorEmail }) });
       return;
     }
     updateInFlight = { startedAt: new Date(), actorEmail: user.email };
@@ -3054,7 +3058,7 @@ export async function adminRoutes(app: FastifyInstance) {
         if (ev.type === "final") finalOk = ev.ok;
       }
     } catch (err) {
-      write({ type: "final", ok: false, error: err instanceof Error ? err.message : "未知错误" });
+      write({ type: "final", ok: false, error: err instanceof Error ? err.message : tr(req, "adminUpdate.err.unknown") });
     } finally {
       await audit(req, user.id, finalOk ? "update.apply_done" : "update.apply_failed");
       reply.raw.end();
@@ -3089,10 +3093,10 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) return reply;
 
     if (!req.isMultipart()) {
-      return reply.code(400).send({ ok: false, error: "请求必须是 multipart/form-data" });
+      return reply.code(400).send({ ok: false, error: tr(req, "adminUpdate.err.needMultipart") });
     }
     if (updateInFlight) {
-      return reply.code(409).send({ ok: false, error: `已有更新进行中（由 ${updateInFlight.actorEmail} 启动）` });
+      return reply.code(409).send({ ok: false, error: tr(req, "adminUpdate.err.inFlightNoTime", { actor: updateInFlight.actorEmail }) });
     }
 
     // 落盘到临时目录：tarball 直接流式写盘（大文件不进内存），sig 作为第二个文件
@@ -3140,10 +3144,10 @@ export async function adminRoutes(app: FastifyInstance) {
                 part.file.on("data", (chunk: Buffer) => {
                   bytes += chunk.length;
                   if (bytes > MAX_UPLOAD_BYTES) {
-                    reject(new Error("文件过大（>100MB）"));
+                    reject(new Error(tr(req, "adminUpdate.err.tooBig")));
                   }
                 });
-                part.file.on("limit", () => reject(new Error("文件过大（>100MB）")));
+                part.file.on("limit", () => reject(new Error(tr(req, "adminUpdate.err.tooBig"))));
                 part.file.on("error", reject);
                 ws.on("error", reject);
                 ws.on("finish", () => resolve());
@@ -3157,7 +3161,7 @@ export async function adminRoutes(app: FastifyInstance) {
             }
             // @fastify/multipart：若 fileSize 触顶，part.file.truncated 会是 true
             if (!aborted && (part.file as unknown as { truncated?: boolean }).truncated) {
-              aborted = "文件过大（>100MB）";
+              aborted = tr(req, "adminUpdate.err.tooBig");
             }
           }
         } else if (part.type === "field") {
@@ -3184,11 +3188,11 @@ export async function adminRoutes(app: FastifyInstance) {
         return reply.code(413).send({ ok: false, error: aborted });
       }
       if (!sawTarball || !tarballPath) {
-        return reply.code(400).send({ ok: false, error: "缺少更新包文件（.tar.gz）" });
+        return reply.code(400).send({ ok: false, error: tr(req, "adminUpdate.err.missingPackage") });
       }
       if (!sigBase64) {
         await audit(req, user.id, "update.upload_rejected", { details: { reason: "missing_signature", file: tarballName.slice(0, 200) } });
-        return reply.code(400).send({ ok: false, error: "缺少签名（请上传对应的 .sig 文件，或填入 signature 字段）" });
+        return reply.code(400).send({ ok: false, error: tr(req, "adminUpdate.err.missingSignature") });
       }
 
       // 拿到锁，开始应用。SSE 流式回传每一步进度。
@@ -3215,7 +3219,7 @@ export async function adminRoutes(app: FastifyInstance) {
           if (ev.type === "final") finalOk = ev.ok;
         }
       } catch (err) {
-        write({ type: "final", ok: false, error: err instanceof Error ? err.message : "未知错误" });
+        write({ type: "final", ok: false, error: err instanceof Error ? err.message : tr(req, "adminUpdate.err.unknown") });
       } finally {
         if (sigVerifyFailed) {
           await audit(req, user.id, "update.upload_signature_rejected", { details: { file: tarballName.slice(0, 200) } });
@@ -3269,7 +3273,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webhookDeliveries.createdAt))
       .limit(50);
     return reply.view("admin/webhooks", {
-      title: "Webhooks · 管理后台",
+      title: tr(req, "adminWebhooks.title") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/webhooks",
       hooks: hooks.map((h) => ({ ...h, eventsList: Array.isArray(h.events) ? h.events : [] })),
@@ -3291,7 +3295,7 @@ export async function adminRoutes(app: FastifyInstance) {
       events: z.union([z.string(), z.array(z.string())]).optional(),
       secret: z.string().max(200).optional().transform((v) => v?.trim() || null),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/webhooks?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/webhooks?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     const events = Array.isArray(body.data.events)
       ? body.data.events
       : (body.data.events ? [body.data.events] : ["event.created", "event.updated", "event.deleted"]);
@@ -3302,7 +3306,7 @@ export async function adminRoutes(app: FastifyInstance) {
       secret: body.data.secret,
     });
     await audit(req, me.id, "webhook.create", { targetType: "webhook", details: { label: body.data.label, url: body.data.url } });
-    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent("已添加 Webhook"));
+    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent(tr(req, "adminWebhooks.flash.added")));
   });
 
   app.post("/admin/webhooks/:id/toggle", async (req, reply) => {
@@ -3314,7 +3318,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
     if (!hook) return reply.redirect("/admin/webhooks");
     await db.update(schema.webhooks).set({ enabled: !hook.enabled }).where(eq(schema.webhooks.id, id.data));
-    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent(hook.enabled ? "已暂停" : "已启用"));
+    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent(hook.enabled ? tr(req, "adminWebhooks.flash.paused") : tr(req, "adminWebhooks.flash.enabled")));
   });
 
   app.post("/admin/webhooks/:id/delete", async (req, reply) => {
@@ -3327,7 +3331,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!hook) return reply.redirect("/admin/webhooks");
     await db.delete(schema.webhooks).where(eq(schema.webhooks.id, id.data));
     await audit(req, me.id, "webhook.delete", { targetType: "webhook", details: { label: hook.label } });
-    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent("已删除"));
+    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent(tr(req, "adminWebhooks.flash.deleted")));
   });
 
   app.post("/admin/webhooks/:id/test", async (req, reply) => {
@@ -3343,7 +3347,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // so we directly enqueue a one-off delivery here instead.
     const { dispatchTestWebhook } = await import("../lib/webhooks.js");
     await dispatchTestWebhook(hook).catch(() => undefined);
-    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent("测试请求已发送，下方记录里看结果"));
+    return redirectWithFlash(reply, "/admin/webhooks?success=" + encodeURIComponent(tr(req, "adminWebhooks.flash.testSent")));
   });
 
   // List deliveries for one webhook — full history with payload + response.
@@ -3354,7 +3358,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const id = z.string().uuid().safeParse((req.params as { id: string }).id);
     if (!id.success) return reply.redirect("/admin/webhooks");
     const [hook] = await db.select().from(schema.webhooks).where(eq(schema.webhooks.id, id.data)).limit(1);
-    if (!hook) return redirectWithFlash(reply, "/admin/webhooks?error=" + encodeURIComponent("Webhook 不存在"));
+    if (!hook) return redirectWithFlash(reply, "/admin/webhooks?error=" + encodeURIComponent(tr(req, "adminWebhooks.flash.notFound")));
     const deliveries = await db
       .select()
       .from(schema.webhookDeliveries)
@@ -3362,7 +3366,7 @@ export async function adminRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.webhookDeliveries.createdAt))
       .limit(200);
     return reply.view("admin/webhook-deliveries", {
-      title: `${hook.label} · Webhook 投递记录 · 管理后台`,
+      title: `${hook.label} · ${tr(req, "adminWebhooks.deliveries.pageTitle")}${tr(req, "admin.titleSuffix")}`,
       user: me,
       csrfToken: csrfTokenFor(req),
       flash: readFlash(req, reply),
@@ -3389,7 +3393,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!dId.success || !hId.success) return reply.redirect("/admin/webhooks");
     const { retryDelivery } = await import("../lib/webhooks.js");
     const result = await retryDelivery(dId.data);
-    const msg = result.ok ? "重试成功" : `重试失败 (HTTP ${result.statusCode ?? "?"})`;
+    const msg = result.ok ? tr(req, "adminWebhooks.flash.retryOk") : tr(req, "adminWebhooks.flash.retryFailed", { status: result.statusCode ?? "?" });
     return redirectWithFlash(reply, `/admin/webhooks/${hId.data}/deliveries`, result.ok ? { success: msg } : { error: msg });
   });
 
@@ -3426,7 +3430,7 @@ export async function adminRoutes(app: FastifyInstance) {
       reply.clearCookie("bwc_oauth_secret", { path: "/admin/oauth-apps" });
     }
     return reply.view("admin/oauth-apps", {
-      title: "OAuth 应用 · 管理后台",
+      title: tr(req, "adminOauthApps.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/oauth-apps",
       apps: apps.map((a) => ({
@@ -3435,7 +3439,7 @@ export async function adminRoutes(app: FastifyInstance) {
         scopesList: a.allowedScopes as string[],
         createdAtLocal: localTimeIso(a.createdAt),
       })),
-      scopes: OAUTH_SCOPES,
+      scopes: Object.fromEntries(Object.entries(OAUTH_SCOPES).map(([k, v]) => [k, OAUTH_SCOPE_DESC_KEYS[k] ? tr(req, OAUTH_SCOPE_DESC_KEYS[k]) : v])),
       issuedSecret, issuedClientId,
       baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
       // 总闸默认是**关**的(schema.ts 的 api_enabled default false),而总闸
@@ -3456,14 +3460,14 @@ export async function adminRoutes(app: FastifyInstance) {
       redirectUris: z.string().min(1).max(2000),
       scopes: z.union([z.string(), z.array(z.string())]).optional(),
     }).safeParse(req.body);
-    if (!body.success) return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent("参数无效"));
+    if (!body.success) return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent(tr(req, "adminCommon.invalidParams")));
     const uris = body.data.redirectUris.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
     for (const u of uris) {
-      try { new URL(u); } catch { return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent("redirect_uri 不是合法 URL：" + u)); }
+      try { new URL(u); } catch { return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent(tr(req, "adminOauthApps.flash.badRedirect", { url: u }))); }
     }
     const requestedScopes = Array.isArray(body.data.scopes) ? body.data.scopes : (body.data.scopes ? [body.data.scopes] : ["read:events"]);
     const allowed = requestedScopes.filter((s): s is OAuthScope => s in OAUTH_SCOPES);
-    if (allowed.length === 0) return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent("至少要勾一个 scope"));
+    if (allowed.length === 0) return redirectWithFlash(reply, "/admin/oauth-apps?error=" + encodeURIComponent(tr(req, "adminOauthApps.flash.needScope")));
     const created = await createOAuthClient({
       name: body.data.name,
       description: body.data.description,
@@ -3477,7 +3481,7 @@ export async function adminRoutes(app: FastifyInstance) {
     reply.setCookie("bwc_oauth_secret", JSON.stringify({ s: created.clientSecret, c: created.clientId }), {
       httpOnly: true, sameSite: "lax", secure: env.NODE_ENV === "production", path: "/admin/oauth-apps", maxAge: 120, signed: true,
     });
-    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent("应用已创建，密钥仅显示一次，请立即复制"));
+    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent(tr(req, "adminOauthApps.flash.created")));
   });
 
   app.post("/admin/oauth-apps/:id/toggle", async (req, reply) => {
@@ -3490,7 +3494,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!app) return reply.redirect("/admin/oauth-apps");
     await db.update(schema.oauthClients).set({ enabled: !app.enabled }).where(eq(schema.oauthClients.id, id.data));
     await audit(req, me.id, app.enabled ? "oauth_app.disable" : "oauth_app.enable", { targetType: "oauth_client", targetId: id.data });
-    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent(app.enabled ? "已禁用" : "已启用"));
+    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent(app.enabled ? tr(req, "adminOauthApps.flash.disabled") : tr(req, "adminOauthApps.flash.enabled")));
   });
 
   app.post("/admin/oauth-apps/:id/delete", async (req, reply) => {
@@ -3504,7 +3508,7 @@ export async function adminRoutes(app: FastifyInstance) {
     // Cascade will drop authorization_codes and access_tokens.
     await db.delete(schema.oauthClients).where(eq(schema.oauthClients.id, id.data));
     await audit(req, me.id, "oauth_app.delete", { targetType: "oauth_client", details: { name: app.name } });
-    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent("应用已删除（已撤销所有访问令牌）"));
+    return redirectWithFlash(reply, "/admin/oauth-apps?success=" + encodeURIComponent(tr(req, "adminOauthApps.flash.deleted")));
   });
 
 
@@ -3534,7 +3538,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   /** 这个平台现在**实际生效**的是哪一份、长什么样、从哪儿来。
    *  站长最需要知道的就是这个,而以前后台完全看不到。 */
-  async function describeClientRelease(platform: ClientPlatform) {
+  async function describeClientRelease(req: FastifyRequest, platform: ClientPlatform) {
     const fs = await import("node:fs/promises");
     const live = platform === "android"
       ? await (await import("../lib/android_release.js")).getLatestRelease()
@@ -3563,7 +3567,7 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     return {
       platform,
-      label: platform === "android" ? "安卓" : "桌面端",
+      label: tr(req, platform === "android" ? "adminClientRelease.platform.android" : "adminClientRelease.platform.desktop"),
       // 「没数据」也要有骨架:整块消失的话,「还没发布过」和「这一页坏了」
       // 看起来一模一样。
       versionName: live?.versionName ?? null,
@@ -3587,10 +3591,10 @@ export async function adminRoutes(app: FastifyInstance) {
     const settings = await getSettings();
     const { announcementFromSettings } = await import("../lib/ios_announcement.js");
     return reply.view("admin/client-release", {
-      title: "客户端更新 · 管理后台",
+      title: tr(req, "adminClientRelease.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
       activeNav: "/admin/client-release",
-      platforms: [await describeClientRelease("android"), await describeClientRelease("desktop")],
+      platforms: [await describeClientRelease(req, "android"), await describeClientRelease(req, "desktop")],
       binaries: {
         android: await listBinaries("android"),
         desktop: await listBinaries("desktop"),
@@ -3629,7 +3633,7 @@ export async function adminRoutes(app: FastifyInstance) {
       body: z.string().max(2000).optional(),
       storeUrl: z.string().max(500).optional(),
     }).safeParse(req.body);
-    if (!body.success) return back("公告内容太长了 —— 没有保存");
+    if (!body.success) return back(tr(req, "adminClientRelease.flash.announcementTooLong"));
     const enabled = body.data.enabled === "on";
     const version = (body.data.version ?? "").trim();
     const title = (body.data.title ?? "").trim();
@@ -3638,11 +3642,11 @@ export async function adminRoutes(app: FastifyInstance) {
     if (enabled) {
       const { isPlausibleAppVersion } = await import("../lib/ios_announcement.js");
       if (!isPlausibleAppVersion(version)) {
-        return back("版本号要写成 1.8.0 这种数字点分形态，客户端才比得出大小 —— 没有保存");
+        return back(tr(req, "adminClientRelease.flash.badVersion"));
       }
-      if (!title && !text) return back("标题和正文至少填一个 —— 没有保存");
+      if (!title && !text) return back(tr(req, "adminClientRelease.flash.announcementEmpty"));
       if (storeUrl && !storeUrl.startsWith("https://")) {
-        return back("商店链接必须是 https:// —— 没有保存");
+        return back(tr(req, "adminClientRelease.flash.badStoreUrl"));
       }
     }
     await updateSettings({
@@ -3659,7 +3663,7 @@ export async function adminRoutes(app: FastifyInstance) {
       targetType: "client_release", targetId: "ios",
       details: { enabled, version },
     });
-    return back(enabled ? `iOS 公告已发布：${version}` : "iOS 公告已关闭", true);
+    return back(enabled ? tr(req, "adminClientRelease.flash.announcementPublished", { version }) : tr(req, "adminClientRelease.flash.announcementOff"), true);
   });
 
   app.post<{ Params: { platform: string } }>("/admin/client-release/:platform", {
@@ -3674,11 +3678,11 @@ export async function adminRoutes(app: FastifyInstance) {
     const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
     if (!p.success) return reply.code(400).send("bad_platform");
     const body = z.object({ manifest: z.string().min(2).max(200_000) }).safeParse(req.body);
-    if (!body.success) return back("内容是空的 —— 没有保存");
+    if (!body.success) return back(tr(req, "adminClientRelease.flash.emptyContent"));
 
     let parsed: unknown;
     try { parsed = JSON.parse(body.data.manifest); }
-    catch { return back("这不是合法的 JSON —— 没有保存"); }
+    catch { return back(tr(req, "adminClientRelease.flash.badJson")); }
 
     // **校验复用读取侧那一份。** 自己写一套「看起来差不多」的,就会出现
     // 「页面说保存成功、而 /api/app/*/latest 直接 404」—— 因为真正决定成败
@@ -3688,7 +3692,7 @@ export async function adminRoutes(app: FastifyInstance) {
       ? (await import("../lib/android_release.js")).parseAndroidManifest(parsed, now)
       : (await import("../lib/desktop_release.js")).parseDesktopManifest(parsed, now);
     if (!ok) {
-      return back("这份清单读取侧认不出来（缺 versionCode / versionName，或者没有任何可下载的资产）—— 没有保存");
+      return back(tr(req, "adminClientRelease.flash.manifestUnreadable"));
     }
 
     // 下载地址只许 https。这个地址会被推给所有装了本站 App 的用户 ——
@@ -3701,7 +3705,7 @@ export async function adminRoutes(app: FastifyInstance) {
       : Object.values((ok as { assets: Record<string, { downloadUrl: string; mirrorUrl: string }> }).assets)
           .flatMap((a) => [a.downloadUrl, a.mirrorUrl]);
     const bad = urls.filter((x) => x && !x.startsWith("https://"));
-    if (bad.length) return back("下载地址必须是 https:// —— 没有保存：" + bad.join("、"));
+    if (bad.length) return back(tr(req, "adminClientRelease.flash.badDownloadUrl", { list: bad.join(tr(req, "adminClientRelease.flash.enumSep")) }));
 
     await mkdir(path.dirname(CLIENT_MANIFEST_RUNTIME[p.data]), { recursive: true });
     // 存**规范化之后**那份,不是原文 —— 存原文的话,页面上显示的和接口实际
@@ -3711,7 +3715,7 @@ export async function adminRoutes(app: FastifyInstance) {
       targetType: "client_release", targetId: p.data,
       details: { versionCode: ok.versionCode, versionName: ok.versionName },
     });
-    return back(`已保存${p.data === "android" ? "安卓" : "桌面端"}清单：${ok.versionName}（${ok.versionCode}）`, true);
+    return back(tr(req, "adminClientRelease.flash.manifestSaved", { platform: tr(req, p.data === "android" ? "adminClientRelease.platform.android" : "adminClientRelease.platform.desktop"), versionName: ok.versionName, versionCode: ok.versionCode }), true);
   });
 
   // 灰度比例的快捷设置（含「一键全量」= 设成 100）。放量是发布现场的
@@ -3730,19 +3734,19 @@ export async function adminRoutes(app: FastifyInstance) {
     const p = z.enum(["android", "desktop"]).safeParse(req.params.platform);
     if (!p.success) return reply.code(400).send("bad_platform");
     const body = z.object({ percent: z.coerce.number().int().min(0).max(100) }).safeParse(req.body);
-    if (!body.success) return back("灰度比例要是 0–100 的整数 —— 没有保存");
+    if (!body.success) return back(tr(req, "adminClientRelease.flash.badRollout"));
     const lib = p.data === "android"
       ? await import("../lib/android_release.js")
       : await import("../lib/desktop_release.js");
     const current = await lib.getLatestRelease();
-    if (!current) return back("还没有可放量的清单 —— 先发布一份再设灰度");
+    if (!current) return back(tr(req, "adminClientRelease.flash.noManifestYet"));
     const now = new Date().toISOString();
     const ok = p.data === "android"
       ? (lib as typeof import("../lib/android_release.js")).parseAndroidManifest(
           { ...current, rolloutPercent: body.data.percent }, now)
       : (lib as typeof import("../lib/desktop_release.js")).parseDesktopManifest(
           { ...current, rolloutPercent: body.data.percent }, now);
-    if (!ok) return back("当前清单读取侧认不出来 —— 没有保存");
+    if (!ok) return back(tr(req, "adminClientRelease.flash.currentUnreadable"));
     await mkdir(path.dirname(CLIENT_MANIFEST_RUNTIME[p.data]), { recursive: true });
     await writeFile(CLIENT_MANIFEST_RUNTIME[p.data], JSON.stringify(ok, null, 2) + "\n", "utf8");
     await audit(req, u.id, "app_manifest.rollout_set", {
@@ -3751,8 +3755,8 @@ export async function adminRoutes(app: FastifyInstance) {
     });
     return back(
       body.data.percent >= 100
-        ? `${p.data === "android" ? "安卓" : "桌面端"}已全量发布（100%）`
-        : `${p.data === "android" ? "安卓" : "桌面端"}灰度已设为 ${body.data.percent}%`,
+        ? tr(req, "adminClientRelease.flash.rolloutFull", { platform: tr(req, p.data === "android" ? "adminClientRelease.platform.android" : "adminClientRelease.platform.desktop") })
+        : tr(req, "adminClientRelease.flash.rolloutSet", { platform: tr(req, p.data === "android" ? "adminClientRelease.platform.android" : "adminClientRelease.platform.desktop"), percent: body.data.percent }),
       true,
     );
   });
@@ -3769,7 +3773,7 @@ export async function adminRoutes(app: FastifyInstance) {
     await audit(req, u.id, "app_manifest.override_cleared", {
       targetType: "client_release", targetId: p.data,
     });
-    return redirectWithFlash(reply, "/admin/client-release?success=" + encodeURIComponent("已清除覆盖，恢复成随代码走的那一份"));
+    return redirectWithFlash(reply, "/admin/client-release?success=" + encodeURIComponent(tr(req, "adminClientRelease.flash.overrideCleared")));
   });
 
 
@@ -3928,12 +3932,12 @@ export async function adminRoutes(app: FastifyInstance) {
 
         const fname = (part.filename || "").trim();
         if (!nameOk(fname)) {
-          rejected = { code: 400, msg: `文件名不合规：${fname.slice(0, 80)}。只能用英文字母、数字、点、下划线和连字符，扩展名必须是 ${platform === "android" ? ".apk" : ".dmg / .msi / .deb"}。` };
+          rejected = { code: 400, msg: tr(req, "adminClientRelease.flash.uploadBadName", { name: fname.slice(0, 80), ext: platform === "android" ? ".apk" : ".dmg / .msi / .deb" }) };
           part.file.resume();
           continue;
         }
         if (binaryUploadsInFlight.has(`${platform}/${fname}`)) {
-          rejected = { code: 409, msg: `${fname} 正在被另一个上传占用，请稍候再试。` };
+          rejected = { code: 409, msg: tr(req, "adminClientRelease.flash.uploadBusy", { name: fname }) };
           part.file.resume();
           continue;
         }
@@ -3968,7 +3972,7 @@ export async function adminRoutes(app: FastifyInstance) {
         // **唯一真正生效的超限判据。** 别在旁边再写「双保险」——
         // 那两道实测都不响,留着只会让人以为有冗余而把这一道删掉。
         if ((part.file as unknown as { truncated?: boolean }).truncated) {
-          rejected = { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` };
+          rejected = { code: 413, msg: tr(req, "adminClientRelease.flash.uploadTooBig", { mb: Math.round(MAX_BINARY_BYTES / 1048576) }) };
           continue;
         }
         saved = { name: fname, size: bytes, sha256: hash.digest("hex") };
@@ -3978,16 +3982,16 @@ export async function adminRoutes(app: FastifyInstance) {
       // for-await 里抛出来的,不 catch 的话变成 500 + 英文原文。
       const e = err as { code?: string; statusCode?: number; message?: string };
       if (e.code === "FST_REQ_FILE_TOO_LARGE" || e.statusCode === 413) {
-        rejected = { code: 413, msg: `文件超过上限（${Math.round(MAX_BINARY_BYTES / 1048576)} MB）。` };
+        rejected = { code: 413, msg: tr(req, "adminClientRelease.flash.uploadTooBig", { mb: Math.round(MAX_BINARY_BYTES / 1048576) }) };
       } else if (e.code === "ERR_STREAM_PREMATURE_CLOSE") {
         // 客户端中途断了(关标签页 / 网断)。响应多半发不出去了,但这一条的
         // 意义在于让下面的 finally 跑到、把锁和临时文件收干净。
-        rejected = { code: 499, msg: "上传中断（连接断开）" };
+        rejected = { code: 499, msg: tr(req, "adminClientRelease.flash.uploadAborted") };
       } else if (e.code === "ENOSPC") {
         // 盘满。errno 原文对站长毫无意义,而这件事他一看就知道怎么办。
-        rejected = { code: 507, msg: "服务器磁盘空间不足，没有保存。先在「客户端更新」页删掉用不到的旧安装包再试。" };
+        rejected = { code: 507, msg: tr(req, "adminClientRelease.flash.uploadNoSpace") };
       } else {
-        rejected = { code: 500, msg: e.message || "上传失败" };
+        rejected = { code: 500, msg: e.message || tr(req, "adminClientRelease.flash.uploadFailed") };
       }
     } finally {
       // 无论走哪条路都必须释放 —— 漏一次,那个文件名在进程重启之前
@@ -3999,7 +4003,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
     if (rejected || !saved) {
       await cleanup();
-      const r = rejected ?? { code: 400, msg: "没有收到文件。" };
+      const r = rejected ?? { code: 400, msg: tr(req, "adminClientRelease.flash.uploadNoFile") };
       await audit(req, u.id, "app_binary.upload_rejected", {
         targetType: "client_release", targetId: platform, details: { reason: r.msg.slice(0, 200) },
       });
@@ -4029,11 +4033,7 @@ export async function adminRoutes(app: FastifyInstance) {
       });
       return reply.code(409).send({
         ok: false,
-        error: "这个包和清单里写的对不上 —— 没有保存。\n"
-          + `清单里写的：${declared.sha256}\n`
-          + `你传上来的：${saved.sha256}\n`
-          + "客户端下载完会校验这个值，不匹配就会一直重试而且不告诉用户为什么。"
-          + "要么重传正确的包，要么先把清单里的 sha256 改成上面这个值。",
+        error: tr(req, "adminClientRelease.flash.shaMismatch", { declared: declared.sha256, saved: saved.sha256 }),
       });
     }
 
@@ -4083,7 +4083,7 @@ export async function adminRoutes(app: FastifyInstance) {
       await audit(req, u.id, "app_binary.delete", {
         targetType: "client_release", targetId: p.data, details: { file: name },
       });
-      return redirectWithFlash(reply, "/admin/client-release?success=" + encodeURIComponent(`已删除 ${name}`));
+      return redirectWithFlash(reply, "/admin/client-release?success=" + encodeURIComponent(tr(req, "adminClientRelease.flash.binaryDeleted", { name })));
     },
   );
 
