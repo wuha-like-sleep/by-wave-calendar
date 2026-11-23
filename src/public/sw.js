@@ -36,6 +36,11 @@ self.addEventListener("push", (event) => {
   try {
     if (event.data) data = event.data.json();
   } catch { /* malformed payload; just show the defaults */ }
+  // 同步唤醒信号（增量同步第三批）：不展示成普通通知，走专门的唤醒路。
+  if (data && data.type === "events_sync") {
+    event.waitUntil(handleSyncPush(data));
+    return;
+  }
   const opts = {
     body: data.body || "",
     icon: data.icon || "/static/icons/icon-192.png",
@@ -53,6 +58,33 @@ self.addEventListener("push", (event) => {
   };
   event.waitUntil(self.registration.showNotification(data.title || "ByWave", opts));
 });
+
+// 同步唤醒信号的处理：载荷里没有任何事件数据（服务端纪律，见
+// lib/sync_push.ts），唯一的任务是叫醒打开着的页面，让它自己走带鉴权
+// 的增量拉取。页面没打开时什么都不用做 —— 下次打开自会拉齐。
+async function handleSyncPush(data) {
+  const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const c of all) {
+    try { c.postMessage({ type: "bwc-events-sync" }); } catch { /* 窗口正关着就算了 */ }
+  }
+  // 展示口径：订阅是 userVisibleOnly: true 建的（见设置页），平台要求
+  // 每次 push 都得展示一条通知；不展示的话 Chrome 会代劳弹一条「此网
+  // 站已在后台更新」的通用通知，反而更打扰、还不受我们控制。所以照
+  // 规矩展示一条静默的、同 tag 的（多次信号在通知中心里也只占一格），
+  // 然后立刻关掉 —— 页面已经去拉增量了，把「日历有更新」留在通知
+  // 中心里只是噪音。
+  const tag = data.tag || "bwc-events-sync";
+  await self.registration.showNotification(data.title || "ByWave", {
+    body: "",
+    icon: data.icon || "/static/icons/icon-192.png",
+    badge: data.badge || "/static/icons/badge-72.png",
+    tag,
+    silent: true,
+    data: { url: data.url || "/app" },
+  });
+  const shown = await self.registration.getNotifications({ tag });
+  for (const n of shown) n.close();
+}
 
 // On click, open the target URL (focus existing tab if already open).
 self.addEventListener("notificationclick", (event) => {

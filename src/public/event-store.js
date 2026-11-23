@@ -221,6 +221,45 @@
   }
 
   globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, planWindowMerge, visibleRows, planDeltaApply, syncPlan };
+
+  // 推送信号 → 拉取的节流门（纯逻辑，时钟与定时器由调用方注进来，
+  // 所以它在 node 里可以直接被打，见 test/pull_gate.test.ts）。
+  //
+  // 背景（增量同步第三批）：服务端清扫器发现变化会发一条 Web Push，
+  // SW 转成页面消息，页面收到就该拉一次增量。但信号可能成串到达
+  // （对方连环编辑、批量导入），裸着一条信号拉一次就是拉取风暴。规则：
+  //   · 两次真正拉取之间至少隔 minGapMs；
+  //   · 间隔没到时来的信号合并成一个定时器，到点统一拉一次；
+  //   · 正在拉时来的信号只记一笔，拉完补一次 —— 补拉走的是增量，
+  //     这期间的变化一并带回，不丢。
+  function makePullGate({ minGapMs, pull, now, schedule }) {
+    let inFlight = false;
+    let pending = false;
+    let timer = null;
+    let lastPullAt = null;
+    function signal() {
+      if (inFlight) { pending = true; return; }
+      const t = now();
+      const wait = lastPullAt == null ? 0 : minGapMs - (t - lastPullAt);
+      if (wait > 0) {
+        if (timer == null) {
+          timer = schedule(() => { timer = null; signal(); }, wait);
+        }
+        return;
+      }
+      inFlight = true;
+      lastPullAt = t;
+      let p;
+      try { p = pull(); } catch (e) { p = Promise.reject(e); }
+      Promise.resolve(p).catch(() => {}).finally(() => {
+        inFlight = false;
+        if (pending) { pending = false; signal(); }
+      });
+    }
+    return { signal };
+  }
+
+  globalThis.bwcPullGate = { makePullGate };
 })();
 
 (function () {
