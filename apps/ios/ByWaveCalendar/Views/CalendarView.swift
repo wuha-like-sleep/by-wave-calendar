@@ -25,6 +25,7 @@ private enum ViewMode: String, CaseIterable, Identifiable {
 struct CalendarView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var mode: ViewMode = .day
@@ -196,6 +197,13 @@ struct CalendarView: View {
             )
     }
 
+    /// 冷启动首拉还没回、且一个事件都没有时的整屏加载态。抽成计算属性是
+    /// 为了让 ZStack 里的 overlay 和它的淡入淡出动画共用同一个条件，
+    /// 两边写散了迟早会不一致。
+    private var showsInitialLoading: Bool {
+        events.isEmpty && (isLoading || (lastSyncedAt == nil && errorMessage == nil))
+    }
+
     @ViewBuilder
     private var calendarContent: some View {
             VStack(spacing: 0) {
@@ -232,17 +240,23 @@ struct CalendarView: View {
                         // empty space above. Day/Month/Year are all happy
                         // to fill too.
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        // 日/周/月/年切换走交叉淡入淡出，别硬切：四个视图
+                        // 布局差异大，滑动式过渡反而会显得乱，淡入最稳。
+                        .transition(.opacity)
                     // 还没有任何结果（缓存没读出来、第一次请求也还没回）时同样显示加载中。
                     // 以前只看 isLoading，而 .task 开跑之前那一段它还是 false，
                     // 冷启动先闪一下「今天没有事件」，几秒后日程才冒出来。
-                    if events.isEmpty && (isLoading || (lastSyncedAt == nil && errorMessage == nil)) {
+                    if showsInitialLoading {
                         // Cache miss + first fetch in flight
                         ProgressView()
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .background(Color(.systemGroupedBackground))
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: mode)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: showsInitialLoading)
             }
             .animation(.snappy, value: state.accountNotice)
             .animation(.snappy, value: state.pendingAnnouncement)

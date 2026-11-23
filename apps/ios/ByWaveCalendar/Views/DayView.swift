@@ -12,6 +12,7 @@ struct DayView: View {
     let onEventChanged: () -> Void
 
     @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pendingDeleteId: String?
     @State private var showDeleteAlert = false
     @State private var pendingDuplicate: EventDTO?
@@ -25,6 +26,7 @@ struct DayView: View {
         Group {
             if events.isEmpty {
                 EmptyDayPlaceholder(date: anchor, onCreate: { creating = true })
+                    .transition(.opacity)
             } else {
                 List {
                     ForEach(events) { ev in
@@ -51,8 +53,12 @@ struct DayView: View {
                     }
                 }
                 .listStyle(.insetGrouped)
+                .transition(.opacity)
             }
         }
+        // 空态占位和列表之间交叉淡入，别硬切：翻到一个空日子、或数据
+        // 回来把占位顶掉的时候，硬切看起来像闪了一下。
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: events.isEmpty)
         .alert("删除事件？", isPresented: $showDeleteAlert) {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) {
