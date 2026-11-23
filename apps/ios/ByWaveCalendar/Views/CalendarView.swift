@@ -66,6 +66,138 @@ struct CalendarView: View {
 
     var body: some View {
         NavigationStack {
+            calendarWithSheets
+        }
+        // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
+        // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
+        // 根视图才出现。5 秒自动消失。
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 8) {
+                undoDeleteBar
+                createdBar
+            }
+            .animation(.snappy, value: state.pendingUndoDelete)
+            .animation(.snappy, value: state.pendingQuickCreated)
+        }
+        .sheet(item: $createdDetailEvent) { ev in
+            NavigationStack {
+                EventDetailView(
+                    event: ev,
+                    calendar: calendars.first { $0.id == ev.calendarId },
+                    allCalendars: calendars,
+                    onChanged: { Task { await load(force: true) } },
+                )
+            }
+        }
+    }
+
+    // body 原来是一条近 260 行的单表达式（VStack + 三十多个修饰符），
+    // Swift 类型检查器在整条链上求解超时（"unable to type-check this
+    // expression in reasonable time"）。拆成两段计算属性分别求解：
+    // calendarContent 是 VStack + 前半修饰符，calendarWithSheets 再叠
+    // 后半的 sheet / fileImporter / 手势。修饰符顺序与原来逐字一致，
+    // 行为不变。
+    @ViewBuilder
+    private var calendarWithSheets: some View {
+        calendarContent
+            .sheet(isPresented: $showingCreate) {
+                NavigationStack {
+                    EventEditView(
+                        mode: .create,
+                        calendars: calendars,
+                        onSaved: { saved in
+                            showingCreate = false
+                            // 动线: jump to the day the new event lives on,
+                            // so「明天下午3点开会」lands you ON tomorrow
+                            // instead of leaving you staring at today.
+                            withAnimation {
+                                anchor = Calendar.current.startOfDay(for: saved.startsAt)
+                            }
+                            Task { await load(force: true) }
+                        },
+                        onCancel: { showingCreate = false },
+                    )
+                }
+            }
+            .sheet(isPresented: $showingSettings) { SettingsView() }
+            .sheet(isPresented: $showingPendingOps) {
+                PendingOpsView(onResolved: { Task { await load(force: true) } })
+            }
+            .sheet(isPresented: $showingFilter) {
+                CalendarFilterView(
+                    calendars: calendars,
+                    onCalendarsChanged: { Task { await load(force: true) } },
+                )
+                .environmentObject(state)
+            }
+            .sheet(isPresented: $showingSearch) {
+                SearchView(calendars: calendars).environmentObject(state)
+            }
+            .sheet(isPresented: $showingProfileSwitcher) {
+                ProfileSwitcherView().environmentObject(state)
+            }
+            // ICS import confirmation — one sheet for both entry
+            // points (the toolbar menu's fileImporter below and a
+            // system handover parked in AppState.pendingImportURL).
+            .sheet(isPresented: Binding(
+                get: { importFileURL != nil },
+                set: { if !$0 { importFileURL = nil } }
+            )) {
+                if let url = importFileURL {
+                    ImportIcsView(
+                        fileURL: url,
+                        calendars: calendars,
+                        onFinished: { didImport in
+                            importFileURL = nil
+                            if didImport { Task { await load(force: true) } }
+                        }
+                    )
+                    .environmentObject(state)
+                }
+            }
+            .fileImporter(
+                isPresented: $showingImportPicker,
+                allowedContentTypes: [UTType(filenameExtension: "ics") ?? .data],
+                allowsMultipleSelection: false
+            ) { result in
+                if case .success(let urls) = result, let url = urls.first {
+                    importFileURL = url
+                }
+            }
+            .onChange(of: state.pendingImportURL) { _, url in
+                if let url {
+                    importFileURL = url
+                    state.pendingImportURL = nil
+                }
+            }
+            .onAppear {
+                if let url = state.pendingImportURL {
+                    importFileURL = url
+                    state.pendingImportURL = nil
+                }
+            }
+            // Horizontal swipe on the body navigates dates. We only commit
+            // when the gesture is decisively horizontal (avoids stealing
+            // List scroll). Translation > 60 pt → snap to prev/next.
+            .gesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { value in
+                        let h = value.translation.width
+                        let v = value.translation.height
+                        // Only navigate on a DECISIVELY horizontal swipe: the
+                        // horizontal component must clearly dominate the vertical
+                        // (≥1.8×), and travel a good distance (70pt). Stricter than
+                        // before so diagonal / near-vertical drags and light flicks
+                        // don't accidentally flip the week/month.
+                        if abs(h) < abs(v) * 1.8 { return }
+                        if h < -70 { shiftAnchor(by: 1) }
+                        else if h > 70 { shiftAnchor(by: -1) }
+                    },
+            )
+    }
+
+    @ViewBuilder
+    private var calendarContent: some View {
             VStack(spacing: 0) {
                 // 「某个账号被服务端登出、已切到这个账号」的提示。放在导航栏下面、
                 // 视图切换条上面：放到 NavigationStack 外面（safeAreaInset）的话，
@@ -202,122 +334,6 @@ struct CalendarView: View {
                 }
             }
             .onDisappear { navDebounceTask?.cancel() }
-            .sheet(isPresented: $showingCreate) {
-                NavigationStack {
-                    EventEditView(
-                        mode: .create,
-                        calendars: calendars,
-                        onSaved: { saved in
-                            showingCreate = false
-                            // 动线: jump to the day the new event lives on,
-                            // so「明天下午3点开会」lands you ON tomorrow
-                            // instead of leaving you staring at today.
-                            withAnimation {
-                                anchor = Calendar.current.startOfDay(for: saved.startsAt)
-                            }
-                            Task { await load(force: true) }
-                        },
-                        onCancel: { showingCreate = false },
-                    )
-                }
-            }
-            .sheet(isPresented: $showingSettings) { SettingsView() }
-            .sheet(isPresented: $showingPendingOps) {
-                PendingOpsView(onResolved: { Task { await load(force: true) } })
-            }
-            .sheet(isPresented: $showingFilter) {
-                CalendarFilterView(
-                    calendars: calendars,
-                    onCalendarsChanged: { Task { await load(force: true) } },
-                )
-                .environmentObject(state)
-            }
-            .sheet(isPresented: $showingSearch) {
-                SearchView(calendars: calendars).environmentObject(state)
-            }
-            .sheet(isPresented: $showingProfileSwitcher) {
-                ProfileSwitcherView().environmentObject(state)
-            }
-            // ICS import confirmation — one sheet for both entry
-            // points (the toolbar menu's fileImporter below and a
-            // system handover parked in AppState.pendingImportURL).
-            .sheet(isPresented: Binding(
-                get: { importFileURL != nil },
-                set: { if !$0 { importFileURL = nil } }
-            )) {
-                if let url = importFileURL {
-                    ImportIcsView(
-                        fileURL: url,
-                        calendars: calendars,
-                        onFinished: { didImport in
-                            importFileURL = nil
-                            if didImport { Task { await load(force: true) } }
-                        }
-                    )
-                    .environmentObject(state)
-                }
-            }
-            .fileImporter(
-                isPresented: $showingImportPicker,
-                allowedContentTypes: [UTType(filenameExtension: "ics") ?? .data],
-                allowsMultipleSelection: false
-            ) { result in
-                if case .success(let urls) = result, let url = urls.first {
-                    importFileURL = url
-                }
-            }
-            .onChange(of: state.pendingImportURL) { _, url in
-                if let url {
-                    importFileURL = url
-                    state.pendingImportURL = nil
-                }
-            }
-            .onAppear {
-                if let url = state.pendingImportURL {
-                    importFileURL = url
-                    state.pendingImportURL = nil
-                }
-            }
-            // Horizontal swipe on the body navigates dates. We only commit
-            // when the gesture is decisively horizontal (avoids stealing
-            // List scroll). Translation > 60 pt → snap to prev/next.
-            .gesture(
-                DragGesture(minimumDistance: 24)
-                    .onEnded { value in
-                        let h = value.translation.width
-                        let v = value.translation.height
-                        // Only navigate on a DECISIVELY horizontal swipe: the
-                        // horizontal component must clearly dominate the vertical
-                        // (≥1.8×), and travel a good distance (70pt). Stricter than
-                        // before so diagonal / near-vertical drags and light flicks
-                        // don't accidentally flip the week/month.
-                        if abs(h) < abs(v) * 1.8 { return }
-                        if h < -70 { shiftAnchor(by: 1) }
-                        else if h > 70 { shiftAnchor(by: -1) }
-                    },
-            )
-        }
-        // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
-        // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
-        // 根视图才出现。5 秒自动消失。
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 8) {
-                undoDeleteBar
-                createdBar
-            }
-            .animation(.snappy, value: state.pendingUndoDelete)
-            .animation(.snappy, value: state.pendingQuickCreated)
-        }
-        .sheet(item: $createdDetailEvent) { ev in
-            NavigationStack {
-                EventDetailView(
-                    event: ev,
-                    calendar: calendars.first { $0.id == ev.calendarId },
-                    allCalendars: calendars,
-                    onChanged: { Task { await load(force: true) } },
-                )
-            }
-        }
     }
 
     @ToolbarContentBuilder
