@@ -18,6 +18,7 @@
       <% if (user) { %>
         <nav class="hidden md:flex items-center gap-1 text-sm text-slate-600">
           <a href="/app" class="px-3 py-1.5 rounded-md hover:bg-slate-100"><%= t("nav.calendar") %></a>
+          <a href="/app/shopping-lists" class="px-3 py-1.5 rounded-md hover:bg-slate-100"><%= t("nav.shoppingLists") %></a>
           <a href="/app/settings" class="px-3 py-1.5 rounded-md hover:bg-slate-100"><%= t("nav.settings") %></a>
           <% if (user.isAdmin) { %>
             <a href="/admin" class="px-3 py-1.5 rounded-md text-amber-700 hover:bg-amber-50"><%= t("nav.admin") %></a>
@@ -67,6 +68,7 @@
         <a href="/app/search" data-bwc-search class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("search.heading") %></a>
         <a href="/app/notifications" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.notifications") %></a>
         <a href="/app" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.calendar") %></a>
+        <a href="/app/shopping-lists" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.shoppingLists") %></a>
         <a href="/app/settings" class="px-3 py-2 rounded-md hover:bg-slate-100"><%= t("nav.settings") %></a>
         <% if (user.isAdmin) { %>
           <a href="/admin" class="px-3 py-2 rounded-md text-amber-700 hover:bg-amber-50"><%= t("nav.admin") %></a>

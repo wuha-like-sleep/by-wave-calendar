@@ -6,7 +6,7 @@
 // push subs / login history all `ON DELETE CASCADE`, and audit / invitedBy /
 // createdBy references are `ON DELETE SET NULL`. So we only hand-move the things
 // that should survive: calendars (which carry their events/attendees), booking
-// links, calendar memberships, and SSO identities.
+// links, shopping lists, calendar memberships, and SSO identities.
 import { eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 
@@ -28,6 +28,7 @@ export type MergeSummary = {
   calendars: number;
   events: number;
   bookingLinks: number;
+  shoppingLists: number;
   memberships: number;
   identities: number;
 };
@@ -47,6 +48,10 @@ export async function mergeSummary(sourceId: string): Promise<MergeSummary> {
     .select({ c: sql<number>`count(*)::int` })
     .from(schema.bookingLinks)
     .where(eq(schema.bookingLinks.userId, sourceId));
+  const [sl] = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(schema.shoppingLists)
+    .where(eq(schema.shoppingLists.ownerId, sourceId));
   const [mem] = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(schema.calendarMembers)
@@ -59,6 +64,7 @@ export async function mergeSummary(sourceId: string): Promise<MergeSummary> {
     calendars: cal?.c ?? 0,
     events: ev?.c ?? 0,
     bookingLinks: bl?.c ?? 0,
+    shoppingLists: sl?.c ?? 0,
     memberships: mem?.c ?? 0,
     identities: idn?.c ?? 0,
   };
@@ -105,6 +111,12 @@ export async function mergeAccounts(sourceId: string, targetId: string): Promise
       await tx.update(schema.bookingLinks).set({ userId: targetId, slug }).where(eq(schema.bookingLinks.id, link.id));
       targetSlugs.add(slug);
     }
+
+    // 2b. Shopping lists — owner-scoped content with no unique constraints;
+    // without this move they'd die with the source (owner ON DELETE CASCADE).
+    // Their event links keep pointing at the same events, which is correct:
+    // the events themselves move with their calendars in step 1.
+    await tx.update(schema.shoppingLists).set({ ownerId: targetId }).where(eq(schema.shoppingLists.ownerId, sourceId));
 
     // 3. Calendar memberships — unique (calendarId, userId); drop collisions.
     const targetCals = new Set(

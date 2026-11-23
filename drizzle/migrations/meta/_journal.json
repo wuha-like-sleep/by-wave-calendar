@@ -498,6 +498,13 @@
       "when": 1795478400000,
       "tag": "0070_geo_pack_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1795564800000,
+      "tag": "0071_shopping_lists",
+      "breakpoints": true
     }
   ]
 }
