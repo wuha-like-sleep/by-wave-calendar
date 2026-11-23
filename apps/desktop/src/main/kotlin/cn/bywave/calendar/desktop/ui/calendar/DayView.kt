@@ -7,6 +7,8 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -85,12 +87,19 @@ fun DayView(
         // 只有在足够宽的屏幕上才看得出来。
         val content = Modifier.widthIn(max = 940.dp).fillMaxSize()
 
-        if (onDay.isEmpty()) {
-            if (loading) {
+        // 骨架 / 空态 / 列表三态以前是硬切：数据回来那一下，整块
+        // 区域从灰条啪地变成列表，看着像闪屏。统一走 Crossfade，
+        // 与主屏切视图的 160ms 口径对齐。
+        val pane = when {
+            onDay.isNotEmpty() -> 2
+            loading -> 0
+            else -> 1
+        }
+        Crossfade(targetState = pane, animationSpec = tween(180), label = "day-pane") { current ->
+            when (current) {
                 // 首次加载:画骨架,别宣布「今天没有事件」——那时候还不知道。
-                EventListSkeleton(modifier = Modifier.widthIn(max = 940.dp))
-            } else {
-                Box(modifier = content, contentAlignment = Alignment.Center) {
+                0 -> EventListSkeleton(modifier = Modifier.widthIn(max = 940.dp))
+                1 -> Box(modifier = content, contentAlignment = Alignment.Center) {
                     val emptyText = remember(locale, anchor) {
                         cn.bywave.calendar.desktop.i18n.I18n.t(
                             if (anchor == LocalDate.now()) "day.emptyToday" else "day.empty"
@@ -101,26 +110,27 @@ fun DayView(
                         color = mutedTextColor(),
                     )
                 }
+                else -> LazyColumn(
+                    modifier = content.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(Dimens.rowGap),
+                ) {
+                    items(items = onDay, key = { "${it.id}@${it.startsAt}" }) { ev ->
+                        EventRow(
+                            event = ev,
+                            calendars = calendars,
+                            onClick = { onEventClick(ev) },
+                            onView = onEventClick,
+                            onEdit = onEventEdit,
+                            onDuplicate = onEventDuplicate,
+                            onDelete = onEventDelete,
+                            // 与安卓端同一口径：列表已按 key 稳定身份，
+                            // 同步带来的增删/重排平滑过渡。
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+                    item { Spacer(Modifier.height(24.dp)) }
+                }
             }
-            return@Box
-        }
-
-        LazyColumn(
-            modifier = content.padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(Dimens.rowGap),
-        ) {
-            items(items = onDay, key = { "${it.id}@${it.startsAt}" }) { ev ->
-                EventRow(
-                    event = ev,
-                    calendars = calendars,
-                    onClick = { onEventClick(ev) },
-                    onView = onEventClick,
-                    onEdit = onEventEdit,
-                    onDuplicate = onEventDuplicate,
-                    onDelete = onEventDelete,
-                )
-            }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -135,6 +145,7 @@ private fun EventRow(
     onEdit: (EventDTO) -> Unit,
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Observe locale so the formatTimeRange() output re-renders on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -145,7 +156,7 @@ private fun EventRow(
     val interaction = remember { MutableInteractionSource() }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(rowShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = Dimens.cardFillAlpha))

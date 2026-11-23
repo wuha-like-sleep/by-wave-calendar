@@ -12,6 +12,8 @@
 
 package cn.bywave.calendar.desktop.ui.calendar
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,39 +108,44 @@ fun AgendaView(
         // 只有在足够宽的屏幕上才看得出来。
         val content = Modifier.widthIn(max = 940.dp).fillMaxSize()
 
-        if (grouped.isEmpty()) {
-            if (loading) {
-                EventListSkeleton(rows = 5, modifier = Modifier.widthIn(max = 940.dp))
-            } else {
-                Box(modifier = content, contentAlignment = Alignment.Center) {
+        // 与日视图同一套：骨架 / 空态 / 列表三态走 Crossfade，
+        // 别硬切，免得数据回来那一下整块闪屏。
+        val pane = when {
+            grouped.isNotEmpty() -> 2
+            loading -> 0
+            else -> 1
+        }
+        Crossfade(targetState = pane, animationSpec = tween(180), label = "agenda-pane") { current ->
+            when (current) {
+                0 -> EventListSkeleton(rows = 5, modifier = Modifier.widthIn(max = 940.dp))
+                1 -> Box(modifier = content, contentAlignment = Alignment.Center) {
                     Text(
                         text = remember(locale) { cn.bywave.calendar.desktop.i18n.I18n.t("agenda.empty") },
                         style = MaterialTheme.typography.bodyMedium,
                         color = mutedTextColor(),
                     )
                 }
-            }
-            return@Box
-        }
-
-        LazyColumn(
-            modifier = content.padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            grouped.forEach { (date, dayEvents) ->
-                item(key = "header-$date") {
-                    AgendaDayHeader(date = date, count = dayEvents.size)
-                }
-                items(dayEvents, key = { "${it.id}-${it.startsAt}" }) { ev ->
-                    AgendaRow(
-                        event = ev,
-                        calendars = calendars,
-                        onClick = { onEventClick(ev) },
-                        onView = onEventClick,
-                        onEdit = onEventEdit,
-                        onDuplicate = onEventDuplicate,
-                        onDelete = onEventDelete,
-                    )
+                else -> LazyColumn(
+                    modifier = content.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    grouped.forEach { (date, dayEvents) ->
+                        item(key = "header-$date") {
+                            AgendaDayHeader(date = date, count = dayEvents.size)
+                        }
+                        items(dayEvents, key = { "${it.id}-${it.startsAt}" }) { ev ->
+                            AgendaRow(
+                                event = ev,
+                                calendars = calendars,
+                                onClick = { onEventClick(ev) },
+                                onView = onEventClick,
+                                onEdit = onEventEdit,
+                                onDuplicate = onEventDuplicate,
+                                onDelete = onEventDelete,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -186,6 +193,7 @@ private fun AgendaRow(
     onEdit: (EventDTO) -> Unit,
     onDuplicate: (EventDTO) -> Unit,
     onDelete: (EventDTO) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // Observe locale so the formatTimeRange() output re-renders on switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -196,7 +204,7 @@ private fun AgendaRow(
     val interaction = remember { MutableInteractionSource() }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(rowShape)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = Dimens.cardFillAlpha))
