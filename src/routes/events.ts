@@ -19,6 +19,7 @@ import { activeSeriesOccurrence, planFutureSeries, truncateSeriesBefore, unchang
 import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { etagMatches, eventsWindowEtag } from "../lib/calendar_ctag.js";
+import { invitationsEtag } from "../lib/invitations.js";
 import { dispatchWebhook, eventToWebhookPayload } from "../lib/webhooks.js";
 import { pushEventChanged } from "../lib/apns.js";
 import { ok, okList, err } from "../lib/api_response.js";
@@ -1099,6 +1100,13 @@ export async function eventRoutes(app: FastifyInstance) {
   app.get("/invitations", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
+    // 条件请求：三端拿这个接口刷邀请徽章，没新邀请、没人回应时正文
+    // 一个字节都不变 —— 与 /events 窗口同口径，命中回 304 空响应，
+    // 下面那串连表查询整段省掉。令牌的原料见 lib/invitations.ts。
+    const tag = await invitationsEtag(user.email);
+    // private, no-cache：可以存，但每次用前必须拿 ETag 回来核对（核对便宜）。
+    reply.header("ETag", tag).header("Cache-Control", "private, no-cache");
+    if (etagMatches(req.headers["if-none-match"], tag)) return reply.code(304).send();
     const rows = await db
       .select({ tok: schema.eventInviteTokens, event: schema.events })
       .from(schema.eventInviteTokens)
