@@ -883,14 +883,26 @@ struct CalendarView: View {
         return "bwc.eventsETag.\(key).\(DateFormatters.isoPlain.string(from: from)).\(DateFormatters.isoPlain.string(from: to))"
     }
 
+    /// /invitations 的 ETag 存档键（UserDefaults）：和 /events 窗口同一
+    /// 套分键（服务器 + 账号），只是没有窗口这一维 —— 邀请列表不分窗。
+    private func invitationsETagKey() -> String {
+        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+        return "bwc.invitationsETag.\(key)"
+    }
+
     /// 邀请徽章数：还没回应的、事件没取消、邀请没过期的条数。拉不到
     /// 就保持原值 —— 徽章是提示性的，失败必须静默。
+    /// 走条件请求：没新邀请、没人回应时服务端回 304，整表不下载、
+    /// 不解码，徽章保持原值 —— 这正是 304 在这里想要的语义。
     private func refreshInvitationBadge() async {
         do {
-            struct Resp: Decodable { let invitations: [InvitationsView.Invitation] }
-            let resp: Resp = try await APIClient(state: state).get("/invitations")
+            let etagKey = invitationsETagKey()
+            let (fetched, newETag) = try await APIClient(state: state).getInvitationsConditional(
+                ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
+            guard let invitations = fetched else { return }
+            if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
             let now = Date()
-            pendingInvitationCount = resp.invitations.filter { inv in
+            pendingInvitationCount = invitations.filter { inv in
                 guard inv.responseStatus == "pending", !inv.event.cancelled else { return false }
                 if let expiry = InvitationTimeText.parse(inv.expiresAt) {
                     return expiry > now

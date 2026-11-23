@@ -612,8 +612,22 @@ final class AppState: ObservableObject {
         // 只清这个账号的缓存。以前退出登录用的是 clearAll()，会把其它账号的离线日历
         // 一起删掉——多账号用户为了修一个登录问题退出 A，回头发现 B 也空了。
         if let url = profile.serverURL {
-            EventCache.shared.clearForUserKey(
-                EventCache.shared.key(serverURL: url, userEmail: profile.userEmail))
+            let userKey = EventCache.shared.key(serverURL: url, userEmail: profile.userEmail)
+            EventCache.shared.clearForUserKey(userKey)
+            // ETag 存档是另一摊：它在 UserDefaults 里、按同一个 userKey
+            // 分键（bwc.eventsETag.<userKey>.<窗口>、bwc.invitationsETag.<userKey>），
+            // 不在 EventCache 文件里，只删文件它纹丝不动。不一起清的话，
+            // 同账号重新登录后第一次拉取会带着旧 ETag 去问、拿回 304，
+            // 而本地缓存已经删空了 —— 日历就一直空着，直到服务端数据
+            // 下一次变化。按这个账号的键精确删，别误伤其它账号的存档：
+            // 事件窗口键在 userKey 后面还隔着一层窗口起止，用带点的
+            // 前缀卡住边界，免得 a@x.com 把 a@x.com.au 的也前缀命中。
+            let defaults = UserDefaults.standard
+            for storedKey in defaults.dictionaryRepresentation().keys
+            where storedKey.hasPrefix("bwc.eventsETag.\(userKey).")
+                || storedKey == "bwc.invitationsETag.\(userKey)" {
+                defaults.removeObject(forKey: storedKey)
+            }
         }
         // 提醒也只清这个账号的 —— 和上面那条离线缓存踩过的是同一个坑。
         let pid = profile.id

@@ -307,6 +307,60 @@ final class APIClient {
             throw APIError.decode(error)
         }
     }
+
+    /// /invitations 专用条件请求（邀请徽章用）。和 getEventsConditional
+    /// 同一套口径：带上 If-None-Match，没新邀请、没人回应时服务端只回
+    /// 304，返回 (nil, _) —— 调用方保持原徽章数，整表下载和解码都省掉；
+    /// 变了才回 200 + 新的 ETag 和正文。
+    func getInvitationsConditional(ifNoneMatch: String?, isRetry: Bool = false) async throws -> (invitations: [InvitationsView.Invitation]?, etag: String?) {
+        struct InvitationsResponse: Decodable { let invitations: [InvitationsView.Invitation] }
+        guard state.activeProfileId == profileID else { throw CancellationError() }
+        guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
+        let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let url = Self.makeURL(server: serverURL, path: "/invitations") else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let ifNoneMatch { req.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match") }
+        req.timeoutInterval = 15
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.network(error)
+        }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.network(NSError(domain: "no-http-response", code: 0))
+        }
+        if http.statusCode == 401 && !isRetry {
+            state.invalidateAccessToken()
+            return try await getInvitationsConditional(ifNoneMatch: ifNoneMatch, isRetry: true)
+        }
+        if http.statusCode == 304 {
+            return (nil, http.value(forHTTPHeaderField: "ETag") ?? ifNoneMatch)
+        }
+        if http.statusCode >= 400 {
+            throw APIError.server(status: http.statusCode, body: String(data: data, encoding: .utf8))
+        }
+        let etag = http.value(forHTTPHeaderField: "ETag")
+        do {
+            if let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let inner = outer["data"] {
+                let innerData = try JSONSerialization.data(withJSONObject: inner)
+                return (try JSONDecoder.iso().decode(InvitationsResponse.self, from: innerData).invitations, etag)
+            }
+            return (try JSONDecoder.iso().decode(InvitationsResponse.self, from: data).invitations, etag)
+        } catch {
+            throw APIError.decode(error)
+        }
+    }
 }
 
 // MARK: - Booking links (预约链接)
