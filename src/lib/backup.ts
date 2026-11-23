@@ -87,6 +87,8 @@ export const BACKUP_EXCLUDED_TABLES = new Set([
   "device_pairings",            // 5 分钟一次性配对码
   "oauth_authorization_codes",  // 10 分钟一次性授权码，换完令牌当场删
   "webhook_deliveries",         // 投递日志，会自己重新积累；而且它挂在 webhooks 下面
+  "geo_sync_tokens",            // 站点级地址包同步凭据（bcrypt 哈希）：不是用户数据，备份文件不该携带凭据材料；恢复后在后台重新签发即可
+  "geo_sync_uploads",           // 同步上传会话台账，48 小时自动清理，恢复后自然重新积累
 ]);
 
 export const BACKUP_VERSION = 1;
