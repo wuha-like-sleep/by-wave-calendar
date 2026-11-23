@@ -232,14 +232,16 @@ struct WeekView: View {
 
     private func allDayPill(ev: EventDTO) -> some View {
         let color = Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor
+        // Same fill strength (0.9) and text rule as the other clients'
+        // all-day / month bars — see Theme.eventTextColor.
+        let textColor = Theme.eventTextColor(forHex: calLookup[ev.calendarId]?.color)
         return Text(ev.summary)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+            .foregroundStyle(textColor)
             .lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(color, in: RoundedRectangle(cornerRadius: 4))
+            .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: Theme.Radius.eventBlock))
             .onTapGesture { detailFor = ev }
     }
 
@@ -355,33 +357,45 @@ struct WeekView: View {
         let dragDy = (isDragging && mode == .move) ? dragState!.dy : 0
         let resizeDy = (isDragging && mode == .resize) ? dragState!.dy : 0
         let bgOpacity: Double = isDragging ? 0.7 : (isPast ? 0.55 : 0.95)
+        // Text follows the fill's luminance (Theme.eventTextColor) —
+        // the drop shadow that used to prop up white text on pastel
+        // calendars is gone; black text on a pale fill needs no prop.
+        let textColor = Theme.eventTextColor(forHex: calLookup[p.event.calendarId]?.color)
+        // Cross-day continuation: square off the corners on any side
+        // where the event runs on into the neighbouring day, so the
+        // per-day segments read as one continuous bar across the grid
+        // instead of separate pills. Shape only — position and size
+        // come from positionedEvents unchanged.
+        let r = Theme.Radius.eventBlock
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: p.continuesFromPreviousDay ? 0 : r,
+            bottomLeadingRadius: p.continuesFromPreviousDay ? 0 : r,
+            bottomTrailingRadius: p.continuesToNextDay ? 0 : r,
+            topTrailingRadius: p.continuesToNextDay ? 0 : r,
+            style: .continuous,
+        )
         return ZStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.event.summary)
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white)
-                    // Subtle shadow keeps the title legible when the
-                    // calendar color is pastel (e.g. light yellow / pink).
-                    // Without it, white text vanishes on a #FBBF24 bar.
-                    .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
-                    .strikethrough(isPast, color: .white.opacity(0.85))
+                    .foregroundStyle(textColor)
+                    .strikethrough(isPast, color: textColor.opacity(0.85))
                     .lineLimit(p.height > 36 ? 2 : 1)
-                if p.height > 50, let location = p.event.location, !location.isEmpty {
+                if p.height > 44, let location = p.event.location, !location.isEmpty {
                     Text(location)
                         .font(.system(size: 10))
-                        .foregroundStyle(.white.opacity(0.9))
-                        .shadow(color: .black.opacity(0.18), radius: 0.5, x: 0, y: 0.5)
+                        .foregroundStyle(textColor.opacity(0.9))
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4).padding(.vertical, 3)
             .frame(width: p.width, height: max(p.height + resizeDy, 18), alignment: .topLeading)
-            .background(color.opacity(bgOpacity), in: RoundedRectangle(cornerRadius: 4))
+            .background(color.opacity(bgOpacity), in: shape)
             // The title/location are fixed-size fonts inside a
             // duration-sized frame; without clipping, a two-line title
             // on a short event painted over the block below it.
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .clipShape(shape)
             // Resize handle — bottom 6pt strip, slightly darker. Gesture
             // attached separately so we can detect "is the touch on the
             // handle" by Y position in onChanged.
@@ -390,7 +404,7 @@ struct WeekView: View {
                 .frame(height: 12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.white.opacity(0.8))
+                        .fill(textColor.opacity(0.8))
                         .frame(width: 16, height: 3)
                         .opacity(p.height > 30 ? 0.6 : 0),  // hide grip on tiny events
                 )
@@ -680,7 +694,16 @@ struct WeekView: View {
                         x: x,
                         y: y,
                         width: slotWidth - 2,
-                        height: h - 2,
+                        // 22pt floor, the same trade-off Android and
+                        // desktop document: at the raw duration height a
+                        // 15-minute block is 12pt, of which the vertical
+                        // padding eats 6 — its only line of text was
+                        // always clipped away. The floor lets a short
+                        // block lap a few points over the next hour line
+                        // rather than render text-less. y is untouched.
+                        height: max(h - 2, 22),
+                        continuesFromPreviousDay: ev.startsAt < dayStart,
+                        continuesToNextDay: ev.endsAt > dayEnd,
                     ))
                 }
             }
@@ -712,6 +735,11 @@ private struct PositionedEvent: Identifiable {
     let y: CGFloat
     let width: CGFloat
     let height: CGFloat
+    // Cross-day continuation, carried alongside the (unchanged)
+    // position so the rect can square off the corners on a side where
+    // the event runs on into the neighbouring day.
+    let continuesFromPreviousDay: Bool
+    let continuesToNextDay: Bool
 }
 
 private struct CreateSeedItem: Identifiable {
