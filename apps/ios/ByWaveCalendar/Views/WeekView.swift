@@ -59,35 +59,16 @@ struct WeekView: View {
     private var allDayEvents: [EventDTO] { events.filter { $0.allDay } }
 
     var body: some View {
-        // Outer VStack MUST claim the full available height — otherwise
-        // CalendarView's enclosing ZStack centers us vertically and
-        // headerRow ends up floating in the middle of the screen with
-        // the time grid stuck at the bottom (which is exactly the bug
-        // user reported in the v0.7.6 screenshot).
-        VStack(spacing: 0) {
-            headerRow
-            if !allDayEvents.isEmpty { allDayRow }
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: true) {
-                    ZStack(alignment: .topLeading) {
-                        gridBackground
-                        eventLayer
-                        nowLine
-                    }
-                    .frame(height: hourHeight * 24)
-                }
-                .frame(maxHeight: .infinity)
-                .onAppear {
-                    // Land somewhere useful: an hour before current time
-                    // when today is in this week; otherwise 8 AM.
-                    let cal = Calendar.current
-                    let now = Date()
-                    let hour = dayStarts.contains(where: { cal.isDateInToday($0) })
-                        ? max(0, cal.component(.hour, from: now) - 1)
-                        : 8
-                    proxy.scrollTo("hour-\(hour)", anchor: .top)
-                }
-            }
+        // 宽度只在一个地方量：根上的 GeometryReader。日期条、全天行、
+        // 网格三者共用它算出的 columnWidth，列宽 1:1 是构造出来的、
+        // 不是碰巧一致。以前日期条靠 VStack 撑满、网格靠 ScrollView
+        // 里的 GeometryReader 各量各的，两个来源没有任何机制保证
+        // 给出同一个数——在 Duo 折叠画布（466×678pt，宽高比和普通
+        // iPhone 完全不同）上迟早分家。
+        // GeometryReader 本身贪婪地占满提议尺寸，VStack 不会被
+        // CalendarView 的 ZStack 垂直居中（v0.7.6 那次的毛病）。
+        GeometryReader { geo in
+            weekContent(totalWidth: geo.size.width)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sheet(item: $detailFor) { ev in
@@ -146,22 +127,63 @@ struct WeekView: View {
         }
     }
 
+    // The week's vertical stack. `totalWidth` comes from the single
+    // GeometryReader in body; every horizontal measurement below
+    // (header columns, all-day columns, grid) derives from it.
+    private func weekContent(totalWidth: CGFloat) -> some View {
+        let columnWidth = (totalWidth - timeGutterWidth) / 7
+        return VStack(spacing: 0) {
+            headerRow(columnWidth: columnWidth)
+            if !allDayEvents.isEmpty { allDayRow(columnWidth: columnWidth) }
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: true) {
+                    ZStack(alignment: .topLeading) {
+                        gridBackground
+                        eventLayer
+                        nowLine
+                    }
+                    // Explicit width, not just height: the stack must
+                    // span the same totalWidth the header used, so the
+                    // grid is full-bleed on any canvas (folded Duo,
+                    // unfolded, iPad split) instead of sizing to
+                    // whatever its children happen to propose.
+                    .frame(width: totalWidth, height: hourHeight * 24)
+                }
+                .frame(maxHeight: .infinity)
+                .onAppear {
+                    // Land somewhere useful: an hour before current time
+                    // when today is in this week; otherwise 8 AM.
+                    let cal = Calendar.current
+                    let now = Date()
+                    let hour = dayStarts.contains(where: { cal.isDateInToday($0) })
+                        ? max(0, cal.component(.hour, from: now) - 1)
+                        : 8
+                    proxy.scrollTo("hour-\(hour)", anchor: .top)
+                }
+            }
+        }
+    }
+
     // MARK: - Header (weekday labels + date numbers)
-    // Pin to a fixed compact height (52pt) — without this constraint
-    // the VStack would happily give the row whatever's left over after
-    // the ScrollView claims its share, blowing the date numbers up
-    // huge on tall phones.
-    private var headerRow: some View {
+    // Height discipline matters as much as width here. DayHeader used
+    // to carry `.frame(maxHeight: .infinity)`, which made this whole
+    // row height-flexible: WeekView's VStack then split its leftover
+    // height between this row and the ScrollView, the row ballooned
+    // to a third of the screen, and its (vertically centered) labels
+    // floated mid-screen with the all-day row and grid shoved below —
+    // exactly the folded-Duo screenshot. The row now takes only its
+    // natural height: minHeight 52 is a floor, not a claim (the labels
+    // are Dynamic Type fonts and a hard 52pt clipped them at the
+    // largest sizes).
+    private func headerRow(columnWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
             // Time gutter spacer
             Color.clear.frame(width: timeGutterWidth)
             ForEach(dayStarts, id: \.self) { day in
                 DayHeader(day: day)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(width: columnWidth)
             }
         }
-        // Minimum, not fixed: the weekday + date labels are Dynamic Type
-        // fonts, and at the largest sizes a hard 52pt clipped them.
         .frame(minHeight: 52)
         .padding(.vertical, 4)
         .background(Color(.systemBackground))
@@ -174,7 +196,7 @@ struct WeekView: View {
     // all-day day can't push the time grid completely off screen. The
     // per-row allowance used to be 20pt, which under-measured the pill
     // at larger Dynamic Type sizes and let pills overlap the row frame.
-    private var allDayRow: some View {
+    private func allDayRow(columnWidth: CGFloat) -> some View {
         let perDay = bucketAllDayByDay()
         let maxRows = min(allDayMaxRows, perDay.values.map { $0.count }.max() ?? 0)
         let rowHeight = CGFloat(maxRows) * 24 + 16
@@ -183,21 +205,23 @@ struct WeekView: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .frame(width: timeGutterWidth)
-            HStack(spacing: 1) {
-                ForEach(dayStarts, id: \.self) { day in
-                    VStack(spacing: 2) {
-                        ForEach((perDay[day] ?? []).prefix(maxRows)) { ev in
-                            allDayPill(ev: ev)
-                        }
-                        if (perDay[day]?.count ?? 0) > maxRows {
-                            Text("+\((perDay[day]?.count ?? 0) - maxRows)")
-                                .font(.system(size: 9))
-                                .foregroundStyle(.secondary)
-                        }
+            // Same fixed columnWidth as the header and the grid — the
+            // pills used to distribute by maxWidth inside their own
+            // HStack (with an extra 1pt inter-column spacing), a third
+            // independent width model that could drift from the grid.
+            ForEach(dayStarts, id: \.self) { day in
+                VStack(spacing: 2) {
+                    ForEach((perDay[day] ?? []).prefix(maxRows)) { ev in
+                        allDayPill(ev: ev)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 2)
+                    if (perDay[day]?.count ?? 0) > maxRows {
+                        Text("+\((perDay[day]?.count ?? 0) - maxRows)")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .padding(.horizontal, 2)
+                .frame(width: columnWidth, alignment: .leading)
             }
         }
         .frame(height: rowHeight)
