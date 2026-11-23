@@ -26,6 +26,7 @@ struct CalendarView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var mode: ViewMode = .day
@@ -35,8 +36,6 @@ struct CalendarView: View {
     @State private var calendars: [CalendarMeta] = []
     @State private var isLoading = false
     @State private var loadGeneration = 0
-    /// 系统现在有没有给竖栏（iPhone Duo 外屏）。见 VerticalBarProbe。
-    @State private var hasVerticalBar = false
     @State private var lastSyncedAt: Date?
     @State private var errorMessage: String?
     @State private var showingCreate = false
@@ -65,9 +64,27 @@ struct CalendarView: View {
     // back; this collapses them into one after the user pauses.
     @State private var navDebounceTask: Task<Void, Never>?
 
+    /// 展开的大画布（Duo 展开 / iPad）= regular 宽度；折叠 Duo 与
+    /// 普通 iPhone 都是 compact。两种画布是两个独立的布局目标，
+    /// 不是同一套布局的拉伸与否。
+    private var useSplitLayout: Bool { horizontalSizeClass == .regular }
+
     var body: some View {
-        NavigationStack {
-            calendarWithSheets
+        // 分支在本视图内部换：mode / anchor / events / calendars 这些
+        // @State 都长在本视图身上，不随分支重建。以前宽屏走另一套
+        // 外壳、里面是第二个 CalendarView 实例，Duo 每次折叠/展开、
+        // iPad 每次拖分屏，整棵日历连同状态一起被换掉——这次同一个
+        // 实例只换 body 的分支，状态原地保留。
+        Group {
+            if useSplitLayout {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    NavigationStack { calendarWithSheets }
+                }
+            } else {
+                NavigationStack { calendarWithSheets }
+            }
         }
         // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
         // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
@@ -262,16 +279,9 @@ struct CalendarView: View {
             .animation(.snappy, value: state.pendingAnnouncement)
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
-            // 所有按钮都声明「有竖栏就放竖栏」：iPhone Duo 外屏右边（横拿时左边）那条
-            // 竖栏是系统给的，按钮放进去，顶上的空间就留给日历本身。没有竖栏的机型
-            // 照旧排在顶上，这个声明不起作用。
-            .modifier(VerticalPreferredToolbar(
-                items: calendarToolbar,
-                verticalOnly: modeToolbar,
-                horizontalOnly: dateNavToolbar,
-                hasVerticalBar: hasVerticalBar,
-            ))
-            .background(VerticalBarProbe(isPresent: $hasVerticalBar))
+            // 展开态的视图切换与日期导航在侧边栏里（见 sidebar），
+            // 这里只留内容工具栏，两边不重复摆。
+            .toolbar { calendarToolbar }
             .refreshable { await load(force: true) }
             .task {
                 // On first appearance, hydrate from cache → instant render,
@@ -437,27 +447,6 @@ struct CalendarView: View {
         }
     }
 
-    /// 有竖栏时，日/周/月/年 也进竖栏，竖排成单独一组；顶上那条分段控件就不画了。
-    @ToolbarContentBuilder
-    private var modeToolbar: some ToolbarContent {
-        // 用普通 Button：试过按钮样式的 Toggle（收进「•••」时会打勾），但它每个
-        // 都更占高度，竖拿时四个只放得下两个，得不偿失。
-        ToolbarItemGroup(placement: .topBarTrailing) {
-            ForEach(ViewMode.allCases) { m in
-                Button {
-                    mode = m
-                } label: {
-                    Text(m.rawValue.loc)
-                        .font(.callout.weight(mode == m ? .bold : .regular))
-                        .foregroundStyle(mode == m ? Color.accentColor : Color.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-                .accessibilityAddTraits(mode == m ? .isSelected : [])
-            }
-        }
-    }
-
     private var visibleCalCount: Int {
         calendars.filter { !state.hiddenCalendarIds.contains($0.id) }.count
     }
@@ -501,8 +490,8 @@ struct CalendarView: View {
         return "?"
     }
 
-    /// ‹ 日期 › 这一行。平时在分段控件下面；有竖栏时搬进顶栏正中，
-    /// 顶栏原来只写着「日历」两个字，等于白占一行。
+    /// ‹ 日期 › 这一行。紧凑态排在分段控件下面（navBar 里）；
+    /// 展开态出现在侧边栏顶部，同一份实现两边共用。
     private var dateNavRow: some View {
         HStack(spacing: 6) {
             Button {
@@ -525,21 +514,110 @@ struct CalendarView: View {
         }
     }
 
-    @ToolbarContentBuilder
-    private var dateNavToolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            // 顶栏只有一行高，日期必须挤在一行里，放不下就缩小字号。
-            // 只加在这里：分段控件下面那一行（navBar）照旧，长日期可以折行。
-            dateNavRow
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+    // MARK: - 展开态侧边栏（regular 宽度）
+
+    /// 展开态的家：视图切换、日期导航、迷你月历、日历显示开关和
+    /// 常用入口都在这里，内容区只放日历主体。全部用系统 List /
+    /// Picker / Toggle，不自绘控件；绑定的都是本视图自己的
+    /// @State 与 AppState，折叠回去时紧凑布局读的是同一份状态。
+    private var sidebar: some View {
+        List {
+            Section {
+                Picker("视图", selection: $mode) {
+                    ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                dateNavRow
+            }
+            Section {
+                MiniMonthView(anchor: anchor) { day in
+                    anchor = Calendar.current.startOfDay(for: day)
+                }
+                .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
+            }
+            Section {
+                ForEach(calendars) { cal in
+                    Toggle(isOn: sidebarVisibilityBinding(for: cal.id)) {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(Color(hex: cal.color) ?? .accentColor)
+                                .frame(width: 12, height: 12)
+                            Text(cal.name).lineLimit(1)
+                        }
+                    }
+                }
+                if !state.hiddenCalendarIds.isEmpty {
+                    Button("全部显示") { state.hiddenCalendarIds.removeAll() }
+                }
+            } header: {
+                Text("显示的日历")
+            }
+            Section {
+                Button {
+                    showingCreate = true
+                } label: {
+                    Label("新建事件", systemImage: "plus")
+                }
+                .disabled(calendars.isEmpty)
+                Button {
+                    showingSearch = true
+                } label: {
+                    Label("搜索", systemImage: "magnifyingglass")
+                }
+                Button {
+                    invitationOpenToken = nil
+                    showingInvitations = true
+                } label: {
+                    HStack {
+                        Label("我收到的邀请", systemImage: "envelope")
+                        if pendingInvitationCount > 0 {
+                            Spacer()
+                            Text("\(pendingInvitationCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 1)
+                                .background(Capsule().fill(Color.red))
+                        }
+                    }
+                }
+                Button {
+                    showingProfileSwitcher = true
+                } label: {
+                    Label("切换账号", systemImage: "person.crop.circle")
+                }
+                Button {
+                    showingSettings = true
+                } label: {
+                    Label("设置", systemImage: "gearshape")
+                }
+            }
         }
+        .listStyle(.sidebar)
+        .navigationTitle(navTitle.loc)
+    }
+
+    /// 与筛选日历页同一个绑定口径：Toggle 的 on = 不在 hidden 集合里。
+    /// 两边写的是同一份 AppState.hiddenCalendarIds，改哪边都即时
+    /// 反映到另一边和日历主体。
+    private func sidebarVisibilityBinding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { !state.hiddenCalendarIds.contains(id) },
+            set: { isVisible in
+                if isVisible {
+                    state.hiddenCalendarIds.remove(id)
+                } else {
+                    state.hiddenCalendarIds.insert(id)
+                }
+            },
+        )
     }
 
     // MARK: - Header (mode picker + nav arrows + anchor date)
     private var navBar: some View {
         VStack(spacing: 6) {
-            if !hasVerticalBar {
+            // 展开态这两组控件在侧边栏里，内容区顶部只留同步/错误状态行。
+            if !useSplitLayout {
                 Picker("视图", selection: $mode) {
                     ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
                 }
@@ -547,7 +625,7 @@ struct CalendarView: View {
                 .padding(.horizontal, 14)
             }
 
-            if !hasVerticalBar {
+            if !useSplitLayout {
                 dateNavRow
                     .padding(.horizontal, 14)
                     .padding(.bottom, 4)
@@ -1220,15 +1298,112 @@ extension Color {
     }
 }
 
-// Toolbar uses the SDK-supported horizontal layout on iPhone, iPad and Catalyst.
-private struct VerticalPreferredToolbar<Items: ToolbarContent, VerticalOnly: ToolbarContent, HorizontalOnly: ToolbarContent>: ViewModifier {
-    let items: Items
-    let verticalOnly: VerticalOnly
-    let horizontalOnly: HorizontalOnly
-    let hasVerticalBar: Bool
-    func body(content: Content) -> some View { content.toolbar { items } }
-}
-private struct VerticalBarProbe: View {
-    @Binding var isPresent: Bool
-    var body: some View { Color.clear.allowsHitTesting(false).accessibilityHidden(true).onAppear { isPresent = false } }
+/// 侧边栏里的迷你月历：显示锚点所在的月，点某天把锚点跳过去
+/// （视图模式不变，四个视图都以锚点为准）。不复用 MonthView——
+/// 那是整屏视图（事件行 + 点选弹层），塞不进侧边栏；这里只做
+/// 日期格本身，日期数学与 MonthView 同一套：公历、周一开头、
+/// 星期符号跟随应用语言。今天与锚点的标记法也与周视图的
+/// DayHeader 一致（今天 = 品牌色实心圆，锚点 = 淡填充圆）。
+private struct MiniMonthView: View {
+    let anchor: Date
+    let onSelect: (Date) -> Void
+
+    private let calendar: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.firstWeekday = 2  // Monday-first to match the rest of the app
+        c.locale = Locale.current
+        return c
+    }()
+
+    private var monthStart: Date {
+        calendar.dateInterval(of: .month, for: anchor)?.start ?? anchor
+    }
+
+    private var gridStart: Date {
+        // First day of the grid = Monday on or before the 1st.
+        let weekday = calendar.component(.weekday, from: monthStart)
+        let daysSinceMonday = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -daysSinceMonday, to: monthStart) ?? monthStart
+    }
+
+    private var days: [Date] {
+        (0..<42).compactMap { calendar.date(byAdding: .day, value: $0, to: gridStart) }
+    }
+
+    private var monthTitle: String {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.setLocalizedDateFormatFromTemplate("yMMMM")
+        return f.string(from: anchor)
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Text(monthTitle)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button {
+                    onSelect(Date())
+                } label: {
+                    Text("今天").font(.caption.weight(.medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+            }
+            HStack(spacing: 0) {
+                ForEach(Array(Self.weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
+                    Text(symbol)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 0), count: 7),
+                spacing: 2,
+            ) {
+                ForEach(days, id: \.self) { day in
+                    dayCell(day)
+                }
+            }
+        }
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let isToday = calendar.isDateInToday(day)
+        let isAnchor = calendar.isDate(day, inSameDayAs: anchor)
+        let inMonth = calendar.isDate(day, equalTo: anchor, toGranularity: .month)
+        return Button {
+            onSelect(day)
+        } label: {
+            Text("\(calendar.component(.day, from: day))")
+                .font(.caption.weight(isToday || isAnchor ? .bold : .regular))
+                .frame(width: 26, height: 26)
+                .background(cellBackground(isToday: isToday, isAnchor: isAnchor), in: Circle())
+                .foregroundStyle(cellForeground(isToday: isToday, inMonth: inMonth))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func cellBackground(isToday: Bool, isAnchor: Bool) -> Color {
+        if isToday { return .accentColor }
+        if isAnchor { return Color.secondary.opacity(0.22) }
+        return .clear
+    }
+
+    private func cellForeground(isToday: Bool, inMonth: Bool) -> Color {
+        if isToday { return .white }
+        return inMonth ? .primary : Color(.tertiaryLabel)
+    }
+
+    /// `veryShortWeekdaySymbols` is Sunday-first; rotate so Monday
+    /// leads, same derivation as MonthView's header.
+    private static var weekdaySymbols: [String] {
+        var cal = Calendar.current
+        cal.locale = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "zh-Hans")
+        let symbols = cal.veryShortWeekdaySymbols  // [Sun, Mon, ..., Sat]
+        return Array(symbols[1...]) + symbols[0...0]  // [Mon, ..., Sat, Sun]
+    }
 }
