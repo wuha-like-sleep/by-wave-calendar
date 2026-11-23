@@ -43,6 +43,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.ui.event.EventContextMenu
@@ -154,6 +155,10 @@ private fun EventRow(
     var menuOpen by remember { mutableStateOf(false) }
     val timeText = remember(locale, event) { formatTimeRange(event) }
     val interaction = remember { MutableInteractionSource() }
+    // Past treatment, aligned with the iOS / Android rows: title struck
+    // through and the event's own marks (dot + title) dropped to 55%.
+    // The card fill is the shared row surface, so it stays.
+    val isPast = parseInstant(event.endsAt)?.isBefore(java.time.Instant.now()) ?: false
 
     Row(
         modifier = modifier
@@ -189,7 +194,7 @@ private fun EventRow(
             modifier = Modifier
                 .size(Dimens.colorDot)
                 .clip(CircleShape)
-                .background(color),
+                .background(color.copy(alpha = if (isPast) 0.55f else 1f)),
         )
         Spacer(Modifier.size(14.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -197,8 +202,10 @@ private fun EventRow(
                 text = event.summary,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isPast) 0.55f else 1f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                textDecoration = if (isPast) TextDecoration.LineThrough else TextDecoration.None,
             )
             Text(
                 text = timeText,
