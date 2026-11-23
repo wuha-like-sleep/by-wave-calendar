@@ -87,6 +87,19 @@ struct EventsResponse: Decodable {
     let events: [EventDTO]
 }
 
+// GET /api/v1/events/sync 的响应（增量同步，syncToken 模型）。
+// 初始同步（不带 token）只有 calendars / events / nextSyncToken；
+// upsertedIds / deletedIds 只在增量响应里出现，所以保持 Optional——
+// 缺键解码为 nil，调用方按「没有增量名单」处理。events 的展开形态
+// 与 GET /events 一字不差（服务端共用同一份展开逻辑）。
+struct EventsSyncResponse: Decodable {
+    let calendars: [CalendarMeta]
+    let events: [EventDTO]
+    let upsertedIds: [String]?
+    let deletedIds: [String]?
+    let nextSyncToken: String
+}
+
 // GET /api/v1/geo/suggest 的一条在线地址建议（服务端已整形成完整
 // 地址串，客户端只管展示与回填）。
 struct GeoSuggestion: Decodable {

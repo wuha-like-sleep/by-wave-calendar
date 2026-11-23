@@ -622,10 +622,15 @@ final class AppState: ObservableObject {
             // 下一次变化。按这个账号的键精确删，别误伤其它账号的存档：
             // 事件窗口键在 userKey 后面还隔着一层窗口起止，用带点的
             // 前缀卡住边界，免得 a@x.com 把 a@x.com.au 的也前缀命中。
+            // 增量同步存档（bwc.eventsSyncToken / bwc.eventsSyncWindow）
+            // 同理必须一起清：令牌活着、本地镜像却被删空的话，下一次
+            // 拉取会拿着令牌只取增量，拼出一份永远缺底稿的日历。
             let defaults = UserDefaults.standard
             for storedKey in defaults.dictionaryRepresentation().keys
             where storedKey.hasPrefix("bwc.eventsETag.\(userKey).")
-                || storedKey == "bwc.invitationsETag.\(userKey)" {
+                || storedKey == "bwc.invitationsETag.\(userKey)"
+                || storedKey == "bwc.eventsSyncToken.\(userKey)"
+                || storedKey == "bwc.eventsSyncWindow.\(userKey)" {
                 defaults.removeObject(forKey: storedKey)
             }
         }

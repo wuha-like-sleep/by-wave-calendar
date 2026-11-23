@@ -324,6 +324,40 @@ enum PendingOpLogic {
     }
 }
 
+/// 增量同步（GET /events/sync）的本地应用计划。纯逻辑，不碰网络
+/// 与存储，Tests/EventSyncLogicCheck.swift 直接测它。
+///
+/// 语义与 Web 的 planDeltaApply 对齐：变更母事件整组替换（本地旧行
+/// 全删、响应行全收——母事件移出窗口时响应里没有它的行，整组替换
+/// 的结果就是删干净）；deletedIds 直接删；每次响应带的完整日历
+/// 名单是可见性权威，名单之外的日历整批剪掉（删日历 / 被取消共享
+/// 时服务端变更日志未必记得到所有者，靠这一路兜底）。
+///
+/// protectedIds 是离线队列里还没落定的母事件（新建 / 修改 / 删除，
+/// 含停在待处理里的）——它们的行一律不动：删了会把用户还没送出去
+/// 的改动冲掉，收了服务端的行又会把本地版本盖回去。与 Web 的
+/// _dirty 保护同语义；展示层随后还会再套一次 overlay（幂等），
+/// 两层口径一致。
+enum EventSyncLogic {
+    static func applyDelta(
+        local: [EventDTO],
+        upsertedIds: [String],
+        deletedIds: [String],
+        incoming: [EventDTO],
+        visibleCalendarIds: Set<String>,
+        protectedIds: Set<String>,
+    ) -> [EventDTO] {
+        let touched = Set(upsertedIds + deletedIds).subtracting(protectedIds)
+        var out = local.filter { dto in
+            if touched.contains(dto.id) { return false }
+            if !visibleCalendarIds.contains(dto.calendarId) && !protectedIds.contains(dto.id) { return false }
+            return true
+        }
+        out.append(contentsOf: incoming.filter { !protectedIds.contains($0.id) })
+        return out
+    }
+}
+
 /// 队列文件存储：一账号一个文件，Documents/pending-ops-v1-<账号键>.json。
 /// 文件很小（几十条条目封顶），同步读写 + NSLock 串行即可——不像
 /// EventCache 那样有成千上万条事件要躲开主线程。

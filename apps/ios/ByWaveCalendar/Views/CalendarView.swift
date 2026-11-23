@@ -982,6 +982,44 @@ struct CalendarView: View {
         return "bwc.invitationsETag.\(key)"
     }
 
+    /// /events/sync 的同步存档键（UserDefaults）：令牌与它的窗口基线
+    /// 分开两键存、一起读一起写——令牌只对它签发时那个窗口的本地
+    /// 镜像有效，窗口对不上就当没有令牌（走全量重建基线），和 Web
+    /// syncPlan 的基线语义一致。分键方式与 ETag 存档相同（服务器 +
+    /// 账号），登出时由 AppState.retireCredentials 一并清掉。
+    private func eventsSyncTokenKey() -> String {
+        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+        return "bwc.eventsSyncToken.\(key)"
+    }
+
+    private func eventsSyncWindowKey() -> String {
+        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
+        return "bwc.eventsSyncWindow.\(key)"
+    }
+
+    /// 窗口基线串：与请求路径同一种格式化（isoPlain），存档与请求
+    /// 永远同源，不会出现「格式差一点、基线永远对不上」。
+    private func syncWindowBaseline(from: Date, to: Date) -> String {
+        "\(DateFormatters.isoPlain.string(from: from))|\(DateFormatters.isoPlain.string(from: to))"
+    }
+
+    /// 取这个窗口基线的令牌：基线对不上（窗口变了）返回 nil，调用方
+    /// 按「没有令牌」走全量同步、重建基线。
+    private func storedSyncToken(forBaseline baseline: String) -> String? {
+        guard UserDefaults.standard.string(forKey: eventsSyncWindowKey()) == baseline else { return nil }
+        return UserDefaults.standard.string(forKey: eventsSyncTokenKey())
+    }
+
+    private func saveSyncState(token: String, baseline: String) {
+        UserDefaults.standard.set(token, forKey: eventsSyncTokenKey())
+        UserDefaults.standard.set(baseline, forKey: eventsSyncWindowKey())
+    }
+
+    private func clearSyncState() {
+        UserDefaults.standard.removeObject(forKey: eventsSyncTokenKey())
+        UserDefaults.standard.removeObject(forKey: eventsSyncWindowKey())
+    }
+
     /// 邀请徽章数：还没回应的、事件没取消、邀请没过期的条数。拉不到
     /// 就保持原值 —— 徽章是提示性的，失败必须静默。
     /// 走条件请求：没新邀请、没人回应时服务端回 304，整表不下载、
@@ -1004,6 +1042,74 @@ struct CalendarView: View {
         } catch {
             // keep the previous count
         }
+    }
+
+    /// 一次窗口拉取的结局。events 是服务端底稿行（还没套离线队列的
+    /// 展示合并）；syncState 是这次拉取换来的新同步存档——**只在结果
+    /// 真正落进本地集之后才由 load() 写入**：令牌要是先存下、结果却
+    /// 被账号切换 / 新一代加载丢掉，令牌就越过了没被应用的那批变化，
+    /// 它们再也不会被增量带回来（ETag 没有这个坑，304 顶多让人多等
+    /// 一次内容变化；syncToken 越过就是永久漏数据）。
+    private enum WindowLoadOutcome {
+        case unchanged
+        case events(calendars: [CalendarMeta], events: [EventDTO], syncState: (token: String, baseline: String)?)
+    }
+
+    /// 窗口拉取：先走 /events/sync（有基线令牌走增量、没有走全量），
+    /// 同步通道任何非 410 失败都清掉同步存档、回退到原来的 ETag
+    /// 条件请求全量路径——同步挂掉不能把日历也拖挂。410 只出现在
+    /// 增量路径上（令牌解不开 / 已被服务端日志裁剪）：清存档后无
+    /// 令牌全量重建一次，重建再失败同样回退旧路径，不连环重试。
+    private func fetchWindow(client: APIClient, from: Date, to: Date, legacyPath: String) async throws -> WindowLoadOutcome {
+        let fromIso = DateFormatters.isoPlain.string(from: from)
+        let toIso = DateFormatters.isoPlain.string(from: to)
+        let baseline = syncWindowBaseline(from: from, to: to)
+        if let token = storedSyncToken(forBaseline: baseline) {
+            do {
+                let delta = try await client.getEventsSync(from: fromIso, to: toIso, syncToken: token)
+                // 增量套到本地集（展示集口径）：没被队列碰过的母事件，
+                // 展示行与服务端镜像行是同一批，整组替换等价；被队列
+                // 占住的母事件整组跳过，本地版本原样留着。
+                let merged = EventSyncLogic.applyDelta(
+                    local: self.events,
+                    upsertedIds: delta.upsertedIds ?? [],
+                    deletedIds: delta.deletedIds ?? [],
+                    incoming: delta.events,
+                    visibleCalendarIds: Set(delta.calendars.map { $0.id }),
+                    protectedIds: state.offlineSync.pendingIds,
+                )
+                return .events(calendars: delta.calendars, events: merged, syncState: (token: delta.nextSyncToken, baseline: baseline))
+            } catch is CancellationError {
+                // 账号在请求途中换了 / 视图正在撤下：不是同步失败，
+                // 存档别动，原样往上抛给 load() 的取消分支。
+                throw CancellationError()
+            } catch let e as APIError {
+                clearSyncState()
+                if case .server(let status, _) = e, status == 410 {
+                    // 令牌过期：本地服务端镜像按令牌那一代算已经不可信，
+                    // 无令牌全量重建（本地未同步写入靠 load() 之后的
+                    // overlay 保住，不会跟着镜像一起丢）。只试这一次。
+                    if let full = try? await client.getEventsSync(from: fromIso, to: toIso, syncToken: nil) {
+                        return .events(calendars: full.calendars, events: full.events, syncState: (token: full.nextSyncToken, baseline: baseline))
+                    }
+                }
+            } catch {
+                clearSyncState()
+            }
+        } else if let full = try? await client.getEventsSync(from: fromIso, to: toIso, syncToken: nil) {
+            // 没有基线令牌（首次 / 窗口变了 / 存档被清）：全量同步，
+            // 顺带把基线立到这个窗口上。
+            return .events(calendars: full.calendars, events: full.events, syncState: (token: full.nextSyncToken, baseline: baseline))
+        } else {
+            clearSyncState()
+        }
+        // 回退：原来的 ETag 条件请求全量路径，一字不改。
+        let etagKey = eventsETagKey(from: from, to: to)
+        let (fetched, newETag) = try await client.getEventsConditional(
+            path: legacyPath, ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
+        guard let resp = fetched else { return .unchanged }
+        if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
+        return .events(calendars: resp.calendars, events: resp.events, syncState: nil)
     }
 
     // MARK: - Fetch
@@ -1036,15 +1142,15 @@ struct CalendarView: View {
 
         do {
             let client = APIClient(state: state)
-            // 条件请求：带上这个（账号、窗口）上次拿到的 ETag。内容没变
-            // 时服务端只回 304，整个窗口的下载、解码、缓存重写、镜像与
-            // 提醒重排全部跳过——15 秒一次的轮询绝大多数时候就该是这个
-            // 结局。令牌由服务端按「可见日历 + 窗口 + 内容版本」算，
-            // 任何一处数据变了令牌就变，不会拿着旧令牌漏掉新数据。
-            let etagKey = eventsETagKey(from: from, to: to)
-            let (fetched, newETag) = try await client.getEventsConditional(
-                path: path, ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
-            guard let resp = fetched else {
+            // 拉取通道在 fetchWindow 里：增量同步（/events/sync）优先，
+            // 同步通道失败回退 ETag 条件请求全量。两条路的结局在这里
+            // 汇成同一份处理——排序、展示合并、缓存、镜像、提醒重排
+            // 都不分岔。unchanged 只来自旧路径的 304：服务端窗口没变，
+            // 整个窗口的下载、解码、缓存重写全部跳过，15 秒一次的
+            // 轮询绝大多数时候就该是这个结局（增量路径同理，没变化时
+            // 响应里只有空名单和新令牌）。
+            let outcome = try await fetchWindow(client: client, from: from, to: to, legacyPath: path)
+            guard case .events(let outcomeCalendars, let outcomeEvents, let syncState) = outcome else {
                 guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
                 // 304 = 服务端窗口没变，但本地队列可能刚有新条目
                 //（刚在详情页删了事件）：把队列合并重新套到现集上，
@@ -1054,7 +1160,7 @@ struct CalendarView: View {
                 self.lastFetchedWindow = (start: from, end: to)
                 return
             }
-            if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
+            let resp = EventsResponse(calendars: outcomeCalendars, events: outcomeEvents)
             // Sort off the main actor before publishing. With a 12-month
             // pre-cache (incoming v1.0.x feature), the event count can
             // hit a few thousand — sorting 3000 elements on main was
@@ -1066,6 +1172,10 @@ struct CalendarView: View {
             // 账号已经换了（或已退出）：这份数据不属于现在的账号，整个丢掉。
             // 这个视图本身也马上会被 RootView 按新账号重新挂载。
             guard !Task.isCancelled, generation == loadGeneration, state.isSignedIn, state.activeProfileId == loadingProfileId else { return }
+            // 结果确认要落进本地集了，才把新同步令牌存档（见
+            // WindowLoadOutcome 的注释：先存令牌、结果被丢掉 =
+            // 令牌越过没被应用的变化，永久漏数据）。
+            if let syncState { saveSyncState(token: syncState.token, baseline: syncState.baseline) }
             self.calendars = resp.calendars
             // 服务端窗口是权威底稿，但还没同步出去的本地改动不能被
             // 这次替换冲掉：待删的剔除、待改的套用、待建的保留
