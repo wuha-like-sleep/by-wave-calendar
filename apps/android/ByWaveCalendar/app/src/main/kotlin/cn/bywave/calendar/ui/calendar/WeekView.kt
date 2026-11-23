@@ -11,12 +11,15 @@
 //   - dayStarts derived from Monday-anchored startOfWeek
 //   - Per-day filter (startsAt < dayEnd && endsAt > dayStart)
 //   - Cluster overlapping events → split column width
+//   - All-day strip above the grid (iOS allDayRow): per-day pills,
+//     max 3 rows + "+N", absent entirely when the week has none
 //   - Auto-scroll to current_hour - 1 on appear
 
 package cn.bywave.calendar.ui.calendar
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -72,6 +75,12 @@ import java.util.Locale
 private val HOUR_HEIGHT = 56.dp
 private val TIME_GUTTER = 44.dp
 
+// 全天行口径与 iOS WeekView 的 allDayRow 对齐：一列最多 3 条药丸，
+// 再多折成「+N」；每条药丸占一个 24dp 的行槽（字号缩放时按比例放大，
+// 见 AllDayRow 里的说明）。
+private val ALL_DAY_MAX_ROWS = 3
+private val ALL_DAY_ROW_HEIGHT = 24.dp
+
 @Composable
 fun WeekView(
     weekStart: LocalDate,
@@ -82,11 +91,27 @@ fun WeekView(
 ) {
     val dayStarts = remember(weekStart) { (0L..6L).map { weekStart.plusDays(it) } }
     val timedEvents = remember(events) { events.filter { !it.allDay } }
+    // 全天事件以前在这里被 !allDay 滤掉之后就没有下文了：时间网格按
+    // 小时定位，全天事件没有小时可言，于是它们在周视图里彻底不渲染
+    //（数据其实一直在 state.events 里，月视图用同一份数据画得好好的）。
+    // 现在分流给下面的 AllDayRow，和 iOS / 桌面端一样在网格上方成行。
+    val allDayEvents = remember(events) { events.filter { it.allDay } }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Header — weekday + date
         HeaderRow(dayStarts = dayStarts)
         HorizontalDivider()
+
+        // All-day strip — pinned between the header and the scrolling
+        // time grid (outside the scroll column, like the header), so
+        // scrolling the hours never carries it away. Renders nothing —
+        // not even the divider — when no all-day event lands this week.
+        AllDayRow(
+            dayStarts = dayStarts,
+            events = allDayEvents,
+            calendars = calendars,
+            onEventClick = onEventClick,
+        )
 
         // Scrollable time grid
         val scroll = rememberScrollState()
@@ -198,6 +223,111 @@ private fun HeaderRow(dayStarts: List<LocalDate>) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AllDayRow(
+    dayStarts: List<LocalDate>,
+    events: List<EventDTO>,
+    calendars: List<CalendarMeta>,
+    onEventClick: (EventDTO) -> Unit,
+) {
+    // 分桶走 eventOnDay：它对全天事件调 eventAllDayDates()，直接读存储里
+    // 的 UTC 午夜日历日期（起止两端、含旧版排他结束日），不按设备时区
+    // 平移——全天事件写着 11 月 16 日，在墨尔本和洛杉矶都必须落在 16 日。
+    // 月视图用的是同一条路径，两边不会漂移。
+    val perDay = remember(events, dayStarts) {
+        dayStarts.map { day ->
+            events.filter { eventOnDay(it, day) }.sortedBy { it.startsAt }
+        }
+    }
+    val maxRows = minOf(ALL_DAY_MAX_ROWS, perDay.maxOfOrNull { it.size } ?: 0)
+    if (maxRows == 0) return
+
+    // 行槽高随系统字号缩放，和月视图的 chipRow 同一条规则。写死 24dp 的话，
+    // 字号调到 1.3 倍以上药丸里的文字行就比槽高，上下两条会叠到一起——
+    // iOS 当年就是把每行 allowance 从 20pt 低估成这样才出的重叠问题。
+    val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 2f)
+    val pillHeight = ALL_DAY_ROW_HEIGHT * fontScale - 2.dp
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            // 左侧说明栏和小时刻度同宽、同为右对齐；列从 TIME_GUTTER 处
+            // 起、按 weight 7 等分，与 HeaderRow 完全同构——表头、全天行、
+            // 时间网格（columnWidth = (全宽 − TIME_GUTTER) / 7）共用同一套
+            // 宽度模型，列对齐是构造出来的，不靠数值凑。
+            Text(
+                text = stringResource(R.string.event_allday),
+                modifier = Modifier
+                    .width(TIME_GUTTER - 4.dp)
+                    .padding(end = 4.dp)
+                    .padding(top = 3.dp),
+                textAlign = TextAlign.End,
+                style = MaterialTheme.typography.labelSmall,
+                color = mutedTextColor(),
+                maxLines = 1,
+            )
+            for (dayEvents in perDay) {
+                Column(
+                    modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    for (ev in dayEvents.take(maxRows)) {
+                        AllDayPill(
+                            event = ev,
+                            calendars = calendars,
+                            height = pillHeight,
+                            onClick = { onEventClick(ev) },
+                        )
+                    }
+                    if (dayEvents.size > maxRows) {
+                        Text(
+                            text = "+${dayEvents.size - maxRows}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = mutedTextColor(),
+                            modifier = Modifier.padding(start = 6.dp),
+                        )
+                    }
+                }
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun AllDayPill(
+    event: EventDTO,
+    calendars: List<CalendarMeta>,
+    height: Dp,
+    onClick: () -> Unit,
+) {
+    // 样式走四端刚统一的口径（与月视图条带、iOS / 桌面端全天药丸一致）：
+    // 圆角 Radii.chip（4dp）、填充不透明度 0.9、字色由 onCalendarColor
+    // 的 WCAG 明度公式决定，不再无条件白字。
+    val color = calendarColor(event, calendars)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(Radii.chipShape)
+            .background(color.copy(alpha = 0.9f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = event.summary,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = onCalendarColor(color),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
