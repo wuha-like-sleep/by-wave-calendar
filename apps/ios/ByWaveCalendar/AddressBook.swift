@@ -181,7 +181,7 @@ enum AddressBook {
         GeoSuggestion(
             label: e.address, name: nil, street: e.street, suburb: e.suburb,
             city: e.city, state: e.state, postcode: e.postcode,
-            country: e.country, lat: e.lat, lon: e.lon
+            country: e.country, lat: e.lat, lon: e.lon, unit: nil, units: nil
         )
     }
 

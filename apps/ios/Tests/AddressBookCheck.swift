@@ -41,7 +41,7 @@ import Foundation
         let geo = GeoSuggestion(
             label: "Melbourne Central", name: nil, street: "La Trobe Street",
             suburb: nil, city: "Melbourne", state: nil, postcode: nil,
-            country: nil, lat: -37.8, lon: 144.9
+            country: nil, lat: -37.8, lon: 144.9, unit: nil, units: nil
         )
         let online = AddressBook.upsert([], address: "Melbourne Central", now: 1000, source: "online", geo: geo)
         precondition(online[0].source == "online" && online[0].street == "La Trobe Street" && online[0].lat == -37.8)

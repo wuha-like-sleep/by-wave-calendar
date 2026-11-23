@@ -103,8 +103,12 @@ struct GeoSuggestion: Decodable {
     // 自建地址包专用：units 是同一基础地址折叠进来的全部单元号
     // （响应层折叠，Photon 来源不带）；unit 是用户在查询里点名某个
     // 单元时代表行命中的那个，此时 label 已含单元前缀。
-    let unit: String? = nil
-    let units: [String]? = nil
+    // 注意不能给这两个字段写 `= nil` 默认值：带初始值的 let 属性
+    // 合成 Decodable 时根本不会被解码（编译器会警告 "will not be
+    // decoded"），服务端的 unit/units 会被静默丢掉、单元注脚永远
+    // 显示不出来。可选属性缺键时 decodeIfPresent 本来就给 nil。
+    let unit: String?
+    let units: [String]?
 }
 
 // GET /api/v1/geo/suggest response。上游失败时服务端回空列表，
