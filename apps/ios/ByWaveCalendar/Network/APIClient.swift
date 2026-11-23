@@ -548,6 +548,76 @@ extension APIClient {
     }
 }
 
+// MARK: - 购买清单
+
+extension APIClient {
+    // GET /shopping-lists → the signed-in user's lists with counts.
+    // `eventId` narrows to the lists linked to one event (the event
+    // editor's section); nil fetches them all.
+    func listShoppingLists(eventId: String? = nil) async throws -> [ShoppingListDTO] {
+        if let eventId {
+            return try await get("/shopping-lists?eventId=\(eventId)")
+        }
+        return try await get("/shopping-lists")
+    }
+
+    // GET /shopping-lists/:id → { list, items }.
+    func getShoppingList(id: String) async throws -> ShoppingListDetailDTO {
+        try await get("/shopping-lists/\(id)")
+    }
+
+    // POST /shopping-lists → 201, the new list (detailView shape).
+    // Throws server 400 event_not_found / 409 list_limit_reached.
+    func createShoppingList(title: String, eventId: String?) async throws -> ShoppingListDTO {
+        try await post("/shopping-lists", body: ShoppingListCreateInput(title: title, eventId: eventId))
+    }
+
+    // PATCH /shopping-lists/:id → the updated list. Hand-built body
+    // because the link field has THREE states the synthesized
+    // encoder cannot express: key absent (leave the link alone),
+    // explicit null (unlink), and a value (link). Hence the double
+    // Optional: outer nil = omit the key, inner nil = send null.
+    func updateShoppingList(id: String, title: String?, eventId: String??) async throws -> ShoppingListDTO {
+        var body: [String: Any] = [:]
+        if let title { body["title"] = title }
+        if let eventId { body["eventId"] = eventId ?? NSNull() }
+        let data = try JSONSerialization.data(withJSONObject: body)
+        return try await patchRaw("/shopping-lists/\(id)", bodyData: data)
+    }
+
+    // DELETE /shopping-lists/:id → { ok: true } in the envelope; the
+    // void helper swallows the body like the other DELETEs.
+    func deleteShoppingList(id: String) async throws {
+        try await delete("/shopping-lists/\(id)")
+    }
+
+    // POST /shopping-lists/:id/items → 201, the new item.
+    // Throws server 409 item_limit_reached.
+    func addShoppingItem(listId: String, _ input: ShoppingItemCreateInput) async throws -> ShoppingListItemDTO {
+        try await post("/shopping-lists/\(listId)/items", body: input)
+    }
+
+    // PATCH /shopping-lists/:id/items/:itemId → the updated item.
+    func updateShoppingItem(listId: String, itemId: String, _ input: ShoppingItemUpdateInput) async throws -> ShoppingListItemDTO {
+        try await patch("/shopping-lists/\(listId)/items/\(itemId)", body: input)
+    }
+
+    // DELETE /shopping-lists/:id/items/:itemId → { ok: true }.
+    func deleteShoppingItem(listId: String, itemId: String) async throws {
+        try await delete("/shopping-lists/\(listId)/items/\(itemId)")
+    }
+
+    // POST /shopping-lists/:id/items/:itemId/move → the moved item.
+    // Callers re-fetch the detail afterwards so order and counts
+    // line up with the server instead of being patched locally.
+    func moveShoppingItem(listId: String, itemId: String, direction: String) async throws -> ShoppingListItemDTO {
+        try await post(
+            "/shopping-lists/\(listId)/items/\(itemId)/move",
+            body: ShoppingItemMoveInput(direction: direction),
+        )
+    }
+}
+
 // MARK: - 冲突检测
 
 extension APIClient {

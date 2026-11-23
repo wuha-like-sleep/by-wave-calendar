@@ -124,6 +124,16 @@ struct SettingsView: View {
                                subtitle: "创建 / 撤销，供程序调用",
                                tint: .yellow)
                     }
+                    // Same settings level as API Token (and the other
+                    // clients): shopping lists are a user feature hub
+                    // entry, not buried inside a single calendar.
+                    NavigationLink {
+                        ShoppingListsView()
+                    } label: {
+                        navRow(icon: "cart.fill", title: "购买清单",
+                               subtitle: "我的清单",
+                               tint: .green)
+                    }
                     // Scan a desktop's pair-init QR to approve it from
                     // the logged-in APP — no browser bounce required.
                     // The phone reads <server>/desktop-pair/<CODE> from

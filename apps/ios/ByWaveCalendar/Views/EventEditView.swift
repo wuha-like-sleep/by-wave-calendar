@@ -193,6 +193,17 @@ struct EventEditView: View {
     @State private var saving = false
     @State private var errorMessage: String?
 
+    // 购买清单 section state. `eventShoppingLists` = the lists linked
+    // to THIS event (fetched with ?eventId=); `allShoppingLists` feeds
+    // the link picker. Both stay empty for a not-yet-saved event,
+    // whose section only shows the save-first hint.
+    @State private var eventShoppingLists: [ShoppingListDTO] = []
+    @State private var allShoppingLists: [ShoppingListDTO] = []
+    @State private var shoppingError: String?
+    @State private var newEventListTitle = ""
+    @State private var showShoppingLinkPicker = false
+    @State private var shoppingBusy = false
+
     // Stable idempotency key for create/duplicate. Generated ONCE here, at
     // editor-construction time (see init), and reused on every save attempt
     // so a retry after a timeout collapses onto the first server row instead
@@ -610,6 +621,62 @@ struct EventEditView: View {
                 }
             }
 
+            // 购买清单 — same "after the event is saved" split as the
+            // attendees section below: a new event shows the save-first
+            // hint; a saved event lists its linked shopping lists with
+            // progress + unlink, can link an existing list, or create
+            // one pre-linked to this event.
+            Section {
+                if let existing = mode.existing {
+                    if eventShoppingLists.isEmpty {
+                        Text("还没有关联的购买清单。")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(eventShoppingLists) { list in
+                        NavigationLink {
+                            ShoppingListDetailView(listId: list.id)
+                                .environmentObject(state)
+                        } label: {
+                            HStack {
+                                Text(list.title).lineLimit(1)
+                                Spacer()
+                                if list.totalCount > 0 {
+                                    Text("已买 %1$lld/%2$lld".locFormat(list.doneCount, list.totalCount))
+                                        .font(.callout).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        Button("解除关联") {
+                            Task { await unlinkShoppingList(list) }
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(shoppingBusy)
+                    }
+                    Button("关联") {
+                        showShoppingLinkPicker = true
+                    }
+                    .disabled(shoppingBusy)
+                    TextField("例如：周末烧烤采购", text: $newEventListTitle)
+                    Button {
+                        Task { await createShoppingListForEvent(existing) }
+                    } label: {
+                        HStack {
+                            if shoppingBusy { ProgressView().controlSize(.small) }
+                            Text("为这个事件新建清单")
+                        }
+                    }
+                    .disabled(shoppingBusy)
+                    if let shoppingError {
+                        Text(shoppingError).foregroundStyle(.red).font(.callout)
+                    }
+                } else {
+                    Text("先保存事件，之后就能给它关联购买清单。")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("购买清单")
+            }
+
             // 邀请人 — matches the web flow: invites are managed on a
             // dedicated page AFTER the event is saved. New events show
             // a hint; editing events show a NavigationLink → AttendeesPage
@@ -684,6 +751,46 @@ struct EventEditView: View {
             if !AddressBookStore.isSeeded() {
                 await seedAddressBook()
             }
+        }
+        // 购买清单 section 数据：已保存事件才拉（关联清单 + 全部清单
+        // 供关联选择器）。失败只落在 section 内的错误行，不挡编辑。
+        .task {
+            await loadShoppingLists()
+        }
+        .sheet(isPresented: $showShoppingLinkPicker) {
+            NavigationStack {
+                List {
+                    if allShoppingLists.isEmpty {
+                        Text("还没有购买清单——在下方建一张吧。")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(allShoppingLists.filter { $0.eventId != mode.existing?.id }) { list in
+                        Button {
+                            showShoppingLinkPicker = false
+                            Task { await linkShoppingList(list) }
+                        } label: {
+                            HStack {
+                                Text(list.title)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Spacer()
+                                if list.totalCount > 0 {
+                                    Text("已买 %1$lld/%2$lld".locFormat(list.doneCount, list.totalCount))
+                                        .font(.callout).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("购买清单")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { showShoppingLinkPicker = false }
+                    }
+                }
+            }
+            .environmentObject(state)
         }
         .navigationTitle({
             switch mode {
@@ -1057,6 +1164,73 @@ struct EventEditView: View {
 
     /// 地点联想刷新：本地同步算；本地不足 3 条、查询够长、开关开着
     /// 才防抖查在线兜底。输入变了就丢弃在途结果。
+    // MARK: - 购买清单 section
+
+    /// Fetch this event's linked lists plus the full set for the
+    /// link picker. Only for saved events; failures land in the
+    /// section's own error row and never block editing the event.
+    private func loadShoppingLists() async {
+        guard let existing = mode.existing else { return }
+        do {
+            let client = APIClient(state: state)
+            eventShoppingLists = try await client.listShoppingLists(eventId: existing.id)
+            allShoppingLists = try await client.listShoppingLists()
+            shoppingError = nil
+        } catch {
+            if !Task.isCancelled { shoppingError = shoppingErrorText(error) }
+        }
+    }
+
+    /// Link an existing list to this event (PATCH its eventId).
+    private func linkShoppingList(_ list: ShoppingListDTO) async {
+        guard let existing = mode.existing else { return }
+        shoppingBusy = true
+        shoppingError = nil
+        defer { shoppingBusy = false }
+        do {
+            _ = try await APIClient(state: state).updateShoppingList(
+                id: list.id, title: nil, eventId: .some(existing.id),
+            )
+            await loadShoppingLists()
+        } catch {
+            shoppingError = shoppingErrorText(error)
+        }
+    }
+
+    /// Unlink a list from this event — explicit null, not omission.
+    private func unlinkShoppingList(_ list: ShoppingListDTO) async {
+        shoppingBusy = true
+        shoppingError = nil
+        defer { shoppingBusy = false }
+        do {
+            _ = try await APIClient(state: state).updateShoppingList(
+                id: list.id, title: nil, eventId: .some(nil),
+            )
+            await loadShoppingLists()
+        } catch {
+            shoppingError = shoppingErrorText(error)
+        }
+    }
+
+    /// Create a list pre-linked to this event. An empty title field
+    /// falls back to the shared default title, like the web flow.
+    private func createShoppingListForEvent(_ existing: EventDTO) async {
+        shoppingBusy = true
+        shoppingError = nil
+        defer { shoppingBusy = false }
+        let title = newEventListTitle.trimmingCharacters(in: .whitespaces)
+        do {
+            _ = try await APIClient(state: state).createShoppingList(
+                title: title.isEmpty ? "购买清单".loc : title,
+                eventId: existing.id,
+            )
+            newEventListTitle = ""
+            await loadShoppingLists()
+        } catch {
+            shoppingError = shoppingErrorText(error)
+        }
+    }
+
     private func refreshSuggestions() {
         localSuggestions = AddressBook.match(AddressBookStore.entries(), query: location, title: summary, limit: 5)
         onlineSuggestions = []

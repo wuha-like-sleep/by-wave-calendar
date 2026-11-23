@@ -1067,6 +1067,106 @@ enum AlarmTriggerParser {
     }
 }
 
+// MARK: - 购买清单 (shopping-lists)
+
+/// One row of GET /shopping-lists — the list header plus the counts
+/// the server computes from its items. `eventSummary` is the linked
+/// event's title, nil when the list is unlinked or the event is gone.
+/// Timestamps stay String: the UI never renders them, and keeping the
+/// raw value avoids coupling this DTO to the date decoder's formats.
+struct ShoppingListDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let eventId: String?
+    let eventSummary: String?
+    let totalCount: Int
+    let doneCount: Int
+    let createdAt: String
+    let updatedAt: String
+
+    /// 买齐 badge — only for a non-empty list with everything ticked.
+    var isAllDone: Bool { totalCount > 0 && doneCount >= totalCount }
+}
+
+/// One item row of GET /shopping-lists/:id. `quantity` is a JSON
+/// number server-side (the numeric column is converted on the way
+/// out) and may be fractional (0.5), hence Double.
+struct ShoppingListItemDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let listId: String
+    let name: String
+    let quantity: Double?
+    let unit: String?
+    let note: String?
+    let done: Bool
+    let position: Int
+    let createdAt: String
+    let updatedAt: String
+}
+
+/// GET /shopping-lists/:id — header (same shape as the list rows,
+/// counts included) plus the items in position order.
+struct ShoppingListDetailDTO: Decodable {
+    let list: ShoppingListDTO
+    let items: [ShoppingListItemDTO]
+}
+
+/// POST /shopping-lists body. A nil eventId is dropped by the
+/// encoder, which is exactly the server's "no link" create.
+struct ShoppingListCreateInput: Encodable {
+    let title: String
+    let eventId: String?
+}
+
+/// POST /shopping-lists/:id/items body. nil quantity / unit / note
+/// are dropped; an empty-string unit or note is sent as-is and the
+/// server normalizes it to null.
+struct ShoppingItemCreateInput: Encodable {
+    let name: String
+    let quantity: Double?
+    let unit: String?
+    let note: String?
+}
+
+/// PATCH /shopping-lists/:id/items/:itemId body — every field
+/// optional, nil entries are dropped so a done-toggle PATCH sends
+/// `{done: …}` alone. (Clearing quantity back to nil is not
+/// expressible this way; the editor never offers it.)
+struct ShoppingItemUpdateInput: Encodable {
+    let name: String?
+    let quantity: Double?
+    let unit: String?
+    let note: String?
+    let done: Bool?
+}
+
+/// POST /shopping-lists/:id/items/:itemId/move body.
+struct ShoppingItemMoveInput: Encodable {
+    let direction: String  // "up" | "down"
+}
+
+/// Quantity display / entry helpers. The server stores quantity as
+/// numeric(12,3), so at most three decimals ever come back; display
+/// trims the meaningless trailing zeros (2 → "2", 0.5 → "0.5").
+enum ShoppingQuantity {
+    static func format(_ quantity: Double) -> String {
+        var s = String(format: "%.3f", quantity)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
+    }
+
+    /// Parse a quantity text field. Accepts a comma decimal
+    /// separator (many locales' keypads produce one); empty or
+    /// unparseable text means "no quantity".
+    static func parse(_ text: String) -> Double? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: ",", with: ".")
+        guard !t.isEmpty else { return nil }
+        return Double(t)
+    }
+}
+
 /// Availability stays in the initiating calendar's zone; legacy calendars used Shanghai.
 func bookingTimeZone(_ explicit: String?, calendar: String?) -> String {
     [explicit, calendar, "Asia/Shanghai"].compactMap { value in
