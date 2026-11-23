@@ -1864,6 +1864,11 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "errorPage.oauth.scopeHeading": "Portée invalide",
   "errorPage.oauth.scopeMessage": "Aucune des portées demandées par l'application n'est autorisée.",
   "flash.oauth.signInToAuthorize": "Connectez-vous pour autoriser « {name} » à accéder à votre agenda",
+  "oauth.consent.intro": "souhaite accéder à votre compte ByWave et demande les autorisations suivantes :",
+  "oauth.consent.redirectNote": "Après votre approbation, vous serez redirigé vers {name}. Vous pouvez révoquer cet accès à tout moment dans <a href='/app/settings#oauth' class='underline'>Paramètres → Applications autorisées</a>.",
+  "oauth.consent.deny": "Refuser",
+  "oauth.consent.approve": "Autoriser",
+  "oauth.consent.signedInAs": "Connecté en tant que {email}",
 
   // flash — SSO login / linking (src/web/sso.ts)
   "flash.sso.configError": "Problème de configuration SSO : {error}",
@@ -2777,9 +2782,9 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "adminOauthApps.flash.disabled": "Désactivée",
   "adminOauthApps.flash.enabled": "Activée",
   "adminOauthApps.flash.deleted": "Application supprimée (tous les jetons d'accès révoqués)",
-  "adminOauthApps.scope.readEvents": "Voir vos calendriers et événements",
-  "adminOauthApps.scope.writeEvents": "Créer, modifier et supprimer vos événements",
-  "adminOauthApps.scope.readProfile": "Lire les informations de votre compte (e-mail, nom affiché)",
+  "oauth.scope.readEvents": "Voir vos calendriers et événements",
+  "oauth.scope.writeEvents": "Créer, modifier et supprimer vos événements",
+  "oauth.scope.readProfile": "Lire les informations de votre compte (e-mail, nom affiché)",
   // /admin/client-release — route flash messages
   "adminClientRelease.flash.announcementTooLong": "Annonce trop longue — non enregistrée",
   "adminClientRelease.flash.badVersion": "Écrivez la version en chiffres séparés par des points, comme 1.8.0, pour que les clients puissent comparer — non enregistré",

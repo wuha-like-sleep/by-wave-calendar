@@ -1850,6 +1850,11 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "errorPage.oauth.scopeHeading": "權限範圍無效",
   "errorPage.oauth.scopeMessage": "應用程式申請的 scope 都不在它被允許的範圍內。",
   "flash.oauth.signInToAuthorize": "登入後授權「{name}」存取你的行事曆",
+  "oauth.consent.intro": "想要存取你的 ByWave 帳號，並取得以下權限：",
+  "oauth.consent.redirectNote": "授權後會跳轉回 {name}，你可以隨時在 <a href='/app/settings#oauth' class='underline'>設定 → 已授權應用程式</a> 撤銷。",
+  "oauth.consent.deny": "拒絕",
+  "oauth.consent.approve": "允許",
+  "oauth.consent.signedInAs": "登入為 {email}",
 
   // flash — SSO login / linking (src/web/sso.ts)
   "flash.sso.configError": "SSO 設定異常：{error}",
@@ -2763,9 +2768,9 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "adminOauthApps.flash.disabled": "已停用",
   "adminOauthApps.flash.enabled": "已啟用",
   "adminOauthApps.flash.deleted": "應用程式已刪除（已撤銷所有存取權杖）",
-  "adminOauthApps.scope.readEvents": "查看你的行事曆和事件",
-  "adminOauthApps.scope.writeEvents": "建立、修改、刪除你的事件",
-  "adminOauthApps.scope.readProfile": "讀取你的帳號資訊（電子郵件、顯示名稱）",
+  "oauth.scope.readEvents": "查看你的行事曆和事件",
+  "oauth.scope.writeEvents": "建立、修改、刪除你的事件",
+  "oauth.scope.readProfile": "讀取你的帳號資訊（電子郵件、顯示名稱）",
   // /admin/client-release — route flash messages
   "adminClientRelease.flash.announcementTooLong": "公告內容太長了 —— 沒有儲存",
   "adminClientRelease.flash.badVersion": "版本號要寫成 1.8.0 這種數字點分形態，客戶端才比得出大小 —— 沒有儲存",

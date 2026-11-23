@@ -1871,6 +1871,11 @@ export const en = {
   "errorPage.oauth.scopeHeading": "Invalid scope",
   "errorPage.oauth.scopeMessage": "None of the scopes the app requested are within what it's allowed to ask for.",
   "flash.oauth.signInToAuthorize": "Sign in to authorize “{name}” to access your calendar",
+  "oauth.consent.intro": "wants to access your ByWave account and is requesting the following permissions:",
+  "oauth.consent.redirectNote": "After you approve, you'll be sent back to {name}. You can revoke this access at any time in <a href='/app/settings#oauth' class='underline'>Settings → Authorized apps</a>.",
+  "oauth.consent.deny": "Deny",
+  "oauth.consent.approve": "Allow",
+  "oauth.consent.signedInAs": "Signed in as {email}",
 
   // flash — SSO login / linking (src/web/sso.ts)
   "flash.sso.configError": "SSO configuration problem: {error}",
@@ -2785,9 +2790,9 @@ export const en = {
   "adminOauthApps.flash.disabled": "Disabled",
   "adminOauthApps.flash.enabled": "Enabled",
   "adminOauthApps.flash.deleted": "App deleted (all access tokens revoked)",
-  "adminOauthApps.scope.readEvents": "View your calendars and events",
-  "adminOauthApps.scope.writeEvents": "Create, edit and delete your events",
-  "adminOauthApps.scope.readProfile": "Read your account info (email, display name)",
+  "oauth.scope.readEvents": "View your calendars and events",
+  "oauth.scope.writeEvents": "Create, edit and delete your events",
+  "oauth.scope.readProfile": "Read your account info (email, display name)",
   // /admin/client-release — route flash messages
   "adminClientRelease.flash.announcementTooLong": "Announcement too long — not saved",
   "adminClientRelease.flash.badVersion": "Write the version as dotted numbers like 1.8.0 so clients can compare sizes — not saved",
