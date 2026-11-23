@@ -134,7 +134,7 @@ final class AppState: ObservableObject {
     /// CalendarView overlays the "已创建" bar （打开 / 撤销） while
     /// non-nil. Token guards the auto-dismiss timer, same as
     /// PendingUndoDelete.
-    struct PendingQuickCreated: Identifiable {
+    struct PendingQuickCreated: Identifiable, Equatable {
         let event: EventDTO
         let token: UUID
         var id: UUID { token }
