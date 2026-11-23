@@ -717,6 +717,17 @@ body.min-h-screen {
   font-weight: 500;
 }
 
+/* Event blocks: one corner radius across every client — 4px, the
+   radius the native week chips, all-day pills and month bars all use.
+   The vendor stylesheet squares the all-day / month bars off
+   (border-radius: 0) and the time block's content layer carries the
+   event's inline colours but no radius of its own. Pin both here.
+   Radius only: Toast UI owns each block's position and size, and the
+   per-event colours stay inline, so a re-render (poll, view switch)
+   lands on exactly the same shape. */
+.toastui-calendar-event-time-content { border-radius: 4px; }
+.toastui-calendar-weekday-event { border-radius: 4px; }
+
 /* ---------- Working hours overlay (REMOVED v1.3.8) ----------
    We used to paint a faint grey wash on the time grid for 0:00-9:00
    and 18:00-24:00 to mimic Google Calendar's "out of working hours"

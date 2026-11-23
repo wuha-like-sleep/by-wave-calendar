@@ -46,6 +46,33 @@ enum Theme {
         static let card: CGFloat = 12
         static let button: CGFloat = 14
         static let chip: CGFloat = 12
+        /// Event blocks in the time grid, all-day pills and month bars.
+        /// One radius across every client (web + Android + desktop use
+        /// the same 4) so a calendar reads as one family everywhere.
+        static let eventBlock: CGFloat = 4
+    }
+
+    // MARK: - Event block text
+
+    /// Text colour to sit on a calendar-colour event block. The same
+    /// rule every client now uses (the web's readableTextOn): WCAG
+    /// relative luminance of the fill, black text above the 0.179
+    /// crossover — the point where black and white give the same
+    /// 4.58:1 ratio, so one of the two always passes AA. This replaces
+    /// the white-text-plus-drop-shadow workaround, which still left
+    /// white glyphs stranded on pale yellow / pink calendars.
+    static func eventTextColor(forHex hex: String?) -> Color {
+        guard var s = hex, !s.isEmpty else { return .white }
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt32(s, radix: 16) else { return .white }
+        func lin(_ c: Double) -> Double {
+            if c <= 0.03928 { return c / 12.92 }
+            return pow((c + 0.055) / 1.055, 2.4)
+        }
+        let lum = 0.2126 * lin(Double((v >> 16) & 0xff) / 255)
+            + 0.7152 * lin(Double((v >> 8) & 0xff) / 255)
+            + 0.0722 * lin(Double(v & 0xff) / 255)
+        return lum > 0.179 ? .black : .white
     }
 
     // MARK: - Surfaces (backgrounds you paint behind content)

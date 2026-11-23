@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -41,6 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.theme.Radii
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
@@ -220,7 +220,7 @@ private fun DayCell(
                 text = ev.summary,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(3.dp))
+                    .clip(Radii.chipShape)
                     .background(color.copy(alpha = 0.9f))
                     .padding(horizontal = 4.dp, vertical = 1.dp),
                 style = MaterialTheme.typography.labelSmall,

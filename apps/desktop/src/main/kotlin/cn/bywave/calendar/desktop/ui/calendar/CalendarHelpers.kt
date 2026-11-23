@@ -45,6 +45,21 @@ internal fun parseHex(hex: String?): Color {
 internal fun calendarColor(event: EventDTO, calendars: List<CalendarMeta>): Color =
     parseHex(calendars.firstOrNull { it.id == event.calendarId }?.color)
 
+/** Readable text color on top of a calendar color — the same rule every
+ *  client uses (the web's readableTextOn): WCAG relative luminance of
+ *  the fill, black text above the 0.179 crossover, the point where
+ *  black and white give the same 4.58:1 ratio, so one of the two always
+ *  passes AA. The week / month / all-day chips here used to hardcode
+ *  white, which vanished on the light yellows and pinks the palette
+ *  offers. */
+internal fun onCalendarColor(bg: Color): Color {
+    fun lin(v: Float): Float =
+        if (v <= 0.03928f) v / 12.92f
+        else Math.pow(((v + 0.055) / 1.055).toDouble(), 2.4).toFloat()
+    val luminance = 0.2126f * lin(bg.red) + 0.7152f * lin(bg.green) + 0.0722f * lin(bg.blue)
+    return if (luminance > 0.179f) Color.Black else Color.White
+}
+
 internal fun calendarName(event: EventDTO, calendars: List<CalendarMeta>): String? =
     calendars.firstOrNull { it.id == event.calendarId }?.name
 

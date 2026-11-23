@@ -222,7 +222,7 @@ private fun DayCell(
                         .clickable { onEventClick(ev) }
                         .padding(horizontal = 4.dp, vertical = 1.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
+                    color = onCalendarColor(color),
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -58,6 +58,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -329,7 +330,7 @@ private fun AllDayChip(
                 .clickable(onClick = onClick)
                 .padding(horizontal = 4.dp, vertical = 1.dp),
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
+            color = onCalendarColor(color),
             fontWeight = FontWeight.Medium,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -509,6 +510,25 @@ private fun EventChip(
     val w = slotWidth - 2.dp
 
     val color = calendarColor(event, calendars)
+    val onText = onCalendarColor(color)
+    // Past treatment, aligned with the other clients: the block keeps
+    // its calendar colour at reduced strength (0.55) and the title is
+    // struck through. Drag/resize feedback (0.7) still wins while the
+    // pointer is down.
+    val isPast = endInstant.isBefore(java.time.Instant.now())
+    // Cross-day continuation: square off the corners on any side where
+    // the event runs on into the neighbouring day, so the per-day
+    // segments read as one continuous bar. Shape only — the chip's
+    // offset/size math above is unchanged.
+    val continuesFrom = startInstant.isBefore(dayStart.toInstant())
+    val continuesTo = endInstant.isAfter(dayEnd.toInstant())
+    val cr = Dimens.chipRadius
+    val chipShape = RoundedCornerShape(
+        topStart = if (continuesFrom) 0.dp else cr,
+        bottomStart = if (continuesFrom) 0.dp else cr,
+        bottomEnd = if (continuesTo) 0.dp else cr,
+        topEnd = if (continuesTo) 0.dp else cr,
+    )
     val isDragging = dragOffsetX != 0f || dragOffsetY != 0f
     val isResizing = resizeOffsetY != 0f
     val livePxToDp: (Float) -> Dp = { with(density) { it.toDp() } }
@@ -525,8 +545,12 @@ private fun EventChip(
             .offset(x = liveX, y = liveY)
             .width(w)
             .height(liveH)
-            .clip(RoundedCornerShape(Dimens.chipRadius))
-            .background(color.copy(alpha = if (isDragging || isResizing) 0.7f else 0.95f))
+            .clip(chipShape)
+            .background(color.copy(alpha = when {
+                isDragging || isResizing -> 0.7f
+                isPast -> 0.55f
+                else -> 0.95f
+            }))
             .onClick(
                 matcher = androidx.compose.foundation.PointerMatcher.mouse(PointerButton.Secondary),
                 onClick = { menuOpen = true },
@@ -566,8 +590,9 @@ private fun EventChip(
             }
             // Smaller vertical padding on short chips so 26dp floor
             // still leaves room for 13dp text. Standard chips keep 3dp
-            // breathing room.
-            .padding(horizontal = 5.dp, vertical = if (h < 36.dp) 1.dp else 3.dp),
+            // breathing room. Horizontal 4dp matches the other clients'
+            // event-block padding.
+            .padding(horizontal = 4.dp, vertical = if (h < 36.dp) 1.dp else 3.dp),
     ) {
         // Show as many lines as the chip can fit. Previously capped at
         // 2 even when the chip was 200dp tall — left events showing
@@ -580,10 +605,11 @@ private fun EventChip(
             Text(
                 text = event.summary,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
+                color = onText,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = lineCountHint,
                 overflow = TextOverflow.Ellipsis,
+                textDecoration = if (isPast) TextDecoration.LineThrough else TextDecoration.None,
             )
             // Time range — only render when chip is tall enough that
             // the title + a second line fits without truncation pressure.
@@ -593,7 +619,7 @@ private fun EventChip(
                 Text(
                     text = remember(locale, event) { formatTimeRange(event) },
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.85f),
+                    color = onText.copy(alpha = 0.85f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

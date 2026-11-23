@@ -858,6 +858,15 @@
     const lum = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
     return lum > 0.179 ? "#000000" : "#ffffff";
   }
+  // Same colour at reduced strength — used for past events (see the
+  // past-event styling in renderEventsToCalendar).
+  function hexWithAlpha(hex, alpha) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  }
+  const calColorById = new Map(ctx.calendars.map((c) => [c.id, c.color]));
   const tuiCalendars = ctx.calendars.map((c) => ({
     id: c.id,
     name: c.name,
@@ -1087,27 +1096,27 @@
       // the user's local timezone boundary.
       const start = e.allDay ? e.startsAt.slice(0, 10) : e.startsAt;
       const end = e.allDay ? e.endsAt.slice(0, 10) : e.endsAt;
-      // Past-event styling: events whose end is already in the past get
-      // muted colors so the user's eye is drawn to upcoming + in-progress.
-      // We don't move them out of the grid (still browsable in history),
-      // just dim them.
+      // Past-event styling: events whose end is already in the past are
+      // dimmed so the user's eye is drawn to upcoming + in-progress. We
+      // don't move them out of the grid (still browsable in history).
+      // The dimming keeps the event's own calendar colour at 55%
+      // strength — the same treatment the native clients give past
+      // blocks — instead of swapping the block to a neutral slate,
+      // which erased which calendar a past event belonged to and made
+      // the web grid read as a different family from the apps. Text
+      // stays the readable black/white for the full-strength colour;
+      // at 55% over the grid the contrast only improves in light mode
+      // and past blocks are de-emphasised by design in dark mode.
       const endMs = +new Date(e.endsAt);
       const isPast = endMs < now;
-      const darkMode = document.documentElement.getAttribute("data-mode") === "dark";
-      const style = isPast
-        ? darkMode
-          ? {
-              backgroundColor: "#334155",
-              borderColor: "#475569",
-              dragBackgroundColor: "#475569",
-              color: "#cbd5e1",
-            }
-          : {
-              backgroundColor: "#e2e8f0",
-              borderColor: "#cbd5e1",
-              dragBackgroundColor: "#cbd5e1",
-              color: "#475569",
-            }
+      const baseColor = calColorById.get(e.calendarId);
+      const style = isPast && baseColor
+        ? {
+            backgroundColor: hexWithAlpha(baseColor, 0.55),
+            borderColor: hexWithAlpha(baseColor, 0.55),
+            dragBackgroundColor: hexWithAlpha(baseColor, 0.55),
+            color: readableTextOn(baseColor),
+          }
         : {};
       return {
         id: e.id,

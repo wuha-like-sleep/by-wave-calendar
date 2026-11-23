@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.R
@@ -103,6 +104,11 @@ private fun EventRow(
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
     val haptic = LocalHapticFeedback.current
+    // Past treatment, aligned with the iOS row: title struck through
+    // and the row's foreground dropped to 55% so a finished day scans
+    // as finished. (The card fill is the shared row surface, not the
+    // event's colour, so it stays — only the event's own marks fade.)
+    val isPast = parseInstant(event.endsAt)?.isBefore(java.time.Instant.now()) ?: false
 
     Row(
         modifier = modifier
@@ -124,7 +130,7 @@ private fun EventRow(
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(color),
+                .background(color.copy(alpha = if (isPast) 0.55f else 1f)),
         )
         Spacer(Modifier.size(12.dp))
         Column(modifier = Modifier.weight(1f)) {
@@ -134,14 +140,27 @@ private fun EventRow(
                 text = event.summary,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isPast) 0.55f else 1f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                textDecoration = if (isPast) TextDecoration.LineThrough else TextDecoration.None,
             )
             Text(
                 text = eventTimeText(event),
                 style = MaterialTheme.typography.bodySmall,
                 color = mutedTextColor(),
             )
+            // Location line — iOS and desktop rows have always shown it;
+            // its absence here was drift, not a design choice.
+            if (!event.location.isNullOrBlank()) {
+                Text(
+                    text = event.location!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = mutedTextColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (event.pendingSync) {
                 Text(
                     text = stringResource(cn.bywave.calendar.R.string.offline_block_badge),
