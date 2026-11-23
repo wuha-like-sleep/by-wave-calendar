@@ -269,19 +269,37 @@ class CalendarViewModel : ViewModel() {
     private var loadJob: kotlinx.coroutines.Job? = null
     fun refreshIfIdle() { if (loadJob?.isActive != true) load() }
 
+    /** 邀请徽章的 ETag 存档，和 /events 窗口那套（bwc-events-etag）
+     *  同一个分法：按 (服务器, 账号) 分键。邀请列表不分窗口，所以
+     *  键里没有窗口这一维。 */
+    private val invitationsEtagPrefs by lazy {
+        app.getSharedPreferences("bwc-invitations-etag", android.content.Context.MODE_PRIVATE)
+    }
+
     /** 邀请徽章计数。和事件加载同节拍（load 触发时顺带刷），单独一条
-     *  轻请求；失败不写 errorMessage、不清零旧值。 */
+     *  轻请求；失败不写 errorMessage、不清零旧值。
+     *  走条件请求：没新邀请、没人回应时服务端回 304，正文不下载、
+     *  不解码，徽章保持原值——和失败时「保持原值」是同一个结局，
+     *  所以 304 在这里直接当无事发生处理。 */
     private fun refreshInvitationBadge() {
         val profile = profiles.active() ?: return
         viewModelScope.launch {
             runCatching {
-                val resp = ApiClient.forProfile(profile, profiles).api.invitations()
+                val key = "${profile.serverUrl}|${profile.id}"
+                val httpResp = ApiClient.forProfile(profile, profiles).api
+                    .invitationsConditional(invitationsEtagPrefs.getString(key, null))
+                if (httpResp.code() == 304) return@runCatching null
+                if (!httpResp.isSuccessful) throw retrofit2.HttpException(httpResp)
+                val resp = httpResp.body() ?: throw retrofit2.HttpException(httpResp)
+                httpResp.headers()["ETag"]?.let {
+                    invitationsEtagPrefs.edit().putString(key, it).apply()
+                }
                 val now = Instant.now()
                 resp.invitations.count { inv ->
                     inv.responseStatus == "pending" && !inv.event.cancelled &&
                         runCatching { Instant.parse(inv.expiresAt).isAfter(now) }.getOrDefault(false)
                 }
-            }.onSuccess { n -> _state.update { it.copy(pendingInvitations = n) } }
+            }.onSuccess { n -> if (n != null) _state.update { it.copy(pendingInvitations = n) } }
         }
     }
 

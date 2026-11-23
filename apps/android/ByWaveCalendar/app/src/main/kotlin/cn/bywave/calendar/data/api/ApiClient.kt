@@ -346,6 +346,17 @@ interface BywaveApi {
     @GET("api/v1/invitations")
     suspend fun invitations(): InvitationsResponse
 
+    /** Badge-path variant of [invitations] with conditional-request
+     *  support. Returns the raw Response so the caller can see 304
+     *  (no new invitations, nobody responded — keep the current badge
+     *  count and skip the decode) and the fresh ETag on a 200. Only
+     *  caller is CalendarViewModel.refreshInvitationBadge; the full
+     *  list screen keeps using [invitations]. */
+    @GET("api/v1/invitations")
+    suspend fun invitationsConditional(
+        @Header("If-None-Match") ifNoneMatch: String? = null,
+    ): retrofit2.Response<InvitationsResponse>
+
     /** RSVP via my invite token — same semantics as the web page's
      *  respond endpoint. 410 when the token expired / event cancelled. */
     @POST("api/v1/invitations/{token}/respond")

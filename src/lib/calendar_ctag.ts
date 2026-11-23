@@ -1,7 +1,7 @@
 // 一个日历「内容有没有变」的令牌。CalDAV 的 ctag 和日历接口的 ETag 都问这里，口径只有一份。
 
 import crypto from "node:crypto";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { getSettings } from "./site_settings.js";
 
@@ -84,6 +84,30 @@ export async function eventsWindowEtag(
   const parts = [...tags.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   const calendars = [...visible].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return etagOf(JSON.stringify([from, to, parts, calendars]));
+}
+
+/**
+ * GET /calendars 列表级的令牌。正文就是日历行本身（名字、颜色、时区、
+ * 描述），信号分两层：
+ *   · 日历行：条数 + max(createdAt) + max(updatedAt)。建历走 insert、
+ *     改历的 API 路径都写 updatedAt、删历是硬删（条数变）。账号合并
+ *     把 ownerId 整体过户、不写 updatedAt，但过户前后两边看到的条数
+ *     都变，靠条数盖住。
+ *   · 每历 ctag 再汇一层：事件侧的任何变化也让列表令牌变。客户端刷
+ *     新时列表和事件窗口总是一起问，多失效一次的代价只是一次列表
+ *     正文；反过来若列表令牌纹丝不动、窗口令牌变了，客户端就可能
+ *     拿一新一旧两份数据拼界面。宁可多失效，不可半新半旧。
+ */
+export async function calendarListEtag(ownerId: string): Promise<string> {
+  const rows = await db
+    .select({ id: schema.calendars.id, createdAt: schema.calendars.createdAt, updatedAt: schema.calendars.updatedAt })
+    .from(schema.calendars)
+    .where(eq(schema.calendars.ownerId, ownerId));
+  const tags = await calendarCtags(rows.map((r) => r.id));
+  const parts = [...tags.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const maxCreated = rows.reduce((m, r) => Math.max(m, r.createdAt.getTime()), 0);
+  const maxUpdated = rows.reduce((m, r) => Math.max(m, r.updatedAt.getTime()), 0);
+  return etagOf(JSON.stringify(["calendar-list", rows.length, maxCreated, maxUpdated, parts]));
 }
 
 /** If-None-Match 命中了吗。反向代理开 gzip 时会把令牌改成弱形式（W/"..."），也算。 */

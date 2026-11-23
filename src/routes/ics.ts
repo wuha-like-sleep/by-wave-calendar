@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { buildIcsFeed } from "../services/ics.js";
+import { calendarCtags, etagMatches, etagOf } from "../lib/calendar_ctag.js";
 import { env } from "../env.js";
 import { getSettings } from "../lib/site_settings.js";
 import path from "node:path";
@@ -51,6 +52,17 @@ export async function icsRoutes(app: FastifyInstance) {
       .where(eq(schema.users.id, calendar.ownerId))
       .limit(1);
     if (!owner || owner.disabledAt) return reply.code(404).send({ error: "not_found" });
+
+    // 条件请求：订阅客户端（系统日历）按 max-age 过期后每轮都来全量
+    // 重下，内容没变时回 304，把「查全部事件 + 生成 ICS + 传输」整段
+    // 省掉。订阅源正文只取决于日历行和它的事件行，所以令牌 = 这个
+    // 日历的 ctag（事件的增删改含软删都已在里面，见 calendar_ctag.ts）
+    // 再拼日历行自己的 updatedAt（改名/改时区会改订阅源的抬头与展开
+    // 口径，而那条写路只动日历行、不动任何事件）。
+    const ctags = await calendarCtags([calendar.id]);
+    const tag = etagOf(`${ctags.get(calendar.id) ?? "none"}|${calendar.updatedAt.toISOString()}`);
+    reply.header("ETag", tag).header("Cache-Control", "public, max-age=300");
+    if (etagMatches(req.headers["if-none-match"], tag)) return reply.code(304).send();
 
     // Soft-deleted events must NOT leak into the public feed — without this
     // filter, anyone with the share URL would still see events that the

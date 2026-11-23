@@ -10,6 +10,7 @@ import { expansionTimeZone, rawIcsStartIsUtc } from "../lib/event_zone.js";
 import { remapSeriesForZoneChange } from "../lib/exdate_remap.js";
 import { normalizeCalendarTimeZone } from "../lib/timezones.js";
 import { resolveLocaleFromRequest, translatePlain } from "../lib/i18n.js";
+import { calendarListEtag, etagMatches } from "../lib/calendar_ctag.js";
 import { getSettings } from "../lib/site_settings.js";
 
 const createSchema = z.object({
@@ -124,6 +125,12 @@ export async function calendarRoutes(app: FastifyInstance) {
   app.get("/calendars", { config: { oauthScope: "read:events" } }, async (req, reply) => {
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
+    // 条件请求：与 /events 窗口同口径。列表令牌的原料（日历行信号 +
+    // 每历 ctag 汇总）见 lib/calendar_ctag.ts 的 calendarListEtag。
+    const tag = await calendarListEtag(user.id);
+    // private, no-cache：可以存，但每次用前必须拿 ETag 回来核对（核对便宜）。
+    reply.header("ETag", tag).header("Cache-Control", "private, no-cache");
+    if (etagMatches(req.headers["if-none-match"], tag)) return reply.code(304).send();
     const rows = await db
       .select()
       .from(schema.calendars)
