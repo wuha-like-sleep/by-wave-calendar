@@ -4,6 +4,7 @@ import { purgeStaleDeviceRows } from "./devices.js";
 import { purgeOldReadNotifications } from "./notifications.js";
 import { remindIdleApiTokens } from "./token_idle_reminders.js";
 import { purgeOldApiTokenUsage } from "./api_token.js";
+import { pruneEventChanges, EVENT_CHANGES_RETENTION_DAYS } from "./event_sync.js";
 
 // Days after which soft-deleted events are physically purged. 90 days is
 // long enough that the user can recover via DB backup if they realize a
@@ -57,6 +58,12 @@ export function startHousekeepingScheduler(log: { info: (m: string) => void; war
       const usage = await purgeOldApiTokenUsage();
       if (usage.purged > 0) {
         log.info(`[housekeeping] purged ${usage.purged} stale API token daily usage row(s)`);
+      }
+      // 事件变更日志（增量同步）只留 30 天：比这更老的同步令牌端点回 410，
+      // 客户端全量重同步。保留期是同步契约的一部分，见 event_sync.ts。
+      const changes = await pruneEventChanges();
+      if (changes.purged > 0) {
+        log.info(`[housekeeping] pruned ${changes.purged} event change row(s) older than ${EVENT_CHANGES_RETENTION_DAYS}d`);
       }
     } catch (err) {
       log.warn({ err });

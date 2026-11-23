@@ -15,6 +15,8 @@ const M = (globalThis as unknown as {
     toLocalRow(e: Row, now: number): Row;
     planWindowMerge(rows: Row[], events: Row[], win: Win): { puts: Row[]; deletes: string[] };
     visibleRows(rows: Row[], fromMs: number, toMs: number): Row[];
+    planDeltaApply(rows: Row[], delta: { events: Row[]; upsertedIds: string[]; deletedIds: string[]; now: number }): { puts: Row[]; deletes: string[] };
+    syncPlan(state: { token: string; spanFrom: number; spanTo: number } | null, fromMs: number, toMs: number, forceFull: boolean): { mode: string; fromMs: number; toMs: number };
   };
 }).bwcMirrorCore;
 
@@ -145,5 +147,67 @@ describe("服务端接受之后写回的那一行", () => {
     const saved = M.toLocalRow(master, NOW);
     const db = apply([saved], M.planWindowMerge([saved], ["02", "09"].map((d) => occ("e1", d)), { ...WIN, fetchStartedAt: NOW + 1, now: NOW + 2 }));
     expect(read(db)).toHaveLength(2);
+  });
+});
+
+describe("增量同步：变过的主事件整组换新", () => {
+  const seed = () => apply([], M.planWindowMerge([], [
+    ...["02", "09", "16"].map((d) => occ("e1", d)),
+    one("e2", "11"),
+  ], WIN));
+
+  it("主事件改了时间：旧的每一次全删，新的每一次全进", () => {
+    const db0 = seed();
+    const moved = ["03", "10"].map((d) => occ("e1", d));
+    const plan = M.planDeltaApply(db0, { events: moved, upsertedIds: ["e1"], deletedIds: [], now: NOW + 1 });
+    const db1 = apply(db0, plan);
+    expect(read(db1).map((e) => e.startsAt).sort()).toEqual([
+      "2026-11-03T09:00:00.000Z", "2026-11-10T09:00:00.000Z", "2026-11-11T09:00:00.000Z",
+    ]);
+  });
+
+  it("主事件被删：整组消失，别的事件不动", () => {
+    const db0 = seed();
+    const plan = M.planDeltaApply(db0, { events: [], upsertedIds: [], deletedIds: ["e1"], now: NOW + 1 });
+    const db1 = apply(db0, plan);
+    expect(read(db1).map((e) => e.id)).toEqual(["e2"]);
+  });
+
+  it("本地有未同步改动的主事件：增量整组跳过，改动不被覆盖", () => {
+    const db0 = seed();
+    const dirty = { ...one("e1", "12"), _dirty: true, _op: "update" };
+    const db1 = apply(db0, { puts: [dirty], deletes: [] });
+    const plan = M.planDeltaApply(db1, {
+      events: [occ("e1", "05")], upsertedIds: ["e1"], deletedIds: [], now: NOW + 1,
+    });
+    expect(plan.puts).toEqual([]);
+    expect(plan.deletes).toEqual([]);
+  });
+
+  it("本地删除墓碑不被增量删除冲掉", () => {
+    const db0 = seed();
+    const tomb = { ...one("e1", "12"), _dirty: true, _op: "delete", deleted: true };
+    const db1 = apply(db0, { puts: [tomb], deletes: [] });
+    const plan = M.planDeltaApply(db1, { events: [], upsertedIds: [], deletedIds: ["e1"], now: NOW + 1 });
+    expect(plan.deletes).toEqual([]);
+  });
+});
+
+describe("同步计划：基线 span 决定走增量还是全量", () => {
+  const state = { token: "bwcs1.MTA", spanFrom: FROM, spanTo: TO };
+  it("没有同步状态 → 全量，范围就是请求窗口", () => {
+    expect(M.syncPlan(null, FROM, TO, false)).toEqual({ mode: "full", fromMs: FROM, toMs: TO });
+  });
+  it("窗口落在基线内 → 增量，问的是整个基线", () => {
+    const mid1 = T("2026-11-10T00:00:00Z"), mid2 = T("2026-11-20T00:00:00Z");
+    expect(M.syncPlan(state, mid1, mid2, false)).toEqual({ mode: "incremental", fromMs: FROM, toMs: TO });
+  });
+  it("窗口探出基线 → 全量，范围是并集", () => {
+    const later = T("2026-12-15T00:00:00Z");
+    expect(M.syncPlan(state, FROM, later, false)).toEqual({ mode: "full", fromMs: FROM, toMs: later });
+  });
+  it("强制全量时窗口在基线内也走全量，范围是并集", () => {
+    const mid1 = T("2026-11-10T00:00:00Z"), mid2 = T("2026-11-20T00:00:00Z");
+    expect(M.syncPlan(state, mid1, mid2, true)).toEqual({ mode: "full", fromMs: FROM, toMs: TO });
   });
 });

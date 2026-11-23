@@ -505,6 +505,13 @@
       "when": 1795564800000,
       "tag": "0071_shopping_lists",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1795651200000,
+      "tag": "0072_event_changes",
+      "breakpoints": true
     }
   ]
 }
