@@ -724,7 +724,7 @@ struct QuickParsedEvent: Decodable {
 
 // Type-erased wrapper for Encodable payloads so we can pass any
 // concrete type into post(...) without making request() generic over input.
-private struct AnyEncodable: Encodable {
+struct AnyEncodable: Encodable {
     let value: Encodable
     init(_ value: Encodable) { self.value = value }
     func encode(to encoder: Encoder) throws { try value.encode(to: encoder) }

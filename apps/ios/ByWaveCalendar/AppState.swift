@@ -742,7 +742,7 @@ final class AppState: ObservableObject {
     /// forcing the user to sign in again every time access token expired
     /// (1h). The visible symptom was "wake up the next morning, app is
     /// logged out."
-    static func parseIsoLenient(_ s: String) -> Date? {
+    nonisolated static func parseIsoLenient(_ s: String) -> Date? {
         let withFrac = ISO8601DateFormatter()
         withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let d = withFrac.date(from: s) { return d }

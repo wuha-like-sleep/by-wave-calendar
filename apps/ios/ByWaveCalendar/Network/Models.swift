@@ -979,7 +979,7 @@ enum ReminderOptions {
     ]
 
     static func options(allDay: Bool) -> [ReminderOption] {
-        allDay ? allDay : timed
+        allDay ? Self.allDay : Self.timed
     }
 
     static func values(allDay: Bool) -> [String] {
