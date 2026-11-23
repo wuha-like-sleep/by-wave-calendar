@@ -21,7 +21,7 @@
             <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/toggle" class="m-0 flex-shrink-0 pt-0.5">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <button type="submit" aria-label="<%= t("shopping.toggleDone") %>"
-                      class="flex h-5 w-5 items-center justify-center rounded border <%= item.done ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-brand-400' %>">
+                      class="flex h-5 w-5 items-center justify-center rounded border transition-colors duration-150 <%= item.done ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-brand-400' %>">
                 <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
               </button>
             </form>

@@ -404,12 +404,103 @@ details > summary::-webkit-details-marker { display: none; }
 .htmx-swapping { opacity: 0; transition: opacity 150ms ease-out; }
 .htmx-settling { opacity: 1; transition: opacity 200ms ease-in; }
 
-/* Toast notification animation */
-@keyframes bwc-toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* (Toast styles live in app.css — the hand-written sheet layout.ejs loads
+   after this one. They used to be duplicated here; one home only, so the
+   enter/leave pair can't drift apart.) */
+
+/* ---------- Motion tokens ----------
+   Site-wide durations/curves converge on three steps so every surface
+   moves at a related speed instead of each component inventing its own:
+     --bwc-dur-1 (150ms)  micro fades: backdrops, flash, skeleton
+     --bwc-dur-2 (200ms)  standard: toasts, palette, confirm dialog
+     --bwc-dur-3 (300ms)  panels: modal cards, bottom sheets, drawer
+   --bwc-ease-out is the house deceleration curve (sheets, drawer);
+   --bwc-ease-spring adds a slight overshoot for centred "pop" panels.
+   Keyframe-only spots (boot splash, page-in) live inline in layout.ejs
+   and stay literal. New motion should pick a token, not a new number. */
+:root {
+  --bwc-dur-1: 150ms;
+  --bwc-dur-2: 200ms;
+  --bwc-dur-3: 300ms;
+  --bwc-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --bwc-ease-spring: cubic-bezier(0.34, 1.32, 0.5, 1);
 }
-.bwc-toast { animation: bwc-toast-in 200ms ease-out; pointer-events: auto; }
+
+/* ---------- Keyboard focus ----------
+   One visible focus ring for keyboard users, everywhere. Mouse/touch
+   focus never matches :focus-visible, so nothing changes visually for
+   pointer users. Templates that already style their own focus (inputs
+   pair focus:outline-none with a ring utility) out-specify this rule
+   and keep theirs. */
+:focus-visible {
+  outline: 2px solid rgb(var(--brand-500) / 0.65);
+  outline-offset: 2px;
+}
+
+/* ---------- Flash banners (partials/flash.ejs) ----------
+   Server-rendered success/error blocks arrive via a POST→redirect page
+   load; a short settle-in keeps them from popping with the rest of the
+   page chrome. Opacity/transform only. */
+@keyframes bwc-flash-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.bwc-flash { animation: bwc-flash-in var(--bwc-dur-2) ease-out; }
+
+/* ---------- Progress bar fills ----------
+   Bars are server-rendered at their final width (shopping lists,
+   API-token usage), so a width transition can never run. Growing the
+   fill from the left edge on mount gives the same "progress moved"
+   read after the toggle→reload loop without touching layout. */
+@keyframes bwc-progress-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.bwc-progress-fill {
+  transform-origin: left center;
+  animation: bwc-progress-grow 500ms var(--bwc-ease-out);
+}
+
+/* ---------- bwc.confirm dialog (app.js) ----------
+   The in-page confirm used to hard-pop in and out while the app's real
+   modals animate. Same motion language as the modal block below:
+   backdrop fades, the card pops on desktop and rises as a sheet on
+   phones. app.js adds .is-leaving for the exit half and removes the
+   node once it has played. */
+.bwc-confirm-overlay { animation: bwc-confirm-fade var(--bwc-dur-2) ease-out; }
+.bwc-confirm-card { animation: bwc-confirm-pop 260ms var(--bwc-ease-spring); }
+@keyframes bwc-confirm-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes bwc-confirm-pop {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+.bwc-confirm-overlay.is-leaving { opacity: 0; transition: opacity 160ms ease-in; }
+.bwc-confirm-overlay.is-leaving .bwc-confirm-card {
+  opacity: 0; transform: translateY(8px);
+  transition: opacity 160ms ease-in, transform 160ms ease-in;
+}
+@media (max-width: 639px) {
+  @keyframes bwc-confirm-pop {
+    from { opacity: 0; transform: translateY(48px); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+/* ---------- Command palette (#bwc-palette, palette.js) ----------
+   Top-anchored panel: backdrop fades like a modal, the card settles
+   down a few px into place. palette.js drives it with the same
+   un-hide → reflow → .is-open pattern as openModal(). */
+#bwc-palette { opacity: 0; transition: opacity var(--bwc-dur-2) ease-out; }
+#bwc-palette.is-open { opacity: 1; }
+#bwc-palette > * {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  transition: opacity var(--bwc-dur-2) ease-out, transform 240ms var(--bwc-ease-out);
+}
+#bwc-palette.is-open > * { opacity: 1; transform: none; }
 
 /* Safe-area padding for footer on iOS */
 @supports (padding: env(safe-area-inset-bottom)) {
@@ -530,7 +621,7 @@ body.min-h-screen {
    sheets (items-end) → slide up from below the fold. */
 [id^="modal-"] {
   opacity: 0;
-  transition: opacity 220ms ease-out;
+  transition: opacity var(--bwc-dur-2) ease-out;
 }
 [id^="modal-"].is-open { opacity: 1; }
 
@@ -539,7 +630,7 @@ body.min-h-screen {
   transform: translateY(18px) scale(0.97);
   transform-origin: center;
   /* gentle overshoot on the way in → a lively, spring-ish "pop" */
-  transition: transform 300ms cubic-bezier(0.34, 1.32, 0.5, 1), opacity 220ms ease-out;
+  transition: transform var(--bwc-dur-3) var(--bwc-ease-spring), opacity var(--bwc-dur-2) ease-out;
 }
 [id^="modal-"].is-open > * { opacity: 1; transform: none; }
 
@@ -547,25 +638,25 @@ body.min-h-screen {
   [id^="modal-"] > * {
     transform: translateY(100%);
     /* clean ease-out for the sheet — no overshoot past the top edge */
-    transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease-out;
+    transition: transform var(--bwc-dur-3) var(--bwc-ease-out), opacity var(--bwc-dur-2) ease-out;
   }
 }
 
 /* Sidebar (mobile drawer) — backdrop fades, drawer slides in from the left. */
 #cal-sidebar-backdrop {
   opacity: 0;
-  transition: opacity 240ms ease-out;
+  transition: opacity var(--bwc-dur-2) ease-out;
 }
 #cal-sidebar-backdrop.is-open { opacity: 1; }
 #cal-sidebar.bwc-drawer {
-  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform var(--bwc-dur-3) var(--bwc-ease-out);
   transform: translateX(-100%);
 }
 #cal-sidebar.bwc-drawer.is-open { transform: translateX(0); }
 
 /* FAB + primary action buttons — tactile press feedback. */
 #btn-new-event-fab {
-  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 180ms ease-out;
+  transition: transform var(--bwc-dur-2) cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow var(--bwc-dur-2) ease-out;
 }
 #btn-new-event-fab:hover { transform: scale(1.06); }
 #btn-new-event-fab:active { transform: scale(0.92); }
@@ -575,13 +666,24 @@ body.min-h-screen {
 @media (prefers-reduced-motion: reduce) {
   [id^="modal-"],
   [id^="modal-"] > *,
+  #bwc-palette,
+  #bwc-palette > *,
   #cal-sidebar-backdrop,
   #cal-sidebar.bwc-drawer,
   #btn-new-event-fab {
     transition: none !important;
   }
   [id^="modal-"] > *,
+  #bwc-palette > *,
   #cal-sidebar.bwc-drawer.is-open { transform: none !important; }
+  /* Entrance keyframes on static chrome settle instantly instead. */
+  .bwc-flash,
+  .bwc-progress-fill,
+  .bwc-confirm-overlay,
+  .bwc-confirm-card,
+  .animate-pulse { animation: none !important; }
+  .bwc-confirm-overlay.is-leaving,
+  .bwc-confirm-overlay.is-leaving .bwc-confirm-card { transition: none !important; }
 }
 
 /* ---------- Touch targets for small inline links ----------

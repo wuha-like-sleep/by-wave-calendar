@@ -134,7 +134,7 @@
     chip.type = "button";
     chip.id = "bwc-update-chip";
     chip.className =
-      "fixed bottom-4 right-4 z-[70] rounded-full bg-emerald-600 text-white " +
+      "bwc-rise-in fixed bottom-4 right-4 z-[70] rounded-full bg-emerald-600 text-white " +
       "shadow-lg px-3 py-1.5 text-xs font-medium hover:bg-emerald-700 " +
       "flex items-center gap-1.5";
     chip.innerHTML = '<span aria-hidden="true">↻</span><span></span>';
@@ -152,7 +152,7 @@
     offlineBanner.id = "bwc-offline-banner";
     offlineBanner.setAttribute("role", "status");
     offlineBanner.className =
-      "fixed top-0 inset-x-0 z-[70] bg-amber-600 text-white shadow-md " +
+      "bwc-rise-in fixed top-0 inset-x-0 z-[70] bg-amber-600 text-white shadow-md " +
       "px-4 py-2.5 flex flex-wrap items-center justify-center gap-3 text-sm";
     offlineBanner.innerHTML =
       '<span></span>' +

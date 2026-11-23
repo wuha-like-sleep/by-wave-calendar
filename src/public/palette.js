@@ -33,15 +33,32 @@
   let searchTimer = null;
 
   function isOpen() { return !modal.classList.contains("hidden"); }
+  // Animated show/hide, same pattern as the app modals (openModal in
+  // calendar-app.js): the CSS (input.css, "#bwc-palette") keeps the
+  // closed state as the default and reveals on `.is-open`, so opening
+  // must un-hide, reflow, then add the class; closing plays the leave
+  // transition before re-hiding.
+  const PALETTE_LEAVE_MS = 220; // ≥ the 200ms CSS leave transition
+  let leaving = false;
   function open() {
+    leaving = false;
     modal.classList.remove("hidden");
+    void modal.offsetWidth; // reflow so the enter transition starts closed
+    modal.classList.add("is-open");
     input.value = "";
     selectedIdx = 0;
     render([], "");
     setTimeout(() => input.focus(), 0);
   }
   function close() {
-    modal.classList.add("hidden");
+    if (!isOpen() || leaving) return;
+    leaving = true;
+    modal.classList.remove("is-open"); // play the leave transition
+    setTimeout(() => {
+      // A re-open during the leave re-adds is-open — don't hide then.
+      if (!modal.classList.contains("is-open")) modal.classList.add("hidden");
+      leaving = false;
+    }, PALETTE_LEAVE_MS);
   }
 
   // The score function for the static-action fallback. Simple substring

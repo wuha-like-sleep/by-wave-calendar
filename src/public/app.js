@@ -24,8 +24,9 @@
     const r = root();
     if (!r) return;
     const dismiss = () => {
-      el.style.opacity = "0";
-      el.style.transition = "opacity 200ms";
+      // Leave half of the toast motion lives in app.css (.is-leaving);
+      // the timeout just outlives the 200ms transition there.
+      el.classList.add("is-leaving");
       setTimeout(() => el.remove(), 220);
     };
     let durationMs = 2200;
@@ -105,10 +106,10 @@
     return new Promise(function (resolve) {
       const overlay = document.createElement("div");
       overlay.className =
-        "fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4";
+        "bwc-confirm-overlay fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4";
       const card = document.createElement("div");
       card.className =
-        "w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl bg-white shadow-2xl";
+        "bwc-confirm-card w-full sm:max-w-sm sm:rounded-2xl rounded-t-2xl bg-white shadow-2xl";
       // Title is optional — when omitted, message itself reads as the prompt.
       // We escape both via textContent to avoid HTML injection from caller.
       const titleNode = title
@@ -139,9 +140,18 @@
       msgEl.textContent = message;
       if (titleEl) titleEl.textContent = title;
       function close(result) {
-        try { overlay.remove(); } catch (_e) {}
         document.removeEventListener("keydown", onKey);
         resolve(result);
+        // Play the leave half of the confirm motion (input.css) before
+        // removing the node; the promise is already resolved, so callers
+        // never wait on the animation. Reduced-motion users skip the
+        // wait entirely — their CSS has no leave transition to play.
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          try { overlay.remove(); } catch (_e) {}
+          return;
+        }
+        overlay.classList.add("is-leaving");
+        setTimeout(function () { try { overlay.remove(); } catch (_e) {} }, 170);
       }
       function onKey(e) {
         if (e.key === "Escape") { e.preventDefault(); close(false); }

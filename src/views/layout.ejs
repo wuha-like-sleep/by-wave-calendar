@@ -219,6 +219,17 @@
         body { animation: bwc-page-in 160ms ease-out; }
       }
       @keyframes bwc-page-in { from { opacity: .85; } to { opacity: 1; } }
+
+      /* Reduced motion: the splash's pulse/spin and the cross-document
+         view transition settle instantly. (Component-level rules live
+         with their components in input.css / app.css.) */
+      @media (prefers-reduced-motion: reduce) {
+        .bwc-boot-splash { transition: none; }
+        .bwc-boot-splash__logo,
+        .bwc-boot-splash__spinner { animation: none; }
+        ::view-transition-old(root),
+        ::view-transition-new(root) { animation: none; }
+      }
     </style>
   </head>
   <body class="min-h-screen bg-slate-50 text-slate-900 antialiased font-sans flex flex-col">

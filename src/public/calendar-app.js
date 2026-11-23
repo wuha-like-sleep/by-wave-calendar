@@ -1025,7 +1025,13 @@
     const host = document.getElementById("calendar");
     if (!host) return;
     let overlay = document.getElementById("calendar-skeleton");
-    if (overlay) return; // already showing
+    if (overlay) {
+      // Already showing — or mid-fade-out from the previous load, in
+      // which case revive it: cancel the pending removal and un-fade.
+      if (overlay.__bwcFadeTimer) { clearTimeout(overlay.__bwcFadeTimer); overlay.__bwcFadeTimer = null; }
+      overlay.classList.remove("bwc-fade-out");
+      return;
+    }
     overlay = document.createElement("div");
     overlay.id = "calendar-skeleton";
     overlay.className = "absolute inset-0 pointer-events-none z-10 px-4 pt-16 flex flex-col gap-2";
@@ -1040,7 +1046,14 @@
     host.appendChild(overlay);
   }
   function hideLoadingSkeleton() {
-    document.getElementById("calendar-skeleton")?.remove();
+    const overlay = document.getElementById("calendar-skeleton");
+    if (!overlay || overlay.__bwcFadeTimer) return;
+    // Fade out (app.css, .bwc-fade-out) instead of a hard remove — the
+    // grid popping in over the skeleton read as a flash on slow loads.
+    // Runs from loadEvents' finally on every poll too; with no overlay
+    // in the DOM it's a no-op.
+    overlay.classList.add("bwc-fade-out");
+    overlay.__bwcFadeTimer = setTimeout(() => overlay.remove(), 180);
   }
 
   // Friendly first-run nudge. Shows when the user has zero events across
@@ -1277,6 +1290,16 @@
   $$(".view-btn").forEach((b) => b.addEventListener("click", () => {
     currentView = b.dataset.view;
     cal.changeView(currentView);
+    // Soften the hard re-render cut with a short fade-in (app.css,
+    // .bwc-view-in). Only on an actual view change — refresh renders
+    // and prev/next navigation keep their instant swap. Restarting the
+    // animation needs the class removed and a reflow in between.
+    const calEl = document.getElementById("calendar");
+    if (calEl) {
+      calEl.classList.remove("bwc-view-in");
+      void calEl.offsetWidth;
+      calEl.classList.add("bwc-view-in");
+    }
     $$(".view-btn").forEach((x) => x.classList.remove("bg-brand-50", "text-brand-700", "font-semibold"));
     b.classList.add("bg-brand-50", "text-brand-700", "font-semibold");
     refresh();
