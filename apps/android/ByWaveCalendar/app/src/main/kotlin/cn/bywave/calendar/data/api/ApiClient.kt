@@ -40,6 +40,7 @@ import cn.bywave.calendar.data.model.ParseEventInput
 import cn.bywave.calendar.data.model.ParseEventResult
 import cn.bywave.calendar.data.model.EventUpdateInput
 import cn.bywave.calendar.data.model.EventsResponse
+import cn.bywave.calendar.data.model.EventsSyncResponse
 import cn.bywave.calendar.data.model.IcsImportPreview
 import cn.bywave.calendar.data.model.IcsImportRequest
 import cn.bywave.calendar.data.model.IcsImportResult
@@ -274,6 +275,19 @@ interface BywaveApi {
         @Query("to") to: String,
         @Header("If-None-Match") ifNoneMatch: String? = null,
     ): retrofit2.Response<EventsResponse>
+
+    /** Incremental sync (syncToken model, Google Calendar semantics).
+     *  Returns the raw Response so the caller can branch on 410 (the
+     *  token expired server-side → full rebuild); a null [syncToken]
+     *  asks for the initial full sync of the window, which answers
+     *  with the window's full content plus a fresh nextSyncToken.
+     *  Only caller is EventRepository.fetchAndCache. */
+    @GET("api/v1/events/sync")
+    suspend fun eventsSync(
+        @Query("from") from: String,
+        @Query("to") to: String,
+        @Query("syncToken") syncToken: String? = null,
+    ): retrofit2.Response<EventsSyncResponse>
 
     @POST("api/v1/events")
     suspend fun createEvent(@Body body: EventCreateInput): EventDTO

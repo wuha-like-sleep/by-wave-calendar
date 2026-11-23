@@ -83,6 +83,21 @@ data class EventsResponse(
     val events: List<EventDTO>,
 )
 
+/** GET /api/v1/events/sync response (after the envelope is unwrapped).
+ *  Incremental sync, syncToken model: an initial sync (no token) only
+ *  carries calendars / events / nextSyncToken; upsertedIds and
+ *  deletedIds appear solely on delta responses, hence the null
+ *  defaults. The events expansion shape is identical to GET /events
+ *  (the server shares one expansion path for both). */
+@Serializable
+data class EventsSyncResponse(
+    val calendars: List<CalendarMeta>,
+    val events: List<EventDTO>,
+    val upsertedIds: List<String>? = null,
+    val deletedIds: List<String>? = null,
+    val nextSyncToken: String,
+)
+
 /** GET /api/v1/search response (after the envelope is unwrapped).
  *  Events carry two extra fields over the wire (calendarName /
  *  calendarColor) that EventDTO does not model — the Json config ignores

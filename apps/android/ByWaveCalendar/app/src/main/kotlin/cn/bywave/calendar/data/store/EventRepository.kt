@@ -7,6 +7,7 @@ package cn.bywave.calendar.data.store
 
 import android.content.Context
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import cn.bywave.calendar.data.api.ApiClient
@@ -14,9 +15,11 @@ import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.auth.ProfileStore
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.data.model.EventsSyncResponse
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import cn.bywave.calendar.sync.ConfirmedEventDeletion
+import cn.bywave.calendar.sync.PendingOpKind
 import cn.bywave.calendar.sync.SnapshotMutationGate
 import cn.bywave.calendar.sync.Reminders
 import cn.bywave.calendar.sync.SystemCalendarMirror
@@ -145,6 +148,60 @@ class EventRepository(
         return client.api.importIcs(calendarId, cn.bywave.calendar.data.model.IcsImportRequest(text, filename))
     }
 
+    /** /events/sync 的同步存档（令牌 + 窗口基线），按 (服务器, 账号)
+     *  分键，与 ETag 存档同一套键法。令牌只对它签发时那个窗口的本地
+     *  镜像有效：窗口对不上就当没有令牌、走全量重建基线（与 Web
+     *  syncPlan 的基线语义一致）。 */
+    private val syncPrefs by lazy {
+        context.getSharedPreferences("bwc-events-sync", Context.MODE_PRIVATE)
+    }
+
+    private fun syncKey(profile: Profile) = "${profile.serverUrl}|${profile.id}"
+
+    /** 取这个窗口基线的令牌：基线对不上（窗口变了）返回 null。 */
+    private fun storedSyncToken(profile: Profile, window: String): String? {
+        val key = syncKey(profile)
+        if (syncPrefs.getString("$key|window", null) != window) return null
+        return syncPrefs.getString(key, null)
+    }
+
+    private fun saveSyncState(profile: Profile, token: String, window: String) {
+        val key = syncKey(profile)
+        syncPrefs.edit().putString(key, token).putString("$key|window", window).apply()
+    }
+
+    private fun clearSyncState(profile: Profile) {
+        val key = syncKey(profile)
+        syncPrefs.edit().remove(key).remove("$key|window").apply()
+    }
+
+    /** 清掉某个账号在同步存档里的全部条目（键里带 profile id，扫
+     *  一遍精确匹配）。profile id 每次配对都会换，残留条目本来就
+     *  读不到；清掉是顺手把关，免得存档无限攒。 */
+    private fun clearSyncStateFor(profileId: String) {
+        val editor = syncPrefs.edit()
+        syncPrefs.all.keys.filter { it.contains("|$profileId") }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
+    /** 一次窗口拉取的结局：内容没变（旧路径的 304）、全量底稿、
+     *  或一份增量响应（套到本地镜像的活在快照闸门里干）。Full 的
+     *  nextSyncToken 是「待存档」的新令牌——只在快照真正落进 Room
+     *  之后才存（见 fetchAndCache）；旧 ETag 路径来的 Full 没有
+     *  令牌（null）。 */
+    private sealed interface WindowFetch {
+        object NotModified : WindowFetch
+        data class Full(
+            val calendars: List<CalendarMeta>,
+            val serverEvents: List<EventDTO>,
+            val nextSyncToken: String?,
+        ) : WindowFetch
+        data class Delta(
+            val calendars: List<CalendarMeta>,
+            val delta: EventsSyncResponse,
+        ) : WindowFetch
+    }
+
     /**
      * Fetch a window from the server and replace the active profile's
      * cache. Errors bubble so the ViewModel can surface a banner
@@ -161,21 +218,16 @@ class EventRepository(
         val profile = profiles.active() ?: error("not signed in")
         val revision = snapshotGate.capture()
         val client = ApiClient.forProfile(profile, profiles)
-        // 条件请求：这个窗口的内容没变时服务端只回 304 空响应，
-        // 整个窗口（15 个月）的正文、JSON 解析、Room 全量替换、提醒
-        // 重排、系统日历镜像全部省掉。304 不是错误——信封拦截器对没
-        // 有 JSON 正文的响应直接放行，Retrofit 也不会替我们抛异常，
-        // 所以要在这里显式判状态码；非 304 的失败则手动抛回
-        // HttpException，保持和以前「events() 直接抛」一样的报错面。
-        val key = etagKey(profile, fromIso, toIso)
-        val httpResp = client.api.events(
-            from = fromIso, to = toIso,
-            ifNoneMatch = etagPrefs.getString(key, null),
-        )
-        if (httpResp.code() == 304) return@withLock
-        if (!httpResp.isSuccessful) throw retrofit2.HttpException(httpResp)
-        val resp = httpResp.body() ?: throw retrofit2.HttpException(httpResp)
-        httpResp.headers()["ETag"]?.let { etagPrefs.edit().putString(key, it).apply() }
+        // 拉取通道的分流全在 fetchWindow 里（增量同步优先、旧 ETag
+        // 全量兜底）；这里只认结局。NotModified（304）= 窗口没变，
+        // Room、提醒、镜像全都原样不动，和以前一样。
+        val fetched = fetchWindow(client, profile, fromIso, toIso)
+        if (fetched is WindowFetch.NotModified) return@withLock
+        val calendars = when (fetched) {
+            is WindowFetch.Full -> fetched.calendars
+            is WindowFetch.Delta -> fetched.calendars
+            WindowFetch.NotModified -> error("unreachable")
+        }
         snapshotGate.applySnapshot(revision, relevant = { profiles.active()?.id == profile.id }) {
             currentCoroutineContext().ensureActive()
             // 未同步条目合并：服务端窗口是权威底稿，但本地还没送出去的
@@ -183,7 +235,31 @@ class EventRepository(
             // 复活）。合并规则在 OfflineQueue.mergeServerEvents。
             val pendingOps = offline.pendingFor(profile)
             val previousFull = db.eventDao().listForProfile(profile.id).map { it.toDto(json) }
-            val mergedEvents = offline.mergeServerEvents(resp.events, pendingOps, previousFull)
+            val mergedEvents = when (fetched) {
+                is WindowFetch.Full -> offline.mergeServerEvents(fetched.serverEvents, pendingOps, previousFull)
+                is WindowFetch.Delta -> {
+                    // 增量先套到本地镜像（上一份合并集）上，再过一遍
+                    // 队列合并：变更母事件整组替换、删的删、名单外
+                    // 日历剪掉；队列里还没落定的母事件整组跳过，
+                    // 本地新建行由 mergeServerEvents 从 previousFull
+                    // 接回。计划函数是纯逻辑，见 EventSyncPlan。
+                    val protectedIds = pendingOps.map { it.eventId }.toSet()
+                    val createIds = pendingOps
+                        .filter { it.kind == PendingOpKind.CREATE }
+                        .map { it.eventId }.toSet()
+                    val mirrorRows = EventSyncPlan.applyDelta(
+                        previousLocal = previousFull,
+                        upsertedIds = fetched.delta.upsertedIds?.toSet() ?: emptySet(),
+                        deletedIds = fetched.delta.deletedIds?.toSet() ?: emptySet(),
+                        incoming = fetched.delta.events,
+                        visibleCalendarIds = fetched.delta.calendars.map { it.id }.toSet(),
+                        protectedIds = protectedIds,
+                        localCreateIds = createIds,
+                    )
+                    offline.mergeServerEvents(mirrorRows, pendingOps, previousFull)
+                }
+                WindowFetch.NotModified -> error("unreachable")
+            }
             val previousEvents = db.withTransaction {
                 // Alarm identity needs no optional metadata. A corrupt old
                 // extraJson must not prevent replacing the cache.
@@ -195,9 +271,19 @@ class EventRepository(
                 )
                 db.calendarDao().replaceForProfile(
                     profile.id,
-                    resp.calendars.map { CalendarEntity.from(it, profile.id) },
+                    calendars.map { CalendarEntity.from(it, profile.id) },
                 )
                 previous
+            }
+            // 镜像已经落进 Room，这时才存新令牌：令牌若先存下、快照
+            // 却没落地（账号中途切换、闸门把这次应用跳过），令牌就
+            // 越过了没被应用的那批变化，它们再也不会被增量带回来。
+            when (fetched) {
+                is WindowFetch.Full -> fetched.nextSyncToken?.let {
+                    saveSyncState(profile, it, "$fromIso|$toIso")
+                }
+                is WindowFetch.Delta -> saveSyncState(profile, fetched.delta.nextSyncToken, "$fromIso|$toIso")
+                WindowFetch.NotModified -> Unit
             }
             // Finish an already-started application under the gate. A delete
             // queued during this pass runs afterwards and removes its event
@@ -212,14 +298,95 @@ class EventRepository(
             currentCoroutineContext().ensureActive()
             if (profiles.active()?.id != profile.id) return@applySnapshot
             if (current.mirrorToSystemCalendar) {
-                runCatching { mirror.mirror(profile, resp.calendars, mergedEvents, selectedCalendars) }
+                runCatching { mirror.mirror(profile, calendars, mergedEvents, selectedCalendars) }
             }
             if (current.remindersEnabled) {
                 runCatching {
-                    reminders.reschedule(profile, mergedEvents, current.reminderLeadMinutes, resp.calendars)
+                    reminders.reschedule(profile, mergedEvents, current.reminderLeadMinutes, calendars)
                 }
             }
         }
+    }
+
+    /** 窗口拉取的分流：先走 /events/sync（有基线令牌走增量、没有
+     *  走全量），同步通道任何非 410 失败都清掉同步存档、回退到
+     *  原来的 ETag 条件请求全量路径——同步挂掉不能把日历也拖挂。
+     *  410 只出现在增量路径上（令牌解不开 / 已被服务端日志
+     *  裁剪）：清存档后无令牌全量重建一次，重建再失败同样回退
+     *  旧路径，不连环重试。 */
+    private suspend fun fetchWindow(
+        client: ApiClient,
+        profile: Profile,
+        fromIso: String,
+        toIso: String,
+    ): WindowFetch {
+        val window = "$fromIso|$toIso"
+        val token = storedSyncToken(profile, window)
+        val outcome: WindowFetch? = try {
+            if (token != null) {
+                val resp = client.api.eventsSync(fromIso, toIso, token)
+                when {
+                    resp.code() == 410 -> {
+                        clearSyncState(profile)
+                        fullSyncWindow(client, profile, fromIso, toIso)
+                    }
+                    resp.isSuccessful -> {
+                        val body = resp.body()
+                        if (body == null) {
+                            clearSyncState(profile)
+                            null
+                        } else {
+                            WindowFetch.Delta(body.calendars, body)
+                        }
+                    }
+                    else -> {
+                        clearSyncState(profile)
+                        null
+                    }
+                }
+            } else {
+                fullSyncWindow(client, profile, fromIso, toIso)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // 网络失败、解码失败都算同步通道失败：清存档、回退旧路径。
+            clearSyncState(profile)
+            null
+        }
+        if (outcome != null) return outcome
+        // 回退：原来的 ETag 条件请求全量路径，一字不改。条件请求：
+        // 这个窗口的内容没变时服务端只回 304 空响应，整个窗口
+        // （15 个月）的正文、JSON 解析、Room 全量替换、提醒重排、
+        // 系统日历镜像全部省掉。304 不是错误——信封拦截器对没有
+        // JSON 正文的响应直接放行，Retrofit 也不会替我们抛异常，
+        // 所以要在这里显式判状态码；非 304 的失败则手动抛回
+        // HttpException，保持和以前「events() 直接抛」一样的报错面。
+        val key = etagKey(profile, fromIso, toIso)
+        val httpResp = client.api.events(
+            from = fromIso, to = toIso,
+            ifNoneMatch = etagPrefs.getString(key, null),
+        )
+        if (httpResp.code() == 304) return WindowFetch.NotModified
+        if (!httpResp.isSuccessful) throw retrofit2.HttpException(httpResp)
+        val resp = httpResp.body() ?: throw retrofit2.HttpException(httpResp)
+        httpResp.headers()["ETag"]?.let { etagPrefs.edit().putString(key, it).apply() }
+        return WindowFetch.Full(resp.calendars, resp.events, nextSyncToken = null)
+    }
+
+    /** 无令牌全量同步一次：成功返回带着新令牌的 Full（令牌由
+     *  fetchAndCache 在快照落地后存档），失败返回 null 让调用方
+     *  回退旧路径。无令牌请求服务端不会回 410。 */
+    private suspend fun fullSyncWindow(
+        client: ApiClient,
+        profile: Profile,
+        fromIso: String,
+        toIso: String,
+    ): WindowFetch.Full? {
+        val resp = client.api.eventsSync(fromIso, toIso, null)
+        if (!resp.isSuccessful) return null
+        val body = resp.body() ?: return null
+        return WindowFetch.Full(body.calendars, body.events, body.nextSyncToken)
     }
 
     /** Remove a server-confirmed delete immediately, including its reminders
@@ -292,6 +459,7 @@ class EventRepository(
 
     /** Wipe just one profile's cache (used when removing that account). */
     suspend fun wipeProfile(profileId: String): Unit = snapshotGate.mutate {
+        clearSyncStateFor(profileId)
         AppDatabase.wipeProfile(context, profileId)
     }
 
@@ -313,6 +481,7 @@ class EventRepository(
             .getOrElse { emptyList() }
         runCatching { reminders.cancelAll(profile, events) }
         runCatching { mirror.unmirror(profile) }
+        clearSyncStateFor(profile.id)
         AppDatabase.wipeProfile(context, profile.id)
     }
 
