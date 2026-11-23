@@ -1,22 +1,22 @@
 <%- include('_nav', { activeNav: '/admin/idp' }) %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">SSO 登录方式</h1>
-<p class="text-sm text-slate-500 mb-4">可以添加多个 OIDC 提供方（Keycloak / Auth0 / Okta / Google Workspace / 飞书 等），登录页会为每个启用项渲染一个按钮。SSO 登录的账号自动跳过邮箱验证。</p>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminSso.heading") %></h1>
+<p class="text-sm text-slate-500 mb-4"><%= t("adminSso.lead") %></p>
 
 <div class="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600 mb-6">
-  <strong>提供方的回调 URL（所有提供方共用一个）：</strong>
+  <strong><%= t("adminSso.callbackLabel") %></strong>
   <code class="ml-1 inline-block bg-white border border-slate-200 rounded px-1.5 py-0.5 font-mono"><%= callbackUrl %></code>
   <br/>
-  在每个 OIDC 提供方那边把这个 URL 加到「Valid Redirect URIs」/「Authorized redirect URIs」即可。
+  <%= t("adminSso.callbackNote") %>
 </div>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">已配置的提供方</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("adminSso.list.title") %></h2>
 
   <% if (!providers || providers.length === 0) { %>
     <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
       <div class="text-3xl mb-2">🔐</div>
-      <div class="text-sm text-slate-500">还没配置任何 SSO 提供方</div>
+      <div class="text-sm text-slate-500"><%= t("adminSso.list.empty") %></div>
     </div>
   <% } else { %>
     <ul class="divide-y divide-slate-100 border-t border-slate-100">
@@ -32,12 +32,12 @@
                 </div>
                 <div class="text-xs text-slate-500 mt-0.5 break-all"><%= p.issuerUrl %></div>
               </div>
-              <span class="text-xs text-slate-400">展开编辑 ▾</span>
+              <span class="text-xs text-slate-400"><%= t("adminSso.expand") %></span>
             </summary>
             <form id="sso-provider-edit-<%= p.id %>" method="post" action="/admin/idp/providers/<%= p.id %>" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
               <label class="text-sm">
-                <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
+                <span class="block font-medium text-slate-700 mb-1"><%= t("adminSso.field.label") %></span>
                 <input type="text" name="label" required maxlength="100" value="<%= p.label %>"
                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
@@ -57,24 +57,24 @@
                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm">
-                <span class="block font-medium text-slate-700 mb-1">Client Secret <span class="text-xs text-slate-400">(留空不修改)</span></span>
+                <span class="block font-medium text-slate-700 mb-1">Client Secret <span class="text-xs text-slate-400"><%= t("adminSso.secretKeep") %></span></span>
                 <input type="password" name="clientSecret" autocomplete="new-password" placeholder="•••••••"
                        class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
               </label>
               <label class="text-sm sm:col-span-2 inline-flex items-center gap-2">
                 <input type="checkbox" name="enabled" <%= p.enabled ? "checked" : "" %>
                        class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-                <span class="text-slate-700">启用（关闭后登录页不显示该按钮）</span>
+                <span class="text-slate-700"><%= t("adminSso.enabledNote") %></span>
               </label>
             </form>
             <%# Keep delete outside the edit form: nested forms merge CSRF fields and submit to the wrong action. %>
             <div class="mt-3 flex justify-between items-center pt-2 border-t border-slate-100">
               <form method="post" action="/admin/idp/providers/<%= p.id %>/delete"
-                    data-confirm="确定删除 <%= p.label %>？删除后该按钮立即消失。" data-confirm-danger="1" data-confirm-ok="删除">
+                    data-confirm="<%= t("adminSso.deleteConfirm", { label: p.label }) %>" data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <button type="submit" class="text-sm text-red-600 hover:text-red-700">删除提供方</button>
+                <button type="submit" class="text-sm text-red-600 hover:text-red-700"><%= t("adminSso.deleteProvider") %></button>
               </form>
-              <button type="submit" form="sso-provider-edit-<%= p.id %>" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">保存修改</button>
+              <button type="submit" form="sso-provider-edit-<%= p.id %>" class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminSso.saveChanges") %></button>
             </div>
           </details>
         </li>
@@ -84,18 +84,18 @@
 </section>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-4">添加新提供方</h2>
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("adminSso.add.title") %></h2>
   <form method="post" action="/admin/idp/providers" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <label class="text-sm">
-      <span class="block font-medium text-slate-700 mb-1">slug <span class="text-xs text-slate-400">(URL 标识，如 <code>keycloak</code> / <code>okta</code> / <code>google</code>)</span></span>
+      <span class="block font-medium text-slate-700 mb-1">slug <span class="text-xs text-slate-400"><%- t("adminSso.slugHint") %></span></span>
       <input type="text" name="slug" required pattern="[a-z0-9][a-z0-9-]{0,30}" maxlength="31"
              placeholder="keycloak"
              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm">
-      <span class="block font-medium text-slate-700 mb-1">显示名 (label)</span>
-      <input type="text" name="label" required maxlength="100" placeholder="使用 Keycloak 登录"
+      <span class="block font-medium text-slate-700 mb-1"><%= t("adminSso.field.label") %></span>
+      <input type="text" name="label" required maxlength="100" placeholder="<%= t("adminSso.labelPlaceholder") %>"
              class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
     </label>
     <label class="text-sm sm:col-span-2">
@@ -115,10 +115,10 @@
     </label>
     <label class="text-sm sm:col-span-2 inline-flex items-center gap-2">
       <input type="checkbox" name="enabled" checked class="h-4 w-4 rounded border-slate-300 accent-brand-600" />
-      <span class="text-slate-700">立即启用</span>
+      <span class="text-slate-700"><%= t("adminSso.enableNow") %></span>
     </label>
     <div class="sm:col-span-2 flex justify-end">
-      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700">添加提供方</button>
+      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("adminSso.add.submit") %></button>
     </div>
   </form>
 </section>

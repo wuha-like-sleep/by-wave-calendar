@@ -1,19 +1,14 @@
 <%- include('_nav') %>
 
-<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2">客户端更新</h1>
-<p class="text-sm text-slate-500 mb-6">
-  三端 App 靠这里的清单知道有没有新版本。默认跟着本站程序走 —— 你每次升级服务端，
-  清单就跟着更新，这一页什么都不用动。
-  只有在你想<strong>自己决定推哪一版</strong>时才需要用到下面的覆盖：比如你自己编译了客户端分发给自己的用户，
-  或者想把版本钉住不跟上游走。
-</p>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminClientRelease.heading") %></h1>
+<p class="text-sm text-slate-500 mb-6"><%- t("adminClientRelease.lead") %></p>
 
 <%
   // 「生效来源」的三种取值，按站长的语言说，不是按字段名说。
   const sourceText = {
-    override:  { label: '你设的覆盖',   cls: 'bg-amber-50 text-amber-800 border-amber-200' },
-    committed: { label: '跟着程序走',   cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-    none:      { label: '还没有清单',   cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+    override:  { label: t("adminClientRelease.source.override"),   cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+    committed: { label: t("adminClientRelease.source.committed"),   cls: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
+    none:      { label: t("adminClientRelease.source.none"),   cls: 'bg-slate-100 text-slate-600 border-slate-200' },
   };
 %>
 
@@ -27,22 +22,16 @@
     写满之后不是「上传失败」这么干净，是数据库拒绝写入。 %>
 <div class="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 mb-6">
   <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
-    <span class="text-slate-500">安装包占用</span>
+    <span class="text-slate-500"><%= t("adminClientRelease.disk.used") %></span>
     <span class="font-semibold text-slate-900"><%= fmtMB(totalBin) %></span>
-    <span class="text-slate-500">磁盘剩余</span>
+    <span class="text-slate-500"><%= t("adminClientRelease.disk.free") %></span>
     <span class="font-semibold <%= disk && disk.freeBytes < 3 * 1073741824 ? 'text-amber-600' : 'text-slate-900' %>">
       <%= disk ? fmtGB(disk.freeBytes) : '—' %><% if (disk) { %> / <%= fmtGB(disk.totalBytes) %><% } %>
     </span>
-    <span class="text-slate-500">单个上限</span>
+    <span class="text-slate-500"><%= t("adminClientRelease.disk.maxSingle") %></span>
     <span class="font-semibold text-slate-900"><%= Math.round(maxBinaryBytes / 1048576) %> MB</span>
   </div>
-  <p class="mt-2 text-xs text-amber-700">
-    ⚠️ <strong>你如果走 nginx 之类的反向代理，那一层也要放行。</strong>
-    部署示例里 <code class="bg-slate-100 px-1 rounded">client_max_body_size</code> 默认只有 10m ——
-    不改的话，包连本程序都到不了，浏览器只会显示一个没头没尾的失败，服务端日志里什么都没有。
-    建议改成 <code class="bg-slate-100 px-1 rounded">client_max_body_size 320m;</code>
-    并加上 <code class="bg-slate-100 px-1 rounded">proxy_request_buffering off;</code>。
-  </p>
+  <p class="mt-2 text-xs text-amber-700"><%- t("adminClientRelease.proxyWarning") %></p>
 </div>
 
 <div class="space-y-6">
@@ -52,22 +41,22 @@
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <h2 class="text-lg font-semibold text-slate-900"><%= p.label %></h2>
       <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium <%= sourceText[p.source].cls %>">
-        当前生效：<%= sourceText[p.source].label %>
+        <%= t("adminClientRelease.source.current", { label: sourceText[p.source].label }) %>
       </span>
     </div>
 
     <%# 没数据也要有骨架 —— 整块字段行消失的话，「还没发布过」和「这一页坏了」看起来一模一样。 %>
     <dl class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5 text-sm">
       <div>
-        <dt class="text-xs text-slate-500 mb-0.5">版本号</dt>
+        <dt class="text-xs text-slate-500 mb-0.5"><%= t("adminClientRelease.field.versionName") %></dt>
         <dd class="font-medium text-slate-900"><%= p.versionName || '—' %></dd>
       </div>
       <div>
-        <dt class="text-xs text-slate-500 mb-0.5">内部版本</dt>
+        <dt class="text-xs text-slate-500 mb-0.5"><%= t("adminClientRelease.field.versionCode") %></dt>
         <dd class="font-medium text-slate-900"><%= p.versionCode == null ? '—' : p.versionCode %></dd>
       </div>
       <div>
-        <dt class="text-xs text-slate-500 mb-0.5">发布时间</dt>
+        <dt class="text-xs text-slate-500 mb-0.5"><%= t("adminClientRelease.field.releasedAt") %></dt>
         <dd class="font-medium text-slate-900">
           <% if (p.releasedAt) { %>
             <time data-tz datetime="<%= p.releasedAt %>" data-style="datetime"><%= p.releasedAt %></time>
@@ -75,33 +64,28 @@
         </dd>
       </div>
       <div>
-        <dt class="text-xs text-slate-500 mb-0.5">灰度放量</dt>
+        <dt class="text-xs text-slate-500 mb-0.5"><%= t("adminClientRelease.field.rollout") %></dt>
         <dd class="font-medium text-slate-900"><%= p.rolloutPercent %>%</dd>
       </div>
       <div>
-        <dt class="text-xs text-slate-500 mb-0.5">强升宽限</dt>
-        <dd class="font-medium text-slate-900"><%= p.graceDays %> 天</dd>
+        <dt class="text-xs text-slate-500 mb-0.5"><%= t("adminClientRelease.field.graceDays") %></dt>
+        <dd class="font-medium text-slate-900"><%= t("adminClientRelease.graceValue", { days: p.graceDays }) %></dd>
       </div>
     </dl>
-    <p class="text-xs text-slate-500 mb-3 -mt-3">
-      灰度与宽限都写在清单里（<code class="bg-slate-100 px-1 rounded">rolloutPercent</code> /
-      <code class="bg-slate-100 px-1 rounded">graceDays</code>）：灰度按设备分桶，没轮到的设备暂时看不到新版；
-      宽限是被强制更新命中后先只提醒、过后才强升的天数。镜像下载地址写清单里的
-      <code class="bg-slate-100 px-1 rounded">mirrorUrl</code>（桌面端写在每个资产里），主备都失败时客户端才会去试它。
-    </p>
+    <p class="text-xs text-slate-500 mb-3 -mt-3"><%- t("adminClientRelease.rolloutNote") %></p>
     <%# 改比例是发布现场的高频动作，单独给一个小表单：只动 rolloutPercent，
         不用为了一个数字重贴整份 JSON（顺手改坏别的字段的风险也随之消失）。 %>
     <div class="flex flex-wrap items-end gap-2 mb-5">
       <form method="post" action="/admin/client-release/<%= p.platform %>/rollout" class="flex items-end gap-2">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <label class="block">
-          <span class="text-xs text-slate-500">灰度比例（%）</span>
+          <span class="text-xs text-slate-500"><%= t("adminClientRelease.rollout.label") %></span>
           <input type="number" name="percent" min="0" max="100" step="1" value="<%= p.rolloutPercent %>"
                  class="mt-1 w-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
         </label>
         <button type="submit"
                 class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          设置灰度
+          <%= t("adminClientRelease.rollout.set") %>
         </button>
       </form>
       <form method="post" action="/admin/client-release/<%= p.platform %>/rollout">
@@ -109,7 +93,7 @@
         <input type="hidden" name="percent" value="100" />
         <button type="submit"
                 class="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700">
-          一键全量
+          <%= t("adminClientRelease.rollout.full") %>
         </button>
       </form>
     </div>
@@ -119,38 +103,32 @@
         反馈「更新下不动」才发现本地包没生效。 %>
     <% if (p.clientAssets && p.clientAssets.length) { %>
     <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-1">
-      <p class="font-medium text-slate-700">App 实际会拿到的下载地址（保存清单 / 上传安装包后刷新本页即为最新）</p>
+      <p class="font-medium text-slate-700"><%= t("adminClientRelease.assets.heading") %></p>
       <% p.clientAssets.forEach(function (a) { %>
         <p class="break-all">
           <% if (p.platform === 'desktop') { %><span class="font-medium"><%= a.platform %></span> · <% } %>
-          主：<a class="text-brand-700 hover:underline" href="<%= a.url %>" rel="noopener" target="_blank"><%= a.url %></a>
-          <% if (a.fallbackUrl) { %><br />备：<a class="text-brand-700 hover:underline" href="<%= a.fallbackUrl %>" rel="noopener" target="_blank"><%= a.fallbackUrl %></a><% } %>
-          <% if (a.mirrorUrl) { %><br />镜像：<a class="text-brand-700 hover:underline" href="<%= a.mirrorUrl %>" rel="noopener" target="_blank"><%= a.mirrorUrl %></a><% } %>
+          <%= t("adminClientRelease.assets.primary") %><a class="text-brand-700 hover:underline" href="<%= a.url %>" rel="noopener" target="_blank"><%= a.url %></a>
+          <% if (a.fallbackUrl) { %><br /><%= t("adminClientRelease.assets.fallback") %><a class="text-brand-700 hover:underline" href="<%= a.fallbackUrl %>" rel="noopener" target="_blank"><%= a.fallbackUrl %></a><% } %>
+          <% if (a.mirrorUrl) { %><br /><%= t("adminClientRelease.assets.mirror") %><a class="text-brand-700 hover:underline" href="<%= a.mirrorUrl %>" rel="noopener" target="_blank"><%= a.mirrorUrl %></a><% } %>
         </p>
       <% }); %>
     </div>
     <% } %>
 
     <% if (p.source === 'none') { %>
-      <p class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 mb-4">
-        这个平台还没有任何清单，所以 App 里的「检查更新」会得到「暂无发布」，
-        下载页也不会显示它。升级一次服务端就会自动带上，或者在下面贴一份。
-      </p>
+      <p class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 mb-4"><%= t("adminClientRelease.noManifest") %></p>
     <% } %>
 
     <%# 服务器上实际有哪些包。做这一块的理由很直接：只能传不能看不能删的话，
         盘迟早满，站长还是得回宝塔。 %>
     <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-4 mb-5">
       <div class="flex flex-wrap items-baseline justify-between gap-2 mb-2">
-        <h3 class="text-sm font-semibold text-slate-800">服务器上的安装包</h3>
-        <span class="text-xs text-slate-500"><%= bin.files.length %> 个 · <%= fmtMB(bin.totalBytes) %></span>
+        <h3 class="text-sm font-semibold text-slate-800"><%= t("adminClientRelease.binaries.heading") %></h3>
+        <span class="text-xs text-slate-500"><%= t("adminClientRelease.binaries.count", { count: bin.files.length, size: fmtMB(bin.totalBytes) }) %></span>
       </div>
 
       <% if (bin.files.length === 0) { %>
-        <p class="text-xs text-slate-500">
-          这个目录是空的，所以下载和 App 内更新都会走上游的地址。
-          传一个上来之后，本站就会优先发自己的。
-        </p>
+        <p class="text-xs text-slate-500"><%= t("adminClientRelease.binaries.empty") %></p>
       <% } else { %>
         <ul class="divide-y divide-slate-200">
           <% bin.files.forEach(function (f) { %>
@@ -158,22 +136,22 @@
               <code class="font-mono text-slate-800 break-all"><%= f.name %></code>
               <span class="text-slate-500"><%= fmtMB(f.size) %></span>
               <% if (f.partial) { %>
-                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500">上传残留</span>
+                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500"><%= t("adminClientRelease.badge.partial") %></span>
               <% } else if (!f.servable) { %>
-                <span class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700">文件名发不出去</span>
+                <span class="rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-red-700"><%= t("adminClientRelease.badge.unservable") %></span>
               <% } else if (!f.referenced) { %>
-                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500">清单没引用它</span>
+                <span class="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-500"><%= t("adminClientRelease.badge.unreferenced") %></span>
               <% } else if (f.sizeMatches === false) { %>
-                <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800">大小和清单对不上</span>
+                <span class="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-amber-800"><%= t("adminClientRelease.badge.sizeMismatch") %></span>
               <% } else { %>
-                <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800">正在用</span>
+                <span class="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-800"><%= t("adminClientRelease.badge.inUse") %></span>
               <% } %>
               <form method="post" class="ml-auto"
                     action="/admin/client-release/<%= p.platform %>/binary/<%= encodeURIComponent(f.name) %>/delete"
-                    data-confirm="删除 <%= f.name %>？<% if (f.referenced) { %>清单还在引用它，删掉之后这个平台会回去走上游地址。<% } %>"
-                    data-confirm-danger="1" data-confirm-ok="删除">
+                    data-confirm="<%= f.referenced ? t("adminClientRelease.binary.deleteConfirmReferenced", { name: f.name }) : t("adminClientRelease.binary.deleteConfirm", { name: f.name }) %>"
+                    data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
                 <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
-                <button type="submit" class="text-red-600 hover:text-red-700">删除</button>
+                <button type="submit" class="text-red-600 hover:text-red-700"><%= t("common.delete") %></button>
               </form>
             </li>
           <% }); %>
@@ -187,17 +165,14 @@
           <input type="file" class="text-xs" data-bwc-binary-upload="<%= p.platform %>"
                  accept="<%= p.platform === 'android' ? '.apk' : '.dmg,.msi,.deb' %>" />
         </label>
-        <p class="mt-1 text-xs text-slate-500" data-bwc-upload-status="<%= p.platform %>">
-          选一个文件就开始上传。上传前会和清单里的 sha256 比对，对不上不会保存 ——
-          客户端下载完会校验这个值，不匹配的话用户会一直重试而且不知道为什么。
-        </p>
+        <p class="mt-1 text-xs text-slate-500" data-bwc-upload-status="<%= p.platform %>"><%= t("adminClientRelease.upload.hint") %></p>
       </div>
     </div>
 
     <form method="post" action="/admin/client-release/<%= p.platform %>" class="space-y-3">
       <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
       <label class="block">
-        <span class="text-sm font-medium text-slate-700">粘贴清单 JSON</span>
+        <span class="text-sm font-medium text-slate-700"><%= t("adminClientRelease.manifest.label") %></span>
         <textarea name="manifest" rows="8" spellcheck="false"
                   class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs
                          focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
@@ -205,16 +180,11 @@
                     ? "{\n  \"versionCode\": 21,\n  \"versionName\": \"0.12.0\",\n  \"downloadUrl\": \"https://…/app.apk\",\n  \"sha256\": \"…\",\n  \"sizeBytes\": 24921268\n}"
                     : "{\n  \"versionCode\": 24,\n  \"versionName\": \"1.1.1\",\n  \"assets\": {\n    \"mac\": { \"downloadUrl\": \"https://…\", \"sha256\": \"…\", \"sizeBytes\": 0 }\n  }\n}" %>'><%= p.overrideRaw || '' %></textarea>
       </label>
-      <p class="text-xs text-slate-500">
-        保存前会用和接口<strong>同一份</strong>校验跑一遍，认不出来就不落盘 ——
-        免得出现「这里说保存成功、而 App 那边拿到 404」。
-        下载地址必须是 <code class="bg-slate-100 px-1 rounded">https://</code>：
-        这个地址会被推给所有装了本站 App 的用户。
-      </p>
+      <p class="text-xs text-slate-500"><%- t("adminClientRelease.manifest.note") %></p>
       <div class="flex flex-wrap gap-2">
         <button type="submit"
                 class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-          保存为覆盖
+          <%= t("adminClientRelease.manifest.save") %>
         </button>
       </div>
     </form>
@@ -224,17 +194,15 @@
           内联事件处理器一律不执行，而且有一条门禁盯着这件事（我第一版就红在那儿）。
           data-confirm 由 src/public/_built/app.js 的全局委托处理。 %>
       <form method="post" action="/admin/client-release/<%= p.platform %>/clear" class="mt-3"
-            data-confirm="清除之后，这个平台会回到跟着程序走的那一份。确定吗？"
-            data-confirm-ok="清除覆盖">
+            data-confirm="<%= t("adminClientRelease.clear.confirm") %>"
+            data-confirm-ok="<%= t("adminClientRelease.clear.ok") %>">
         <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
         <button type="submit"
                 class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-          清除覆盖，恢复成跟着程序走
+          <%= t("adminClientRelease.clear.label") %>
         </button>
         <% if (!p.committedExists) { %>
-          <span class="ml-2 text-xs text-amber-700">
-            ⚠️ 这台服务器上没有随程序走的那一份，清除之后这个平台会变成「还没有清单」。
-          </span>
+          <span class="ml-2 text-xs text-amber-700"><%= t("adminClientRelease.clear.noCommitted") %></span>
         <% } %>
       </form>
     <% } %>
@@ -246,28 +214,24 @@
     「商店里有新版了」的一条广播，存在站点设置里，客户端启动时自己来拉。 %>
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mt-6">
   <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-    <h2 class="text-lg font-semibold text-slate-900">iOS 公告</h2>
+    <h2 class="text-lg font-semibold text-slate-900"><%= t("adminClientRelease.ios.heading") %></h2>
     <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium <%= iosAnnouncement.live ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200' %>">
-      当前状态：<%= iosAnnouncement.live ? '正在播' : '没有在播' %>
+      <%= t("adminClientRelease.ios.status", { state: iosAnnouncement.live ? t("adminClientRelease.ios.stateLive") : t("adminClientRelease.ios.stateOff") }) %>
     </span>
   </div>
-  <p class="text-sm text-slate-500 mb-4">
-    iOS 版本只走 App Store，App 自己不知道商店里有没有新版 —— 开了这条公告之后，
-    还在旧版上的 iOS 用户启动 App 时会看到一次提示（点过「稍后」后，同一版本不再弹；
-    改了内容再保存一次会刷新发布时间，想再弹一次也是保存一次的事）。
-  </p>
+  <p class="text-sm text-slate-500 mb-4"><%= t("adminClientRelease.ios.lead") %></p>
 
   <%# 自检：接口实际会返回的那一份。表单里填了 ≠ 在播 —— 版本号形态不对
       这类问题在这里直接现形。 %>
   <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 mb-4 text-xs text-slate-600 space-y-1">
-    <p class="font-medium text-slate-700">App 实际会拿到的公告（GET /api/app/ios/announcement）</p>
+    <p class="font-medium text-slate-700"><%= t("adminClientRelease.ios.previewHeading") %></p>
     <% if (iosAnnouncement.live) { %>
       <p class="break-all">
-        版本 <%= iosAnnouncement.live.version %> · <%= iosAnnouncement.live.title || '（无标题）' %>
-        <% if (iosAnnouncement.live.storeUrl) { %><br />商店链接：<a class="text-brand-700 hover:underline" href="<%= iosAnnouncement.live.storeUrl %>" rel="noopener" target="_blank"><%= iosAnnouncement.live.storeUrl %></a><% } %>
+        <%= t("adminClientRelease.ios.versionLine", { version: iosAnnouncement.live.version, title: iosAnnouncement.live.title || t("adminClientRelease.ios.noTitle") }) %>
+        <% if (iosAnnouncement.live.storeUrl) { %><br /><%= t("adminClientRelease.ios.storeLink") %><a class="text-brand-700 hover:underline" href="<%= iosAnnouncement.live.storeUrl %>" rel="noopener" target="_blank"><%= iosAnnouncement.live.storeUrl %></a><% } %>
       </p>
     <% } else { %>
-      <p>没有在播 —— 接口现在回的是 404。常见原因：没勾启用、版本号没填或形态不对、标题正文全空。</p>
+      <p><%= t("adminClientRelease.ios.notLive") %></p>
     <% } %>
   </div>
 
@@ -276,34 +240,34 @@
     <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
       <input type="checkbox" name="enabled" <%= iosAnnouncement.enabled ? 'checked' : '' %>
              class="rounded border-slate-300" />
-      启用这条公告
+      <%= t("adminClientRelease.ios.enable") %>
     </label>
     <div class="grid sm:grid-cols-2 gap-3">
       <label class="block">
-        <span class="text-sm font-medium text-slate-700">目标版本（App Store 在架版本）</span>
+        <span class="text-sm font-medium text-slate-700"><%= t("adminClientRelease.ios.field.version") %></span>
         <input type="text" name="version" value="<%= iosAnnouncement.version %>" placeholder="1.8.0"
                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </label>
       <label class="block">
-        <span class="text-sm font-medium text-slate-700">商店链接</span>
+        <span class="text-sm font-medium text-slate-700"><%= t("adminClientRelease.ios.field.storeUrl") %></span>
         <input type="text" name="storeUrl" value="<%= iosAnnouncement.storeUrl %>" placeholder="https://apps.apple.com/…"
                class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
       </label>
     </div>
     <label class="block">
-      <span class="text-sm font-medium text-slate-700">标题</span>
-      <input type="text" name="title" value="<%= iosAnnouncement.title %>" placeholder="新版本 1.8.0 已发布"
+      <span class="text-sm font-medium text-slate-700"><%= t("adminClientRelease.ios.field.title") %></span>
+      <input type="text" name="title" value="<%= iosAnnouncement.title %>" placeholder="<%= t("adminClientRelease.ios.titlePlaceholder") %>"
              class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500" />
     </label>
     <label class="block">
-      <span class="text-sm font-medium text-slate-700">正文</span>
+      <span class="text-sm font-medium text-slate-700"><%= t("adminClientRelease.ios.field.body") %></span>
       <textarea name="body" rows="3"
                 class="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
-                placeholder="这一版修了什么、为什么值得更新"><%= iosAnnouncement.body %></textarea>
+                placeholder="<%= t("adminClientRelease.ios.bodyPlaceholder") %>"><%= iosAnnouncement.body %></textarea>
     </label>
     <button type="submit"
             class="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-      保存公告
+      <%= t("adminClientRelease.ios.save") %>
     </button>
   </form>
 </section>
@@ -312,6 +276,22 @@
 (function () {
   var CSRF = <%- JSON.stringify(csrfToken) %>;
   var MAX = <%= maxBinaryBytes %>;
+  var T = {
+    tooBig: <%- JSON.stringify(t("adminClientRelease.js.tooBig")) %>,
+    uploading: <%- JSON.stringify(t("adminClientRelease.js.uploading")) %>,
+    starting: <%- JSON.stringify(t("adminClientRelease.js.starting")) %>,
+    networkError: <%- JSON.stringify(t("adminClientRelease.js.networkError")) %>,
+    saved: <%- JSON.stringify(t("adminClientRelease.js.saved")) %>,
+    savedTail: <%- JSON.stringify(t("adminClientRelease.js.savedTail")) %>,
+    savedUnverified: <%- JSON.stringify(t("adminClientRelease.js.savedUnverified")) %>,
+    savedUnreferenced: <%- JSON.stringify(t("adminClientRelease.js.savedUnreferenced")) %>,
+    failed: <%- JSON.stringify(t("adminClientRelease.js.failed")) %>,
+    proxyBlocked413: <%- JSON.stringify(t("adminClientRelease.js.proxyBlocked413")) %>,
+    interceptedHtml: <%- JSON.stringify(t("adminClientRelease.js.interceptedHtml")) %>
+  };
+  function fmt(s, vars) {
+    return s.replace(/\{(\w+)\}/g, function (_, k) { return vars[k] != null ? String(vars[k]) : ""; });
+  }
 
   function mb(n) { return (n / 1048576).toFixed(1) + ' MB'; }
 
@@ -330,7 +310,7 @@
 
     // 本地先拦一道 —— 让人白传 109MB 再告诉他超限是很不体面的。
     if (file.size > MAX) {
-      say('这个文件 ' + mb(file.size) + '，超过上限 ' + mb(MAX) + ' —— 没有上传。', 'mt-1 text-xs text-red-600');
+      say(fmt(T.tooBig, { size: mb(file.size), max: mb(MAX) }), 'mt-1 text-xs text-red-600');
       input.value = '';
       return;
     }
@@ -349,22 +329,21 @@
     xhr.upload.onprogress = function (e) {
       if (!e.lengthComputable) return;
       var pct = Math.round((e.loaded / e.total) * 100);
-      say('正在上传 ' + file.name + ' —— ' + pct + '%（' + mb(e.loaded) + ' / ' + mb(e.total) + '）。别关这个页面。');
+      say(fmt(T.uploading, { name: file.name, pct: pct, loaded: mb(e.loaded), total: mb(e.total) }));
     };
     xhr.onerror = function () {
-      say('上传失败：连不上服务器。如果你走反向代理，先确认那一层的 client_max_body_size 放开了。',
-          'mt-1 text-xs text-red-600');
+      say(T.networkError, 'mt-1 text-xs text-red-600');
       input.value = '';
     };
     xhr.onload = function () {
       var body = null;
       try { body = JSON.parse(xhr.responseText); } catch (e) {}
       if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
-        var extra = '';
-        if (body.unverified) extra = ' ⚠️ 清单里没写 sha256，这一版发出去不会有任何客户端校验。';
-        else if (!body.referenced) extra = ' ⚠️ 清单没有引用这个文件名，所以它暂时不会被发给任何人。';
-        say('已保存 ' + body.file + '（' + mb(body.sizeBytes) + '）。' + extra + ' 刷新页面看结果。',
-            'mt-1 text-xs text-emerald-700');
+        var parts = [fmt(T.saved, { file: body.file, size: mb(body.sizeBytes) })];
+        if (body.unverified) parts.push(T.savedUnverified);
+        else if (!body.referenced) parts.push(T.savedUnreferenced);
+        parts.push(T.savedTail);
+        say(parts.join(' '), 'mt-1 text-xs text-emerald-700');
         setTimeout(function () { window.location.reload(); }, 1200);
         return;
       }
@@ -375,21 +354,18 @@
       if (!body && looksHtml) {
         if (xhr.status === 413) {
           // 反向代理自己发的 413：请求根本没到本程序。
-          msg = '请求被拒绝（413），而且不是本程序发的 —— 是你的反向代理拦的。'
-              + '把 nginx 的 client_max_body_size 调到 320m 以上再试。';
+          msg = T.proxyBlocked413;
         } else {
           // 最阴的一种：状态码 2xx，body 却是一张 HTML 错误页。
           // 宝塔 WAF 拦大 body 时就是这样（提示「Nginx缓冲区溢出」），
           // 看起来像成功，实际上请求从没到过本程序。
-          msg = '上传被中间层拦了（返回的是一张 HTML 页面，不是本程序的响应，状态码 '
-              + xhr.status + '）。常见于宝塔 Nginx 防火墙：把这个地址加进 URL 白名单'
-              + '（^/admin/client-release/.*/binary$）再试。';
+          msg = fmt(T.interceptedHtml, { status: xhr.status });
         }
       }
-      say('上传失败：' + msg, 'mt-1 text-xs text-red-600');
+      say(fmt(T.failed, { msg: msg }), 'mt-1 text-xs text-red-600');
       input.value = '';
     };
-    say('正在上传 ' + file.name + '…… 别关这个页面。');
+    say(fmt(T.starting, { name: file.name }));
     xhr.send(form);
   });
 })();
