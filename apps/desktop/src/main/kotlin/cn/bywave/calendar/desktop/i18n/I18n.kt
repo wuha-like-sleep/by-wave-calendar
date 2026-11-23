@@ -194,6 +194,11 @@ object I18n {
         "menu.settings" to "Settings…",
         "menu.checkUpdate" to "Check for Updates…",
         "menu.quit" to "Quit ByWave Calendar",
+        // Window controls (custom title bar)
+        "window.minimize" to "Minimize",
+        "window.maximize" to "Maximize",
+        "window.restore" to "Restore",
+        "window.close" to "Close",
 
         // Settings shell
         "settings.title" to "Settings",
@@ -952,6 +957,11 @@ object I18n {
         "menu.settings" to "设置…",
         "menu.checkUpdate" to "检查更新…",
         "menu.quit" to "退出 ByWave Calendar",
+        // 自绘标题栏按钮(Windows)
+        "window.minimize" to "最小化",
+        "window.maximize" to "最大化",
+        "window.restore" to "还原",
+        "window.close" to "关闭",
 
         "settings.title" to "设置",
         "settings.close" to "关闭设置",
@@ -1691,6 +1701,11 @@ object I18n {
         "menu.settings" to "設定…",
         "menu.checkUpdate" to "檢查更新…",
         "menu.quit" to "結束 ByWave Calendar",
+        // 自繪標題欄按鈕(Windows)
+        "window.minimize" to "最小化",
+        "window.maximize" to "最大化",
+        "window.restore" to "還原",
+        "window.close" to "關閉",
 
         "settings.title" to "設定",
         "settings.close" to "關閉設定",
@@ -2439,6 +2454,11 @@ object I18n {
         "menu.settings" to "設定…",
         "menu.checkUpdate" to "アップデートを確認…",
         "menu.quit" to "ByWave Calendar を終了",
+        // タイトルバーのボタン(Windows)
+        "window.minimize" to "最小化",
+        "window.maximize" to "最大化",
+        "window.restore" to "元に戻す",
+        "window.close" to "閉じる",
 
         "settings.title" to "設定",
         "settings.close" to "設定を閉じる",
@@ -3187,6 +3207,11 @@ object I18n {
         "menu.settings" to "설정…",
         "menu.checkUpdate" to "업데이트 확인…",
         "menu.quit" to "ByWave Calendar 종료",
+        // 제목 표시줄 버튼(Windows)
+        "window.minimize" to "최소화",
+        "window.maximize" to "최대화",
+        "window.restore" to "복원",
+        "window.close" to "닫기",
 
         "settings.title" to "설정",
         "settings.close" to "설정 닫기",
@@ -3935,6 +3960,11 @@ object I18n {
         "menu.settings" to "Ajustes…",
         "menu.checkUpdate" to "Buscar actualizaciones…",
         "menu.quit" to "Salir de ByWave Calendar",
+        // Botones de la barra de título (Windows)
+        "window.minimize" to "Minimizar",
+        "window.maximize" to "Maximizar",
+        "window.restore" to "Restaurar",
+        "window.close" to "Cerrar",
 
         "settings.title" to "Ajustes",
         "settings.close" to "Cerrar ajustes",
@@ -4683,6 +4713,11 @@ object I18n {
         "menu.settings" to "Réglages…",
         "menu.checkUpdate" to "Rechercher des mises à jour…",
         "menu.quit" to "Quitter ByWave Calendar",
+        // Boutons de la barre de titre (Windows)
+        "window.minimize" to "Réduire",
+        "window.maximize" to "Agrandir",
+        "window.restore" to "Restaurer",
+        "window.close" to "Fermer",
 
         "settings.title" to "Réglages",
         "settings.close" to "Fermer les réglages",
@@ -5431,6 +5466,11 @@ object I18n {
         "menu.settings" to "Einstellungen…",
         "menu.checkUpdate" to "Nach Updates suchen…",
         "menu.quit" to "ByWave Calendar beenden",
+        // Schaltflächen der Titelleiste (Windows)
+        "window.minimize" to "Minimieren",
+        "window.maximize" to "Maximieren",
+        "window.restore" to "Wiederherstellen",
+        "window.close" to "Schließen",
 
         "settings.title" to "Einstellungen",
         "settings.close" to "Einstellungen schließen",
