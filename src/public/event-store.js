@@ -157,6 +157,55 @@
     return { puts, deletes };
   }
 
+  // 增量同步（GET /api/events/sync 的 syncToken 模型）落到镜像上的计划。
+  // 服务端回的是「哪些主事件变了」：upsertedIds 的当前状态在 events 里按
+  // 窗口展开好了，deletedIds 只给 id。这里把它们折成镜像的行操作：
+  //   · 变过的主事件，它在镜像里的旧行**整组删掉再写新的** —— 只按窗口
+  //     替换会把改到窗口外的旧 occurrence 留成幽灵；整组删又不能不分青红
+  //     皂白，所以有本地未同步改动（_dirty）的主事件整组跳过，和
+  //     planWindowMerge 对 _dirty 的保护同一口径，等改动发出去后下一轮
+  //     全量（每 10 次一次）或它自己的增量再对齐；
+  //   · 删除的主事件同理整组删（墓碑行是 _dirty，会被上面的规则保住，
+  //     等删除真的发到服务端后由 applyAccepted 清）。
+  function planDeltaApply(rows, delta) {
+    const masters = new Set([...(delta.upsertedIds || []), ...(delta.deletedIds || [])]);
+    const dirtyMasters = new Set();
+    for (const r of rows) {
+      if (r._dirty) dirtyMasters.add(r._masterId || r.id);
+    }
+    const deletes = [];
+    for (const r of rows) {
+      const master = r._masterId || r.id;
+      if (masters.has(master) && !dirtyMasters.has(master)) deletes.push(r.id);
+    }
+    const puts = [];
+    for (const e of delta.events || []) {
+      if (dirtyMasters.has(e.id)) continue;
+      puts.push(toLocalRow(e, delta.now));
+    }
+    return { puts, deletes };
+  }
+
+  // 这一轮该怎么问服务端。镜像的基线是「span 这段区间在 token 那个水位上
+  // 是完整的」：问的窗口落在 span 里就走增量（问的范围是整个 span，不是
+  // 当前窗口 —— span 里别处的行也要保鲜）；探出 span 之外就全量，范围是
+  // span 与窗口的并集，全量回来后基线扩到并集。每 10 次强制一次全量是
+  // 自愈：万一哪条变化漏记了，页面不至于永远停在错的内容上（410 也是
+  // 同一类自愈，服务端主动发起的那种）。
+  function syncPlan(state, fromMs, toMs, forceFull) {
+    if (!state || !state.token) {
+      return { mode: "full", fromMs, toMs };
+    }
+    if (!forceFull && fromMs >= state.spanFrom && toMs <= state.spanTo) {
+      return { mode: "incremental", fromMs: state.spanFrom, toMs: state.spanTo };
+    }
+    return {
+      mode: "full",
+      fromMs: Math.min(state.spanFrom, fromMs),
+      toMs: Math.max(state.spanTo, toMs),
+    };
+  }
+
   // 窗口里该显示的行。系列有本地改动 / 删除时，旧的每一次都不显示，只显示改动那一行。
   function visibleRows(rows, fromMs, toMs) {
     const hidden = new Set(rows.filter((r) => r._dirty).map((r) => r.id));
@@ -171,7 +220,7 @@
     return out;
   }
 
-  globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, planWindowMerge, visibleRows };
+  globalThis.bwcMirrorCore = { rowKeyOf, toLocalRow, planWindowMerge, visibleRows, planDeltaApply, syncPlan };
 })();
 
 (function () {
@@ -297,49 +346,45 @@
   // On network failure, return whatever's in the local mirror that
   // overlaps the window. Caller doesn't need to know whether it came
   // from network or cache.
-  // 上一次成功拉取的窗口和令牌，只在内存里：本地写过就作废，镜像可能已经和那个令牌对不上。
-  let lastFetch = null;
+  //
+  // 同步走 GET /api/events/sync 的 syncToken 模型（见文件上半部分
+  // syncPlan / planDeltaApply 的说明）：同步状态（令牌 + 基线 span）和
+  // 镜像一起落盘，刷新页面后第一拉就是增量 —— 以前 ETag 只存内存，
+  // 每次刷新第一拉必全量，就是被这一点顶着的。本地写不再作废令牌：
+  // 增量应用会跳过有未同步改动的主事件，写出去后 applyAccepted 自己
+  // 把行对齐；invalidateFetch 因此只剩计数，调用点保持原样。
+  let syncState = null;        // { token, spanFrom, spanTo } | null
+  let syncStateLoaded = false;
   let localWrites = 0;
   let lastFetchSeq = 0;
   let lastAppliedFetchSeq = 0;
-  let fetchesSinceFull = 0;
+  let syncsSinceFull = 0;
   const FULL_FETCH_EVERY = 10;
-  function invalidateFetch() { lastFetch = null; localWrites += 1; }
+  function invalidateFetch() { localWrites += 1; }
+
+  async function ensureSyncState() {
+    if (syncStateLoaded) return;
+    syncStateLoaded = true;
+    try {
+      const token = await getMeta("syncToken");
+      const span = await getMeta("syncSpan");
+      if (typeof token === "string" && span && Number.isFinite(span.fromMs) && Number.isFinite(span.toMs)) {
+        syncState = { token, spanFrom: span.fromMs, spanTo: span.toMs };
+      }
+    } catch { /* 读不到就当没有，走全量 */ }
+  }
+
+  async function persistSyncState() {
+    await setMeta("syncToken", syncState ? syncState.token : null);
+    await setMeta("syncSpan", syncState ? { fromMs: syncState.spanFrom, toMs: syncState.spanTo } : null);
+  }
 
   async function getAll({ from, to, calendarIds }) {
     const fromMs = +new Date(from);
     const toMs = +new Date(to);
-    let serverData = null;
+    let serverCalendars = null;
     try {
-      const url = `/api/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${calendarIds ? "&calendarIds=" + encodeURIComponent(calendarIds) : ""}`;
-      // 页面每 30 秒拉一次当前窗口。和上次同一个窗口就带上令牌，数据没变服务端回 304，
-      // 不用重算、不用传、不用再写一遍镜像。隔几轮不带令牌拉一次全量：浏览器清掉了 IndexedDB、
-      // 或者别的标签页动过镜像时，304 会让页面一直停在不对的内容上。
-      fetchesSinceFull += 1;
-      const prev = lastFetch && lastFetch.url === url && fetchesSinceFull < FULL_FETCH_EVERY ? lastFetch : null;
-      if (!prev) fetchesSinceFull = 0;
-      const fetchStartedAt = Date.now();
-      const fetchSeq = ++lastFetchSeq;
-      const writesAtStart = localWrites;
-      const r = await http("GET", url, undefined, prev ? { "If-None-Match": prev.etag } : undefined);
-      if (r.status === 304 && prev) {
-        serverData = { calendars: prev.calendars };
-        await setMeta("lastSyncedAt", new Date().toISOString());
-      } else if (r.ok) {
-        serverData = r.data;
-        // 比已经写进镜像的那次还早发出的响应（网络乱序）：内容更旧，不写。比序号不比时刻：
-        // 系统时钟往回跳的话，比时刻会把之后的结果全丢掉。
-        if (fetchSeq > lastAppliedFetchSeq) {
-          lastAppliedFetchSeq = fetchSeq;
-          await mergeIntoLocal(serverData.events || [], {
-            fromMs, toMs, fetchStartedAt,
-            calendarIds: calendarIds ? calendarIds.split(",") : null,
-          });
-          // 拉取途中本地写过：这个令牌可能和镜像对不上，下次老实拉全量。
-          lastFetch = r.etag && localWrites === writesAtStart ? { url, etag: r.etag, calendars: serverData.calendars } : null;
-          await setMeta("lastSyncedAt", new Date().toISOString());
-        }
-      }
+      serverCalendars = await syncFromServer(fromMs, toMs);
     } catch { /* offline */ }
 
     // Even when online, return from local mirror so optimistic outbox
@@ -351,9 +396,116 @@
 
     return {
       events: filtered,
-      calendars: serverData ? serverData.calendars : null,
+      calendars: serverCalendars,
       offline: !serverReachable,
     };
+  }
+
+  const isoOf = (ms) => new Date(ms).toISOString();
+
+  // 问服务端要数据并写进镜像，返回这次响应里的日历名单；拿不到（断网、
+  // 服务端出错）返回 null，调用方就用镜像里现有的。410 的处理在增量分支里。
+  async function syncFromServer(fromMs, toMs) {
+    await ensureSyncState();
+    syncsSinceFull += 1;
+    const forceFull = syncsSinceFull >= FULL_FETCH_EVERY;
+    if (forceFull) syncsSinceFull = 0;
+    const plan = mirror.syncPlan(syncState, fromMs, toMs, forceFull);
+    const fetchSeq = ++lastFetchSeq;
+    // 记发出拉取的时刻，不记到达的时刻（与 planWindowMerge 同一口径）。
+    const fetchStartedAt = Date.now();
+
+    if (plan.mode === "incremental" && syncState) {
+      const url = `/api/events/sync?from=${encodeURIComponent(isoOf(plan.fromMs))}&to=${encodeURIComponent(isoOf(plan.toMs))}&syncToken=${encodeURIComponent(syncState.token)}`;
+      const r = await http("GET", url);
+      if (r.status === 410) {
+        // 令牌过期（服务端把变更日志裁掉了）：服务端行整体作废、同步
+        // 状态清零，按全量重建。本地未同步的改动（_dirty）留着 —— 那是
+        // outbox 的账，不是镜像的。
+        await wipeServerRows();
+        syncState = null;
+        await persistSyncState();
+        return fullSync(fromMs, toMs, fetchSeq, fetchStartedAt);
+      }
+      if (!r.ok) return null;
+      // 比已经写进镜像的那次还早发出的响应（网络乱序）：内容更旧，不写。
+      // 比序号不比时刻：系统时钟往回跳的话，比时刻会把之后的结果全丢掉。
+      if (fetchSeq > lastAppliedFetchSeq) {
+        lastAppliedFetchSeq = fetchSeq;
+        await applyDeltaToLocal(r.data, fetchStartedAt);
+        await pruneVanishedCalendars(r.data.calendars);
+        syncState = { token: r.data.nextSyncToken, spanFrom: syncState.spanFrom, spanTo: syncState.spanTo };
+        await persistSyncState();
+        await setMeta("lastSyncedAt", new Date().toISOString());
+      }
+      return r.data.calendars || null;
+    }
+    return fullSync(plan.fromMs, plan.toMs, fetchSeq, fetchStartedAt);
+  }
+
+  // 全量同步：plan 给的范围（基线 span 与请求窗口的并集）就是这一轮的
+  // 真相，mergeIntoLocal 会把范围里对不上的行清掉；回来后基线扩到这个范围。
+  async function fullSync(fromMs, toMs, fetchSeq, fetchStartedAt) {
+    const url = `/api/events/sync?from=${encodeURIComponent(isoOf(fromMs))}&to=${encodeURIComponent(isoOf(toMs))}`;
+    const r = await http("GET", url);
+    if (!r.ok) return null;
+    if (fetchSeq > lastAppliedFetchSeq) {
+      lastAppliedFetchSeq = fetchSeq;
+      await mergeIntoLocal(r.data.events || [], { fromMs, toMs, fetchStartedAt, calendarIds: null });
+      await pruneVanishedCalendars(r.data.calendars);
+      syncState = { token: r.data.nextSyncToken, spanFrom: fromMs, spanTo: toMs };
+      await persistSyncState();
+      await setMeta("lastSyncedAt", new Date().toISOString());
+    }
+    return r.data.calendars || null;
+  }
+
+  // 增量落盘：变过的主事件整组换新（规则见 planDeltaApply）。
+  async function applyDeltaToLocal(data, now) {
+    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+      const all = s.getAll();
+      all.onsuccess = () => {
+        const plan = mirror.planDeltaApply(all.result || [], {
+          events: data.events || [],
+          upsertedIds: data.upsertedIds || [],
+          deletedIds: data.deletedIds || [],
+          now,
+        });
+        for (const key of plan.deletes) s.delete(key);
+        for (const row of plan.puts) s.put(row);
+        resolve();
+      };
+    }));
+  }
+
+  // 同步响应每次都带当前可见日历全量：名单里没了的日历（被删、被取消
+  // 共享），它名下的服务端行要整组清掉 —— 删日历时事件的删除日志可能
+  // 记不全（级联顺序），这一路是兜底。本地未同步的改动不清。
+  async function pruneVanishedCalendars(calendars) {
+    if (!Array.isArray(calendars)) return;
+    const keep = new Set(calendars.map((c) => c.id));
+    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+      const all = s.getAll();
+      all.onsuccess = () => {
+        for (const r of all.result || []) {
+          if (!r._dirty && !keep.has(r.calendarId)) s.delete(r.id);
+        }
+        resolve();
+      };
+    }));
+  }
+
+  // 410 重建时丢掉全部服务端行，只留本地未同步的改动。
+  async function wipeServerRows() {
+    await tx(STORE_EVENTS, "readwrite", (s) => new Promise((resolve) => {
+      const all = s.getAll();
+      all.onsuccess = () => {
+        for (const r of all.result || []) {
+          if (!r._dirty) s.delete(r.id);
+        }
+        resolve();
+      };
+    }));
   }
 
   // 这次拉取的结果写进镜像，规则见文件上面 planWindowMerge 那段。
@@ -639,6 +791,10 @@
     // Debug hook — clear everything (used by /reset-pwa).
     _wipe: async () => {
       invalidateFetch();
+      // 同步状态在 meta 里，随下面一起清；内存这份也要归零。
+      syncState = null;
+      syncStateLoaded = true;
+      lastAppliedFetchSeq = 0;
       const db = await openDB();
       await new Promise((resolve) => {
         const t = db.transaction([STORE_EVENTS, STORE_OUTBOX, STORE_META], "readwrite");
