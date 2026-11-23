@@ -308,6 +308,60 @@ final class APIClient {
         }
     }
 
+    /// /events/sync 专用请求（增量同步，syncToken 模型）。鉴权 / 401
+    /// 重试 / 信封拆包与 getEventsConditional 同一套口径；单独一份，
+    /// 是因为调用方要按状态码分流：410（令牌过期）触发全量重建，
+    /// 其它错误回退旧 /events——状态码就借 APIError.server 的 status
+    /// 带出去。syncToken 为 nil = 初始全量同步（窗口全量 + 新令牌）。
+    func getEventsSync(from: String, to: String, syncToken: String?, isRetry: Bool = false) async throws -> EventsSyncResponse {
+        guard state.activeProfileId == profileID else { throw CancellationError() }
+        guard let serverURL = state.serverURL else { throw APIError.notSignedIn }
+        let token = try await state.currentAccessToken()
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        let allowed = CharacterSet.urlQueryAllowed
+        var path = "/events/sync?from=\(from.addingPercentEncoding(withAllowedCharacters: allowed)!)&to=\(to.addingPercentEncoding(withAllowedCharacters: allowed)!)"
+        if let syncToken {
+            path += "&syncToken=\(syncToken.addingPercentEncoding(withAllowedCharacters: allowed)!)"
+        }
+        guard let url = Self.makeURL(server: serverURL, path: path) else {
+            throw APIError.network(NSError(domain: "bad-url", code: 0))
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 15
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await URLSession.shared.data(for: req)
+        } catch {
+            throw APIError.network(error)
+        }
+        guard state.activeProfileId == profileID, !Task.isCancelled else { throw CancellationError() }
+        guard let http = resp as? HTTPURLResponse else {
+            throw APIError.network(NSError(domain: "no-http-response", code: 0))
+        }
+        if http.statusCode == 401 && !isRetry {
+            state.invalidateAccessToken()
+            return try await getEventsSync(from: from, to: to, syncToken: syncToken, isRetry: true)
+        }
+        if http.statusCode >= 400 {
+            throw APIError.server(status: http.statusCode, body: String(data: data, encoding: .utf8))
+        }
+        do {
+            if let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let inner = outer["data"] {
+                let innerData = try JSONSerialization.data(withJSONObject: inner)
+                return try JSONDecoder.iso().decode(EventsSyncResponse.self, from: innerData)
+            }
+            return try JSONDecoder.iso().decode(EventsSyncResponse.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+    }
+
     /// /invitations 专用条件请求（邀请徽章用）。和 getEventsConditional
     /// 同一套口径：带上 If-None-Match，没新邀请、没人回应时服务端只回
     /// 304，返回 (nil, _) —— 调用方保持原徽章数，整表下载和解码都省掉；
