@@ -145,8 +145,8 @@
   <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 mb-3"><%- t("landing.bottomCtaTitle") %></h2>
   <p class="text-slate-600 max-w-xl mx-auto mb-6"><%= t("landing.bottomCtaDesc") %></p>
   <% if (registrationOpen) { %>
-    <a href="/register" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-brand-600/20 hover:bg-brand-700"><%= t("landing.bottomCtaButton") %></a>
+    <a href="/register" class="inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-brand-600/20 hover:bg-brand-700 hover:shadow-xl hover:-translate-y-px transition"><%= t("landing.bottomCtaButton") %></a>
   <% } else { %>
-    <a href="/login" class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-brand-600/20 hover:bg-brand-700"><%= t("nav.signIn") %></a>
+    <a href="/login" class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white shadow-lg shadow-brand-600/20 hover:bg-brand-700 hover:shadow-xl hover:-translate-y-px transition"><%= t("nav.signIn") %></a>
   <% } %>
 </section>

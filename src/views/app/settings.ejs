@@ -779,7 +779,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
           <% apiTokenUsage.perToken.forEach(function(pt){ %>
             <li class="flex items-center gap-2 text-xs text-slate-600">
               <span class="w-32 truncate"><%= pt.label %></span>
-              <span class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><span class="block h-full rounded-full bg-brand-500/70" style="width:<%= pt.pct %>%"></span></span>
+              <span class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100"><span class="bwc-progress-fill block h-full rounded-full bg-brand-500/70" style="width:<%= pt.pct %>%"></span></span>
               <span class="w-20 text-right tabular-nums"><%= t("settings.devices.apiTokenUsageTotal", { count: pt.count }) %></span>
             </li>
           <% }) %>

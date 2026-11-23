@@ -35,9 +35,54 @@
   background-color: #e5484d !important;
 }
 
-/* Toast animation */
+/* Toast animation — enter rises a few px while fading in; the leave
+   half is a class app.js adds (`.is-leaving`) so the exit is the same
+   motion in reverse instead of an inline-style opacity hack. Both
+   halves only run when the user hasn't asked for reduced motion. */
 @keyframes bwc-toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.bwc-toast { animation: bwc-toast-in 200ms ease-out; pointer-events: auto; }
+.bwc-toast { pointer-events: auto; }
+.bwc-toast.is-leaving {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 200ms ease-in, transform 200ms ease-in;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bwc-toast { animation: bwc-toast-in 200ms ease-out; }
+}
+
+/* Generic entrance for floating chrome that JS appends to <body>
+   (version-check's update chip, the offline banner): same rise-and-fade
+   family as the toast so floating elements share one accent. */
+@keyframes bwc-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .bwc-rise-in { animation: bwc-rise-in 200ms ease-out; }
+}
+
+/* Calendar loading skeleton: calendar-app.js fades it out (this class)
+   once events render, instead of the grid popping in over a hard cut.
+   The transition lives on the base rule so both the template-rendered
+   and JS-created overlays (same id) behave alike. */
+#calendar-skeleton { transition: opacity 160ms ease-out; }
+#calendar-skeleton.bwc-fade-out { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  #calendar-skeleton { transition: none; }
+}
+
+/* Calendar view switch (month/week/day): calendar-app.js restarts this
+   class on #calendar so the re-rendered grid fades in instead of
+   hard-cutting. Opacity only — Toast UI measures its children, so no
+   transform here. Refresh renders do NOT get the class; only an actual
+   view change does. */
+@keyframes bwc-view-in {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #calendar.bwc-view-in { animation: bwc-view-in 160ms ease-out; }
+}
