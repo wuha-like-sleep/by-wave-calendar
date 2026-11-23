@@ -248,7 +248,7 @@ struct ApiTokensView: View {
                     ForEach(data.usage.perDay, id: \.day) { day in
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(day.count > 0 ? Color.accentColor : Color.secondary.opacity(0.25))
-                            .frame(height: barHeight(count: day.count, max: maxCount))
+                            .frame(height: barHeight(count: day.count, maxCount: maxCount))
                     }
                 }
                 .frame(height: 44, alignment: .bottom)
@@ -264,10 +264,10 @@ struct ApiTokensView: View {
         }
     }
 
-    private func barHeight(count: Int, max: Int) -> CGFloat {
-        guard max > 0 else { return 1 }
+    private func barHeight(count: Int, maxCount: Int) -> CGFloat {
+        guard maxCount > 0 else { return 1 }
         if count == 0 { return 1 }
-        return max(3, 44 * CGFloat(count) / CGFloat(max))
+        return max(3, 44 * CGFloat(count) / CGFloat(maxCount))
     }
 
     @ViewBuilder
