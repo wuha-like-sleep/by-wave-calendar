@@ -49,6 +49,10 @@ export async function getPublicVapidKey(): Promise<string> {
 }
 
 export type PushPayload = {
+  // 载荷类型。缺省 = 普通通知（sw.js 展示标题/正文）。"events_sync" 是
+  // 增量同步的唤醒信号：不带任何事件数据，sw.js 收到后只通知打开着的
+  // 页面自己拉增量，通知本身展示后立即关闭（见 sw.js 与 lib/sync_push.ts）。
+  type?: string;
   title: string;
   body: string;
   // Click-through URL when the user taps the notification.
@@ -69,7 +73,15 @@ export type PushPayload = {
 // Send a push to every device the user has registered. Failures are
 // logged; subscriptions returning 404/410 (browser revoked) are
 // auto-deleted so we stop trying to reach them.
-export async function pushToUser(userId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
+//
+// ttlSeconds 默认 1 天（普通通知：人可能一天后才看手机，迟到也还有用）。
+// 同步唤醒信号传一个短 TTL：浏览器离线几小时后才收到「有变化」毫无意义
+// —— 它上线打开页面时自会增量拉取，迟到的信号只会多唤醒一次。
+export async function pushToUser(
+  userId: string,
+  payload: PushPayload,
+  opts?: { ttlSeconds?: number },
+): Promise<{ sent: number; failed: number }> {
   await ensureVapidKeys();
   const subs = await db.select().from(schema.pushSubscriptions).where(eq(schema.pushSubscriptions.userId, userId));
   if (subs.length === 0) return { sent: 0, failed: 0 };
@@ -83,7 +95,7 @@ export async function pushToUser(userId: string, payload: PushPayload): Promise<
       await webpush.sendNotification(
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         body,
-        { TTL: 24 * 3600 },  // expire after 1 day if undelivered
+        { TTL: opts?.ttlSeconds ?? 24 * 3600 },
       );
       sent++;
       // Bookkeeping; opportunistic, ignore failures.

@@ -143,6 +143,7 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "notif.security.scopeRead": "只读",
   "notif.security.scopeWrite": "可读写",
   "notif.push.view": "查看",
+  "notif.eventsSync.title": "日历有更新",
   "notif.eventInvitation.title": "活动邀请：{summary}",
   "notif.eventInvitation.body": "{organizer} 邀请你参加，时间 {when}。点开即可回复是否参加。",
   "notif.rsvp.title": "邀请回复：{summary}",

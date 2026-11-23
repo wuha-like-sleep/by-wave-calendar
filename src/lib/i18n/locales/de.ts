@@ -142,6 +142,7 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "notif.security.scopeRead": "nur Lesen",
   "notif.security.scopeWrite": "Lesen und Schreiben",
   "notif.push.view": "Ansehen",
+  "notif.eventsSync.title": "Kalender wurde aktualisiert",
   "notif.eventInvitation.title": "Einladung zu einem Termin: {summary}",
   "notif.eventInvitation.body": "{organizer} hat dich eingeladen. Zeit: {when}. Öffnen, um zu antworten.",
   "notif.rsvp.title": "RSVP-Antwort: {summary}",

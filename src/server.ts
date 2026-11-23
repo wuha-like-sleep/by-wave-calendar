@@ -47,6 +47,7 @@ import { caldavRoutes } from "./web/caldav.js";
 import { getSettings } from "./lib/site_settings.js";
 import { startSubscriptionScheduler } from "./lib/ics_import.js";
 import { startReminderScheduler } from "./lib/reminders.js";
+import { startSyncPushScheduler } from "./lib/sync_push.js";
 import { startHousekeepingScheduler } from "./lib/housekeeping.js";
 import { logApnsStartup } from "./lib/apns.js";
 import { readThemeFromRequest } from "./lib/user_theme.js";
@@ -1062,6 +1063,13 @@ startReminderScheduler({
 });
 
 startHousekeepingScheduler({
+  info: (m) => app.log.info(m),
+  warn: (m) => app.log.warn(m),
+});
+
+// 增量同步第三批：扫 event_changes 给有变化的用户发同步唤醒推送，
+// 打开着的 Web 页面收到后自己拉增量；轮询从此只是兜底。
+startSyncPushScheduler({
   info: (m) => app.log.info(m),
   warn: (m) => app.log.warn(m),
 });
