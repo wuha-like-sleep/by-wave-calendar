@@ -54,6 +54,9 @@ export const EXPORT_TABLES = [
   // bookings 还挂着 events，所以排在 events 之后。
   { name: "booking_links",        table: schema.bookingLinks },
   { name: "events",               table: schema.events },
+  // 购买清单挂在 users + events（可空）上，排在两者之后；条目挂在清单上紧随其后。
+  { name: "shopping_lists",       table: schema.shoppingLists },
+  { name: "shopping_list_items",  table: schema.shoppingListItems },
   { name: "bookings",             table: schema.bookings },
   // 「这条提醒已经发过了」的台账。丢了会把已经发过的提醒又发一遍。
   { name: "reminders_sent",       table: schema.remindersSent },

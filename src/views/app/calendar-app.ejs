@@ -161,6 +161,7 @@
       <div class="p-3 mt-auto text-xs text-slate-400 space-y-1 border-t border-slate-100">
         <a href="/app/calendars" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.cardView") %></a>
         <a href="/app/booking-links" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.bookingLinks") %></a>
+        <a href="/app/shopping-lists" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.shoppingLists") %></a>
         <a href="/app/settings" class="block py-1.5 hover:text-slate-700"><%= t("app.sidebar.accountSettings") %></a>
         <% if (user.isAdmin) { %>
           <a href="/admin" class="block py-1.5 text-amber-700 hover:text-amber-900"><%= t("app.sidebar.admin") %></a>
@@ -451,6 +452,22 @@
         </div>
       </div>
     </form>
+    <%# Shopping lists linked to this event. Deliberately OUTSIDE the
+        event form: a list survives its event, so linking is its own API
+        operation (calendar-app.js), not a form field — and outside the
+        form the view-mode field disabling in setModalMode can't freeze
+        the section. Only meaningful for a saved event; a new one has no
+        id to link to yet, hence the hint row. %>
+    <div class="px-4 py-3 border-t border-slate-100">
+      <label class="block text-xs font-medium text-slate-600 mb-1"><%= t("app.event.shoppingLists") %></label>
+      <p id="shopping-lists-unsaved" class="text-xs text-slate-400"><%= t("app.event.shoppingListsUnsaved") %></p>
+      <ul id="shopping-lists-linked" class="space-y-1.5"></ul>
+      <div id="shopping-lists-actions" class="hidden mt-2 flex flex-wrap items-center gap-2">
+        <select id="shopping-lists-select" class="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-200"></select>
+        <button type="button" id="shopping-lists-link-btn" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"><%= t("app.event.shoppingListsLink") %></button>
+        <button type="button" id="shopping-lists-create-btn" class="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"><%= t("app.event.shoppingListsCreate") %></button>
+      </div>
+    </div>
   </div>
 </div>
 

@@ -1,0 +1,154 @@
+<a href="/app/shopping-lists" class="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700 mb-3">← <%= t("shopping.backToLists") %></a>
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= list.title %></h1>
+<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500 mb-6">
+  <span><%= t("shopping.progress", { done: items.filter(function(i){ return i.done; }).length, total: items.length }) %></span>
+  <% if (eventSummary) { %>
+    <span class="inline-flex items-center gap-1">📅 <%= eventSummary %></span>
+  <% } %>
+</div>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <% if (items.length === 0) { %>
+    <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+      <div class="text-3xl mb-2">🧺</div>
+      <div class="text-sm text-slate-500"><%= t("shopping.itemsEmpty") %></div>
+    </div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100">
+      <% items.forEach(function(item, idx){ %>
+        <li class="py-3">
+          <div class="flex items-start gap-3">
+            <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/toggle" class="m-0 flex-shrink-0 pt-0.5">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" aria-label="<%= t("shopping.toggleDone") %>"
+                      class="flex h-5 w-5 items-center justify-center rounded border <%= item.done ? 'border-brand-600 bg-brand-600 text-white' : 'border-slate-300 bg-white text-transparent hover:border-brand-400' %>">
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+              </button>
+            </form>
+            <div class="min-w-0 flex-1">
+              <div class="text-sm <%= item.done ? 'text-slate-400 line-through' : 'text-slate-900' %>">
+                <%= item.name %>
+                <% if (item.quantity !== null || item.unit) { %>
+                  <span class="text-slate-500 <%= item.done ? 'text-slate-300' : '' %>">· <%= item.quantity !== null ? item.quantity : "" %><%= item.unit || "" %></span>
+                <% } %>
+              </div>
+              <% if (item.note) { %><div class="mt-0.5 text-xs text-slate-500"><%= item.note %></div><% } %>
+            </div>
+            <div class="flex flex-shrink-0 items-center gap-1">
+              <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/move" class="m-0">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="direction" value="up" />
+                <button type="submit" <%= idx === 0 ? "disabled" : "" %> aria-label="<%= t("shopping.moveUp") %>"
+                        class="rounded px-1.5 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent">↑</button>
+              </form>
+              <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/move" class="m-0">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <input type="hidden" name="direction" value="down" />
+                <button type="submit" <%= idx === items.length - 1 ? "disabled" : "" %> aria-label="<%= t("shopping.moveDown") %>"
+                        class="rounded px-1.5 py-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30 disabled:hover:bg-transparent">↓</button>
+              </form>
+              <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/delete" class="m-0"
+                    data-confirm="<%= t("shopping.deleteItemConfirm") %>" data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+                <button type="submit" class="rounded px-1.5 py-1 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"><%= t("common.delete") %></button>
+              </form>
+            </div>
+          </div>
+          <details class="mt-1.5 ml-8">
+            <summary class="w-fit cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 hover:underline"><%= t("shopping.editItem") %></summary>
+            <form method="post" action="/app/shopping-lists/<%= list.id %>/items/<%= item.id %>/update" class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <label class="text-xs col-span-2">
+                <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemName") %></span>
+                <input type="text" name="name" required maxlength="200" value="<%= item.name %>"
+                       class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+              </label>
+              <label class="text-xs">
+                <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemQuantity") %></span>
+                <input type="number" name="quantity" min="0" step="any" value="<%= item.quantity !== null ? item.quantity : '' %>"
+                       class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+              </label>
+              <label class="text-xs">
+                <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemUnit") %></span>
+                <input type="text" name="unit" maxlength="20" value="<%= item.unit || '' %>"
+                       class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+              </label>
+              <label class="text-xs col-span-2 sm:col-span-3">
+                <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemNote") %></span>
+                <input type="text" name="note" maxlength="500" value="<%= item.note || '' %>"
+                       class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+              </label>
+              <div class="flex items-end justify-end">
+                <button type="submit" class="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"><%= t("common.save") %></button>
+              </div>
+            </form>
+          </details>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+
+  <form method="post" action="/app/shopping-lists/<%= list.id %>/items" class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2 border-t border-slate-100 pt-4">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="text-xs col-span-2">
+      <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemName") %></span>
+      <input type="text" name="name" required maxlength="200" placeholder="<%= t("shopping.itemNamePlaceholder") %>"
+             class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-xs">
+      <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemQuantity") %></span>
+      <input type="number" name="quantity" min="0" step="any"
+             class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-xs">
+      <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemUnit") %></span>
+      <input type="text" name="unit" maxlength="20"
+             class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-xs col-span-2 sm:col-span-3">
+      <span class="block font-medium text-slate-600 mb-1"><%= t("shopping.itemNote") %></span>
+      <input type="text" name="note" maxlength="500"
+             class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <div class="flex items-end justify-end">
+      <button type="submit" class="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700"><%= t("shopping.addItem") %></button>
+    </div>
+  </form>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("shopping.listSettings") %></h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
+    <form method="post" action="/app/shopping-lists/<%= list.id %>/rename" class="grid gap-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <label class="text-sm">
+        <span class="block font-medium text-slate-700 mb-1"><%= t("shopping.titleLabel") %></span>
+        <input type="text" name="title" required maxlength="120" value="<%= list.title %>"
+               class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      </label>
+      <div>
+        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("shopping.renameButton") %></button>
+      </div>
+    </form>
+    <form method="post" action="/app/shopping-lists/<%= list.id %>/link" class="grid gap-2">
+      <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+      <label class="text-sm">
+        <span class="block font-medium text-slate-700 mb-1"><%= t("shopping.linkEventLabel") %></span>
+        <select name="eventId" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+          <option value="" <%= !list.eventId ? "selected" : "" %>><%= t("shopping.noEvent") %></option>
+          <% events.forEach(function(ev){ %>
+            <option value="<%= ev.id %>" <%= list.eventId === ev.id ? "selected" : "" %>><%= ev.summary %> · <%= ev.startsAt.toISOString().slice(0, 10) %></option>
+          <% }) %>
+        </select>
+      </label>
+      <div>
+        <button type="submit" class="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"><%= t("shopping.linkButton") %></button>
+      </div>
+    </form>
+  </div>
+  <form method="post" action="/app/shopping-lists/<%= list.id %>/delete" class="m-0 mt-5 border-t border-slate-100 pt-4"
+        data-confirm="<%= t("shopping.deleteListConfirm") %>" data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <button type="submit" class="text-sm text-red-600 hover:text-red-700"><%= t("shopping.deleteList") %></button>
+  </form>
+</section>

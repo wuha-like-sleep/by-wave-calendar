@@ -25,6 +25,21 @@ import { cancelEvent } from "../lib/event_cancel.js";
 import { availableSlots, bookingTimeZone, bookingTimeZoneFromCalendar, BookingError, bookSlot, cancelBooking, DEFAULT_AVAILABILITY, deleteBookingLink, findLinkBySlug, type WeeklyAvailability } from "../lib/booking.js";
 import { canonicalTimeZone, fromWallClock, toWallClock } from "../lib/zoned_time.js";
 import { createTimeProposal, decideTimeProposal, listProposalsForEvent } from "../lib/time_proposals.js";
+import {
+  SHOPPING_ITEM_NAME_MAX,
+  SHOPPING_ITEM_NOTE_MAX,
+  SHOPPING_ITEM_UNIT_MAX,
+  SHOPPING_LIST_TITLE_MAX,
+  createShoppingList,
+  createShoppingListItem,
+  deleteShoppingList,
+  deleteShoppingListItem,
+  getShoppingListDetail,
+  listShoppingLists,
+  moveShoppingListItem,
+  updateShoppingList,
+  updateShoppingListItem,
+} from "../lib/shopping_lists.js";
 import { issueCode, verifyCode, type PendingRegistration } from "../lib/email_verification.js";
 import { notifyLoginSuccess } from "../lib/login_alert.js";
 import { getSettings, getCaptchaConfig } from "../lib/site_settings.js";
@@ -3261,6 +3276,225 @@ export async function webRoutes(app: FastifyInstance) {
     return redirectWith(reply, "/app/booking-links", {
       success: link.notifyEmail ? tr(req, "flash.bookingLink.notifyOff") : tr(req, "flash.bookingLink.notifyOn"),
     });
+  });
+
+  // -------- Shopping lists（购买清单）--------
+  // 数据操作全在 lib/shopping_lists.ts，与 JSON API 共用同一套 owner
+  // 隔离逻辑；这里只管表单解析、CSRF 与 flash 跳转。事件下拉的数据源是
+  // 「自己日历上未删除的事件」——与 lib 里关联校验的口径一致（别人的、
+  // 已删的都不出现），免得用户选了才报错。
+  async function ownEventsForLinking(userId: string) {
+    return db
+      .select({ id: schema.events.id, summary: schema.events.summary, startsAt: schema.events.startsAt })
+      .from(schema.events)
+      .innerJoin(schema.calendars, eq(schema.events.calendarId, schema.calendars.id))
+      .where(and(eq(schema.calendars.ownerId, userId), isNull(schema.events.deletedAt)))
+      .orderBy(desc(schema.events.startsAt))
+      .limit(100);
+  }
+
+  // 表单里的 quantity 是字符串：空 = 不填；填了必须是正数（与 JSON API
+  // 的 coerce 口径一致，上限对齐 numeric(12,3)）。返回 undefined 表示非法。
+  function formQuantity(raw: unknown): string | null | undefined {
+    if (raw === undefined || raw === null) return null;
+    const s = String(raw).trim();
+    if (s === "") return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n <= 0 || n > 999_999_999.999) return undefined;
+    return String(Math.round(n * 1000) / 1000);
+  }
+  const blankFormText = (raw: unknown, max: number): string | null => {
+    const s = String(raw ?? "").trim().slice(0, max);
+    return s === "" ? null : s;
+  };
+
+  app.get("/app/shopping-lists", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    const lists = await listShoppingLists(user.id);
+    return reply.view("app/shopping-lists", {
+      title: tr(req, "page.shoppingLists"),
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: readFlash(req, reply),
+      lists,
+      events: await ownEventsForLinking(user.id),
+    });
+  });
+
+  app.post("/app/shopping-lists", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const body = z.object({
+      title: z.string().trim().min(1).max(SHOPPING_LIST_TITLE_MAX),
+      eventId: z.string().uuid().optional().or(z.literal("")),
+    }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, "/app/shopping-lists", { error: tr(req, "flash.shopping.paramInvalid") });
+    }
+    const result = await createShoppingList(user.id, {
+      title: body.data.title,
+      eventId: body.data.eventId ? body.data.eventId : null,
+    });
+    if (!result.ok) {
+      const key = result.error === "event_not_found" ? "flash.shopping.eventNotFound" : "flash.shopping.listLimit";
+      return redirectWith(reply, "/app/shopping-lists", { error: tr(req, key) });
+    }
+    return redirectWith(reply, `/app/shopping-lists/${result.value.id}`, { success: tr(req, "flash.shopping.listCreated") });
+  });
+
+  app.get<{ Params: { id: string } }>("/app/shopping-lists/:id", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/shopping-lists");
+    const detail = await getShoppingListDetail(user.id, id.data);
+    if (!detail) return reply.redirect("/app/shopping-lists");
+    return reply.view("app/shopping-list", {
+      title: detail.list.title,
+      user,
+      csrfToken: csrfTokenFor(req),
+      flash: readFlash(req, reply),
+      list: detail.list,
+      // numeric 回读是 "2.500" 这样的字符串，展示前压成 2.5。
+      items: detail.items.map((i) => ({ ...i, quantity: i.quantity === null ? null : String(Number(i.quantity)) })),
+      eventSummary: detail.eventSummary,
+      events: await ownEventsForLinking(user.id),
+    });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/shopping-lists/:id/rename", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/shopping-lists");
+    const body = z.object({ title: z.string().trim().min(1).max(SHOPPING_LIST_TITLE_MAX) }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.paramInvalid") });
+    }
+    const result = await updateShoppingList(user.id, id.data, { title: body.data.title });
+    if (!result.ok || !result.value) return reply.redirect("/app/shopping-lists");
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, { success: tr(req, "flash.shopping.listRenamed") });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/shopping-lists/:id/delete", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/shopping-lists");
+    await deleteShoppingList(user.id, id.data);
+    return redirectWith(reply, "/app/shopping-lists", { success: tr(req, "flash.shopping.listDeleted") });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/shopping-lists/:id/link", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/shopping-lists");
+    const body = z.object({ eventId: z.string().uuid().or(z.literal("")) }).safeParse(req.body);
+    if (!body.success) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.paramInvalid") });
+    }
+    const result = await updateShoppingList(user.id, id.data, {
+      eventId: body.data.eventId === "" ? null : body.data.eventId,
+    });
+    if (!result.ok) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.eventNotFound") });
+    }
+    if (!result.value) return reply.redirect("/app/shopping-lists");
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, {
+      success: tr(req, body.data.eventId === "" ? "flash.shopping.unlinked" : "flash.shopping.linked"),
+    });
+  });
+
+  app.post<{ Params: { id: string } }>("/app/shopping-lists/:id/items", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    if (!id.success) return reply.redirect("/app/shopping-lists");
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    const name = String(raw.name ?? "").trim().slice(0, SHOPPING_ITEM_NAME_MAX);
+    const quantity = formQuantity(raw.quantity);
+    if (!name || quantity === undefined) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.paramInvalid") });
+    }
+    const result = await createShoppingListItem(user.id, id.data, {
+      name,
+      quantity,
+      unit: blankFormText(raw.unit, SHOPPING_ITEM_UNIT_MAX),
+      note: blankFormText(raw.note, SHOPPING_ITEM_NOTE_MAX),
+    });
+    if (!result.ok) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.itemLimit") });
+    }
+    if (!result.value) return reply.redirect("/app/shopping-lists");
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, { success: tr(req, "flash.shopping.itemAdded") });
+  });
+
+  app.post<{ Params: { id: string; itemId: string } }>("/app/shopping-lists/:id/items/:itemId/update", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    const itemId = z.string().uuid().safeParse(req.params.itemId);
+    if (!id.success || !itemId.success) return reply.redirect("/app/shopping-lists");
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    const name = String(raw.name ?? "").trim().slice(0, SHOPPING_ITEM_NAME_MAX);
+    const quantity = formQuantity(raw.quantity);
+    if (!name || quantity === undefined) {
+      return redirectWith(reply, `/app/shopping-lists/${id.data}`, { error: tr(req, "flash.shopping.paramInvalid") });
+    }
+    const row = await updateShoppingListItem(user.id, id.data, itemId.data, {
+      name,
+      quantity,
+      unit: blankFormText(raw.unit, SHOPPING_ITEM_UNIT_MAX),
+      note: blankFormText(raw.note, SHOPPING_ITEM_NOTE_MAX),
+    });
+    if (!row) return reply.redirect("/app/shopping-lists");
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, { success: tr(req, "flash.shopping.itemUpdated") });
+  });
+
+  app.post<{ Params: { id: string; itemId: string } }>("/app/shopping-lists/:id/items/:itemId/toggle", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    const itemId = z.string().uuid().safeParse(req.params.itemId);
+    if (!id.success || !itemId.success) return reply.redirect("/app/shopping-lists");
+    const detail = await getShoppingListDetail(user.id, id.data);
+    const item = detail?.items.find((i) => i.id === itemId.data);
+    if (!item) return reply.redirect("/app/shopping-lists");
+    await updateShoppingListItem(user.id, id.data, itemId.data, { done: !item.done });
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, {});
+  });
+
+  app.post<{ Params: { id: string; itemId: string } }>("/app/shopping-lists/:id/items/:itemId/delete", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    const itemId = z.string().uuid().safeParse(req.params.itemId);
+    if (!id.success || !itemId.success) return reply.redirect("/app/shopping-lists");
+    await deleteShoppingListItem(user.id, id.data, itemId.data);
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, { success: tr(req, "flash.shopping.itemDeleted") });
+  });
+
+  app.post<{ Params: { id: string; itemId: string } }>("/app/shopping-lists/:id/items/:itemId/move", async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const id = z.string().uuid().safeParse(req.params.id);
+    const itemId = z.string().uuid().safeParse(req.params.itemId);
+    if (!id.success || !itemId.success) return reply.redirect("/app/shopping-lists");
+    const body = z.object({ direction: z.enum(["up", "down"]) }).safeParse(req.body);
+    if (!body.success) return redirectWith(reply, `/app/shopping-lists/${id.data}`, {});
+    await moveShoppingListItem(user.id, id.data, itemId.data, body.data.direction);
+    return redirectWith(reply, `/app/shopping-lists/${id.data}`, {});
   });
 
   // -------- Public booking pages --------

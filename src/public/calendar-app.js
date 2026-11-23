@@ -2180,6 +2180,8 @@
       manage.classList.toggle("hidden", !payload.id);
       if (payload.id) manage.href = `/app/events/${encodeURIComponent(payload.id)}/attendees`;
     }
+    // Shopping lists linked to this event (separate API, not form state).
+    renderEventShoppingLists(payload.id || null, payload.summary || "");
     // Link field (separate from notes — stored at extra.url).
     const urlInput = form.querySelector('[name="url"]');
     if (urlInput) urlInput.value = payload.url || "";
@@ -2227,6 +2229,114 @@
     const nlHint = $("#nl-hint");
     if (nl) nl.value = "";
     if (nlHint) { nlHint.classList.add("hidden"); nlHint.textContent = ""; }
+  }
+
+  // ---------- Event ↔ shopping lists ----------
+  // The modal section is NOT part of the event form: a list outlives its
+  // event, so link / unlink / create-for-event are their own API calls
+  // against /api/shopping-lists, fired immediately (no "save" step).
+  let shoppingListsEventId = null;
+
+  async function renderEventShoppingLists(eventId, summary) {
+    shoppingListsEventId = eventId;
+    const unsaved = $("#shopping-lists-unsaved");
+    const linked = $("#shopping-lists-linked");
+    const actions = $("#shopping-lists-actions");
+    const select = $("#shopping-lists-select");
+    if (!linked || !actions) return;
+    linked.innerHTML = "";
+    if (!eventId) {
+      if (unsaved) unsaved.classList.remove("hidden");
+      actions.classList.add("hidden");
+      return;
+    }
+    if (unsaved) unsaved.classList.add("hidden");
+    actions.classList.remove("hidden");
+    let lists = [];
+    try {
+      const resp = await fetch("/api/shopping-lists", fetchOpts());
+      if (resp.ok) {
+        const data = await resp.json();
+        lists = Array.isArray(data) ? data : (data.data || []);
+      }
+    } catch (_e) { /* leave the section empty; the lists page still works */ }
+    const mine = lists.filter((l) => l.eventId === eventId);
+    const linkable = lists.filter((l) => !l.eventId);
+    if (mine.length === 0) {
+      const li = document.createElement("li");
+      li.className = "text-xs text-slate-400";
+      li.textContent = T("app.js.shopping.none");
+      linked.appendChild(li);
+    }
+    for (const l of mine) {
+      const li = document.createElement("li");
+      li.className = "flex items-center gap-2 text-sm";
+      const a = document.createElement("a");
+      a.href = `/app/shopping-lists/${encodeURIComponent(l.id)}`;
+      a.className = "min-w-0 flex-1 truncate font-medium text-brand-700 hover:underline";
+      a.textContent = l.title;
+      const progress = document.createElement("span");
+      progress.className = "flex-shrink-0 text-xs text-slate-400";
+      progress.textContent = T("app.js.shopping.progress", { done: l.doneCount, total: l.totalCount });
+      const unlink = document.createElement("button");
+      unlink.type = "button";
+      unlink.className = "flex-shrink-0 text-xs text-slate-500 hover:text-slate-700";
+      unlink.textContent = T("app.js.shopping.unlink");
+      unlink.addEventListener("click", async () => {
+        await fetch(`/api/shopping-lists/${encodeURIComponent(l.id)}`, fetchOpts({
+          method: "PATCH",
+          body: JSON.stringify({ eventId: null }),
+        })).catch(() => undefined);
+        renderEventShoppingLists(shoppingListsEventId, summary);
+      });
+      li.append(a, progress, unlink);
+      linked.appendChild(li);
+    }
+    if (select) {
+      select.innerHTML = "";
+      for (const l of linkable) {
+        const opt = document.createElement("option");
+        opt.value = l.id;
+        opt.textContent = l.title;
+        select.appendChild(opt);
+      }
+      select.disabled = linkable.length === 0;
+    }
+    const linkBtn = $("#shopping-lists-link-btn");
+    if (linkBtn) {
+      linkBtn.disabled = linkable.length === 0;
+      if (!linkBtn.dataset.bound) {
+        linkBtn.dataset.bound = "1";
+        linkBtn.addEventListener("click", async () => {
+          const sel = $("#shopping-lists-select");
+          if (!sel || !sel.value || !shoppingListsEventId) return;
+          await fetch(`/api/shopping-lists/${encodeURIComponent(sel.value)}`, fetchOpts({
+            method: "PATCH",
+            body: JSON.stringify({ eventId: shoppingListsEventId }),
+          })).catch(() => undefined);
+          renderEventShoppingLists(shoppingListsEventId, "");
+        });
+      }
+    }
+    const createBtn = $("#shopping-lists-create-btn");
+    if (createBtn && !createBtn.dataset.bound) {
+      createBtn.dataset.bound = "1";
+      createBtn.addEventListener("click", async () => {
+        if (!shoppingListsEventId) return;
+        const titleInput = $("#form-event")?.querySelector('[name="summary"]');
+        const title = (titleInput && titleInput.value.trim()) || T("app.js.shopping.defaultTitle");
+        const resp = await fetch("/api/shopping-lists", fetchOpts({
+          method: "POST",
+          body: JSON.stringify({ title, eventId: shoppingListsEventId }),
+        })).catch(() => null);
+        if (resp && resp.ok) {
+          const created = await resp.json().catch(() => null);
+          const createdId = created && (created.id || (created.data && created.data.id));
+          if (createdId) window.open(`/app/shopping-lists/${encodeURIComponent(createdId)}`, "_blank");
+        }
+        renderEventShoppingLists(shoppingListsEventId, "");
+      });
+    }
   }
 
   // ---------- Natural-language event parser ----------

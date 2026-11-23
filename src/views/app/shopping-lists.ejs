@@ -1,0 +1,67 @@
+<h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("shopping.heading") %></h1>
+<p class="text-sm text-slate-500 mb-6"><%= t("shopping.intro") %></p>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("shopping.yourLists") %></h2>
+  <% if (lists.length === 0) { %>
+    <div class="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-8 text-center">
+      <div class="text-3xl mb-2">🛒</div>
+      <div class="text-sm text-slate-500"><%= t("shopping.empty") %></div>
+    </div>
+  <% } else { %>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">
+      <% lists.forEach(function(l){ %>
+        <li class="py-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <a href="/app/shopping-lists/<%= l.id %>" class="text-sm font-medium text-slate-900 hover:text-brand-700 hover:underline"><%= l.title %></a>
+              <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                <span><%= t("shopping.progress", { done: l.doneCount, total: l.totalCount }) %></span>
+                <% if (l.totalCount > 0 && l.doneCount === l.totalCount) { %>
+                  <span class="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700"><%= t("shopping.allDone") %></span>
+                <% } %>
+                <% if (l.eventSummary) { %>
+                  <span class="inline-flex items-center gap-1 text-slate-500">📅 <%= l.eventSummary %></span>
+                <% } %>
+              </div>
+              <% if (l.totalCount > 0) { %>
+                <div class="mt-2 h-1.5 w-full max-w-xs rounded-full bg-slate-100 overflow-hidden">
+                  <div class="h-full rounded-full bg-brand-500" style="width: <%= Math.round(l.doneCount / l.totalCount * 100) %>%"></div>
+                </div>
+              <% } %>
+            </div>
+            <form method="post" action="/app/shopping-lists/<%= l.id %>/delete" class="m-0 flex-shrink-0"
+                  data-confirm="<%= t("shopping.deleteListConfirm") %>" data-confirm-danger="1" data-confirm-ok="<%= t("common.delete") %>">
+              <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+              <button type="submit" class="text-xs text-red-600 hover:text-red-700"><%= t("common.delete") %></button>
+            </form>
+          </div>
+        </li>
+      <% }) %>
+    </ul>
+  <% } %>
+</section>
+
+<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+  <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("shopping.createHeading") %></h2>
+  <form method="post" action="/app/shopping-lists" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl">
+    <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1"><%= t("shopping.titleLabel") %></span>
+      <input type="text" name="title" required maxlength="120" placeholder="<%= t("shopping.titlePlaceholder") %>"
+             class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+    </label>
+    <label class="text-sm">
+      <span class="block font-medium text-slate-700 mb-1"><%= t("shopping.linkEventLabel") %></span>
+      <select name="eventId" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100">
+        <option value=""><%= t("shopping.noEvent") %></option>
+        <% events.forEach(function(ev){ %>
+          <option value="<%= ev.id %>"><%= ev.summary %> · <%= ev.startsAt.toISOString().slice(0, 10) %></option>
+        <% }) %>
+      </select>
+    </label>
+    <div class="sm:col-span-2 flex justify-end">
+      <button type="submit" class="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700"><%= t("shopping.createButton") %></button>
+    </div>
+  </form>
+</section>

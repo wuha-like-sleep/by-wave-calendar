@@ -10,6 +10,7 @@ import {
   jsonb,
   date,
   bigint,
+  numeric,
   primaryKey,
 } from "drizzle-orm/pg-core";
 import { desc, sql } from "drizzle-orm";
@@ -849,6 +850,39 @@ export const bookingLinks = pgTable("booking_links", {
   userIdx: index("booking_links_user_idx").on(t.userId),
 }));
 
+// 购买清单（迁移 0071）。owner_id 是唯一权限边界，接口层按它隔离、
+// 他人清单一律 404。event_id 可空：事件被物理清除时 SET NULL，清单保留、
+// 关联自动解除。quantity 用 numeric —— 0.5 斤这类小数是日常量，整数列
+// 装不下、自由文本又没法在客户端做步进编辑。
+export const shoppingLists = pgTable("shopping_lists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  eventId: uuid("event_id").references(() => events.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  ownerIdx: index("shopping_lists_owner_idx").on(t.ownerId),
+  eventIdx: index("shopping_lists_event_idx").on(t.eventId),
+}));
+
+export const shoppingListItems = pgTable("shopping_list_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  listId: uuid("list_id").notNull().references(() => shoppingLists.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  quantity: numeric("quantity", { precision: 12, scale: 3 }),
+  unit: text("unit"),
+  note: text("note"),
+  done: boolean("done").notNull().default(false),
+  // 排序位：新条目取最大值 +1024，移动时只改被挪的那一行（取邻居中点），
+  // 空档耗尽由服务层整体重排。见 lib/shopping_lists.ts。
+  position: integer("position").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  listIdx: index("shopping_list_items_list_idx").on(t.listId, t.position),
+}));
+
 export const bookings = pgTable("bookings", {
   id: uuid("id").primaryKey().defaultRandom(),
   linkId: uuid("link_id").notNull().references(() => bookingLinks.id, { onDelete: "cascade" }),
@@ -963,6 +997,10 @@ export type BookingLink = typeof bookingLinks.$inferSelect;
 export type NewBookingLink = typeof bookingLinks.$inferInsert;
 export type Booking = typeof bookings.$inferSelect;
 export type NewBooking = typeof bookings.$inferInsert;
+export type ShoppingList = typeof shoppingLists.$inferSelect;
+export type NewShoppingList = typeof shoppingLists.$inferInsert;
+export type ShoppingListItem = typeof shoppingListItems.$inferSelect;
+export type NewShoppingListItem = typeof shoppingListItems.$inferInsert;
 export type SignupInvite = typeof signupInvites.$inferSelect;
 export type NewSignupInvite = typeof signupInvites.$inferInsert;
 

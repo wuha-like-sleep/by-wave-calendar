@@ -459,7 +459,7 @@ async function adminTargetUser(req: FastifyRequest, reply: FastifyReply) {
  *  好让「当时到底删掉了多少东西」在行没了之后还答得上来。 */
 export async function deleteImpact(userId: string) {
   const n = (rows: { c: number }[]) => Number(rows[0]?.c ?? 0);
-  const [cals, events, bookings, devices, links, shares, subs, tokens, appPw] = await Promise.all([
+  const [cals, events, bookings, devices, links, shares, subs, tokens, appPw, shopLists] = await Promise.all([
     db.select({ c: sql<number>`count(*)::int` }).from(schema.calendars).where(eq(schema.calendars.ownerId, userId)),
     db.select({ c: sql<number>`count(*)::int` }).from(schema.events)
       .innerJoin(schema.calendars, eq(schema.calendars.id, schema.events.calendarId))
@@ -477,11 +477,12 @@ export async function deleteImpact(userId: string) {
       .where(eq(schema.calendars.ownerId, userId)),
     db.select({ c: sql<number>`count(*)::int` }).from(schema.apiTokens).where(eq(schema.apiTokens.userId, userId)),
     db.select({ c: sql<number>`count(*)::int` }).from(schema.appPasswords).where(eq(schema.appPasswords.userId, userId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.shoppingLists).where(eq(schema.shoppingLists.ownerId, userId)),
   ]);
   return {
     calendars: n(cals), events: n(events), bookings: n(bookings), devices: n(devices),
     bookingLinks: n(links), shareTokens: n(shares), subscriptions: n(subs),
-    apiTokens: n(tokens), appPasswords: n(appPw),
+    apiTokens: n(tokens), appPasswords: n(appPw), shoppingLists: n(shopLists),
   };
 }
 
@@ -1208,7 +1209,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const [
       calendars, eventCount, devices, sessionCount, passkeys,
       appPasswordCount, apiTokenCount, bookingLinkCount, shareTokenCount,
-      subscriptionCount, identities, oauthGrantCount, recentLogins,
+      subscriptionCount, identities, oauthGrantCount, recentLogins, shoppingListCount,
     ] = await Promise.all([
       db.select({ id: schema.calendars.id, name: schema.calendars.name, color: schema.calendars.color })
         .from(schema.calendars).where(eq(schema.calendars.ownerId, uid)).orderBy(asc(schema.calendars.name)).limit(50),
@@ -1247,6 +1248,7 @@ export async function adminRoutes(app: FastifyInstance) {
         userAgent: schema.loginEvents.userAgent, createdAt: schema.loginEvents.createdAt,
       }).from(schema.loginEvents).where(eq(schema.loginEvents.userId, uid))
         .orderBy(desc(schema.loginEvents.createdAt)).limit(20),
+      db.select({ c: sql<number>`count(*)::int` }).from(schema.shoppingLists).where(eq(schema.shoppingLists.ownerId, uid)),
     ]);
 
     const n = (rows: { c: number }[]) => Number(rows[0]?.c ?? 0);
@@ -1272,6 +1274,7 @@ export async function adminRoutes(app: FastifyInstance) {
         appPasswords: n(appPasswordCount), apiTokens: n(apiTokenCount),
         bookingLinks: n(bookingLinkCount), shareTokens: n(shareTokenCount),
         subscriptions: n(subscriptionCount), oauthGrants: n(oauthGrantCount),
+        shoppingLists: n(shoppingListCount),
         calendars: calendars.length, devices: devices.length, passkeys: passkeys.length,
       },
     });
