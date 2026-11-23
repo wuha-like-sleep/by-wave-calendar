@@ -557,6 +557,8 @@ struct WeekView: View {
             extra: nil,
             scope: scope?.rawValue,
             recurrenceId: recIso,
+            // 拖动只改起止时间，删失的期次名单不归这里管：省略 = 不动。
+            exdates: nil,
         )
         // 走离线队列：拖动改时间先落本地 + 入队，没网不再弹错把事件
         // 弹回原位——新位置保留显示、标待同步，网络恢复自动送出。
