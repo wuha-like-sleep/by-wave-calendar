@@ -36,6 +36,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -49,11 +50,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.ui.theme.NowLineRed
@@ -310,15 +314,36 @@ private fun EventChip(
     val w = slotWidth - 2.dp
 
     val color = calendarColor(event, calendars)
+    val onText = onCalendarColor(color)
     val haptic = LocalHapticFeedback.current
+    // Past treatment, aligned with iOS and the web: the block keeps its
+    // calendar colour at reduced strength (0.55) and the title is
+    // struck through, instead of staying indistinguishable from an
+    // upcoming event.
+    val isPast = endInstant.isBefore(java.time.Instant.now())
+    // Cross-day continuation: square off the corners on any side where
+    // the event runs on into the neighbouring day, so the per-day
+    // segments read as one continuous bar. Shape only — x/y/w/h above
+    // are unchanged.
+    val continuesFrom = startInstant.isBefore(dayStart.toInstant())
+    val continuesTo = endInstant.isAfter(dayEnd.toInstant())
+    val r = Radii.chip
+    val shape = RoundedCornerShape(
+        topStart = if (continuesFrom) 0.dp else r,
+        bottomStart = if (continuesFrom) 0.dp else r,
+        bottomEnd = if (continuesTo) 0.dp else r,
+        topEnd = if (continuesTo) 0.dp else r,
+    )
+    val formats = rememberCalendarFormats()
+    val allDayLabel = stringResource(R.string.event_allday)
 
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
             .width(w)
             .height(h)
-            .clip(Radii.chipShape)
-            .background(color.copy(alpha = 0.95f))
+            .clip(shape)
+            .background(color.copy(alpha = if (isPast) 0.55f else 0.95f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = {
@@ -328,14 +353,29 @@ private fun EventChip(
             )
             .padding(horizontal = 4.dp, vertical = 3.dp),
     ) {
-        Text(
-            text = event.summary,
-            style = MaterialTheme.typography.labelSmall,
-            color = onCalendarColor(color),
-            fontWeight = FontWeight.SemiBold,
-            maxLines = if (h > 36.dp) 2 else 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Column {
+            Text(
+                text = event.summary,
+                style = MaterialTheme.typography.labelSmall,
+                color = onText,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = if (h > 36.dp) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+                textDecoration = if (isPast) TextDecoration.LineThrough else TextDecoration.None,
+            )
+            // Time-range subline once the chip is tall enough for a
+            // second line — the same 44dp threshold the desktop week
+            // view uses (its subline has always been the time range).
+            if (h > 44.dp) {
+                Text(
+                    text = formatTimeRange(event, formats, allDayLabel),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = onText.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

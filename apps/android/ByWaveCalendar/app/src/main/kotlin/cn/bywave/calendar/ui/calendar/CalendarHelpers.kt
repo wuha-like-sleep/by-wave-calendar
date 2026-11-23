@@ -47,12 +47,20 @@ internal fun calendarColor(event: EventDTO, calendars: List<CalendarMeta>): Colo
 /** Readable text color on top of a calendar color. Calendar colors come
  *  from the server as arbitrary #rrggbb (the web palette includes light
  *  yellows/greys), so the white text the chips used unconditionally was
- *  unreadable on light calendars created on the web. A plain luminance
- *  cut keeps saturated colors on white text and flips light ones to a
- *  dark neutral. */
+ *  unreadable on light calendars created on the web.
+ *
+ *  The cut is the same one every client now uses (the web's
+ *  readableTextOn): WCAG relative luminance of the fill, black text
+ *  above the 0.179 crossover — the point where black and white give
+ *  the same 4.58:1 ratio, so one of the two always passes AA. The
+ *  earlier plain 0.299/0.587/0.114 weighted sum at 0.72 stranded
+ *  mid-luminance colours (e.g. slate-400) with white text at ~2.9:1. */
 internal fun onCalendarColor(bg: Color): Color {
-    val luminance = 0.299f * bg.red + 0.587f * bg.green + 0.114f * bg.blue
-    return if (luminance > 0.72f) Color(0xFF1C1B1F) else Color.White
+    fun lin(v: Float): Float =
+        if (v <= 0.03928f) v / 12.92f
+        else Math.pow(((v + 0.055) / 1.055).toDouble(), 2.4).toFloat()
+    val luminance = 0.2126f * lin(bg.red) + 0.7152f * lin(bg.green) + 0.0722f * lin(bg.blue)
+    return if (luminance > 0.179f) Color.Black else Color.White
 }
 
 internal fun calendarName(event: EventDTO, calendars: List<CalendarMeta>): String? =
