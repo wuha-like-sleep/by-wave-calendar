@@ -139,6 +139,7 @@ struct ShoppingListsView: View {
 struct ShoppingListDetailView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let listId: String
 
@@ -231,6 +232,15 @@ struct ShoppingListDetailView: View {
     @ViewBuilder
     private func itemsSection(_ detail: ShoppingListDetailDTO) -> some View {
         Section {
+            if detail.list.totalCount > 0 {
+                // 进度条和区头「已买 x/y」是同一个数的两种读法：数字
+                // 给确切值，条给一眼进度。勾选后的重拉走动画事务
+                // （见 reload(animated:)），条会平滑地涨过去而不是跳。
+                ProgressView(
+                    value: Double(detail.list.doneCount),
+                    total: Double(detail.list.totalCount),
+                )
+            }
             if detail.items.isEmpty {
                 Text("这张清单还是空的——在下方添加第一件要买的东西。")
                     .font(.callout).foregroundStyle(.secondary)
@@ -407,13 +417,23 @@ struct ShoppingListDetailView: View {
 
     // MARK: - Networking
 
-    private func reload() async {
+    private func reload(animated: Bool = false) async {
         loading = true
         defer { loading = false }
         do {
             let fresh = try await APIClient(state: state).getShoppingList(id: listId)
-            detail = fresh
-            renameTitle = fresh.list.title
+            // 勾选 / 排序这类用户刚刚亲手触发的变更，重拉结果落进
+            // 动画事务：勾变绿、删除线、上移下移都平滑过渡，而不是
+            // 整页数据啪地换一茬。首次加载和下拉刷新不走动画。
+            if animated && !reduceMotion {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    detail = fresh
+                    renameTitle = fresh.list.title
+                }
+            } else {
+                detail = fresh
+                renameTitle = fresh.list.title
+            }
             errorMessage = nil
         } catch {
             errorMessage = shoppingErrorText(error)
@@ -426,7 +446,12 @@ struct ShoppingListDetailView: View {
                 listId: listId, itemId: item.id,
                 ShoppingItemUpdateInput(name: nil, quantity: nil, unit: nil, note: nil, done: !item.done),
             )
-            await reload()
+            // 只在「勾上」时给一下成功触觉，取消勾选不给——和保存
+            // 成功给触觉的口径一致，克制着用。
+            if !item.done {
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            }
+            await reload(animated: true)
         } catch {
             errorMessage = shoppingErrorText(error)
         }
@@ -437,7 +462,7 @@ struct ShoppingListDetailView: View {
             _ = try await APIClient(state: state).moveShoppingItem(
                 listId: listId, itemId: item.id, direction: direction,
             )
-            await reload()
+            await reload(animated: true)
         } catch {
             errorMessage = shoppingErrorText(error)
         }

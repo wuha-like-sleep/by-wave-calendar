@@ -6,11 +6,13 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
             if state.isBootstrapping {
                 BootSplashView()
+                    .transition(.opacity)
             } else if state.isSignedIn {
                 // 不按 horizontalSizeClass 换外壳。以前宽屏（iPad / 展开的 iPhone Duo）
                 // 走一套带侧栏的 NavigationSplitView、窄屏走 CalendarView，两边各有
@@ -29,8 +31,8 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        .animation(.easeOut(duration: 0.2), value: state.isSignedIn)
-        .animation(.easeOut(duration: 0.2), value: state.isBootstrapping)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: state.isSignedIn)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: state.isBootstrapping)
         .onOpenURL { url in
             // Invitation deep link: bywave://invitations/<token> —
             // stash the token; CalendarView consumes it once the user

@@ -1,5 +1,11 @@
 package cn.bywave.calendar.desktop.ui.main
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -119,7 +126,6 @@ fun ShoppingListsDialog(
     var listError by remember { mutableStateOf<String?>(null) }
     var selectedId by remember { mutableStateOf(initialListId) }
     var detail by remember { mutableStateOf<ShoppingListDetail?>(null) }
-    var detailLoading by remember { mutableStateOf(false) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
@@ -142,7 +148,8 @@ fun ShoppingListsDialog(
     }
 
     suspend fun loadDetail(id: String) {
-        detailLoading = true
+        // 加载中没有单独的状态位：detail 还是 null 时，弹窗那边的
+        // pane 推导自然落到加载态（见下方 AnimatedContent 处）。
         try {
             detail = client.getShoppingList(id)
         } catch (e: Exception) {
@@ -150,8 +157,6 @@ fun ShoppingListsDialog(
             actionError = shoppingErrorText(e, "error.loadFailed")
             selectedId = null
             detail = null
-        } finally {
-            detailLoading = false
         }
     }
 
@@ -196,7 +201,21 @@ fun ShoppingListsDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                if (selectedId == null) {
+                // 列表态 ↔ 详情态以前是整块硬换，点进一张清单像跳页，
+                // 返回也是。改走 AnimatedContent 淡入淡出，两态之间
+                // 有个交代；选了清单但详情还没回来是中间的加载态。
+                val pane = when {
+                    selectedId == null -> 0
+                    currentDetail != null -> 2
+                    else -> 1
+                }
+                AnimatedContent(
+                    targetState = pane,
+                    transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                    label = "shopping-pane",
+                ) { current ->
+                    when (current) {
+                        0 -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // ---- 清单列表态 ----
                     Text(
                         t("shopping.yourLists"),
@@ -262,11 +281,12 @@ fun ShoppingListsDialog(
                             enabled = !busy,
                         ) { Text(t("shopping.createList")) }
                     }
-                } else if (detailLoading && currentDetail == null) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
-                    }
-                } else if (currentDetail != null) {
+                        }
+                        1 -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                        }
+                        else -> if (currentDetail != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     // ---- 清单详情态 ----
                     ShoppingListDetailContent(
                         detail = currentDetail,
@@ -317,6 +337,13 @@ fun ShoppingListsDialog(
                         },
                         onDeleteList = { confirmDeleteList = true },
                     )
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -501,6 +528,26 @@ private fun ShoppingListDetailContent(
                 fontWeight = FontWeight.SemiBold,
             )
         }
+    }
+
+    // 进度条和上面的数字是同一个数：数字给确切值，条给一眼进度。
+    // 勾选后平滑涨过去，不要跳变。动画状态提在条件外面声明，
+    // 别让条的出现/消失带着状态一起重建。
+    val progressFraction = if (list.totalCount > 0) {
+        list.doneCount.toFloat() / list.totalCount.toFloat()
+    } else {
+        0f
+    }
+    val animatedProgress by animateFloatAsState(
+        targetValue = progressFraction,
+        animationSpec = tween(300),
+        label = "shopping-progress",
+    )
+    if (list.totalCount > 0) {
+        LinearProgressIndicator(
+            progress = animatedProgress,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 
     if (detail.items.isEmpty()) {

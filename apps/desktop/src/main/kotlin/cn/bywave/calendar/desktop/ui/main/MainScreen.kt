@@ -9,9 +9,16 @@
 
 package cn.bywave.calendar.desktop.ui.main
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.foundation.layout.aspectRatio
@@ -495,18 +502,37 @@ fun MainScreen(
                     }
                     }
                     }
+                    // 顶部横幅（错误 / 操作失败 / 离线队列）以前都是硬
+                    // 出现硬消失，还会把下面的日历猛地推下去一截。统一
+                    // 走展开+淡入、收起+淡出，布局变化有个过渡。
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        if (ui.error != null) {
-                            ErrorBanner(message = ui.error!!, onRetry = { state.load() })
+                        AnimatedVisibility(
+                            visible = ui.error != null,
+                            enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                            exit = shrinkVertically(tween(150)) + fadeOut(tween(150)),
+                        ) {
+                            ui.error?.let { msg ->
+                                ErrorBanner(message = msg, onRetry = { state.load() })
+                            }
                         }
                         // 删除 / 拖动改时间 / 撤销删除失败。这几条路上没有弹窗,
                         // 以前失败写进 formError(只有编辑弹窗会画它),等于没写。
-                        ui.actionError?.let { msg ->
-                            ActionErrorBanner(message = msg, onDismiss = { state.dismissActionError() })
+                        AnimatedVisibility(
+                            visible = ui.actionError != null,
+                            enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                            exit = shrinkVertically(tween(150)) + fadeOut(tween(150)),
+                        ) {
+                            ui.actionError?.let { msg ->
+                                ActionErrorBanner(message = msg, onDismiss = { state.dismissActionError() })
+                            }
                         }
                         // 离线队列指示：有没送出去的改动就亮一条，
                         // 待处理（被服务端拒绝、要用户裁决）优先。
-                        if (ui.pendingOps.isNotEmpty()) {
+                        AnimatedVisibility(
+                            visible = ui.pendingOps.isNotEmpty(),
+                            enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+                            exit = shrinkVertically(tween(150)) + fadeOut(tween(150)),
+                        ) {
                             PendingSyncBanner(
                                 pendingCount = ui.pendingOps.count {
                                     it.state == cn.bywave.calendar.sync.PendingOpState.PENDING
@@ -518,22 +544,36 @@ fun MainScreen(
                             )
                         }
                     }
-                    ui.undoDelete?.let { undo ->
-                        UndoDeleteSnackbar(
-                            undo = undo,
-                            onUndo = { state.undoLastDelete() },
-                            onTimeout = { state.dismissUndoDelete(undo.token) },
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-                        )
+                    // 底部反馈条（撤销删除 / 已创建）从底部滑入、到期
+                    // 滑出，别凭空出现又凭空消失。
+                    AnimatedVisibility(
+                        visible = ui.undoDelete != null,
+                        enter = slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)),
+                        exit = slideOutVertically(tween(160)) { it / 2 } + fadeOut(tween(160)),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                    ) {
+                        ui.undoDelete?.let { undo ->
+                            UndoDeleteSnackbar(
+                                undo = undo,
+                                onUndo = { state.undoLastDelete() },
+                                onTimeout = { state.dismissUndoDelete(undo.token) },
+                            )
+                        }
                     }
-                    ui.createdNotice?.let { notice ->
-                        CreatedNoticeSnackbar(
-                            notice = notice,
-                            onOpen = { state.openCreatedNotice() },
-                            onUndo = { state.undoQuickSave() },
-                            onTimeout = { state.dismissCreatedNotice(notice.token) },
-                            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-                        )
+                    AnimatedVisibility(
+                        visible = ui.createdNotice != null,
+                        enter = slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)),
+                        exit = slideOutVertically(tween(160)) { it / 2 } + fadeOut(tween(160)),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                    ) {
+                        ui.createdNotice?.let { notice ->
+                            CreatedNoticeSnackbar(
+                                notice = notice,
+                                onOpen = { state.openCreatedNotice() },
+                                onUndo = { state.undoQuickSave() },
+                                onTimeout = { state.dismissCreatedNotice(notice.token) },
+                            )
+                        }
                     }
                 }
             }
