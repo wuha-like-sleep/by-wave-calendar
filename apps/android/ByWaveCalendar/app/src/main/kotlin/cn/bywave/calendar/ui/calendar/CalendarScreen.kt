@@ -9,6 +9,13 @@
 
 package cn.bywave.calendar.ui.calendar
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,9 +90,14 @@ import cn.bywave.calendar.ui.event.EventDetailSheet
 import cn.bywave.calendar.ui.event.RecurringAction
 import cn.bywave.calendar.ui.event.RecurringScope
 import cn.bywave.calendar.ui.event.RecurringScopePicker
+import cn.bywave.calendar.ui.components.rememberReduceMotion
 import cn.bywave.calendar.ui.profile.ProfileSwitcherDialog
 import cn.bywave.calendar.ui.theme.MultiAccountGreen
 import cn.bywave.calendar.ui.theme.Sizing
+
+/** 主区域当前是哪一「页」：首拉加载态，或日/周/月之一。AnimatedContent
+ *  以它为 targetState 做过渡，加载完成和切视图都走同一条淡入淡出。 */
+private enum class CalendarPane { Loading, Day, Week, Month }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -564,35 +576,56 @@ private fun CalendarBody(
 
         val deviceZone = rememberDeviceTimeZone()
         androidx.compose.runtime.key(deviceZone.id) {
-        Box(modifier = Modifier.fillMaxSize().weight(1f)) {
-            if (state.loading && state.events.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        // 加载态和日/周/月以前都是硬切：转圈啪地换成内容、切个视图
+        // 整屏跳变。统一走 AnimatedContent 淡入淡出；系统动画缩放
+        // 关到 0（减弱动态）时直接切换，不给动画。
+        val reduceMotion = rememberReduceMotion()
+        val pane = when {
+            state.loading && state.events.isEmpty() -> CalendarPane.Loading
+            state.mode == ViewMode.Day -> CalendarPane.Day
+            state.mode == ViewMode.Week -> CalendarPane.Week
+            else -> CalendarPane.Month
+        }
+        AnimatedContent(
+            targetState = pane,
+            transitionSpec = {
+                if (reduceMotion) {
+                    EnterTransition.None togetherWith ExitTransition.None
+                } else {
+                    fadeIn(tween(200)) togetherWith fadeOut(tween(150))
+                }
+            },
+            modifier = Modifier.fillMaxSize().weight(1f),
+            label = "calendar-pane",
+        ) { current ->
+            when (current) {
+                CalendarPane.Loading -> Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
                     CircularProgressIndicator()
                 }
-            } else {
-                when (state.mode) {
-                    ViewMode.Day -> DayView(
-                        anchor = state.anchor,
-                        events = eventsForDay(state.anchor),
-                        calendars = state.calendars,
-                        onEventClick = onEventClick,
-                        onEventLongPress = onEventLongPress,
-                        onCreateEvent = onCreateEvent,
-                    )
-                    ViewMode.Week -> WeekView(
-                        weekStart = startOfWeek(state.anchor),
-                        events = state.events,
-                        calendars = state.calendars,
-                        onEventClick = onEventClick,
-                        onEventLongPress = onEventLongPress,
-                    )
-                    ViewMode.Month -> MonthView(
-                        anchor = state.anchor,
-                        events = state.events,
-                        calendars = state.calendars,
-                        onDayClick = onDayClick,
-                    )
-                }
+                CalendarPane.Day -> DayView(
+                    anchor = state.anchor,
+                    events = eventsForDay(state.anchor),
+                    calendars = state.calendars,
+                    onEventClick = onEventClick,
+                    onEventLongPress = onEventLongPress,
+                    onCreateEvent = onCreateEvent,
+                )
+                CalendarPane.Week -> WeekView(
+                    weekStart = startOfWeek(state.anchor),
+                    events = state.events,
+                    calendars = state.calendars,
+                    onEventClick = onEventClick,
+                    onEventLongPress = onEventLongPress,
+                )
+                CalendarPane.Month -> MonthView(
+                    anchor = state.anchor,
+                    events = state.events,
+                    calendars = state.calendars,
+                    onDayClick = onDayClick,
+                )
             }
         }
         }

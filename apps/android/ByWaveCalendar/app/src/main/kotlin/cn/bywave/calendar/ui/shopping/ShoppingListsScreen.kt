@@ -23,6 +23,10 @@
 
 package cn.bywave.calendar.ui.shopping
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +54,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -66,7 +71,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -86,6 +93,7 @@ import cn.bywave.calendar.data.model.ShoppingListItemMoveRequest
 import cn.bywave.calendar.data.model.ShoppingListItemUpdateInput
 import cn.bywave.calendar.data.model.ShoppingListUpdateInput
 import cn.bywave.calendar.ui.calendar.mutedTextColor
+import cn.bywave.calendar.ui.components.rememberReduceMotion
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -291,6 +299,7 @@ fun ShoppingListDetailScreen(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val reduceMotion = rememberReduceMotion()
     var detail by remember { mutableStateOf<ShoppingListDetail?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -390,6 +399,27 @@ fun ShoppingListDetailScreen(
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
+                }
+
+                // 进度条和上面的「x/y」是同一个数：数字给确切值，
+                // 条给一眼进度。勾选后平滑涨过去，不要跳变；减弱
+                // 动态时直接落到新值。动画状态提在条件外面声明，
+                // 别让条的出现/消失带着状态一起重建。
+                val progressFraction = if (d.list.totalCount > 0) {
+                    d.list.doneCount.toFloat() / d.list.totalCount.toFloat()
+                } else {
+                    0f
+                }
+                val animatedFraction by animateFloatAsState(
+                    targetValue = progressFraction,
+                    animationSpec = if (reduceMotion) snap() else tween(300),
+                    label = "shopping-progress",
+                )
+                if (d.list.totalCount > 0) {
+                    LinearProgressIndicator(
+                        progress = { animatedFraction },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
                 if (d.items.isEmpty()) {
@@ -669,17 +699,30 @@ private fun ShoppingItemRow(
         // The checkbox itself is the toggle; the description is
         // what screen readers announce for it.
         val toggleDescription = stringResource(R.string.shopping_toggle_done)
+        val haptic = LocalHapticFeedback.current
         Checkbox(
             checked = item.done,
-            onCheckedChange = { onToggle() },
+            onCheckedChange = {
+                // 只在「勾上」时震一下（口径同 CalendarScreen 的
+                // LongPress 轻触觉），取消勾选不震，别滥用。
+                if (!item.done) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggle()
+            },
             modifier = Modifier.semantics { contentDescription = toggleDescription },
         )
         Column(modifier = Modifier.weight(1f)) {
+            // 勾选后名字变灰是瞬时翻转，删除线也是；颜色这一维能
+            // 平滑就平滑，让整行状态变化看起来是一口气完成的。
+            val nameColor by animateColorAsState(
+                targetValue = if (item.done) mutedTextColor() else MaterialTheme.colorScheme.onSurface,
+                animationSpec = tween(200),
+                label = "shopping-item-name",
+            )
             Text(
                 text = item.name,
                 style = MaterialTheme.typography.bodyLarge,
                 textDecoration = if (item.done) TextDecoration.LineThrough else null,
-                color = if (item.done) mutedTextColor() else MaterialTheme.colorScheme.onSurface,
+                color = nameColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
