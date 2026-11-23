@@ -11,6 +11,7 @@ package cn.bywave.calendar.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * A single event, as returned by GET /api/v1/events. Recurring masters
@@ -970,6 +971,126 @@ data class SubscriptionRefreshOutcome(
 data class SubscriptionCreateResponse(
     val subscription: CalendarSubscription,
     val refresh: SubscriptionRefreshOutcome,
+)
+
+// ---- Shopping lists (GET/POST/PATCH/DELETE /api/v1/shopping-lists …) ----
+//
+// Owner-isolated on the server: a list that isn't yours (or doesn't
+// exist) reads as 404. The list rows carry their counts inline
+// (totalCount / doneCount) so the overview needs no per-list detail
+// fetch; the detail response pairs the same row shape with its items.
+
+/** One row of GET /api/v1/shopping-lists (and the body returned by
+ *  POST / PATCH .../shopping-lists). `eventSummary` is the linked
+ *  event's title, resolved server-side; null when the list is not
+ *  linked or the event is gone. */
+@Serializable
+data class ShoppingList(
+    val id: String,
+    val title: String,
+    val eventId: String? = null,
+    val eventSummary: String? = null,
+    val totalCount: Int = 0,
+    val doneCount: Int = 0,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+)
+
+/** One item of a shopping list. `quantity` is a JSON number on the
+ *  wire (the server's numeric column converted back) and may be
+ *  fractional — 0.5 is a real quantity. */
+@Serializable
+data class ShoppingListItem(
+    val id: String,
+    val listId: String,
+    val name: String,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+    val done: Boolean = false,
+    val position: Int = 0,
+    val createdAt: String? = null,
+    val updatedAt: String? = null,
+)
+
+/** GET /api/v1/shopping-lists/{id} response (after the envelope is
+ *  unwrapped): the list row plus its items in position order. */
+@Serializable
+data class ShoppingListDetail(
+    val list: ShoppingList,
+    val items: List<ShoppingListItem> = emptyList(),
+)
+
+/** POST /api/v1/shopping-lists body. `eventId` omitted (null, dropped
+ *  by explicitNulls = false) creates an unlinked list. */
+@Serializable
+data class ShoppingListCreateRequest(
+    val title: String,
+    val eventId: String? = null,
+)
+
+/** Non-null wrapper so an explicit eventId deletion survives
+ *  explicitNulls = false — same trick as EventStringField /
+ *  EventAlarmsField above: a null FIELD means "don't touch the link"
+ *  (omitted from the wire), a wrapper holding null sends an explicit
+ *  JSON null (unlink), a wrapper holding an id links that event. */
+@Serializable(with = ShoppingListEventFieldSerializer::class)
+data class ShoppingListEventField(val eventId: String?)
+
+object ShoppingListEventFieldSerializer : kotlinx.serialization.KSerializer<ShoppingListEventField> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
+        "ShoppingListEventField", kotlinx.serialization.descriptors.PrimitiveKind.STRING,
+    )
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: ShoppingListEventField) {
+        require(encoder is kotlinx.serialization.json.JsonEncoder)
+        val element = value.eventId?.let { kotlinx.serialization.json.JsonPrimitive(it) }
+            ?: kotlinx.serialization.json.JsonNull
+        encoder.encodeJsonElement(element)
+    }
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): ShoppingListEventField {
+        require(decoder is kotlinx.serialization.json.JsonDecoder)
+        val element = decoder.decodeJsonElement()
+        if (element == kotlinx.serialization.json.JsonNull) return ShoppingListEventField(null)
+        return ShoppingListEventField(element.jsonPrimitive.content)
+    }
+}
+
+/** PATCH /api/v1/shopping-lists/{id} body — see ShoppingListEventField
+ *  for why `eventId` is wrapped instead of a plain String?. */
+@Serializable
+data class ShoppingListUpdateInput(
+    val title: String? = null,
+    val eventId: ShoppingListEventField? = null,
+)
+
+/** POST /api/v1/shopping-lists/{id}/items body. Blank unit / note are
+ *  normalized to null server-side; quantity must be positive when
+ *  present (the server's schema rejects 0 and negatives). */
+@Serializable
+data class ShoppingListItemCreateRequest(
+    val name: String,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+)
+
+/** PATCH /api/v1/shopping-lists/{id}/items/{itemId} body. Every field
+ *  optional; only those present change. The edit form sends the full
+ *  field set it displays, so a cleared unit / note goes out as ""
+ *  and the server stores null. */
+@Serializable
+data class ShoppingListItemUpdateInput(
+    val name: String? = null,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+    val done: Boolean? = null,
+)
+
+/** POST /api/v1/shopping-lists/{id}/items/{itemId}/move body. */
+@Serializable
+data class ShoppingListItemMoveRequest(
+    val direction: String,
 )
 
 /** POST /calendars/{id}/subscriptions/{subId}/refresh success body. */

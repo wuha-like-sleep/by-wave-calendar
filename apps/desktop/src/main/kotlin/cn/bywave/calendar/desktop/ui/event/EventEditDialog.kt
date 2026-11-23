@@ -209,6 +209,8 @@ fun EventEditDialog(
      *  来源 + 组件学进地址簿）；本地选中也报一声，供保存时的编辑
      *  学习知道「这是从哪条改出来的」。 */
     onSuggestionPicked: (address: String, online: cn.bywave.calendar.desktop.data.model.GeoSuggestion?) -> Unit = { _, _ -> },
+    /** 购买清单区用的 client（绑定当前账号）。null = 该区不启用。 */
+    shoppingClient: cn.bywave.calendar.desktop.data.api.ApiClient? = null,
 ) {
     // Observe locale so all form labels re-render on language switch.
     val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
@@ -697,6 +699,15 @@ fun EventEditDialog(
                         }
                     }
                 }
+                // 购买清单区（地点之后）：未保存的事件只能先保存；
+                // 已保存的事件在这里看 / 关联 / 新建它的购买清单。
+                if (shoppingClient != null) {
+                    EventShoppingListsSection(
+                        client = shoppingClient,
+                        eventId = if (form.isEdit) form.sourceId else null,
+                    )
+                }
+
                 OutlinedTextField(
                     value = form.url,
                     onValueChange = { form = form.copy(url = it) },
@@ -1550,4 +1561,233 @@ internal fun nextHalfHour(zone: ZoneId = ZoneId.systemDefault(), instant: Instan
     val now = instant.atZone(zone).toLocalDateTime()
     return if (now.minute < 30) now.withMinute(30).withSecond(0).withNano(0)
            else now.plusHours(1).withMinute(0).withSecond(0).withNano(0)
+}
+
+/** 事件编辑里的购买清单区（地点字段之后）。
+ *
+ *  事件还没保存（新建 / 复制）时没有 id 可关联，只显示一句提示、
+ *  不可操作。已保存时：拉 ?eventId= 显示已关联清单（标题 + 进度 +
+ *  解除 + 点开详情），再给「关联已有清单」下拉（全部清单里选一张，
+ *  PATCH 它的 eventId 到本事件）和「为这个事件新建清单」（POST 带
+ *  eventId，标题用输入框，空则用默认标题）。
+ *
+ *  改动不算进表单的未保存改动指纹：关联是即时生效的服务端状态，
+ *  不是随事件一起保存的字段，关掉编辑框也不会丢。 */
+@Composable
+private fun EventShoppingListsSection(
+    client: cn.bywave.calendar.desktop.data.api.ApiClient,
+    eventId: String?,
+) {
+    val locale by cn.bywave.calendar.desktop.i18n.I18n.current.collectAsState()
+    val t = remember(locale) { { key: String -> cn.bywave.calendar.desktop.i18n.I18n.t(key) } }
+    val tv = remember(locale) {
+        { key: String, vars: Map<String, Any> -> cn.bywave.calendar.desktop.i18n.I18n.t(key, vars) }
+    }
+    val scope = rememberCoroutineScope()
+
+    if (eventId == null) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                t("shopping.title"),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            Text(
+                t("shopping.eventUnsaved"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            t("shopping.title"),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.outline,
+        )
+
+        var linked by remember(eventId) {
+            mutableStateOf<List<cn.bywave.calendar.desktop.data.model.ShoppingList>?>(null)
+        }
+        var allLists by remember(eventId) {
+            mutableStateOf<List<cn.bywave.calendar.desktop.data.model.ShoppingList>>(emptyList())
+        }
+        var loading by remember(eventId) { mutableStateOf(true) }
+        var error by remember(eventId) { mutableStateOf<String?>(null) }
+        var busy by remember(eventId) { mutableStateOf(false) }
+        var reloadKey by remember(eventId) { mutableStateOf(0) }
+        var openListId by remember(eventId) { mutableStateOf<String?>(null) }
+        var selectedLinkId by remember(eventId) { mutableStateOf<String?>(null) }
+        var linkMenuOpen by remember(eventId) { mutableStateOf(false) }
+        var newTitle by remember(eventId) { mutableStateOf("") }
+
+        LaunchedEffect(eventId, reloadKey) {
+            loading = true
+            try {
+                linked = client.listShoppingLists(eventId)
+                allLists = client.listShoppingLists()
+                error = null
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                error = cn.bywave.calendar.desktop.ui.main.shoppingErrorText(e, "error.loadFailed")
+            } finally {
+                loading = false
+            }
+        }
+
+        fun mutate(block: suspend () -> Unit) {
+            if (busy) return
+            busy = true
+            error = null
+            scope.launch {
+                try {
+                    block()
+                    reloadKey++
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    error = cn.bywave.calendar.desktop.ui.main.shoppingErrorText(e, "error.saveFailed")
+                } finally {
+                    busy = false
+                }
+            }
+        }
+
+        when {
+            loading && linked == null -> CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+            linked.isNullOrEmpty() -> Text(
+                t("shopping.eventNone"),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> linked!!.forEach { list ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            list.title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            tv(
+                                "shopping.eventProgress",
+                                mapOf("done" to list.doneCount, "total" to list.totalCount),
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        onClick = { openListId = list.id },
+                        enabled = !busy,
+                    ) { Text(t("created.open")) }
+                    TextButton(
+                        onClick = {
+                            mutate { client.updateShoppingList(list.id, clearEvent = true) }
+                        },
+                        enabled = !busy,
+                    ) { Text(t("shopping.unlink")) }
+                }
+            }
+        }
+
+        if (error != null) {
+            Text(
+                error!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        // 关联已有清单：候选 = 全部清单里还没关联到本事件的那些。
+        val candidates = allLists.filter { it.eventId != eventId }
+        if (candidates.isNotEmpty()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { linkMenuOpen = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            candidates.firstOrNull { it.id == selectedLinkId }?.title
+                                ?: t("shopping.yourLists"),
+                            modifier = Modifier.weight(1f),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text("▾", color = MaterialTheme.colorScheme.outline)
+                    }
+                    DropdownMenu(expanded = linkMenuOpen, onDismissRequest = { linkMenuOpen = false }) {
+                        for (candidate in candidates) {
+                            DropdownMenuItem(
+                                text = { Text(candidate.title) },
+                                onClick = {
+                                    selectedLinkId = candidate.id
+                                    linkMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+                Button(
+                    onClick = {
+                        val target = selectedLinkId ?: return@Button
+                        mutate {
+                            client.updateShoppingList(target, eventId = eventId)
+                            selectedLinkId = null
+                        }
+                    },
+                    enabled = !busy && selectedLinkId != null,
+                ) { Text(t("shopping.eventLink")) }
+            }
+        }
+
+        // 为这个事件新建清单：标题输入框，空则用默认标题。
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = newTitle,
+                onValueChange = { newTitle = it },
+                label = { Text(t("shopping.titleLabel")) },
+                placeholder = { Text(t("shopping.titlePlaceholder")) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(
+                onClick = {
+                    val title = newTitle.trim().ifBlank { t("shopping.defaultTitle") }
+                    mutate {
+                        client.createShoppingList(
+                            cn.bywave.calendar.desktop.data.model.ShoppingListCreateInput(
+                                title = title,
+                                eventId = eventId,
+                            ),
+                        )
+                        newTitle = ""
+                    }
+                },
+                enabled = !busy,
+            ) { Text(t("shopping.eventCreate")) }
+        }
+
+        openListId?.let { listId ->
+            cn.bywave.calendar.desktop.ui.main.ShoppingListsDialog(
+                client = client,
+                initialListId = listId,
+                onDismiss = {
+                    openListId = null
+                    reloadKey++
+                },
+            )
+        }
+    }
 }

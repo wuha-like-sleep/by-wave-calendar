@@ -70,6 +70,13 @@ import cn.bywave.calendar.desktop.data.model.RefreshResponse
 import cn.bywave.calendar.desktop.data.model.GeoSuggestResponse
 import cn.bywave.calendar.desktop.data.model.SearchResponse
 import cn.bywave.calendar.desktop.data.model.ShareToken
+import cn.bywave.calendar.desktop.data.model.ShoppingList
+import cn.bywave.calendar.desktop.data.model.ShoppingListCreateInput
+import cn.bywave.calendar.desktop.data.model.ShoppingListDetail
+import cn.bywave.calendar.desktop.data.model.ShoppingListItem
+import cn.bywave.calendar.desktop.data.model.ShoppingListItemCreateInput
+import cn.bywave.calendar.desktop.data.model.ShoppingListItemMoveInput
+import cn.bywave.calendar.desktop.data.model.ShoppingOkResponse
 import cn.bywave.calendar.desktop.data.model.ShareTokenCreateInput
 import cn.bywave.calendar.desktop.data.model.SubscriptionCreateInput
 import cn.bywave.calendar.desktop.data.model.SubscriptionCreateResponse
@@ -103,10 +110,13 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 class ApiException(val status: Int, message: String) : RuntimeException(message)
 
@@ -970,6 +980,174 @@ class ApiClient(
             }
         }.getOrNull()
         return ApiException(resp.status.value, code ?: "HTTP ${resp.status.value}")
+    }
+
+    // ---- Shopping lists ----
+    //
+    // /api/v1/shopping-lists 全套。错误处理照 API Token 那套：这些
+    // 路由的出错 body 只有机器码没有人话，所以失败时把 code 作为
+    // ApiException 的 message 抛出去（shoppingErrorFrom 与
+    // tokenErrorFrom 同实现），UI 再把认识的码（list_limit_reached /
+    // item_limit_reached / event_not_found）翻成本地化文案，其余走
+    // userFacingError 的通用兜底——机器码不会原样摆给用户。
+
+    /** GET /api/v1/shopping-lists[?eventId=] — 清单列表（带计数与
+     *  关联事件标题）。eventId 非空时只返回关联该事件的清单。 */
+    suspend fun listShoppingLists(eventId: String? = null): List<ShoppingList> {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.get("$baseUrl/api/v1/shopping-lists") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                if (eventId != null) parameter("eventId", eventId)
+            }
+        }
+        return unwrapShoppingResponse(resp, ListSerializer(ShoppingList.serializer()))
+    }
+
+    /** GET /api/v1/shopping-lists/{id} — 清单 + 条目详情。 */
+    suspend fun getShoppingList(id: String): ShoppingListDetail {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.get("$baseUrl/api/v1/shopping-lists/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingListDetail.serializer())
+    }
+
+    /** POST /api/v1/shopping-lists — 新建清单。201。 */
+    suspend fun createShoppingList(input: ShoppingListCreateInput): ShoppingList {
+        val resp = withRefresh {
+            val token = accessToken()
+            val jsonBody = jsonCfg.encodeToString(ShoppingListCreateInput.serializer(), input)
+            client.post("$baseUrl/api/v1/shopping-lists") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingList.serializer())
+    }
+
+    /** PATCH /api/v1/shopping-lists/{id} — 改名 / 改关联。
+     *  关联的三种意图必须分清：eventId 非空 = 关联到它；
+     *  clearEvent = true = 解除关联，请求体里必须真的发出
+     *  `"eventId": null`；两者都不给 = 不动关联。共享 Json 配置是
+     *  explicitNulls=false，普通 DTO 会把 null 省掉，所以这里手拼
+     *  JsonObject，保证 JsonNull 原样上 wire。 */
+    suspend fun updateShoppingList(
+        id: String,
+        title: String? = null,
+        eventId: String? = null,
+        clearEvent: Boolean = false,
+    ): ShoppingList {
+        val body = buildJsonObject {
+            if (title != null) put("title", title)
+            if (clearEvent) put("eventId", JsonNull)
+            else if (eventId != null) put("eventId", eventId)
+        }
+        val resp = withRefresh {
+            val token = accessToken()
+            client.patch("$baseUrl/api/v1/shopping-lists/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingList.serializer())
+    }
+
+    /** DELETE /api/v1/shopping-lists/{id} — 删除整张清单。 */
+    suspend fun deleteShoppingList(id: String) {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.delete("$baseUrl/api/v1/shopping-lists/$id") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        unwrapShoppingResponse(resp, ShoppingOkResponse.serializer())
+    }
+
+    /** POST /api/v1/shopping-lists/{id}/items — 加一条。201。 */
+    suspend fun addShoppingListItem(listId: String, input: ShoppingListItemCreateInput): ShoppingListItem {
+        val resp = withRefresh {
+            val token = accessToken()
+            val jsonBody = jsonCfg.encodeToString(ShoppingListItemCreateInput.serializer(), input)
+            client.post("$baseUrl/api/v1/shopping-lists/$listId/items") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingListItem.serializer())
+    }
+
+    /** PATCH /api/v1/shopping-lists/{id}/items/{itemId} — 改条目。
+     *  只发非 null 字段（勾选切换只发 done，整条编辑发全部字段）；
+     *  例外是数量：clearQuantity = true 时手拼 `"quantity": null`
+     *  清掉已填的数量。unit / note 清空发空串即可，服务端会转 null。 */
+    suspend fun updateShoppingListItem(
+        listId: String,
+        itemId: String,
+        name: String? = null,
+        quantity: Double? = null,
+        clearQuantity: Boolean = false,
+        unit: String? = null,
+        note: String? = null,
+        done: Boolean? = null,
+    ): ShoppingListItem {
+        val body = buildJsonObject {
+            if (name != null) put("name", name)
+            if (clearQuantity) put("quantity", JsonNull)
+            else if (quantity != null) put("quantity", quantity)
+            if (unit != null) put("unit", unit)
+            if (note != null) put("note", note)
+            if (done != null) put("done", done)
+        }
+        val resp = withRefresh {
+            val token = accessToken()
+            client.patch("$baseUrl/api/v1/shopping-lists/$listId/items/$itemId") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(body.toString())
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingListItem.serializer())
+    }
+
+    /** DELETE /api/v1/shopping-lists/{id}/items/{itemId} — 删一条。 */
+    suspend fun deleteShoppingListItem(listId: String, itemId: String) {
+        val resp = withRefresh {
+            val token = accessToken()
+            client.delete("$baseUrl/api/v1/shopping-lists/$listId/items/$itemId") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+            }
+        }
+        unwrapShoppingResponse(resp, ShoppingOkResponse.serializer())
+    }
+
+    /** POST /api/v1/shopping-lists/{id}/items/{itemId}/move —
+     *  direction 只取 "up" / "down"，与相邻条目交换位置。 */
+    suspend fun moveShoppingListItem(listId: String, itemId: String, direction: String): ShoppingListItem {
+        val resp = withRefresh {
+            val token = accessToken()
+            val jsonBody = jsonCfg.encodeToString(
+                ShoppingListItemMoveInput.serializer(),
+                ShoppingListItemMoveInput(direction),
+            )
+            client.post("$baseUrl/api/v1/shopping-lists/$listId/items/$itemId/move") {
+                if (!token.isNullOrEmpty()) bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(jsonBody)
+            }
+        }
+        return unwrapShoppingResponse(resp, ShoppingListItem.serializer())
+    }
+
+    /** 成功 → 信封拆包；失败 → ApiException 带机器码（同 tokenErrorFrom）。 */
+    private suspend fun <T> unwrapShoppingResponse(resp: HttpResponse, serializer: KSerializer<T>): T {
+        if (resp.status.isSuccess()) return unwrap(resp, serializer)
+        throw tokenErrorFrom(resp)
     }
 
     fun calendarConnectionApi() = object : cn.bywave.calendar.connect.CalendarConnectionApi {

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">購買清單</string>
+    <string name="shopping_your_lists">我的清單</string>
+    <string name="shopping_new_list">新增清單</string>
+    <string name="shopping_create_list">建立清單</string>
+    <string name="shopping_title_label">標題</string>
+    <string name="shopping_title_placeholder">例如：週末烤肉採購</string>
+    <string name="shopping_empty_lists">還沒有購買清單——在下方建一張吧。</string>
+    <string name="shopping_progress">已買 %1$d/%2$d</string>
+    <string name="shopping_all_done">已買齊</string>
+    <string name="shopping_list_settings">清單設定</string>
+    <string name="shopping_rename">重新命名</string>
+    <string name="shopping_delete_list">刪除這張清單</string>
+    <string name="shopping_delete_list_confirm">確定刪除這張清單？裡面的項目會一併刪除。</string>
+    <string name="shopping_link_event_label">關聯事件（可選）</string>
+    <string name="shopping_no_event">不關聯事件</string>
+    <string name="shopping_unlink">解除關聯</string>
+    <string name="shopping_items_empty">這張清單還是空的——在下方新增第一件要買的東西。</string>
+    <string name="shopping_item_name">名稱</string>
+    <string name="shopping_item_name_placeholder">例如：番茄</string>
+    <string name="shopping_quantity">數量</string>
+    <string name="shopping_unit">單位</string>
+    <string name="shopping_note">備註</string>
+    <string name="shopping_add_item">新增項目</string>
+    <string name="shopping_edit_item">編輯</string>
+    <string name="shopping_delete_item_confirm">確定刪除這個項目？</string>
+    <string name="shopping_move_up">上移</string>
+    <string name="shopping_move_down">下移</string>
+    <string name="shopping_toggle_done">標記已買 / 未買</string>
+    <string name="shopping_event_none">還沒有關聯的購買清單。</string>
+    <string name="shopping_event_link">關聯</string>
+    <string name="shopping_event_create">為這個事件新增清單</string>
+    <string name="shopping_event_unsaved">先儲存事件，之後就能給它關聯購買清單。</string>
+    <string name="shopping_event_progress">已買 %1$d/%2$d</string>
+    <string name="shopping_default_title">購買清單</string>
+    <string name="shopping_error_list_limit">清單數量已達上限。</string>
+    <string name="shopping_error_item_limit">這張清單的項目已達上限。</string>
+    <string name="shopping_error_event_not_found">這個事件已經不存在了，無法關聯。</string>
+    <string name="shopping_load_failed">載入清單失敗。</string>
+    <string name="shopping_action_failed">操作失敗，請重試。</string>
+</resources>

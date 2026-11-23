@@ -68,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Refresh
@@ -205,6 +206,10 @@ fun MainScreen(
     // badge (invitations still awaiting my reply).
     var showInvitations by remember { mutableStateOf(false) }
     var invitationPending by remember { mutableStateOf(0) }
+    // 购买清单对话框：顶栏购物车入口打开列表态；initialListId 预留
+    // 给需要直达某张清单详情的入口（当前顶栏入口传 null）。
+    var showShoppingLists by remember { mutableStateOf(false) }
+    var shoppingInitialListId by remember { mutableStateOf<String?>(null) }
 
     suspend fun refreshInvitationBadge(c: ApiClient) {
         // Badge is advisory — a failed fetch keeps the previous count.
@@ -384,6 +389,7 @@ fun MainScreen(
                 onOpenSearch = { showSearch = true },
                 invitationPending = invitationPending,
                 onOpenInvitations = { showInvitations = true },
+                onOpenShoppingLists = { shoppingInitialListId = null; showShoppingLists = true },
                 onOpenImport = { pickIcsFile()?.let { importFile = it } },
                 // Settings page hosts sign-out + all account / security /
                 // appearance / about controls. Previously the toolbar had
@@ -574,6 +580,7 @@ fun MainScreen(
             onSuggestionPicked = { address, online ->
                 if (online != null) state.learnOnlineSuggestion(online) else state.noteAddressPicked(address)
             },
+            shoppingClient = client,
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -587,6 +594,7 @@ fun MainScreen(
                 if (create != null) state.create(create)
             },
             onDismiss = { state.closeSheet() },
+            shoppingClient = client,
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -607,6 +615,7 @@ fun MainScreen(
                 }
             },
             onDismiss = { state.closeSheet() },
+            shoppingClient = client,
             onCheckConflicts = { calId, startsAt, endsAt, excludeId ->
                 state.checkConflicts(calId, startsAt, endsAt, excludeId)
             },
@@ -753,6 +762,19 @@ fun MainScreen(
                     showInvitations = false
                     scope.launch { refreshInvitationBadge(c) }
                 },
+            )
+        }
+    }
+
+    // 购买清单 — 顶栏购物车打开。与邀请对话框一样用主 client（绑定
+    // 当前账号），关掉即销毁内部状态。
+    if (showShoppingLists) {
+        val c = client
+        if (c != null) {
+            ShoppingListsDialog(
+                client = c,
+                initialListId = shoppingInitialListId,
+                onDismiss = { showShoppingLists = false },
             )
         }
     }
@@ -912,6 +934,7 @@ private fun TopBar(
     onOpenSearch: () -> Unit,
     invitationPending: Int,
     onOpenInvitations: () -> Unit,
+    onOpenShoppingLists: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -1013,6 +1036,12 @@ private fun TopBar(
                 ) {
                     Icon(Icons.Outlined.Email, contentDescription = t("invitations.title"))
                 }
+            }
+        }
+        // 购买清单 — 与邀请 / 搜索同一排的顶栏入口。
+        WithTooltip(t("shopping.title")) {
+            IconButton(onClick = onOpenShoppingLists) {
+                Icon(Icons.Outlined.ShoppingCart, contentDescription = t("shopping.title"))
             }
         }
         WithTooltip(t("import.title"), "I") {

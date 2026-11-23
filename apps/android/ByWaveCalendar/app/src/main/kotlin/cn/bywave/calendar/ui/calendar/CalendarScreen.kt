@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -99,6 +100,8 @@ fun CalendarScreen(
     onSignInAgain: (SignedOutNotice) -> Unit,
     onOpenSearch: () -> Unit,
     onOpenInvitations: () -> Unit,
+    /** 购买清单页入口（顶栏购物车图标，与设置同层级）。 */
+    onOpenShoppingLists: () -> Unit = {},
     /** 离线队列页：待同步指示条点进去逐条看 / 裁决待处理。 */
     onOpenOfflineQueue: () -> Unit,
     vm: CalendarViewModel = viewModel(),
@@ -224,6 +227,10 @@ fun CalendarScreen(
                     }
                 },
                 actions = {
+                    // 购买清单 — 与左上角的设置同层级的一级入口。
+                    IconButton(onClick = onOpenShoppingLists) {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = stringResource(R.string.shopping_title))
+                    }
                     // 我收到的邀请 — 徽章数 = 未处理数（待回复且未取消、
                     // 未过期），由 CalendarViewModel 随事件刷新同节拍更新。
                     BadgedBox(

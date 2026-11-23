@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">Shopping lists</string>
+    <string name="shopping_your_lists">Your lists</string>
+    <string name="shopping_new_list">Create a list</string>
+    <string name="shopping_create_list">Create list</string>
+    <string name="shopping_title_label">Title</string>
+    <string name="shopping_title_placeholder">e.g. Weekend barbecue</string>
+    <string name="shopping_empty_lists">No shopping lists yet — create one below.</string>
+    <string name="shopping_progress">%1$d of %2$d bought</string>
+    <string name="shopping_all_done">All bought</string>
+    <string name="shopping_list_settings">List settings</string>
+    <string name="shopping_rename">Rename</string>
+    <string name="shopping_delete_list">Delete this list</string>
+    <string name="shopping_delete_list_confirm">Delete this shopping list and all its items?</string>
+    <string name="shopping_link_event_label">Link to event (optional)</string>
+    <string name="shopping_no_event">No linked event</string>
+    <string name="shopping_unlink">Unlink</string>
+    <string name="shopping_items_empty">Nothing on this list yet — add your first item below.</string>
+    <string name="shopping_item_name">Item</string>
+    <string name="shopping_item_name_placeholder">e.g. Tomatoes</string>
+    <string name="shopping_quantity">Qty</string>
+    <string name="shopping_unit">Unit</string>
+    <string name="shopping_note">Note</string>
+    <string name="shopping_add_item">Add item</string>
+    <string name="shopping_edit_item">Edit</string>
+    <string name="shopping_delete_item_confirm">Delete this item?</string>
+    <string name="shopping_move_up">Move up</string>
+    <string name="shopping_move_down">Move down</string>
+    <string name="shopping_toggle_done">Mark as bought / not bought</string>
+    <string name="shopping_event_none">No shopping list linked yet.</string>
+    <string name="shopping_event_link">Link</string>
+    <string name="shopping_event_create">New list for this event</string>
+    <string name="shopping_event_unsaved">Save the event first — then you can link a shopping list to it.</string>
+    <string name="shopping_event_progress">%1$d/%2$d bought</string>
+    <string name="shopping_default_title">Shopping list</string>
+    <string name="shopping_error_list_limit">You\'ve reached the maximum number of shopping lists.</string>
+    <string name="shopping_error_item_limit">This list has reached the maximum number of items.</string>
+    <string name="shopping_error_event_not_found">That event no longer exists, so the list could not be linked.</string>
+    <string name="shopping_load_failed">Couldn\'t load shopping lists.</string>
+    <string name="shopping_action_failed">Something went wrong — please try again.</string>
+</resources>

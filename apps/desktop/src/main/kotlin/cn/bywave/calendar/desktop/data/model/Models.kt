@@ -937,3 +937,73 @@ data class SubscriptionRefreshResponse(
     val skipped: Int = 0,
     val total: Int = 0,
 )
+
+// ---- Shopping lists ----
+//
+// GET/POST/PATCH/DELETE /api/v1/shopping-lists (+ /items 子资源)。
+// 清单对象在列表与详情里同形状（详情的 list 带计数，见服务端
+// detailView）；条目的 quantity 是 JSON number（numeric 列回读后
+// 服务端转回 number），可为 0.5 这种小数，null = 没填数量。
+
+@Serializable
+data class ShoppingList(
+    val id: String,
+    val title: String,
+    val eventId: String? = null,
+    /** 关联事件的标题；未关联或事件已删为 null。 */
+    val eventSummary: String? = null,
+    val totalCount: Int = 0,
+    val doneCount: Int = 0,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
+@Serializable
+data class ShoppingListItem(
+    val id: String,
+    val listId: String,
+    val name: String,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+    val done: Boolean = false,
+    val position: Int = 0,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
+/** GET /api/v1/shopping-lists/{id} 的 data 载荷。 */
+@Serializable
+data class ShoppingListDetail(
+    val list: ShoppingList,
+    val items: List<ShoppingListItem> = emptyList(),
+)
+
+/** POST /api/v1/shopping-lists 请求体。eventId 为 null 时不发
+ *  （explicitNulls=false），服务端默认不关联。 */
+@Serializable
+data class ShoppingListCreateInput(
+    val title: String,
+    val eventId: String? = null,
+)
+
+/** POST /api/v1/shopping-lists/{id}/items 请求体。 */
+@Serializable
+data class ShoppingListItemCreateInput(
+    val name: String,
+    val quantity: Double? = null,
+    val unit: String? = null,
+    val note: String? = null,
+)
+
+/** POST .../items/{itemId}/move 请求体。direction 只取 "up" / "down"。 */
+@Serializable
+data class ShoppingListItemMoveInput(
+    val direction: String,
+)
+
+/** DELETE 清单 / 条目成功时 data 里的 { ok: true }。 */
+@Serializable
+data class ShoppingOkResponse(
+    val ok: Boolean = false,
+)
