@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">Listas de la compra</string>
+    <string name="shopping_your_lists">Tus listas</string>
+    <string name="shopping_new_list">Crear una lista</string>
+    <string name="shopping_create_list">Crear lista</string>
+    <string name="shopping_title_label">Título</string>
+    <string name="shopping_title_placeholder">p. ej., Barbacoa del fin de semana</string>
+    <string name="shopping_empty_lists">Aún no tienes listas de la compra. Crea una abajo.</string>
+    <string name="shopping_progress">%1$d de %2$d comprados</string>
+    <string name="shopping_all_done">Todo comprado</string>
+    <string name="shopping_list_settings">Ajustes de la lista</string>
+    <string name="shopping_rename">Renombrar</string>
+    <string name="shopping_delete_list">Eliminar esta lista</string>
+    <string name="shopping_delete_list_confirm">¿Eliminar esta lista y todos sus artículos?</string>
+    <string name="shopping_link_event_label">Vincular a un evento (opcional)</string>
+    <string name="shopping_no_event">Sin evento vinculado</string>
+    <string name="shopping_unlink">Desvincular</string>
+    <string name="shopping_items_empty">Esta lista está vacía. Añade abajo el primer artículo.</string>
+    <string name="shopping_item_name">Artículo</string>
+    <string name="shopping_item_name_placeholder">p. ej., Tomates</string>
+    <string name="shopping_quantity">Cantidad</string>
+    <string name="shopping_unit">Unidad</string>
+    <string name="shopping_note">Nota</string>
+    <string name="shopping_add_item">Añadir artículo</string>
+    <string name="shopping_edit_item">Editar</string>
+    <string name="shopping_delete_item_confirm">¿Eliminar este artículo?</string>
+    <string name="shopping_move_up">Subir</string>
+    <string name="shopping_move_down">Bajar</string>
+    <string name="shopping_toggle_done">Marcar como comprado / no comprado</string>
+    <string name="shopping_event_none">Aún no hay ninguna lista vinculada.</string>
+    <string name="shopping_event_link">Vincular</string>
+    <string name="shopping_event_create">Lista nueva para este evento</string>
+    <string name="shopping_event_unsaved">Guarda primero el evento; después podrás vincularle una lista de la compra.</string>
+    <string name="shopping_event_progress">%1$d/%2$d comprados</string>
+    <string name="shopping_default_title">Lista de la compra</string>
+    <string name="shopping_error_list_limit">Has alcanzado el número máximo de listas.</string>
+    <string name="shopping_error_item_limit">Esta lista ha alcanzado el número máximo de artículos.</string>
+    <string name="shopping_error_event_not_found">Ese evento ya no existe, así que no se pudo vincular la lista.</string>
+    <string name="shopping_load_failed">No se pudieron cargar las listas.</string>
+    <string name="shopping_action_failed">Algo salió mal. Inténtalo de nuevo.</string>
+</resources>

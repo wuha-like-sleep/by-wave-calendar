@@ -109,6 +109,9 @@ fun EventEditScreen(
     onQuickSaved: ((cn.bywave.calendar.data.model.EventDTO) -> Unit)? = null,
     /** 日历列表没拿到时，给用户一条能自己重试的路。null = 不显示重试。 */
     onRetryCalendars: (() -> Unit)? = null,
+    /** 购买清单区里点开一张已关联清单时跳详情页。null = 点了没反应，
+     *  所以调用方（事件编辑路由）应当传。新建态用不到（未保存先提示）。 */
+    onOpenShoppingList: ((String) -> Unit)? = null,
     vm: EventEditViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
@@ -493,6 +496,15 @@ fun EventEditScreen(
                     }
                 }
             }
+
+            // 购买清单区（紧跟地点之后）：已保存事件显示已关联清单 +
+            // 关联已有 / 为这个事件新建；未保存（新建 / 复制）只显示
+            // 「先保存」提示。关联动作统一在这里发生，见
+            // ui/shopping/EventShoppingListsSection.kt。
+            cn.bywave.calendar.ui.shopping.EventShoppingListsSection(
+                eventId = if (state.isEdit) state.sourceId else null,
+                onOpenList = { listId -> onOpenShoppingList?.invoke(listId) },
+            )
 
             OutlinedTextField(
                 value = state.url,

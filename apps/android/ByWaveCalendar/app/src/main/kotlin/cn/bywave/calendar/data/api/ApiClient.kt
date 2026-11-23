@@ -51,6 +51,14 @@ import cn.bywave.calendar.data.model.RefreshRequest
 import cn.bywave.calendar.data.model.RefreshResponse
 import cn.bywave.calendar.data.model.SearchResponse
 import cn.bywave.calendar.data.model.ShareToken
+import cn.bywave.calendar.data.model.ShoppingList
+import cn.bywave.calendar.data.model.ShoppingListCreateRequest
+import cn.bywave.calendar.data.model.ShoppingListDetail
+import cn.bywave.calendar.data.model.ShoppingListItem
+import cn.bywave.calendar.data.model.ShoppingListItemCreateRequest
+import cn.bywave.calendar.data.model.ShoppingListItemMoveRequest
+import cn.bywave.calendar.data.model.ShoppingListItemUpdateInput
+import cn.bywave.calendar.data.model.ShoppingListUpdateInput
 import cn.bywave.calendar.data.model.ShareTokenCreateRequest
 import cn.bywave.calendar.data.model.AccountMfaVerifyRequest
 import cn.bywave.calendar.data.model.CalendarSubscription
@@ -480,6 +488,74 @@ interface BywaveApi {
         @Path("id") id: String,
         @Path("subId") subId: String,
     )
+
+    // ---- Shopping lists ----
+    //
+    // Bearer-auth, enveloped /api/v1 routes. Errors arrive (after the
+    // envelope interceptor) as HttpException with a `{ code, message }`
+    // body — the shopping screens map `list_limit_reached` (409 on
+    // create), `item_limit_reached` (409 on add) and `event_not_found`
+    // (400 on create / link) to localized copy.
+
+    /** List every shopping list the active user owns, newest first.
+     *  `eventId` narrows to the lists linked to one event (the event
+     *  editor's shopping section). */
+    @GET("api/v1/shopping-lists")
+    suspend fun shoppingLists(@Query("eventId") eventId: String? = null): List<ShoppingList>
+
+    /** Create a list, optionally linked to an event. Server replies
+     *  201 with the list row (counts included). */
+    @POST("api/v1/shopping-lists")
+    suspend fun createShoppingList(@Body body: ShoppingListCreateRequest): ShoppingList
+
+    /** One list plus its items in position order. */
+    @GET("api/v1/shopping-lists/{id}")
+    suspend fun shoppingList(@Path("id") id: String): ShoppingListDetail
+
+    /** Rename and/or (un)link. The body's eventId wrapper decides:
+     *  absent = leave the link alone, explicit null = unlink. */
+    @PATCH("api/v1/shopping-lists/{id}")
+    suspend fun updateShoppingList(
+        @Path("id") id: String,
+        @Body body: ShoppingListUpdateInput,
+    ): ShoppingList
+
+    /** Delete a list and all its items. Envelope unwraps to
+     *  `{ ok: true }`; show a destructive confirm before calling. */
+    @DELETE("api/v1/shopping-lists/{id}")
+    suspend fun deleteShoppingList(@Path("id") id: String)
+
+    /** Add an item. Server replies 201 with the item row. */
+    @POST("api/v1/shopping-lists/{id}/items")
+    suspend fun addShoppingListItem(
+        @Path("id") id: String,
+        @Body body: ShoppingListItemCreateRequest,
+    ): ShoppingListItem
+
+    /** Patch an item — the done toggle sends only `done`, the edit
+     *  form sends the full field set it displays. */
+    @PATCH("api/v1/shopping-lists/{id}/items/{itemId}")
+    suspend fun updateShoppingListItem(
+        @Path("id") id: String,
+        @Path("itemId") itemId: String,
+        @Body body: ShoppingListItemUpdateInput,
+    ): ShoppingListItem
+
+    /** Remove an item. Envelope unwraps to `{ ok: true }`. */
+    @DELETE("api/v1/shopping-lists/{id}/items/{itemId}")
+    suspend fun deleteShoppingListItem(
+        @Path("id") id: String,
+        @Path("itemId") itemId: String,
+    )
+
+    /** Move an item one step ("up" / "down"). Callers re-fetch the
+     *  detail afterwards so order and counts align with the server. */
+    @POST("api/v1/shopping-lists/{id}/items/{itemId}/move")
+    suspend fun moveShoppingListItem(
+        @Path("id") id: String,
+        @Path("itemId") itemId: String,
+        @Body body: ShoppingListItemMoveRequest,
+    ): ShoppingListItem
 
     // ---- Calendar export ----
 

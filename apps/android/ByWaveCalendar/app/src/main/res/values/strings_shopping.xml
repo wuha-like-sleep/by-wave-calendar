@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">购买清单</string>
+    <string name="shopping_your_lists">我的清单</string>
+    <string name="shopping_new_list">新建清单</string>
+    <string name="shopping_create_list">创建清单</string>
+    <string name="shopping_title_label">标题</string>
+    <string name="shopping_title_placeholder">例如：周末烧烤采购</string>
+    <string name="shopping_empty_lists">还没有购买清单——在下方建一张吧。</string>
+    <string name="shopping_progress">已买 %1$d/%2$d</string>
+    <string name="shopping_all_done">已买齐</string>
+    <string name="shopping_list_settings">清单设置</string>
+    <string name="shopping_rename">重命名</string>
+    <string name="shopping_delete_list">删除这张清单</string>
+    <string name="shopping_delete_list_confirm">确定删除这张清单？里面的条目会一并删除。</string>
+    <string name="shopping_link_event_label">关联事件（可选）</string>
+    <string name="shopping_no_event">不关联事件</string>
+    <string name="shopping_unlink">解除关联</string>
+    <string name="shopping_items_empty">这张清单还是空的——在下方添加第一件要买的东西。</string>
+    <string name="shopping_item_name">名称</string>
+    <string name="shopping_item_name_placeholder">例如：番茄</string>
+    <string name="shopping_quantity">数量</string>
+    <string name="shopping_unit">单位</string>
+    <string name="shopping_note">备注</string>
+    <string name="shopping_add_item">添加条目</string>
+    <string name="shopping_edit_item">编辑</string>
+    <string name="shopping_delete_item_confirm">确定删除这个条目？</string>
+    <string name="shopping_move_up">上移</string>
+    <string name="shopping_move_down">下移</string>
+    <string name="shopping_toggle_done">标记已买 / 未买</string>
+    <string name="shopping_event_none">还没有关联的购买清单。</string>
+    <string name="shopping_event_link">关联</string>
+    <string name="shopping_event_create">为这个事件新建清单</string>
+    <string name="shopping_event_unsaved">先保存事件，之后就能给它关联购买清单。</string>
+    <string name="shopping_event_progress">已买 %1$d/%2$d</string>
+    <string name="shopping_default_title">购买清单</string>
+    <string name="shopping_error_list_limit">清单数量已达上限。</string>
+    <string name="shopping_error_item_limit">这张清单的条目已达上限。</string>
+    <string name="shopping_error_event_not_found">这个事件已经不存在了，无法关联。</string>
+    <string name="shopping_load_failed">加载清单失败。</string>
+    <string name="shopping_action_failed">操作失败，请重试。</string>
+</resources>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">Listes de courses</string>
+    <string name="shopping_your_lists">Vos listes</string>
+    <string name="shopping_new_list">Créer une liste</string>
+    <string name="shopping_create_list">Créer la liste</string>
+    <string name="shopping_title_label">Titre</string>
+    <string name="shopping_title_placeholder">ex. Barbecue du week-end</string>
+    <string name="shopping_empty_lists">Aucune liste de courses pour le moment — créez-en une ci-dessous.</string>
+    <string name="shopping_progress">%1$d sur %2$d achetés</string>
+    <string name="shopping_all_done">Tout est acheté</string>
+    <string name="shopping_list_settings">Réglages de la liste</string>
+    <string name="shopping_rename">Renommer</string>
+    <string name="shopping_delete_list">Supprimer cette liste</string>
+    <string name="shopping_delete_list_confirm">Supprimer cette liste et tous ses articles ?</string>
+    <string name="shopping_link_event_label">Rattacher à un événement (facultatif)</string>
+    <string name="shopping_no_event">Aucun événement rattaché</string>
+    <string name="shopping_unlink">Détacher</string>
+    <string name="shopping_items_empty">Cette liste est encore vide — ajoutez le premier article ci-dessous.</string>
+    <string name="shopping_item_name">Article</string>
+    <string name="shopping_item_name_placeholder">ex. Tomates</string>
+    <string name="shopping_quantity">Qté</string>
+    <string name="shopping_unit">Unité</string>
+    <string name="shopping_note">Note</string>
+    <string name="shopping_add_item">Ajouter un article</string>
+    <string name="shopping_edit_item">Modifier</string>
+    <string name="shopping_delete_item_confirm">Supprimer cet article ?</string>
+    <string name="shopping_move_up">Monter</string>
+    <string name="shopping_move_down">Descendre</string>
+    <string name="shopping_toggle_done">Marquer comme acheté / non acheté</string>
+    <string name="shopping_event_none">Aucune liste rattachée pour le moment.</string>
+    <string name="shopping_event_link">Rattacher</string>
+    <string name="shopping_event_create">Nouvelle liste pour cet événement</string>
+    <string name="shopping_event_unsaved">Enregistrez d\'abord l\'événement, puis vous pourrez lui rattacher une liste de courses.</string>
+    <string name="shopping_event_progress">%1$d/%2$d achetés</string>
+    <string name="shopping_default_title">Liste de courses</string>
+    <string name="shopping_error_list_limit">Vous avez atteint le nombre maximal de listes.</string>
+    <string name="shopping_error_item_limit">Cette liste a atteint le nombre maximal d\'articles.</string>
+    <string name="shopping_error_event_not_found">Cet événement n\'existe plus, la liste n\'a pas pu être rattachée.</string>
+    <string name="shopping_load_failed">Impossible de charger les listes.</string>
+    <string name="shopping_action_failed">L\'opération a échoué. Réessayez.</string>
+</resources>

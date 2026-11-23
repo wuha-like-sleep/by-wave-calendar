@@ -52,6 +52,8 @@ import cn.bywave.calendar.ui.event.EventEditMode
 import cn.bywave.calendar.ui.event.EventEditScreen
 import cn.bywave.calendar.ui.importics.ImportIcsScreen
 import cn.bywave.calendar.ui.search.SearchScreen
+import cn.bywave.calendar.ui.shopping.ShoppingListDetailScreen
+import cn.bywave.calendar.ui.shopping.ShoppingListsScreen
 import cn.bywave.calendar.ui.settings.BookingLinksScreen
 import cn.bywave.calendar.ui.settings.CalendarListScreen
 import cn.bywave.calendar.ui.settings.SettingsScreen
@@ -375,6 +377,7 @@ private fun AppRoot(
                 },
                 onOpenSearch = { nav.navigate("search") },
                 onOpenInvitations = { nav.navigate("invitations") },
+                onOpenShoppingLists = { nav.navigate("shopping_lists") },
                 onOpenOfflineQueue = { nav.navigate("offline_queue") },
             )
         }
@@ -391,6 +394,24 @@ private fun AppRoot(
         ) { entry ->
             InvitationsScreen(
                 openToken = entry.arguments?.getString("token"),
+                onBack = { nav.popBackStack() },
+            )
+        }
+
+        composable("shopping_lists") {
+            ShoppingListsScreen(
+                onBack = { nav.popBackStack() },
+                onOpenList = { id -> nav.navigate("shopping_list/$id") },
+            )
+        }
+
+        composable(
+            route = "shopping_list/{id}",
+            arguments = listOf(navArgument("id") { type = NavType.StringType }),
+        ) { entry ->
+            val id = entry.arguments?.getString("id") ?: return@composable
+            ShoppingListDetailScreen(
+                listId = id,
                 onBack = { nav.popBackStack() },
             )
         }
@@ -564,6 +585,7 @@ private fun AppRoot(
                 initialMode = EventEditMode.Edit(source),
                 calendars = state.calendars,
                 onDismiss = { nav.popBackStack() },
+                onOpenShoppingList = { listId -> nav.navigate("shopping_list/$listId") },
                 onSaved = {
                     nav.popBackStack()
                     calVm.reload()

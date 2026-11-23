@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">Einkaufslisten</string>
+    <string name="shopping_your_lists">Ihre Listen</string>
+    <string name="shopping_new_list">Liste erstellen</string>
+    <string name="shopping_create_list">Liste erstellen</string>
+    <string name="shopping_title_label">Titel</string>
+    <string name="shopping_title_placeholder">z. B. Grillen am Wochenende</string>
+    <string name="shopping_empty_lists">Noch keine Einkaufslisten – legen Sie unten eine an.</string>
+    <string name="shopping_progress">%1$d von %2$d gekauft</string>
+    <string name="shopping_all_done">Alles gekauft</string>
+    <string name="shopping_list_settings">Listeneinstellungen</string>
+    <string name="shopping_rename">Umbenennen</string>
+    <string name="shopping_delete_list">Diese Liste löschen</string>
+    <string name="shopping_delete_list_confirm">Diese Liste mit allen Einträgen löschen?</string>
+    <string name="shopping_link_event_label">Mit Termin verknüpfen (optional)</string>
+    <string name="shopping_no_event">Kein Termin verknüpft</string>
+    <string name="shopping_unlink">Verknüpfung aufheben</string>
+    <string name="shopping_items_empty">Diese Liste ist noch leer – fügen Sie unten den ersten Eintrag hinzu.</string>
+    <string name="shopping_item_name">Eintrag</string>
+    <string name="shopping_item_name_placeholder">z. B. Tomaten</string>
+    <string name="shopping_quantity">Menge</string>
+    <string name="shopping_unit">Einheit</string>
+    <string name="shopping_note">Notiz</string>
+    <string name="shopping_add_item">Eintrag hinzufügen</string>
+    <string name="shopping_edit_item">Bearbeiten</string>
+    <string name="shopping_delete_item_confirm">Diesen Eintrag löschen?</string>
+    <string name="shopping_move_up">Nach oben</string>
+    <string name="shopping_move_down">Nach unten</string>
+    <string name="shopping_toggle_done">Als gekauft / nicht gekauft markieren</string>
+    <string name="shopping_event_none">Noch keine Einkaufsliste verknüpft.</string>
+    <string name="shopping_event_link">Verknüpfen</string>
+    <string name="shopping_event_create">Neue Liste für diesen Termin</string>
+    <string name="shopping_event_unsaved">Speichern Sie den Termin zuerst – danach können Sie eine Einkaufsliste verknüpfen.</string>
+    <string name="shopping_event_progress">%1$d/%2$d gekauft</string>
+    <string name="shopping_default_title">Einkaufsliste</string>
+    <string name="shopping_error_list_limit">Die maximale Anzahl an Listen ist erreicht.</string>
+    <string name="shopping_error_item_limit">Diese Liste hat die maximale Anzahl an Einträgen erreicht.</string>
+    <string name="shopping_error_event_not_found">Dieser Termin existiert nicht mehr, die Liste konnte nicht verknüpft werden.</string>
+    <string name="shopping_load_failed">Die Listen konnten nicht geladen werden.</string>
+    <string name="shopping_action_failed">Das hat nicht geklappt – bitte erneut versuchen.</string>
+</resources>

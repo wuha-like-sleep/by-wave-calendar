@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="shopping_title">장보기 목록</string>
+    <string name="shopping_your_lists">내 목록</string>
+    <string name="shopping_new_list">목록 만들기</string>
+    <string name="shopping_create_list">목록 만들기</string>
+    <string name="shopping_title_label">제목</string>
+    <string name="shopping_title_placeholder">예: 주말 바비큐</string>
+    <string name="shopping_empty_lists">아직 장보기 목록이 없습니다. 아래에서 만들어 보세요.</string>
+    <string name="shopping_progress">%2$d개 중 %1$d개 구매</string>
+    <string name="shopping_all_done">모두 구매 완료</string>
+    <string name="shopping_list_settings">목록 설정</string>
+    <string name="shopping_rename">이름 변경</string>
+    <string name="shopping_delete_list">이 목록 삭제</string>
+    <string name="shopping_delete_list_confirm">이 목록을 삭제할까요? 안의 항목도 함께 삭제됩니다.</string>
+    <string name="shopping_link_event_label">일정에 연결(선택)</string>
+    <string name="shopping_no_event">연결 안 함</string>
+    <string name="shopping_unlink">연결 해제</string>
+    <string name="shopping_items_empty">이 목록은 아직 비어 있습니다. 아래에서 첫 항목을 추가하세요.</string>
+    <string name="shopping_item_name">항목</string>
+    <string name="shopping_item_name_placeholder">예: 토마토</string>
+    <string name="shopping_quantity">수량</string>
+    <string name="shopping_unit">단위</string>
+    <string name="shopping_note">메모</string>
+    <string name="shopping_add_item">항목 추가</string>
+    <string name="shopping_edit_item">편집</string>
+    <string name="shopping_delete_item_confirm">이 항목을 삭제할까요?</string>
+    <string name="shopping_move_up">위로 이동</string>
+    <string name="shopping_move_down">아래로 이동</string>
+    <string name="shopping_toggle_done">구매 완료 / 미완료 표시</string>
+    <string name="shopping_event_none">아직 연결된 장보기 목록이 없습니다.</string>
+    <string name="shopping_event_link">연결</string>
+    <string name="shopping_event_create">이 일정용으로 새로 만들기</string>
+    <string name="shopping_event_unsaved">일정을 먼저 저장하면 장보기 목록을 연결할 수 있습니다.</string>
+    <string name="shopping_event_progress">%1$d/%2$d개 구매</string>
+    <string name="shopping_default_title">장보기 목록</string>
+    <string name="shopping_error_list_limit">목록 수 상한에 도달했습니다.</string>
+    <string name="shopping_error_item_limit">이 목록의 항목 수 상한에 도달했습니다.</string>
+    <string name="shopping_error_event_not_found">그 일정이 더 이상 존재하지 않아 연결할 수 없습니다.</string>
+    <string name="shopping_load_failed">장보기 목록을 불러오지 못했습니다.</string>
+    <string name="shopping_action_failed">작업에 실패했습니다. 다시 시도해 주세요.</string>
+</resources>
