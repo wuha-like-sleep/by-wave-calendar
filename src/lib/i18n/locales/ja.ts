@@ -1864,6 +1864,11 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "errorPage.oauth.scopeHeading": "スコープが無効です",
   "errorPage.oauth.scopeMessage": "アプリが要求したスコープは、いずれも許可された範囲に含まれていません。",
   "flash.oauth.signInToAuthorize": "ログインして「{name}」にカレンダーへのアクセスを許可してください",
+  "oauth.consent.intro": "は、あなたの ByWave アカウントへのアクセスと、以下の権限をリクエストしています：",
+  "oauth.consent.redirectNote": "承認すると {name} に戻ります。アクセス権は <a href='/app/settings#oauth' class='underline'>設定 → 連携済みアプリ</a> からいつでも取り消せます。",
+  "oauth.consent.deny": "拒否",
+  "oauth.consent.approve": "許可",
+  "oauth.consent.signedInAs": "{email} としてログイン中",
 
   // flash — SSO login / linking (src/web/sso.ts)
   "flash.sso.configError": "SSO の設定に問題があります：{error}",
@@ -2777,9 +2782,9 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "adminOauthApps.flash.disabled": "無効化しました",
   "adminOauthApps.flash.enabled": "有効化しました",
   "adminOauthApps.flash.deleted": "アプリを削除しました（すべてのアクセストークンを取り消しました）",
-  "adminOauthApps.scope.readEvents": "カレンダーとイベントを表示",
-  "adminOauthApps.scope.writeEvents": "イベントの作成・編集・削除",
-  "adminOauthApps.scope.readProfile": "アカウント情報（メールアドレス、表示名）を読み取り",
+  "oauth.scope.readEvents": "カレンダーとイベントを表示",
+  "oauth.scope.writeEvents": "イベントの作成・編集・削除",
+  "oauth.scope.readProfile": "アカウント情報（メールアドレス、表示名）を読み取り",
   // /admin/client-release — route flash messages
   "adminClientRelease.flash.announcementTooLong": "お知らせが長すぎます —— 保存しませんでした",
   "adminClientRelease.flash.badVersion": "バージョンは 1.8.0 のようなドット区切りの数字で書いてください。クライアントが大小を比較できません —— 保存しませんでした",

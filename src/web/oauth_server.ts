@@ -21,7 +21,7 @@ import {
   findClientByClientId,
   issueAuthorizationCode,
   exchangeCodeForToken,
-  OAUTH_SCOPES,
+  oauthScopeDescKey,
 } from "../lib/oauth_server.js";
 
 const authorizeQuery = z.object({
@@ -135,7 +135,10 @@ export async function oauthServerRoutes(app: FastifyInstance) {
         logoUrl: client.logoUrl,
         clientId: client.clientId,
       },
-      scopes: finalScopes.map((s) => ({ name: s, description: (OAUTH_SCOPES as Record<string, string>)[s] || s })),
+      scopes: finalScopes.map((s) => {
+        const descKey = oauthScopeDescKey(s);
+        return { name: s, description: descKey ? tr(req, descKey) : s };
+      }),
       // We pass the request params through hidden form fields so the
       // approve POST carries them.
       params: q.data,

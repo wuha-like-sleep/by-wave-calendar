@@ -57,7 +57,7 @@ import { listEnabledProvidersPublic } from "../lib/sso_providers.js";
 import { countActiveAdmins, evictAllCredentials } from "../lib/user_state.js";
 import { invalidateCalDavAuthCache, getCalDavAuthCacheStats } from "../lib/caldav_auth.js";
 import { getCalDavThrottleStats } from "../lib/caldav_throttle.js";
-import { createOAuthClient, OAUTH_SCOPES, type OAuthScope } from "../lib/oauth_server.js";
+import { createOAuthClient, OAUTH_SCOPES, oauthScopeDescKey, type OAuthScope } from "../lib/oauth_server.js";
 import { tForRequest } from "../lib/i18n.js";
 // 配额窗口的起点从建号收口函数里拿,不在这里重算。后台「今天已建 N 个」这个
 // 数字必须跟真正拦人的那道闸门用同一个窗口,否则管理员看到的 N 和刹车实际
@@ -103,12 +103,9 @@ async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
 // 前面的路由用它就得靠「回调比声明晚执行」这个巧合成立 —— 一眼看不出来的雷。
 const localTimeIso = (d: Date) => `<time data-tz datetime="${d.toISOString()}" data-style="datetime">${d.toISOString()}</time>`;
 
-/** 请求内翻译,给 flash / 页面标题用。口径跟 web/sso.ts 的 tr() 一致。 */
-const OAUTH_SCOPE_DESC_KEYS: Record<string, string> = {
-  "read:events": "adminOauthApps.scope.readEvents",
-  "write:events": "adminOauthApps.scope.writeEvents",
-  "read:profile": "adminOauthApps.scope.readProfile",
-};
+/** 请求内翻译,给 flash / 页面标题用。口径跟 web/sso.ts 的 tr() 一致。
+ *  scope 说明的键映射在 lib/oauth_server.ts 的 oauthScopeDescKey ——
+ *  跟用户同意页共用同一批 oauth.scope.* 键,不要在这里再抄一份。 */
 function tr(req: FastifyRequest, key: string, vars?: Record<string, string | number>): string {
   return tForRequest(req)(key, vars);
 }
@@ -3439,7 +3436,10 @@ export async function adminRoutes(app: FastifyInstance) {
         scopesList: a.allowedScopes as string[],
         createdAtLocal: localTimeIso(a.createdAt),
       })),
-      scopes: Object.fromEntries(Object.entries(OAUTH_SCOPES).map(([k, v]) => [k, OAUTH_SCOPE_DESC_KEYS[k] ? tr(req, OAUTH_SCOPE_DESC_KEYS[k]) : v])),
+      scopes: Object.fromEntries(Object.entries(OAUTH_SCOPES).map(([k, v]) => {
+        const descKey = oauthScopeDescKey(k);
+        return [k, descKey ? tr(req, descKey) : v];
+      })),
       issuedSecret, issuedClientId,
       baseUrl: env.PUBLIC_BASE_URL.replace(/\/$/, ""),
       // 总闸默认是**关**的(schema.ts 的 api_enabled default false),而总闸

@@ -38,6 +38,20 @@ export const OAUTH_SCOPES = {
 } as const;
 export type OAuthScope = keyof typeof OAUTH_SCOPES;
 
+// Display copy for the scopes lives in the locale dictionaries under
+// oauth.scope.* — the strings in OAUTH_SCOPES above are only a last-resort
+// fallback, never the rendered text. The admin OAuth-apps page and the
+// user-facing consent screen share this one mapping so the two surfaces
+// can never drift into two different wordings for the same permission.
+export const OAUTH_SCOPE_DESC_KEYS: Record<OAuthScope, string> = {
+  "read:events": "oauth.scope.readEvents",
+  "write:events": "oauth.scope.writeEvents",
+  "read:profile": "oauth.scope.readProfile",
+};
+export function oauthScopeDescKey(scope: string): string | undefined {
+  return (OAUTH_SCOPE_DESC_KEYS as Record<string, string>)[scope];
+}
+
 // ---------- Client (third-party app) management ----------
 
 export async function createOAuthClient(input: {

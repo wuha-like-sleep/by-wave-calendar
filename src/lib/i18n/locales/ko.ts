@@ -1864,6 +1864,11 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "errorPage.oauth.scopeHeading": "권한 범위가 유효하지 않습니다",
   "errorPage.oauth.scopeMessage": "앱이 요청한 범위가 모두 허용된 범위 밖입니다.",
   "flash.oauth.signInToAuthorize": "로그인한 뒤 “{name}” 이 캘린더에 접근하도록 승인하세요",
+  "oauth.consent.intro": "에서 회원님의 ByWave 계정에 대한 다음 권한을 요청합니다:",
+  "oauth.consent.redirectNote": "승인하면 {name}(으)로 돌아갑니다. <a href='/app/settings#oauth' class='underline'>설정 → 승인된 앱</a>에서 언제든지 승인을 취소할 수 있습니다.",
+  "oauth.consent.deny": "거부",
+  "oauth.consent.approve": "허용",
+  "oauth.consent.signedInAs": "{email}(으)로 로그인 중",
 
   // flash — SSO login / linking (src/web/sso.ts)
   "flash.sso.configError": "SSO 설정에 문제가 있습니다: {error}",
@@ -2777,9 +2782,9 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "adminOauthApps.flash.disabled": "비활성화했습니다",
   "adminOauthApps.flash.enabled": "활성화했습니다",
   "adminOauthApps.flash.deleted": "앱을 삭제했습니다(모든 액세스 토큰 취소)",
-  "adminOauthApps.scope.readEvents": "캘린더와 일정 보기",
-  "adminOauthApps.scope.writeEvents": "일정 만들기·수정·삭제",
-  "adminOauthApps.scope.readProfile": "계정 정보(이메일, 표시 이름) 읽기",
+  "oauth.scope.readEvents": "캘린더와 일정 보기",
+  "oauth.scope.writeEvents": "일정 만들기·수정·삭제",
+  "oauth.scope.readProfile": "계정 정보(이메일, 표시 이름) 읽기",
   // /admin/client-release — route flash messages
   "adminClientRelease.flash.announcementTooLong": "공지 내용이 너무 깁니다 — 저장하지 않았습니다",
   "adminClientRelease.flash.badVersion": "버전은 1.8.0처럼 점으로 구분한 숫자 형식이어야 클라이언트가 크기를 비교할 수 있습니다 — 저장하지 않았습니다",
