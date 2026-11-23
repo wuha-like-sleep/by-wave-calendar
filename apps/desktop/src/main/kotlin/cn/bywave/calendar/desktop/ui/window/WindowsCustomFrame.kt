@@ -4,12 +4,14 @@
 // WS_THICKFRAME | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX |
 // WS_MAXIMIZEBOX 样式,用 JNA 把窗口过程子类化,只拦:
 //
-//   · WM_NCCALCSIZE —— 先链回 AWT 原过程拿到默认客户区(它已经扣掉
-//     了 AWT 菜单栏的高度),再把左右下三边扩回窗口边缘、上边收回
-//     边框厚度。结果:客户区铺满整个窗口(菜单栏除外),系统标题栏
-//     消失,但边框样式还在 —— DWM 阴影、拖到屏幕边缘的 Aero Snap、
-//     窗口动画都由系统照旧提供。最大化时不做任何调整:默认客户区
-//     正好是工作区,改了反而会溢出屏幕或压住任务栏。
+//   · WM_NCCALCSIZE —— 先链回 AWT 原过程拿到默认客户区,再把左右
+//     下三边扩回窗口边缘、上边收回「边框 + 标题栏」的高度。默认
+//     客户区的上边距恰好 = 边框 + 标题栏 + AWT 菜单栏,只扣前两项,
+//     菜单栏原样保留(它的高度随窗口宽度换行变化,只能从默认客户区
+//     里反推,不能自己算)。结果:客户区铺满整个窗口(菜单栏除外),
+//     系统标题栏消失,但边框样式还在 —— DWM 阴影、拖到屏幕边缘的
+//     Aero Snap、窗口动画都由系统照旧提供。最大化时不做任何调整:
+//     默认客户区正好是工作区,改了反而会溢出屏幕或压住任务栏。
 //   · WM_NCHITTEST —— 按几何位置回答命中码:边缘 → 8 向缩放码,
 //     标题栏右侧三钮 → HTMINBUTTON / HTMAXBUTTON / HTCLOSE,其余
 //     标题栏 → HTCAPTION(拖动、双击最大化、拖到边缘分屏都由系统
@@ -64,6 +66,7 @@ private const val HTCLOSE = 20
 
 private const val SM_CXSIZEFRAME = 32
 private const val SM_CYSIZEFRAME = 33
+private const val SM_CYCAPTION = 4
 private const val SM_CXPADDEDBORDER = 92
 
 private const val SWP_NOSIZE = 0x0001
@@ -191,14 +194,21 @@ private class FrameWndProc(
         // 窗口矩形,链回原过程后被改成默认客户区。先把窗口矩形存下来。
         val ptr = Pointer(lParam)
         val winLeft = ptr.getInt(0)
+        val winTop = ptr.getInt(4)
         val winRight = ptr.getInt(8)
         val winBottom = ptr.getInt(12)
         val result = chain(WM_NCCALCSIZE, wParam, lParam)
         if (user32.IsZoomed(hwnd)) return result
         val dpi = user32.GetDpiForWindow(hwnd).takeIf { it > 0 } ?: 96
         val fy = frameThickness(SM_CYSIZEFRAME, dpi)
+        // 默认客户区的上边距 = 边框(fy)+ 标题栏 + 菜单栏。扣掉前两项,
+        // 剩下的恰好是菜单栏:客户区从菜单栏下方开始铺满。只扣 fy 的话
+        // 标题栏高度的非客户区还在,DWM 会在那条里继续画系统标题文字,
+        // 自绘栏反而要叠在它下面 —— 必须连标题栏一起扣。maxOf 兜底:
+        // 万一某个 DPI 下度量对不齐,客户区上沿也不能越过窗口上沿。
+        val newTop = maxOf(ptr.getInt(4) - fy - captionHeight(dpi), winTop)
         ptr.setInt(0, winLeft)
-        ptr.setInt(4, ptr.getInt(4) - fy)
+        ptr.setInt(4, newTop)
         ptr.setInt(8, winRight)
         ptr.setInt(12, winBottom)
         return 0L
@@ -275,6 +285,13 @@ private class FrameWndProc(
         user32.GetSystemMetricsForDpi(metric, dpi) + user32.GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi)
     }.getOrElse {
         user32.GetSystemMetrics(metric) + user32.GetSystemMetrics(SM_CXPADDEDBORDER)
+    }
+
+    /** 系统标题栏高度(按窗口当前 DPI 取);默认客户区的上边距里含这一项。 */
+    private fun captionHeight(dpi: Int): Int = runCatching {
+        user32.GetSystemMetricsForDpi(SM_CYCAPTION, dpi)
+    }.getOrElse {
+        user32.GetSystemMetrics(SM_CYCAPTION)
     }
 }
 

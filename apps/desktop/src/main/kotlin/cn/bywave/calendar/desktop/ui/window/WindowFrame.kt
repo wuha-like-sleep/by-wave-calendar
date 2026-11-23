@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -93,6 +94,10 @@ internal fun CustomTitleBar(
     val locale by I18n.current.collectAsState()
     val tr = remember(locale) { { key: String -> I18n.t(key) } }
     val maximized = windowState.isMaximized
+    // 原生标题栏在窗口失焦时标题与按钮字形会变灰,这里跟上 —— 不然
+    // 两个窗口并排时看不出哪个是活的,一眼就是「仿的」。悬停/按下
+    // 高亮不受影响:系统对失焦窗口的按钮悬停照样给反馈。
+    val focused = LocalWindowInfo.current.isWindowFocused
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -109,18 +114,20 @@ internal fun CustomTitleBar(
             Text(
                 text = "ByWave Calendar",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (focused) 1f else 0.55f),
                 maxLines = 1,
             )
             Spacer(Modifier.weight(1f))
             CaptionButtonBox(
                 button = CaptionButton.MINIMIZE,
                 captionState = captionState,
+                windowFocused = focused,
                 description = tr("window.minimize"),
             ) { fg, _ -> CaptionGlyph(CaptionButton.MINIMIZE, restore = false, color = fg, fill = fg) }
             CaptionButtonBox(
                 button = CaptionButton.MAXIMIZE,
                 captionState = captionState,
+                windowFocused = focused,
                 description = if (maximized) tr("window.restore") else tr("window.maximize"),
             ) { fg, bg ->
                 CaptionGlyph(CaptionButton.MAXIMIZE, restore = maximized, color = fg, fill = bg)
@@ -128,6 +135,7 @@ internal fun CustomTitleBar(
             CaptionButtonBox(
                 button = CaptionButton.CLOSE,
                 captionState = captionState,
+                windowFocused = focused,
                 description = tr("window.close"),
             ) { fg, _ -> CaptionGlyph(CaptionButton.CLOSE, restore = false, color = fg, fill = fg) }
         }
@@ -139,6 +147,7 @@ internal fun CustomTitleBar(
 private fun CaptionButtonBox(
     button: CaptionButton,
     captionState: CaptionButtonState,
+    windowFocused: Boolean,
     description: String,
     glyph: @Composable (fg: Color, bg: Color) -> Unit,
 ) {
@@ -153,7 +162,11 @@ private fun CaptionButtonBox(
         hovered -> onSurface.copy(alpha = 0.08f)
         else -> Color.Transparent
     }
-    val fg = if (isClose && (hovered || pressed)) Color.White else onSurface
+    val fg = when {
+        isClose && (hovered || pressed) -> Color.White
+        !windowFocused -> onSurface.copy(alpha = 0.55f)
+        else -> onSurface
+    }
     // 还原字形的前框要用底色填充(盖住后框的线条),底色就是按钮当前的背景;
     // 未悬停时按钮透明,填充色就是标题栏的 surface。
     val fill = if (bg == Color.Transparent) MaterialTheme.colorScheme.surface else bg
