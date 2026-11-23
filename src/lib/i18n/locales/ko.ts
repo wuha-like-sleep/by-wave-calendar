@@ -142,6 +142,7 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "notif.security.scopeRead": "읽기 전용",
   "notif.security.scopeWrite": "읽기/쓰기",
   "notif.push.view": "보기",
+  "notif.eventsSync.title": "캘린더가 업데이트되었습니다",
   "notif.eventInvitation.title": "이벤트 초대: {summary}",
   "notif.eventInvitation.body": "{organizer}님이 초대했습니다. 시간: {when}. 열어서 참석 여부를 답하세요.",
   "notif.rsvp.title": "초대 응답: {summary}",

@@ -142,6 +142,7 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "notif.security.scopeRead": "読み取り専用",
   "notif.security.scopeWrite": "読み書き可",
   "notif.push.view": "表示",
+  "notif.eventsSync.title": "カレンダーが更新されました",
   "notif.eventInvitation.title": "イベントへの招待：{summary}",
   "notif.eventInvitation.body": "{organizer} さんが招待しています。日時：{when}。開いて参加可否を返信してください。",
   "notif.rsvp.title": "出欠の返信：{summary}",

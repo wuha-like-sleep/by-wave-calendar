@@ -1236,19 +1236,41 @@
   function refresh() { formatPeriodLabel(); loadEvents(); }
 
   // ---------- Live sync: pick up events added from phone / other tab ----------
-  // Polls /api/events every 30 seconds while the tab is visible. Also fires
+  // Primary trigger is now push (增量同步第三批): the server sweeps the
+  // change log and sends a data-free Web Push nudge; the SW relays it as
+  // a "bwc-events-sync" message and we pull the delta right away (see
+  // pullEventsAfterPush below). Polling stays as the fallback: every
+  // 30 seconds while the tab is visible, relaxed to 5 minutes when this
+  // browser has an active push subscription (push is near-real-time;
+  // the poll then only covers a silently-dead push channel). Also fires
   // immediately on visibilitychange (when the user comes back to the tab).
   const POLL_INTERVAL_MS = 30_000;
+  const POLL_INTERVAL_PUSH_MS = 300_000;
+  let pollIntervalMs = POLL_INTERVAL_MS;
   let pollHandle = null;
   function startPolling() {
     if (pollHandle) return;
     pollHandle = setInterval(() => {
       if (document.hidden) return;
       loadEvents().catch(() => {});
-    }, POLL_INTERVAL_MS);
+    }, pollIntervalMs);
   }
   function stopPolling() {
     if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+  // 订阅状态会变（用户在设置页开/关推送），启动时和每次回到前台时重查；
+  // 间隔变了就按新间隔重启计时器。查不到（老浏览器、无 SW）就保持
+  // 30 秒原节奏，轮询照常兜底。
+  async function refreshPollInterval() {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      const next = sub ? POLL_INTERVAL_PUSH_MS : POLL_INTERVAL_MS;
+      if (next === pollIntervalMs) return;
+      pollIntervalMs = next;
+      if (pollHandle) { stopPolling(); startPolling(); }
+    } catch (_e) { /* keep the current interval */ }
   }
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -1258,11 +1280,35 @@
       loadEvents().catch(() => {});
       startPolling();
       startNowTick();
+      refreshPollInterval();
       // Snap the indicator back to "now" the moment we regain focus.
       try { cal.render(); } catch (_e) {}
     }
   });
   startPolling();
+  refreshPollInterval();
+
+  // ---------- Push-triggered pull ----------
+  // SW 把同步信号转成页面消息（sw.js 的 handleSyncPush）。收到就走既有
+  // 的 loadEvents —— 它内部就是 syncToken 增量拉取，不另写一套路径。
+  // 中间的节流门在 event-store.js 的纯逻辑区（makePullGate，5 秒最小
+  // 间隔、拉取中只记一笔拉完补拉），那边有测试打它；event-store.js
+  // 没加载成功时退化成直接拉，不让信号白来。
+  const syncPullGate = window.bwcPullGate
+    ? window.bwcPullGate.makePullGate({
+        minGapMs: 5_000,
+        pull: () => loadEvents(),
+        now: () => Date.now(),
+        schedule: (fn, ms) => setTimeout(fn, ms),
+      })
+    : null;
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (!event.data || event.data.type !== "bwc-events-sync") return;
+      if (syncPullGate) syncPullGate.signal();
+      else loadEvents().catch(() => {});
+    });
+  }
 
   // ---------- Now-indicator tick ----------
   // Toast UI's red "now line" auto-updates every minute internally — but our

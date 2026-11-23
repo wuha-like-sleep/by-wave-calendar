@@ -512,6 +512,13 @@
       "when": 1795651200000,
       "tag": "0072_event_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1795737600000,
+      "tag": "0073_sync_push_state",
+      "breakpoints": true
     }
   ]
 }

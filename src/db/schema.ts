@@ -720,6 +720,20 @@ export const eventChanges = pgTable("event_changes", {
   atIdx: index("event_changes_at_idx").on(t.at),
 }));
 
+// 同步推送（增量同步第三批）的每用户水位：清扫器（lib/sync_push.ts）扫
+// event_changes 时，记「这个用户已经被推送通知到哪个序号了」。一行一个
+// 用户，只给真正有 Web Push 订阅的人建（没订阅就永远不需要这一行）。
+// pushed_seq 只在推送确实被推送服务收下（至少一个端点 sent）之后才推进 ——
+// 宁可下轮重推，不可把没送达的变化标成已通知。last_pushed_at 是防滥发的
+// 最小间隔（30 秒）判据，和 pushed_seq 同行存，省得再开一张表。
+// 这里**要**挂 CASCADE：它只是账号的附属记账，账号没了这行留着没意义，
+// 和 event_changes 那种「墓碑要活得比本体久」的表正相反。
+export const syncPushState = pgTable("sync_push_state", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  pushedSeq: bigint("pushed_seq", { mode: "number" }).notNull().default(0),
+  lastPushedAt: timestamp("last_pushed_at", { withTimezone: true }),
+});
+
 export const calendarMembers = pgTable("calendar_members", {
   id: uuid("id").primaryKey().defaultRandom(),
   calendarId: uuid("calendar_id").notNull().references(() => calendars.id, { onDelete: "cascade" }),

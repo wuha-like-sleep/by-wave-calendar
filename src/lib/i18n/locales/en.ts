@@ -149,6 +149,7 @@ export const en = {
   "notif.security.scopeRead": "read-only",
   "notif.security.scopeWrite": "read/write",
   "notif.push.view": "View",
+  "notif.eventsSync.title": "Calendar updated",
   "notif.eventInvitation.title": "Event invitation: {summary}",
   "notif.eventInvitation.body": "{organizer} invited you. Time: {when}. Open to reply whether you'll attend.",
   "notif.rsvp.title": "RSVP update: {summary}",
