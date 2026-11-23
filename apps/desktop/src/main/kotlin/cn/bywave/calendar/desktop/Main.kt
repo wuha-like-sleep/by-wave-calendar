@@ -6,7 +6,10 @@ package cn.bywave.calendar.desktop
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -32,6 +35,10 @@ import cn.bywave.calendar.desktop.ui.main.MainScreen
 import cn.bywave.calendar.desktop.ui.main.ShortcutAction
 import cn.bywave.calendar.desktop.ui.main.ShortcutBus
 import cn.bywave.calendar.desktop.ui.main.keyEventToShortcut
+import cn.bywave.calendar.desktop.ui.window.CaptionButtonState
+import cn.bywave.calendar.desktop.ui.window.CustomTitleBar
+import cn.bywave.calendar.desktop.ui.window.MacWindowChrome
+import cn.bywave.calendar.desktop.ui.window.WindowsCustomFrame
 import cn.bywave.calendar.desktop.util.DebugLog
 
 // Brand palette mirrors Android Theme.kt — Mac+Win windows feel like
@@ -111,6 +118,9 @@ fun main() {
         // 见下面 onCloseRequest 的注释。
         val isMac = remember {
             System.getProperty("os.name").orEmpty().lowercase().contains("mac")
+        }
+        val isWindows = remember {
+            System.getProperty("os.name").orEmpty().lowercase().contains("win")
         }
         // Track visibility separately so the close button hides the window
         // (macOS standard behavior — app stays in dock, Cmd+Tab still finds
@@ -221,6 +231,27 @@ fun main() {
                 window.minimumSize = java.awt.Dimension(960, 620)
             }
 
+            // 窗口框与应用融为一体(见 ui/window 包):
+            //   · Windows —— 原生标题栏与应用界面是两个画风,换自绘:
+            //     子类化窗口过程去掉系统标题栏,这里画一条跟随主题的
+            //     标题栏(下面的 CustomTitleBar)。拖动/缩放/分屏等
+            //     原生行为由命中测试交还系统,不在这里重造。
+            //   · macOS —— 不自绘,开融合标题栏:内容延伸到红绿灯下,
+            //     内容顶部留一条空带让位(下面的 macChromeActive 分支)。
+            //   · Linux —— 本轮不发,保持原生框,两个分支都不进。
+            // 两边都是「装不上就保持原生框」:install/apply 内部各自
+            // runCatching,失败只影响观感,应用照常启动。
+            val captionState = remember { CaptionButtonState() }
+            var customFrameActive by remember { mutableStateOf(false) }
+            var macChromeActive by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                if (isWindows) {
+                    customFrameActive = WindowsCustomFrame.install(window, captionState)
+                } else if (isMac) {
+                    macChromeActive = MacWindowChrome.apply(window)
+                }
+            }
+
             // Menu bar — gives the user explicit way to re-show the window
             // (if they closed it and the dock icon isn't around) and a
             // clean "退出" path that maps to Cmd+Q. Without this, hiding
@@ -284,7 +315,18 @@ fun main() {
             }
             MaterialTheme(colorScheme = if (dark) DarkColors else LightColors) {
                 androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
-                    Root()
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        if (customFrameActive) {
+                            CustomTitleBar(windowState = state, captionState = captionState)
+                        } else if (macChromeActive) {
+                            // 融合标题栏下红绿灯浮在内容区左上角,这里留出
+                            // 按钮高度的空带,底色就是 Surface 的 surface。
+                            Spacer(Modifier.height(MacWindowChrome.TitleBarInset))
+                        }
+                        Box(Modifier.weight(1f)) {
+                            Root()
+                        }
+                    }
                 }
             }
         }
