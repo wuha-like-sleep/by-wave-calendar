@@ -77,9 +77,10 @@ private val TIME_GUTTER = 44.dp
 
 // 全天行口径与 iOS WeekView 的 allDayRow 对齐：一列最多 3 条药丸，
 // 再多折成「+N」；每条药丸占一个 24dp 的行槽（字号缩放时按比例放大，
-// 见 AllDayRow 里的说明）。
+// 见 AllDayRow 里的说明）。行槽高常量与 AllDayPill 是 internal：日视图
+// 的全天区共用同一套口径（见 DayView.kt），不要各写一份漂移出去。
 private val ALL_DAY_MAX_ROWS = 3
-private val ALL_DAY_ROW_HEIGHT = 24.dp
+internal val ALL_DAY_ROW_HEIGHT = 24.dp
 
 @Composable
 fun WeekView(
@@ -300,7 +301,7 @@ private fun AllDayRow(
 }
 
 @Composable
-private fun AllDayPill(
+internal fun AllDayPill(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     height: Dp,
