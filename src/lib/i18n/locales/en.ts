@@ -363,6 +363,8 @@ export const en = {
   "settings.security.passkeyLastUsed": "Last used {date}",
   "settings.security.passkeyLastUsedLabel": "Last used",
   "settings.security.passkeyAddPrompt": "Name this passkey (e.g. Mac TouchID / iPhone)",
+  "settings.security.passkeyNameHint": "Leave empty to use an automatically generated name",
+  "settings.security.passkeyNameTooLong": "Name must be 100 characters or fewer",
   "settings.security.passkeyAddSuccess": "Passkey added",
   "settings.security.passkeyAddFailed": "Couldn't add passkey: {error}",
   "settings.security.passkeyDelete": "Delete",
