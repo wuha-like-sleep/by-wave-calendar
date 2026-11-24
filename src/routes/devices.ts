@@ -121,13 +121,69 @@ function _purgeExpiredDesktopPairs() {
 
 type WebPair = {
   code: string;
-  status: "pending" | "approved" | "denied";
+  // "redeeming" is the atomic-claim state: web-pair-status flips
+  // approved → redeeming synchronously (before its first await) so a
+  // second concurrent poll can never mint a second session.
+  status: "pending" | "approved" | "denied" | "redeeming";
   createdAt: number;
   expiresAt: number;
   userId?: string;
+  // SHA-256 (hex) of the poll secret issued to the initiating browser
+  // at init time. The plaintext secret only ever lives in that
+  // browser's HttpOnly cookie (see WEB_PAIR_POLL_COOKIE below) — the
+  // QR code, and anyone who photographs it, carries only `code`,
+  // which by itself can no longer redeem a session.
+  pollSecretHash?: string;
+  // Who approved, recorded at approve time: the requireUserOrSend
+  // authVia tag ("device:ios" / "session" / "idp:…"). Surfaced in the
+  // redemption log line so a planted session can be traced back to
+  // the kind of credential that approved it.
+  approvedVia?: string;
 };
 const webPairs = new Map<string, WebPair>();
 const WEB_PAIR_TTL_MS = 5 * 60 * 1000;
+
+// Cookie carrying the web-pair poll secret from web-pair-init back to
+// web-pair-status. Path-scoped to the status endpoint so the secret
+// isn't sprayed across the whole API surface; lifetime = pair TTL.
+// The login page's fetch calls use credentials:"same-origin", so the
+// cookie round-trips without the page JS ever seeing the secret.
+const WEB_PAIR_POLL_COOKIE = "bwc_qr_poll";
+const WEB_PAIR_STATUS_PATH = "/api/v1/devices/web-pair-status";
+
+function hashPollSecret(secret: string): string {
+  return createHash("sha256").update(secret).digest("hex");
+}
+
+// Constant-time check of the poll-secret cookie against the hash
+// stored at init. Missing cookie / missing hash / mismatch all return
+// false, and the status handler maps false to the exact same 404 it
+// returns for an unknown code — a prober can't tell "code exists but
+// you don't hold the secret" apart from "no such code".
+function pollSecretMatches(req: FastifyRequest, p: WebPair): boolean {
+  if (!p.pollSecretHash) return false;
+  const presented = req.cookies[WEB_PAIR_POLL_COOKIE];
+  if (!presented) return false;
+  const a = Buffer.from(hashPollSecret(presented));
+  const b = Buffer.from(p.pollSecretHash);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// requireUserOrSend tags req.authVia for Bearer paths ("api_token:write",
+// "device:ios", "idp:…", "oauth"); a plain cookie session leaves it
+// unset, which we report as "session".
+function authViaOf(req: FastifyRequest): string {
+  const via = (req as unknown as { authVia?: string }).authVia;
+  return typeof via === "string" && via ? via : "session";
+}
+
+// A personal API token must never approve a web pair: approving turns
+// whoever polls into a full mfaSatisfied browser session, so letting a
+// (possibly leaked / lower-assurance) API token approve would let it
+// upgrade itself into exactly the credential class it is not.
+function apiTokenApproveBlocked(req: FastifyRequest): boolean {
+  return authViaOf(req).startsWith("api_token");
+}
 
 function _purgeExpiredWebPairs() {
   const now = Date.now();
@@ -149,6 +205,7 @@ async function siteQrLoginEnabled(): Promise<boolean> {
 }
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import QRCode from "qrcode";
 import { and, eq } from "drizzle-orm";
@@ -1536,8 +1593,16 @@ export async function deviceRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: "not_pending", status: webP.status });
       }
       if (!(await ensureQrLoginEnabled(reply, req))) return;
+      // Web pairs only — the desktopPairs branch above is untouched.
+      // A personal API token may not approve: approval plants a full
+      // mfaSatisfied browser session, which would let a token upgrade
+      // itself into the credential class it is not.
+      if (apiTokenApproveBlocked(req)) {
+        return reply.code(403).send({ error: "api_token_cannot_approve" });
+      }
       webP.status = "approved";
       webP.userId = user.id;
+      webP.approvedVia = authViaOf(req);
       return reply.send({ ok: true, kind: "web" });
     }
     return reply.code(404).send({ error: "expired_or_unknown" });
@@ -1560,10 +1625,13 @@ export async function deviceRoutes(app: FastifyInstance) {
   //   5. Phone:    POST /web-pair/<code>/approve (cookie auth, CSRF)
   //   6. Server:   marks code approved with userId
   //   7. Browser:  GET /api/v1/devices/web-pair-status?code=...
+  //                (the browser also sends the bwc_qr_poll cookie set
+  //                at step 1 — see the poll-secret note on WebPair)
   //                → 200 + { redirectTo: "/app" } AND sets bwc_sid cookie
   //                  (single-use — entry deleted after this call)
   //                → 202 if still pending
-  //                → 404 if expired/unknown
+  //                → 404 if expired/unknown — OR if the poll secret is
+  //                  missing/wrong (deliberately indistinguishable)
   //                → 410 if denied
   //   8. Browser:  follows redirect, lands signed-in.
   //
@@ -1585,9 +1653,13 @@ export async function deviceRoutes(app: FastifyInstance) {
 
   // -------- web-pair-init (anonymous — browser starts the QR flow) --------
   // Anonymous because the calling browser has no session yet (that's the
-  // whole point). The one-time code IS the proof of authorization once
-  // the phone approves. Rate-limited per IP so a stranger can't churn
-  // codes faster than 30/min.
+  // whole point). Authorization is split in two: the 8-char code is the
+  // public pair identifier (it is what the QR encodes and what the
+  // phone approves), while redemption additionally requires the poll
+  // secret generated here and handed ONLY to this browser as an
+  // HttpOnly cookie — knowing the code alone is no longer enough.
+  // Rate-limited per IP so a stranger can't churn codes faster than
+  // 30/min.
   //
   // Gated on TWO flags:
   //   - appsEnabled  (master APP feature) — phone APP needs this to
@@ -1602,17 +1674,34 @@ export async function deviceRoutes(app: FastifyInstance) {
     _purgeExpiredWebPairs();
     const { randomBytes } = await import("node:crypto");
     // Same alphabet as desktop-pair (visually-unambiguous uppercase). 8
-    // chars → ~40 bits of entropy, plenty for a 5-minute window.
+    // chars → ~40 bits of entropy, plenty for a 5-minute window. The
+    // code is only an identifier now — the redemption credential is the
+    // separate 128-bit poll secret below.
     const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     const bytes = randomBytes(8);
     let code = "";
     for (const b of bytes) code += ALPHABET[b % ALPHABET.length];
+    const pollSecret = randomBytes(16).toString("base64url");
     const now = Date.now();
     webPairs.set(code, {
       code,
       status: "pending",
       createdAt: now,
       expiresAt: now + WEB_PAIR_TTL_MS,
+      pollSecretHash: hashPollSecret(pollSecret),
+    });
+    // Hand the secret to THIS browser only. HttpOnly so page JS (and
+    // anything injected into it) can't read it out; Path-scoped to the
+    // status endpoint; SameSite=Lax like the session cookie; Secure in
+    // production. There is deliberately NO fallback that redeems on
+    // code alone — a browser that lost the cookie (cleared cookies,
+    // different browser) must start a fresh pair.
+    reply.setCookie(WEB_PAIR_POLL_COOKIE, pollSecret, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: env.NODE_ENV === "production",
+      path: WEB_PAIR_STATUS_PATH,
+      maxAge: WEB_PAIR_TTL_MS / 1000,
     });
     const serverUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     // QR-encoded URL uses the /desktop-pair/ prefix instead of /web-pair/
@@ -1638,12 +1727,14 @@ export async function deviceRoutes(app: FastifyInstance) {
 
   // -------- web-pair-status (anonymous, polled by browser) --------
   // CRITICAL: on approval this call plants the bwc_sid cookie via
-  // createSession() so the browser lands fully signed in. That means
-  // the polling browser MUST be the same one that called init — but
-  // we don't enforce that with a "init token" because the random
-  // 8-char code itself is the proof (40 bits, 5min TTL, single-use).
-  // An attacker who steals the code from another browser's network
-  // tab could redeem it — same threat model as the desktop-pair flow.
+  // createSession() so the browser lands fully signed in. The polling
+  // browser must prove it is the one that called init: init set an
+  // HttpOnly poll-secret cookie (128-bit secret, only its SHA-256 hash
+  // is kept server-side) and this handler requires it before it will
+  // reveal — let alone redeem — the pair's state. A missing/wrong
+  // secret gets the same 404 as an unknown code, so the code printed
+  // in the QR (photographable, shoulder-surfable) is by itself only an
+  // identifier, never a credential.
   app.get<{ Querystring: { code?: string } }>("/devices/web-pair-status", {
     config: { rateLimit: { max: 600, timeWindow: "1 minute" } },
   }, async (req, reply) => {
@@ -1653,6 +1744,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (!code) return reply.code(400).send({ error: "missing_code" });
     const p = webPairs.get(code);
     if (!p) return reply.code(404).send({ status: "expired" });
+    // Poll-secret gate — before ANY state is revealed. Without this,
+    // denied/pending/approved would each leak that the code is real.
+    if (!pollSecretMatches(req, p)) {
+      return reply.code(404).send({ status: "expired" });
+    }
     if (p.status === "denied") {
       webPairs.delete(code);
       return reply.code(410).send({ status: "denied" });
@@ -1660,11 +1756,21 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (p.status === "pending") {
       return reply.code(202).send({ status: "pending" });
     }
-    // Approved — plant the session cookie and tell the browser where
-    // to go. Single-use: delete the entry so a second status poll
-    // (e.g. from a different tab that grabbed the code) returns 404.
+    if (p.status === "redeeming") {
+      // A concurrent poll already claimed this pair and is minting the
+      // session right now. From here on the pair is spent either way.
+      return reply.code(404).send({ status: "expired" });
+    }
+    // Approved — claim the pair ATOMICALLY before the first await
+    // below. Everything from webPairs.get() down to this flip runs in
+    // one synchronous stretch, so a second concurrent status request
+    // can only observe "redeeming" (→ 404 above), never a second
+    // "approved". Previously the delete happened after several awaits
+    // and two racing polls could each mint a session.
+    p.status = "redeeming";
     if (!p.userId) {
       // Shouldn't happen — approved without userId is a server bug.
+      // The pair stays consumed (it was claimed above).
       webPairs.delete(code);
       return reply.code(500).send({ status: "internal_error" });
     }
@@ -1675,16 +1781,32 @@ export async function deviceRoutes(app: FastifyInstance) {
     //     pair was already MFA-verified, so we trust it.
     const [user] = await db.select().from(schema.users).where(eq(schema.users.id, p.userId)).limit(1);
     if (!user || !userIsActive(user)) {
+      // Redemption failed — the pair is still spent (delete, as
+      // before): the browser must generate a fresh code rather than
+      // keep polling one whose approval can never land.
       webPairs.delete(code);
       return reply.code(403).send({ status: "account_disabled" });
     }
-    await createSession(reply, user.id, {
+    const sessionId = await createSession(reply, user.id, {
       kind: "delegated",
       why: "批准这次配对的是手机上那个已经过了二次验证的会话",
     });
     const { setModeCookie, setThemeCookies } = await import("../lib/user_theme.js");
     setThemeCookies(reply, user.themePalette, user.themeDensity);
     setModeCookie(reply, user.themeMode);
+    webPairs.delete(code);
+    // The spent poll secret must not linger: the next init on this
+    // browser overwrites it anyway, but clearing here keeps a stale
+    // secret from being replayed against a future pair's status URL.
+    reply.clearCookie(WEB_PAIR_POLL_COOKIE, { path: WEB_PAIR_STATUS_PATH });
+    // Traceability: recordLoginEvent's row has no room for the minted
+    // session id or the approving credential type, so the redemption
+    // is also written to the structured server log with both — that is
+    // what ties a planted session back to this pair and its approver.
+    req.log.info(
+      { event: "qr_login_redeemed", userId: user.id, sessionId, approvedVia: p.approvedVia ?? null },
+      "web pair redeemed: browser session planted",
+    );
     // Fire-and-forget the security-conscious notifications. Don't block
     // the response — the user already sees the redirect.
     void (async () => {
@@ -1699,7 +1821,6 @@ export async function deviceRoutes(app: FastifyInstance) {
         await notifyLoginSuccess(req, user, "qr");
       } catch (err) { req.log.warn({ err }, "qr_login_alert_failed"); }
     })();
-    webPairs.delete(code);
     return reply.send({ status: "approved", redirectTo: "/app" });
   });
 
@@ -1730,8 +1851,14 @@ export async function deviceRoutes(app: FastifyInstance) {
     if (p.status !== "pending") {
       return reply.code(409).send({ error: "not_pending", status: p.status });
     }
+    // Same rule as the desktop-pair-approve web fallback: a personal
+    // API token must not approve its way into a full browser session.
+    if (apiTokenApproveBlocked(req)) {
+      return reply.code(403).send({ error: "api_token_cannot_approve" });
+    }
     p.status = "approved";
     p.userId = user.id;
+    p.approvedVia = authViaOf(req);
     // `kind` mirrors what /devices/desktop-pair-approve returns, so the
     // mobile success-screen renderer can use the same field regardless
     // of which approve endpoint the client called.
@@ -1890,7 +2017,9 @@ export async function pairPageRoutes(app: FastifyInstance) {
     if (p.status !== "pending") {
       return reply.view("web-pair", {
         title: tr(req, "page.webQrSignIn"),
-        state: p.status === "approved" ? "already_approved" : "denied",
+        // "redeeming" = the browser is planting its session right now;
+        // from the approver's side that reads as already approved.
+        state: p.status === "approved" || p.status === "redeeming" ? "already_approved" : "denied",
         user, csrfToken: csrfTokenFor(req), siteName, flash: null,
       });
     }
@@ -1905,12 +2034,21 @@ export async function pairPageRoutes(app: FastifyInstance) {
     _purgeExpiredWebPairs();
     const user = await requireUserOrSend(req, reply);
     if (!user) return reply;
+    // Same rule as the API approve endpoints: a request that
+    // authenticated with a personal API token (Bearer wins over the
+    // ambient cookie in requireUserOrSend) must not approve a pair
+    // into a full browser session. A real phone browser never sends a
+    // Bearer token, so this only fires on credential-mixing clients.
+    if (apiTokenApproveBlocked(req)) {
+      return reply.code(403).send({ error: "api_token_cannot_approve" });
+    }
     const code = req.params.code.toUpperCase();
     const p = webPairs.get(code);
     if (!p) return reply.redirect(`/web-pair/${code}`);
     if (p.status !== "pending") return reply.redirect(`/web-pair/${code}`);
     p.status = "approved";
     p.userId = user.id;
+    p.approvedVia = authViaOf(req);
     return reply.redirect(`/web-pair/${code}`);
   });
 
