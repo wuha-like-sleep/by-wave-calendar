@@ -157,9 +157,9 @@
       <% if (fetchJob.recovered) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.recovered") %></p><% } %>
       <% if (fetchJob.lastError) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.lastError") %>: <span class="font-mono text-xs"><%= fetchJob.lastError %></span></p><% } %>
     <% } else if (fetchJob.status === "done") { %>
-      <p class="text-emerald-600 font-medium"><%= t("adminGeoPacks.fetch.done", { time: fetchJob.finishedAt ? fetchJob.finishedAt.slice(0, 19).replace("T", " ") : "" }) %></p>
+      <p class="text-emerald-600 font-medium"><%= t("adminGeoPacks.fetch.done") %><% if (fetchJob.finishedAt) { %>: <time data-tz datetime="<%= fetchJob.finishedAt %>" data-style="datetime"><%= fetchJob.finishedAt.slice(0, 19).replace("T", " ") %></time><% } %></p>
     <% } else { %>
-      <p class="text-red-600 font-medium"><%= t("adminGeoPacks.fetch.failed", { time: fetchJob.finishedAt ? fetchJob.finishedAt.slice(0, 19).replace("T", " ") : "" }) %><% if (fetchJob.error) { %> · <span class="font-mono text-xs"><%= fetchJob.error %></span><% } %></p>
+      <p class="text-red-600 font-medium"><%= t("adminGeoPacks.fetch.failed") %><% if (fetchJob.finishedAt) { %>: <time data-tz datetime="<%= fetchJob.finishedAt %>" data-style="datetime"><%= fetchJob.finishedAt.slice(0, 19).replace("T", " ") %></time><% } %><% if (fetchJob.error) { %> · <span class="font-mono text-xs"><%= fetchJob.error %></span><% } %></p>
     <% } %>
     <% if (fetchJob.release) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.release") %>: <span class="font-mono"><%= fetchJob.release %></span></p><% } %>
     <% if (fetchJob.files.length > 0) { %>
