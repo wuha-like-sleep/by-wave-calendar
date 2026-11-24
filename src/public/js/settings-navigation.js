@@ -5,7 +5,7 @@
   var sections = {
     profile: "", language: "", danger: "",
     passkey: "/security", mfa: "/security", password: "/security", "login-methods": "/security",
-    devices: "/devices", "app-passwords": "/devices", "caldav-connect": "/devices",
+    devices: "/devices", "app-passwords": "/devices", "caldav-connect": "/devices", oauth: "/devices",
     push: "/notifications", theme: "/appearance"
   };
   var aliases = { passkeys: "passkey", sso: "login-methods", "danger-zone": "danger" };

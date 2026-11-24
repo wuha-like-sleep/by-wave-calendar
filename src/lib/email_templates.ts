@@ -641,7 +641,8 @@ export function calendarInviteMail(
 // ---------- Security alert: 2FA / Passkey enabled ----------
 export type SecurityChangeKind =
   | "passkey_added" | "mfa_enabled" | "mfa_disabled" | "password_changed"
-  | "api_token_created" | "api_token_revoked" | "api_token_rotated";
+  | "api_token_created" | "api_token_revoked" | "api_token_rotated"
+  | "oauth_grant_revoked";
 
 /** API Token 变更通知里允许出现的信息：只有 prefix（公开标识，本来就印在
  *  设置页和后台列表里）、标签、权限和到期。**明文绝不能进邮件** —— 明文
@@ -655,7 +656,7 @@ export type SecurityTokenInfo = {
   via: "self_service" | "admin";
 };
 
-export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; deviceName?: string | null; token?: SecurityTokenInfo }): SendArgs {
+export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; deviceName?: string | null; token?: SecurityTokenInfo; appName?: string | null }): SendArgs {
   const baseUrl = env.PUBLIC_BASE_URL.replace(/\/$/, "");
   const label = ctx.kind === "passkey_added" ? "Passkey 已添加"
               : ctx.kind === "mfa_enabled"   ? "二次验证 (TOTP) 已启用"
@@ -663,6 +664,7 @@ export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; 
               : ctx.kind === "api_token_created" ? "API Token 已创建"
               : ctx.kind === "api_token_revoked" ? "API Token 已撤销"
               : ctx.kind === "api_token_rotated" ? "API Token 已轮换"
+              : ctx.kind === "oauth_grant_revoked" ? "第三方应用授权已撤销"
               :                                "密码已修改";
   const emoji = ctx.kind === "passkey_added" ? "🔐"
               : ctx.kind === "mfa_enabled"   ? "🛡️"
@@ -670,6 +672,7 @@ export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; 
               : ctx.kind === "api_token_created" ? "🗝️"
               : ctx.kind === "api_token_revoked" ? "⚠️"
               : ctx.kind === "api_token_rotated" ? "🔁"
+              : ctx.kind === "oauth_grant_revoked" ? "⚠️"
               :                                "🔑";
   const tokenDescription = (): string => {
     if (!ctx.token) return "";
@@ -700,6 +703,7 @@ export function securityChangeMail(to: string, ctx: { kind: SecurityChangeKind; 
               : ctx.kind === "mfa_enabled"   ? "你刚刚启用了 TOTP 二次验证。今后登录需要密码 + 认证器 6 位验证码（除非使用 Passkey）。请把备用码妥善保存到密码管理器。"
               : ctx.kind === "mfa_disabled"  ? "你刚刚关闭了 TOTP 二次验证 —— 登录从此只需密码（或 Passkey）。如果不是你本人操作，立即修改密码！"
               : ctx.kind === "api_token_created" || ctx.kind === "api_token_revoked" || ctx.kind === "api_token_rotated" ? tokenDescription()
+              : ctx.kind === "oauth_grant_revoked" ? `你刚刚撤销了第三方应用${ctx.appName ? `「${ctx.appName}」` : ""}对账号的授权 —— 它持有的访问令牌已即刻失效，无法再访问你的日历；想恢复只能重新走一遍授权。如果不是你本人操作，说明你的登录会话可能已被盗用 —— 请立即修改密码。`
               :                                "你刚刚修改了账号密码 —— 所有已登录设备都已被强制下线，需要使用新密码重新登录。";
   const isWarning = ctx.kind === "mfa_disabled";
   const text = `${label}\n\n${description}\n\n如果不是你本人操作，立即前往 ${baseUrl}/app/settings 检查账号安全。`;

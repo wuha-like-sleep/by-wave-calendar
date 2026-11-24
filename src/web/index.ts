@@ -56,6 +56,7 @@ import { createReset, loadValidReset, consumeReset } from "../lib/password_reset
 import { createLoginChallenge, isLoginFamiliar, verifyLoginChallenge } from "../lib/login_risk.js";
 import { createAppPassword, listAppPasswords, revokeAppPassword } from "../lib/app_password.js";
 import { createApiToken, listApiTokensForUser, revokeApiTokenForUser, countActiveApiTokensForUser, getApiTokenUsageSummary, rotateApiToken, verifyApiTokenStepUp, MAX_API_TOKENS_PER_USER } from "../lib/api_token.js";
+import { listOAuthGrantsForUser, revokeOAuthGrantForUser, oauthScopeDescKey } from "../lib/oauth_server.js";
 import { audit } from "../lib/audit.js";
 import { fetchIcsUrl, importIcsText, previewIcsText, refreshSubscription, type ImportPreview } from "../lib/ics_import.js";
 import { buildIcsFeed } from "../services/ics.js";
@@ -2407,6 +2408,7 @@ export async function webRoutes(app: FastifyInstance) {
     const caldavBaseUrl = `${baseUrl}/caldav/`;
     const siteSettings = await getSettings();
     const apiTokens = await listApiTokensForUser(user.id);
+    const oauthGrants = await listOAuthGrantsForUser(user.id);
 
     // Linked SSO identities + available providers (for the "登录方式" block).
     const { listIdentities } = await import("../lib/identities.js");
@@ -2449,6 +2451,18 @@ export async function webRoutes(app: FastifyInstance) {
         inGrace: !!a.rotatedAt && !(a.expiresAt && a.expiresAt.getTime() < Date.now()),
       })),
       apiEnabled: siteSettings.apiEnabled,
+      oauthGrants: oauthGrants.map((g) => ({
+        ...g,
+        grantedAtLocal: localTime(g.grantedAt),
+        lastUsedAtLocal: g.lastUsedAt ? localTime(g.lastUsedAt) : null,
+        // Scope descriptions resolved here with the same mapping the
+        // consent screen uses, so the settings list can never word a
+        // permission differently from the screen that granted it.
+        scopeLabels: g.scopes.map((s) => {
+          const key = oauthScopeDescKey(s);
+          return key ? tr(req, key) : s;
+        }),
+      })),
       apiTokenLimit: MAX_API_TOKENS_PER_USER,
       apiTokenLimitReached: apiTokens.length >= MAX_API_TOKENS_PER_USER,
       // 近 30 天用量（每日条形 + 按 Token 分列）。pct 在这里算好，模板只管
@@ -2763,6 +2777,40 @@ export async function webRoutes(app: FastifyInstance) {
       }
     }
     return redirectWith(reply, "/app/settings/devices#api-tokens", { success: tr(req, "flash.apiToken.revoked") });
+  });
+
+  // Revoke one third-party app's OAuth grant from the settings page
+  // (#oauth section). The consent screen promises this exact escape
+  // hatch; the lib call kills every live token for that client plus any
+  // outstanding authorization codes, so the app is fully cut off at
+  // once. Same audit + security mail + inbox mirror as API-token
+  // revocation. Not gated on the site API master switch — a user must
+  // always be able to clean up a grant (mirrors verifyOAuthToken's
+  // "revoke" use).
+  app.post<{ Params: { clientId: string } }>("/app/settings/oauth-apps/:clientId/revoke", {
+    config: { rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await loadAuthedUser(req, reply);
+    if (!user) return reply;
+    if (!verifyCsrf(req, reply)) return;
+    const clientId = z.string().uuid().safeParse(req.params.clientId);
+    if (!clientId.success) return reply.redirect("/app/settings/devices");
+    const own = (await listOAuthGrantsForUser(user.id)).find((g) => g.clientId === clientId.data);
+    const revoked = await revokeOAuthGrantForUser(user.id, clientId.data);
+    if (revoked) {
+      await audit(req, user.id, "oauth_grant.revoke", {
+        targetType: "oauth_client", targetId: clientId.data,
+        details: { appName: own?.name ?? null, via: "self_service" },
+      });
+      if (own) {
+        void sendMail(securityChangeMail(user.email, {
+          kind: "oauth_grant_revoked",
+          appName: own.name,
+        })).catch((err) => req.log.warn({ err }, "oauth_grant_security_mail_failed"));
+        void notifySecurityEvent(user.id, "oauth_grant_revoked", { appName: own.name }).catch(() => undefined);
+      }
+    }
+    return redirectWith(reply, "/app/settings/devices#oauth", { success: tr(req, "flash.oauthGrant.revoked") });
   });
 
   // Self-service rotation: mint a new secret for an existing token, old

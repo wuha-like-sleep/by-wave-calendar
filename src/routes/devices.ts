@@ -244,6 +244,11 @@ import {
   verifyApiTokenStepUp,
   MAX_API_TOKENS_PER_USER,
 } from "../lib/api_token.js";
+import {
+  listOAuthGrantsForUser,
+  revokeOAuthGrantForUser,
+  type OAuthGrant,
+} from "../lib/oauth_server.js";
 
 /**
  * 苹果登录建号被拒 → 这条路的错误形态。导出是为了能单独钉住这张表。
@@ -1347,6 +1352,72 @@ export async function deviceRoutes(app: FastifyInstance) {
       plain: rotated.plain,
       oldExpiresAt: rotated.oldExpiresAt,
     });
+  });
+
+  // -------- OAuth grants (native JSON twin of /app/settings#oauth) ----
+  // The consent screen sends users to Settings → Authorized apps to
+  // revoke a third-party app later. The web page manages grants through
+  // form posts at /app/settings/oauth-apps (src/web/index.ts); these are
+  // the same lib calls over JSON for the native apps, behind the same
+  // self-service bar as the API-token endpoints above: listing or
+  // revoking grants is credential management, so a personal API token or
+  // an IdP service client may not do it (apiTokenSelfServiceDenied is
+  // that guard, reused verbatim), and OAuth callers are denied by the
+  // oauthScope config before any of this runs. Revocation is NOT gated
+  // on the site API master switch — verifyOAuthToken's "revoke" use
+  // exists precisely so a user can always clean up a grant.
+  function oauthGrantView(g: OAuthGrant) {
+    return {
+      clientId: g.clientId,
+      name: g.name,
+      logoUrl: g.logoUrl,
+      scopes: g.scopes,
+      grantedAt: g.grantedAt,
+      lastUsedAt: g.lastUsedAt,
+      tokenCount: g.tokenCount,
+    };
+  }
+
+  app.get("/account/oauth-grants", {
+    // 第三方 OAuth 一律不许碰:已授权应用管理。
+    config: { oauthScope: "deny" },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const grants = await listOAuthGrantsForUser(user.id);
+    return reply.send({ grants: grants.map(oauthGrantView) });
+  });
+
+  app.post<{ Params: { clientId: string } }>("/account/oauth-grants/:clientId/revoke", {
+    config: { oauthScope: "deny", rateLimit: { max: 10, timeWindow: "5 minutes" } },
+  }, async (req, reply) => {
+    const user = await requireUserOrSend(req, reply);
+    if (!user) return reply;
+    if (apiTokenSelfServiceDenied(req)) {
+      return reply.code(403).send({ error: "token_management_requires_session" });
+    }
+    const clientId = z.string().uuid().safeParse(req.params.clientId);
+    if (!clientId.success) return reply.code(400).send({ error: "bad_request" });
+    const own = (await listOAuthGrantsForUser(user.id)).find((g) => g.clientId === clientId.data);
+    const revoked = await revokeOAuthGrantForUser(user.id, clientId.data);
+    if (revoked && own) {
+      await audit(req, user.id, "oauth_grant.revoke", {
+        targetType: "oauth_client", targetId: clientId.data,
+        details: { appName: own.name, via: "app" },
+      });
+      const { sendMail } = await import("../lib/mailer.js");
+      const { securityChangeMail } = await import("../lib/email_templates.js");
+      void sendMail(securityChangeMail(user.email, {
+        kind: "oauth_grant_revoked",
+        appName: own.name,
+      })).catch((err) => req.log.warn({ err }, "oauth_grant_security_mail_failed"));
+      const { notifySecurityEvent } = await import("../lib/security_inbox.js");
+      void notifySecurityEvent(user.id, "oauth_grant_revoked", { appName: own.name }).catch(() => undefined);
+    }
+    return reply.send({ ok: true });
   });
 
   // -------- mint a web-session token (Bearer auth required) --------

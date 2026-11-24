@@ -11,7 +11,7 @@
 //      — token validated via verifyOAuthToken below; resolves to user_id.
 
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import { getSettings } from "./site_settings.js";
@@ -221,4 +221,97 @@ export async function touchOAuthToken(tokenId: string): Promise<void> {
 export async function revokeOAuthToken(userId: string, tokenId: string): Promise<void> {
   await db.update(schema.oauthAccessTokens).set({ revokedAt: new Date() })
     .where(and(eq(schema.oauthAccessTokens.id, tokenId), eq(schema.oauthAccessTokens.userId, userId)));
+}
+
+// ---------- User-facing grant management (/app/settings#oauth) ----------
+// The consent screen promises the user they can revoke access later in
+// Settings → Authorized apps. A "grant" is per client, not per token:
+// re-authorizing an app mints a fresh token each time and the older ones
+// stay live, so the settings list groups a client's live tokens into one
+// row and revoking the row kills every one of them. There are no refresh
+// tokens in this implementation (see the header), so once a client's
+// access tokens are revoked the grant is gone entirely — nothing can
+// mint a new access token except a fresh consent round, and any
+// authorization code still outstanding for that client is deleted here
+// so it can't be exchanged into a post-revocation token either.
+
+export type OAuthGrant = {
+  /** oauth_clients.id — the handle the settings page revokes by. */
+  clientId: string;
+  name: string;
+  logoUrl: string | null;
+  /** Union of scopes across the client's live tokens. */
+  scopes: string[];
+  /** Earliest live token's creation — when access was first granted. */
+  grantedAt: Date;
+  /** Most recent use across the client's live tokens, if any. */
+  lastUsedAt: Date | null;
+  /** How many live tokens this grant currently stands on. */
+  tokenCount: number;
+};
+
+export async function listOAuthGrantsForUser(userId: string): Promise<OAuthGrant[]> {
+  const rows = await db
+    .select({
+      tokenCreatedAt: schema.oauthAccessTokens.createdAt,
+      tokenLastUsedAt: schema.oauthAccessTokens.lastUsedAt,
+      tokenScopes: schema.oauthAccessTokens.scopes,
+      clientId: schema.oauthClients.id,
+      clientName: schema.oauthClients.name,
+      clientLogoUrl: schema.oauthClients.logoUrl,
+    })
+    .from(schema.oauthAccessTokens)
+    .innerJoin(schema.oauthClients, eq(schema.oauthAccessTokens.clientId, schema.oauthClients.id))
+    .where(and(
+      eq(schema.oauthAccessTokens.userId, userId),
+      isNull(schema.oauthAccessTokens.revokedAt),
+      gt(schema.oauthAccessTokens.expiresAt, new Date()),
+    ))
+    .orderBy(desc(schema.oauthAccessTokens.createdAt));
+  const byClient = new Map<string, OAuthGrant>();
+  for (const r of rows) {
+    const scopes = r.tokenScopes as string[];
+    const existing = byClient.get(r.clientId);
+    if (!existing) {
+      byClient.set(r.clientId, {
+        clientId: r.clientId,
+        name: r.clientName,
+        logoUrl: r.clientLogoUrl,
+        scopes: [...scopes],
+        grantedAt: r.tokenCreatedAt,
+        lastUsedAt: r.tokenLastUsedAt,
+        tokenCount: 1,
+      });
+      continue;
+    }
+    existing.tokenCount += 1;
+    for (const s of scopes) if (!existing.scopes.includes(s)) existing.scopes.push(s);
+    if (r.tokenCreatedAt < existing.grantedAt) existing.grantedAt = r.tokenCreatedAt;
+    if (r.tokenLastUsedAt && (!existing.lastUsedAt || r.tokenLastUsedAt > existing.lastUsedAt)) {
+      existing.lastUsedAt = r.tokenLastUsedAt;
+    }
+  }
+  return [...byClient.values()];
+}
+
+/** Revoke every live token the user has granted to one client, and drop
+ *  any outstanding authorization codes for that client so they can't be
+ *  exchanged after the revocation. Owner-scoped by construction (the
+ *  userId is the caller's own). Returns true when at least one live
+ *  token was actually revoked. */
+export async function revokeOAuthGrantForUser(userId: string, clientId: string): Promise<boolean> {
+  const revoked = await db.update(schema.oauthAccessTokens).set({ revokedAt: new Date() })
+    .where(and(
+      eq(schema.oauthAccessTokens.userId, userId),
+      eq(schema.oauthAccessTokens.clientId, clientId),
+      isNull(schema.oauthAccessTokens.revokedAt),
+      gt(schema.oauthAccessTokens.expiresAt, new Date()),
+    ))
+    .returning({ id: schema.oauthAccessTokens.id });
+  await db.delete(schema.oauthAuthorizationCodes)
+    .where(and(
+      eq(schema.oauthAuthorizationCodes.userId, userId),
+      eq(schema.oauthAuthorizationCodes.clientId, clientId),
+    ));
+  return revoked.length > 0;
 }

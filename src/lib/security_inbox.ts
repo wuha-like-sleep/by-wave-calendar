@@ -21,6 +21,7 @@ import { getSettings } from "./site_settings.js";
 
 export type SecurityInboxKind =
   | "token_created" | "token_revoked" | "token_rotated"
+  | "oauth_grant_revoked"
   | "password_changed"
   | "mfa_enabled" | "mfa_disabled"
   | "passkey_added"
@@ -33,6 +34,8 @@ export type SecurityInboxContext = {
   tokenScope?: string | null;
   /** Token 轮换场景：旧 Token 的宽限天数。 */
   graceDays?: number | null;
+  /** OAuth 授权撤销场景：第三方应用名。 */
+  appName?: string | null;
   /** 新设备登录场景：设备描述（UA 摘要）。 */
   device?: string | null;
   /** 新设备登录场景：来源 IP。 */
@@ -68,6 +71,7 @@ function bodyFor(locale: LocaleCode, kind: SecurityInboxKind, ctx: SecurityInbox
         label: ctx.tokenLabel || "API Token", scope, days: ctx.graceDays ?? 7,
       });
     }
+    case "oauth_grant_revoked": return translate(locale, "notif.security.oauthGrantRevoked", { name: ctx.appName || "OAuth app" });
     case "password_changed": return translate(locale, "notif.security.passwordChanged");
     case "mfa_enabled": return translate(locale, "notif.security.mfaEnabled");
     case "mfa_disabled": return translate(locale, "notif.security.mfaDisabled");
