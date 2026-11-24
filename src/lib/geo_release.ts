@@ -43,6 +43,11 @@
 // 的任务在继续跑；任务完成或硬失败后状态文件清除。开始由后台路
 // 由记审计，完成 / 失败在这里直插审计台账（无请求上下文，沿用系
 // 统动作 ip="-" 的既有做法）。
+//
+// 进度展示（后台页的进度条 / 速度 / ETA）由 GeoFetchProgress
+// Tracker 核算：逐文件字节按高水位入账（续传接续、重写不倒
+// 退），速度只计新到字节的滚动窗口均值；内存状态是轮询的权威来
+// 源，进度落盘节流（≥2 s 或 ≥8 MiB 一次），只为跨重启恢复显示。
 
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
@@ -371,6 +376,9 @@ export async function downloadGeoAsset(args: {
   expectedBytes: number;
   fetchImpl?: GeoFetchImpl;
   onProgress?: (bytesDone: number) => void;
+  /** 每收到一块网络数据调一次（只报块长）：测速专用——续传的起
+   *  始偏移与「已在盘上」的字节不经这里，不会被算成下载速度。 */
+  onChunk?: (chunkBytes: number) => void;
   hooks?: GeoDownloadHooks;
   tuning?: GeoDownloadTuning;
 }): Promise<void> {
@@ -441,6 +449,7 @@ export async function downloadGeoAsset(args: {
             cb(new GeoReleaseError("download_size_overflow", `download exceeds expected size for ${args.url}`));
             return;
           }
+          args.onChunk?.(chunk.length);
           args.onProgress?.(base + written);
           cb(null, chunk);
         },
@@ -496,6 +505,9 @@ export async function fetchGeoReleaseFile(args: {
   fetchImpl?: GeoFetchImpl;
   scope?: string;
   onProgress?: (bytesDone: number) => void;
+  /** 透传给 downloadGeoAsset 的测速回调（分卷时每卷共用一个：
+   *  块长就是网络新字节，与卷在整文件里的偏移无关）。 */
+  onChunk?: (chunkBytes: number) => void;
   hooks?: GeoDownloadHooks;
   tuning?: GeoDownloadTuning;
 }): Promise<{ status: "done" | "skipped"; bytes: number }> {
@@ -524,6 +536,7 @@ export async function fetchGeoReleaseFile(args: {
       expectedBytes: plan.bytes,
       fetchImpl,
       onProgress: args.onProgress,
+      onChunk: args.onChunk,
       hooks: args.hooks,
       tuning: args.tuning,
     });
@@ -551,6 +564,7 @@ export async function fetchGeoReleaseFile(args: {
         expectedBytes: part.bytes,
         fetchImpl,
         onProgress: (n) => args.onProgress?.(partStart + n),
+        onChunk: args.onChunk,
         hooks: args.hooks,
         tuning: args.tuning,
       });
@@ -725,12 +739,158 @@ export interface GeoPackFetchJobState {
   error: string | null;
   /** 最近一次瞬时失败的说明（任务级汇总，给后台页一眼看到在卡什么）。 */
   lastError: string | null;
+  /** 任务级聚合进度（字节口径，由 GeoFetchProgressTracker 核算；
+   *  读取状态时按当前时刻刷新——速度随停滞自然衰减，不冻结）。 */
+  totalBytes: number;
+  downloadedBytes: number;
+  /** 滚动窗口平均下载速度（字节/秒）；停滞或任务已结束为 0。 */
+  speedBps: number;
+  /** 按当前速度估算的剩余秒数；速度为 0 或已下完时为 null。 */
+  etaSeconds: number | null;
+  /** 正在处理的文件（下载 / 重试 / 校验 / 激活中），没有为 null。 */
+  currentFile: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// 获取进度核算（逐文件高水位 + 滚动窗口测速）
+// ---------------------------------------------------------------------------
+// 进度口径：每个文件的进度 = 朝最终文件已就位的字节数，也就是
+// downloadGeoAsset 的 onProgress 报的绝对位置（续传从断点接着报，
+// 天然不重复计数）。唯一会让绝对位置倒退的情形是服务端不认
+// Range、回 200 整文件重写——tracker 按文件记高水位，进度只进不
+// 退：重写期间进度停在高水位，直到真实位置追过它。
+//
+// 速度口径：只计「新到字节」——每块网络数据经 onChunk 进 tracker，
+// 在滚动窗口（默认 10 s）内按采样点算平均速率。续传的起始偏移、
+// 跳过文件报满的整文件字节都不经 onChunk，不会灌进速度。停滞 /
+// 退避等待期间没有新字节进窗口，速度随窗口滑动自然衰减到 0，不
+// 会冻结在一个旧值上误导人。now 全程可注入，纯逻辑可测。
+
+/** 测速滚动窗口：最近这么久的平均速度。 */
+export const GEO_FETCH_SPEED_WINDOW_MS = 10_000;
+/** 采样点最小间隔：块到达频率可以很高，采样点没必要比这更密。 */
+const GEO_FETCH_SPEED_SAMPLE_MS = 200;
+/** 进度落盘节流：距上次落盘至少这么久，或又下了这么多字节，才
+ *  再写一次 fetch-job-state.json（进度写盘只为跨重启恢复显示，
+ *  不能让每块数据都触发一次整文件写）。 */
+export const GEO_FETCH_PERSIST_MIN_MS = 2_000;
+export const GEO_FETCH_PERSIST_MIN_BYTES = 8 * 1024 * 1024;
+
+export class GeoFetchProgressTracker {
+  private totals = new Map<string, number>();
+  private positions = new Map<string, number>();
+  private samples: { at: number; total: number }[] = [];
+  private newBytes = 0;
+
+  constructor(files: { file: string; bytesTotal: number }[] = []) {
+    for (const f of files) this.totals.set(f.file, f.bytesTotal);
+  }
+
+  /** 报告某文件当前已就位的绝对字节数（高水位：只进不退）。 */
+  notePosition(file: string, absoluteBytes: number): void {
+    const total = this.totals.get(file);
+    if (total === undefined) return;
+    const clamped = Math.max(0, Math.min(absoluteBytes, total));
+    if (clamped > (this.positions.get(file) ?? 0)) this.positions.set(file, clamped);
+  }
+
+  /** 恢复接续：把落盘的逐文件进度种回高水位（不计速度——恢复后
+   *  速度从零重新测）。 */
+  seed(file: string, absoluteBytes: number): void {
+    this.notePosition(file, absoluteBytes);
+  }
+
+  positionOf(file: string): number {
+    return this.positions.get(file) ?? 0;
+  }
+
+  /** 报告一块刚从网络收到的数据：只喂速度，不动进度位置。 */
+  noteChunk(chunkBytes: number, now: number = Date.now()): void {
+    if (chunkBytes <= 0) return;
+    this.newBytes += chunkBytes;
+    const last = this.samples[this.samples.length - 1];
+    if (!last || now - last.at >= GEO_FETCH_SPEED_SAMPLE_MS) {
+      this.samples.push({ at: now, total: this.newBytes });
+    }
+    this.prune(now);
+  }
+
+  private prune(now: number): void {
+    const floor = now - GEO_FETCH_SPEED_WINDOW_MS;
+    let drop = 0;
+    while (drop < this.samples.length && this.samples[drop]!.at <= floor) drop++;
+    // 窗口起点之前保留最近一个样本作测速基线，其余丢弃（数组有界）。
+    if (drop > 1) this.samples.splice(0, drop - 1);
+  }
+
+  /** 当前滚动窗口平均速度（字节/秒）；窗口内没有新字节 → 0。 */
+  speedBps(now: number = Date.now()): number {
+    this.prune(now);
+    const first = this.samples[0];
+    if (!first) return 0;
+    const gained = this.newBytes - first.total;
+    const spanMs = now - first.at;
+    if (gained <= 0 || spanMs <= 0) return 0;
+    return gained / (spanMs / 1000);
+  }
+
+  snapshot(now: number = Date.now()): {
+    downloadedBytes: number;
+    totalBytes: number;
+    speedBps: number;
+    etaSeconds: number | null;
+  } {
+    let totalBytes = 0;
+    let downloadedBytes = 0;
+    for (const [file, total] of this.totals) {
+      totalBytes += total;
+      downloadedBytes += this.positions.get(file) ?? 0;
+    }
+    const speedBps = this.speedBps(now);
+    const remaining = totalBytes - downloadedBytes;
+    return {
+      downloadedBytes,
+      totalBytes,
+      speedBps,
+      etaSeconds: remaining > 0 && speedBps > 0 ? Math.ceil(remaining / speedBps) : null,
+    };
+  }
+}
+
+/** 把 tracker 的核算刷进任务状态（聚合字节 / 速度 / ETA / 当前文
+ *  件）。运行中的任务每次进度事件与每次被读取时都刷一遍，所以管
+ *  理员轮询到的速度永远是「此刻」的衰减值；任务结束后速度归零、
+ *  ETA 与当前文件清空，只留最终字节数。 */
+export function refreshGeoFetchProgress(
+  job: GeoPackFetchJobState,
+  tracker: GeoFetchProgressTracker,
+  now: number = Date.now(),
+): void {
+  const snap = tracker.snapshot(now);
+  job.totalBytes = snap.totalBytes;
+  job.downloadedBytes = snap.downloadedBytes;
+  if (job.status === "running") {
+    job.speedBps = snap.speedBps;
+    job.etaSeconds = snap.etaSeconds;
+    const current = job.files.find(
+      (f) => f.status === "downloading" || f.status === "retrying" || f.status === "verifying" || f.status === "activating",
+    );
+    job.currentFile = current ? current.file : null;
+  } else {
+    job.speedBps = 0;
+    job.etaSeconds = null;
+    job.currentFile = null;
+  }
 }
 
 let activeFetchJob: GeoPackFetchJobState | null = null;
 let lastFetchJob: GeoPackFetchJobState | null = null;
+let activeFetchTracker: GeoFetchProgressTracker | null = null;
 
 export function getGeoPackFetchState(): GeoPackFetchJobState | null {
+  // 读取时按当前时刻刷新聚合进度：停滞期间没有进度事件进来，速
+  // 度也要随窗口滑动衰减到 0，而不是停在最后一次事件的值上。
+  if (activeFetchJob && activeFetchTracker) refreshGeoFetchProgress(activeFetchJob, activeFetchTracker);
   return activeFetchJob ?? lastFetchJob;
 }
 
@@ -820,10 +980,35 @@ async function runFetchJob(
   args: { packDir: string; fetchImpl: GeoFetchImpl; actorUserId: string | null; tuning?: GeoDownloadTuning },
 ): Promise<void> {
   const persist = () => persistFetchJob(job, args.packDir, args.actorUserId);
+  // 进度落盘节流基线：检查点落盘（计划生成 / 每个文件收尾）更新
+  // 基线，进度事件只在距基线 ≥2 s 或又下了 ≥8 MiB 时才补写一次。
+  let lastPersistAt = 0;
+  let lastPersistDownloaded = 0;
+  const persistCheckpoint = async () => {
+    lastPersistAt = Date.now();
+    lastPersistDownloaded = job.downloadedBytes;
+    await persist();
+  };
+  const persistProgress = () => {
+    const now = Date.now();
+    if (
+      now - lastPersistAt >= GEO_FETCH_PERSIST_MIN_MS ||
+      job.downloadedBytes - lastPersistDownloaded >= GEO_FETCH_PERSIST_MIN_BYTES
+    ) {
+      lastPersistAt = now;
+      lastPersistDownloaded = job.downloadedBytes;
+      void persist();
+    }
+  };
+  let tracker: GeoFetchProgressTracker | null = null;
   try {
     const manifest = await readManifest(job.baseUrl, args.fetchImpl);
     job.release = manifest.release;
     const plan = releaseFilePlan(manifest);
+    // 恢复接续：上一程落盘的逐文件进度按文件名种回高水位，聚合进
+    // 度从落盘值起步（暂存文件还在盘上，续传位置与种子基本一致）；
+    // 速度不种——新一程的 tracker 从零重新测。
+    const previous = new Map(job.files.map((f) => [f.file, f.bytesDone]));
     job.files = plan.map((p) => ({
       file: p.file,
       status: "pending" as GeoFetchFileStatus,
@@ -832,7 +1017,17 @@ async function runFetchJob(
       attempts: 0,
       error: null,
     }));
-    await persist();
+    tracker = new GeoFetchProgressTracker(plan.map((p) => ({ file: p.file, bytesTotal: p.bytes })));
+    for (const state of job.files) {
+      const before = previous.get(state.file);
+      if (before) {
+        tracker.seed(state.file, before);
+        state.bytesDone = tracker.positionOf(state.file);
+      }
+    }
+    activeFetchTracker = tracker;
+    refreshGeoFetchProgress(job, tracker);
+    await persistCheckpoint();
     let anyFailed = false;
     for (let i = 0; i < plan.length; i++) {
       const state = job.files[i]!;
@@ -863,13 +1058,21 @@ async function runFetchJob(
           hooks,
           tuning: args.tuning,
           onProgress: (n) => {
-            state.bytesDone = n;
+            // 经 tracker 高水位入账：续传接续、重写不倒退；聚合进
+            // 度与速度随手刷新，落盘走节流（不许每块数据写一次盘）。
+            tracker?.notePosition(item.file, n);
+            state.bytesDone = tracker ? tracker.positionOf(item.file) : n;
             if (state.status === "retrying") state.status = "downloading";
+            if (tracker) refreshGeoFetchProgress(job, tracker);
+            persistProgress();
           },
+          onChunk: (n) => tracker?.noteChunk(n),
         });
         state.status = res.status === "skipped" ? "skipped" : "done";
+        tracker?.notePosition(item.file, item.bytes);
         state.bytesDone = item.bytes;
         state.error = null;
+        if (tracker) refreshGeoFetchProgress(job, tracker);
       } catch (err) {
         // 走到这里的都是硬失败（瞬时失败在 downloadGeoAsset 里无限
         // 续传，不会上抛）：本文件判死，但不拖累后面的文件。
@@ -878,15 +1081,18 @@ async function runFetchJob(
         job.lastError = `${item.file}: ${state.error}`;
         anyFailed = true;
       }
-      await persist();
+      await persistCheckpoint();
     }
     job.status = anyFailed ? "failed" : "done";
   } catch (err) {
     job.status = "failed";
     job.error = err instanceof GeoReleaseError ? err.code : err instanceof Error ? err.message : String(err);
   } finally {
+    // 终态刷新一次聚合进度：字节数定格，速度 / ETA / 当前文件清空。
+    if (tracker) refreshGeoFetchProgress(job, tracker);
     job.finishedAt = new Date().toISOString();
     activeFetchJob = null;
+    activeFetchTracker = null;
     lastFetchJob = job;
     // 终态任务没有恢复价值：清掉落盘状态，下次开机不会「恢复」一个
     // 已经结束的任务。
@@ -916,6 +1122,11 @@ export function startGeoPackFetch(args: {
     files: [],
     error: null,
     lastError: null,
+    totalBytes: 0,
+    downloadedBytes: 0,
+    speedBps: 0,
+    etaSeconds: null,
+    currentFile: null,
   };
   activeFetchJob = job;
   void runFetchJob(job, {
@@ -966,6 +1177,14 @@ export async function resumePersistedGeoPackFetch(args: {
     recovered: true,
     files: Array.isArray(saved.job.files) ? saved.job.files : [],
     error: null,
+    // 聚合字节按落盘值接续（runFetchJob 会按当前清单再校准）；速
+    // 度与 ETA 不接续落盘值——恢复后从零重新测。旧版本落盘文件没
+    // 有这些字段时给缺省，双向兼容，不升 version。
+    totalBytes: typeof saved.job.totalBytes === "number" ? saved.job.totalBytes : 0,
+    downloadedBytes: typeof saved.job.downloadedBytes === "number" ? saved.job.downloadedBytes : 0,
+    speedBps: 0,
+    etaSeconds: null,
+    currentFile: null,
   };
   activeFetchJob = job;
   void runFetchJob(job, {
