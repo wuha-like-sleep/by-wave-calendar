@@ -461,6 +461,13 @@ details > summary::-webkit-details-marker { display: none; }
   animation: bwc-progress-grow 500ms var(--bwc-ease-out);
 }
 
+/* Live-updating fills (geo-pack fetch progress): the width itself is
+   rewritten by polling every second or so, so instead of the mount
+   animation the fill eases between values on the panel duration. */
+.bwc-progress-live {
+  transition: width var(--bwc-dur-3) var(--bwc-ease-out);
+}
+
 /* ---------- bwc.confirm dialog (app.js) ----------
    The in-page confirm used to hard-pop in and out while the app's real
    modals animate. Same motion language as the modal block below:

@@ -23,6 +23,7 @@
 </section>
 <% } %>
 
+<div id="geo-pack-listing">
 <% if (!listing.configured) { %>
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.notConfigured.heading") %></h2>
@@ -142,6 +143,7 @@
 </section>
 <% } %>
 <% } %>
+</div>
 
 <section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.fetch.heading") %></h2>
@@ -151,11 +153,42 @@
     <div id="geo-preview" class="mt-3 hidden"></div>
   </div>
   <% if (fetchJob) { %>
-  <div class="text-sm mb-4">
+  <%
+    var jobPct = fetchJob.totalBytes > 0 ? Math.floor((fetchJob.downloadedBytes / fetchJob.totalBytes) * 1000) / 10 : 0;
+    var jobCurrent = null;
+    if (fetchJob.currentFile) {
+      for (var ci = 0; ci < fetchJob.files.length; ci++) {
+        if (fetchJob.files[ci].file === fetchJob.currentFile) { jobCurrent = fetchJob.files[ci]; break; }
+      }
+    }
+    var jobCurrentPct = jobCurrent && jobCurrent.bytesTotal > 0 ? Math.floor((jobCurrent.bytesDone / jobCurrent.bytesTotal) * 1000) / 10 : 0;
+  %>
+  <div class="text-sm mb-4" id="geo-fetch-status">
     <% if (fetchJob.status === "running") { %>
       <p class="text-amber-600 font-medium"><%= t("adminGeoPacks.fetch.running") %></p>
       <% if (fetchJob.recovered) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.recovered") %></p><% } %>
       <% if (fetchJob.lastError) { %><p class="text-slate-400 mt-1"><%= t("adminGeoPacks.fetch.lastError") %>: <span class="font-mono text-xs"><%= fetchJob.lastError %></span></p><% } %>
+      <div id="geo-fetch-progress" class="mt-3 max-w-xl">
+        <div id="geo-fetch-bar-wrap"<% if (fetchJob.totalBytes <= 0) { %> class="hidden"<% } %>>
+          <div class="flex items-baseline justify-between gap-3 text-xs text-slate-500">
+            <span id="geo-fetch-pct" class="font-medium text-slate-700"><%= jobPct %>%</span>
+            <span id="geo-fetch-bytes" class="tabular-nums"><%= fmtBytes(fetchJob.downloadedBytes) %> / <%= fmtBytes(fetchJob.totalBytes) %></span>
+          </div>
+          <div class="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div id="geo-fetch-bar" class="bwc-progress-live h-full rounded-full bg-brand-600" style="width: <%= jobPct %>%"></div>
+          </div>
+        </div>
+        <p id="geo-fetch-rate" class="mt-2 text-xs text-slate-500"><% if (jobCurrent && jobCurrent.status === "retrying") { %><%= t("adminGeoPacks.fetch.waitingRetry") %><% } else if (fetchJob.speedBps > 0) { %><%= fmtBytes(Math.round(fetchJob.speedBps)) %>/s<% } else { %><%= t("adminGeoPacks.fetch.etaUnknown") %><% } %></p>
+        <div id="geo-fetch-current" class="mt-3<% if (!jobCurrent) { %> hidden<% } %>">
+          <div class="flex items-baseline justify-between gap-3 text-xs">
+            <span class="min-w-0 truncate text-slate-500"><%= t("adminGeoPacks.fetch.currentFile") %>: <span id="geo-fetch-current-name" class="font-mono text-slate-700"><%= jobCurrent ? jobCurrent.file : "" %></span></span>
+            <span id="geo-fetch-current-pct" class="tabular-nums text-slate-500"><%= jobCurrentPct %>%</span>
+          </div>
+          <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+            <div id="geo-fetch-current-bar" class="bwc-progress-live h-full rounded-full bg-brand-400" style="width: <%= jobCurrentPct %>%"></div>
+          </div>
+        </div>
+      </div>
     <% } else if (fetchJob.status === "done") { %>
       <p class="text-emerald-600 font-medium"><%= t("adminGeoPacks.fetch.done") %><% if (fetchJob.finishedAt) { %>: <time data-tz datetime="<%= fetchJob.finishedAt %>" data-style="datetime"><%= fetchJob.finishedAt.slice(0, 19).replace("T", " ") %></time><% } %></p>
     <% } else { %>
@@ -165,18 +198,18 @@
     <% if (fetchJob.files.length > 0) { %>
     <ul class="divide-y divide-slate-100 mt-2">
       <% fetchJob.files.forEach(function (f) { %>
-      <li class="flex flex-wrap items-center justify-between gap-3 py-2">
+      <li class="flex flex-wrap items-center justify-between gap-3 py-2" data-geo-file="<%= f.file %>">
         <span class="font-mono text-slate-700"><%= f.file %></span>
         <span class="text-slate-400">
-          <%= fmtBytes(f.bytesDone) %> / <%= fmtBytes(f.bytesTotal) %> ·
-          <% if (f.status === "done") { %><span class="text-emerald-600"><%= t("adminGeoPacks.fetch.fileDone") %></span>
+          <span data-geo-file-bytes><%= fmtBytes(f.bytesDone) %> / <%= fmtBytes(f.bytesTotal) %></span> ·
+          <span data-geo-file-status><% if (f.status === "done") { %><span class="text-emerald-600"><%= t("adminGeoPacks.fetch.fileDone") %></span>
           <% } else if (f.status === "skipped") { %><span class="text-slate-500"><%= t("adminGeoPacks.fetch.fileSkipped") %></span>
           <% } else if (f.status === "failed") { %><span class="text-red-600"><%= t("adminGeoPacks.fetch.fileFailed") %><% if (f.error) { %> · <%= f.error %><% } %></span>
           <% } else if (f.status === "activating") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileActivating") %></span>
           <% } else if (f.status === "verifying") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileVerifying") %></span>
           <% } else if (f.status === "downloading") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileDownloading") %></span>
           <% } else if (f.status === "retrying") { %><span class="text-amber-600"><%= t("adminGeoPacks.fetch.fileRetrying", { attempt: f.attempts }) %><% if (f.error) { %> · <%= f.error %><% } %></span>
-          <% } else { %><%= t("adminGeoPacks.fetch.filePending") %><% } %>
+          <% } else { %><%= t("adminGeoPacks.fetch.filePending") %><% } %></span>
         </span>
       </li>
       <% }); %>
@@ -359,6 +392,162 @@
       .catch(function () { showError("unreachable", null); })
       .finally(function () { btn.disabled = false; });
   });
+})();
+</script>
+
+<script>
+(function () {
+  // 获取进度轮询：服务端首屏渲染的是打开页面那一刻的真实状态，这
+  // 里每 1.5 s 拉一次内存任务状态，把进度条 / 速度 / ETA / 当前文
+  // 件 / 逐文件行就地更新；任务一结束走 finish() 的局部替换（终
+  // 态文案与包列表换成服务端最新渲染），全程不需要手动刷新。
+  var wrap = document.getElementById("geo-fetch-progress");
+  if (!wrap) return;
+  var T = {
+    rateLine: <%- JSON.stringify(t("adminGeoPacks.fetch.rateLine")) %>,
+    etaSeconds: <%- JSON.stringify(t("adminGeoPacks.fetch.etaSeconds")) %>,
+    etaMinutes: <%- JSON.stringify(t("adminGeoPacks.fetch.etaMinutes")) %>,
+    etaHoursMinutes: <%- JSON.stringify(t("adminGeoPacks.fetch.etaHoursMinutes")) %>,
+    etaUnknown: <%- JSON.stringify(t("adminGeoPacks.fetch.etaUnknown")) %>,
+    waitingRetry: <%- JSON.stringify(t("adminGeoPacks.fetch.waitingRetry")) %>,
+    filePending: <%- JSON.stringify(t("adminGeoPacks.fetch.filePending")) %>,
+    fileDownloading: <%- JSON.stringify(t("adminGeoPacks.fetch.fileDownloading")) %>,
+    fileVerifying: <%- JSON.stringify(t("adminGeoPacks.fetch.fileVerifying")) %>,
+    fileActivating: <%- JSON.stringify(t("adminGeoPacks.fetch.fileActivating")) %>,
+    fileDone: <%- JSON.stringify(t("adminGeoPacks.fetch.fileDone")) %>,
+    fileSkipped: <%- JSON.stringify(t("adminGeoPacks.fetch.fileSkipped")) %>,
+    fileFailed: <%- JSON.stringify(t("adminGeoPacks.fetch.fileFailed")) %>,
+    fileRetrying: <%- JSON.stringify(t("adminGeoPacks.fetch.fileRetrying")) %>
+  };
+  var barWrap = document.getElementById("geo-fetch-bar-wrap");
+  var bar = document.getElementById("geo-fetch-bar");
+  var pctEl = document.getElementById("geo-fetch-pct");
+  var bytesEl = document.getElementById("geo-fetch-bytes");
+  var rateEl = document.getElementById("geo-fetch-rate");
+  var curWrap = document.getElementById("geo-fetch-current");
+  var curName = document.getElementById("geo-fetch-current-name");
+  var curPct = document.getElementById("geo-fetch-current-pct");
+  var curBar = document.getElementById("geo-fetch-current-bar");
+  var rows = {};
+  Array.prototype.forEach.call(document.querySelectorAll("[data-geo-file]"), function (li) {
+    rows[li.getAttribute("data-geo-file")] = {
+      bytes: li.querySelector("[data-geo-file-bytes]"),
+      status: li.querySelector("[data-geo-file-status]"),
+    };
+  });
+  function fmtBytes(n) {
+    if (n >= 1024 * 1024 * 1024) return (n / (1024 * 1024 * 1024)).toFixed(2) + " GiB";
+    if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + " MiB";
+    if (n >= 1024) return (n / 1024).toFixed(1) + " KiB";
+    return n + " B";
+  }
+  function pctOf(done, total) {
+    return total > 0 ? Math.floor((done / total) * 1000) / 10 : 0;
+  }
+  function fmtEta(sec) {
+    if (sec == null) return T.etaUnknown;
+    if (sec < 60) return T.etaSeconds.replace("{count}", String(sec));
+    if (sec < 3600) return T.etaMinutes.replace("{count}", String(Math.round(sec / 60)));
+    var h = Math.floor(sec / 3600);
+    var m = Math.round((sec % 3600) / 60);
+    if (m === 60) { h += 1; m = 0; }
+    return T.etaHoursMinutes.replace("{hours}", String(h)).replace("{minutes}", String(m));
+  }
+  function renderFileStatus(span, f) {
+    var text = T.filePending, cls = "";
+    if (f.status === "done") { text = T.fileDone; cls = "text-emerald-600"; }
+    else if (f.status === "skipped") { text = T.fileSkipped; cls = "text-slate-500"; }
+    else if (f.status === "failed") { text = T.fileFailed + (f.error ? " · " + f.error : ""); cls = "text-red-600"; }
+    else if (f.status === "activating") { text = T.fileActivating; cls = "text-amber-600"; }
+    else if (f.status === "verifying") { text = T.fileVerifying; cls = "text-amber-600"; }
+    else if (f.status === "downloading") { text = T.fileDownloading; cls = "text-amber-600"; }
+    else if (f.status === "retrying") {
+      text = T.fileRetrying.replace("{attempt}", String(f.attempts)) + (f.error ? " · " + f.error : "");
+      cls = "text-amber-600";
+    }
+    span.textContent = text;
+    span.className = cls;
+  }
+  function render(job) {
+    if (job.totalBytes > 0) {
+      barWrap.classList.remove("hidden");
+      var p = pctOf(job.downloadedBytes, job.totalBytes);
+      bar.style.width = p + "%";
+      pctEl.textContent = p + "%";
+      bytesEl.textContent = fmtBytes(job.downloadedBytes) + " / " + fmtBytes(job.totalBytes);
+    }
+    var current = null;
+    job.files.forEach(function (f) {
+      if (f.file === job.currentFile) current = f;
+      var row = rows[f.file];
+      if (row) {
+        if (row.bytes) row.bytes.textContent = fmtBytes(f.bytesDone) + " / " + fmtBytes(f.bytesTotal);
+        if (row.status) renderFileStatus(row.status, f);
+      }
+    });
+    if (current && curWrap) {
+      curWrap.classList.remove("hidden");
+      curName.textContent = current.file;
+      var cp = pctOf(current.bytesDone, current.bytesTotal);
+      curPct.textContent = cp + "%";
+      curBar.style.width = cp + "%";
+    } else if (curWrap) {
+      curWrap.classList.add("hidden");
+    }
+    if (current && current.status === "retrying") {
+      rateEl.textContent = T.waitingRetry;
+    } else if (job.speedBps > 0) {
+      rateEl.textContent = T.rateLine
+        .replace("{speed}", fmtBytes(Math.round(job.speedBps)) + "/s")
+        .replace("{eta}", fmtEta(job.etaSeconds));
+    } else {
+      rateEl.textContent = T.etaUnknown;
+    }
+  }
+  var stopped = false;
+  function swapIn(id, doc) {
+    var fresh = doc.getElementById(id);
+    var cur = document.getElementById(id);
+    if (fresh && cur) cur.replaceWith(document.importNode(fresh, true));
+  }
+  function finish() {
+    // 终态不整页刷新：停轮询后拉一次整页 HTML，只把状态区（换成
+    // 完成/失败文案与完成时间）与包列表（版本/大小/行数已是落位
+    // 后的新状态）两块换成服务端最新渲染，滚动位置与页面其余部
+    // 分都不动；获取按钮恢复可用，新换入的 <time data-tz> 交给
+    // local-time 的全局重排函数按浏览器时区格式化。
+    stopped = true;
+    fetch("/admin/geo-packs", { credentials: "same-origin", headers: { accept: "text/html" } })
+      .then(function (resp) { return resp.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        swapIn("geo-fetch-status", doc);
+        swapIn("geo-pack-listing", doc);
+        var fb = document.getElementById("geo-fetch-btn");
+        if (fb) {
+          fb.disabled = false;
+          fb.className = "rounded-lg px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700";
+        }
+        if (window.bwcFormatTimes) window.bwcFormatTimes();
+      })
+      .catch(function () { /* 换不上就保留当前画面——任务本身已经结束 */ });
+  }
+  function tick() {
+    if (stopped) return;
+    fetch("/admin/geo-packs/fetch-status", { credentials: "same-origin", headers: { accept: "application/json" } })
+      .then(function (resp) { return resp.json().catch(function () { return null; }); })
+      .then(function (data) {
+        var job = data && data.ok ? data.job : null;
+        if (!job || job.status !== "running") {
+          finish();
+          return;
+        }
+        render(job);
+        setTimeout(tick, 1500);
+      })
+      .catch(function () { setTimeout(tick, 3000); });
+  }
+  setTimeout(tick, 1500);
 })();
 </script>
 

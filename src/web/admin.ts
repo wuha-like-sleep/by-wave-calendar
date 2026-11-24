@@ -2034,6 +2034,17 @@ export async function adminRoutes(app: FastifyInstance) {
     }
   });
 
+  // 获取任务状态（JSON）：后台页轮询进度条 / 速度 / ETA 用。只读
+  // 进程内存里的任务状态（读取时按当前时刻刷新聚合进度），不碰
+  // 磁盘与发布源，所以限额比 preview 宽——页面每 1.5 s 拉一次。
+  app.get("/admin/geo-packs/fetch-status", {
+    config: { rateLimit: { max: 120, timeWindow: "1 minute" } },
+  }, async (req, reply) => {
+    const u = await requireAdmin(req, reply);
+    if (!u) return reply;
+    return reply.send({ ok: true, job: getGeoPackFetchState() });
+  });
+
   // 一键获取官方包：从 GEO_PACK_RELEASE_BASE_URL 拉发布清单，按清
   // 单下载（分卷拼接 + 逐文件 SHA-256 复核）后走与同步通道同一条
   // 原子落位路径激活。任务在后台跑（大包要传很久，不能占着请求），
