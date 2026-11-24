@@ -2,30 +2,21 @@
 
   <!-- Header -->
   <div class="mb-8">
-    <div class="flex items-center gap-3">
-      <span class="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-brand-50 text-brand-700 shrink-0">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-      </span>
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight">기술 지원</h1>
-        <p class="text-sm text-slate-500">최종 업데이트：<%= updatedDate %></p>
-      </div>
-    </div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight mb-2">기술 지원</h1>
+    <p class="text-sm text-slate-500">최종 업데이트：<%= updatedDate %></p>
     <p class="text-slate-600 leading-relaxed mt-4"><strong class="font-semibold text-slate-900"><%= siteName %></strong>을(를) 이용해 주셔서 감사합니다. 아래의 자주 묻는 질문은 대부분 즉시 해결에 도움이 됩니다. 그래도 해결되지 않으면 문제 유형에 맞는 연락 채널을 선택하시기 바랍니다.</p>
   </div>
 
   <!-- FAQ -->
   <h2 class="text-lg font-semibold text-slate-900 mb-3">자주 묻는 질문</h2>
-  <div class="space-y-2.5 mb-10">
+  <div class="divide-y divide-slate-200 border-y border-slate-200 mb-10">
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔑</span> 로그인이 안 됨 / 비밀번호 분실</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>로그인이 안 됨 / 비밀번호 분실</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>로그인 페이지 하단의 「비밀번호 찾기」를 클릭하고, 이메일에 담긴 링크를 따라 재설정하시면 됩니다.</li>
           <li>2단계 인증(MFA)을 활성화했으나 인증기를 찾을 수 없는 경우：MFA 등록 시 다운로드한 백업 코드로 로그인한 후, 즉시 비활성화했다가 다시 활성화하시기 바랍니다.</li>
@@ -34,12 +25,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">📱</span> APP QR 코드 로그인 실패 / 계속 로딩 중</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>APP QR 코드 로그인 실패 / 계속 로딩 중</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>휴대폰에서 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= siteName %></code> 웹페이지가 정상적으로 열리는지(즉 휴대폰이 서버에 연결되는지) 확인하시기 바랍니다.</li>
           <li>「설정 → 내 기기 → 새 기기 연결」에서 새 QR 코드를 생성한 후 다시 시도하시기 바랍니다(이전 코드는 10분 후 만료됩니다).</li>
@@ -48,12 +39,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔄</span> 일정이 동기화되지 않음 / 주간 뷰에 일정 누락</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>일정이 동기화되지 않음 / 주간 뷰에 일정 누락</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>APP 캘린더 목록에서 아래로 당겨 한 번 당겨서 새로고침을 실행하시기 바랍니다.</li>
           <li>APP을 종료한 후 다시 실행하시기 바랍니다. 포그라운드 시작 시 최신 일정을 자동으로 다시 가져옵니다.</li>
@@ -62,12 +53,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">👥</span> 다른 사람을 일정에 초대하는 방법</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>다른 사람을 일정에 초대하는 방법</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>웹 / iOS：일정 편집 → 「참석자 관리」 → 상대방 이메일 입력 → 발송(iOS는 이미 저장된 일정에서만 사용 가능).</li>
           <li>상대방은 .ics 첨부 파일이 포함된 초대 메일을 받게 되며, RSVP 회신 후 귀하는 일정 상세에서 수락/거절 상태를 확인할 수 있습니다.</li>
@@ -75,12 +66,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">📅</span> Apple Calendar / Outlook에서 구독하기</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>Apple Calendar / Outlook에서 구독하기</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>읽기 전용 구독：웹에서 캘린더 우클릭 메뉴 → 「구독 링크」로 ICS 주소 생성 → Apple Calendar의 「파일 → 새로운 캘린더 구독」에 붙여넣기.</li>
           <li>양방향 동기화：CalDAV를 사용하시고, 사용자명/비밀번호는 「설정 → 앱 비밀번호」에서 전용 비밀번호를 생성하시기 바랍니다.</li>
@@ -88,12 +79,12 @@
       </div>
     </details>
 
-        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API 토큰과 외부 도구 연동</span>
+        <details id="api-token" class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>API 토큰과 외부 도구 연동</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>「설정 → 기기 → API 토큰」에서 직접 만들 수 있습니다. 도구가 쓸 필요가 없으면 읽기 전용을 선택하세요. 전체 토큰은 한 번만 표시되니 바로 도구에 넣으세요.</li>
           <li>401이 나오면 이 순서로 확인하세요: (1) 사이트 운영자가 API를 켜지 않음 — 운영자만 바꿀 수 있습니다; (2) 토큰이 해지됐거나 만료됨 — 같은 설정 페이지에서 확인하고 새로 만드세요; (3) 계정이 정지됨 — 이것도 운영자 쪽입니다.</li>
@@ -102,12 +93,12 @@
       </div>
     </details>
 
-    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> API로 내 캘린더에 접근하기 (스크립트 / 자동화)</span>
+    <details id="api-usage" class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>API로 내 캘린더에 접근하기 (스크립트 / 자동화)</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <p class="mb-3">Token을 만들면 HTTPS 요청을 보낼 수 있는 도구(스크립트, n8n, Zapier, 단축어 등)가 내 캘린더를 읽고 쓸 수 있습니다. 아래는 최소 가이드이며, 기계가 읽을 수 있는 전체 명세는 <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a>에 있습니다. Postman 같은 도구로 가져오면 호출 코드를 자동 생성할 수 있습니다.</p>
         <p class="font-medium text-slate-800 mb-1.5">인증과 기본 주소</p>
         <p class="mb-3">모든 요청에 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code> 헤더를 붙입니다. 기본 주소는 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>입니다. /api/v1 응답은 통일된 형식으로, 성공은 {"ok": true, "data": …}, 실패는 {"ok": false, "error": {"code": "…", "message": "…"}}입니다.</p>
@@ -143,12 +134,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 가입과 인증 메일</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>가입과 인증 메일</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>가입 후 메일로 받은 인증 코드를 입력해야 계정 만들기가 끝납니다.</li>
           <li>메일이 안 오면 스팸함을 확인하고 몇 분 기다려 보세요. 그래도 없으면 인증 페이지에서 다시 보내세요.</li>
@@ -157,12 +148,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> 오류 코드의 뜻</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>오류 코드의 뜻</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code> — 토큰이 틀렸거나, 해지·만료됐거나, API가 꺼져 있거나, 계정이 정지된 경우입니다. 위의 API 토큰 항목을 순서대로 확인하세요.</li>
           <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code> — 토큰이 읽기 전용인데 도구가 쓰려고 한 경우입니다. 읽기·쓰기 토큰을 만들거나 도구가 읽기만 하게 하세요.</li>
@@ -172,12 +163,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> 문의하기 전에 준비할 것</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>문의하기 전에 준비할 것</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>서버 버전: 브라우저에서 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code>를 열어 표시되는 version을 적어 두세요. 쓰는 클라이언트와 버전, 브라우저, 문제가 생긴 시간과 시간대도 함께 적어 주세요.</li>
           <li>어떤 순서로 무엇을 했는지, 기대한 결과와 실제 결과.</li>
@@ -186,12 +177,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> 계정 탈퇴 / 모든 데이터 삭제</span>
+<details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>계정 탈퇴 / 모든 데이터 삭제</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>웹 또는 APP：설정 → 계정 → 위험 구역 → 「계정 삭제」. <strong class="font-semibold text-slate-900">이 작업은 복구할 수 없으며</strong>, 귀하의 모든 캘린더, 일정, 초대, 기기 연결이 삭제됩니다.</li>
           <li>삭제 전에 먼저 백업하려면, 삭제하기 전에 .ics 파일을 내보내 로컬에 저장하시면 됩니다.</li>
@@ -205,37 +196,36 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
   <h2 class="text-lg font-semibold text-slate-900 mb-1">여전히 해결되지 않았나요?</h2>
   <p class="text-sm text-slate-500 mb-4">문제 유형에 맞는 입구를 선택하시면 가장 빠르게 답을 얻을 수 있습니다.</p>
 
-  <div class="grid sm:grid-cols-3 gap-3 mb-8">
+  <div class="divide-y divide-slate-200 border-y border-slate-200 mb-10">
     <!-- Operator -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 mb-3" aria-hidden="true">👤</span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">계정 / 데이터 / 서버</h3>
-      <p class="text-xs text-slate-500 leading-relaxed">계정 잠김, 데이터 복구, 유지보수 시간 등. 데이터는 모두 <strong class="font-medium text-slate-700">본 사이트 운영자</strong>의 서버에 있으니 운영자에게 연락하시기 바랍니다(연락처는 푸터 참조).</p>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">계정 / 데이터 / 서버</h3>
+      <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">계정 잠김, 데이터 복구, 유지보수 시간 등. 데이터는 모두 <strong class="font-medium text-slate-700">본 사이트 운영자</strong>의 서버에 있으니 운영자에게 연락하시기 바랍니다(연락처는 푸터 참조).</p>
     </div>
     <!-- GitHub -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white mb-3">
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.67.8.56A11.53 11.53 0 0023.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
-      </span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">APP / 소프트웨어 bug</h3>
-      <p class="text-xs text-slate-500 leading-relaxed mb-2">프런트엔드 / APP / 서버의 bug, 기능 제안, 오픈소스 협업.</p>
-      <div class="mt-auto flex flex-col gap-1 text-xs">
-        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">Issue 제출 ↗</a>
-        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">APP / 소프트웨어 bug</h3>
+      <div>
+        <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">프런트엔드 / APP / 서버의 bug, 기능 제안, 오픈소스 협업.</p>
+        <div class="mt-2 flex flex-col gap-1 text-sm">
+          <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">Issue 제출 ↗</a>
+          <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+        </div>
       </div>
     </div>
     <!-- Email -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-brand-50 text-brand-700 mb-3" aria-hidden="true">✉️</span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">비즈니스 / 미디어 / 일반</h3>
-      <p class="text-xs text-slate-500 leading-relaxed mb-2">기업 배포 문의, 협력, 일반 문의.</p>
-      <a href="mailto:info@by-wave.com" class="mt-auto text-xs text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">비즈니스 / 미디어 / 일반</h3>
+      <div>
+        <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">기업 배포 문의, 협력, 일반 문의.</p>
+        <a href="mailto:info@by-wave.com" class="mt-2 inline-block text-sm text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+      </div>
     </div>
   </div>
 
   <!-- Response times -->
-  <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <h3 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-2"><span aria-hidden="true">⏱️</span> 응답 시간 예상</h3>
+  <div>
+    <h3 class="font-semibold text-slate-900 text-sm mb-2.5">응답 시간 예상</h3>
     <ul class="text-sm text-slate-600 space-y-1.5">
       <li><strong class="font-medium text-slate-800">GitHub Issues</strong> —— 일반적으로 1~7일 이내에 답변; 긴급 보안 문제는 이메일도 함께 보내 주시기 바랍니다.</li>
       <li><strong class="font-medium text-slate-800">이메일</strong> —— 영업일 기준 1~3일(메일 제목에 유형을 표기하시면, 예: 「[Bug] iOS 주간 뷰…」 「[비즈니스] 기업 배포」 더 빠르게 분류됩니다).</li>

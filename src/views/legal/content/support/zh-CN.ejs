@@ -2,30 +2,21 @@
 
   <!-- Header -->
   <div class="mb-8">
-    <div class="flex items-center gap-3">
-      <span class="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-brand-50 text-brand-700 shrink-0">
-        <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 17.25h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-      </span>
-      <div>
-        <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight">技术支持</h1>
-        <p class="text-sm text-slate-500">最近更新：<%= updatedDate %></p>
-      </div>
-    </div>
+    <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 leading-tight mb-2">技术支持</h1>
+    <p class="text-sm text-slate-500">最近更新：<%= updatedDate %></p>
     <p class="text-slate-600 leading-relaxed mt-4">感谢您使用 <strong class="font-semibold text-slate-900"><%= siteName %></strong>。下面的常见问题多数能即时帮您解决；仍未解决可按问题类型选择对应联系渠道。</p>
   </div>
 
   <!-- FAQ -->
   <h2 class="text-lg font-semibold text-slate-900 mb-3">常见问题</h2>
-  <div class="space-y-2.5 mb-10">
+  <div class="divide-y divide-slate-200 border-y border-slate-200 mb-10">
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔑</span> 登录不上 / 忘记密码</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>登录不上 / 忘记密码</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>登录页底部点「忘记密码」，按邮箱里的链接重置即可。</li>
           <li>启用了二次验证 (MFA) 但找不到认证器：用注册 MFA 时下载的备用码登录后，立刻关闭再重新启用。</li>
@@ -34,12 +25,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">📱</span> APP 扫码登录失败 / 一直转圈</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>APP 扫码登录失败 / 一直转圈</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>确认手机能正常打开 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= siteName %></code> 的网页（即手机能联通服务器）。</li>
           <li>「设置 → 我的设备 → 绑定新设备」生成新的二维码再试（旧码 10 分钟过期）。</li>
@@ -48,12 +39,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔄</span> 事件不同步 / 周视图缺事件</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>事件不同步 / 周视图缺事件</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>在 APP 日历列表往下拉，触发一次下拉刷新。</li>
           <li>退出 APP 重新进入；前台启动时会自动重新拉取最新事件。</li>
@@ -62,12 +53,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">👥</span> 如何邀请别人参加事件</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>如何邀请别人参加事件</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>网页 / iOS：编辑事件 →「管理参与者」→ 输入对方邮箱 → 发送（iOS 仅在已保存的事件上可用）。</li>
           <li>对方会收到带 .ics 附件的邀请邮件，回复 RSVP 后您可在事件详情看到接受/拒绝状态。</li>
@@ -75,12 +66,12 @@
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">📅</span> 在 Apple Calendar / Outlook 里订阅</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>在 Apple Calendar / Outlook 里订阅</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>只读订阅：网页打开日历右键菜单 →「订阅链接」生成 ICS 地址 → 在 Apple Calendar「文件 → 新建日历订阅」粘贴。</li>
           <li>双向同步：请用 CalDAV，用户名/密码在「设置 → 应用密码」生成专用密码。</li>
@@ -88,12 +79,12 @@
       </div>
     </details>
 
-        <details id="api-token" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🔌</span> API Token 与第三方接入</span>
+        <details id="api-token" class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>API Token 与第三方接入</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>在「设置 → 设备 → API Token」里自己创建。工具不需要写入时就选只读；完整 Token 只显示一次，建好直接填到工具里。</li>
           <li>遇到 401 按这个顺序查：(1) 本站运营者还没开启 API——只有运营者能改；(2) Token 已被撤销或已过期——在同一个设置页检查、重新建一个；(3) 账号被停用——这也要找运营者。</li>
@@ -102,12 +93,12 @@
       </div>
     </details>
 
-    <details id="api-usage" class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🛠️</span> 用 API 访问我的日历（脚本 / 自动化）</span>
+    <details id="api-usage" class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>用 API 访问我的日历（脚本 / 自动化）</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <p class="mb-3">建好 Token 后，任何能发 HTTPS 请求的工具（脚本、n8n、Zapier、快捷指令等）都能用它读写你自己的日历。下面是最小可用说明；完整的机器可读接口定义在 <a class="text-brand-700 hover:underline" href="<%= baseUrl %>/api/v1/openapi.json">openapi.json</a>，可导入 Postman 等工具自动生成调用代码。</p>
         <p class="font-medium text-slate-800 mb-1.5">鉴权与地址</p>
         <p class="mb-3">每个请求带请求头 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">Authorization: Bearer <redacted></code>。基础地址是 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded"><%= baseUrl %>/api/v1</code>。/api/v1 的响应统一包一层：成功是 {"ok": true, "data": …}，失败是 {"ok": false, "error": {"code": "…", "message": "…"}}。</p>
@@ -143,12 +134,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">✉️</span> 注册与验证邮件</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>注册与验证邮件</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>注册后，把邮件里的验证码填回去，账号才算建好。</li>
           <li>没收到？先查垃圾箱，再等几分钟；还没有就在验证页重新发送。</li>
@@ -157,12 +148,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">⚠️</span> 报错代码是什么意思</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>报错代码是什么意思</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">401 invalid_token</code>——Token 写错、已被撤销或过期，或 API 没开启，或账号被停用。按上面 API Token 那条逐项查。</li>
           <li><code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">403 token_is_read_only</code>——Token 是只读的，但工具想写入。改建读写 Token，或者让工具只读。</li>
@@ -172,12 +163,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-    <details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🧰</span> 求助前先整理好这些</span>
+    <details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>求助前先整理好这些</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>服务端版本号：在浏览器打开 <code class="text-[0.85em] bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded">/health</code>，把显示的 version 记下来。再写清你用的客户端和版本、浏览器、出问题的时间和时区。</li>
           <li>你做了哪些步骤、期望发生什么、实际发生了什么。</li>
@@ -186,12 +177,12 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
       </div>
     </details>
 
-<details class="group rounded-xl border border-slate-200 bg-white transition open:border-slate-300 open:shadow-sm">
-      <summary class="flex items-center justify-between gap-3 px-4 py-3.5 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
-        <span class="flex items-center gap-2.5"><span aria-hidden="true">🗑️</span> 注销账号 / 删除所有数据</span>
+<details class="group">
+      <summary class="flex items-center justify-between gap-3 py-4 cursor-pointer select-none list-none font-medium text-slate-800 group-hover:text-brand-700">
+        <span>注销账号 / 删除所有数据</span>
         <svg class="w-4 h-4 text-slate-400 shrink-0 transition-transform group-open:rotate-180" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
       </summary>
-      <div class="px-4 pb-4 text-sm text-slate-600">
+      <div class="pb-5 text-sm text-slate-600">
         <ul class="list-disc pl-5 space-y-1.5">
           <li>网页或 APP：设置 → 账号 → 危险区 →「删除账户」。<strong class="font-semibold text-slate-900">此操作不可恢复</strong>，会清空您所有日历、事件、邀请、设备绑定。</li>
           <li>如需先备份再删除，可在删除前导出 .ics 文件保存到本地。</li>
@@ -205,37 +196,36 @@ curl -X POST "<%= baseUrl %>/api/v1/events" -H "Authorization: Bearer <redacted>
   <h2 class="text-lg font-semibold text-slate-900 mb-1">仍然没解决？</h2>
   <p class="text-sm text-slate-500 mb-4">按问题类型选择对应入口，最快拿到答案。</p>
 
-  <div class="grid sm:grid-cols-3 gap-3 mb-8">
+  <div class="divide-y divide-slate-200 border-y border-slate-200 mb-10">
     <!-- Operator -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 mb-3" aria-hidden="true">👤</span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">账号 / 数据 / 服务器</h3>
-      <p class="text-xs text-slate-500 leading-relaxed">账号被锁、数据恢复、维护时间等。数据都在<strong class="font-medium text-slate-700">本站运营者</strong>的服务器上，请联系运营者（联系方式见页脚）。</p>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">账号 / 数据 / 服务器</h3>
+      <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">账号被锁、数据恢复、维护时间等。数据都在<strong class="font-medium text-slate-700">本站运营者</strong>的服务器上，请联系运营者（联系方式见页脚）。</p>
     </div>
     <!-- GitHub -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-900 text-white mb-3">
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.74.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56 0-.27-.01-1.16-.02-2.1-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.2 1.77 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.44-2.7 5.42-5.27 5.7.41.36.78 1.07.78 2.16 0 1.56-.01 2.82-.01 3.2 0 .31.21.67.8.56A11.53 11.53 0 0023.5 12.02C23.5 5.74 18.27.5 12 .5z"/></svg>
-      </span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">APP / 软件 bug</h3>
-      <p class="text-xs text-slate-500 leading-relaxed mb-2">前端 / APP / 服务端的 bug、功能建议、开源协作。</p>
-      <div class="mt-auto flex flex-col gap-1 text-xs">
-        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">提交 Issue ↗</a>
-        <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">APP / 软件 bug</h3>
+      <div>
+        <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">前端 / APP / 服务端的 bug、功能建议、开源协作。</p>
+        <div class="mt-2 flex flex-col gap-1 text-sm">
+          <a href="https://github.com/wuha-like-sleep/by-wave-calendar/issues" class="text-brand-700 hover:underline font-medium">提交 Issue ↗</a>
+          <a href="https://github.com/wuha-like-sleep/by-wave-calendar/discussions" class="text-brand-700 hover:underline">Discussions ↗</a>
+        </div>
       </div>
     </div>
     <!-- Email -->
-    <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-col">
-      <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-brand-50 text-brand-700 mb-3" aria-hidden="true">✉️</span>
-      <h3 class="font-semibold text-slate-900 text-sm mb-1">商务 / 媒体 / 通用</h3>
-      <p class="text-xs text-slate-500 leading-relaxed mb-2">企业部署咨询、合作、通用询问。</p>
-      <a href="mailto:info@by-wave.com" class="mt-auto text-xs text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+    <div class="grid gap-1 sm:grid-cols-[210px_1fr] sm:gap-8 py-5">
+      <h3 class="text-sm font-semibold text-slate-900">商务 / 媒体 / 通用</h3>
+      <div>
+        <p class="text-sm leading-relaxed text-slate-600 max-w-2xl">企业部署咨询、合作、通用询问。</p>
+        <a href="mailto:info@by-wave.com" class="mt-2 inline-block text-sm text-brand-700 hover:underline font-mono break-all">info@by-wave.com</a>
+      </div>
     </div>
   </div>
 
   <!-- Response times -->
-  <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-    <h3 class="font-semibold text-slate-900 text-sm mb-2.5 flex items-center gap-2"><span aria-hidden="true">⏱️</span> 响应时间预期</h3>
+  <div>
+    <h3 class="font-semibold text-slate-900 text-sm mb-2.5">响应时间预期</h3>
     <ul class="text-sm text-slate-600 space-y-1.5">
       <li><strong class="font-medium text-slate-800">GitHub Issues</strong> —— 一般 1–7 天内回复；紧急安全问题请同时发邮件。</li>
       <li><strong class="font-medium text-slate-800">邮件</strong> —— 1–3 个工作日（邮件标题注明类型，如「[Bug] iOS 周视图…」「[商务] 企业部署」更快分类）。</li>
