@@ -170,26 +170,3 @@ export async function listGeoPacks(dir: string | undefined | null): Promise<GeoP
   }
   return { configured: true, packs, sharedFiles };
 }
-
-/** 下载白名单：把请求的文件名对到扫描结果上，命中才返回绝对路径。
- *  只接受单个文件名或 licences/<name>.txt 两种形状，其余一律 null。 */
-export async function resolveGeoPackDownload(
-  dir: string | undefined | null,
-  requested: string,
-): Promise<{ full: string; name: string; bytes: number } | null> {
-  if (!dir || !requested) return null;
-  if (requested.includes("\\") || requested.includes("\0")) return null;
-  const listing = await listGeoPacks(dir);
-  const all: GeoPackFileEntry[] = [
-    ...listing.packs.map((p) => ({ name: p.file, bytes: p.bytes, kind: "pack" as const })),
-    ...listing.packs.flatMap((p) => p.companions),
-    ...listing.sharedFiles,
-  ];
-  const hit = all.find((e) => e.name === requested);
-  if (!hit) return null;
-  const full = path.join(dir, hit.name);
-  // 最后一道：解析后的真实路径必须还在包目录内。
-  const root = path.resolve(dir);
-  if (!path.resolve(full).startsWith(root + path.sep)) return null;
-  return { full, name: hit.name, bytes: hit.bytes };
-}

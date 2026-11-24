@@ -1998,7 +1998,6 @@ export const en = {
   "adminGeoPacks.notConfigured.lead": "GEO_PACK_DIR is not set, so there are no local packs. Address suggestions fall back to the online provider. Set GEO_PACK_DIR to the directory holding the pack-*.sqlite files and restart the service.",
   "adminGeoPacks.providerNote": "Current GEO_PROVIDER: {provider}. With \"pack\", suggestions are answered from the packs below first and fall back to the online provider when a pack is missing or has no match.",
   "adminGeoPacks.empty": "The pack directory is configured but contains no pack-*.sqlite files yet.",
-  "adminGeoPacks.download": "Download",
   "adminGeoPacks.colRows": "Rows",
   "adminGeoPacks.colBuilt": "Built",
   "adminGeoPacks.colSha": "SHA-256",

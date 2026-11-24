@@ -205,6 +205,17 @@ describe("后台获取官方地址包", () => {
     expect(getGeoPackFetchState()).toBeNull();
   });
 
+  it("包文件没有下到本地的出口：旧下载端点不存在（管理员请求也 404）", async () => {
+    const admin = await makeUser("admin-nodl@example.com", { isAdmin: true });
+    const s = await loginAs(admin.id);
+    const res = await app.inject({
+      method: "GET", url: "/admin/geo-packs/download?file=pack-au-ot.sqlite",
+      headers: { cookie: s.cookie },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.headers["content-disposition"]).toBeUndefined();
+  });
+
   it("预检：未装包时每包大小/总下载量与清单一致，非管理员看不到", async () => {
     const admin = await makeUser("admin2@example.com", { isAdmin: true });
     const s = await loginAs(admin.id);

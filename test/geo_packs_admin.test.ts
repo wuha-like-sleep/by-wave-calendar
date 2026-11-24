@@ -1,12 +1,12 @@
-// 后台「地址包」清单与下载白名单（lib/geo_packs.ts）：
-// 元数据取自 manifest、配套/共享文件归类正确、下载只认扫描白名单
-// （目录穿越与未登记文件一律拒）。
+// 后台「地址包」清单（lib/geo_packs.ts）：
+// 元数据取自 manifest、配套/共享文件归类正确。
+// 包文件本体不设下载出口：本站没有任何按文件名取包文件的路径。
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { listGeoPacks, resolveGeoPackDownload } from "../src/lib/geo_packs.js";
+import { listGeoPacks } from "../src/lib/geo_packs.js";
 import { attachEmbeddedAttribution } from "../src/lib/geo_pack_attribution.js";
 
 let dir = "";
@@ -23,7 +23,6 @@ beforeAll(() => {
   writeFileSync(path.join(dir, "manifest.json"), JSON.stringify({ pack_id: "au" }));
   mkdirSync(path.join(dir, "licences"));
   writeFileSync(path.join(dir, "licences", "odbl-1.0.txt"), "odbl");
-  writeFileSync(path.join(dir, "stray.txt"), "not part of the pack layout");
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -93,21 +92,5 @@ describe("attachEmbeddedAttribution（清单页从包内读许可/署名）", ()
     expect(ot.embedded?.licences).toEqual({ "cc-by-4.0.txt": "full text" });
     const legacy = listing.packs.find((p) => p.id === "au-legacy")!;
     expect(legacy.embedded).toBeNull();
-  });
-});
-
-describe("resolveGeoPackDownload", () => {
-  it("白名单内的文件可下载", async () => {
-    expect((await resolveGeoPackDownload(dir, "pack-au.sqlite"))?.bytes).toBe(13);
-    expect(await resolveGeoPackDownload(dir, "licences/odbl-1.0.txt")).not.toBeNull();
-    expect(await resolveGeoPackDownload(dir, "ATTRIBUTION-au.txt")).not.toBeNull();
-  });
-
-  it("穿越与未登记文件一律拒", async () => {
-    expect(await resolveGeoPackDownload(dir, "../secret")).toBeNull();
-    expect(await resolveGeoPackDownload(dir, "licences/../../etc/passwd")).toBeNull();
-    expect(await resolveGeoPackDownload(dir, "stray.txt")).toBeNull();
-    expect(await resolveGeoPackDownload(dir, "pack-au-vic.sqlite")).toBeNull();
-    expect(await resolveGeoPackDownload(undefined, "pack-au.sqlite")).toBeNull();
   });
 });

@@ -84,13 +84,6 @@
           <% if (row.status === "update" && row.releaseVersion) { %> · <span class="text-amber-600"><%= t("adminGeoPacks.meta.updateTo", { version: "v" + row.releaseVersion }) %></span><% } %>
         </p>
       </div>
-      <% if (row.file) { %>
-      <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(row.file) %>"
-         class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-        <%= t("adminGeoPacks.download") %>
-      </a>
-      <% } %>
     </div>
     <% if (row.file) { %>
     <details class="mt-1.5">
@@ -154,10 +147,7 @@
           <% row.companions.forEach(function (f) { %>
           <li class="flex items-center justify-between gap-3 py-2">
             <span class="font-mono text-slate-700"><%= f.name %></span>
-            <span class="flex items-center gap-3">
-              <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
-              <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
-            </span>
+            <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
           </li>
           <% }); %>
         </ul>
@@ -177,10 +167,7 @@
   <% listing.sharedFiles.forEach(function (f) { %>
   <li class="flex items-center justify-between gap-3 py-2">
     <span class="font-mono text-slate-700"><%= f.name %></span>
-    <span class="flex items-center gap-3">
-      <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
-      <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
-    </span>
+    <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
   </li>
   <% }); %>
 </ul>

@@ -1990,7 +1990,6 @@ export const ja: Partial<Record<TranslationKey, string>> = {
   "adminGeoPacks.notConfigured.lead": "GEO_PACK_DIR が設定されていないため、ローカルパックはありません。住所サジェストはオンラインプロバイダにフォールバックします。GEO_PACK_DIR に pack-*.sqlite ファイルのあるディレクトリを指定し、サービスを再起動してください。",
   "adminGeoPacks.providerNote": "現在の GEO_PROVIDER：{provider}。「pack」の場合、サジェストはまず下記のパックから回答し、パックがない／一致しない場合はオンラインプロバイダにフォールバックします。",
   "adminGeoPacks.empty": "パックディレクトリは設定されていますが、pack-*.sqlite ファイルがまだありません。",
-  "adminGeoPacks.download": "ダウンロード",
   "adminGeoPacks.colRows": "行数",
   "adminGeoPacks.colBuilt": "生成日時",
   "adminGeoPacks.colSha": "SHA-256",
