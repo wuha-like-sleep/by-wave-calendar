@@ -40,9 +40,11 @@
 // 任务状态以内存注册表为实时视图，同时把计划与逐文件进度落盘到
 // 暂存区（fetch-job-state.json，临时文件 + rename 原子写）：进程
 // 重启后开机自检会自动恢复未完成的任务，后台页能看到「已恢复」
-// 的任务在继续跑；任务完成或硬失败后状态文件清除。开始由后台路
-// 由记审计，完成 / 失败在这里直插审计台账（无请求上下文，沿用系
-// 统动作 ip="-" 的既有做法）。
+// 的任务在继续跑；恢复任务读清单遇瞬时错误会退避重试（开机头几
+// 秒网络常未就绪，一次失败不许把无人值守的恢复任务判死），新点
+// 的任务则立即判死让失败立即可见。任务完成或硬失败后状态文件清
+// 除。开始由后台路由记审计，完成 / 失败在这里直插审计台账（无
+// 请求上下文，沿用系统动作 ip="-" 的既有做法）。
 //
 // 进度展示（后台页的进度条 / 速度 / ETA）由 GeoFetchProgress
 // Tracker 核算：逐文件字节按高水位入账（续传接续、重写不倒
@@ -954,6 +956,47 @@ async function readManifest(baseUrl: string, fetchImpl: GeoFetchImpl): Promise<G
   return parseGeoReleaseManifest(parsed);
 }
 
+/** 恢复任务读清单的瞬时重试上限。管理员新点的任务读清单失败立即
+ *  判死——人在跟前，失败立即可见、再点一次就行；但进程重启恢复的
+ *  任务没有人在跟前：开机头几秒网络 / DNS 往往还没就绪，一次瞬时
+ *  失败就把恢复任务判死并清掉落盘状态，等于白恢复，管理员回来只
+ *  能重新点。所以恢复任务读清单遇瞬时错误（网络层抛错、408 /
+ *  429 / 5xx）按下载同一套退避多试几次（生产退避下 8 次约覆盖
+ *  4 分钟的开机动荡期）；硬错误（404、清单非法）仍立即判死。 */
+export const GEO_FETCH_RESUME_MANIFEST_ATTEMPTS = 8;
+
+function isTransientManifestError(err: unknown): boolean {
+  if (err instanceof GeoReleaseError) {
+    const m = /^release_manifest_http_(\d+)$/.exec(err.code);
+    return m ? isTransientHttpStatus(Number(m[1])) : false;
+  }
+  // fetch 本身抛错（连接失败 / DNS 未就绪 / 连接被重置）按瞬时处理。
+  return true;
+}
+
+async function readManifestForJob(
+  job: GeoPackFetchJobState,
+  fetchImpl: GeoFetchImpl,
+  tuning?: GeoDownloadTuning,
+): Promise<GeoReleaseManifest> {
+  const maxAttempts = job.recovered ? GEO_FETCH_RESUME_MANIFEST_ATTEMPTS : 1;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await readManifest(job.baseUrl, fetchImpl);
+    } catch (err) {
+      if (attempt >= maxAttempts || !isTransientManifestError(err)) throw err;
+      job.lastError = `manifest: ${err instanceof Error ? err.message : String(err)}`;
+      await sleep(
+        geoFetchRetryDelayMs(
+          attempt,
+          tuning?.retryBaseMs ?? GEO_FETCH_RETRY_BASE_MS,
+          tuning?.retryMaxMs ?? GEO_FETCH_RETRY_MAX_MS,
+        ),
+      );
+    }
+  }
+}
+
 async function auditFetchFinished(job: GeoPackFetchJobState, actorUserId: string | null): Promise<void> {
   try {
     await db.insert(schema.adminAuditLog).values({
@@ -1002,7 +1045,7 @@ async function runFetchJob(
   };
   let tracker: GeoFetchProgressTracker | null = null;
   try {
-    const manifest = await readManifest(job.baseUrl, args.fetchImpl);
+    const manifest = await readManifestForJob(job, args.fetchImpl, args.tuning);
     job.release = manifest.release;
     const plan = releaseFilePlan(manifest);
     // 恢复接续：上一程落盘的逐文件进度按文件名种回高水位，聚合进
