@@ -876,7 +876,8 @@ struct CalendarView: View {
         withAnimation { state.clearQuickCreated() }
         // 删除已在本地生效 → 既有撤销删除条接力（可恢复）。
         state.noteEventDeleted(id: pending.event.id, summary: pending.event.summary)
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        // 这里不给触觉：触觉定版口径只给正向确认（保存成功、
+        // RSVP、清单勾选），删除与撤销一律不震。
         await load(force: true)
     }
 
@@ -933,14 +934,14 @@ struct CalendarView: View {
             events += restored.filter { !existing.contains("\($0.id)|\($0.startsAt)") }
             events.sort { $0.startsAt < $1.startsAt }
             withAnimation { state.pendingUndoDelete = nil }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // 撤销删除不给触觉（定版口径：删除/撤销不震），
+            // 两个恢复分支保持一致。
             await load(force: true)
             return
         }
         do {
             try await APIClient(state: state).restoreEvent(id: pending.eventId)
             withAnimation { state.pendingUndoDelete = nil }
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
             await load(force: true)
         } catch {
             errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription

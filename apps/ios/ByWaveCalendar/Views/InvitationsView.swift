@@ -450,6 +450,9 @@ private struct InvitationDetailView: View {
                 "/invitations/\(token)/respond",
                 body: Body(status: status),
             )
+            // 触觉定版口径：RSVP 提交成功算正向确认，与保存成功、
+            // 清单勾选一样给一下 .success；失败走 catch，不给。
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
             await reloadSelf()
             onChanged()
         } catch {
