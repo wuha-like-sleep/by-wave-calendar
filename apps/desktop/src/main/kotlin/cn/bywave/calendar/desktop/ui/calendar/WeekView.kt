@@ -56,6 +56,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -422,12 +424,36 @@ private fun EmptySlotTapLayer(
 
 @Composable
 private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
-    val today = LocalDate.now()
-    val todayIdx = dayStarts.indexOf(today)
+    // 定版口径（三端一致）：线连续走，不再每分钟跳一格。秒级
+    // ticker 只在窗口聚焦时跑（LocalWindowInfo 焦点信号，与
+    // DeviceTimeZone 的焦点刷新同一口径），切走视图随组合销毁
+    // 取消；状态只挂在线自己的组合作用域里，每秒重组的只有
+    // 它自己。系统减少动态时回退每分钟跳格、位置只算到分钟
+    // （判定见 ReduceMotion.kt）。桌面平台没有震动能力，
+    // 触觉定版在本端不适用。
+    val reduceMotion = rememberReduceMotion()
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    val windowFocused = LocalWindowInfo.current.isWindowFocused
+    val todayInWeek = dayStarts.contains(LocalDate.now())
+    LaunchedEffect(reduceMotion, windowFocused, todayInWeek) {
+        if (!windowFocused || !todayInWeek) return@LaunchedEffect
+        val stepMs = if (reduceMotion) 60_000L else 1_000L
+        while (true) {
+            now = LocalTime.now()
+            // 对齐到下一个整秒/整分边界，步进不漂移。
+            delay(stepMs - (System.currentTimeMillis() % stepMs))
+        }
+    }
+
+    val todayIdx = dayStarts.indexOf(LocalDate.now())
     if (todayIdx < 0) return
 
-    val now = LocalTime.now()
-    val y = HOUR_HEIGHT * (now.hour + now.minute / 60f)
+    val y = if (reduceMotion) {
+        HOUR_HEIGHT * (now.hour + now.minute / 60f)
+    } else {
+        // 秒也算进位置：56dp 一小时，秒步进约 0.016dp，肉眼平滑。
+        HOUR_HEIGHT * (now.hour + now.minute / 60f + now.second / 3600f)
+    }
     val x = TIME_GUTTER + columnWidth * todayIdx
 
     Box(modifier = Modifier.fillMaxSize()) {
