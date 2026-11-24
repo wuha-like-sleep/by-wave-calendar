@@ -43,7 +43,8 @@ import {
 import { audit } from "../lib/audit.js";
 import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
 import { attachEmbeddedAttribution } from "../lib/geo_pack_attribution.js";
-import { GeoReleaseError, getGeoPackFetchState, previewGeoPackRelease, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
+import { GeoReleaseError, fetchGeoReleaseIndex, getGeoPackFetchState, previewGeoPackRelease, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
+import { buildGeoPackPageModel } from "../lib/geo_pack_page.js";
 import {
   createGeoSyncToken,
   latestGeoSyncUploadByFile,
@@ -1929,6 +1930,19 @@ export async function adminRoutes(app: FastifyInstance) {
         status: up.status, received, total: up.chunkCount, updatedAt: up.updatedAt, error: up.error,
       };
     }
+    // 改版后的列表视图模型（lib/geo_pack_page 构建、单测覆盖）：包
+    // 按国家分组、标题用地区人话名，状态徽标由本地 manifest 的
+    // sha256 与发布清单比对得出。发布索引只拉清单本身
+    // （fetchGeoReleaseIndex，4 秒超时、失败返回 null)，页面退化成
+    // 「已安装 / 未安装」两态，绝不因为查更新拖挂。发布里有、本地
+    // 没有的包也列出来标「未安装」——管理员要能一眼看全「有哪些
+    // 包、我装了哪些、哪些能更新」。
+    const releaseIndex = listing.configured ? await fetchGeoReleaseIndex({}) : null;
+    const pageModel = buildGeoPackPageModel({
+      t: tForRequest(req), packs: listing.packs, releaseIndex, syncByFile,
+    });
+    const packGroups = pageModel.groups;
+    const summary = pageModel.summary;
     return reply.view("admin/geo-packs", {
       title: tr(req, "adminGeoPacks.heading") + tr(req, "admin.titleSuffix"),
       user: u, csrfToken: csrfTokenFor(req), flash: readFlash(req, reply),
@@ -1941,6 +1955,11 @@ export async function adminRoutes(app: FastifyInstance) {
       recentUploads,
       releaseBaseUrl: resolveGeoPackReleaseBaseUrl(),
       fetchJob: getGeoPackFetchState(),
+      packGroups,
+      summary,
+      // 预检脚本按 packId 查人话名；名字来自字典 / 发布清单，JSON
+      // 里的 < 转义掉，避免清单里的 region 原文把 script 提前关掉。
+      packNamesJson: JSON.stringify(pageModel.packNames).replace(/</g, "\\u003c"),
     });
   };
 

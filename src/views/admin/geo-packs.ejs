@@ -10,6 +10,13 @@
   function fmtRows(n) {
     return n == null ? "—" : n.toLocaleString(pageLocale);
   }
+  function badgeOf(status) {
+    if (status === "latest") return { key: "adminGeoPacks.badge.latest", cls: "bg-emerald-50 text-emerald-700" };
+    if (status === "update") return { key: "adminGeoPacks.badge.update", cls: "bg-amber-50 text-amber-700" };
+    if (status === "missing") return { key: "adminGeoPacks.badge.notInstalled", cls: "bg-slate-100 text-slate-500" };
+    return { key: "adminGeoPacks.badge.installed", cls: "bg-slate-100 text-slate-600" };
+  }
+  function isIsoLike(s) { return typeof s === "string" && /^\d{4}-\d{2}-\d{2}T/.test(s); }
 %>
 
 <h1 class="text-2xl sm:text-3xl font-semibold text-slate-900 mb-2"><%= t("adminGeoPacks.heading") %></h1>
@@ -25,127 +32,171 @@
 
 <div id="geo-pack-listing">
 <% if (!listing.configured) { %>
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+<section>
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.notConfigured.heading") %></h2>
   <p class="text-sm text-slate-500"><%= t("adminGeoPacks.notConfigured.lead") %></p>
 </section>
 <% } else { %>
-<p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.providerNote", { provider: provider }) %></p>
-<p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.dirNote", { dir: packDir }) %></p>
 
-<% if (listing.packs.length === 0) { %>
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <p class="text-sm text-slate-500"><%= t("adminGeoPacks.empty") %></p>
-</section>
+<%# 顶部一句话结论：装了几个包 / 多少条地址 / 多大 / 什么版本 /
+    数据新到什么时候 / 是否最新。整块在 #geo-pack-listing 里，获取
+    任务结束时轮询脚本的局部替换会把这里一起换成最新状态。 %>
+<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-slate-600">
+  <% if (summary.installedCount === 0) { %>
+    <span class="font-medium text-slate-900"><%= t("adminGeoPacks.summary.none") %></span>
+  <% } else { %>
+    <span class="font-medium text-slate-900"><%= t("adminGeoPacks.summary.installed", { count: summary.installedCount }) %></span>
+    <% if (summary.totalRows != null) { %><span aria-hidden="true" class="text-slate-300">·</span><span><%= t("adminGeoPacks.summary.addresses", { count: fmtRows(summary.totalRows) }) %></span><% } %>
+    <span aria-hidden="true" class="text-slate-300">·</span><span><%= t("adminGeoPacks.summary.size", { size: fmtBytes(summary.totalBytes) }) %></span>
+    <% if (summary.versions.length > 0) { %><span aria-hidden="true" class="text-slate-300">·</span><span><%= t("adminGeoPacks.summary.version", { version: summary.versions.join(", ") }) %></span><% } %>
+    <% if (summary.latestBuildDate) { %><span aria-hidden="true" class="text-slate-300">·</span><span><%= t("adminGeoPacks.summary.updated") %><% if (isIsoLike(summary.latestBuildDate)) { %> <time data-tz datetime="<%= summary.latestBuildDate %>" data-style="date"><%= summary.latestBuildDate.slice(0, 10) %></time><% } else { %> <%= summary.latestBuildDate %><% } %></span><% } %>
+  <% } %>
+  <% if (!summary.checked) { %>
+    <span aria-hidden="true" class="text-slate-300">·</span><span class="text-slate-400"><%= t("adminGeoPacks.summary.checkFailed") %></span>
+  <% } else if (summary.updateCount > 0 || summary.missingCount > 0) { %>
+    <% if (summary.updateCount > 0) { %><span aria-hidden="true" class="text-slate-300">·</span><span class="font-medium text-amber-600"><%= t("adminGeoPacks.summary.updatesAvailable", { count: summary.updateCount }) %></span><% } %>
+    <% if (summary.missingCount > 0) { %><span aria-hidden="true" class="text-slate-300">·</span><span class="font-medium text-amber-600"><%= t("adminGeoPacks.summary.missing", { count: summary.missingCount }) %></span><% } %>
+  <% } else if (summary.installedCount > 0) { %>
+    <span aria-hidden="true" class="text-slate-300">·</span><span class="font-medium text-emerald-600"><%= t("adminGeoPacks.summary.upToDate") %></span>
+  <% } %>
+</div>
+
+<% if (packGroups.length === 0) { %>
+<p class="mt-4 text-sm text-slate-500"><%= t("adminGeoPacks.empty") %></p>
 <% } %>
 
-<% listing.packs.forEach(function (pack) { %>
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
-  <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
-    <div>
-      <h2 class="text-lg font-semibold text-slate-900 font-mono"><%= pack.file %></h2>
-      <p class="text-sm text-slate-500">
-        <%= pack.region || "—" %> · <%= fmtBytes(pack.bytes) %>
-        <% if (pack.packVersion) { %> · v<%= pack.packVersion %><% } %>
-      </p>
-      <% var sync = syncByFile[pack.file]; %>
-      <p class="text-sm mt-1">
-        <span class="text-slate-400"><%= t("adminGeoPacks.sync.colStatus") %>:</span>
-        <% if (!sync) { %>
-          <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusNone") %></span>
-        <% } else if (sync.status === "active") { %>
-          <span class="text-emerald-600 font-medium"><%= t("adminGeoPacks.sync.statusActive") %></span>
-        <% } else if (sync.status === "receiving") { %>
-          <span class="text-amber-600 font-medium"><%= t("adminGeoPacks.sync.statusReceiving") %> · <%= t("adminGeoPacks.sync.progress", { received: sync.received, total: sync.total }) %></span>
-        <% } else if (sync.status === "failed") { %>
-          <span class="text-red-600 font-medium"><%= t("adminGeoPacks.sync.statusFailed") %><% if (sync.error) { %> · <span class="font-mono text-xs"><%= sync.error %></span><% } %></span>
-        <% } else { %>
-          <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusAborted") %></span>
+<% packGroups.forEach(function (group) { %>
+<h2 class="mt-6 mb-1 text-base font-semibold text-slate-900"><%= group.countryName %></h2>
+<ul class="divide-y divide-slate-200 border-y border-slate-200">
+  <% group.rows.forEach(function (row) { var badge = badgeOf(row.status); %>
+  <li class="py-3">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0">
+        <p class="flex flex-wrap items-center gap-2">
+          <span class="font-medium text-slate-900"><%= row.name %></span>
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium <%= badge.cls %>"><%= t(badge.key) %></span>
+        </p>
+        <p class="mt-0.5 text-sm text-slate-500">
+          <%= t(row.national ? "adminGeoPacks.coverage.national" : "adminGeoPacks.coverage.region") %>
+          <% if (row.rows != null) { %> · <%= t("adminGeoPacks.meta.addresses", { count: fmtRows(row.rows) }) %><% } %>
+          · <%= fmtBytes(row.bytes) %>
+          <% if (row.packVersion) { %> · v<%= row.packVersion %><% } %>
+          <% if (row.status === "update" && row.releaseVersion) { %> · <span class="text-amber-600"><%= t("adminGeoPacks.meta.updateTo", { version: "v" + row.releaseVersion }) %></span><% } %>
+        </p>
+      </div>
+      <% if (row.file) { %>
+      <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(row.file) %>"
+         class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <%= t("adminGeoPacks.download") %>
+      </a>
+      <% } %>
+    </div>
+    <% if (row.file) { %>
+    <details class="mt-1.5">
+      <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-600"><%= t("adminGeoPacks.details.toggle") %></summary>
+      <div class="mt-3">
+        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mb-4">
+          <div class="min-w-0">
+            <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.details.fileName") %></dt>
+            <dd class="mt-1 font-mono text-xs text-slate-900 break-all"><%= row.file %></dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.colBuilt") %></dt>
+            <dd class="mt-1 text-slate-900"><% if (!row.buildDate) { %>—<% } else if (isIsoLike(row.buildDate)) { %><time data-tz datetime="<%= row.buildDate %>" data-style="datetime"><%= row.buildDate.slice(0, 19).replace("T", " ") %></time><% } else { %><%= row.buildDate %><% } %></dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.colSha") %></dt>
+            <dd class="mt-1 font-mono text-xs text-slate-900 break-all"><%= row.sha256 || "—" %></dd>
+          </div>
+        </dl>
+        <p class="text-sm mb-4">
+          <span class="text-slate-400"><%= t("adminGeoPacks.sync.colStatus") %>:</span>
+          <% if (!row.sync) { %>
+            <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusNone") %></span>
+          <% } else if (row.sync.status === "active") { %>
+            <span class="text-emerald-600 font-medium"><%= t("adminGeoPacks.sync.statusActive") %></span>
+          <% } else if (row.sync.status === "receiving") { %>
+            <span class="text-amber-600 font-medium"><%= t("adminGeoPacks.sync.statusReceiving") %> · <%= t("adminGeoPacks.sync.progress", { received: row.sync.received, total: row.sync.total }) %></span>
+          <% } else if (row.sync.status === "failed") { %>
+            <span class="text-red-600 font-medium"><%= t("adminGeoPacks.sync.statusFailed") %><% if (row.sync.error) { %> · <span class="font-mono text-xs"><%= row.sync.error %></span><% } %></span>
+          <% } else { %>
+            <span class="text-slate-500"><%= t("adminGeoPacks.sync.statusAborted") %></span>
+          <% } %>
+        </p>
+        <% if (row.embedded) { %>
+        <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.attribution.heading") %></h3>
+        <% if (row.embedded.licenceManifest && row.embedded.licenceManifest.derivedDatabaseNotice) { %>
+        <p class="text-sm text-slate-500 mb-2"><%= row.embedded.licenceManifest.derivedDatabaseNotice %></p>
         <% } %>
-      </p>
-    </div>
-    <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(pack.file) %>"
-       class="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-      <%= t("adminGeoPacks.download") %>
-    </a>
-  </div>
-  <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm mb-4">
-    <div>
-      <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.colRows") %></dt>
-      <dd class="mt-1 tabular-nums text-slate-900"><%= fmtRows(pack.rows) %></dd>
-    </div>
-    <div>
-      <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.colBuilt") %></dt>
-      <dd class="mt-1 text-slate-900"><%= pack.buildDate || "—" %></dd>
-    </div>
-    <div class="min-w-0">
-      <dt class="text-xs font-medium uppercase tracking-wider text-slate-400"><%= t("adminGeoPacks.colSha") %></dt>
-      <dd class="mt-1 font-mono text-xs text-slate-900 break-all"><%= pack.sha256 || "—" %></dd>
-    </div>
-  </dl>
-  <% if (pack.embedded) { %>
-  <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.attribution.heading") %></h3>
-  <% if (pack.embedded.licenceManifest && pack.embedded.licenceManifest.derivedDatabaseNotice) { %>
-  <p class="text-sm text-slate-500 mb-2"><%= pack.embedded.licenceManifest.derivedDatabaseNotice %></p>
-  <% } %>
-  <% if (pack.embedded.licenceManifest && pack.embedded.licenceManifest.sources.length > 0) { %>
-  <ul class="divide-y divide-slate-100 text-sm mb-3">
-    <% pack.embedded.licenceManifest.sources.forEach(function (s) { %>
-    <li class="py-2">
-      <span class="font-medium text-slate-900"><%= s.name %></span>
-      <span class="text-slate-500"> · <%= s.licence %><% if (s.dataVersion) { %> · <%= s.dataVersion %><% } %><% if (s.included === false) { %> · <%= t("adminGeoPacks.attribution.notIncluded") %><% } %></span>
-      <% if (s.attributionText) { %><span class="block text-slate-400"><%= s.attributionText %></span><% } %>
-      <% s.restrictions.forEach(function (r) { %><span class="block text-amber-600"><%= r %></span><% }); %>
-    </li>
-    <% }); %>
-  </ul>
-  <% } %>
-  <% if (pack.embedded.attribution) { %>
-  <details class="mb-4">
-    <summary class="text-sm text-brand-700 cursor-pointer hover:underline"><%= t("adminGeoPacks.attribution.showText") %></summary>
-    <pre class="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-700"><%= pack.embedded.attribution %></pre>
-  </details>
-  <% } %>
-  <% } %>
-  <% if (pack.companions.length > 0) { %>
-  <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.companions") %></h3>
-  <ul class="divide-y divide-slate-100 text-sm">
-    <% pack.companions.forEach(function (f) { %>
-    <li class="flex items-center justify-between gap-3 py-2">
-      <span class="font-mono text-slate-700"><%= f.name %></span>
-      <span class="flex items-center gap-3">
-        <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
-        <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
-      </span>
-    </li>
-    <% }); %>
-  </ul>
-  <% } %>
-</section>
+        <% if (row.embedded.licenceManifest && row.embedded.licenceManifest.sources.length > 0) { %>
+        <ul class="divide-y divide-slate-100 text-sm mb-3">
+          <% row.embedded.licenceManifest.sources.forEach(function (s) { %>
+          <li class="py-2">
+            <span class="font-medium text-slate-900"><%= s.name %></span>
+            <span class="text-slate-500"> · <%= s.licence %><% if (s.dataVersion) { %> · <%= s.dataVersion %><% } %><% if (s.included === false) { %> · <%= t("adminGeoPacks.attribution.notIncluded") %><% } %></span>
+            <% if (s.attributionText) { %><span class="block text-slate-400"><%= s.attributionText %></span><% } %>
+            <% s.restrictions.forEach(function (r) { %><span class="block text-amber-600"><%= r %></span><% }); %>
+          </li>
+          <% }); %>
+        </ul>
+        <% } %>
+        <% if (row.embedded.attribution) { %>
+        <details class="mb-4">
+          <summary class="text-sm text-brand-700 cursor-pointer hover:underline"><%= t("adminGeoPacks.attribution.showText") %></summary>
+          <pre class="mt-2 whitespace-pre-wrap break-words rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs text-slate-700"><%= row.embedded.attribution %></pre>
+        </details>
+        <% } %>
+        <% } %>
+        <% if (row.companions.length > 0) { %>
+        <h3 class="text-sm font-medium text-slate-700 mb-2"><%= t("adminGeoPacks.companions") %></h3>
+        <ul class="divide-y divide-slate-100 text-sm">
+          <% row.companions.forEach(function (f) { %>
+          <li class="flex items-center justify-between gap-3 py-2">
+            <span class="font-mono text-slate-700"><%= f.name %></span>
+            <span class="flex items-center gap-3">
+              <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
+              <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
+            </span>
+          </li>
+          <% }); %>
+        </ul>
+        <% } %>
+      </div>
+    </details>
+    <% } %>
+  </li>
+  <% }); %>
+</ul>
 <% }); %>
 
 <% if (listing.sharedFiles.length > 0) { %>
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-  <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.shared.heading") %></h2>
-  <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.shared.lead") %></p>
-  <ul class="divide-y divide-slate-100 text-sm">
-    <% listing.sharedFiles.forEach(function (f) { %>
-    <li class="flex items-center justify-between gap-3 py-2">
-      <span class="font-mono text-slate-700"><%= f.name %></span>
-      <span class="flex items-center gap-3">
-        <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
-        <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
-      </span>
-    </li>
-    <% }); %>
-  </ul>
-</section>
+<h2 class="mt-6 mb-1 text-base font-semibold text-slate-900"><%= t("adminGeoPacks.shared.heading") %></h2>
+<p class="text-sm text-slate-500 mb-2"><%= t("adminGeoPacks.shared.lead") %></p>
+<ul class="divide-y divide-slate-200 border-y border-slate-200 text-sm">
+  <% listing.sharedFiles.forEach(function (f) { %>
+  <li class="flex items-center justify-between gap-3 py-2">
+    <span class="font-mono text-slate-700"><%= f.name %></span>
+    <span class="flex items-center gap-3">
+      <span class="tabular-nums text-slate-400"><%= fmtBytes(f.bytes) %></span>
+      <a href="/admin/geo-packs/download?file=<%= encodeURIComponent(f.name) %>" class="text-brand-700 hover:underline"><%= t("adminGeoPacks.download") %></a>
+    </span>
+  </li>
+  <% }); %>
+</ul>
 <% } %>
+
+<details class="mt-6">
+  <summary class="cursor-pointer text-sm text-slate-400 hover:text-slate-600"><%= t("adminGeoPacks.configDetails") %></summary>
+  <div class="mt-2 space-y-1">
+    <p class="text-sm text-slate-500"><%= t("adminGeoPacks.providerNote", { provider: provider }) %></p>
+    <p class="text-sm text-slate-500"><%= t("adminGeoPacks.dirNote", { dir: packDir }) %></p>
+  </div>
+</details>
 <% } %>
 </div>
 
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+<section class="mt-10 border-t border-slate-200 pt-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.fetch.heading") %></h2>
   <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.fetch.lead", { base: releaseBaseUrl }) %></p>
   <div class="mb-4">
@@ -224,7 +275,7 @@
   </form>
 </section>
 
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6">
+<section class="mt-10 border-t border-slate-200 pt-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-1"><%= t("adminGeoPacks.tokens.heading") %></h2>
   <p class="text-sm text-slate-500 mb-4"><%= t("adminGeoPacks.tokens.lead") %></p>
   <% if (syncTokens.length === 0) { %>
@@ -265,7 +316,7 @@
 </section>
 
 <% if (recentUploads.length > 0) { %>
-<section class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+<section class="mt-10 border-t border-slate-200 pt-6">
   <h2 class="text-lg font-semibold text-slate-900 mb-4"><%= t("adminGeoPacks.recent.heading") %></h2>
   <ul class="divide-y divide-slate-100 text-sm">
     <% recentUploads.forEach(function (up) { %>
@@ -290,6 +341,9 @@
   var box = document.getElementById("geo-preview");
   var fetchBtn = document.getElementById("geo-fetch-btn");
   if (!btn || !box) return;
+  // 包的人话名（服务端按当前语言解析好，键是 packId）；查不到时
+  // 回落发布清单里的 region 原文，再回落文件名。
+  var NAMES = <%- packNamesJson %>;
   var T = {
     loading: <%- JSON.stringify(t("adminGeoPacks.fetch.previewLoading")) %>,
     release: <%- JSON.stringify(t("adminGeoPacks.fetch.release")) %>,
@@ -350,8 +404,8 @@
     pv.packs.forEach(function (p) {
       var tr = el("tr");
       var tdPack = el("td", "py-2 pr-3");
-      tdPack.appendChild(el("span", "font-mono text-slate-700", p.file));
-      if (p.region) tdPack.appendChild(el("span", "block text-xs text-slate-400", p.region));
+      tdPack.appendChild(el("span", "font-medium text-slate-900", NAMES[p.packId] || p.region || p.file));
+      tdPack.appendChild(el("span", "block font-mono text-xs text-slate-400", p.file));
       tr.appendChild(tdPack);
       tr.appendChild(el("td", "py-2 pr-3 tabular-nums text-slate-700", p.rows == null ? "—" : p.rows.toLocaleString(LOCALE)));
       var tdSize = el("td", "py-2 pr-3 tabular-nums text-slate-700", fmtBytes(p.bytes));
