@@ -1990,7 +1990,6 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "adminGeoPacks.notConfigured.lead": "GEO_PACK_DIR가 설정되지 않아 로컬 팩이 없습니다. 주소 제안은 온라인 제공자로 폴백합니다. GEO_PACK_DIR를 pack-*.sqlite 파일이 있는 디렉터리로 설정하고 서비스를 재시작하세요.",
   "adminGeoPacks.providerNote": "현재 GEO_PROVIDER: {provider}. \"pack\"인 경우 제안은 먼저 아래 팩에서 답하고, 팩이 없거나 일치 항목이 없으면 온라인 제공자로 폴백합니다.",
   "adminGeoPacks.empty": "팩 디렉터리는 설정되어 있지만 아직 pack-*.sqlite 파일이 없습니다.",
-  "adminGeoPacks.download": "다운로드",
   "adminGeoPacks.colRows": "행 수",
   "adminGeoPacks.colBuilt": "생성 일시",
   "adminGeoPacks.colSha": "SHA-256",

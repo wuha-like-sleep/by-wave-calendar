@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, isNull, like, ne, or, sql } from "drizzle-orm";
 import { mkdir, writeFile, unlink, mkdtemp, rm } from "node:fs/promises";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -41,7 +41,7 @@ import {
   RestoreNeedsConfirmationError, RESTORE_BLOCKED_AUDIT_ACTION, type BackupBundle, type TableAtRisk,
 } from "../lib/backup.js";
 import { audit } from "../lib/audit.js";
-import { listGeoPacks, resolveGeoPackDownload } from "../lib/geo_packs.js";
+import { listGeoPacks } from "../lib/geo_packs.js";
 import { attachEmbeddedAttribution } from "../lib/geo_pack_attribution.js";
 import { GeoReleaseError, fetchGeoReleaseIndex, getGeoPackFetchState, previewGeoPackRelease, resolveGeoPackReleaseBaseUrl, startGeoPackFetch } from "../lib/geo_release.js";
 import { buildGeoPackPageModel } from "../lib/geo_pack_page.js";
@@ -1903,9 +1903,9 @@ export async function adminRoutes(app: FastifyInstance) {
   // 「我的预约在不在备份里」，得到的是错的答案。
   // ---------- 地址包（自建地址库） ----------
   // 包目录由 resolveGeoPackDir() 统一解析（同步通道写、provider 读、
-  // 这里列，同一个目录）。列表页把 manifest 的行数 / sha256 / 生成时间
-  // 摆出来，下载走白名单 + 流式响应（全国包 9.47 GiB，绝不整包读进
-  // 内存），每次下载记审计。同步状态读 geo_sync_uploads 台账（每个文件
+  // 这里列，同一个目录）。列表页只摆 manifest 的行数 / sha256 / 生成
+  // 时间等元数据：包文件本体不设任何下载出口——管理员只能通过下面的
+  // 获取流程把包下到服务器，谁也不能把包文件从本站拿走。同步状态读 geo_sync_uploads 台账（每个文件
   // 最近一次上传）；同步令牌也在这页签发 / 吊销——令牌与个人 API
   // Token、管理员会话完全分开，只存哈希，明文只在签发时经加密 flash
   // 展示一次（与个人 Token 的一次性展示同一套机制）。
@@ -1967,22 +1967,6 @@ export async function adminRoutes(app: FastifyInstance) {
     const u = await requireAdmin(req, reply);
     if (!u) return reply;
     return geoPacksPage(req, reply, u);
-  });
-
-  app.get("/admin/geo-packs/download", async (req, reply) => {
-    const u = await requireAdmin(req, reply);
-    if (!u) return reply;
-    const parsed = z.object({ file: z.string().min(1).max(200) }).safeParse(req.query);
-    if (!parsed.success) return reply.code(400).send("bad file");
-    const hit = await resolveGeoPackDownload(resolveGeoPackDir(), parsed.data.file);
-    if (!hit) return reply.code(404).send("not found");
-    await audit(req, u.id, "geo_pack.download", {
-      targetType: "geo_pack", targetId: hit.name, details: { bytes: hit.bytes },
-    });
-    reply.header("Content-Type", "application/octet-stream");
-    reply.header("Content-Length", String(hit.bytes));
-    reply.header("Content-Disposition", `attachment; filename="${path.basename(hit.name)}"`);
-    return reply.send(createReadStream(hit.full));
   });
 
   app.post("/admin/geo-packs/sync-tokens", {

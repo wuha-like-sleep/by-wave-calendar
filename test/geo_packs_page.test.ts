@@ -106,8 +106,9 @@ describe("admin geo-packs page (redesign)", () => {
     expect(details.textContent).toContain("pack-au-nsw.sqlite");
     expect(details.textContent).toContain(SHA_A);
     expect(details.hasAttribute("open")).toBe(false);
-    // 下载入口还在
-    expect(nswRow.querySelector('a[href="/admin/geo-packs/download?file=pack-au-nsw.sqlite"]')).not.toBeNull();
+    // 包文件不许下到本地：行内没有下载链接，整页也没有任何指向包文件的下载入口
+    expect(nswRow.querySelector('a[href^="/admin/geo-packs/download"]')).toBeNull();
+    expect(html).not.toContain("/admin/geo-packs/download");
     // 预检脚本的名字表带上了人话名
     expect(html).toContain('"au-nsw":"新南威尔士州"');
   });
@@ -125,6 +126,7 @@ describe("admin geo-packs page (redesign)", () => {
     });
     expect(html).toContain("有新版可更新");
     expect(html).toContain("有 1 个包可更新");
+    expect(html).not.toContain("/admin/geo-packs/download");
     expect(html).toContain("另有 1 个包未安装");
     expect(html).toContain("可更新到 v2026.12.0");
     const rows = [...doc.querySelectorAll("#geo-pack-listing li")];
@@ -145,7 +147,8 @@ describe("admin geo-packs page (redesign)", () => {
       currentFile: "pack-au-nsw.sqlite",
       files: [{ file: "pack-au-nsw.sqlite", status: "downloading", bytesTotal: 1000, bytesDone: 400, attempts: 1, error: null }],
     };
-    const { doc } = await render({ packs: [], releaseIndex: null, fetchJob: job });
+    const { html, doc } = await render({ packs: [], releaseIndex: null, fetchJob: job });
+    expect(html).not.toContain("/admin/geo-packs/download");
     expect(doc.querySelector("#geo-pack-listing")).not.toBeNull();
     const status = doc.querySelector("#geo-fetch-status");
     expect(status).not.toBeNull();
@@ -176,6 +179,7 @@ describe("admin geo-packs page (redesign)", () => {
     const { html, doc } = await render({ packs: [pack()], releaseIndex: null, fetchJob: job });
     expect(doc.querySelector("#geo-fetch-status")).not.toBeNull();
     expect(html).toContain("上次获取已完成");
+    expect(html).not.toContain("/admin/geo-packs/download");
     expect(doc.querySelector<HTMLButtonElement>("#geo-fetch-btn")?.disabled).toBe(false);
   });
 

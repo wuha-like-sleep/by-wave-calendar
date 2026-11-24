@@ -1976,7 +1976,6 @@ export const zhTW: Partial<Record<TranslationKey, string>> = {
   "adminGeoPacks.notConfigured.lead": "尚未設定 GEO_PACK_DIR，因此沒有本地包。地址聯想會回落到線上提供方。把 GEO_PACK_DIR 指向存放 pack-*.sqlite 的目錄並重啟服務即可。",
   "adminGeoPacks.providerNote": "目前 GEO_PROVIDER：{provider}。設為 \"pack\" 時，建議先由下面的包回答，包缺失或查不到時回落線上提供方。",
   "adminGeoPacks.empty": "包目錄已設定，但裡面還沒有 pack-*.sqlite 檔案。",
-  "adminGeoPacks.download": "下載",
   "adminGeoPacks.colRows": "行數",
   "adminGeoPacks.colBuilt": "產生時間",
   "adminGeoPacks.colSha": "SHA-256",

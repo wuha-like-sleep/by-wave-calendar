@@ -1990,7 +1990,6 @@ export const de: Partial<Record<TranslationKey, string>> = {
   "adminGeoPacks.notConfigured.lead": "GEO_PACK_DIR ist nicht gesetzt, daher gibt es keine lokalen Pakete. Adressvorschläge fallen auf den Online-Anbieter zurück. Setzen Sie GEO_PACK_DIR auf das Verzeichnis mit den pack-*.sqlite-Dateien und starten Sie den Dienst neu.",
   "adminGeoPacks.providerNote": "Aktueller GEO_PROVIDER: {provider}. Mit \"pack\" werden Vorschläge zuerst aus den untenstehenden Paketen beantwortet und fallen auf den Online-Anbieter zurück, wenn ein Paket fehlt oder nichts findet.",
   "adminGeoPacks.empty": "Das Paketverzeichnis ist konfiguriert, enthält aber noch keine pack-*.sqlite-Dateien.",
-  "adminGeoPacks.download": "Herunterladen",
   "adminGeoPacks.colRows": "Zeilen",
   "adminGeoPacks.colBuilt": "Erstellt",
   "adminGeoPacks.colSha": "SHA-256",
