@@ -367,6 +367,13 @@
 "网页端正在自动登录。可以回到电脑浏览器前继续操作。" = "The web is signing in automatically. You can go back to your computer's browser.";
 "电脑端正在自动登录。可以回到电脑前继续操作。" = "The computer is signing in automatically. You can go back to your computer.";
 "批准失败" = "Approval failed";
+"要批准这次登录吗？" = "Approve this sign-in?";
+"批准后，这台电脑会以下面这个账号登录，能看到并修改你的全部日历。" = "If you approve, that computer signs in as the account below and can read and change all of your calendars.";
+"批准后，那个浏览器会以下面这个账号登录，能看到并修改你的全部日历。" = "If you approve, that browser signs in as the account below and can read and change all of your calendars.";
+"只有你自己刚刚在电脑上发起了这次登录，才应该批准。别人拿给你「扫一下」的码，扫完就等于把账号交给了他。" = "Only approve if you just started this sign-in yourself. If someone handed you a code and asked you to scan it, approving hands them your account.";
+"批准登录" = "Approve sign-in";
+"服务器没有提供发起方的更多信息（设备、IP、时间）。" = "The server says nothing more about who asked (device, IP, time).";
+"这个码来自另一台服务器：%@；你现在登录的是 %@。" = "This code comes from a different server: %@. You are signed in to %@.";
 "二维码无法识别" = "QR code not recognized";
 "这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。" = "This doesn't look like a sign-in code. Make sure you're scanning the desktop or web sign-in QR code.";
 "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。" = "Tip: the QR code appears in the desktop “Sign in to ByWave Calendar” screen or under the “Scan to sign in” tab at /login.";

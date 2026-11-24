@@ -367,6 +367,13 @@
 "网页端正在自动登录。可以回到电脑浏览器前继续操作。" = "La web está iniciando sesión automáticamente. Puedes volver al navegador del ordenador.";
 "电脑端正在自动登录。可以回到电脑前继续操作。" = "El ordenador está iniciando sesión automáticamente. Puedes volver al ordenador.";
 "批准失败" = "Falló la aprobación";
+"要批准这次登录吗？" = "¿Aprobar este inicio de sesión?";
+"批准后，这台电脑会以下面这个账号登录，能看到并修改你的全部日历。" = "Si apruebas, ese ordenador iniciará sesión con la cuenta de abajo y podrá ver y modificar todos tus calendarios.";
+"批准后，那个浏览器会以下面这个账号登录，能看到并修改你的全部日历。" = "Si apruebas, ese navegador iniciará sesión con la cuenta de abajo y podrá ver y modificar todos tus calendarios.";
+"只有你自己刚刚在电脑上发起了这次登录，才应该批准。别人拿给你「扫一下」的码，扫完就等于把账号交给了他。" = "Aprueba solo si acabas de iniciar tú mismo este inicio de sesión. Si alguien te da un código para escanear, aprobarlo equivale a entregarle tu cuenta.";
+"批准登录" = "Aprobar inicio de sesión";
+"服务器没有提供发起方的更多信息（设备、IP、时间）。" = "El servidor no indica nada más sobre quién lo solicita (dispositivo, IP, hora).";
+"这个码来自另一台服务器：%@；你现在登录的是 %@。" = "Este código procede de otro servidor: %@. Tu sesión está iniciada en %@.";
 "二维码无法识别" = "No se reconoce el código QR";
 "这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。" = "Esto no parece un código de inicio de sesión. Asegúrate de escanear el código QR de inicio de sesión del ordenador o de la web.";
 "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。" = "Sugerencia: el código QR aparece en la pantalla «Iniciar sesión en ByWave Calendar» del ordenador o en la pestaña «Escanear para iniciar sesión» de /login.";

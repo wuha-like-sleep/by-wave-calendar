@@ -367,6 +367,13 @@
 "网页端正在自动登录。可以回到电脑浏览器前继续操作。" = "Das Web meldet sich automatisch an. Du kannst zum Browser auf dem Computer zurückkehren.";
 "电脑端正在自动登录。可以回到电脑前继续操作。" = "Der Computer meldet sich automatisch an. Du kannst zum Computer zurückkehren.";
 "批准失败" = "Genehmigung fehlgeschlagen";
+"要批准这次登录吗？" = "Diese Anmeldung genehmigen?";
+"批准后，这台电脑会以下面这个账号登录，能看到并修改你的全部日历。" = "Wenn du genehmigst, meldet sich dieser Computer mit dem Konto unten an und kann alle deine Kalender sehen und ändern.";
+"批准后，那个浏览器会以下面这个账号登录，能看到并修改你的全部日历。" = "Wenn du genehmigst, meldet sich dieser Browser mit dem Konto unten an und kann alle deine Kalender sehen und ändern.";
+"只有你自己刚刚在电脑上发起了这次登录，才应该批准。别人拿给你「扫一下」的码，扫完就等于把账号交给了他。" = "Genehmige nur, wenn du diese Anmeldung gerade selbst gestartet hast. Hält dir jemand einen Code zum Scannen hin, gibst du mit der Genehmigung dein Konto aus der Hand.";
+"批准登录" = "Anmeldung genehmigen";
+"服务器没有提供发起方的更多信息（设备、IP、时间）。" = "Der Server nennt keine weiteren Angaben zum Anfragenden (Gerät, IP, Zeit).";
+"这个码来自另一台服务器：%@；你现在登录的是 %@。" = "Dieser Code stammt von einem anderen Server: %@. Angemeldet bist du bei %@.";
 "二维码无法识别" = "QR-Code nicht erkannt";
 "这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。" = "Das sieht nicht nach einem Anmeldecode aus. Stelle sicher, dass du den Anmelde-QR-Code des Computers oder des Webs scannst.";
 "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。" = "Tipp: Der QR-Code erscheint im Computer-Bildschirm „Bei ByWave Calendar anmelden“ oder unter dem Tab „Zum Anmelden scannen“ auf /login.";
