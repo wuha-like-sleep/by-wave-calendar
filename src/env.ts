@@ -94,6 +94,11 @@ const schema = z.object({
   // 网镜像（或本机测试）时才需要打开。默认关——基地址即使被改成内
   // 网地址，SSRF 守卫也会挡下解析到内网的下载。
   GEO_PACK_RELEASE_ALLOW_PRIVATE_NETWORK: boolFlag.default(false),
+  // 地址包获取的单文件并行分段下载并发数：大包切成固定大小的段、
+  // 同时开这么多条连接各下一段（生产链路单连接吞吐差，靠并发段把
+  // 带宽吃满）。只在单个文件内并发，文件之间仍逐个下。1 = 关闭并
+  // 行、回单流。钳制在 1..16，太高只会给发布源 CDN 添堵。
+  GEO_FETCH_PARALLELISM: z.coerce.number().int().min(1).max(16).default(4),
 
   // SSRF guard escape hatch. Outbound fetches of *user-supplied* URLs (ICS
   // subscriptions, one-shot URL imports, and — defense-in-depth — outbound
