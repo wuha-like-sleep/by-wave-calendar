@@ -143,6 +143,10 @@ data class EventEditUiState(
     val deleting: Boolean = false,
     val errorMessage: String? = null,
     val finished: Boolean = false,
+    /** 这次 finished 是删除走完的（保存与删除共用 finished 出口）。
+     *  界面层据此区分触觉：保存成功给一下轻震，删除一律不震
+     *  （触觉定版口径）。 */
+    val finishedViaDelete: Boolean = false,
     /** 一句话解析刚成功回填过、且关键字段没再被手改过：编辑器据此
      *  显示「直接保存」。标题/时间/全天任一被手改就清掉——那时存的
      *  已经不是解析结果了，要存走普通保存按钮。 */
@@ -825,6 +829,7 @@ class EventEditViewModel : ViewModel() {
                 it.copy(
                     saving = false,
                     finished = true,
+                    finishedViaDelete = false,
                     savedEvent = if (viaQuick) created else null,
                     savedViaQuick = viaQuick,
                 )
@@ -850,7 +855,7 @@ class EventEditViewModel : ViewModel() {
                 val profile = profiles.active() ?: error(app.getString(R.string.eventedit_err_not_logged_in))
                 // 同样走离线队列：本地立刻消失，没网排队等恢复。
                 app.repository.offline.submitDelete(profile, id, scope, recurrenceId)
-                _state.update { it.copy(deleting = false, finished = true) }
+                _state.update { it.copy(deleting = false, finished = true, finishedViaDelete = true) }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

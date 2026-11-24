@@ -24,6 +24,7 @@ struct WeekView: View {
     let onEventChanged: () -> Void
 
     @EnvironmentObject var state: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var detailFor: EventDTO?
     @State private var createSeed: (calendarId: String, start: Date)?
@@ -616,15 +617,29 @@ struct WeekView: View {
     }
 
     // MARK: - Current-time line (only on today's column)
+    // 定版口径（三端一致）：线连续走，位置按当前时刻精确计算，不再
+    // 每分钟跳一格。TimelineView 按秒重绘的只有这条线本身，网格与
+    // 事件层不跟着刷新；视图离开层级（切到日/月/年视图）或 App
+    // 退到后台时它自动停摆，不留常驻定时器。系统「减少动态效果」
+    // 开启时回退到每 60 秒刷新 + 只算到分钟，即原来的跳格行为。
     private var nowLine: some View {
+        TimelineView(.periodic(from: .now, by: reduceMotion ? 60 : 1)) { context in
+            nowLineContent(at: context.date)
+        }
+    }
+
+    private func nowLineContent(at now: Date) -> some View {
         GeometryReader { geo in
             let cal = Calendar.current
             if let todayIdx = dayStarts.firstIndex(where: { cal.isDateInToday($0) }) {
                 let columnWidth = (geo.size.width - timeGutterWidth) / 7
-                let now = Date()
                 let hour = cal.component(.hour, from: now)
                 let minute = cal.component(.minute, from: now)
-                let y = (CGFloat(hour) + CGFloat(minute) / 60.0) * hourHeight
+                // 连续口径把秒也算进位置：56pt 一小时，秒步进约
+                // 0.016pt，肉眼就是平滑滑动。减少动态时秒归零，
+                // 与每分钟一次的刷新对齐成整格跳动。
+                let second = reduceMotion ? 0 : cal.component(.second, from: now)
+                let y = (CGFloat(hour) + CGFloat(minute) / 60.0 + CGFloat(second) / 3600.0) * hourHeight
                 let x = timeGutterWidth + CGFloat(todayIdx) * columnWidth
                 ZStack(alignment: .topLeading) {
                     // Dot on left + line across the column. The red is

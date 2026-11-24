@@ -46,7 +46,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
+import cn.bywave.calendar.ui.components.rememberReduceMotion
 import cn.bywave.calendar.ui.theme.NowLineRed
 import cn.bywave.calendar.ui.theme.Radii
 import java.time.LocalDate
@@ -379,12 +387,37 @@ private fun ColumnSeparators(columnWidth: Dp) {
 
 @Composable
 private fun NowLine(dayStarts: List<LocalDate>, columnWidth: Dp) {
-    val today = LocalDate.now()
-    val todayIdx = dayStarts.indexOf(today)
+    // 定版口径（三端一致）：线连续走，不再每分钟跳一格。秒级
+    // ticker 的生命周期跟着组合与 RESUMED 走：切走视图（离开
+    // 组合）自动取消，退后台 repeatOnLifecycle 自动暂停；状态
+    // 只挂在这条线自己的组合作用域里，每秒重组的只有它自己，
+    // 网格与事件块不跟着动。系统动画缩放为 0（减少动态）时
+    // 回退到每分钟跳一格，位置只算到分钟。
+    val reduceMotion = rememberReduceMotion()
+    var now by remember { mutableStateOf(LocalTime.now()) }
+    val todayInWeek = dayStarts.contains(LocalDate.now())
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(reduceMotion, lifecycleOwner, todayInWeek) {
+        if (!todayInWeek) return@LaunchedEffect
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            val stepMs = if (reduceMotion) 60_000L else 1_000L
+            while (true) {
+                now = LocalTime.now()
+                // 对齐到下一个整秒/整分边界，步进不漂移。
+                delay(stepMs - (System.currentTimeMillis() % stepMs))
+            }
+        }
+    }
+
+    val todayIdx = dayStarts.indexOf(LocalDate.now())
     if (todayIdx < 0) return
 
-    val now = LocalTime.now()
-    val y = HOUR_HEIGHT * (now.hour + now.minute / 60f)
+    val y = if (reduceMotion) {
+        HOUR_HEIGHT * (now.hour + now.minute / 60f)
+    } else {
+        // 秒也算进位置：56dp 一小时，秒步进约 0.016dp，肉眼平滑。
+        HOUR_HEIGHT * (now.hour + now.minute / 60f + now.second / 3600f)
+    }
     val x = TIME_GUTTER + columnWidth * todayIdx
 
     Box(modifier = Modifier.fillMaxSize()) {

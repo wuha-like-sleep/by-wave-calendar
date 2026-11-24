@@ -54,8 +54,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -137,10 +135,11 @@ fun CalendarScreen(
             }
         }
     }
-    // Subtle haptic on primary (FAB create) + destructive (delete confirm)
-    // taps, to match the iOS app's feel. Long-press already buzzes via
-    // Compose's built-in combinedClickable haptic.
-    val haptic = LocalHapticFeedback.current
+    // 触觉定版口径：本屏不再发震动。早先 FAB 按压与删除确认
+    // 上的震动注释称「对齐 iOS」，但 iOS 既不在新建按钮按压时
+    // 震、删除路径也从来不震；定版后震动只出现在保存成功、
+    // RSVP、清单勾选三处正向确认，本屏两处一并摘除。长按的
+    // 震动是 combinedClickable 的内置手势反馈，不在此列。
     var selectedEvent by remember { mutableStateOf<EventDTO?>(null) }
     var actionsForEvent by remember { mutableStateOf<EventDTO?>(null) }
     var pendingDelete by remember { mutableStateOf<EventDTO?>(null) }
@@ -319,7 +318,6 @@ fun CalendarScreen(
         },
         floatingActionButton = {
             FloatingActionButton(onClick = {
-                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onCreateEvent()
             }) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.event_new))
@@ -440,7 +438,6 @@ fun CalendarScreen(
             text = { Text(stringResource(R.string.cal_delete_message, pd.summary)) },
             confirmButton = {
                 TextButton(onClick = {
-                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     pendingDelete = null
                     vm.deleteEvent(pd.id)
                 }) { Text(stringResource(R.string.action_delete)) }
