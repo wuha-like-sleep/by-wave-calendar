@@ -76,6 +76,14 @@ fun DayView(
         events.filter { eventOnDay(it, anchor) }
               .sortedBy { it.startsAt }
     }
+    // 全天事件单独置顶成区，不再混在定时列表里按 startsAt 排序找。
+    // 分流的口径和周视图一致：eventOnDay 对全天事件走 eventAllDayDates，
+    // 按存储的 UTC 日历日期判定（多天全天事件在它覆盖的每一天都会进
+    // onDay），这里只按 allDay 拆两半，两边都保持 onDay 的 startsAt
+    // 顺序，不再二次排序。空态判定仍看 onDay 全集——只有全天事件的
+    // 日子照样进列表态，不会误显「无事件」。
+    val allDayEvents = remember(onDay) { onDay.filter { it.allDay } }
+    val timedEvents = remember(onDay) { onDay.filter { !it.allDay } }
 
     // 超宽屏上把列表宽度收住。一行事件在 2560 的显示器上铺满,色点在最左、
     // 时间在最右,眼睛要横扫一整块屏幕才能把「什么事」和「几点」对上。
@@ -115,7 +123,43 @@ fun DayView(
                     modifier = content.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(Dimens.rowGap),
                 ) {
-                    items(items = onDay, key = { "${it.id}@${it.startsAt}" }) { ev ->
+                    if (allDayEvents.isNotEmpty()) {
+                        item(key = "allday-section") {
+                            // 标签文案与周视图全天带同一条键，语言切换时
+                            // 跟着 locale 一起重渲染。
+                            val allDayLabel = remember(locale) {
+                                cn.bywave.calendar.desktop.i18n.I18n.t("fmt.timeAllDay")
+                            }
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = allDayLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = mutedTextColor(),
+                                    maxLines = 1,
+                                )
+                                // 日视图是整宽列表，没有周视图的列宽约束，
+                                // 所以不照搬全天带的「每列 2 条 +N」上限：
+                                // 有几条排几条，区高随条数自然增长（与
+                                // 安卓 / iOS 日视图同一口径）。药丸直接用
+                                // 周视图的 AllDayChip 同一实现——样式、
+                                // 右键菜单都不是抄的第二份。药丸高度由
+                                // 文字自然撑开，没有写死高度，字体放大时
+                                // 跟着长高，不会重叠或裁切。
+                                for (ev in allDayEvents) {
+                                    AllDayChip(
+                                        event = ev,
+                                        calendars = calendars,
+                                        onClick = { onEventClick(ev) },
+                                        onView = onEventClick,
+                                        onEdit = onEventEdit,
+                                        onDuplicate = onEventDuplicate,
+                                        onDelete = onEventDelete,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    items(items = timedEvents, key = { "${it.id}@${it.startsAt}" }) { ev ->
                         EventRow(
                             event = ev,
                             calendars = calendars,

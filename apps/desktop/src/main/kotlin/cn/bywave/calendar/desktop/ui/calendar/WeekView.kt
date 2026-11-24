@@ -304,7 +304,7 @@ private fun AllDayBand(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AllDayChip(
+internal fun AllDayChip(
     event: EventDTO,
     calendars: List<CalendarMeta>,
     onClick: () -> Unit,

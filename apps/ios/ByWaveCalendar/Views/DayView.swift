@@ -22,6 +22,13 @@ struct DayView: View {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
     }
 
+    // 全天事件单独置顶成区，不再混在定时列表里按 startsAt 排序找。
+    // 分流只看 allDay 标记：父级 eventsForDay 已经用 AllDayDates 把
+    // 全天事件按存储的 UTC 日历日期分桶到这一天（与周/月视图同一
+    // 口径），这里不二次判定日期。两半都保持父级的 startsAt 顺序。
+    private var allDayEvents: [EventDTO] { events.filter { $0.allDay } }
+    private var timedEvents: [EventDTO] { events.filter { !$0.allDay } }
+
     var body: some View {
         Group {
             if events.isEmpty {
@@ -29,7 +36,28 @@ struct DayView: View {
                     .transition(.opacity)
             } else {
                 List {
-                    ForEach(events) { ev in
+                    if !allDayEvents.isEmpty {
+                        Section {
+                            ForEach(allDayEvents) { ev in
+                                NavigationLink {
+                                    EventDetailView(
+                                        event: ev,
+                                        calendar: calLookup[ev.calendarId],
+                                        allCalendars: calendars,
+                                        onChanged: onEventChanged,
+                                    )
+                                } label: {
+                                    AllDayPillRow(
+                                        event: ev,
+                                        calendar: calLookup[ev.calendarId],
+                                    )
+                                }
+                            }
+                        } header: {
+                            Text("全天")
+                        }
+                    }
+                    ForEach(timedEvents) { ev in
                         NavigationLink {
                             EventDetailView(
                                 event: ev,
@@ -117,6 +145,28 @@ struct DayView: View {
         // restorable soft-delete → offer undo.
         state.noteEventDeleted(id: id, summary: ev.summary)
         onEventChanged()
+    }
+}
+
+/// 全天区里的一条药丸。与 WeekView 的全天药丸同一套样式参数：填充
+/// 0.9、圆角走 Theme.Radius.eventBlock、字色走 Theme.eventTextColor
+/// （全端统一的 WCAG 亮度规则）。WeekView 的药丸是它文件内的私有
+/// 函数，没法跨文件引用，所以这里按同一来源重建外形，公式与令牌
+/// 都是共享的那一份。不设固定高度：caption2 随 Dynamic Type 缩放，
+/// 药丸高度由文字自然撑开，大字号下不会裁切。
+private struct AllDayPillRow: View {
+    let event: EventDTO
+    let calendar: CalendarMeta?
+
+    var body: some View {
+        let color = Color(hex: calendar?.color) ?? .accentColor
+        Text(event.summary)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Theme.eventTextColor(forHex: calendar?.color))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6).padding(.vertical, 3)
+            .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: Theme.Radius.eventBlock))
     }
 }
 
