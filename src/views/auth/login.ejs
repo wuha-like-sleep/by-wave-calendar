@@ -206,6 +206,7 @@ const BWC_LOGIN_T = <%- jsonForScript({
   let pollTimer = null;
   let pollCount = 0;
   let currentCode = null;
+  let currentExpiresAtMs = 0;
 
   function activateTab(which) {
     if (which === "pwd") {
@@ -222,7 +223,29 @@ const BWC_LOGIN_T = <%- jsonForScript({
       if (!qrInitialized) {
         qrInitialized = true;
         initQr();
+      } else {
+        resumeQr();
       }
+    }
+  }
+
+  // Coming back to the QR tab after a detour to the password tab:
+  // polling was stopped on the way out, so pick it back up. If the
+  // code is still inside its server-side TTL, keep waiting on the SAME
+  // code (the phone may already be looking at it); if it has expired,
+  // mint a fresh one — initQr shows the new QR with the waiting status,
+  // which is the user's cue that the code changed.
+  function resumeQr() {
+    if (currentCode && currentExpiresAtMs > Date.now()) {
+      // Restart the round counter: the expiry check in pollStatus is
+      // the real bound now, and the server answers 404 for a code that
+      // died early (denied/redeemed), so resuming can't poll forever.
+      pollCount = 0;
+      showDisplay();
+      setStatus('<span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse mr-1.5 align-middle"></span>' + esc(BWC_LOGIN_T.qrWaiting), true);
+      pollStatus();
+    } else {
+      initQr();
     }
   }
   tabPwd.addEventListener("click", function(){ activateTab("pwd"); });
@@ -286,6 +309,7 @@ const BWC_LOGIN_T = <%- jsonForScript({
       const env = await initResp.json();
       const data = env && env.ok && env.data ? env.data : env;
       currentCode = data.code;
+      currentExpiresAtMs = Date.parse(data.expiresAt || "") || 0;
       // Server pre-renders SVG so we don't need a JS QR lib bundled
       // (matches the 中国友好 no-CDN constraint). Just inject it.
       // The SVG is from our own server — same origin — so this is safe
@@ -311,9 +335,10 @@ const BWC_LOGIN_T = <%- jsonForScript({
   async function pollStatus() {
     if (!currentCode) return;
     pollCount++;
-    if (pollCount > 150) {
-      // ~5min exceeded → server side TTL'd anyway. Stop polling and
-      // tell user to refresh.
+    if (pollCount > 150 || (currentExpiresAtMs && Date.now() > currentExpiresAtMs)) {
+      // Pair TTL exceeded → server side TTL'd anyway. Stop polling and
+      // tell user to refresh. (The expiry check is what bounds polling
+      // after a tab-switch resume reset the round counter.)
       setStatus('<span class="text-amber-600">' + esc(BWC_LOGIN_T.qrExpired) + '</span>', false);
       return;
     }

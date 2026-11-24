@@ -367,6 +367,13 @@
 "网页端正在自动登录。可以回到电脑浏览器前继续操作。" = "Le web se connecte automatiquement. Vous pouvez revenir au navigateur de l’ordinateur.";
 "电脑端正在自动登录。可以回到电脑前继续操作。" = "L’ordinateur se connecte automatiquement. Vous pouvez revenir à l’ordinateur.";
 "批准失败" = "Échec de l’approbation";
+"要批准这次登录吗？" = "Approuver cette connexion ?";
+"批准后，这台电脑会以下面这个账号登录，能看到并修改你的全部日历。" = "Si vous approuvez, cet ordinateur se connectera avec le compte ci-dessous et pourra consulter et modifier tous vos calendriers.";
+"批准后，那个浏览器会以下面这个账号登录，能看到并修改你的全部日历。" = "Si vous approuvez, ce navigateur se connectera avec le compte ci-dessous et pourra consulter et modifier tous vos calendriers.";
+"只有你自己刚刚在电脑上发起了这次登录，才应该批准。别人拿给你「扫一下」的码，扫完就等于把账号交给了他。" = "N’approuvez que si vous venez de lancer cette connexion vous-même. Si quelqu’un vous tend un code à scanner, l’approuver revient à lui donner votre compte.";
+"批准登录" = "Approuver la connexion";
+"服务器没有提供发起方的更多信息（设备、IP、时间）。" = "Le serveur ne donne aucune autre information sur l’auteur de la demande (appareil, IP, heure).";
+"这个码来自另一台服务器：%@；你现在登录的是 %@。" = "Ce code provient d’un autre serveur : %@. Vous êtes connecté à %@.";
 "二维码无法识别" = "QR code non reconnu";
 "这个二维码不像登录码。请确认扫描的是电脑端或网页端的登录二维码。" = "Cela ne ressemble pas à un code de connexion. Vérifiez que vous scannez le QR code de connexion de l’ordinateur ou du web.";
 "提示：电脑端「登录 ByWave Calendar」或网页 /login 的「扫码登录」标签都会显示二维码。" = "Astuce : le QR code apparaît sur l’écran « Se connecter à ByWave Calendar » de l’ordinateur ou sous l’onglet « Scanner pour se connecter » sur /login.";
