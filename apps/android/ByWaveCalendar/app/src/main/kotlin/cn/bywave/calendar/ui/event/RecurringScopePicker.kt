@@ -31,8 +31,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,14 +64,11 @@ fun RecurringScopePicker(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    // Buzz on a destructive (delete-scope) pick — the pick IS the
-    // confirmation for recurring deletes, so it deserves the same haptic
-    // as the plain delete dialog. Edit-scope picks stay silent.
-    val haptic = LocalHapticFeedback.current
+    // 删除范围的选定不给触觉：触觉定版口径只给正向确认（保存
+    // 成功、RSVP、清单勾选），删除一律不震。早先这里与普通
+    // 删除弹窗都带震动，注释称对齐 iOS，但 iOS 删除路径从来
+    // 不震，本次一并摘除。
     val pick: (RecurringScope) -> Unit = { scope ->
-        if (action == RecurringAction.Delete) {
-            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        }
         onPick(scope)
     }
     val title = if (action == RecurringAction.Edit)

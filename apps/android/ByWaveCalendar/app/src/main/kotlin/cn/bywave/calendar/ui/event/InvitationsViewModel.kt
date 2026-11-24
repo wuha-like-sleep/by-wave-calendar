@@ -34,6 +34,11 @@ data class InvitationsUiState(
     val acting: Boolean = false,
     /** Last mutation failure, shown on the detail page (not the list). */
     val actionError: String? = null,
+    /** 成功提交 RSVP 的次数（单调递增，失败不涨）。界面据此给
+     *  成功触觉——触觉定版口径里 RSVP 与保存成功、清单勾选
+     *  同属正向确认；propose 不计入，与 iOS 只在 respond 给
+     *  触觉一一对应。 */
+    val respondSuccessSeq: Int = 0,
 )
 
 class InvitationsViewModel : ViewModel() {
@@ -62,7 +67,7 @@ class InvitationsViewModel : ViewModel() {
 
     fun respond(status: String) {
         val token = _state.value.selectedToken ?: return
-        mutate {
+        mutate(buzzOnSuccess = true) {
             val client = client() ?: return@mutate
             client.api.respondInvitation(token, InvitationRespondRequest(status))
         }
@@ -79,13 +84,22 @@ class InvitationsViewModel : ViewModel() {
         }
     }
 
-    private fun mutate(block: suspend () -> Unit) {
+    private fun mutate(buzzOnSuccess: Boolean = false, block: suspend () -> Unit) {
         if (_state.value.acting) return
         _state.update { it.copy(acting = true, actionError = null) }
         viewModelScope.launch {
             try {
                 block()
-                _state.update { it.copy(acting = false) }
+                _state.update {
+                    it.copy(
+                        acting = false,
+                        respondSuccessSeq = if (buzzOnSuccess) {
+                            it.respondSuccessSeq + 1
+                        } else {
+                            it.respondSuccessSeq
+                        },
+                    )
+                }
                 load() // re-read statuses / proposals from the server
             } catch (e: Exception) {
                 _state.update {

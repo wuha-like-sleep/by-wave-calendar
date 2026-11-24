@@ -115,7 +115,10 @@ fun EventEditScreen(
     vm: EventEditViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsState()
-    // Subtle haptic on the destructive delete confirm (matches iOS).
+    // 触觉定版口径：只给保存成功一下轻震（与 iOS 保存成功的
+    // .success 一一对应，沿用仓内 LongPress 一档）；删除确认
+    // 与删除走完都不震——早先删除确认上的震动注释称「对齐
+    // iOS」，但 iOS 删除路径从来不震，本次一并摘除改正。
     val haptic = LocalHapticFeedback.current
 
     // bootstrap once — keyed on a stable identity (source id or "create").
@@ -131,6 +134,11 @@ fun EventEditScreen(
     LaunchedEffect(calendars) { vm.onCalendarsChanged(calendars) }
     LaunchedEffect(state.finished) {
         if (!state.finished) return@LaunchedEffect
+        // 保存与删除共用 finished 出口，靠 finishedViaDelete
+        // 区分：只有保存成功才震这一下。
+        if (!state.finishedViaDelete) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
         val created = state.savedEvent
         if (state.savedViaQuick && created != null && onQuickSaved != null) {
             onQuickSaved(created)
@@ -624,7 +632,6 @@ fun EventEditScreen(
                 text = { Text(stringResource(R.string.event_delete_confirm_message)) },
                 confirmButton = {
                     TextButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         showDeleteDialog = false
                         vm.delete()
                     }) { Text(stringResource(R.string.action_delete)) }

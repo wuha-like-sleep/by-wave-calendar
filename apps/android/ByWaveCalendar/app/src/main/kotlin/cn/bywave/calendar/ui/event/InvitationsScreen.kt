@@ -62,6 +62,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,6 +90,19 @@ fun InvitationsScreen(
 ) {
     val state by vm.state.collectAsState()
     LaunchedEffect(openToken) { vm.bootstrap(openToken) }
+
+    // RSVP 提交成功给一下轻震（触觉定版口径，与 iOS 的
+    // .success 一一对应；沿用仓内 LongPress 一档）。只认成功
+    // 计数的新增：lastBuzzedSeq 在进入组合时以当前计数起步，
+    // 失败不涨、离开再回来不重放。
+    val haptic = LocalHapticFeedback.current
+    var lastBuzzedSeq by remember { mutableStateOf(state.respondSuccessSeq) }
+    LaunchedEffect(state.respondSuccessSeq) {
+        if (state.respondSuccessSeq > lastBuzzedSeq) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+        lastBuzzedSeq = state.respondSuccessSeq
+    }
 
     val selected = state.invitations.firstOrNull { it.token == state.selectedToken }
 
