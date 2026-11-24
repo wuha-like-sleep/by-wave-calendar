@@ -705,6 +705,65 @@ export async function previewGeoPackRelease(args: {
 }
 
 // ---------------------------------------------------------------------------
+// 发布索引（只拉清单，给后台列表页标「有新版」用）
+// ---------------------------------------------------------------------------
+// 与预检的区别：预检要算「这次还要下多少」，得对本地大文件做整文件
+// SHA-256；列表页每次打开都跑一遍那个太重。这里只拉发布清单本身，
+// 本地版本取包目录 manifest 里记录的 sha256 比对（包落位时已经全量
+// 验过，manifest 就是它的出生证明），页面打开不读包本体。任何失败
+// （源不可达 / 超时 / 清单非法）都返回 null：页面退化成只展示本地
+// 状态，绝不因为查更新把后台页拖挂。
+
+export interface GeoReleaseIndexPack {
+  packId: string;
+  file: string;
+  bytes: number;
+  sha256: string;
+  rows: number | null;
+  region: string | null;
+  packVersion: string | null;
+  /** 分卷数；0 = 单资产发布。 */
+  parts: number;
+}
+
+export interface GeoReleaseIndex {
+  release: string;
+  generatedAt: string | null;
+  packs: GeoReleaseIndexPack[];
+}
+
+export async function fetchGeoReleaseIndex(args: {
+  baseUrl?: string;
+  fetchImpl?: GeoFetchImpl;
+  timeoutMs?: number;
+} = {}): Promise<GeoReleaseIndex | null> {
+  const baseUrl = (args.baseUrl ?? resolveGeoPackReleaseBaseUrl()).replace(/\/+$/, "");
+  const base = args.fetchImpl ?? defaultFetchImpl;
+  const timeoutMs = args.timeoutMs ?? 4000;
+  const impl: GeoFetchImpl = (url, init) =>
+    base(url, { ...init, signal: init.signal ?? AbortSignal.timeout(timeoutMs) });
+  try {
+    const manifest = await readManifest(baseUrl, impl);
+    return {
+      release: manifest.release,
+      generatedAt: manifest.generatedAt,
+      packs: manifest.packs.map((p) => ({
+        packId: p.packId,
+        file: p.file,
+        bytes: p.bytes,
+        sha256: p.sha256,
+        rows: p.rows,
+        region: p.region,
+        packVersion: p.packVersion,
+        parts: p.parts.length,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 获取任务（内存注册表为实时视图 + 暂存区落盘状态，重启可恢复）
 // ---------------------------------------------------------------------------
 
