@@ -63,6 +63,20 @@ data class EventsResponse(
     val events: List<EventDTO>,
 )
 
+/** GET /api/v1/events/sync 的响应。初始同步（不带 syncToken）只回
+ *  calendars / events / nextSyncToken，两个 id 名单缺省为空；增量
+ *  响应里 upsertedIds 是「在窗口内按当前状态重展开」的主事件名单
+ *  （events 是它们的展开行，主事件移出窗口时名单里有它、events
+ *  里没有行，客户端据此整组清行），deletedIds 是只给名单的行。 */
+@Serializable
+data class EventsSyncResponse(
+    val calendars: List<CalendarMeta>,
+    val events: List<EventDTO>,
+    val upsertedIds: List<String> = emptyList(),
+    val deletedIds: List<String> = emptyList(),
+    val nextSyncToken: String,
+)
+
 @Serializable
 data class CalendarMeta(
     val id: String,

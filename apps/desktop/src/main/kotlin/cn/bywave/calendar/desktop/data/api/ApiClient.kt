@@ -57,6 +57,7 @@ import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
 import cn.bywave.calendar.desktop.data.model.Profile
 import cn.bywave.calendar.desktop.data.model.EventsResponse
+import cn.bywave.calendar.desktop.data.model.EventsSyncResponse
 import cn.bywave.calendar.desktop.data.model.InvitationProposeRequest
 import cn.bywave.calendar.desktop.data.model.InvitationProposeResponse
 import cn.bywave.calendar.desktop.data.model.InvitationRespondRequest
@@ -316,6 +317,21 @@ class ApiClient(
         }
         if (resp.status == HttpStatusCode.NotModified) return EventsFetch.NotModified
         return EventsFetch.Fresh(unwrap(resp, EventsResponse.serializer()), resp.headers["ETag"])
+    }
+
+    /** GET /api/v1/events/sync?from=&to=[&syncToken=] — 增量同步
+     *  （Google Calendar syncToken 同款语义，服务端原语见
+     *  src/lib/event_sync.ts）。不带令牌 = 初始同步（窗口全量 +
+     *  nextSyncToken）；带令牌 = 只回令牌之后的变化。令牌过期 /
+     *  解不开 / 变更量过大时服务端回 410，unwrap 抛 ApiException
+     *  (410)，调用方据此清令牌、全量重建。老服务端没有这条路由
+     *  时是 404，同样走 ApiException，调用方回退窗口全量拉取。 */
+    suspend fun eventsSync(from: String, to: String, syncToken: String?): EventsSyncResponse {
+        return getAuthed("/api/v1/events/sync", EventsSyncResponse.serializer()) {
+            parameter("from", from)
+            parameter("to", to)
+            if (syncToken != null) parameter("syncToken", syncToken)
+        }
     }
 
     /** GET /api/v1/search?q=<needle>&limit=<n>. Server-side substring match

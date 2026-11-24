@@ -71,6 +71,15 @@ class OfflineQueue(
 
     val pendingIds: Set<String> get() = _ops.value.map { it.eventId }.toSet()
 
+    /** 队列里 CREATE 条目的临时 id 集。增量同步应用计划要把它们
+     *  从服务端底稿里排除（本地新建行不是服务端镜像的一部分），
+     *  与 pendingIds 分开给：protectedIds 是按主事件 id 保护，
+     *  这一份是按临时行 id 排除，语义不同。 */
+    val localCreateIds: Set<String> get() = _ops.value
+        .filter { it.kind == PendingOpKind.CREATE }
+        .map { it.eventId }
+        .toSet()
+
     private fun persistLocked() {
         val key = accountKey ?: return
         PendingOpStore.write(key, _ops.value)

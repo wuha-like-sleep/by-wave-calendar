@@ -19,6 +19,11 @@ data class CachedEvents(
      *  带默认值：旧版本写的快照没有这个字段，照常解码、只是第一次
      *  刷新拿不到 304、刷新完就补上了。 */
     val etag: String? = null,
+    /** 这个（账号、窗口）的增量同步令牌（/events/sync 的
+     *  nextSyncToken）。它只对同文件里这份快照基线有效：快照在、
+     *  令牌就在，基线换了（全量重写）令牌随新基线一起换。带默认
+     *  值同上：旧快照没有这个字段，第一次刷新走初始同步补上。 */
+    val syncToken: String? = null,
 )
 
 /** Bounded, disposable snapshots. Network responses remain authoritative. */
@@ -42,14 +47,14 @@ internal class DiskEventCache(private val root: Path, private val now: () -> Lon
         }
     } catch (_: Exception) { null }
 
-    @Synchronized fun write(profile: String, from: String, to: String, response: EventsResponse, etag: String? = null) {
+    @Synchronized fun write(profile: String, from: String, to: String, response: EventsResponse, etag: String? = null, syncToken: String? = null) {
         var temporary: Path? = null
         try {
             val dir = directory(profile)
             if (Files.isSymbolicLink(dir)) return
             Files.createDirectories(dir)
             runCatching { Files.setPosixFilePermissions(dir, PosixFilePermissions.fromString("rwx------")) }
-            val text = json.encodeToString(CachedEvents.serializer(), CachedEvents(now(), response, etag))
+            val text = json.encodeToString(CachedEvents.serializer(), CachedEvents(now(), response, etag, syncToken))
             if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) return
             temporary = Files.createTempFile(dir, ".snapshot-", ".tmp")
             runCatching { Files.setPosixFilePermissions(temporary, PosixFilePermissions.fromString("rw-------")) }
@@ -67,6 +72,21 @@ internal class DiskEventCache(private val root: Path, private val now: () -> Lon
             }
         } catch (_: Exception) { /* A cache failure must never fail an event operation. */ }
         finally { temporary?.let { runCatching { Files.deleteIfExists(it) } } }
+    }
+
+    /** 只抹掉这个窗口的同步令牌，快照本体与保存时间不动。同步
+     *  通道失败（令牌 410、老服务端没这条路由、响应解不开）后
+     *  调用：下次刷新不再拿着废令牌重试增量，而是走初始同步或
+     *  ETag 全量。文件不在 / 已损坏时静默无操作；万一写坏了，
+     *  readEntry 解码失败按缓存未命中处理，不会卡住用户。 */
+    @Synchronized fun clearSyncToken(profile: String, from: String, to: String) {
+        try {
+            val path = file(profile, from, to)
+            if (Files.isSymbolicLink(directory(profile)) || Files.isSymbolicLink(path) || !Files.isRegularFile(path)) return
+            val cached = json.decodeFromString(CachedEvents.serializer(), Files.readString(path))
+            if (cached.syncToken == null) return
+            Files.writeString(path, json.encodeToString(CachedEvents.serializer(), cached.copy(syncToken = null)))
+        } catch (_: Exception) { /* A cache failure must never fail an event operation. */ }
     }
 
     @Synchronized fun clear(profile: String) {
@@ -92,6 +112,7 @@ object EventCache {
     private val cache by lazy { DiskEventCache(Paths.get(System.getProperty("user.home"), ".bywave-calendar", "event-cache")) }
     fun read(deviceId: String, fromIso: String, toIso: String) = cache.read(deviceId, fromIso, toIso)
     fun readEntry(deviceId: String, fromIso: String, toIso: String) = cache.readEntry(deviceId, fromIso, toIso)
-    fun write(deviceId: String, fromIso: String, toIso: String, resp: EventsResponse, etag: String? = null) = cache.write(deviceId, fromIso, toIso, resp, etag)
+    fun write(deviceId: String, fromIso: String, toIso: String, resp: EventsResponse, etag: String? = null, syncToken: String? = null) = cache.write(deviceId, fromIso, toIso, resp, etag, syncToken)
+    fun clearSyncToken(deviceId: String, fromIso: String, toIso: String) = cache.clearSyncToken(deviceId, fromIso, toIso)
     fun clear(deviceId: String) = cache.clear(deviceId)
 }
