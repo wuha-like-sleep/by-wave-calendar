@@ -713,6 +713,115 @@ describe("跨轮 / 跨重启续传", () => {
     }
   });
 
+  function writePersistedRunningJob(stagingDir: string) {
+    writeFileSync(path.join(stagingDir, "fetch-job-state.json"), JSON.stringify({
+      version: 1,
+      actorUserId: null,
+      job: {
+        id: "00000000-0000-4000-8000-000000000001",
+        status: "running",
+        baseUrl,
+        release: "geo-packs-au-vTest",
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        recovered: false,
+        files: [],
+        error: null,
+        lastError: null,
+      },
+    }));
+  }
+
+  it("重启恢复（多文件衔接）：已落位的文件零请求跳过，半截的包 Range 续上并落位", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestSingleAsset()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      // 「上一程被杀」的现场：共享许可与配套已经落位（已完成），包
+      // 本体在暂存区留了半截，状态文件停在 running。
+      mkdirSync(path.join(packDir, "licences"), { recursive: true });
+      writeFileSync(path.join(packDir, "licences", "test-licence.txt"), licenceText);
+      writeFileSync(path.join(packDir, "manifest-au-ot.json"), companion);
+      const stagingDir = path.join(packDir, ".incoming");
+      mkdirSync(stagingDir, { recursive: true });
+      const tag = sha("pack-au-ot.sqlite").slice(0, 16);
+      writeFileSync(path.join(stagingDir, `fetch-${GEO_FETCH_STAGING_SCOPE}-${tag}.part`), part0);
+      writePersistedRunningJob(stagingDir);
+      const requested: string[] = [];
+      const counting = async (url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) => {
+        requested.push(url);
+        return fetch(url, init);
+      };
+      lastRangeHeader = null;
+      const resumed = await resumePersistedGeoPackFetch({ packDir, fetchImpl: counting, tuning: FLAKY_TUNING });
+      expect(resumed).toBe(true);
+      const job = await waitForJob((s) => s.recovered && s.finishedAt !== null);
+      expect(job.status).toBe("done");
+      // 已完成文件：跳过判定纯本地（大小 + 整文件 SHA），恢复全程
+      // 不许为它们发任何请求。
+      expect(requested.some((u) => u.endsWith("/licences/test-licence.txt"))).toBe(false);
+      expect(requested.some((u) => u.endsWith("/manifest-au-ot.json"))).toBe(false);
+      expect(job.files.find((f) => f.file === "licences/test-licence.txt")!.status).toBe("skipped");
+      expect(job.files.find((f) => f.file === "manifest-au-ot.json")!.status).toBe("skipped");
+      // 未完成文件：Range 起点 = 半截大小；最终逐字一致（落位前整
+      // 文件 SHA-256 校验是 activateStagedGeoFile 的必经之路）。
+      expect(lastRangeHeader).toBe(`bytes=${part0.length}-`);
+      expect(readFileSync(path.join(packDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+      expect(existsSync(path.join(stagingDir, "fetch-job-state.json"))).toBe(false);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("重启恢复：开机时清单先 500 两次（网络未就绪）→ 退避重试不判死，最终完成", async () => {
+    writeFileSync(path.join(releaseDir, "geo-pack-release.json"), JSON.stringify(manifestSingleAsset()));
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      const stagingDir = path.join(packDir, ".incoming");
+      mkdirSync(stagingDir, { recursive: true });
+      writePersistedRunningJob(stagingDir);
+      let manifestCalls = 0;
+      const impl = async (url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) => {
+        if (url.endsWith("/geo-pack-release.json")) {
+          manifestCalls += 1;
+          if (manifestCalls <= 2) return new Response("boot not ready", { status: 500 });
+        }
+        return fetch(url, init);
+      };
+      const resumed = await resumePersistedGeoPackFetch({ packDir, fetchImpl: impl, tuning: FLAKY_TUNING });
+      expect(resumed).toBe(true);
+      const job = await waitForJob((s) => s.recovered && s.finishedAt !== null);
+      expect(job.status).toBe("done");
+      expect(manifestCalls).toBe(3);
+      expect(readFileSync(path.join(packDir, "pack-au-ot.sqlite"))).toEqual(packBuf);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
+  it("新点任务：清单 500 立即判死、只请求一次（有人值守，失败立即可见）", async () => {
+    const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
+    try {
+      let manifestCalls = 0;
+      const impl = async (url: string, init: { headers?: Record<string, string>; signal?: AbortSignal }) => {
+        if (url.endsWith("/geo-pack-release.json")) {
+          manifestCalls += 1;
+          return new Response("boom", { status: 500 });
+        }
+        return fetch(url, init);
+      };
+      const { started } = startGeoPackFetch({
+        actorUserId: null, packDir, baseUrl, fetchImpl: impl, tuning: FLAKY_TUNING,
+      });
+      expect(started).toBe(true);
+      const job = await waitForJob((s) => s.finishedAt !== null);
+      expect(job.status).toBe("failed");
+      expect(job.error).toBe("release_manifest_http_500");
+      expect(manifestCalls).toBe(1);
+    } finally {
+      rmSync(packDir, { recursive: true, force: true });
+    }
+  });
+
   it("没有落盘状态 / 状态已损坏 → 不恢复", async () => {
     const packDir = mkdtempSync(path.join(tmpdir(), "bywave-packdir-"));
     try {
