@@ -356,6 +356,8 @@ export const fr: Partial<Record<TranslationKey, string>> = {
   "settings.security.passkeyLastUsed": "Dernière utilisation le {date}",
   "settings.security.passkeyLastUsedLabel": "Dernière utilisation le",
   "settings.security.passkeyAddPrompt": "Nommez cette passkey (par ex. Mac TouchID / iPhone)",
+  "settings.security.passkeyNameHint": "Laissez ce champ vide pour utiliser un nom généré automatiquement",
+  "settings.security.passkeyNameTooLong": "Le nom doit comporter 100 caractères maximum",
   "settings.security.passkeyAddSuccess": "Passkey ajoutée",
   "settings.security.passkeyAddFailed": "Impossible d'ajouter la passkey : {error}",
   "settings.security.passkeyDelete": "Supprimer",

@@ -356,6 +356,8 @@ export const ko: Partial<Record<TranslationKey, string>> = {
   "settings.security.passkeyLastUsed": "마지막 사용 {date}",
   "settings.security.passkeyLastUsedLabel": "마지막 사용",
   "settings.security.passkeyAddPrompt": "이 패스키의 이름을 지정하세요 (예: Mac TouchID / iPhone)",
+  "settings.security.passkeyNameHint": "비워 두면 자동 생성된 이름이 사용됩니다",
+  "settings.security.passkeyNameTooLong": "이름은 100자 이내로 입력하세요",
   "settings.security.passkeyAddSuccess": "패스키가 추가되었습니다",
   "settings.security.passkeyAddFailed": "패스키를 추가할 수 없습니다: {error}",
   "settings.security.passkeyDelete": "삭제",

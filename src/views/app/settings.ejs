@@ -74,6 +74,33 @@
   <% } %>
 </section>
 
+<!-- Modal: name a new passkey. Replaces the native prompt() that used to
+     collect the device name before the system registration sheet. Same
+     skeleton and open/close mechanics as the pair-device modal below. -->
+<div id="modal-passkey-name" class="hidden fixed inset-0 z-[70] bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+  <div class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl">
+    <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <h3 class="text-base font-semibold text-slate-900"><%= t("settings.security.passkeyAdd") %></h3>
+      <button type="button" id="btn-passkey-name-close" class="p-1.5 rounded-md hover:bg-slate-100" aria-label="<%= t('settings.devices.modalClose') %>">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <form id="form-passkey-name" class="p-5">
+      <label for="passkey-name-input" class="block text-sm text-slate-600 mb-2"><%= t("settings.security.passkeyAddPrompt") %></label>
+      <input id="passkey-name-input" type="text" autocomplete="off"
+             class="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100" />
+      <p class="mt-2 text-xs text-slate-500"><%= t("settings.security.passkeyNameHint") %></p>
+      <p id="passkey-name-error" class="hidden mt-3 text-sm text-red-600"></p>
+      <div class="mt-5 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+        <button type="button" id="btn-passkey-name-cancel"
+                class="rounded-lg border border-slate-300 bg-white px-4 py-2.5 sm:py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"><%= t("common.cancel") %></button>
+        <button type="submit" id="btn-passkey-name-ok"
+                class="rounded-lg bg-brand-600 px-4 py-2.5 sm:py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"><%= t("common.continue") %></button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <section id="mfa" class="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 scroll-mt-32"<% if (!isVisible('mfa')) { %> style="display:none"<% } %>>
   <h2 class="text-lg font-semibold text-slate-900 mb-2"><%= t("settings.security.mfaTitle") %></h2>
   <% if (user.mfaEnabled) { %>
@@ -188,7 +215,9 @@ JSON.stringify({
   pushOn: t("settings.notifications.pushOn"),
   pushOff: t("settings.notifications.pushOff"),
   pushEnableFailed: t("settings.notifications.pushEnableFailed"),
-  passkeyAddPrompt: t("settings.security.passkeyAddPrompt"),
+  passkeyNameTooLong: t("settings.security.passkeyNameTooLong"),
+  passkeyWaiting: t("login.passkeyWaiting"),
+  passkeyContinue: t("common.continue"),
   passkeyAddSuccess: t("settings.security.passkeyAddSuccess"),
   passkeyAddFailed: t("settings.security.passkeyAddFailed"),
   passkeyDeleteConfirm: t("settings.security.passkeyDeleteConfirm"),
@@ -1087,31 +1116,97 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-  document.getElementById("add-passkey")?.addEventListener("click", async () => {
-    try {
-      const name = prompt(BWC_I18N.passkeyAddPrompt, "");
-      const opts = await (await fetch("/webauthn/register/options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-        credentials: "same-origin",
-        body: JSON.stringify({})
-      })).json();
-      if (opts.error) throw new Error(opts.error);
-      const att = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
-      const verify = await (await fetch("/webauthn/register/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-        credentials: "same-origin",
-        body: JSON.stringify({ response: att, deviceName: name || undefined })
-      })).json();
-      if (!verify.ok) throw new Error(verify.error || "verify_failed");
-      window.bwc.toast(BWC_I18N.passkeyAddSuccess, "success");
-      setTimeout(() => window.location.reload(), 500);
-    } catch (err) {
-      console.error(err);
-      window.bwc.toast(fmt(BWC_I18N.passkeyAddFailed, { error: (err.message || err) }), "error");
-    }
-  });
+  // Add passkey: the name is collected in the in-app modal above (it used
+  // to be a native prompt(), which also let a cancelled prompt fall
+  // through and register anyway). Confirming the modal runs the system
+  // registration sheet; a failure keeps the modal open with the error
+  // inside it, so the user can fix the name or retry without starting
+  // over. Open/close mirrors the pair-device modal's mechanics (shared
+  // [id^="modal-"] CSS keeps the element transparent until .is-open).
+  const pkModal = document.getElementById("modal-passkey-name");
+  const pkForm = document.getElementById("form-passkey-name");
+  const pkInput = document.getElementById("passkey-name-input");
+  const pkError = document.getElementById("passkey-name-error");
+  const pkOkBtn = document.getElementById("btn-passkey-name-ok");
+  const pkCancelBtn = document.getElementById("btn-passkey-name-cancel");
+  const pkCloseBtn = document.getElementById("btn-passkey-name-close");
+  let pkBusy = false;
+
+  function setPasskeyBusy(on) {
+    pkBusy = on;
+    pkInput.disabled = on;
+    pkOkBtn.disabled = on;
+    pkCancelBtn.disabled = on;
+    pkCloseBtn.disabled = on;
+    pkOkBtn.textContent = on ? BWC_I18N.passkeyWaiting : BWC_I18N.passkeyContinue;
+  }
+  function showPasskeyError(text) {
+    pkError.textContent = text;
+    pkError.classList.remove("hidden");
+  }
+  function openPasskeyModal() {
+    pkInput.value = "";
+    pkError.classList.add("hidden");
+    pkError.textContent = "";
+    setPasskeyBusy(false);
+    pkModal.classList.remove("hidden");
+    void pkModal.offsetWidth; // reflow so the enter transition starts closed
+    pkModal.classList.add("is-open");
+    setTimeout(() => pkInput.focus(), 60);
+  }
+  function closePasskeyModal() {
+    if (pkBusy) return; // the system sheet is up; its own cancel lands back here as an error
+    if (pkModal.classList.contains("hidden")) return;
+    pkModal.classList.remove("is-open"); // play the leave transition
+    setTimeout(function () {
+      if (!pkModal.classList.contains("is-open")) pkModal.classList.add("hidden");
+    }, 340);
+  }
+
+  if (pkModal && pkForm && pkInput && pkError && pkOkBtn && pkCancelBtn && pkCloseBtn) {
+    document.getElementById("add-passkey")?.addEventListener("click", openPasskeyModal);
+    pkCancelBtn.addEventListener("click", closePasskeyModal);
+    pkCloseBtn.addEventListener("click", closePasskeyModal);
+    pkModal.addEventListener("click", (e) => { if (e.target === pkModal) closePasskeyModal(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !pkModal.classList.contains("hidden")) closePasskeyModal();
+    });
+    pkInput.addEventListener("input", () => pkError.classList.add("hidden"));
+
+    pkForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (pkBusy) return;
+      const name = pkInput.value;
+      // Mirror the server rule in /webauthn/register/verify: zod checks
+      // the raw string at max(100). Empty is allowed on purpose — the
+      // server generates a default name, as the hint under the input says.
+      if (name.length > 100) { showPasskeyError(BWC_I18N.passkeyNameTooLong); return; }
+      setPasskeyBusy(true);
+      try {
+        const opts = await (await fetch("/webauthn/register/options", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          credentials: "same-origin",
+          body: JSON.stringify({})
+        })).json();
+        if (opts.error) throw new Error(opts.error);
+        const att = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON: opts });
+        const verify = await (await fetch("/webauthn/register/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
+          credentials: "same-origin",
+          body: JSON.stringify({ response: att, deviceName: name || undefined })
+        })).json();
+        if (!verify.ok) throw new Error(verify.error || "verify_failed");
+        window.bwc.toast(BWC_I18N.passkeyAddSuccess, "success");
+        setTimeout(() => window.location.reload(), 500);
+      } catch (err) {
+        console.error(err);
+        setPasskeyBusy(false);
+        showPasskeyError(fmt(BWC_I18N.passkeyAddFailed, { error: (err.message || err) }));
+      }
+    });
+  }
 
   document.querySelector("[data-copy-app-pwd]")?.addEventListener("click", async () => {
     const el = document.getElementById("new-app-password");

@@ -348,6 +348,8 @@ export const zhCN: Partial<Record<TranslationKey, string>> = {
   "settings.security.passkeyLastUsed": "最近使用 {date}",
   "settings.security.passkeyLastUsedLabel": "最近使用",
   "settings.security.passkeyAddPrompt": "给这把 Passkey 起个名字（比如 Mac TouchID / iPhone）",
+  "settings.security.passkeyNameHint": "留空将使用自动生成的默认名称",
+  "settings.security.passkeyNameTooLong": "名称最多 100 个字符",
   "settings.security.passkeyAddSuccess": "Passkey 添加成功",
   "settings.security.passkeyAddFailed": "添加失败：{error}",
   "settings.security.passkeyDelete": "删除",
