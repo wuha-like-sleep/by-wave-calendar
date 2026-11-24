@@ -3,7 +3,7 @@
     <div class="flex h-14 items-center justify-between gap-2 sm:gap-4">
       <a href="<%= user ? '/app' : '/' %>" class="flex shrink-0 items-center gap-2.5 font-semibold text-slate-900">
         <% if (typeof siteLogoUrl !== 'undefined' && siteLogoUrl) { %>
-          <img src="<%= siteLogoUrl %>" alt="logo" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200 shadow-sm" />
+          <img src="<%= siteLogoUrl %>" alt="logo" class="h-9 w-9 rounded-xl object-cover ring-1 ring-slate-200" />
         <% } else { %>
           <img src="/static/brand/logo-small.svg?v=<%= typeof assetVersion !== 'undefined' ? assetVersion : '1' %>" alt="" width="36" height="36" class="h-9 w-9" />
         <% } %>
@@ -57,7 +57,7 @@
           <%- include('lang-switcher') %>
           <a href="/login" class="px-2 sm:px-3 py-1.5 rounded-md text-slate-700 hover:bg-slate-100 whitespace-nowrap"><%= t("nav.signIn") %></a>
           <% if (registrationOpen) { %>
-            <a href="/register" class="px-2 sm:px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 shadow-sm whitespace-nowrap"><%= t("nav.register") %></a>
+            <a href="/register" class="px-2 sm:px-3 py-1.5 rounded-md bg-brand-600 text-white hover:bg-brand-700 whitespace-nowrap"><%= t("nav.register") %></a>
           <% } %>
         </div>
       <% } %>
