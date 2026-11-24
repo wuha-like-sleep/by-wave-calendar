@@ -37,6 +37,18 @@
 //   - 暂存文件名与任务无关（固定 scope），换一轮任务、乃至进程重
 //     启，半截文件都还在原地接着续。
 //
+// 下载加速（并行分段）：生产链路（GitHub Release CDN → 服务器）单
+// 连接吞吐差，单流下几个 GiB 要磨很久。大文件改为单文件内并行分
+// 段：切成固定大小的段（GEO_FETCH_SEGMENT_BYTES），小型并发池
+// （GEO_FETCH_PARALLELISM，默认 4）同时下多段，每段用 Range 请求
+// + 定位写落进同一个暂存文件。续传语义随之从「文件大小 = 已下字
+// 节」升级为段位图：已完成段落盘记录在任务状态里，恢复时只补未
+// 完成的段；段内半截不续、整段重下（段大小有界，重下成本可控，
+// 且不必信任定位写下稀疏文件里的任何字节）。服务端不认 Range
+// （回 200）→ 整文件回退单流老逻辑。并发只在文件内，文件之间仍
+// 按既有顺序逐个下。旧任务状态（没有段记录）恢复时，单流时代的
+// 顺序前缀按「整段覆盖才算完成」映射成段状态，已下字节不浪费。
+//
 // 任务状态以内存注册表为实时视图，同时把计划与逐文件进度落盘到
 // 暂存区（fetch-job-state.json，临时文件 + rename 原子写）：进程
 // 重启后开机自检会自动恢复未完成的任务，后台页能看到「已恢复」
@@ -53,7 +65,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, rename, stat, truncate, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, stat, truncate, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -104,6 +116,10 @@ export interface GeoDownloadTuning {
   stallMs?: number;
   retryBaseMs?: number;
   retryMaxMs?: number;
+  /** 并行分段下载的并发段数（缺省取环境变量 GEO_FETCH_PARALLELISM）。 */
+  parallelism?: number;
+  /** 并行分段的段大小（字节；缺省 GEO_FETCH_SEGMENT_BYTES）。 */
+  segmentBytes?: number;
 }
 
 export class GeoReleaseError extends Error {
@@ -479,6 +495,409 @@ export async function downloadGeoAsset(args: {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 并行分段下载（大文件加速；语义与单流版逐项对齐）
+// ---------------------------------------------------------------------------
+
+/** 分段大小：32 MiB。取值权衡：段是「整段重下」的最大浪费单位，
+ *  也是段位图里一段的粒度——太小则请求数与状态体积膨胀（2 GiB 的
+ *  包在 16 MiB 下有 128 段、32 MiB 下 64 段，都还小）；太大了中
+ *  断时整段重下的浪费和「最后一个段拖尾」明显。32 MiB 在生产那
+ *  条烂链路上单段约几十秒量级，重下不心疼，并发池也喂得饱。 */
+export const GEO_FETCH_SEGMENT_BYTES = 32 * 1024 * 1024;
+
+/** 一个下载单元（整文件或一个分卷）的段状态：段大小 + 已完成段
+ *  下标（升序）。落盘在任务状态的逐文件 segments 里（键 = 资产
+ *  名）；恢复时凭它只补未完成的段，已完成段零请求。 */
+export interface GeoSegmentState {
+  segmentBytes: number;
+  done: number[];
+}
+
+/** 并发段数：调参优先，其次环境变量，最后默认 4。钳制 1..16。 */
+export function resolveGeoFetchParallelism(tuning?: GeoDownloadTuning): number {
+  const raw = tuning?.parallelism ?? env.GEO_FETCH_PARALLELISM;
+  if (!Number.isFinite(raw)) return 4;
+  return Math.min(16, Math.max(1, Math.floor(raw)));
+}
+
+/** 纯函数：这个文件要不要走并行分段、段多大、并发多少。小文件
+ *  （不足 2 段）或并发为 1 时不值得折腾，走单流老路。任务层据此
+ *  在计划生成时预置段状态骨架（见 runFetchJob），下载层据此分
+ *  发，两处共用同一判定，不许漂移。 */
+export function geoFetchSegmentPlan(
+  bytes: number,
+  tuning?: GeoDownloadTuning,
+): { parallel: boolean; segmentBytes: number; concurrency: number } {
+  const segmentBytes = Math.max(1, Math.floor(tuning?.segmentBytes ?? GEO_FETCH_SEGMENT_BYTES));
+  const concurrency = resolveGeoFetchParallelism(tuning);
+  return { parallel: concurrency > 1 && bytes >= segmentBytes * 2, segmentBytes, concurrency };
+}
+
+function segmentLength(index: number, segmentBytes: number, totalBytes: number): number {
+  return Math.min(segmentBytes, totalBytes - index * segmentBytes);
+}
+
+/** 分段布局标记：与暂存文件同目录同名的 `.segments.json` 小文件，
+ *  内容只有段大小。它是磁盘布局的自证——只要一个暂存文件是被定
+ *  位写过的（稀疏、大小不代表进度），标记就必须在场，且在第一
+ *  段字节落盘之前就写好。任务状态（段位图）可能因任务收尾、状
+ *  态损坏等原因先行消失，暂存文件却还躺在盘上；后来者判断「这
+ *  文件能不能按单流前缀理解」只认标记，不认状态在不在。回退单
+ *  流时摘除（此后写的是顺序字节），落位成功后摘除（暂存已改名
+ *  走，标记没有跟随的意义）。 */
+function geoSegmentMarkerPath(dest: string): string {
+  return `${dest}.segments.json`;
+}
+
+async function readGeoSegmentMarker(dest: string): Promise<number | null> {
+  try {
+    const parsed = JSON.parse(await readFile(geoSegmentMarkerPath(dest), "utf8")) as { segmentBytes?: unknown };
+    return typeof parsed.segmentBytes === "number" && parsed.segmentBytes > 0
+      ? Math.floor(parsed.segmentBytes)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+async function clearGeoSegmentMarker(dest: string): Promise<void> {
+  await unlink(geoSegmentMarkerPath(dest)).catch(() => {});
+}
+
+/** 并行分段下载一个资产到 dest，与 downloadGeoAsset 的保证逐项
+ *  对齐：无总时长超时（只有逐请求的停滞看门狗）、瞬时失败无限退
+ *  避重试（下沉到段：一 段卡住只重试那一段，不牵连其他段）、硬
+ *  失败立即抛（其余 4xx、体积溢出）、长度精确。
+ *
+ *  与单流的差异都在明处：
+ *  - 每段独立 Range 请求，响应体按偏移定位写进同一个 dest（不
+ *    拼段文件、不二次拷贝）；dest 可能是稀疏文件，文件大小不再
+ *    代表进度，进度只认段状态 + 在途段已写字节；
+ *  - 段内半截不续：某段失败重来时整段重下（段大小有界；换来状
+ *    态只是一张位图，不必逐段记字节、更不必信任稀疏区字节）；
+ *  - 盘上字节能不能信、按什么语义理解，按三级判定：initialState
+ *    给了就以它为准（段大小也以它记录的为准，防配置在两次运行
+ *    间变过）；没给状态但分段标记在场 → 这是分段半成品而状态
+ *    已丢，盘上字节一概不信、全部段重下（标记里的段大小优先）；
+ *    两者都没有才按「单流时代的顺序前缀」映射：盘上已有的前 N
+ *    字节里被整段覆盖的段算完成（旧半截文件的字节就是顺序写
+ *    在正确偏移上的），尾巴上的半截段整段重下；
+ *  - 任一段的响应是 200（服务端不认 Range）→ 中止全池、截断
+ *    dest、摘掉分段标记与段状态，然后整文件委托单流
+ *    downloadGeoAsset 走老路（摘标记保证此后中断恢复时按单流
+ *    前缀语义续，不会被当成段位图误读）；
+ *  - onSegmentState 在开始时先报一次初始状态（任务层据此在字
+ *    节落盘前就把「这是分段文件、段多大」持久化），之后每完成
+ *    一段报一次最新快照。 */
+export async function downloadGeoAssetParallel(args: {
+  url: string;
+  dest: string;
+  expectedBytes: number;
+  fetchImpl?: GeoFetchImpl;
+  onProgress?: (bytesDone: number) => void;
+  onChunk?: (chunkBytes: number) => void;
+  hooks?: GeoDownloadHooks;
+  tuning?: GeoDownloadTuning;
+  segmentBytes: number;
+  concurrency: number;
+  initialState?: GeoSegmentState | null;
+  onSegmentState?: (state: GeoSegmentState | null) => void;
+}): Promise<void> {
+  const fetchImpl = args.fetchImpl ?? defaultFetchImpl;
+  const stallMs = args.tuning?.stallMs ?? GEO_FETCH_STALL_MS;
+  const retryBaseMs = args.tuning?.retryBaseMs ?? GEO_FETCH_RETRY_BASE_MS;
+  const retryMaxMs = args.tuning?.retryMaxMs ?? GEO_FETCH_RETRY_MAX_MS;
+  const total = args.expectedBytes;
+  const markerSegmentBytes = await readGeoSegmentMarker(args.dest);
+  const segmentBytes = Math.max(
+    1,
+    Math.floor(args.initialState?.segmentBytes ?? markerSegmentBytes ?? args.segmentBytes),
+  );
+  const segCount = Math.ceil(total / segmentBytes);
+
+  // ---- 定已完成段 ------------------------------------------------
+  // 注意：这里没有单流版「大小等于期望即完成」的早退——定位写
+  // 的稀疏文件被撑到全长时大小毫无意义，完成只认段位图（三级
+  // 判定算完后 done 占满才算完）。
+  let existing = await fileSize(args.dest);
+  if (existing > total) {
+    await truncate(args.dest, 0);
+    existing = 0;
+  }
+  const done = new Set<number>();
+  if (args.initialState) {
+    // 盘上文件不在了（或空了）却声称有段完成，自相矛盾：段状态
+    // 作废，从零下——信位图把空洞当数据，代价是整文件判死。
+    // 另有一条恒真校验：文件大小单调不减，凡是真写完过的段，
+    // 其末尾偏移必然 ≤ 当前文件大小；越界的段（状态与盘面对不
+    // 上，如暂存被外部截断）一律摘掉重下。
+    if (existing > 0) {
+      for (const i of args.initialState.done) {
+        if (
+          Number.isInteger(i) && i >= 0 && i < segCount &&
+          i * segmentBytes + segmentLength(i, segmentBytes, total) <= existing
+        ) {
+          done.add(i);
+        }
+      }
+    }
+  } else if (markerSegmentBytes !== null) {
+    // 分段标记在场、但段状态已丢（任务收尾清了状态、或状态文
+    // 件损坏）：盘上是定位写的稀疏半成品，字节一概不信，全部
+    // 段从零重下。宁可多下，不可把空洞当数据——终检 SHA 虽然
+    // 兜底，但那要白费一整轮。
+  } else {
+    // 单流前缀映射：整段被已有字节覆盖的才算完成。
+    for (let i = 0; (i + 1) * segmentBytes <= existing; i++) done.add(i);
+  }
+  if (done.size === segCount) {
+    // 三级判定后全部段都可信地在盘上（状态背书，或单流前缀整段
+    // 覆盖到文件尾）：不必发任何请求。
+    args.onProgress?.(total);
+    return;
+  }
+  const snapshotState = (): GeoSegmentState => ({
+    segmentBytes,
+    done: [...done].sort((a, b) => a - b),
+  });
+  args.onSegmentState?.(snapshotState());
+  // 分段标记必须赶在第一段字节落盘之前写好（布局自证）。
+  await writeFile(geoSegmentMarkerPath(args.dest), JSON.stringify({ segmentBytes }));
+
+  // ---- 进度核算（完成段字节 + 在途段已写，高水位只进不退） ------
+  let completedBytes = 0;
+  for (const i of done) completedBytes += segmentLength(i, segmentBytes, total);
+  const inflight = new Map<number, number>();
+  let reported = 0;
+  const reportProgress = () => {
+    let inPlace = completedBytes;
+    for (const n of inflight.values()) inPlace += n;
+    if (inPlace > reported) {
+      reported = inPlace;
+      args.onProgress?.(inPlace);
+    }
+  };
+  reportProgress();
+
+  // ---- 并发池 ----------------------------------------------------
+  let fatal: GeoReleaseError | null = null;
+  let fallback = false;
+  let totalAttempts = 0;
+  const activeControllers = new Set<AbortController>();
+  const stopAll = () => {
+    for (const c of activeControllers) c.abort();
+  };
+
+  /** 下载一段：成功返回 true；被全池叫停（回退 / 致命错误）返回
+   *  false；瞬时失败在内部退避重试、永不返回。 */
+  const runSegment = async (index: number): Promise<boolean> => {
+    const segStart = index * segmentBytes;
+    const segLen = segmentLength(index, segmentBytes, total);
+    for (let attempt = 1; ; attempt++) {
+      if (fatal || fallback) return false;
+      totalAttempts += 1;
+      args.hooks?.onAttempt?.(totalAttempts);
+      const controller = new AbortController();
+      activeControllers.add(controller);
+      let stallTimer: ReturnType<typeof setTimeout> | null = null;
+      let stalled = false;
+      const armStall = () => {
+        if (stallTimer) clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          stalled = true;
+          controller.abort();
+        }, stallMs);
+      };
+      try {
+        armStall();
+        const resp = await fetchImpl(args.url, {
+          headers: { range: `bytes=${segStart}-${segStart + segLen - 1}` },
+          signal: controller.signal,
+        });
+        if (resp.status === 200) {
+          // 服务端不认 Range：整文件回退单流（调用方在本函数返回
+          // 后统一处理，这里只负责叫停全池）。
+          fallback = true;
+          stopAll();
+          return false;
+        }
+        if (resp.status === 206) {
+          const m = /^bytes (\d+)-(\d+)\/(\d+|\*)$/.exec((resp.headers.get("content-range") ?? "").trim());
+          if (!m || Number(m[1]) !== segStart) throw new Error("bad_content_range");
+        } else if (resp.status === 416) {
+          throw new Error("range_not_satisfiable");
+        } else if (isTransientHttpStatus(resp.status)) {
+          throw new Error(`http_${resp.status}`);
+        } else {
+          throw new GeoReleaseError(
+            `download_http_${resp.status}`,
+            `download failed: HTTP ${resp.status} for ${args.url}`,
+          );
+        }
+        if (!resp.body) throw new Error("empty_body");
+        const handle = await open(args.dest, "r+");
+        let written = 0;
+        try {
+          for await (const chunk of Readable.fromWeb(
+            resp.body as Parameters<typeof Readable.fromWeb>[0],
+          )) {
+            armStall();
+            const buf = chunk as Buffer;
+            if (written + buf.length > segLen) {
+              throw new GeoReleaseError(
+                "download_size_overflow",
+                `segment exceeds expected size for ${args.url}`,
+              );
+            }
+            // 定位写：整块写完才算数（write 可能短写，循环补齐）。
+            let off = 0;
+            while (off < buf.length) {
+              const { bytesWritten } = await handle.write(buf, off, buf.length - off, segStart + written + off);
+              if (bytesWritten <= 0) throw new Error("write_failed");
+              off += bytesWritten;
+            }
+            written += buf.length;
+            inflight.set(index, written);
+            args.onChunk?.(buf.length);
+            reportProgress();
+          }
+        } finally {
+          await handle.close().catch(() => {});
+        }
+        if (written !== segLen) throw new Error("short_read");
+        inflight.delete(index);
+        done.add(index);
+        completedBytes += segLen;
+        reportProgress();
+        args.onSegmentState?.(snapshotState());
+        return true;
+      } catch (err) {
+        inflight.delete(index);
+        if (err instanceof GeoReleaseError) {
+          fatal = err;
+          stopAll();
+          return false;
+        }
+        if (fatal || fallback) return false;
+        const message = stalled
+          ? "stall_timeout"
+          : err instanceof Error
+            ? err.message
+            : String(err);
+        args.hooks?.onRetry?.(attempt, message);
+        await sleep(geoFetchRetryDelayMs(attempt, retryBaseMs, retryMaxMs));
+      } finally {
+        if (stallTimer) clearTimeout(stallTimer);
+        activeControllers.delete(controller);
+      }
+    }
+  };
+
+  const queue: number[] = [];
+  for (let i = 0; i < segCount; i++) if (!done.has(i)) queue.push(i);
+  // dest 必须先存在，段的定位写才能 open("r+")。
+  if (existing === 0 && queue.length > 0) await writeFile(args.dest, "");
+  let cursor = 0;
+  const workers: Promise<void>[] = [];
+  const workerCount = Math.min(Math.max(1, Math.floor(args.concurrency)), queue.length);
+  for (let w = 0; w < workerCount; w++) {
+    workers.push(
+      (async () => {
+        for (;;) {
+          if (fatal || fallback) return;
+          const next = queue[cursor++];
+          if (next === undefined) return;
+          await runSegment(next);
+        }
+      })(),
+    );
+  }
+  await Promise.all(workers);
+
+  if (fallback) {
+    // 回退单流：dest 里是定位写的稀疏半成品，单流的「大小 = 进
+    // 度」语义不成立，先截断；分段标记与段状态一并摘除，此后
+    // 按单流前缀续传。
+    args.onSegmentState?.(null);
+    await clearGeoSegmentMarker(args.dest);
+    await truncate(args.dest, 0);
+    await downloadGeoAsset({
+      url: args.url,
+      dest: args.dest,
+      expectedBytes: total,
+      fetchImpl,
+      onProgress: args.onProgress,
+      onChunk: args.onChunk,
+      hooks: args.hooks,
+      tuning: args.tuning,
+    });
+    return;
+  }
+  if (fatal) throw fatal;
+  if (done.size !== segCount) throw new GeoReleaseError("download_incomplete", `segments missing for ${args.url}`);
+  if ((await fileSize(args.dest)) !== total) {
+    throw new GeoReleaseError("download_size_mismatch", `assembled size mismatch for ${args.url}`);
+  }
+  args.onProgress?.(total);
+}
+
+/** 下载一个资产（整文件或一个分卷）的分发点：够大就并行分段，
+ *  否则单流。段状态按资产名进出（fetchGeoReleaseFile 透传任务层
+ *  的记录）。 */
+async function downloadOneAsset(args: {
+  url: string;
+  dest: string;
+  bytes: number;
+  fetchImpl: GeoFetchImpl;
+  onProgress?: (bytesDone: number) => void;
+  onChunk?: (chunkBytes: number) => void;
+  hooks?: GeoDownloadHooks;
+  tuning?: GeoDownloadTuning;
+  segmentState?: GeoSegmentState | null;
+  onSegmentState?: (state: GeoSegmentState | null) => void;
+}): Promise<void> {
+  const plan = geoFetchSegmentPlan(args.bytes, args.tuning);
+  // 例外：盘上已经躺着上一程的分段半成品（段状态里有完成段）
+  // 时，哪怕这一程的调参把并行关了，也必须按段状态走完——稀疏
+  // 文件按单流「大小 = 进度」续传会把空洞当数据，只能靠终检 SHA
+  // 兜底判死重来，不如一开始就走对路。
+  const hasPriorSegments = (args.segmentState?.done.length ?? 0) > 0;
+  if (!plan.parallel && !hasPriorSegments) {
+    // 例外中的例外：盘上躺着分段半成品（标记在场）但这一程走单
+    // 流——稀疏文件的大小语义不成立，整文件清掉重下，标记摘除。
+    if ((await readGeoSegmentMarker(args.dest)) !== null) {
+      await clearGeoSegmentMarker(args.dest);
+      await truncate(args.dest, 0).catch(() => {});
+    }
+    await downloadGeoAsset({
+      url: args.url,
+      dest: args.dest,
+      expectedBytes: args.bytes,
+      fetchImpl: args.fetchImpl,
+      onProgress: args.onProgress,
+      onChunk: args.onChunk,
+      hooks: args.hooks,
+      tuning: args.tuning,
+    });
+    return;
+  }
+  await downloadGeoAssetParallel({
+    url: args.url,
+    dest: args.dest,
+    expectedBytes: args.bytes,
+    fetchImpl: args.fetchImpl,
+    onProgress: args.onProgress,
+    onChunk: args.onChunk,
+    hooks: args.hooks,
+    tuning: args.tuning,
+    segmentBytes: args.segmentState?.segmentBytes ?? plan.segmentBytes,
+    concurrency: plan.concurrency,
+    initialState: args.segmentState ?? null,
+    onSegmentState: args.onSegmentState,
+  });
+}
+
 function assetUrl(baseUrl: string, name: string): string {
   return `${baseUrl}/${name.split("/").map(encodeURIComponent).join("/")}`;
 }
@@ -512,6 +931,11 @@ export async function fetchGeoReleaseFile(args: {
   onChunk?: (chunkBytes: number) => void;
   hooks?: GeoDownloadHooks;
   tuning?: GeoDownloadTuning;
+  /** 并行分段的段状态（键 = 资产名；任务层从落盘状态里带进来）。 */
+  segmentState?: Record<string, GeoSegmentState>;
+  /** 段状态变更回调（开始 / 每段完成 / 回退单流时摘除），任务层
+   *  据此更新内存状态并落盘。 */
+  onSegmentState?: (unit: string, state: GeoSegmentState | null) => void;
 }): Promise<{ status: "done" | "skipped"; bytes: number }> {
   const packDir = args.packDir ?? resolveGeoPackDir();
   const plan = args.plan;
@@ -532,15 +956,19 @@ export async function fetchGeoReleaseFile(args: {
   const fetchImpl = args.fetchImpl ?? defaultFetchImpl;
 
   if (plan.parts.length === 0) {
-    await downloadGeoAsset({
+    await downloadOneAsset({
       url: assetUrl(args.baseUrl, plan.file),
       dest: staging,
-      expectedBytes: plan.bytes,
+      bytes: plan.bytes,
       fetchImpl,
       onProgress: args.onProgress,
       onChunk: args.onChunk,
       hooks: args.hooks,
       tuning: args.tuning,
+      segmentState: args.segmentState?.[plan.file] ?? null,
+      onSegmentState: args.onSegmentState
+        ? (state) => args.onSegmentState!(plan.file, state)
+        : undefined,
     });
   } else {
     // 已拼好的前缀必须正好落在卷边界上，否则截断到上一个卷边界。
@@ -560,23 +988,29 @@ export async function fetchGeoReleaseFile(args: {
       const partStart = plan.parts.slice(0, i).reduce((a, x) => a + x.bytes, 0);
       if (partStart + part.bytes <= assembled) continue;
       const partTemp = path.join(stagingDir, `fetch-${scope}-${tag}-p${String(i).padStart(3, "0")}.part`);
-      await downloadGeoAsset({
+      await downloadOneAsset({
         url: assetUrl(args.baseUrl, part.name),
         dest: partTemp,
-        expectedBytes: part.bytes,
+        bytes: part.bytes,
         fetchImpl,
         onProgress: (n) => args.onProgress?.(partStart + n),
         onChunk: args.onChunk,
         hooks: args.hooks,
         tuning: args.tuning,
+        segmentState: args.segmentState?.[part.name] ?? null,
+        onSegmentState: args.onSegmentState
+          ? (state) => args.onSegmentState!(part.name, state)
+          : undefined,
       });
       if ((await sha256File(partTemp)) !== part.sha256) {
         await unlink(partTemp).catch(() => {});
+        await clearGeoSegmentMarker(partTemp);
         throw new GeoReleaseError("part_sha256_mismatch", `part ${part.name} sha256 mismatch`);
       }
       // 把这一卷追加到拼装文件尾部（流式拷贝，不进内存）。
       await pipeline(createReadStream(partTemp), createWriteStream(staging, { flags: "a" }));
       await unlink(partTemp).catch(() => {});
+      await clearGeoSegmentMarker(partTemp);
       doneBytes = partStart + part.bytes;
       args.onProgress?.(doneBytes);
     }
@@ -592,6 +1026,7 @@ export async function fetchGeoReleaseFile(args: {
     sha256: plan.sha256,
     packDir,
   });
+  if (outcome.ok) await clearGeoSegmentMarker(staging);
   if (!outcome.ok) {
     if (outcome.error === "sha256_mismatch" || outcome.error === "staging_size_mismatch") {
       await unlink(staging).catch(() => {});
@@ -785,6 +1220,10 @@ export interface GeoPackFetchFileState {
   /** 已尝试次数（含正在进行的这次）；瞬时失败会一直涨，直到下完。 */
   attempts: number;
   error: string | null;
+  /** 并行分段的段状态（键 = 资产名：整文件或各分卷名）。可选是
+   *  为了兼容旧版本落盘的任务状态——没有这个字段的文件按单流
+   *  前缀语义恢复（见 downloadGeoAssetParallel 的前缀映射）。 */
+  segments?: Record<string, GeoSegmentState>;
 }
 
 export interface GeoPackFetchJobState {
@@ -1111,14 +1550,22 @@ async function runFetchJob(
     // 度从落盘值起步（暂存文件还在盘上，续传位置与种子基本一致）；
     // 速度不种——新一程的 tracker 从零重新测。
     const previous = new Map(job.files.map((f) => [f.file, f.bytesDone]));
-    job.files = plan.map((p) => ({
-      file: p.file,
-      status: "pending" as GeoFetchFileStatus,
-      bytesTotal: p.bytes,
-      bytesDone: 0,
-      attempts: 0,
-      error: null,
-    }));
+    const previousSegments = new Map(job.files.map((f) => [f.file, f.segments]));
+    job.files = plan.map((p) => {
+      // 上一程的段记录按文件名结转（恢复续传的依据）；磁盘布局
+      // 本身另有标记文件自证（见 downloadGeoAssetParallel），不
+      // 靠这份状态猜。
+      const carried = previousSegments.get(p.file);
+      return {
+        file: p.file,
+        status: "pending" as GeoFetchFileStatus,
+        bytesTotal: p.bytes,
+        bytesDone: 0,
+        attempts: 0,
+        error: null,
+        ...(carried ? { segments: JSON.parse(JSON.stringify(carried)) as Record<string, GeoSegmentState> } : {}),
+      };
+    });
     tracker = new GeoFetchProgressTracker(plan.map((p) => ({ file: p.file, bytesTotal: p.bytes })));
     for (const state of job.files) {
       const before = previous.get(state.file);
@@ -1169,6 +1616,22 @@ async function runFetchJob(
             persistProgress();
           },
           onChunk: (n) => tracker?.noteChunk(n),
+          segmentState: state.segments,
+          onSegmentState: (unit, segState) => {
+            // 段状态是跨重启续传的命根子：新单元的初始状态出现
+            // 时立即落盘（不等节流），之后每段完成走进度节流
+            // （生产段 ≥8 MiB，完成一段本身就跨过字节阈值、实
+            // 际也是立即落盘）；回退单流摘除状态同样立即落盘。
+            if (segState === null) {
+              if (state.segments) delete state.segments[unit];
+              void persist();
+              return;
+            }
+            const isNew = !state.segments?.[unit];
+            (state.segments ??= {})[unit] = segState;
+            if (isNew) void persist();
+            else persistProgress();
+          },
         });
         state.status = res.status === "skipped" ? "skipped" : "done";
         tracker?.notePosition(item.file, item.bytes);
