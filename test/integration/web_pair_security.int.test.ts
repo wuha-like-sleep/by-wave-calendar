@@ -54,7 +54,7 @@ async function initPair(): Promise<PairInit> {
   const arr = Array.isArray(sc) ? sc : sc ? [sc] : [];
   const poll = arr.find((c) => c.startsWith("bwc_qr_poll="));
   expect(poll, "init 必须给发起浏览器种轮询秘密 cookie").toBeTruthy();
-  const secret = poll!.split(";")[0].slice("bwc_qr_poll=".length);
+  const secret = (poll!.split(";")[0] ?? "").slice("bwc_qr_poll=".length);
   expect(secret.length).toBeGreaterThanOrEqual(22); // 128 位 → base64url 22 字符
   return { code: body.code, pollCookie: `bwc_qr_poll=${secret}`, rawSetCookie: poll! };
 }
