@@ -1,339 +1,361 @@
 <!--
-  Download landing — three equal-width native cards (iOS / Android / Desktop)
-  with the Web/PWA option as a separate banner underneath. Every URL comes
+  Download page — one hairline-separated row per platform (iOS / Android /
+  Desktop / Web), in the same editorial layout as the landing page: platform
+  name in the left column, version + downloads in the right. Every URL comes
   from template locals (src/web/index.ts), so cutting a release only touches
   that one place. All copy is keyed under download.* in the i18n dicts.
 -->
 
 <!-- ============ Hero ============ -->
-<section class="relative overflow-hidden text-center py-14 sm:py-20">
-  <div class="absolute inset-0 -z-10 bg-gradient-to-br from-brand-50 via-white to-slate-50"></div>
-  <div class="absolute -z-10 top-12 left-1/2 -translate-x-1/2 h-80 w-80 rounded-full bg-brand-400/15 blur-3xl"></div>
-
-  <h1 class="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900">
+<section class="pt-6 sm:pt-10 pb-12 border-b border-slate-200">
+  <h1 class="max-w-3xl text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.15] text-slate-900">
     <%= t("download.heroTitle") %>
   </h1>
-  <p class="mt-5 max-w-2xl mx-auto text-base sm:text-lg text-slate-600 leading-relaxed">
+  <p class="mt-5 max-w-2xl text-base sm:text-lg text-slate-600 leading-relaxed">
     <%- t("download.heroSubtitle", { siteName: siteName }) %>
   </p>
 </section>
 
-<!-- ============ Three native cards (iOS / Android / Desktop) ============ -->
-<section class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto px-4">
+<!-- ============ Platforms ============ -->
+<section>
+  <div class="divide-y divide-slate-200 border-b border-slate-200">
 
-  <!-- ===== iOS ===== -->
-  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
-    <div class="flex items-center justify-between mb-5">
-      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center shadow-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>
+    <!-- ===== iOS ===== -->
+    <div class="grid gap-3 sm:grid-cols-[210px_1fr] sm:gap-8 py-6">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">iOS</h2>
+        <p class="mt-1 text-sm text-slate-500">iPhone · iPad</p>
       </div>
-      <span class="text-xs font-mono text-slate-400">v<%= iosVersion %></span>
-    </div>
-
-    <h2 class="text-xl font-semibold text-slate-900">iOS</h2>
-    <p class="text-sm text-slate-500 mt-0.5 mb-5">iPhone · iPad</p>
-
-    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
-      <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.ios.feature1") %></li>
-      <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.ios.feature2") %></li>
-    </ul>
-
-    <div class="mt-auto space-y-2">
-      <% if (iosAppStoreUrl) { %>
-        <a href="<%= iosAppStoreUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.ios.appStore") %>
-        </a>
-        <% if (iosTestFlightUrl) { %>
-          <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
-             class="block w-full text-center rounded-lg px-3 py-1.5 text-xs text-slate-500 hover:text-slate-900 transition">
-            <%= t("download.ios.testflightSecondary") %>
-          </a>
-        <% } %>
-      <% } else if (iosTestFlightUrl) { %>
-        <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.ios.testflightPrimary") %>
-        </a>
-        <p class="text-xs text-slate-400 text-center pt-1">
-          <%= t("download.ios.reviewPending", { eta: iosEtaWeek }) %>
-        </p>
-      <% } else { %>
-        <button disabled
-                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
-          <%= t("download.ios.inReview") %>
-        </button>
-        <p class="text-xs text-slate-400 text-center pt-1">
-          <%= t("download.etaPrefix", { eta: iosEtaWeek }) %>
-        </p>
-      <% } %>
-    </div>
-  </div>
-
-  <!-- ===== Android ===== -->
-  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
-    <div class="flex items-center justify-between mb-5">
-      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white flex items-center justify-center shadow-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor"><path d="M17.523 15.34a1.123 1.123 0 1 1-.001-2.247 1.123 1.123 0 0 1 .001 2.247m-11.046 0a1.123 1.123 0 1 1 0-2.247 1.123 1.123 0 0 1 0 2.247m11.45-6.155l2.196-3.801a.452.452 0 0 0-.78-.452l-2.226 3.85A13.49 13.49 0 0 0 12 7.5c-1.83 0-3.555.336-5.118.94L4.658 4.59a.452.452 0 0 0-.78.452l2.196 3.802C2.27 10.93 0 14.193 0 17.952h24c0-3.76-2.27-7.022-5.073-8.767"/></svg>
+      <div class="min-w-0">
+        <p class="text-xs font-mono text-slate-400">v<%= iosVersion %></p>
+        <ul class="mt-3 text-sm text-slate-600 space-y-1.5">
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.ios.feature1") %></li>
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.ios.feature2") %></li>
+        </ul>
+        <div class="mt-5 space-y-2.5">
+          <% if (iosAppStoreUrl) { %>
+            <div>
+              <a href="<%= iosAppStoreUrl %>" target="_blank" rel="noopener"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.ios.appStore") %>
+              </a>
+            </div>
+            <% if (iosTestFlightUrl) { %>
+              <div>
+                <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
+                   class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">
+                  <%= t("download.ios.testflightSecondary") %>
+                </a>
+              </div>
+            <% } %>
+          <% } else if (iosTestFlightUrl) { %>
+            <div>
+              <a href="<%= iosTestFlightUrl %>" target="_blank" rel="noopener"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.ios.testflightPrimary") %>
+              </a>
+            </div>
+            <p class="text-xs text-slate-400">
+              <%= t("download.ios.reviewPending", { eta: iosEtaWeek }) %>
+            </p>
+          <% } else { %>
+            <div>
+              <button disabled
+                      class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-medium text-slate-400 cursor-not-allowed">
+                <%= t("download.ios.inReview") %>
+              </button>
+            </div>
+            <p class="text-xs text-slate-400">
+              <%= t("download.etaPrefix", { eta: iosEtaWeek }) %>
+            </p>
+          <% } %>
+        </div>
       </div>
-      <span class="text-xs font-mono text-slate-400">v<%= androidVersion %></span>
     </div>
 
-    <h2 class="text-xl font-semibold text-slate-900">Android</h2>
-    <p class="text-sm text-slate-500 mt-0.5 mb-5">Phone · Tablet</p>
+    <!-- ===== Android ===== -->
+    <div class="grid gap-3 sm:grid-cols-[210px_1fr] sm:gap-8 py-6">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900">Android</h2>
+        <p class="mt-1 text-sm text-slate-500">Phone · Tablet</p>
+      </div>
+      <div class="min-w-0">
+        <p class="text-xs font-mono text-slate-400">v<%= androidVersion %></p>
+        <ul class="mt-3 text-sm text-slate-600 space-y-1.5">
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.android.feature1") %></li>
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.android.feature2") %></li>
+        </ul>
 
-    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
-      <li class="flex items-center gap-2"><span class="text-emerald-600">·</span> <%= t("download.android.feature1") %></li>
-      <li class="flex items-center gap-2"><span class="text-emerald-600">·</span> <%= t("download.android.feature2") %></li>
-    </ul>
-
-    <% if (typeof androidNotes !== 'undefined' && androidNotes) { %>
-      <details class="text-xs text-slate-500 mb-5 group/notes -mt-3">
-        <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
-          <span class="transition-transform group-open/notes:rotate-90">▸</span>
-          <%= t("download.releaseNotes") %>
-        </summary>
-        <div class="mt-2 pl-4 border-l-2 border-emerald-100 whitespace-pre-line leading-relaxed">
+        <% if (typeof androidNotes !== 'undefined' && androidNotes) { %>
+          <details class="text-xs text-slate-500 group/notes mt-4">
+            <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+              <span class="transition-transform group-open/notes:rotate-90">▸</span>
+              <%= t("download.releaseNotes") %>
+            </summary>
+            <div class="mt-2 pl-4 border-l-2 border-slate-200 whitespace-pre-line leading-relaxed max-w-2xl">
 <%= androidNotes %>
+            </div>
+          </details>
+        <% } %>
+
+        <div class="mt-5 space-y-2.5">
+          <% if (androidApkUrl) { %>
+            <div>
+              <a href="<%= androidApkUrl %>" target="_blank" rel="noopener"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.android.apkButton", { size: androidApkSize }) %>
+              </a>
+            </div>
+            <%# 备选链接只在「本站真的有这个文件」时才非空（服务端 stat 过）。
+                它出现 = 主按钮走的是本站，这一条是给下不动本站的人兜底。 %>
+            <% if (androidApkAltUrl) { %>
+              <p class="text-xs text-slate-500">
+                <%= t("download.mirror.prefix") %>
+                <a href="<%= androidApkAltUrl %>" target="_blank" rel="noopener"
+                   class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors"><%= t("download.mirror.github") %></a>
+              </p>
+            <% } %>
+            <%# 镜像直达（Gitee）：清单里填了 mirrorUrl 才出现。和备选的区别是
+                它不依赖本站有没有文件 —— 它是发布时就钉好的第三个来源。 %>
+            <% if (typeof androidMirrorUrl !== 'undefined' && androidMirrorUrl) { %>
+              <p class="text-xs text-slate-500">
+                <%= t("download.mirror.prefix") %>
+                <a href="<%= androidMirrorUrl %>" target="_blank" rel="noopener"
+                   class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors"><%= t("download.mirror.gitee") %></a>
+              </p>
+            <% } %>
+            <% if (typeof androidApkSha256 !== 'undefined' && androidApkSha256) { %>
+              <p class="text-xs text-slate-400">
+                <%= t("download.checksum") %>
+                <span class="block font-mono break-all mt-0.5 text-slate-500"><%= androidApkSha256 %></span>
+              </p>
+            <% } %>
+          <% } else { %>
+            <div>
+              <button disabled
+                      class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-medium text-slate-400 cursor-not-allowed">
+                <%= t("download.android.comingSoon") %>
+              </button>
+            </div>
+            <p class="text-xs text-slate-400">
+              <%= t("download.etaPrefix", { eta: androidEtaWeek }) %>
+            </p>
+          <% } %>
         </div>
-      </details>
-    <% } %>
-
-    <div class="mt-auto space-y-2">
-      <% if (androidApkUrl) { %>
-        <a href="<%= androidApkUrl %>" target="_blank" rel="noopener"
-           class="block w-full text-center rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.android.apkButton", { size: androidApkSize }) %>
-        </a>
-        <%# 备选链接只在「本站真的有这个文件」时才非空（服务端 stat 过）。
-            它出现 = 主按钮走的是本站，这一条是给下不动本站的人兜底。 %>
-        <% if (androidApkAltUrl) { %>
-          <p class="text-center text-[11px] text-slate-400 pt-0.5">
-            <%= t("download.mirror.prefix") %>
-            <a href="<%= androidApkAltUrl %>" target="_blank" rel="noopener"
-               class="underline hover:text-slate-600"><%= t("download.mirror.github") %></a>
-          </p>
-        <% } %>
-        <%# 镜像直达（Gitee）：清单里填了 mirrorUrl 才出现。和备选的区别是
-            它不依赖本站有没有文件 —— 它是发布时就钉好的第三个来源。 %>
-        <% if (typeof androidMirrorUrl !== 'undefined' && androidMirrorUrl) { %>
-          <p class="text-center text-[11px] text-slate-400 pt-0.5">
-            <%= t("download.mirror.prefix") %>
-            <a href="<%= androidMirrorUrl %>" target="_blank" rel="noopener"
-               class="underline hover:text-slate-600"><%= t("download.mirror.gitee") %></a>
-          </p>
-        <% } %>
-        <% if (typeof androidApkSha256 !== 'undefined' && androidApkSha256) { %>
-          <p class="text-[11px] text-slate-400 pt-1 text-left">
-            <%= t("download.checksum") %>
-            <span class="block font-mono break-all mt-0.5"><%= androidApkSha256 %></span>
-          </p>
-        <% } %>
-      <% } else { %>
-        <button disabled
-                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
-          <%= t("download.android.comingSoon") %>
-        </button>
-        <p class="text-xs text-slate-400 text-center pt-1">
-          <%= t("download.etaPrefix", { eta: androidEtaWeek }) %>
-        </p>
-      <% } %>
-    </div>
-  </div>
-
-  <!-- ===== Desktop ===== -->
-  <div class="group rounded-2xl border border-slate-200 bg-white p-7 flex flex-col transition hover:border-slate-300 hover:shadow-sm">
-    <div class="flex items-center justify-between mb-5">
-      <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center shadow-sm">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
       </div>
-      <span class="text-xs font-mono text-slate-400">v<%= desktopVersion %></span>
     </div>
 
-    <h2 class="text-xl font-semibold text-slate-900"><%= t("download.desktop.title") %></h2>
-    <p class="text-sm text-slate-500 mt-0.5 mb-5">macOS · Windows · Linux</p>
+    <!-- ===== Desktop ===== -->
+    <div class="grid gap-3 sm:grid-cols-[210px_1fr] sm:gap-8 py-6">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900"><%= t("download.desktop.title") %></h2>
+        <p class="mt-1 text-sm text-slate-500">macOS · Windows · Linux</p>
+      </div>
+      <div class="min-w-0">
+        <p class="text-xs font-mono text-slate-400">v<%= desktopVersion %></p>
+        <ul class="mt-3 text-sm text-slate-600 space-y-1.5">
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.desktop.feature1") %></li>
+          <li class="flex items-center gap-2"><span class="text-slate-900">·</span> <%= t("download.desktop.feature2") %></li>
+        </ul>
 
-    <ul class="text-sm text-slate-600 space-y-1.5 mb-6">
-      <li class="flex items-center gap-2"><span class="text-brand-600">·</span> <%= t("download.desktop.feature1") %></li>
-      <li class="flex items-center gap-2"><span class="text-brand-600">·</span> <%= t("download.desktop.feature2") %></li>
-    </ul>
-
-    <% if (desktopNotes) { %>
-      <details class="text-xs text-slate-500 mb-5 group/notes -mt-3">
-        <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
-          <span class="transition-transform group-open/notes:rotate-90">▸</span>
-          <%= t("download.releaseNotes") %>
-        </summary>
-        <div class="mt-2 pl-4 border-l-2 border-brand-100 whitespace-pre-line leading-relaxed">
+        <% if (desktopNotes) { %>
+          <details class="text-xs text-slate-500 group/notes mt-4">
+            <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+              <span class="transition-transform group-open/notes:rotate-90">▸</span>
+              <%= t("download.releaseNotes") %>
+            </summary>
+            <div class="mt-2 pl-4 border-l-2 border-slate-200 whitespace-pre-line leading-relaxed max-w-2xl">
 <%= desktopNotes %>
+            </div>
+          </details>
+        <% } %>
+
+        <div class="mt-5 space-y-2.5">
+          <!-- Primary: the first available platform gets the filled button;
+               every other platform is a plain text link in the row below. -->
+          <% if (desktopMacUrl) { %>
+            <div>
+              <a href="<%= desktopMacUrl %>"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.desktop.mac") %> (Apple Silicon)<% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %>
+              </a>
+            </div>
+          <% } else if (desktopWinUrl) { %>
+            <div>
+              <a href="<%= desktopWinUrl %>"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.desktop.win") %><% if (desktopWinSize) { %> · <%= desktopWinSize %><% } %>
+              </a>
+            </div>
+          <% } else if (desktopLinuxUrl) { %>
+            <div>
+              <a href="<%= desktopLinuxUrl %>"
+                 class="inline-flex items-center justify-center rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 transition-colors">
+                <%= t("download.desktop.linux") %><% if (desktopLinuxSize) { %> · <%= desktopLinuxSize %><% } %>
+              </a>
+            </div>
+          <% } else { %>
+            <div>
+              <button disabled
+                      class="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-5 py-2.5 text-sm font-medium text-slate-400 cursor-not-allowed">
+                <%= t("download.desktop.comingSoon") %>
+              </button>
+            </div>
+            <p class="text-xs text-slate-400">
+              <%= t("download.etaPrefix", { eta: desktopEtaWeek }) %>
+            </p>
+          <% } %>
+
+          <%# 其余平台的下载入口：与主按钮同一个清单、同一批 URL，只是呈现
+              为文字链接。主按钮占了哪个平台，这里就不再重复它。 %>
+          <% if (desktopMacUrl || desktopWinUrl || desktopLinuxUrl || desktopMacIntelUrl) { %>
+            <% const primaryOs = desktopMacUrl ? 'mac' : (desktopWinUrl ? 'win' : (desktopLinuxUrl ? 'linux' : '')); %>
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5">
+              <% if (primaryOs !== 'mac' && desktopMacUrl) { %>
+                <a href="<%= desktopMacUrl %>" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">macOS · Apple Silicon<% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %></a>
+              <% } %>
+              <% if (primaryOs !== 'win' && desktopWinUrl) { %>
+                <a href="<%= desktopWinUrl %>" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">Windows<% if (desktopWinSize) { %> · <%= desktopWinSize %><% } %></a>
+              <% } %>
+              <% if (primaryOs !== 'linux' && desktopLinuxUrl) { %>
+                <a href="<%= desktopLinuxUrl %>" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">Linux<% if (desktopLinuxSize) { %> · <%= desktopLinuxSize %><% } %></a>
+              <% } %>
+              <% if (desktopMacIntelUrl) { %>
+                <a href="<%= desktopMacIntelUrl %>" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">macOS · Intel</a>
+              <% } %>
+            </div>
+          <% } %>
+
+          <%# 桌面端的备选链接。同样只在本站真的有文件时出现。
+              三个平台各自独立 —— 站长可能只往服务器上放了其中一两个。 %>
+          <% if (desktopMacAltUrl || desktopWinAltUrl || desktopLinuxAltUrl) { %>
+            <p class="text-xs text-slate-500">
+              <%= t("download.mirror.prefix") %>
+              <% if (desktopMacAltUrl) { %><a href="<%= desktopMacAltUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">macOS</a><% } %><%
+              %><% if (desktopWinAltUrl) { %><%= desktopMacAltUrl ? ' · ' : '' %><a href="<%= desktopWinAltUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">Windows</a><% } %><%
+              %><% if (desktopLinuxAltUrl) { %><%= (desktopMacAltUrl || desktopWinAltUrl) ? ' · ' : '' %><a href="<%= desktopLinuxAltUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">Linux</a><% } %>
+            </p>
+          <% } %>
+
+          <%# 桌面端的镜像直达（Gitee），逐资产独立，口径同安卓那条。 %>
+          <% if (desktopMacMirrorUrl || desktopWinMirrorUrl || desktopLinuxMirrorUrl) { %>
+            <p class="text-xs text-slate-500">
+              <%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %>：
+              <% if (desktopMacMirrorUrl) { %><a href="<%= desktopMacMirrorUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">macOS</a><% } %><%
+              %><% if (desktopWinMirrorUrl) { %><%= desktopMacMirrorUrl ? ' · ' : '' %><a href="<%= desktopWinMirrorUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">Windows</a><% } %><%
+              %><% if (desktopLinuxMirrorUrl) { %><%= (desktopMacMirrorUrl || desktopWinMirrorUrl) ? ' · ' : '' %><a href="<%= desktopLinuxMirrorUrl %>" target="_blank" rel="noopener" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors">Linux</a><% } %>
+            </p>
+          <% } %>
+
+          <% if (desktopMacIntelUrl && desktopMacIntelAltUrl) { %>
+            <p class="text-xs text-slate-500">
+              <a href="<%= desktopMacIntelAltUrl %>" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors"><%= t("download.mirror.prefix") %> macOS · Intel</a>
+            </p>
+          <% } %>
+          <% if (desktopMacIntelUrl && desktopMacIntelMirrorUrl) { %>
+            <p class="text-xs text-slate-500">
+              <a href="<%= desktopMacIntelMirrorUrl %>" class="underline decoration-slate-300 underline-offset-4 hover:text-slate-900 hover:decoration-slate-500 transition-colors"><%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %> · macOS · Intel</a>
+            </p>
+          <% } %>
+
+          <%# 校验和：清单里每个安装包都带 sha256（更新器也在用它验包），
+              页面上一并给出，手动下载的用户能自己核对文件完整性。 %>
+          <% if (desktopMacSha256 || desktopMacIntelSha256 || desktopWinSha256 || desktopLinuxSha256) { %>
+            <details class="text-xs text-slate-500 group/sums">
+              <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
+                <span class="transition-transform group-open/sums:rotate-90">▸</span>
+                <%= t("download.checksum") %>
+              </summary>
+              <ul class="mt-2 space-y-2">
+                <% if (desktopMacSha256) { %><li>macOS · Apple Silicon<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacSha256 %></span></li><% } %>
+                <% if (desktopMacIntelSha256) { %><li>macOS · Intel<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacIntelSha256 %></span></li><% } %>
+                <% if (desktopWinSha256) { %><li>Windows<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopWinSha256 %></span></li><% } %>
+                <% if (desktopLinuxSha256) { %><li>Linux<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopLinuxSha256 %></span></li><% } %>
+              </ul>
+            </details>
+          <% } %>
         </div>
-      </details>
-    <% } %>
-
-    <div class="mt-auto space-y-2">
-      <!-- Primary: pick the first available platform; render others below as small chips -->
-      <% if (desktopMacUrl) { %>
-        <a href="<%= desktopMacUrl %>"
-           class="block w-full text-center rounded-xl bg-slate-900 hover:bg-slate-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.desktop.mac") %> (Apple Silicon)<% if (desktopMacSize) { %> · <%= desktopMacSize %><% } %>
-        </a>
-      <% } else if (desktopWinUrl) { %>
-        <a href="<%= desktopWinUrl %>"
-           class="block w-full text-center rounded-xl bg-sky-700 hover:bg-sky-800 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.desktop.win") %><% if (desktopWinSize) { %> · <%= desktopWinSize %><% } %>
-        </a>
-      <% } else if (desktopLinuxUrl) { %>
-        <a href="<%= desktopLinuxUrl %>"
-           class="block w-full text-center rounded-xl bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 text-sm font-semibold shadow-sm transition">
-          <%= t("download.desktop.linux") %><% if (desktopLinuxSize) { %> · <%= desktopLinuxSize %><% } %>
-        </a>
-      <% } else { %>
-        <button disabled
-                class="block w-full text-center rounded-xl bg-slate-100 text-slate-400 px-5 py-3 text-sm font-semibold cursor-not-allowed">
-          <%= t("download.desktop.comingSoon") %>
-        </button>
-        <p class="text-xs text-slate-400 text-center pt-1">
-          <%= t("download.etaPrefix", { eta: desktopEtaWeek }) %>
-        </p>
-      <% } %>
-
-      <%# 桌面端的备选链接。同样只在本站真的有文件时出现。
-          三个平台各自独立 —— 站长可能只往服务器上放了其中一两个。 %>
-      <% if (desktopMacAltUrl || desktopWinAltUrl || desktopLinuxAltUrl) { %>
-        <p class="text-center text-[11px] text-slate-400 pt-0.5">
-          <%= t("download.mirror.prefix") %>
-          <% if (desktopMacAltUrl) { %><a href="<%= desktopMacAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">macOS</a><% } %><%
-          %><% if (desktopWinAltUrl) { %><%= desktopMacAltUrl ? ' · ' : '' %><a href="<%= desktopWinAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Windows</a><% } %><%
-          %><% if (desktopLinuxAltUrl) { %><%= (desktopMacAltUrl || desktopWinAltUrl) ? ' · ' : '' %><a href="<%= desktopLinuxAltUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Linux</a><% } %>
-        </p>
-      <% } %>
-
-      <%# 桌面端的镜像直达（Gitee），逐资产独立，口径同安卓那条。 %>
-      <% if (desktopMacMirrorUrl || desktopWinMirrorUrl || desktopLinuxMirrorUrl) { %>
-        <p class="text-center text-[11px] text-slate-400 pt-0.5">
-          <%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %>：
-          <% if (desktopMacMirrorUrl) { %><a href="<%= desktopMacMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">macOS</a><% } %><%
-          %><% if (desktopWinMirrorUrl) { %><%= desktopMacMirrorUrl ? ' · ' : '' %><a href="<%= desktopWinMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Windows</a><% } %><%
-          %><% if (desktopLinuxMirrorUrl) { %><%= (desktopMacMirrorUrl || desktopWinMirrorUrl) ? ' · ' : '' %><a href="<%= desktopLinuxMirrorUrl %>" target="_blank" rel="noopener" class="underline hover:text-slate-600">Linux</a><% } %>
-        </p>
-      <% } %>
-
-      <% if (desktopMacIntelUrl) { %>
-        <a href="<%= desktopMacIntelUrl %>" class="block text-center text-sm py-2 rounded-lg border border-slate-200 hover:bg-slate-50">macOS · Intel</a>
-        <% if (desktopMacIntelAltUrl) { %><a href="<%= desktopMacIntelAltUrl %>" class="block text-center text-xs underline"><%= t("download.mirror.prefix") %> macOS · Intel</a><% } %>
-        <% if (desktopMacIntelMirrorUrl) { %><a href="<%= desktopMacIntelMirrorUrl %>" class="block text-center text-xs underline"><%= t("download.mirror.prefix") %> <%= t("download.mirror.gitee") %> · macOS · Intel</a><% } %>
-      <% } %>
-      <!-- Platform downloads -->
-      <div class="grid grid-cols-3 gap-1.5 pt-1">
-        <a href="<%= desktopMacUrl || '#' %>" <% if (!desktopMacUrl) { %>aria-disabled="true"<% } %>
-           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopMacUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
-          macOS · Apple Silicon
-        </a>
-        <a href="<%= desktopWinUrl || '#' %>" <% if (!desktopWinUrl) { %>aria-disabled="true"<% } %>
-           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopWinUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
-          Windows
-        </a>
-        <a href="<%= desktopLinuxUrl || '#' %>" <% if (!desktopLinuxUrl) { %>aria-disabled="true"<% } %>
-           class="text-center text-[11px] rounded-md px-2 py-1.5 <%= desktopLinuxUrl ? 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100' : 'bg-slate-50 border border-slate-100 text-slate-300 cursor-not-allowed' %>">
-          Linux
-        </a>
       </div>
+    </div>
 
-      <%# 校验和：清单里每个安装包都带 sha256（更新器也在用它验包），
-          页面上一并给出，手动下载的用户能自己核对文件完整性。 %>
-      <% if (desktopMacSha256 || desktopMacIntelSha256 || desktopWinSha256 || desktopLinuxSha256) { %>
-        <details class="text-xs text-slate-500 group/sums pt-1">
-          <summary class="cursor-pointer hover:text-slate-700 select-none list-none flex items-center gap-1">
-            <span class="transition-transform group-open/sums:rotate-90">▸</span>
-            <%= t("download.checksum") %>
+    <!-- ===== Web / PWA ===== -->
+    <div class="grid gap-3 sm:grid-cols-[210px_1fr] sm:gap-8 py-6">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-900"><%= t("download.web.title") %></h2>
+        <p class="mt-1 text-sm text-slate-500"><%= t("download.web.pwaBadge") %></p>
+      </div>
+      <div class="min-w-0">
+        <p class="text-sm sm:text-[15px] leading-relaxed text-slate-600 max-w-2xl">
+          <%= t("download.web.desc") %>
+        </p>
+        <div class="mt-5">
+          <a href="/app"
+             class="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-400 transition-colors">
+            <%= t("download.web.open") %>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============ Help: APK install + macOS Gatekeeper ============ -->
+<% if (androidApkUrl || desktopMacUrl) { %>
+<section>
+  <div class="divide-y divide-slate-200 border-b border-slate-200">
+    <% if (androidApkUrl) { %>
+      <div class="py-8">
+        <details>
+          <summary class="cursor-pointer text-sm font-medium text-slate-800 hover:text-slate-900 select-none">
+            <%= t("download.apkHelp.summary") %>
           </summary>
-          <ul class="mt-2 space-y-2 text-left">
-            <% if (desktopMacSha256) { %><li>macOS · Apple Silicon<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacSha256 %></span></li><% } %>
-            <% if (desktopMacIntelSha256) { %><li>macOS · Intel<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopMacIntelSha256 %></span></li><% } %>
-            <% if (desktopWinSha256) { %><li>Windows<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopWinSha256 %></span></li><% } %>
-            <% if (desktopLinuxSha256) { %><li>Linux<span class="block font-mono break-all text-[11px] text-slate-400 mt-0.5"><%= desktopLinuxSha256 %></span></li><% } %>
-          </ul>
+          <ol class="mt-3 ml-4 list-decimal space-y-1.5 text-sm text-slate-600 max-w-2xl">
+            <li><%= t("download.apkHelp.step1") %></li>
+            <li><%= t("download.apkHelp.step2") %></li>
+            <li><%= t("download.apkHelp.step3") %></li>
+          </ol>
+          <p class="mt-3 text-xs text-slate-400 max-w-2xl">
+            <%= t("download.apkHelp.note") %>
+          </p>
         </details>
-      <% } %>
-    </div>
-  </div>
-</section>
-
-<!-- ============ Web / PWA banner ============ -->
-<section class="max-w-6xl mx-auto mt-6 px-4">
-  <div class="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50/60 via-white to-white p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center gap-5">
-    <div class="h-12 w-12 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-white flex items-center justify-center shadow-sm shrink-0">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
-    </div>
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap">
-        <h3 class="font-semibold text-slate-900"><%= t("download.web.title") %></h3>
-        <span class="text-[10px] font-medium bg-brand-100 text-brand-700 px-2 py-0.5 rounded-full"><%= t("download.web.pwaBadge") %></span>
       </div>
-      <p class="text-sm text-slate-600 mt-1.5 leading-relaxed">
-        <%= t("download.web.desc") %>
-      </p>
-    </div>
-    <a href="/app"
-       class="rounded-xl bg-brand-600 hover:bg-brand-700 text-white px-6 py-3 text-sm font-semibold shadow-sm transition shrink-0">
-      <%= t("download.web.open") %>
-    </a>
+    <% } %>
+    <% if (desktopMacUrl) { %>
+      <div class="py-8">
+        <details>
+          <summary class="cursor-pointer text-sm font-medium text-slate-800 hover:text-slate-900 select-none">
+            <%= t("download.macHelp.summary") %>
+          </summary>
+          <p class="mt-3 text-sm text-slate-600 leading-relaxed max-w-2xl">
+            <%= t("download.macHelp.body") %>
+          </p>
+        </details>
+      </div>
+    <% } %>
   </div>
 </section>
-
-<!-- ============ Help: APK install hint ============ -->
-<% if (androidApkUrl) { %>
-<section class="max-w-6xl mx-auto mt-6 px-4">
-  <details class="rounded-2xl border border-amber-200/60 bg-amber-50/40 p-5">
-    <summary class="cursor-pointer font-medium text-sm text-amber-900 select-none">
-      <%= t("download.apkHelp.summary") %>
-    </summary>
-    <ol class="mt-3 ml-4 list-decimal space-y-1.5 text-sm text-amber-900/90">
-      <li><%= t("download.apkHelp.step1") %></li>
-      <li><%= t("download.apkHelp.step2") %></li>
-      <li><%= t("download.apkHelp.step3") %></li>
-    </ol>
-    <p class="mt-3 text-xs text-amber-700/80">
-      <%= t("download.apkHelp.note") %>
-    </p>
-  </details>
-</section>
 <% } %>
 
-<!-- ============ Mac DMG: Gatekeeper note ============ -->
-<% if (desktopMacUrl) { %>
-<section class="max-w-6xl mx-auto mt-3 px-4">
-  <details class="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
-    <summary class="cursor-pointer font-medium text-sm text-slate-700 select-none">
-      <%= t("download.macHelp.summary") %>
-    </summary>
-    <p class="mt-3 text-sm text-slate-600 leading-relaxed">
-      <%= t("download.macHelp.body") %>
-    </p>
-  </details>
-</section>
-<% } %>
-
-<!-- ============ Source code footer ============ -->
-<section class="max-w-6xl mx-auto mt-12 mb-12 px-4 text-center">
-  <p class="text-xs uppercase tracking-widest text-slate-400 mb-4"><%= t("download.source.eyebrow") %></p>
-  <div class="flex flex-wrap justify-center gap-2.5">
+<!-- ============ Source code ============ -->
+<section class="py-12">
+  <h2 class="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900"><%= t("download.source.eyebrow") %></h2>
+  <p class="mt-3 max-w-2xl text-sm sm:text-[15px] leading-relaxed text-slate-600">
+    <%- t("download.source.note") %>
+  </p>
+  <div class="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
     <a href="https://github.com/wuha-like-sleep/by-wave-calendar" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition">
+       class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.387.6.113.82-.26.82-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.418-1.305.762-1.605-2.665-.305-5.467-1.334-5.467-5.93 0-1.31.468-2.382 1.235-3.222-.135-.303-.54-1.524.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.4 3-.405 1.02.005 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.652.24 2.873.12 3.176.765.84 1.23 1.912 1.23 3.222 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22v3.293c0 .32.21.694.825.577C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub
     </a>
     <a href="https://gitee.com/zhaorunsen/by-wave-calendar" target="_blank" rel="noopener"
-       class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .587L8.793 7.219.587 8.397l5.94 5.79-1.404 8.181L12 18.51l6.876 3.858L17.471 14.187l5.94-5.79-8.205-1.178z"/></svg>
+       class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">
       <%= t("download.source.gitee") %>
     </a>
-    <a href="/support" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+    <a href="/support" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500 transition-colors">
       <%= t("download.source.support") %>
     </a>
   </div>
-  <p class="mt-5 text-xs text-slate-400">
-    <%- t("download.source.note") %>
-  </p>
 </section>
