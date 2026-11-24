@@ -16,12 +16,17 @@ import cn.bywave.calendar.desktop.data.AddressBook
 import cn.bywave.calendar.desktop.data.AddressBookStore
 import cn.bywave.calendar.desktop.data.GeoSuggestPrefs
 import cn.bywave.calendar.desktop.data.api.ApiClient
+import cn.bywave.calendar.desktop.data.api.ApiException
+import cn.bywave.calendar.desktop.data.cache.CachedEvents
 import cn.bywave.calendar.desktop.data.cache.EventCache
 import cn.bywave.calendar.desktop.data.model.CalendarMeta
 import cn.bywave.calendar.desktop.data.model.EventCreateInput
 import cn.bywave.calendar.desktop.data.model.EventDTO
+import cn.bywave.calendar.desktop.data.model.EventsResponse
+import cn.bywave.calendar.desktop.data.model.EventsSyncResponse
 import cn.bywave.calendar.desktop.data.model.ParseEventResult
 import cn.bywave.calendar.desktop.data.model.EventUpdateInput
+import cn.bywave.calendar.desktop.data.sync.EventSyncPlan
 import cn.bywave.calendar.desktop.data.notify.ReminderFeed
 import cn.bywave.calendar.desktop.util.userFacingDetail
 import cn.bywave.calendar.desktop.util.userFacingError
@@ -276,7 +281,14 @@ class CalendarState(
             //    缓存按**这个 client 的账号**读写，不按「当前活动账号」：切账号
             //    时还在飞的那次加载，结果不能写进另一个账号的缓存。
             val deviceId = client.profileId
-            val cachedEntry = if (useCache) deviceId?.let { EventCache.readEntry(it, fromIso, toIso) } else null
+            // 条目（快照 + ETag + 同步令牌）总是读：令牌不是展示
+            // 数据，useCache=false（刚改完数据 / 回到前台刷新）时
+            // 不画旧快照，但增量同步照样要拿令牌——它的基线就是
+            // 文件里这份快照。写操作会整表清掉这个账号的缓存，
+            // 清完条目为 null，令牌随基线一起没有，自动回到
+            // 初始同步，不存在「有令牌没基线」的悬空状态。
+            val entry = deviceId?.let { EventCache.readEntry(it, fromIso, toIso) }
+            val cachedEntry = if (useCache) entry else null
             val cached = cachedEntry?.resp
             if (cached != null) {
                 loadedWindow = queryWindow
@@ -292,57 +304,44 @@ class CalendarState(
                 _ui.value = _ui.value.copy(loading = true, error = null)
             }
 
-            // 2. Hit the network. On success: replace + persist. On
-            //    failure: keep whatever we showed (cache or empty), set
-            //    error message. CancellationException is NOT an error
-            //    — it just means the user navigated away mid-fetch
-            //    (e.g. clicked prev/next twice quickly), so the next
-            //    load() call wins and we don't surface the cancellation.
+            // 2. Hit the network. 先走增量同步通道（/events/sync，
+            //    见 fetchViaSync）：有令牌只回变化、没令牌回全量 +
+            //    新令牌。通道失败（老服务端没这条路由、网络、解码）
+            //    才回退到原来的 ETag 条件请求全量路径，报错面与以前
+            //    一字不差——同步挂掉不能把用户卡在空数据上。
+            //    On success: replace + persist. On failure: keep
+            //    whatever we showed (cache or empty), set error
+            //    message. CancellationException is NOT an error — it
+            //    just means the user navigated away mid-fetch (e.g.
+            //    clicked prev/next twice quickly), so the next load()
+            //    call wins and we don't surface the cancellation.
             try {
-                // 条件请求：快照里存了这个窗口的 ETag 就带上。服务端回
-                // 304 = 内容没变，刚画上去的缓存就是最新，正文的传输、
-                // 解析、状态替换全部省掉；回 200 才走下面整套替换。
-                // useCache=false（刚改完数据）时没读快照、没有令牌，
-                // 天然是全量拉取——自己的改动也必然让服务端令牌变化，
-                // 两条路都不会漏数据。
-                when (val fetch = client.eventsConditional(fromIso, toIso, cachedEntry?.etag)) {
-                    is ApiClient.EventsFetch.NotModified -> {
-                        currentCoroutineContext().ensureActive()
-                        loadedWindow = queryWindow
-                        // 304 = 服务端没变，但队列可能刚有新条目（刚删了
-                        // 一个事件）：合并重套到现集上（幂等）。
-                        _ui.value = _ui.value.copy(
-                            events = offline.overlay(_ui.value.events),
-                            loading = false, error = null,
-                        )
-                        // 网络是通的（304 也是响应）：顺手推一轮队列。
-                        offline.kickReplay()
-                    }
-                    is ApiClient.EventsFetch.Fresh -> {
-                        val resp = fetch.resp
-                        currentCoroutineContext().ensureActive()
-                        // 展示集 = 服务端窗口 + 未同步条目合并；缓存文件
-                        // 里仍存原始响应，合并只发生在展示这一层。
-                        val displayEvents = offline.overlay(resp.events)
-                        _ui.value = _ui.value.copy(
-                            events = displayEvents,
-                            calendars = resp.calendars,
-                            // Absence only means deletion within the same query window.
-                            // A timezone switch can move a still-open event to another day.
-                            activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, displayEvents,
-                                allowMissingAsDeletion = loadedWindow == queryWindow),
-                            loading = false,
-                            error = null,
-                        )
-                        loadedWindow = queryWindow
-                        if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp, fetch.etag)
-                        // 拉取成功 = 网络通：推一轮离线队列（休眠唤醒 /
-                        // 网络切换后的兜底触发点，MainScreen 的焦点与
-                        // 定时刷新都走 load）。
-                        offline.kickReplay()
-                        // 地址簿首次播种也挂在这里：网络刚通、账号已定，
-                        // 后台拉一次宽窗口把已有地点收进本地簿。
-                        maybeSeedAddressBook()
+                if (!fetchViaSync(queryWindow, fromIso, toIso, entry)) {
+                    // 条件请求：快照里存了这个窗口的 ETag 就带上。服务端回
+                    // 304 = 内容没变，刚画上去的缓存就是最新，正文的传输、
+                    // 解析、状态替换全部省掉；回 200 才走下面整套替换。
+                    when (val fetch = client.eventsConditional(fromIso, toIso, entry?.etag)) {
+                        is ApiClient.EventsFetch.NotModified -> {
+                            currentCoroutineContext().ensureActive()
+                            loadedWindow = queryWindow
+                            // 304 = 服务端没变，但队列可能刚有新条目（刚删了
+                            // 一个事件）：合并重套到现集上（幂等）。
+                            _ui.value = _ui.value.copy(
+                                events = offline.overlay(_ui.value.events),
+                                loading = false, error = null,
+                            )
+                            // 网络是通的（304 也是响应）：顺手推一轮队列。
+                            offline.kickReplay()
+                        }
+                        is ApiClient.EventsFetch.Fresh -> {
+                            val resp = fetch.resp
+                            currentCoroutineContext().ensureActive()
+                            // 旧路径落盘：ETag 随正文走，同步令牌不写——
+                            // 通道刚失败 / 不可用，这份基线没有令牌，
+                            // 下次刷新从初始同步重新领。
+                            if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, resp, fetch.etag)
+                            showFreshWindow(resp, queryWindow)
+                        }
                     }
                 }
             } catch (e: CancellationException) {
@@ -359,6 +358,105 @@ class CalendarState(
                 )
             }
         }
+    }
+
+    /** 增量同步通道（GET /events/sync）。成功（初始 / 增量 / 410
+     *  后重建）返回 true，展示与落盘都已完成；通道失败返回 false，
+     *  调用方回退原来的 ETag 窗口全量路径。与 Android
+     *  EventRepository.fetchWindow 同口径：
+     *   · 有令牌走增量；410（令牌过期 / 已被服务端日志裁剪 /
+     *     变更量过大）→ 抹掉这个窗口的令牌、无令牌初始同步重建
+     *     一次，重建再失败同样回退旧路径，不连环重试；
+     *   · 任何非 410 失败（老服务端 404、5xx、解码失败）→ 抹掉
+     *     令牌、回退旧路径，下次刷新从初始同步重新领令牌；
+     *   · 新令牌只在结果确认落地后才写进缓存文件：增量先把计划
+     *     套到旧快照上算出新快照、连同新令牌一起写盘，再更新
+     *     界面。先存令牌再丢弃结果会永久丢变更（iOS/Android
+     *     踩过的坑）；写盘静默失败时文件里还是旧快照 + 旧令牌，
+     *     下次把同一份增量再套一遍，计划对同一基线幂等无害。 */
+    private suspend fun fetchViaSync(
+        queryWindow: Pair<Instant, Instant>,
+        fromIso: String,
+        toIso: String,
+        entry: CachedEvents?,
+    ): Boolean {
+        val deviceId = client.profileId
+        val token = entry?.syncToken
+        try {
+            if (token != null && entry != null) {
+                val delta = try {
+                    client.eventsSync(fromIso, toIso, token)
+                } catch (e: ApiException) {
+                    if (e.status != 410) throw e
+                    if (deviceId != null) EventCache.clearSyncToken(deviceId, fromIso, toIso)
+                    val full = client.eventsSync(fromIso, toIso, null)
+                    currentCoroutineContext().ensureActive()
+                    applyFullSync(full, queryWindow, fromIso, toIso)
+                    return true
+                }
+                currentCoroutineContext().ensureActive()
+                val merged = EventsResponse(
+                    calendars = delta.calendars,
+                    events = EventSyncPlan.applyDelta(
+                        previousLocal = entry.resp.events,
+                        upsertedIds = delta.upsertedIds.toSet(),
+                        deletedIds = delta.deletedIds.toSet(),
+                        incoming = delta.events,
+                        visibleCalendarIds = delta.calendars.map { it.id }.toSet(),
+                        protectedIds = offline.pendingIds,
+                        localCreateIds = offline.localCreateIds,
+                    ),
+                )
+                if (deviceId != null) EventCache.write(deviceId, fromIso, toIso, merged, syncToken = delta.nextSyncToken)
+                showFreshWindow(merged, queryWindow)
+                return true
+            }
+            val full = client.eventsSync(fromIso, toIso, null)
+            currentCoroutineContext().ensureActive()
+            applyFullSync(full, queryWindow, fromIso, toIso)
+            return true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (token != null && deviceId != null) EventCache.clearSyncToken(deviceId, fromIso, toIso)
+            return false
+        }
+    }
+
+    /** 初始同步成功：整窗替换。先把新基线 + 新令牌写盘，再展示。 */
+    private fun applyFullSync(
+        full: EventsSyncResponse,
+        queryWindow: Pair<Instant, Instant>,
+        fromIso: String,
+        toIso: String,
+    ) {
+        val resp = EventsResponse(full.calendars, full.events)
+        client.profileId?.let { EventCache.write(it, fromIso, toIso, resp, syncToken = full.nextSyncToken) }
+        showFreshWindow(resp, queryWindow)
+    }
+
+    /** 一份新的窗口全量到了（初始同步 / 增量合并 / 旧路径 200
+     *  共用）：展示集 = 服务端窗口 + 未同步条目合并；缓存文件里
+     *  存的始终是合并前的原始响应，合并只发生在展示这一层。 */
+    private fun showFreshWindow(resp: EventsResponse, queryWindow: Pair<Instant, Instant>) {
+        val displayEvents = offline.overlay(resp.events)
+        _ui.value = _ui.value.copy(
+            events = displayEvents,
+            calendars = resp.calendars,
+            // Absence only means deletion within the same query window.
+            // A timezone switch can move a still-open event to another day.
+            activeSheet = refreshedDetail(_ui.value.activeSheet, _ui.value.events, displayEvents,
+                allowMissingAsDeletion = loadedWindow == queryWindow),
+            loading = false,
+            error = null,
+        )
+        loadedWindow = queryWindow
+        // 拉取成功 = 网络通：推一轮离线队列（休眠唤醒 / 网络切换后
+        // 的兜底触发点，MainScreen 的焦点与定时刷新都走 load）。
+        offline.kickReplay()
+        // 地址簿首次播种也挂在这里：网络刚通、账号已定，后台拉
+        // 一次宽窗口把已有地点收进本地簿。
+        maybeSeedAddressBook()
     }
 
     // ---- 本地地址簿（地点联想）----
