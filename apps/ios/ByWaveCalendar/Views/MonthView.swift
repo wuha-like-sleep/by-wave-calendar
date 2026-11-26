@@ -53,10 +53,27 @@ struct MonthView: View {
         // ① 全天事件存的是 UTC 午夜，UTC 以西的时区会整体归到前一天；
         // ② 跨天的事件只出现在第一格 —— 一个三天的出差，月视图上只看得到一天。
         // 现在逐格问「这个事件占不占这一天」，两件事一起解决。
+        // 这份按「占不占」分的表喂的是点开某一天的日视图和长按速览：
+        // 它们要按实际时段画，跨午夜事件在次日凌晨那段必须在。
+        // 格子里挂的条走下面 chipEventsByDay，口径不同，别混用。
         var m = [Date: [EventDTO]]()
         for day in days {
             let list = events
                 .filter { AllDayDates.occupies($0, localDay: day, calendar: calendar) }
+                .sorted { $0.startsAt < $1.startsAt }
+            if !list.isEmpty { m[calendar.startOfDay(for: day)] = list }
+        }
+        return m
+    }
+
+    /// 格子里实际挂的条：全天事件挂它占的每一格，定时事件只挂
+    /// 开始日一格（见 AllDayDates.showsInMonthCell）。跨午夜的
+    /// 定时事件若在次日格子里再挂一条，看起来像重复事件。
+    private var chipEventsByDay: [Date: [EventDTO]] {
+        var m = [Date: [EventDTO]]()
+        for day in days {
+            let list = events
+                .filter { AllDayDates.showsInMonthCell($0, localDay: day, calendar: calendar) }
                 .sorted { $0.startsAt < $1.startsAt }
             if !list.isEmpty { m[calendar.startOfDay(for: day)] = list }
         }
@@ -84,7 +101,7 @@ struct MonthView: View {
                             day: day,
                             inMonth: calendar.isDate(day, equalTo: monthAnchor, toGranularity: .month),
                             isToday: calendar.isDateInToday(day),
-                            events: eventsByDay[calendar.startOfDay(for: day)] ?? [],
+                            events: chipEventsByDay[calendar.startOfDay(for: day)] ?? [],
                             calendars: calendars,
                             height: cellH,
                         )
