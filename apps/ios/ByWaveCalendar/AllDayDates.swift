@@ -52,6 +52,19 @@ enum AllDayDates {
         return ev.startsAt < end && ev.endsAt > start
     }
 
+    /// 月视图的格子里挂不挂这个事件的条。
+    /// 全天事件按日期占格（多天的全天事件挂它占的每一格）；定时事件
+    /// 只挂开始日那一格 —— 跨午夜的定时事件（25 号 22:00 → 26 号
+    /// 04:00）若按 occupies 在 26 号再挂一条，看起来就像重复建了
+    /// 两个事件。与 Android / 桌面端 MonthView 的既有口径一致
+    /// （timed events keep their start-day chip）。
+    /// 注意这只是月视图格子的归属：日 / 周视图和点开某一天的日视图
+    /// 仍然走 occupies 按实际时段画，26 号凌晨那段照常显示。
+    static func showsInMonthCell(_ ev: EventDTO, localDay day: Date, calendar: Calendar = .current) -> Bool {
+        if ev.allDay { return occupies(ev, localDay: day, calendar: calendar) }
+        return calendar.isDate(ev.startsAt, inSameDayAs: day)
+    }
+
     /// 事件的第一天，用本地日历的 Date 表示（按天分桶时当键用）。
     static func firstLocalDay(of ev: EventDTO, calendar: Calendar = .current) -> Date {
         guard ev.allDay else { return calendar.startOfDay(for: ev.startsAt) }
