@@ -800,3 +800,4 @@
 "清单数量已达上限。" = "Vous avez atteint le nombre maximal de listes.";
 "这张清单的条目已达上限。" = "Cette liste a atteint le nombre maximal d'articles.";
 "这个事件已经不存在了，无法关联。" = "Cet événement n'existe plus, la liste n'a pas pu être rattachée.";
+"切换侧边栏" = "Afficher ou masquer la barre latérale";

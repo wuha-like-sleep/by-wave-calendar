@@ -204,7 +204,7 @@ enum PendingOpLogic {
         guard let recId = op.recurrenceId, let recDate = AppState.parseIsoLenient(recId) else { return false }
         switch scope {
         case "instance": return dto.startsAt == recDate
-        case "future": return dto.startsAt >= recDate
+        case "future": return dto.startsAt.timeIntervalSinceReferenceDate >= recDate.timeIntervalSinceReferenceDate
         default: return true
         }
     }

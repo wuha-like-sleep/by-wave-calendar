@@ -25,7 +25,7 @@ import Foundation
                 precondition(calendar.dateComponents([.day], from: calendar.startOfDay(for: copyStart), to: calendar.startOfDay(for: multiEnd)).day == 2)
             }
         }
-        let body = EventUpdateInput(calendarId: nil, summary: "Meeting", description: "", location: "", startsAt: nil, endsAt: nil, allDay: nil, rrule: nil, extra: nil, scope: nil, recurrenceId: nil)
+        let body = EventUpdateInput(calendarId: nil, summary: "Meeting", description: "", location: "", startsAt: nil, endsAt: nil, allDay: nil, rrule: nil, extra: nil, scope: nil, recurrenceId: nil, exdates: nil)
         let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as! [String: Any]
         precondition(json["description"] as? String == "")
         precondition(json["location"] as? String == "")

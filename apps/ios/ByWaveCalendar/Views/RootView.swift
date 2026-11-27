@@ -14,15 +14,7 @@ struct RootView: View {
                 BootSplashView()
                     .transition(.opacity)
             } else if state.isSignedIn {
-                // 不按 horizontalSizeClass 换外壳。以前宽屏（iPad / 展开的 iPhone Duo）
-                // 走一套带侧栏的 NavigationSplitView、窄屏走 CalendarView，两边各有
-                // 一个 CalendarView：Duo 每次折叠/展开、iPad 每次拖分屏，整棵日历都被
-                // 换掉——看到哪天、正在写一半的新事件全部丢失。侧栏里也只有
-                // 「设置 / 账号 / 退出」，日历自己的工具栏都有。宽屏的日、周、月格子
-                // 本来就按宽度铺开，不需要另一套外壳。
-                // MainTabView 的标签栏同理：标签树只有一份，展开时只是把
-                // 标签栏藏起来（导航归日历自己的分栏侧边栏），不换树。
-                MainTabView()
+                CalendarView()
                     // 换了账号就整个重新挂载日历：CalendarView 的日程、日历列表、
                     // 同步时间都存在它自己的 @State 里，不重新挂载的话，
                     // 换账号之后手上还是上一个账号的日程，要等下一次轮询（最长 60 秒）才换。

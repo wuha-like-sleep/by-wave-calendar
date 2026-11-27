@@ -63,24 +63,18 @@ struct CalendarView: View {
     @State private var errorMessage: String?
     @State private var showingCreate = false
     @State private var showingPendingOps = false
-    @State private var showingSettings = false
     @State private var showingFilter = false
     @State private var showingSearch = false
     @State private var showingProfileSwitcher = false
-    // Invitations addressed to me: sheet visibility, the pending-count
-    // badge on the toolbar button, and the deep-link token to open on.
-    @State private var showingInvitations = false
-    @State private var pendingInvitationCount = 0
-    @State private var invitationOpenToken: String?
     // ICS import: the fileImporter toggle, plus the file (picked or
     // handed over by the system) whose confirmation sheet is showing.
     @State private var showingImportPicker = false
     @State private var importFileURL: URL?
-    // Horizontal-swipe tracking for date navigation. Reset on each new
-    // gesture; commits to a direction once user has moved > 50 pt.
-    @State private var swipeOffset: CGFloat = 0
+    // The badge and its validator belong to the same signed-in calendar.
+    @State private var pendingInvitationCount = 0
+    @State private var invitationETag: String?
 
-    // Polling timer — fires every 60s while in foreground.
+    // Polling timer — fires every 15s while in foreground.
     @State private var pollTask: Task<Void, Never>?
     // Debounce task for anchor/mode changes. Swiping rapidly through
     // a week would otherwise fire 5+ /api/v1/events requests back to
@@ -90,24 +84,14 @@ struct CalendarView: View {
     /// 展开的大画布（Duo 展开 / iPad）= regular 宽度；折叠 Duo 与
     /// 普通 iPhone 都是 compact。两种画布是两个独立的布局目标，
     /// 不是同一套布局的拉伸与否。
-    private var useSplitLayout: Bool { horizontalSizeClass == .regular }
+    @State private var sidebarCollapsed = false
+    private var useSplitLayout: Bool { horizontalSizeClass == .regular && !sidebarCollapsed }
 
     var body: some View {
-        // 分支在本视图内部换：mode / anchor / events / calendars 这些
-        // @State 都长在本视图身上，不随分支重建。以前宽屏走另一套
-        // 外壳、里面是第二个 CalendarView 实例，Duo 每次折叠/展开、
-        // iPad 每次拖分屏，整棵日历连同状态一起被换掉——这次同一个
-        // 实例只换 body 的分支，状态原地保留。
-        Group {
-            if useSplitLayout {
-                NavigationSplitView {
-                    sidebar
-                } detail: {
-                    NavigationStack { calendarWithSheets }
-                }
-            } else {
-                NavigationStack { calendarWithSheets }
-            }
+        MainTabView(sidebarCollapsed: $sidebarCollapsed, pendingInvitationCount: pendingInvitationCount) {
+            calendarWithSheets
+        } calendarTools: {
+            sidebarSections
         }
         // 撤销删除 snackbar (v1.6.2, 对齐 Android/桌面)。挂在 NavigationStack
         // 外层——详情页里删除、pop 动画还没结束时它就已经可见,而不是等回到
@@ -146,6 +130,8 @@ struct CalendarView: View {
                     EventEditView(
                         mode: .create,
                         calendars: calendars,
+                        prefilledStart: Calendar.current.isDateInToday(anchor)
+                            ? nil : Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: anchor),
                         onSaved: { saved in
                             showingCreate = false
                             // 动线: jump to the day the new event lives on,
@@ -160,7 +146,6 @@ struct CalendarView: View {
                     )
                 }
             }
-            .sheet(isPresented: $showingSettings) { SettingsView() }
             .sheet(isPresented: $showingPendingOps) {
                 PendingOpsView(onResolved: { Task { await load(force: true) } })
             }
@@ -305,7 +290,19 @@ struct CalendarView: View {
             // 展开态所有按钮都进侧边栏（见 sidebar），详情页顶部
             // 不留工具栏 —— 用户原话：按钮在侧面，不是在上方。
             // 折叠 / 普通 iPhone 没有侧边栏，工具栏照旧全套。
-            .toolbar { if !useSplitLayout { calendarToolbar } }
+            .toolbar {
+                if !useSplitLayout {
+                    #if canImport(SwiftUI, _version: 8.1)
+                    if #available(iOS 27.1, *) {
+                        calendarToolbar.axisBehavior(.verticalPreferred)
+                    } else {
+                        calendarToolbar
+                    }
+                    #else
+                    calendarToolbar
+                    #endif
+                }
+            }
             .refreshable { await load(force: true) }
             .task {
                 // On first appearance, hydrate from cache → instant render,
@@ -315,9 +312,11 @@ struct CalendarView: View {
                     Task { await load(force: false) }
                 }
                 await loadFromCache()
+                guard !Task.isCancelled else { return }
                 await load(force: false)
+                guard !Task.isCancelled else { return }
                 await refreshInvitationBadge()
-                startPolling()
+                if !Task.isCancelled && scenePhase == .active { startPolling() }
             }
             .environment(\.timeZone, deviceTimeZone)
             .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
@@ -340,31 +339,14 @@ struct CalendarView: View {
             // APNs silent push from the server posts this notification.
             // We reload immediately so the UI reflects whatever changed
             // on the server side (event created on another device, etc.).
-            .onReceive(NotificationCenter.default.publisher(for: .bwcRemoteDataChanged)) { note in
+            .onReceive(NotificationCenter.default.publisher(for: .bwcRemoteDataChanged)) { _ in
                 Task { await load(force: true) }
-                // A push that carries an invitation routes straight to
-                // that invitation's respond screen.
-                if let userInfo = note.userInfo,
-                   let token = InvitationPushRouting.token(from: userInfo) {
-                    invitationOpenToken = token
-                    showingInvitations = true
-                }
                 Task { await refreshInvitationBadge() }
-            }
-            // Deep link bywave://invitations/<token> is consumed by
-            // MainTabView (switches to the invitations tab) — not here:
-            // the invitations sheet in this view is only for the
-            // toolbar / sidebar buttons and the push route below.
-            .sheet(isPresented: $showingInvitations, onDismiss: {
-                invitationOpenToken = nil
-                Task { await refreshInvitationBadge() }
-            }) {
-                InvitationsView(openToken: invitationOpenToken)
-                    .environmentObject(state)
             }
             .onChange(of: mode) { _, _ in
-                // Mode switch is pure UI now (filter window changes) —
-                // events are already cached for a wide range. No fetch.
+                if mode == .year && (isLoading || anchorOutsideFetchedWindow()) {
+                    scheduleDebouncedLoad()
+                }
                 // Light selection tick so the day/week/month/year segmented
                 // control feels physical, like the iOS Calendar tabs.
                 UISelectionFeedbackGenerator().selectionChanged()
@@ -491,40 +473,69 @@ struct CalendarView: View {
     /// ‹ 日期 › 这一行。紧凑态排在分段控件下面（navBar 里）；
     /// 展开态出现在侧边栏顶部，同一份实现两边共用。
     private var dateNavRow: some View {
-        HStack(spacing: 6) {
-            Button {
-                UISelectionFeedbackGenerator().selectionChanged()
-                shiftAnchor(by: -1)
-            } label: { Image(systemName: "chevron.left") }
-                .accessibilityLabel(Text("上一页"))
-            Spacer()
-            Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
-                Text(anchorLabel)
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(.primary)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+                dateStep(-1)
+                Spacer(minLength: 0)
+                anchorButton.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 0)
+                dateStep(1)
+                dayStyleMenu
             }
-            Spacer()
-            Button {
-                UISelectionFeedbackGenerator().selectionChanged()
-                shiftAnchor(by: 1)
-            } label: { Image(systemName: "chevron.right") }
-                .accessibilityLabel(Text("下一页"))
-            // 日视图样式切换（单日 / 多日 / 列表）：苹果把这个
-            // 菜单放在日视图右上角，这里跟在日期行尾，两边
-            // （紧凑态日期行、展开态侧边栏顶部）共用同一处。
-            if mode == .day {
-                Menu {
-                    Picker("日视图样式", selection: $dayViewMode) {
-                        ForEach(DayViewMode.allCases, id: \.self) { m in
-                            Label(m.title, systemImage: m.symbol).tag(m)
-                        }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    Image(systemName: dayViewMode.symbol)
+            VStack(spacing: 0) {
+                anchorButton
+                HStack(spacing: 6) {
+                    dateStep(-1)
+                    Spacer(minLength: 0)
+                    dayStyleMenu
+                    Spacer(minLength: 0)
+                    dateStep(1)
                 }
-                .accessibilityLabel(Text("日视图样式"))
             }
+        }
+        // A list row otherwise treats all three buttons as its default action.
+        .buttonStyle(.borderless)
+    }
+
+    private var anchorButton: some View {
+        Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
+            Text(anchorLabel)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .frame(minHeight: 44)
+        }
+        .accessibilityHint(Text("今天"))
+    }
+
+    private func dateStep(_ direction: Int) -> some View {
+        Button {
+            UISelectionFeedbackGenerator().selectionChanged()
+            shiftAnchor(by: direction)
+        } label: {
+            Image(systemName: direction < 0 ? "chevron.backward" : "chevron.forward")
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .accessibilityLabel(direction < 0 ? Text("上一页") : Text("下一页"))
+    }
+
+    @ViewBuilder
+    private var dayStyleMenu: some View {
+        if mode == .day {
+            Menu {
+                Picker("日视图样式", selection: $dayViewMode) {
+                    ForEach(DayViewMode.allCases, id: \.self) { style in
+                        Label(style.title.loc, systemImage: style.symbol).tag(style)
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: dayViewMode.symbol)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text("日视图样式"))
         }
     }
 
@@ -574,6 +585,8 @@ struct CalendarView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text(day.formatted(date: .complete, time: .omitted)))
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
             if showsLunarCalendar {
@@ -598,94 +611,69 @@ struct CalendarView: View {
     /// 常用入口都在这里，内容区只放日历主体。全部用系统 List /
     /// Picker / Toggle，不自绘控件；绑定的都是本视图自己的
     /// @State 与 AppState，折叠回去时紧凑布局读的是同一份状态。
-    private var sidebar: some View {
-        List {
-            Section {
-                Picker("视图", selection: $mode) {
-                    ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                dateNavRow
+    @ViewBuilder
+    private var sidebarSections: some View {
+        Section {
+            Picker("视图", selection: $mode) {
+                ForEach(ViewMode.allCases) { Text($0.rawValue.loc).tag($0) }
             }
-            Section {
-                MiniMonthView(anchor: anchor) { day in
-                    anchor = Calendar.current.startOfDay(for: day)
-                }
-                .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
+            .pickerStyle(.segmented)
+            dateNavRow
+        }
+        Section {
+            MiniMonthView(anchor: anchor) { day in
+                anchor = Calendar.current.startOfDay(for: day)
             }
-            Section {
-                ForEach(calendars) { cal in
-                    Toggle(isOn: sidebarVisibilityBinding(for: cal.id)) {
-                        HStack(spacing: 10) {
-                            Circle()
-                                .fill(Color(hex: cal.color) ?? .accentColor)
-                                .frame(width: 12, height: 12)
-                            Text(cal.name).lineLimit(1)
-                        }
+            .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 14))
+        }
+        Section {
+            ForEach(calendars) { cal in
+                Toggle(isOn: sidebarVisibilityBinding(for: cal.id)) {
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(Color(hex: cal.color) ?? .accentColor)
+                            .frame(width: 12, height: 12)
+                        Text(cal.name).lineLimit(1)
                     }
                 }
-                if !state.hiddenCalendarIds.isEmpty {
-                    Button("全部显示") { state.hiddenCalendarIds.removeAll() }
-                }
-            } header: {
-                Text("显示的日历")
             }
-            Section {
-                Button {
-                    showingCreate = true
-                } label: {
-                    Label("新建事件", systemImage: "plus")
-                }
-                .disabled(calendars.isEmpty)
-                Button {
-                    showingSearch = true
-                } label: {
-                    Label("搜索", systemImage: "magnifyingglass")
-                }
-                Button {
-                    invitationOpenToken = nil
-                    showingInvitations = true
-                } label: {
-                    HStack {
-                        Label("我收到的邀请", systemImage: "envelope")
-                        if pendingInvitationCount > 0 {
-                            Spacer()
-                            Text("\(pendingInvitationCount)")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(Color.red))
-                        }
-                    }
-                }
-                Button {
-                    showingProfileSwitcher = true
-                } label: {
-                    Label("切换账号", systemImage: "person.crop.circle")
-                }
-                Button {
-                    showingSettings = true
-                } label: {
-                    Label("设置", systemImage: "gearshape")
-                }
-                // 顶栏菜单里剩下的两件也搬进侧边栏：展开态顶部
-                // 一个按钮都不留，功能不能跟着工具栏一起消失。
-                Button {
-                    Task { await load(force: true) }
-                } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
-                }
-                .disabled(isLoading)
-                Button {
-                    showingImportPicker = true
-                } label: {
-                    Label("导入 .ics 文件", systemImage: "square.and.arrow.down")
-                }
+            if !state.hiddenCalendarIds.isEmpty {
+                Button("全部显示") { state.hiddenCalendarIds.removeAll() }
+            }
+        } header: {
+            Text("显示的日历")
+        }
+        Section {
+            Button {
+                showingCreate = true
+            } label: {
+                Label("新建事件", systemImage: "plus")
+            }
+            .disabled(calendars.isEmpty)
+            Button {
+                showingSearch = true
+            } label: {
+                Label("搜索", systemImage: "magnifyingglass")
+            }
+            Button {
+                showingProfileSwitcher = true
+            } label: {
+                Label("切换账号", systemImage: "person.crop.circle")
+            }
+            // 顶栏菜单里剩下的两件也搬进侧边栏：展开态顶部
+            // 一个按钮都不留，功能不能跟着工具栏一起消失。
+            Button {
+                Task { await load(force: true) }
+            } label: {
+                Label("刷新", systemImage: "arrow.clockwise")
+            }
+            .disabled(isLoading)
+            Button {
+                showingImportPicker = true
+            } label: {
+                Label("导入 .ics 文件", systemImage: "square.and.arrow.down")
             }
         }
-        .listStyle(.sidebar)
-        .navigationTitle(navTitle.loc)
     }
 
     /// 与筛选日历页同一个绑定口径：Toggle 的 on = 不在 hidden 集合里。
@@ -889,17 +877,8 @@ struct CalendarView: View {
     }
 
     // MARK: - Fetch window
-    // v1.2.1: switched from per-view windows (day = 1 day, week = 7 days,
-    // ...) to a single wide window centered on `anchor`. Reason: when
-    // each view fetched only its own range, switching day→week→month
-    // showed inconsistent event sets — each view kept the LAST window's
-    // snapshot in `self.events`. Now every load fetches the same wide
-    // range and the per-view filters slice it locally; switching modes
-    // is pure UI work, no network hit.
-    //
-    // The window is anchored ±range around the current anchor. When the
-    // user navigates far outside it (e.g. jump to next year), a new
-    // fetch covers the new range.
+    // Day, week and month share a rolling window. Year also needs January
+    // through December, including all-day events stored at UTC midnight.
     private static let windowMonthsBack: Int = 2
     private static let windowMonthsForward: Int = 13
 
@@ -909,7 +888,19 @@ struct CalendarView: View {
         let cal = Calendar.current
         let start = cal.date(byAdding: .month, value: -Self.windowMonthsBack, to: anchor) ?? anchor
         let end = cal.date(byAdding: .month, value: Self.windowMonthsForward, to: anchor) ?? anchor
-        return (cal.startOfDay(for: start), cal.startOfDay(for: end))
+        let rolling = (cal.startOfDay(for: start), cal.startOfDay(for: end))
+        guard let year = visibleYearWindow else { return rolling }
+        return (min(rolling.0, year.start), max(rolling.1, year.end))
+    }
+
+    private var visibleYearWindow: DateInterval? {
+        guard mode == .year else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = deviceTimeZone
+        guard let year = calendar.dateInterval(of: .year, for: anchor),
+              let firstUTC = AllDayDates.utcRange(forLocalDay: year.start, calendar: calendar),
+              let nextUTC = AllDayDates.utcRange(forLocalDay: year.end, calendar: calendar) else { return nil }
+        return DateInterval(start: min(year.start, firstUTC.start), end: max(year.end, nextUTC.start))
     }
 
     /// True if the anchor moved far enough that the existing window
@@ -918,6 +909,7 @@ struct CalendarView: View {
     @State private var lastFetchedWindow: (start: Date, end: Date)?
     private func anchorOutsideFetchedWindow() -> Bool {
         guard let w = lastFetchedWindow else { return true }
+        if let year = visibleYearWindow { return year.start < w.start || year.end > w.end }
         // Add a 2-week safety margin so we refetch BEFORE the visible
         // edge of week/month view hits the boundary.
         let margin: TimeInterval = 14 * 86400
@@ -1065,17 +1057,19 @@ struct CalendarView: View {
     }
 
     private func loadFromCache() async {
+        guard lastFetchedWindow == nil else { return }
         let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
         // EventCache is now off the main actor (v1.0.1) — disk I/O +
         // JSON decode happen on a background queue, only the parsed
         // payload comes back here. Await is cheap (the decode is fast
         // compared to a network request).
-        guard let payload = await EventCache.shared.read(key: key) else { return }
+        guard let payload = await EventCache.shared.read(key: key),
+              !Task.isCancelled, lastFetchedWindow == nil else { return }
         // Use cached events only if the current view window overlaps the
         // cached window — otherwise we'd show stale events from a totally
         // different range. Server fetch updates within a moment anyway.
         let (start, end) = currentWindow()
-        if payload.windowStart <= end && payload.windowEnd >= start {
+        if payload.windowStart < end && start < payload.windowEnd {
             // 缓存里存的是上次展示的那一份；再套一次队列合并（幂等）
             // 是为了把「缓存写入之后才入队」的改动也算进来。
             self.events = state.offlineSync.overlay(payload.events)
@@ -1090,13 +1084,6 @@ struct CalendarView: View {
     private func eventsETagKey(from: Date, to: Date) -> String {
         let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
         return "bwc.eventsETag.\(key).\(DateFormatters.isoPlain.string(from: from)).\(DateFormatters.isoPlain.string(from: to))"
-    }
-
-    /// /invitations 的 ETag 存档键（UserDefaults）：和 /events 窗口同一
-    /// 套分键（服务器 + 账号），只是没有窗口这一维 —— 邀请列表不分窗。
-    private func invitationsETagKey() -> String {
-        let key = EventCache.shared.key(serverURL: state.serverURL ?? URL(string: "http://nil")!, userEmail: state.currentUserEmail)
-        return "bwc.invitationsETag.\(key)"
     }
 
     /// /events/sync 的同步存档键（UserDefaults）：令牌与它的窗口基线
@@ -1143,11 +1130,10 @@ struct CalendarView: View {
     /// 不解码，徽章保持原值 —— 这正是 304 在这里想要的语义。
     private func refreshInvitationBadge() async {
         do {
-            let etagKey = invitationsETagKey()
             let (fetched, newETag) = try await APIClient(state: state).getInvitationsConditional(
-                ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
-            guard let invitations = fetched else { return }
-            if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
+                ifNoneMatch: invitationETag)
+            guard !Task.isCancelled, let invitations = fetched else { return }
+            invitationETag = newETag
             let now = Date()
             pendingInvitationCount = invitations.filter { inv in
                 guard inv.responseStatus == "pending", !inv.event.cancelled else { return false }
@@ -1156,9 +1142,6 @@ struct CalendarView: View {
                 }
                 return true
             }.count
-            // 镜像一份到 AppState：标签栏的邀请角标读它，刷新逻辑
-            // 仍然只有这一份。
-            state.pendingInvitationCount = pendingInvitationCount
         } catch {
             // keep the previous count
         }
@@ -1184,7 +1167,8 @@ struct CalendarView: View {
         let fromIso = DateFormatters.isoPlain.string(from: from)
         let toIso = DateFormatters.isoPlain.string(from: to)
         let baseline = syncWindowBaseline(from: from, to: to)
-        if let token = storedSyncToken(forBaseline: baseline) {
+        let hasMatchingRows = lastFetchedWindow?.start == from && lastFetchedWindow?.end == to
+        if hasMatchingRows, let token = storedSyncToken(forBaseline: baseline) {
             do {
                 let delta = try await client.getEventsSync(from: fromIso, to: toIso, syncToken: token)
                 // 增量套到本地集（展示集口径）：没被队列碰过的母事件，
@@ -1226,7 +1210,7 @@ struct CalendarView: View {
         // 回退：原来的 ETag 条件请求全量路径，一字不改。
         let etagKey = eventsETagKey(from: from, to: to)
         let (fetched, newETag) = try await client.getEventsConditional(
-            path: legacyPath, ifNoneMatch: UserDefaults.standard.string(forKey: etagKey))
+            path: legacyPath, ifNoneMatch: hasMatchingRows ? UserDefaults.standard.string(forKey: etagKey) : nil)
         guard let resp = fetched else { return .unchanged }
         if let newETag { UserDefaults.standard.set(newETag, forKey: etagKey) }
         return .events(calendars: resp.calendars, events: resp.events, syncState: nil)
@@ -1371,8 +1355,8 @@ struct CalendarView: View {
         navDebounceTask = Task { [weak state] in
             try? await Task.sleep(nanoseconds: 220_000_000)
             if Task.isCancelled { return }
-            guard state != nil else { return }
-            await load(force: false)
+            guard state != nil, anchorOutsideFetchedWindow() || (mode == .year && isLoading) else { return }
+            await load(force: true)
         }
     }
 

@@ -16,6 +16,10 @@ import Foundation
         events.map { "\($0.id)@\($0.startsAt.timeIntervalSince1970)" }.sorted()
     }
 
+    static func expectRows(_ actual: [EventDTO], _ expected: [EventDTO]) {
+        precondition(keys(actual) == keys(expected))
+    }
+
     static func main() throws {
         let t1 = "2026-06-01T10:00:00.000Z"
         let t2 = "2026-06-02T10:00:00.000Z"
@@ -28,7 +32,7 @@ import Foundation
             upsertedIds: ["a"], deletedIds: [],
             incoming: [dto(id: "a", startsAt: t3)],
             visibleCalendarIds: visible, protectedIds: [])
-        precondition(keys(out) == keys([try dto(id: "a", startsAt: t3), dto(id: "b", startsAt: t1)]))
+        try expectRows(out, [dto(id: "a", startsAt: t3), dto(id: "b", startsAt: t1)])
 
         // ---- 母事件移出窗口：upserted 里有它、响应里没有行 → 删干净 ----
         out = try EventSyncLogic.applyDelta(
@@ -36,7 +40,7 @@ import Foundation
             upsertedIds: ["a"], deletedIds: [],
             incoming: [],
             visibleCalendarIds: visible, protectedIds: [])
-        precondition(keys(out) == keys([try dto(id: "b", startsAt: t1)]))
+        try expectRows(out, [dto(id: "b", startsAt: t1)])
 
         // ---- deletedIds 直接删 ----
         out = try EventSyncLogic.applyDelta(
@@ -44,7 +48,7 @@ import Foundation
             upsertedIds: [], deletedIds: ["b"],
             incoming: [],
             visibleCalendarIds: visible, protectedIds: [])
-        precondition(keys(out) == keys([try dto(id: "a", startsAt: t1)]))
+        try expectRows(out, [dto(id: "a", startsAt: t1)])
 
         // ---- 队列保护：待同步的母事件，upsert 与 delete 都跳过，
         //      服务端给它的新行也不收（本地版本说了算） ----
@@ -53,7 +57,7 @@ import Foundation
             upsertedIds: ["c"], deletedIds: ["d"],
             incoming: [dto(id: "c", startsAt: t3)],
             visibleCalendarIds: visible, protectedIds: ["c", "d"])
-        precondition(keys(out) == keys([try dto(id: "c", startsAt: t1), dto(id: "d", startsAt: t1)]))
+        try expectRows(out, [dto(id: "c", startsAt: t1), dto(id: "d", startsAt: t1)])
 
         // ---- 日历剪枝：名单外的日历整批剪掉；被保护的留在原地 ----
         out = try EventSyncLogic.applyDelta(
@@ -65,10 +69,10 @@ import Foundation
             upsertedIds: [], deletedIds: [],
             incoming: [],
             visibleCalendarIds: visible, protectedIds: ["e"])
-        precondition(keys(out) == keys([
-            try dto(id: "a", calendarId: "c1", startsAt: t1),
+        try expectRows(out, [
+            dto(id: "a", calendarId: "c1", startsAt: t1),
             dto(id: "e", calendarId: "gone", startsAt: t1),
-        ]))
+        ])
 
         // ---- 没被点名的母事件原样保留；离线新建的临时行不被名单误伤 ----
         out = try EventSyncLogic.applyDelta(

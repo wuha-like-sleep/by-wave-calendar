@@ -800,3 +800,4 @@
 "清单数量已达上限。" = "Die maximale Anzahl an Listen ist erreicht.";
 "这张清单的条目已达上限。" = "Diese Liste hat die maximale Anzahl an Einträgen erreicht.";
 "这个事件已经不存在了，无法关联。" = "Dieser Termin existiert nicht mehr, die Liste konnte nicht verknüpft werden.";
+"切换侧边栏" = "Seitenleiste ein- oder ausblenden";

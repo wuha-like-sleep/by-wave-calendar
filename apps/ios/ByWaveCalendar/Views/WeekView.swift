@@ -36,9 +36,11 @@ struct WeekView: View {
 
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var detailFor: EventDTO?
     @State private var createSeed: (calendarId: String, start: Date)?
+    @State private var dayListDate: Date?
     // Drag-to-move state. Set when a long-press completes on an event;
     // updated as the finger moves; consumed (commit/cancel) on release.
     @State private var dragState: DragState?
@@ -47,6 +49,10 @@ struct WeekView: View {
     /// from UIScreen, which is wrong whenever the week view isn't the
     /// full screen width (iPad split view / Stage Manager / foldables).
     @State private var lastColumnWidth: CGFloat = 0
+    @State private var dragLayoutInvalidated = false
+    // Unlike onEnded, GestureState also resets when iOS cancels the
+    // recognizer (rotation, interruption, or another gesture winning).
+    @GestureState private var eventGestureActive = false
     // After release on a recurring event, hold this until the user picks
     // a scope (or cancels), then fire the PATCH.
     @State private var pendingMove: PendingMove?
@@ -80,9 +86,18 @@ struct WeekView: View {
         // GeometryReader 本身贪婪地占满提议尺寸，VStack 不会被
         // CalendarView 的 ZStack 垂直居中（v0.7.6 那次的毛病）。
         GeometryReader { geo in
-            weekContent(totalWidth: geo.size.width)
+            weekContent(totalWidth: geo.size.width, availableHeight: geo.size.height)
+                .onChange(of: geo.size) { _, _ in cancelDragForLayoutChange() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .onChange(of: weekStart) { _, _ in cancelDragForLayoutChange() }
+        .onChange(of: dayCount) { _, _ in cancelDragForLayoutChange() }
+        .onChange(of: eventGestureActive) { _, active in
+            if !active {
+                dragState = nil
+                dragLayoutInvalidated = false
+            }
+        }
         .sheet(item: $detailFor) { ev in
             NavigationStack {
                 EventDetailView(
@@ -96,6 +111,22 @@ struct WeekView: View {
                         Button("关闭") { detailFor = nil }
                     }
                 }
+            }
+        }
+        .sheet(item: Binding(
+            get: { dayListDate.map { DayListItem(date: $0) } },
+            set: { if $0 == nil { dayListDate = nil } },
+        )) { item in
+            NavigationStack {
+                DayView(anchor: item.date, events: eventsForDay(item.date), calendars: calendars,
+                        onEventChanged: onEventChanged)
+                    .navigationTitle(item.date.formatted(date: .abbreviated, time: .omitted))
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("关闭") { dayListDate = nil }
+                        }
+                    }
             }
         }
         .sheet(item: Binding(
@@ -142,8 +173,8 @@ struct WeekView: View {
     // The week's vertical stack. `totalWidth` comes from the single
     // GeometryReader in body; every horizontal measurement below
     // (header columns, all-day columns, grid) derives from it.
-    private func weekContent(totalWidth: CGFloat) -> some View {
-        let columnWidth = (totalWidth - timeGutterWidth) / CGFloat(dayCount)
+    private func weekContent(totalWidth: CGFloat, availableHeight: CGFloat) -> some View {
+        let columnWidth = gridColumnWidth(totalWidth)
         return VStack(spacing: 0) {
             // fixedSize 是硬要求不是装饰：headerRow 里的 Color.clear
             // 时间槽垫片在纵向是完全弹性的，VStack 会把剩余高度
@@ -156,7 +187,8 @@ struct WeekView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !allDayEvents.isEmpty {
-                allDayRow(columnWidth: columnWidth)
+                allDayRow(columnWidth: columnWidth,
+                          rowLimit: availableHeight < 320 || dynamicTypeSize.isAccessibilitySize ? 1 : allDayMaxRows)
                     .fixedSize(horizontal: false, vertical: true)
             }
             ScrollViewReader { proxy in
@@ -204,8 +236,15 @@ struct WeekView: View {
             // Time gutter spacer
             Color.clear.frame(width: timeGutterWidth)
             ForEach(dayStarts, id: \.self) { day in
-                DayHeader(day: day)
-                    .frame(width: columnWidth)
+                Button { dayListDate = day } label: {
+                    DayHeader(day: day)
+                        .frame(width: columnWidth)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
+                .accessibilityHint("打开这一天".loc)
             }
         }
         .frame(minHeight: 52)
@@ -215,15 +254,11 @@ struct WeekView: View {
     }
 
     // MARK: - All-day row
-    // Each pill is ~24pt tall at the default text size (caption2 line +
-    // vertical padding); cap at allDayMaxRows × 24 + padding so a busy
-    // all-day day can't push the time grid completely off screen. The
-    // per-row allowance used to be 20pt, which under-measured the pill
-    // at larger Dynamic Type sizes and let pills overlap the row frame.
-    private func allDayRow(columnWidth: CGFloat) -> some View {
+    // Cap the row count, not the font's height. Short viewports and accessibility
+    // text sizes show one row plus access to the full day's existing list.
+    private func allDayRow(columnWidth: CGFloat, rowLimit: Int) -> some View {
         let perDay = bucketAllDayByDay()
-        let maxRows = min(allDayMaxRows, perDay.values.map { $0.count }.max() ?? 0)
-        let rowHeight = CGFloat(maxRows) * 24 + 16
+        let maxRows = min(rowLimit, perDay.values.map { $0.count }.max() ?? 0)
         return HStack(spacing: 0) {
             Text("全天")
                 .font(.caption2)
@@ -234,21 +269,31 @@ struct WeekView: View {
             // HStack (with an extra 1pt inter-column spacing), a third
             // independent width model that could drift from the grid.
             ForEach(dayStarts, id: \.self) { day in
+                let rows = perDay[day] ?? []
+                // Reserve one row for a real control when there are more
+                // events. Natural text height also respects Dynamic Type.
+                let visibleCount = rows.count > maxRows ? max(0, maxRows - 1) : maxRows
                 VStack(spacing: 2) {
-                    ForEach((perDay[day] ?? []).prefix(maxRows)) { ev in
+                    ForEach(rows.prefix(visibleCount), id: \.weekOccurrenceKey) { ev in
                         allDayPill(ev: ev)
                     }
-                    if (perDay[day]?.count ?? 0) > maxRows {
-                        Text("+\((perDay[day]?.count ?? 0) - maxRows)")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
+                    if rows.count > visibleCount {
+                        Button { dayListDate = day } label: {
+                            Text("+\(rows.count - visibleCount)")
+                                .font(.caption.weight(.medium))
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("还有 %lld 个…".locFormat(rows.count - visibleCount))
+                        .accessibilityHint("打开这一天".loc)
                     }
                 }
                 .padding(.horizontal, 2)
                 .frame(width: columnWidth, alignment: .leading)
             }
         }
-        .frame(height: rowHeight)
+        .fixedSize(horizontal: false, vertical: true)
         .padding(.vertical, 4)
         .background(Theme.subtleSurface)
         .overlay(Divider(), alignment: .bottom)
@@ -259,14 +304,18 @@ struct WeekView: View {
         // Same fill strength (0.9) and text rule as the other clients'
         // all-day / month bars — see Theme.eventTextColor.
         let textColor = Theme.eventTextColor(forHex: calLookup[ev.calendarId]?.color)
-        return Text(ev.summary)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(textColor)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 6).padding(.vertical, 3)
-            .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: Theme.Radius.eventBlock))
-            .onTapGesture { detailFor = ev }
+        return Button { detailFor = ev } label: {
+            Text(ev.summary)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(textColor)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: Theme.Radius.eventBlock))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(ev.summary)
+        .accessibilityValue("全天".loc)
     }
 
     // MARK: - Grid background (hour lines + time labels)
@@ -329,7 +378,7 @@ struct WeekView: View {
     // 0,0 and shift visually."
     private var eventLayer: some View {
         GeometryReader { geo in
-            let columnWidth = (geo.size.width - timeGutterWidth) / CGFloat(dayCount)
+            let columnWidth = gridColumnWidth(geo.size.width)
             let cal = Calendar.current
             ZStack(alignment: .topLeading) {
                 // Tap-to-create background — one transparent rect per
@@ -361,6 +410,7 @@ struct WeekView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .onChange(of: columnWidth) { _, newWidth in
+                cancelDragForLayoutChange()
                 lastColumnWidth = newWidth
             }
             .onAppear { lastColumnWidth = columnWidth }
@@ -369,7 +419,7 @@ struct WeekView: View {
 
     private func eventRect(for p: PositionedEvent) -> some View {
         let color = Color(hex: calLookup[p.event.calendarId]?.color) ?? .accentColor
-        let isDragging = dragState?.eventId == p.event.id
+        let isDragging = dragState?.segmentId == p.id
         let mode = dragState?.mode
         // Already-ended events fade out + get a strikethrough on the
         // title so a Saturday morning glance shows "today's left" vs
@@ -420,6 +470,8 @@ struct WeekView: View {
             // duration-sized frame; without clipping, a two-line title
             // on a short event painted over the block below it.
             .clipShape(shape)
+            .contentShape(Rectangle())
+            .gesture(dragGesture(for: p))
             // Resize handle — bottom 6pt strip, slightly darker. Gesture
             // attached separately so we can detect "is the touch on the
             // handle" by Y position in onChanged.
@@ -443,10 +495,15 @@ struct WeekView: View {
         // under the user's finger.
         .offset(x: dragDx, y: dragDy)
         .zIndex(isDragging ? 100 : 0)
-        .animation(.easeOut(duration: 0.12), value: isDragging)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isDragging)
         // Tap = open detail; long-press + drag (on body) = move.
         .onTapGesture { detailFor = p.event }
-        .gesture(dragGesture(for: p))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(p.event.summary)
+        .accessibilityValue(p.event.startsAt.formatted(date: .abbreviated, time: .shortened)
+                            + " – " + p.event.endsAt.formatted(date: .abbreviated, time: .shortened))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { detailFor = p.event }
     }
 
     // Resize gesture — fires on the bottom-edge handle. Gated behind a
@@ -458,24 +515,28 @@ struct WeekView: View {
     private func resizeGesture(for p: PositionedEvent) -> some Gesture {
         LongPressGesture(minimumDuration: 0.3)
             .sequenced(before: DragGesture(minimumDistance: 8))
+            .updating($eventGestureActive) { _, active, _ in active = true }
             .onChanged { value in
                 switch value {
                 case .first:
                     // Press in progress; nothing visible until the drag begins.
+                    if dragState == nil { dragLayoutInvalidated = false }
                     return
                 case .second(true, let drag):
-                    guard let drag else { return }
-                    if dragState?.eventId != p.event.id || dragState?.mode != .resize {
+                    guard let drag, !dragLayoutInvalidated else { return }
+                    if dragState == nil {
                         dragState = DragState(
+                            segmentId: p.id,
                             eventId: p.event.id,
                             mode: .resize,
                             origStart: p.event.startsAt,
                             origEnd: p.event.endsAt,
-                            origDayIdx: dayIndex(for: p.event.startsAt) ?? 0,
+                            origDayIdx: p.dayIndex,
                             dx: 0, dy: 0,
                         )
                         UISelectionFeedbackGenerator().selectionChanged()
                     }
+                    guard dragState?.segmentId == p.id, dragState?.mode == .resize else { return }
                     dragState?.dy = drag.translation.height
                 default:
                     return
@@ -483,13 +544,13 @@ struct WeekView: View {
             }
             .onEnded { _ in
                 // Only commit if we actually entered the resize drag phase.
-                guard let s = dragState, s.mode == .resize else { dragState = nil; return }
+                guard !dragLayoutInvalidated, let s = dragState, s.segmentId == p.id, s.mode == .resize else { return }
                 dragState = nil
                 // Convert dy to minutes, snap 15-min, apply to endsAt only.
                 let rawMin = (s.dy / hourHeight) * 60.0
                 let snapped = Int((rawMin / 15.0).rounded()) * 15
                 if abs(snapped) < 5 { return }
-                guard let originalEvent = events.first(where: { $0.id == s.eventId }) else { return }
+                guard let originalEvent = events.first(where: { $0.id == s.eventId && $0.startsAt == s.origStart }) else { return }
                 let newEnd = Calendar.current.date(byAdding: .minute, value: snapped, to: s.origEnd)!
                 // Don't allow newEnd to dip below newStart + 15 min.
                 let minEnd = Calendar.current.date(byAdding: .minute, value: 15, to: originalEvent.startsAt)!
@@ -510,33 +571,37 @@ struct WeekView: View {
             // Require a clear 10pt drag AFTER the long-press before we start
             // moving — a micro-jitter while holding shouldn't nudge the time.
             .sequenced(before: DragGesture(minimumDistance: 10))
+            .updating($eventGestureActive) { _, active, _ in active = true }
             .onChanged { value in
                 switch value {
                 case .first:
                     // Long-press in progress; nothing visible until drag.
+                    if dragState == nil { dragLayoutInvalidated = false }
                     return
                 case .second(true, let drag):
-                    guard let drag else { return }
+                    guard let drag, !dragLayoutInvalidated else { return }
                     // First tick: latch onto this event.
-                    if dragState == nil || dragState?.eventId != p.event.id || dragState?.mode != .move {
+                    if dragState == nil {
                         dragState = DragState(
+                            segmentId: p.id,
                             eventId: p.event.id,
                             mode: .move,
                             origStart: p.event.startsAt,
                             origEnd: p.event.endsAt,
-                            origDayIdx: dayIndex(for: p.event.startsAt) ?? 0,
+                            origDayIdx: p.dayIndex,
                             dx: 0, dy: 0,
                         )
                         // Light haptic on grab
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     }
+                    guard dragState?.segmentId == p.id, dragState?.mode == .move else { return }
                     dragState?.dx = drag.translation.width
                     dragState?.dy = drag.translation.height
                 default: return
                 }
             }
             .onEnded { _ in
-                guard let s = dragState else { return }
+                guard !dragLayoutInvalidated, let s = dragState, s.segmentId == p.id, s.mode == .move else { return }
                 dragState = nil
                 // Compute the new start time from the drag offset. snap
                 // hour delta is "translation.height / hourHeight" rounded
@@ -545,17 +610,12 @@ struct WeekView: View {
                 let snapped = computeSnappedMove(s)
                 // No-op moves: < 5 minutes shift and same day.
                 if abs(snapped.minuteDelta) < 5 && snapped.dayDelta == 0 { return }
-                guard let originalEvent = events.first(where: { $0.id == s.eventId }) else { return }
-                let newStart = Calendar.current.date(
-                    byAdding: .minute,
-                    value: snapped.minuteDelta + snapped.dayDelta * 24 * 60,
-                    to: s.origStart,
-                )!
-                let newEnd = Calendar.current.date(
-                    byAdding: .minute,
-                    value: snapped.minuteDelta + snapped.dayDelta * 24 * 60,
-                    to: s.origEnd,
-                )!
+                guard let originalEvent = events.first(where: { $0.id == s.eventId && $0.startsAt == s.origStart }) else { return }
+                // A calendar day can be 23 or 25 hours. Horizontal movement
+                // keeps the clock reading; the event's elapsed duration stays.
+                guard let shiftedDay = Calendar.current.date(byAdding: .day, value: snapped.dayDelta, to: s.origStart),
+                      let newStart = Calendar.current.date(byAdding: .minute, value: snapped.minuteDelta, to: shiftedDay) else { return }
+                let newEnd = newStart.addingTimeInterval(s.origEnd.timeIntervalSince(s.origStart))
                 let move = PendingMove(event: originalEvent, newStart: newStart, newEnd: newEnd)
                 if originalEvent.rrule != nil {
                     // Recurring: prompt for scope. The .sheet(isPresented:)
@@ -593,6 +653,26 @@ struct WeekView: View {
         // Round to nearest 15-min step
         let snappedMin = Int((rawMin / 15.0).rounded()) * 15
         return (snappedMin, dayDelta)
+    }
+
+    private func gridColumnWidth(_ totalWidth: CGFloat) -> CGFloat {
+        max(0, totalWidth - timeGutterWidth) / CGFloat(max(1, dayCount))
+    }
+
+    private func cancelDragForLayoutChange() {
+        guard dragState != nil else { return }
+        dragLayoutInvalidated = true
+        dragState = nil
+    }
+
+    private func eventsForDay(_ day: Date) -> [EventDTO] {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: day)
+        let end = calendar.date(byAdding: .day, value: 1, to: start) ?? start
+        return events.filter { event in
+            event.allDay ? AllDayDates.occupies(event, localDay: day, calendar: calendar)
+                : event.startsAt < end && event.endsAt > start
+        }.sorted { $0.startsAt < $1.startsAt }
     }
 
     // Returns the day-column index (0-6) for a given start date, if
@@ -665,7 +745,7 @@ struct WeekView: View {
         GeometryReader { geo in
             let cal = Calendar.current
             if let todayIdx = dayStarts.firstIndex(where: { cal.isDateInToday($0) }) {
-                let columnWidth = (geo.size.width - timeGutterWidth) / CGFloat(dayCount)
+                let columnWidth = gridColumnWidth(geo.size.width)
                 let hour = cal.component(.hour, from: now)
                 let minute = cal.component(.minute, from: now)
                 // 连续口径把秒也算进位置：56pt 一小时，秒步进约
@@ -713,7 +793,9 @@ struct WeekView: View {
             var currentCluster: [EventDTO] = []
             var frontier: Date = .distantPast
             for ev in onDay {
-                if ev.startsAt >= frontier {
+                // Compare the stored instants directly: SDK 27.2's new
+                // Date.>= entry point is absent in early 27.2 runtimes.
+                if ev.startsAt.timeIntervalSinceReferenceDate >= frontier.timeIntervalSinceReferenceDate {
                     if !currentCluster.isEmpty { clusters.append(currentCluster) }
                     currentCluster = [ev]
                     frontier = ev.endsAt
@@ -739,9 +821,10 @@ struct WeekView: View {
                     out.append(PositionedEvent(
                         id: "\(ev.id)@\(ev.startsAt.timeIntervalSince1970)@\(dayIdx)",
                         event: ev,
+                        dayIndex: dayIdx,
                         x: x,
                         y: y,
-                        width: slotWidth - 2,
+                        width: max(1, slotWidth - 2),
                         // 22pt floor, the same trade-off Android and
                         // desktop document: at the raw duration height a
                         // 15-minute block is 12pt, of which the vertical
@@ -779,6 +862,7 @@ struct WeekView: View {
 private struct PositionedEvent: Identifiable {
     let id: String
     let event: EventDTO
+    let dayIndex: Int
     let x: CGFloat
     let y: CGFloat
     let width: CGFloat
@@ -796,12 +880,22 @@ private struct CreateSeedItem: Identifiable {
     let start: Date
 }
 
+private struct DayListItem: Identifiable {
+    let date: Date
+    var id: Date { date }
+}
+
+private extension EventDTO {
+    var weekOccurrenceKey: String { "\(id)@\(startsAt.timeIntervalSince1970)" }
+}
+
 // Held while the user is actively dragging an event with their finger.
 // dx/dy are the live translation in points; we apply them as .offset on
 // the event rect (move mode) or stretch the height (resize mode). On
 // release we snap (15-min on Y, full-day on X) and call commitMove.
 private enum DragMode { case move, resize }
 private struct DragState {
+    let segmentId: String
     let eventId: String
     let mode: DragMode
     let origStart: Date

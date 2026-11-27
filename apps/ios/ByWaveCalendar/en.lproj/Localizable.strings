@@ -800,3 +800,4 @@
 "清单数量已达上限。" = "You've reached the maximum number of shopping lists.";
 "这张清单的条目已达上限。" = "This list has reached the maximum number of items.";
 "这个事件已经不存在了，无法关联。" = "That event no longer exists, so the list could not be linked.";
+"切换侧边栏" = "Toggle sidebar";

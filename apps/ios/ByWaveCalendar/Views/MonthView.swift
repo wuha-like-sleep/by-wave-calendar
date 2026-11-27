@@ -16,9 +16,15 @@ struct MonthView: View {
     let calendars: [CalendarMeta]
     let onEventChanged: () -> Void
 
-    @State private var selectedDay: Date?
-    @State private var showDaySheet = false
-    @EnvironmentObject private var state: AppState
+    private struct DaySelection: Identifiable {
+        let date: Date
+        var id: Date { date }
+    }
+
+    @State private var selectedDay: DaySelection?
+    @ScaledMetric(relativeTo: .callout) private var dateBadgeSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .caption2) private var eventFontSize: CGFloat = 11
+    @ScaledMetric(relativeTo: .caption2) private var eventLineHeight: CGFloat = 14
 
     private let calendar: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -82,91 +88,98 @@ struct MonthView: View {
 
     /// 网格两侧的留白。以前是 0，日期数字直接顶在屏幕边缘，
     /// 「今天」那个圆圈几乎被屏幕圆角切到。
-    private let sideInset: CGFloat = 8
+    private let sideInset: CGFloat = 6
 
     var body: some View {
         VStack(spacing: 0) {
             weekdayHeader
             GeometryReader { geo in
                 let cellW = geo.size.width / 7
-                // 42 天固定铺 6 行，所以高度按 6 等分。
-                // 关键是 geo.size.height 必须是**可见**高度：这个 GeometryReader
-                // 外面加了 .safeAreaPadding(.bottom)，否则在有 Home 指示条的机型上
-                // 它拿到的是含安全区的高度，最后一行会被屏幕底部切掉半截
-                // （实测 iPhone 18 Pro 上第六周只露出小半截）。
-                let cellH = geo.size.height / 6
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellW), spacing: 0), count: 7), spacing: 0) {
-                    ForEach(days, id: \.self) { day in
-                        DayCell(
-                            day: day,
-                            inMonth: calendar.isDate(day, equalTo: monthAnchor, toGranularity: .month),
-                            isToday: calendar.isDateInToday(day),
-                            events: chipEventsByDay[calendar.startOfDay(for: day)] ?? [],
-                            calendars: calendars,
-                            height: cellH,
-                        )
-                        .frame(width: cellW, height: cellH)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            selectedDay = day
-                            showDaySheet = true
-                        }
-                        // Long-press a day to peek at its events without
-                        // opening the sheet — quick scan + jump-to options.
-                        .contextMenu {
-                            let dayEvents = eventsByDay[calendar.startOfDay(for: day)] ?? []
-                            ForEach(dayEvents.prefix(5)) { ev in
-                                Button {
-                                    selectedDay = day
-                                    showDaySheet = true
-                                } label: {
-                                    Text(ev.summary).lineLimit(1)
-                                }
-                            }
-                            if dayEvents.count > 5 {
-                                Text("还有 %lld 个…".locFormat(dayEvents.count - 5))
-                            }
-                            if dayEvents.isEmpty {
-                                Text("无事件").foregroundStyle(.secondary)
-                            }
-                            Divider()
+                // Keep all six weeks reachable when landscape or Dynamic Type
+                // leaves too little height. Each day remains a usable tap target.
+                let cellH = max(geo.size.height / 6, max(44, dateBadgeSize + eventLineHeight + 12))
+                let occupied = eventsByDay
+                let chips = chipEventsByDay
+                ScrollView(.vertical) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(cellW), spacing: 0), count: 7), spacing: 0) {
+                        ForEach(days, id: \.self) { day in
+                            let dayEvents = occupied[calendar.startOfDay(for: day)] ?? []
                             Button {
-                                selectedDay = day
-                                showDaySheet = true
+                                openDay(day)
                             } label: {
-                                Label("打开这一天", systemImage: "calendar.day.timeline.left")
+                                DayCell(
+                                    day: day,
+                                    inMonth: calendar.isDate(day, equalTo: monthAnchor, toGranularity: .month),
+                                    isToday: calendar.isDateInToday(day),
+                                    events: chips[calendar.startOfDay(for: day)] ?? [],
+                                    calendars: calendars,
+                                    width: cellW,
+                                    height: cellH,
+                                    dateBadgeSize: dateBadgeSize,
+                                    eventFontSize: eventFontSize,
+                                    eventLineHeight: eventLineHeight
+                                )
+                                .frame(width: cellW, height: cellH)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text(day.formatted(date: .complete, time: .omitted)))
+                            .accessibilityValue(Text("%lld 个事件".locFormat(dayEvents.count)))
+                            .accessibilityIdentifier("month.day.\(calendar.component(.year, from: day))-\(calendar.component(.month, from: day))-\(calendar.component(.day, from: day))")
+                            // Long-press a day to peek at its events without
+                            // opening the sheet — quick scan + jump-to options.
+                            .contextMenu {
+                                ForEach(dayEvents.prefix(5)) { ev in
+                                    Button {
+                                        openDay(day)
+                                    } label: {
+                                        Text(ev.summary).lineLimit(1)
+                                    }
+                                }
+                                if dayEvents.count > 5 {
+                                    Text("还有 %lld 个…".locFormat(dayEvents.count - 5))
+                                }
+                                if dayEvents.isEmpty {
+                                    Text("无事件").foregroundStyle(.secondary)
+                                }
+                                Divider()
+                                Button {
+                                    openDay(day)
+                                } label: {
+                                    Label("打开这一天", systemImage: "calendar.day.timeline.left")
+                                }
                             }
                         }
                     }
                 }
+                .scrollBounceBehavior(.basedOnSize)
             }
             .padding(.horizontal, sideInset)
             .safeAreaPadding(.bottom)
         }
-        .sheet(isPresented: $showDaySheet) {
-            if let day = selectedDay {
-                NavigationStack {
-                    DayView(
-                        anchor: calendar.startOfDay(for: day),
-                        events: (eventsByDay[calendar.startOfDay(for: day)] ?? [])
-                            .sorted { $0.startsAt < $1.startsAt },
-                        calendars: calendars,
-                        onEventChanged: {
-                            // Day sheet edited an event — parent reloads,
-                            // which republishes events to this view.
-                            onEventChanged()
-                        },
-                    )
-                    .navigationTitle(dayTitle(day))  // date-formatted, locale-driven
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("关闭") { showDaySheet = false }
-                        }
+        .sheet(item: $selectedDay) { selection in
+            let day = selection.date
+            NavigationStack {
+                DayView(
+                    anchor: day,
+                    events: (eventsByDay[day] ?? [])
+                        .sorted { $0.startsAt < $1.startsAt },
+                    calendars: calendars,
+                    onEventChanged: onEventChanged
+                )
+                .navigationTitle(dayTitle(day))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("关闭") { selectedDay = nil }
                     }
                 }
             }
         }
+    }
+
+    private func openDay(_ day: Date) {
+        selectedDay = DaySelection(date: calendar.startOfDay(for: day))
     }
 
     private var weekdayHeader: some View {
@@ -179,6 +192,8 @@ struct MonthView: View {
             ForEach(Array(labels.enumerated()), id: \.offset) { _, label in
                 Text(label)
                     .font(.caption2.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
@@ -209,7 +224,11 @@ private struct DayCell: View {
     let isToday: Bool
     let events: [EventDTO]
     let calendars: [CalendarMeta]
+    let width: CGFloat
     let height: CGFloat
+    let dateBadgeSize: CGFloat
+    let eventFontSize: CGFloat
+    let eventLineHeight: CGFloat
 
     private var dayNumber: Int { Calendar.current.component(.day, from: day) }
 
@@ -217,82 +236,59 @@ private struct DayCell: View {
         Dictionary(uniqueKeysWithValues: calendars.map { ($0.id, $0) })
     }
 
-    /// 这一格放得下几行事件，按格子的真实高度算。
-    /// 以前是「高于 60pt 就放三行 + 一行 +N」，而那四行加日期要将近 100pt：
-    /// iPhone Duo 外屏只有 678pt 高，一格才 72pt 左右，有三件事的那天格子
-    /// 被撑高、上下各盖住半行。现在按行数放，放不下的进右上角的 +N。
-    /// 4+4 上下内边距、22 日期圆；每行 13pt 字 + 4pt 间距。末尾 Spacer 前那 4pt 间距
-    /// 不算进去：它落在下内边距里，被裁掉的只是空白。
+    // Text and capacity use the same scaled metrics, so larger text removes
+    // preview rows instead of clipping a date or half an event summary.
     private var eventLineCapacity: Int {
-        max(0, Int((height - 30) / 17))
+        min(3, max(0, Int((height - dateBadgeSize - 8) / (eventLineHeight + 4))))
     }
 
     var body: some View {
-        let lines = min(eventLineCapacity, 3)
-        let shown = events.count <= lines ? events.count : lines
+        let lines = eventLineCapacity
+        let shown = events.count > lines ? max(0, lines - 1) : events.count
         let hidden = events.count - shown
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 2) {
-                // 只能有一个 .foregroundStyle。以前写了两遍：先 numberColor、
-                // 后 .white，而 SwiftUI 里靠外层的那次会被内层覆盖——加上
-                // numberColor 对「今天」返回的正好是品牌蓝，于是蓝底配蓝字，
-                // **今天的日期数字在月视图里完全看不见**（只剩一个纯蓝圆点）。
-                // 周视图的写法本来就是对的，只有这里坏了。
-                Text("\(dayNumber)")
-                    .font(.callout.weight(isToday ? .bold : .regular))
-                    .frame(minWidth: 22, minHeight: 22)
-                    .background(isToday ? Color.accentColor : .clear, in: Circle())
-                    .foregroundStyle(isToday ? Color.white : numberColor)
-                Spacer(minLength: 0)
-                // 「还有几件」放在日期同一行的右边，不再单独占一行。
-                if lines > 0 && hidden > 0 {
-                    Text("+\(hidden)")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-            }
-            // Up to 3 events with a colored bar; more compressed when no space.
-            // Text bumped from 9pt → 10.5pt with medium weight for legibility
-            // — 9pt was readable on a Retina screen but too thin in dark mode
-            // / for older eyes.
+            Text("\(dayNumber)")
+                .font(.callout.weight(isToday ? .bold : .regular))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(width: max(0, min(dateBadgeSize, width - 8)), height: dateBadgeSize)
+                .background(isToday ? Color.accentColor : .clear, in: Circle())
+                .foregroundStyle(isToday ? Color.white : numberColor)
             if lines > 0 {
                 ForEach(events.prefix(shown)) { ev in
                     HStack(spacing: 3) {
-                        // 色条要定高：不定高它会跟着格子拉长，空出来的高度被摊进每一行。
                         RoundedRectangle(cornerRadius: 1.5)
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
-                            .frame(width: 3, height: 12)
+                            .frame(width: 3, height: eventLineHeight - 2)
                         Text(ev.summary)
-                            .font(.system(size: 10.5, weight: .medium))
+                            .font(.system(size: eventFontSize, weight: .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
+                    .frame(height: eventLineHeight)
                 }
-            } else {
-                // Compact: just colored dots in a row.
+                if hidden > 0 {
+                    Text("+\(hidden)")
+                        .font(.system(size: eventFontSize, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(height: eventLineHeight)
+                }
+            } else if !events.isEmpty {
                 HStack(spacing: 2) {
                     ForEach(events.prefix(4)) { ev in
                         Circle()
                             .fill(Color(hex: calLookup[ev.calendarId]?.color) ?? .accentColor)
                             .frame(width: 5, height: 5)
                     }
-                    if events.count > 4 {
-                        Text("+\(events.count - 4)").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-                    }
                 }
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 4).padding(.vertical, 4)
-        // 格线跟着格子本身画、超出的内容裁掉：上面的行数是按默认字号算的，
-        // 系统调大字号时宁可少露半行，也不许压到隔壁格子上。
+        .padding(4)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
-        .background(
-            Rectangle().stroke(Theme.gridLine, lineWidth: 0.5)
-        )
+        .background(Rectangle().stroke(Theme.gridLine, lineWidth: 0.5))
         .opacity(inMonth ? 1.0 : 0.35)
     }
 

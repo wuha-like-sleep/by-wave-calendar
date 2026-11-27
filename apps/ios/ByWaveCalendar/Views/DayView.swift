@@ -38,7 +38,7 @@ struct DayView: View {
                 List {
                     if !allDayEvents.isEmpty {
                         Section {
-                            ForEach(allDayEvents) { ev in
+                            ForEach(allDayEvents, id: \.dayListOccurrenceKey) { ev in
                                 NavigationLink {
                                     EventDetailView(
                                         event: ev,
@@ -57,7 +57,7 @@ struct DayView: View {
                             Text("全天")
                         }
                     }
-                    ForEach(timedEvents) { ev in
+                    ForEach(timedEvents, id: \.dayListOccurrenceKey) { ev in
                         NavigationLink {
                             EventDetailView(
                                 event: ev,
@@ -150,10 +150,8 @@ struct DayView: View {
 
 /// 全天区里的一条药丸。与 WeekView 的全天药丸同一套样式参数：填充
 /// 0.9、圆角走 Theme.Radius.eventBlock、字色走 Theme.eventTextColor
-/// （全端统一的 WCAG 亮度规则）。WeekView 的药丸是它文件内的私有
-/// 函数，没法跨文件引用，所以这里按同一来源重建外形，公式与令牌
-/// 都是共享的那一份。不设固定高度：caption2 随 Dynamic Type 缩放，
-/// 药丸高度由文字自然撑开，大字号下不会裁切。
+/// （全端统一的 WCAG 亮度规则）。列表留足点击高度，并允许标题换行；
+/// 窄屏或大字号下也能辨认事件，不把周网格的紧凑字号带进详情列表。
 private struct AllDayPillRow: View {
     let event: EventDTO
     let calendar: CalendarMeta?
@@ -161,13 +159,21 @@ private struct AllDayPillRow: View {
     var body: some View {
         let color = Color(hex: calendar?.color) ?? .accentColor
         Text(event.summary)
-            .font(.caption2.weight(.semibold))
+            .font(.subheadline.weight(.medium))
             .foregroundStyle(Theme.eventTextColor(forHex: calendar?.color))
-            .lineLimit(1)
+            .lineLimit(3)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 6).padding(.vertical, 3)
+            .padding(.horizontal, 10).padding(.vertical, 8)
+            .frame(minHeight: 44)
             .background(color.opacity(0.9), in: RoundedRectangle(cornerRadius: Theme.Radius.eventBlock))
     }
+}
+
+private extension EventDTO {
+    // Expanded recurring occurrences share the server id, including when
+    // two long occurrences overlap this day. Keep their row identity distinct.
+    var dayListOccurrenceKey: String { "\(id)@\(startsAt.timeIntervalSince1970)" }
 }
 
 private struct EmptyDayPlaceholder: View {
@@ -179,11 +185,17 @@ private struct EmptyDayPlaceholder: View {
         // the system component is available everywhere — no self-drawn
         // VStack to keep in sync. The actions form adds the one next
         // step this placeholder exists for: creating that day's event.
-        ContentUnavailableView {
-            Label(label, systemImage: "calendar")
-        } actions: {
-            Button("新建事件") { onCreate() }
-                .buttonStyle(.borderedProminent)
+        GeometryReader { geometry in
+            ScrollView {
+                ContentUnavailableView {
+                    Label(label, systemImage: "calendar")
+                } actions: {
+                    Button("新建事件") { onCreate() }
+                        .buttonStyle(.borderedProminent)
+                }
+                .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

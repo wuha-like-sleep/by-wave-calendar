@@ -88,3 +88,32 @@ enum AllDayDates {
         utcCalendar.isDate(ev.startsAt, inSameDayAs: lastInclusiveUTCDay(of: ev))
     }
 }
+
+/// The dots, badge and spoken count share one occupancy summary. Walking only
+/// the displayed year keeps long events bounded without truncating them at 92 days.
+struct YearEventSummary {
+    let busyDays: Set<Date>
+    let eventCountByMonth: [Int: Int]
+
+    init(events: [EventDTO], yearAnchor: Date, calendar: Calendar) {
+        var occupied = Set<Date>()
+        var counts = [Int: Int]()
+        if let year = calendar.dateInterval(of: .year, for: yearAnchor) {
+            for event in events where event.endsAt.timeIntervalSinceReferenceDate >= event.startsAt.timeIntervalSinceReferenceDate {
+                var day = max(year.start, AllDayDates.firstLocalDay(of: event, calendar: calendar))
+                var months = Set<Int>()
+                while day < year.end && AllDayDates.occupies(event, localDay: day, calendar: calendar) {
+                    occupied.insert(calendar.startOfDay(for: day))
+                    months.insert(calendar.component(.month, from: day))
+                    guard let next = calendar.date(byAdding: .day, value: 1, to: day), next > day else { break }
+                    day = calendar.startOfDay(for: next)
+                }
+                // A multi-day event counts once in every month it occupies;
+                // separate occurrences of a recurring event remain separate.
+                for month in months { counts[month, default: 0] += 1 }
+            }
+        }
+        busyDays = occupied
+        eventCountByMonth = counts
+    }
+}
