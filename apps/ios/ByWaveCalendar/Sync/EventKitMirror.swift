@@ -196,11 +196,15 @@ final class EventKitMirror {
     // expansion gives us per-occurrence rows whose id matches the master;
     // we disambiguate by start time so each occurrence gets its own
     // EKEvent. Non-recurring events use the plain id.
+    private static let occurrenceStamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
     private func stableKey(for e: EventDTO) -> String {
         if e.isOccurrence == true {
-            let iso = ISO8601DateFormatter()
-            iso.formatOptions = [.withInternetDateTime]
-            return "\(e.id)@\(iso.string(from: e.startsAt))"
+            return "\(e.id)@\(Self.occurrenceStamp.string(from: e.startsAt))"
         }
         return e.id
     }
@@ -212,6 +216,15 @@ final class EventKitMirror {
         ek.startDate = server.startsAt
         ek.endDate = server.endsAt
         ek.isAllDay = server.allDay
+        // All-day dates arrive as UTC midnights (the app's AllDayDates
+        // day math is UTC-based). EventKit reads an all-day event's day
+        // in the EVENT's time zone, falling back to the device zone —
+        // in UTC− zones an unpinned all-day event lands on the previous
+        // day. Pin all-day events to GMT so the day is the same
+        // everywhere; timed events keep absolute dates (zone-free).
+        // Set both ways: an event edited from all-day to timed must not
+        // keep a stale GMT pin from an earlier mirror.
+        ek.timeZone = server.allDay ? TimeZone(secondsFromGMT: 0) : nil
         // We don't mirror RRULE — server already expanded it, and EKEvent
         // recurrence rules are a whole separate API surface. Each
         // occurrence is its own EKEvent in our mirror.
