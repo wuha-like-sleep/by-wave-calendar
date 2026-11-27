@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">予定に紐づける（任意）</string>
     <string name="shopping_no_event">紐づけない</string>
     <string name="shopping_unlink">紐づけ解除</string>
+    <string name="shopping_change_link">紐づけを変更</string>
     <string name="shopping_items_empty">このリストはまだ空です。下から最初のアイテムを追加しましょう。</string>
     <string name="shopping_item_name">アイテム</string>
     <string name="shopping_item_name_placeholder">例：トマト</string>

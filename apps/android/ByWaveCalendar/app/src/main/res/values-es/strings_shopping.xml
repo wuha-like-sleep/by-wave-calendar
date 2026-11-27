@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">Vincular a un evento (opcional)</string>
     <string name="shopping_no_event">Sin evento vinculado</string>
     <string name="shopping_unlink">Desvincular</string>
+    <string name="shopping_change_link">Cambiar vínculo</string>
     <string name="shopping_items_empty">Esta lista está vacía. Añade abajo el primer artículo.</string>
     <string name="shopping_item_name">Artículo</string>
     <string name="shopping_item_name_placeholder">p. ej., Tomates</string>

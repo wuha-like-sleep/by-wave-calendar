@@ -13,13 +13,13 @@
 //   DELETE /shopping-lists/{id}/items/{itemId} → { ok: true }
 //   POST   /shopping-lists/{id}/items/{itemId}/move → item
 //
-// Linking a list to an event deliberately does NOT happen here beyond
-// unlinking: picking an event lives in the event editor's shopping
-// section (same split as the desktop client), so this screen only
-// shows the current link and can cut it. After a move or a done
-// toggle the detail is re-fetched whole, so item order and the
-// list's counts always match the server instead of drifting through
-// local arithmetic.
+// The settings block re-links as well as unlinks: its picker offers
+// the event window's events (newest first, one row per series, cap
+// 100 — the Web detail page's select, window-bound), and the event
+// editor's shopping section can link from the other side too. After
+// a move or a done toggle the detail is re-fetched whole, so item
+// order and the list's counts always match the server instead of
+// drifting through local arithmetic.
 
 package cn.bywave.calendar.ui.shopping
 
@@ -43,6 +43,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -83,6 +84,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.R
+import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.model.ShoppingList
 import cn.bywave.calendar.data.model.ShoppingListCreateRequest
 import cn.bywave.calendar.data.model.ShoppingListDetail
@@ -308,6 +310,8 @@ fun ShoppingListDetailScreen(
     var editingItem by remember { mutableStateOf<ShoppingListItem?>(null) }
     var deletingItem by remember { mutableStateOf<ShoppingListItem?>(null) }
     var showDeleteList by remember { mutableStateOf(false) }
+    var showLinkPicker by remember { mutableStateOf(false) }
+    var linkCandidates by remember { mutableStateOf<List<EventDTO>?>(null) }
     // Add-item form.
     var itemName by remember { mutableStateOf("") }
     var itemQuantity by remember { mutableStateOf("") }
@@ -557,14 +561,7 @@ fun ShoppingListDetailScreen(
                             )
                         }
                     },
-                    onUnlink = {
-                        mutate {
-                            shoppingApi().updateShoppingList(
-                                listId,
-                                ShoppingListUpdateInput(eventId = ShoppingListEventField(null)),
-                            )
-                        }
-                    },
+                    onChangeLink = { showLinkPicker = true },
                     onDeleteList = { showDeleteList = true },
                 )
             }
@@ -593,6 +590,110 @@ fun ShoppingListDetailScreen(
                             note = note,
                         ),
                     )
+                }
+            },
+        )
+    }
+
+    if (showLinkPicker) {
+        val currentList = detail?.list
+        LaunchedEffect(showLinkPicker) {
+            if (linkCandidates == null) {
+                linkCandidates = try {
+                    // 与 Web 详情页的关联选择器尽量对齐：候选按开始
+                    // 时间倒序、同一系列只留一行、上限 100；客户端
+                    // 走事件窗口（前 2 个月 / 后 13 个月）。
+                    val zone = java.time.ZoneId.systemDefault()
+                    val now = java.time.Instant.now().atZone(zone)
+                    val resp = shoppingApi().eventsSync(
+                        now.minusMonths(2).toInstant().toString(),
+                        now.plusMonths(13).toInstant().toString(),
+                        null,
+                    )
+                    resp.body()?.events.orEmpty()
+                        .sortedByDescending { it.startsAt }
+                        .distinctBy { it.id }
+                        .take(100)
+                } catch (e: Exception) {
+                    actionError = shoppingErrorText(context, e, R.string.shopping_action_failed)
+                    emptyList()
+                }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showLinkPicker = false },
+            title = { Text(stringResource(R.string.shopping_link_event_label)) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    TextButton(
+                        onClick = {
+                            showLinkPicker = false
+                            mutate {
+                                shoppingApi().updateShoppingList(
+                                    listId,
+                                    ShoppingListUpdateInput(eventId = ShoppingListEventField(null)),
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            stringResource(R.string.shopping_no_event),
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (currentList?.eventId == null) {
+                            Icon(Icons.Default.Check, contentDescription = null)
+                        }
+                    }
+                    val candidates = linkCandidates
+                    if (candidates == null) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        candidates.forEach { ev ->
+                            TextButton(
+                                onClick = {
+                                    showLinkPicker = false
+                                    mutate {
+                                        shoppingApi().updateShoppingList(
+                                            listId,
+                                            ShoppingListUpdateInput(
+                                                eventId = ShoppingListEventField(ev.id),
+                                            ),
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        ev.summary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        formatLinkCandidateDate(ev),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = mutedTextColor(),
+                                    )
+                                }
+                                if (currentList?.eventId == ev.id) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLinkPicker = false }) {
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -771,12 +872,13 @@ private fun ShoppingItemRow(
 }
 
 /** The detail's settings block: rename, the current event link (with
- *  unlink), and the destructive delete entry. */
+ *  a change-link entry that opens the picker), and the destructive
+ *  delete entry. */
 @Composable
 private fun ShoppingListSettings(
     list: ShoppingList,
     onRename: (String) -> Unit,
-    onUnlink: () -> Unit,
+    onChangeLink: () -> Unit,
     onDeleteList: () -> Unit,
 ) {
     var title by remember(list.id, list.title) { mutableStateOf(list.title) }
@@ -812,25 +914,26 @@ private fun ShoppingListSettings(
             style = MaterialTheme.typography.bodySmall,
             color = mutedTextColor(),
         )
-        if (list.eventId != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = list.eventSummary ?: list.eventId,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onUnlink) {
-                    Text(stringResource(R.string.shopping_unlink))
-                }
-            }
-        } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = stringResource(R.string.shopping_no_event),
+                text = if (list.eventId != null) {
+                    list.eventSummary ?: list.eventId
+                } else {
+                    stringResource(R.string.shopping_no_event)
+                },
                 style = MaterialTheme.typography.bodyMedium,
-                color = mutedTextColor(),
+                color = if (list.eventId != null) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    mutedTextColor()
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            TextButton(onClick = onChangeLink) {
+                Text(stringResource(R.string.shopping_change_link))
+            }
         }
         TextButton(onClick = onDeleteList) {
             Text(

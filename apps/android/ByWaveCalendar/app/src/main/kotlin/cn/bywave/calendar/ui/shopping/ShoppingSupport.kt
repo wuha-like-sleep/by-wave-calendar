@@ -9,6 +9,7 @@ import android.content.Context
 import cn.bywave.calendar.BywaveApp
 import cn.bywave.calendar.R
 import cn.bywave.calendar.data.api.ApiClient
+import cn.bywave.calendar.data.model.EventDTO
 import cn.bywave.calendar.data.api.BywaveApi
 import cn.bywave.calendar.data.api.serverErrorMessage
 import kotlinx.serialization.json.Json
@@ -55,6 +56,18 @@ internal fun shoppingErrorText(context: Context, e: Throwable, fallbackRes: Int)
 internal fun formatShoppingQuantity(quantity: Double): String {
     if (quantity == quantity.toLong().toDouble()) return quantity.toLong().toString()
     return BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()
+}
+
+/** Date line under an event in the re-link picker. All-day events
+ *  store UTC midnight, so their date is read in UTC — the local
+ *  zone would show the previous day west of Greenwich. */
+internal fun formatLinkCandidateDate(ev: EventDTO): String {
+    val instant = runCatching { java.time.Instant.parse(ev.startsAt) }.getOrNull() ?: return ""
+    val zone = if (ev.allDay) java.time.ZoneOffset.UTC else java.time.ZoneId.systemDefault()
+    return java.time.format.DateTimeFormatter
+        .ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+        .withLocale(java.util.Locale.getDefault())
+        .format(instant.atZone(zone).toLocalDate())
 }
 
 /** Parse a quantity field: blank or unparseable → null (the field is

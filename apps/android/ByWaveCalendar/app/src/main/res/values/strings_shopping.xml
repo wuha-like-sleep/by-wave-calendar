@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">关联事件（可选）</string>
     <string name="shopping_no_event">不关联事件</string>
     <string name="shopping_unlink">解除关联</string>
+    <string name="shopping_change_link">更改关联</string>
     <string name="shopping_items_empty">这张清单还是空的——在下方添加第一件要买的东西。</string>
     <string name="shopping_item_name">名称</string>
     <string name="shopping_item_name_placeholder">例如：番茄</string>

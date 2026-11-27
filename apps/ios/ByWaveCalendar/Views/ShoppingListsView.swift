@@ -1,10 +1,10 @@
 // ShoppingListsView.swift
 // Shopping lists — the native twin of the Web /shopping-lists pages.
-// A list is standalone or linked to one event; linking and unlinking
-// to an arbitrary event happens in the event editor's shopping
-// section (same split as the other clients), so the detail page's
-// settings only rename, show the current link with an unlink button,
-// and delete. Items are ticked off in place; after a toggle / move
+// A list is standalone or linked to one event. The detail page's
+// settings rename, re-link (a picker over the calendar window's
+// events, like the Web detail page's select), unlink, and delete;
+// the event editor's shopping section can link from the other side
+// too. Items are ticked off in place; after a toggle / move
 // the detail is re-fetched so order and counts match the server.
 
 import SwiftUI
@@ -165,6 +165,9 @@ struct ShoppingListDetailView: View {
     @State private var settingsError: String?
     @State private var showDeleteListAlert = false
     @State private var deleting = false
+    @State private var showLinkPicker = false
+    @State private var linkCandidates: [EventDTO]?
+    @State private var linking = false
 
     var body: some View {
         Form {
@@ -225,6 +228,80 @@ struct ShoppingListDetailView: View {
             )
             .environmentObject(state)
         }
+        .sheet(isPresented: $showLinkPicker) {
+            linkPickerSheet
+                .environmentObject(state)
+        }
+    }
+
+    /// 改绑选择器：候选是日历宽窗口（前 2 个月 / 后 13 个月，与
+    /// CalendarView 同一窗口）里的事件，按开始时间倒序、同一系列
+    /// 只留一行（窗口里是展开后的 occurrence 行），上限 100 ——
+    /// 与 Web 详情页那个 select 的口径尽量对齐（Web 是全量最近
+    /// 100 条，客户端受窗口所限）。第一行恒为「不关联事件」。
+    @ViewBuilder
+    private var linkPickerSheet: some View {
+        NavigationStack {
+            List {
+                if let list = detail?.list {
+                    Section {
+                        Button {
+                            Task { await setLink(list, eventId: nil) }
+                        } label: {
+                            HStack {
+                                Text("不关联事件")
+                                Spacer()
+                                if list.eventId == nil {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                    Section {
+                        if linkCandidates == nil {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            ForEach(linkCandidates ?? [], id: \.id) { ev in
+                                Button {
+                                    Task { await setLink(list, eventId: ev.id) }
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(ev.summary).lineLimit(1)
+                                            Text(linkCandidateDate(ev))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        if list.eventId == ev.id {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("关联事件（可选）")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { showLinkPicker = false }
+                }
+            }
+        }
+    }
+
+    private func linkCandidateDate(_ ev: EventDTO) -> String {
+        let f = DateFormatter()
+        f.locale = Locale.current
+        f.dateStyle = .medium
+        f.timeStyle = .none
+        // 全天事件的 startsAt 是 UTC 午夜，按 UTC 读日期才不会
+        // 在 UTC 以西错到前一天（与 AllDayDates 同一条纪律）。
+        if ev.allDay { f.timeZone = TimeZone(identifier: "UTC") }
+        return f.string(from: ev.startsAt)
     }
 
     // MARK: - Sections
@@ -395,11 +472,11 @@ struct ShoppingListDetailView: View {
                     Text("不关联事件").foregroundStyle(.secondary)
                 }
             }
-            if list.eventId != nil {
-                Button("解除关联") {
-                    Task { await unlink(list) }
-                }
+            Button("更改关联") {
+                showLinkPicker = true
+                Task { await loadLinkCandidates() }
             }
+            .disabled(linking)
             if let settingsError {
                 Text(settingsError).foregroundStyle(.red).font(.callout)
             }
@@ -541,17 +618,48 @@ struct ShoppingListDetailView: View {
         }
     }
 
-    private func unlink(_ list: ShoppingListDTO) async {
-        settingsError = nil
+    private func loadLinkCandidates() async {
+        if linkCandidates != nil { return }
+        let cal = Calendar.current
+        let now = Date()
+        guard
+            let from = cal.date(byAdding: .month, value: -2, to: now),
+            let to = cal.date(byAdding: .month, value: 13, to: now)
+        else { return }
         do {
-            // Explicit .some(nil): the PATCH must carry eventId: null
-            // — omitting the key would leave the link untouched.
-            _ = try await APIClient(state: state).updateShoppingList(
-                id: list.id, title: nil, eventId: .some(nil),
+            let resp = try await APIClient(state: state).getEventsSync(
+                from: DateFormatters.isoPlain.string(from: from),
+                to: DateFormatters.isoPlain.string(from: to),
+                syncToken: nil,
             )
+            // 倒序后按 id 去重：同一系列的多个 occurrence 只留最近一行。
+            var seen = Set<String>()
+            linkCandidates = resp.events
+                .sorted { $0.startsAt > $1.startsAt }
+                .filter { seen.insert($0.id).inserted }
+                .prefix(100)
+                .map { $0 }
+        } catch {
+            linkCandidates = []
+            settingsError = shoppingErrorText(error)
+        }
+    }
+
+    /// 改绑（含解绑：eventId 传 nil）。两种情况都要显式发
+    /// eventId —— .some(nil) 是解绑的 null，省掉键是「不动关联」。
+    private func setLink(_ list: ShoppingListDTO, eventId: String?) async {
+        linking = true
+        settingsError = nil
+        defer { linking = false }
+        do {
+            _ = try await APIClient(state: state).updateShoppingList(
+                id: list.id, title: nil, eventId: .some(eventId),
+            )
+            showLinkPicker = false
             await reload()
         } catch {
             settingsError = shoppingErrorText(error)
+            showLinkPicker = false
         }
     }
 

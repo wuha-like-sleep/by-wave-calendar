@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -54,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
 import cn.bywave.calendar.desktop.data.api.ApiException
+import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.data.model.ShoppingList
 import cn.bywave.calendar.desktop.data.model.ShoppingListCreateInput
 import cn.bywave.calendar.desktop.data.model.ShoppingListDetail
@@ -85,6 +87,17 @@ internal fun formatShoppingQuantity(quantity: Double): String {
     }
 }
 
+/** 改绑选择器里事件名下面的日期行。全天事件存的是 UTC 午夜，
+ *  日期按 UTC 读，否则 UTC 以西会错到前一天。 */
+internal fun formatLinkCandidateDate(ev: EventDTO): String {
+    val instant = runCatching { java.time.Instant.parse(ev.startsAt) }.getOrNull() ?: return ""
+    val zone = if (ev.allDay) java.time.ZoneOffset.UTC else java.time.ZoneId.systemDefault()
+    return java.time.format.DateTimeFormatter
+        .ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
+        .withLocale(java.util.Locale.getDefault())
+        .format(instant.atZone(zone).toLocalDate())
+}
+
 /** 数量输入框解析：空 = 没填（null）；逗号小数点也认。解析不了返回
  *  null 之外还要让调用方知道是「填错了」而不是「没填」，所以非法
  *  输入回 NaN 哨兵，由调用方拦下。 */
@@ -99,11 +112,11 @@ internal fun parseShoppingQuantity(text: String): Double? {
  *
  * 列表态：全部清单（标题、进度、全买齐徽标、关联事件名）+ 新建行。
  * 详情态：条目（勾选 / 数量单位 / 备注 / 上移下移 / 编辑 / 删除）、
- * 加条目表单，以及清单设置（改名、解除关联、删清单带确认）。
+ * 加条目表单，以及清单设置（改名、改绑关联事件、删清单带确认）。
  *
- * 关联事件只在这里「解除」：把清单关联到某个事件的动作统一走事件
- * 编辑区的购买清单区（或新建时），这里不做任意事件选择器——拉全部
- * 事件做选择器代价大，也和另外两端的客户端从简口径一致。
+ * 改绑选择器的候选是事件窗口（前 2 个月 / 后 13 个月）里的事件，
+ * 与 Web 详情页的 select 尽量对齐（倒序、一系列一行、上限 100）；
+ * 事件编辑区的购买清单区也能从另一侧关联。
  *
  * 所有改动都先走服务端、成功后重拉（详情或列表），不做乐观更新：
  * move / toggle 之后直接重拉详情，顺序与计数以服务端为准。
@@ -133,6 +146,8 @@ fun ShoppingListsDialog(
     var confirmDeleteList by remember { mutableStateOf(false) }
     var confirmDeleteItem by remember { mutableStateOf<ShoppingListItem?>(null) }
     var editingItem by remember { mutableStateOf<ShoppingListItem?>(null) }
+    var showLinkPicker by remember { mutableStateOf(false) }
+    var linkCandidates by remember { mutableStateOf<List<EventDTO>?>(null) }
 
     suspend fun loadLists() {
         listLoading = true
@@ -328,13 +343,7 @@ fun ShoppingListsDialog(
                                 loadLists()
                             }
                         },
-                        onUnlink = {
-                            mutate("error.saveFailed") {
-                                client.updateShoppingList(currentDetail.list.id, clearEvent = true)
-                                loadDetail(currentDetail.list.id)
-                                loadLists()
-                            }
-                        },
+                        onChangeLink = { showLinkPicker = true },
                         onDeleteList = { confirmDeleteList = true },
                     )
                             }
@@ -411,6 +420,94 @@ fun ShoppingListsDialog(
             },
             dismissButton = {
                 TextButton(onClick = { confirmDeleteItem = null }) { Text(t("common.cancel")) }
+            },
+        )
+    }
+
+    // 改绑选择器：候选与 Web 详情页的 select 尽量对齐（开始时间
+    // 倒序、同一系列只留一行、上限 100），客户端走事件窗口
+    // （前 2 个月 / 后 13 个月）。第一行恒为「不关联事件」（= 解绑）。
+    if (showLinkPicker && currentDetail != null) {
+        val linkedId = currentDetail.list.eventId
+        LaunchedEffect(showLinkPicker) {
+            if (linkCandidates == null) {
+                linkCandidates = try {
+                    val zone = java.time.ZoneId.systemDefault()
+                    val now = java.time.Instant.now().atZone(zone)
+                    client.eventsSync(
+                        now.minusMonths(2).toInstant().toString(),
+                        now.plusMonths(13).toInstant().toString(),
+                        null,
+                    ).events
+                        .sortedByDescending { it.startsAt }
+                        .distinctBy { it.id }
+                        .take(100)
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    actionError = shoppingErrorText(e, "error.loadFailed")
+                    emptyList()
+                }
+            }
+        }
+        AlertDialog(
+            onDismissRequest = { showLinkPicker = false },
+            title = { Text(t("shopping.linkEventLabel")) },
+            text = {
+                Column(
+                    modifier = Modifier.width(420.dp).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    TextButton(
+                        onClick = {
+                            showLinkPicker = false
+                            mutate("error.saveFailed") {
+                                client.updateShoppingList(currentDetail.list.id, clearEvent = true)
+                                loadDetail(currentDetail.list.id)
+                                loadLists()
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(t("shopping.noEvent"), modifier = Modifier.weight(1f))
+                        if (linkedId == null) {
+                            Icon(Icons.Default.Check, contentDescription = null)
+                        }
+                    }
+                    val candidates = linkCandidates
+                    if (candidates == null) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                    } else {
+                        candidates.forEach { ev ->
+                            TextButton(
+                                onClick = {
+                                    showLinkPicker = false
+                                    mutate("error.saveFailed") {
+                                        client.updateShoppingList(currentDetail.list.id, eventId = ev.id)
+                                        loadDetail(currentDetail.list.id)
+                                        loadLists()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(ev.summary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        formatLinkCandidateDate(ev),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (linkedId == ev.id) {
+                                    Icon(Icons.Default.Check, contentDescription = null)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLinkPicker = false }) { Text(t("common.cancel")) }
             },
         )
     }
@@ -501,7 +598,7 @@ private fun ShoppingListDetailContent(
     onDeleteItem: (ShoppingListItem) -> Unit,
     onAddItem: (name: String, quantity: Double?, unit: String?, note: String?) -> Unit,
     onRename: (String) -> Unit,
-    onUnlink: () -> Unit,
+    onChangeLink: () -> Unit,
     onDeleteList: () -> Unit,
 ) {
     val locale by I18n.current.collectAsState()
@@ -640,7 +737,7 @@ private fun ShoppingListDetailContent(
 
     HorizontalDivider()
 
-    // 清单设置：改名、关联事件（只展示 + 解除）、删除。
+    // 清单设置：改名、关联事件（展示 + 改绑）、删除。
     Text(
         t("shopping.listSettings"),
         style = MaterialTheme.typography.labelLarge,
@@ -669,18 +766,19 @@ private fun ShoppingListDetailContent(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (list.eventId == null) {
-            Text(t("shopping.noEvent"), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    list.eventSummary ?: t("shopping.noEvent"),
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                TextButton(onClick = onUnlink, enabled = !busy) { Text(t("shopping.unlink")) }
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                list.eventSummary ?: t("shopping.noEvent"),
+                color = if (list.eventId != null) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            TextButton(onClick = onChangeLink, enabled = !busy) { Text(t("shopping.changeLink")) }
         }
     }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
