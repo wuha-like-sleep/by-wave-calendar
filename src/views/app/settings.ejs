@@ -748,7 +748,7 @@ const fmt = (s, vars) => s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
             <div class="text-sm font-medium text-slate-900"><%= tok.label %>
               <% if (tok.scope === 'read') { %><span class="ml-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500"><%= t("settings.devices.apiTokenScopeRead") %></span><% } else { %><span class="ml-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700"><%= t("settings.devices.apiTokenScopeWrite") %></span><% } %>
               <% if (tok.expired) { %><span class="ml-1 inline-block rounded-full bg-red-50 px-2 py-0.5 text-xs font-normal text-red-600"><%= t("settings.devices.apiTokenExpired") %></span><% } %>
-              <% if (tok.inGrace) { %><span class="ml-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-700"><%= t("settings.devices.apiTokenGraceBadge") %></span><% } %>
+              <% if (tok.inGrace) { %><span class="ml-1 inline-block rounded-full bg-sky-50 px-2 py-0.5 text-xs font-normal text-sky-700"><%= t("settings.devices.apiTokenGraceBadge") %></span><% } %>
             </div>
             <div class="text-xs text-slate-500">
               <%= t("settings.devices.appPasswordPrefix") %> <code class="font-mono text-slate-700"><%= tok.prefix %></code> ·
