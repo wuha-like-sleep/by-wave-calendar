@@ -19,6 +19,10 @@ import UIKit
 import WebKit
 
 struct SettingsView: View {
+    /// 以 sheet 形式出现时右上角有「完成」；作为标签页根时隐藏
+    /// （同 InvitationsView 的约定）。
+    var showsDoneButton: Bool = true
+
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
 
@@ -171,8 +175,10 @@ struct SettingsView: View {
             // 几小时前，管理员刚发的公告不该等下一次冷启动才出现。
             .task { await state.refreshAnnouncement() }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { dismiss() }
+                    }
                 }
             }
             .alert("解绑当前设备？", isPresented: $showRevokeAlert) {

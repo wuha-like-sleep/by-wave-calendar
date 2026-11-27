@@ -17,6 +17,10 @@ struct InvitationsView: View {
     /// Deep-link token (bywave://invitations/<token> or a push payload):
     /// once the list lands, push straight to that invitation's detail.
     let openToken: String?
+    /// 以 sheet 形式出现时右上角有「完成」；作为标签页根时没有
+    /// 可关闭的对象，隐藏它（标签页里点一个点了没反应的按钮
+    /// 比没有按钮更糟）。
+    var showsDoneButton: Bool = true
 
     @EnvironmentObject var state: AppState
     @Environment(\.dismiss) private var dismiss
@@ -105,8 +109,10 @@ struct InvitationsView: View {
             .navigationTitle("我收到的邀请")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("完成") { dismiss() }
+                if showsDoneButton {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("完成") { dismiss() }
+                    }
                 }
             }
             .navigationDestination(for: Invitation.self) { inv in

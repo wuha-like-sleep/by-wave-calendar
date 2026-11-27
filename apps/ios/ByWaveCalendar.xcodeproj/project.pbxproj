@@ -32,6 +32,7 @@
 		1F0001000000000000000046 /* DevicesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000046 /* DevicesView.swift */; };
 		1F00010000000000000000D1 /* ApiTokensView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000D1 /* ApiTokensView.swift */; };
 		1F00010000000000000000D2 /* ShoppingListsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000D2 /* ShoppingListsView.swift */; };
+		1F00010000000000000000D3 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000D3 /* MainTabView.swift */; };
 		1F0001000000000000000010 /* EventKitMirror.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000010 /* EventKitMirror.swift */; };
 		1F0001000000000000000011 /* EventCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000011 /* EventCache.swift */; };
 		1F0001000000000000000047 /* OfflineSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000047 /* OfflineSync.swift */; };
@@ -93,6 +94,7 @@
 		1B0001000000000000000046 /* DevicesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevicesView.swift; sourceTree = "<group>"; };
 		1B00010000000000000000D1 /* ApiTokensView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApiTokensView.swift; sourceTree = "<group>"; };
 		1B00010000000000000000D2 /* ShoppingListsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListsView.swift; sourceTree = "<group>"; };
+		1B00010000000000000000D3 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000010 /* EventKitMirror.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitMirror.swift; sourceTree = "<group>"; };
 		1B0001000000000000000011 /* EventCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventCache.swift; sourceTree = "<group>"; };
 		1B0001000000000000000047 /* OfflineSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineSync.swift; sourceTree = "<group>"; };
@@ -204,6 +206,7 @@
 			isa = PBXGroup;
 			children = (
 				1B0001000000000000000007 /* RootView.swift */,
+				1B00010000000000000000D3 /* MainTabView.swift */,
 				1B0001000000000000000048 /* PendingOpsView.swift */,
 				1B0001000000000000000008 /* SetupView.swift */,
 				1B0001000000000000000009 /* ScannerView.swift */,
@@ -355,6 +358,7 @@
 				1F0001000000000000000005 /* Keychain.swift in Sources */,
 				1F0001000000000000000006 /* PairingService.swift in Sources */,
 				1F0001000000000000000007 /* RootView.swift in Sources */,
+				1F00010000000000000000D3 /* MainTabView.swift in Sources */,
 				1F0001000000000000000008 /* SetupView.swift in Sources */,
 				1F0001000000000000000009 /* ScannerView.swift in Sources */,
 				1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */,
@@ -556,7 +560,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -592,7 +596,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = ByWaveCalendar/ByWaveCalendar.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
