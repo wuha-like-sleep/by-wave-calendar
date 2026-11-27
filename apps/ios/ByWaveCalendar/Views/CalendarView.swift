@@ -279,9 +279,10 @@ struct CalendarView: View {
             .animation(.snappy, value: state.pendingAnnouncement)
             .navigationTitle(navTitle.loc)
             .navigationBarTitleDisplayMode(.inline)
-            // 展开态的视图切换与日期导航在侧边栏里（见 sidebar），
-            // 这里只留内容工具栏，两边不重复摆。
-            .toolbar { calendarToolbar }
+            // 展开态所有按钮都进侧边栏（见 sidebar），详情页顶部
+            // 不留工具栏 —— 用户原话：按钮在侧面，不是在上方。
+            // 折叠 / 普通 iPhone 没有侧边栏，工具栏照旧全套。
+            .toolbar { if !useSplitLayout { calendarToolbar } }
             .refreshable { await load(force: true) }
             .task {
                 // On first appearance, hydrate from cache → instant render,
@@ -590,6 +591,19 @@ struct CalendarView: View {
                     showingSettings = true
                 } label: {
                     Label("设置", systemImage: "gearshape")
+                }
+                // 顶栏菜单里剩下的两件也搬进侧边栏：展开态顶部
+                // 一个按钮都不留，功能不能跟着工具栏一起消失。
+                Button {
+                    Task { await load(force: true) }
+                } label: {
+                    Label("刷新", systemImage: "arrow.clockwise")
+                }
+                .disabled(isLoading)
+                Button {
+                    showingImportPicker = true
+                } label: {
+                    Label("导入 .ics 文件", systemImage: "square.and.arrow.down")
                 }
             }
         }
