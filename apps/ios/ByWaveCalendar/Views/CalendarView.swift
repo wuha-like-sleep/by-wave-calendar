@@ -666,12 +666,26 @@ struct CalendarView: View {
     private var contentForMode: some View {
         switch mode {
         case .day:
-            DayView(
-                anchor: anchor,
-                events: eventsForDay(anchor),
-                calendars: calendars,
-                onEventChanged: { Task { await load(force: true) } },
-            )
+            if useSplitLayout {
+                // 展开态（Duo 展开 / iPad）学苹果日历：「日」是时间
+                // 网格而不是手机的议程列表 —— 同一套 WeekView 网格
+                // 只画锚点这一天一列。折叠 / 普通 iPhone 仍走下面的
+                // DayView 列表，两种画布两个视图。
+                WeekView(
+                    weekStart: Calendar.current.startOfDay(for: anchor),
+                    events: visibleEvents,
+                    calendars: calendars,
+                    onEventChanged: { Task { await load(force: true) } },
+                    dayCount: 1,
+                )
+            } else {
+                DayView(
+                    anchor: anchor,
+                    events: eventsForDay(anchor),
+                    calendars: calendars,
+                    onEventChanged: { Task { await load(force: true) } },
+                )
+            }
         case .week:
             WeekView(
                 weekStart: startOfWeek(anchor),

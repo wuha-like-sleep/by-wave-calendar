@@ -1,5 +1,7 @@
 // WeekView.swift
-// 7-column × 24-hour time grid, like iOS Calendar / Google Calendar.
+// N-column × 24-hour time grid, like iOS Calendar / Google Calendar.
+// dayCount=7 时是周网格；dayCount=1 时是展开态「日」视图的单日
+// 时间轴（苹果日历 iPad 日视图的形态）。
 // Events render as colored rounded rectangles positioned by start time
 // + duration. Overlapping events split their column width.
 //
@@ -18,10 +20,14 @@
 import SwiftUI
 
 struct WeekView: View {
-    let weekStart: Date     // Monday of the displayed week
+    let weekStart: Date     // Monday of the displayed week (dayCount=1 时就是那一天)
     let events: [EventDTO]
     let calendars: [CalendarMeta]
     let onEventChanged: () -> Void
+    // 7 = 周网格；1 = 单日时间轴。展开态（Duo 展开 / iPad）的「日」
+    // 视图学苹果日历：不用手机上的议程列表，而是同一套时间网格
+    // 只画一列 —— 全天行、红线、点空位新建、拖动改期全部现成。
+    var dayCount: Int = 7
 
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -52,7 +58,7 @@ struct WeekView: View {
 
     private var dayStarts: [Date] {
         let cal = Calendar.current
-        return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
+        return (0..<dayCount).compactMap { cal.date(byAdding: .day, value: $0, to: weekStart) }
     }
 
     // Split events: all-day stays at the top, timed go in the grid.
@@ -132,7 +138,7 @@ struct WeekView: View {
     // GeometryReader in body; every horizontal measurement below
     // (header columns, all-day columns, grid) derives from it.
     private func weekContent(totalWidth: CGFloat) -> some View {
-        let columnWidth = (totalWidth - timeGutterWidth) / 7
+        let columnWidth = (totalWidth - timeGutterWidth) / CGFloat(dayCount)
         return VStack(spacing: 0) {
             headerRow(columnWidth: columnWidth)
             if !allDayEvents.isEmpty { allDayRow(columnWidth: columnWidth) }
@@ -273,7 +279,7 @@ struct WeekView: View {
         .overlay(
             HStack(spacing: 0) {
                 Color.clear.frame(width: timeGutterWidth)
-                ForEach(0..<7, id: \.self) { _ in
+                ForEach(0..<dayCount, id: \.self) { _ in
                     Rectangle()
                         .fill(Theme.gridLine)
                         .frame(width: 0.5)
@@ -306,7 +312,7 @@ struct WeekView: View {
     // 0,0 and shift visually."
     private var eventLayer: some View {
         GeometryReader { geo in
-            let columnWidth = (geo.size.width - timeGutterWidth) / 7
+            let columnWidth = (geo.size.width - timeGutterWidth) / CGFloat(dayCount)
             let cal = Calendar.current
             ZStack(alignment: .topLeading) {
                 // Tap-to-create background — one transparent rect per
@@ -553,8 +559,12 @@ struct WeekView: View {
         // drag that somehow starts before the first layout pass.
         let columnWidth = lastColumnWidth > 0
             ? lastColumnWidth
-            : (UIScreen.main.bounds.width - timeGutterWidth) / 7
-        let dayDelta = Int((s.dx / columnWidth).rounded())
+            : (UIScreen.main.bounds.width - timeGutterWidth) / CGFloat(dayCount)
+        // 钳在可见列内：单日时间轴（dayCount=1）横向拖不能把事件
+        // 拖出画面消失；周网格里也以可见周为界（与原来靠列数自然
+        // 限制的体感一致，只是现在显式写出来）。
+        let rawDayDelta = Int((s.dx / columnWidth).rounded())
+        let dayDelta = min(max(rawDayDelta, -s.origDayIdx), dayCount - 1 - s.origDayIdx)
         // Minutes from vertical translation: dy / hourHeight * 60
         let rawMin = (s.dy / hourHeight) * 60.0
         // Round to nearest 15-min step
@@ -632,7 +642,7 @@ struct WeekView: View {
         GeometryReader { geo in
             let cal = Calendar.current
             if let todayIdx = dayStarts.firstIndex(where: { cal.isDateInToday($0) }) {
-                let columnWidth = (geo.size.width - timeGutterWidth) / 7
+                let columnWidth = (geo.size.width - timeGutterWidth) / CGFloat(dayCount)
                 let hour = cal.component(.hour, from: now)
                 let minute = cal.component(.minute, from: now)
                 // 连续口径把秒也算进位置：56pt 一小时，秒步进约
