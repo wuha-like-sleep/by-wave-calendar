@@ -444,7 +444,7 @@ struct ShoppingListDetailView: View {
         do {
             _ = try await APIClient(state: state).updateShoppingItem(
                 listId: listId, itemId: item.id,
-                ShoppingItemUpdateInput(name: nil, quantity: nil, unit: nil, note: nil, done: !item.done),
+                ShoppingItemUpdateInput(name: nil, quantity: .unmanaged, unit: nil, note: nil, done: !item.done),
             )
             // 只在「勾上」时给一下成功触觉，取消勾选不给——和保存
             // 成功给触觉的口径一致，克制着用。
@@ -491,9 +491,19 @@ struct ShoppingListDetailView: View {
     }
 
     private func saveItem(_ item: ShoppingListItemDTO, name: String, quantity: String, unit: String, note: String) async {
+        // 数量框清空 = 把数量删掉（显式 null）；填了但解析不了 =
+        // 不动服务端上的旧值，别拿一次手误把数量清了。
+        let quantityField: ExtraField<Double>
+        if quantity.trimmingCharacters(in: .whitespaces).isEmpty {
+            quantityField = .cleared
+        } else if let parsed = ShoppingQuantity.parse(quantity) {
+            quantityField = .value(parsed)
+        } else {
+            quantityField = .unmanaged
+        }
         let input = ShoppingItemUpdateInput(
             name: name,
-            quantity: ShoppingQuantity.parse(quantity),
+            quantity: quantityField,
             unit: unit,
             note: note,
             done: nil,

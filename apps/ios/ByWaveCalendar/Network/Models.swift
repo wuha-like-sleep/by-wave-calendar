@@ -1147,14 +1147,35 @@ struct ShoppingItemCreateInput: Encodable {
 
 /// PATCH /shopping-lists/:id/items/:itemId body — every field
 /// optional, nil entries are dropped so a done-toggle PATCH sends
-/// `{done: …}` alone. (Clearing quantity back to nil is not
-/// expressible this way; the editor never offers it.)
+/// `{done: …}` alone. Quantity is the exception: it rides as an
+/// ExtraField because "the editor cleared it" (explicit null, the
+/// server clears the stored value) and "this caller doesn't manage
+/// quantity" (key absent, server keeps it) are different orders —
+/// a plain Double? collapses both into a dropped key, which is why
+/// clearing a quantity used to silently not stick.
 struct ShoppingItemUpdateInput: Encodable {
     let name: String?
-    let quantity: Double?
+    let quantity: ExtraField<Double>
     let unit: String?
     let note: String?
     let done: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name, quantity, unit, note, done
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(name, forKey: .name)
+        switch quantity {
+        case .unmanaged: break
+        case .cleared: try c.encodeNil(forKey: .quantity)
+        case .value(let v): try c.encode(v, forKey: .quantity)
+        }
+        try c.encodeIfPresent(unit, forKey: .unit)
+        try c.encodeIfPresent(note, forKey: .note)
+        try c.encodeIfPresent(done, forKey: .done)
+    }
 }
 
 /// POST /shopping-lists/:id/items/:itemId/move body.
