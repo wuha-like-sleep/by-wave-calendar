@@ -91,6 +91,7 @@ import cn.bywave.calendar.data.model.ShoppingListItem
 import cn.bywave.calendar.data.model.ShoppingListItemCreateRequest
 import cn.bywave.calendar.data.model.ShoppingListItemMoveRequest
 import cn.bywave.calendar.data.model.ShoppingListItemUpdateInput
+import cn.bywave.calendar.data.model.ShoppingQuantityField
 import cn.bywave.calendar.data.model.ShoppingListUpdateInput
 import cn.bywave.calendar.ui.calendar.mutedTextColor
 import cn.bywave.calendar.ui.components.rememberReduceMotion
@@ -576,14 +577,18 @@ fun ShoppingListDetailScreen(
         ShoppingItemEditDialog(
             item = item,
             onDismiss = { editingItem = null },
-            onSave = { name, quantity, unit, note ->
+            onSave = { name, quantityText, unit, note ->
                 editingItem = null
                 mutate {
                     shoppingApi().updateShoppingListItem(
                         listId, item.id,
                         ShoppingListItemUpdateInput(
                             name = name,
-                            quantity = quantity,
+                            quantity = when {
+                                quantityText.isBlank() -> ShoppingQuantityField(null)
+                                else -> parseShoppingQuantity(quantityText)
+                                    ?.let { ShoppingQuantityField(it) }
+                            },
                             unit = unit,
                             note = note,
                         ),
@@ -837,14 +842,15 @@ private fun ShoppingListSettings(
 }
 
 /** Edit one item: the full field set the row displays. A cleared
- *  unit / note goes out as "" and the server stores null; a cleared
- *  quantity is omitted (the server keeps the old value) because the
- *  wire has no "clear quantity" signal distinct from "unchanged". */
+ *  unit / note goes out as "" and the server stores null. Quantity
+ *  travels as raw text so the caller can tell "cleared" (blank →
+ *  explicit null on the wire, the server clears it) apart from
+ *  "typed something unparseable" (field omitted, old value kept). */
 @Composable
 private fun ShoppingItemEditDialog(
     item: ShoppingListItem,
     onDismiss: () -> Unit,
-    onSave: (name: String, quantity: Double?, unit: String?, note: String?) -> Unit,
+    onSave: (name: String, quantityText: String, unit: String?, note: String?) -> Unit,
 ) {
     var name by remember(item.id) { mutableStateOf(item.name) }
     var quantity by remember(item.id) {
@@ -895,7 +901,7 @@ private fun ShoppingItemEditDialog(
                 onClick = {
                     onSave(
                         name.trim(),
-                        parseShoppingQuantity(quantity),
+                        quantity,
                         unit.trim(),
                         note.trim(),
                     )

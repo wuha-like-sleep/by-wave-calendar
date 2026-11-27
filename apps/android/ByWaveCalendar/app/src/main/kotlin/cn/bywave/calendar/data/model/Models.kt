@@ -11,6 +11,7 @@ package cn.bywave.calendar.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonPrimitive
 
 /**
@@ -1089,14 +1090,41 @@ data class ShoppingListItemCreateRequest(
     val note: String? = null,
 )
 
+/** Non-null wrapper so an explicit quantity deletion survives
+ *  explicitNulls = false — same trick as ShoppingListEventField
+ *  above: a null FIELD means "don't touch the quantity" (omitted
+ *  from the wire), a wrapper holding null sends an explicit JSON
+ *  null (clear it), a wrapper holding a number sets that number. */
+@Serializable(with = ShoppingQuantityFieldSerializer::class)
+data class ShoppingQuantityField(val quantity: Double?)
+
+object ShoppingQuantityFieldSerializer : kotlinx.serialization.KSerializer<ShoppingQuantityField> {
+    override val descriptor = kotlinx.serialization.descriptors.PrimitiveSerialDescriptor(
+        "ShoppingQuantityField", kotlinx.serialization.descriptors.PrimitiveKind.DOUBLE,
+    )
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: ShoppingQuantityField) {
+        require(encoder is kotlinx.serialization.json.JsonEncoder)
+        val element = value.quantity?.let { kotlinx.serialization.json.JsonPrimitive(it) }
+            ?: kotlinx.serialization.json.JsonNull
+        encoder.encodeJsonElement(element)
+    }
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): ShoppingQuantityField {
+        require(decoder is kotlinx.serialization.json.JsonDecoder)
+        val element = decoder.decodeJsonElement()
+        if (element == kotlinx.serialization.json.JsonNull) return ShoppingQuantityField(null)
+        return ShoppingQuantityField(element.jsonPrimitive.double)
+    }
+}
+
 /** PATCH /api/v1/shopping-lists/{id}/items/{itemId} body. Every field
  *  optional; only those present change. The edit form sends the full
  *  field set it displays, so a cleared unit / note goes out as ""
- *  and the server stores null. */
+ *  and the server stores null; quantity rides in the wrapper above
+ *  so clearing it is expressible too. */
 @Serializable
 data class ShoppingListItemUpdateInput(
     val name: String? = null,
-    val quantity: Double? = null,
+    val quantity: ShoppingQuantityField? = null,
     val unit: String? = null,
     val note: String? = null,
     val done: Boolean? = null,

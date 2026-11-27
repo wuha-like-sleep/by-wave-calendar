@@ -572,6 +572,7 @@ private fun ShoppingListDetailContent(
     // 加条目表单：名称必填，数量 / 单位 / 备注选填。
     var newName by remember(list.id) { mutableStateOf("") }
     var newQuantity by remember(list.id) { mutableStateOf("") }
+    var newQuantityError by remember(list.id) { mutableStateOf(false) }
     var newUnit by remember(list.id) { mutableStateOf("") }
     var newNote by remember(list.id) { mutableStateOf("") }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -586,9 +587,15 @@ private fun ShoppingListDetailContent(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = newQuantity,
-                onValueChange = { newQuantity = it },
+                onValueChange = { newQuantity = it; newQuantityError = false },
                 label = { Text(t("shopping.quantity")) },
                 singleLine = true,
+                isError = newQuantityError,
+                supportingText = if (newQuantityError) {
+                    { Text(t("shopping.quantityInvalid"), color = MaterialTheme.colorScheme.error) }
+                } else {
+                    null
+                },
                 modifier = Modifier.weight(1f),
             )
             OutlinedTextField(
@@ -610,7 +617,11 @@ private fun ShoppingListDetailContent(
             Button(
                 onClick = {
                     val quantity = parseShoppingQuantity(newQuantity)
-                    if (quantity != null && quantity.isNaN()) return@Button
+                    if (quantity != null && quantity.isNaN()) {
+                        // 同编辑弹窗：非法数量要亮出来，别静默不提交。
+                        newQuantityError = true
+                        return@Button
+                    }
                     onAddItem(
                         newName.trim(),
                         quantity,
@@ -769,6 +780,7 @@ private fun ShoppingItemEditDialog(
     var quantity by remember(item.id) {
         mutableStateOf(item.quantity?.let { formatShoppingQuantity(it) } ?: "")
     }
+    var quantityError by remember(item.id) { mutableStateOf(false) }
     var unit by remember(item.id) { mutableStateOf(item.unit ?: "") }
     var note by remember(item.id) { mutableStateOf(item.note ?: "") }
 
@@ -791,9 +803,15 @@ private fun ShoppingItemEditDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = quantity,
-                        onValueChange = { quantity = it },
+                        onValueChange = { quantity = it; quantityError = false },
                         label = { Text(t("shopping.quantity")) },
                         singleLine = true,
+                        isError = quantityError,
+                        supportingText = if (quantityError) {
+                            { Text(t("shopping.quantityInvalid"), color = MaterialTheme.colorScheme.error) }
+                        } else {
+                            null
+                        },
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
@@ -816,6 +834,13 @@ private fun ShoppingItemEditDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    // 数量填了但不是数字：留在弹窗里把错误亮出来，
+                    // 别静默吞掉 —— 用户会以为存上了，其实什么都没发。
+                    val parsed = parseShoppingQuantity(quantity)
+                    if (parsed != null && parsed.isNaN()) {
+                        quantityError = true
+                        return@Button
+                    }
                     onSave(
                         name.trim(),
                         quantity,
