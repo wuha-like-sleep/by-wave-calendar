@@ -147,6 +147,30 @@ describe("GET /invitations 的 ETag", () => {
     expect((list.json() as { invitations: unknown[] }).invitations).toHaveLength(0);
     await expect304("/api/invitations", invAuth, t3);
   });
+
+  it("组织者 / 受邀者改名 → 旧 ETag 失效；无关用户改名 → 不变", async () => {
+    await makeEventWithInvitee();
+    const t0 = await etagOf("/api/invitations", invAuth, "private, no-cache");
+
+    // 改名在库里就是 users.displayName 变（SSO 同步、后台、将来的
+    // 设置页都落到这一列）；正文印的正是组织者的显示名。
+    await db.update(schema.users).set({ displayName: "组织者新名" })
+      .where(eq(schema.users.id, organizer.id));
+    const t1 = await expect200WithOldTag("/api/invitations", invAuth, t0);
+    await expect304("/api/invitations", invAuth, t1);
+
+    // 受邀者本人的名字也在全名单里印着，改了一样要失效。
+    await db.update(schema.users).set({ displayName: "受邀者新名" })
+      .where(eq(schema.users.id, invitee.id));
+    const t2 = await expect200WithOldTag("/api/invitations", invAuth, t1);
+
+    // 与这批邀请毫无关系的用户改名，正文不变，令牌也不许变——
+    // 否则任何人改名都会让所有人的邀请缓存陪葬。
+    const other = await makeUser("etag-other@example.com");
+    await db.update(schema.users).set({ displayName: "路人新名" })
+      .where(eq(schema.users.id, other.id));
+    await expect304("/api/invitations", invAuth, t2);
+  });
 });
 
 describe("GET /calendars 的 ETag", () => {
