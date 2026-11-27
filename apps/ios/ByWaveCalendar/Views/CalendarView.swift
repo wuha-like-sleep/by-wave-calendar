@@ -575,7 +575,7 @@ struct CalendarView: View {
                                 .foregroundStyle(selected ? Color.white : (today ? Color.red : Color.primary))
                                 .frame(width: 34, height: 34)
                                 .background {
-                                    if selected { Circle().fill(Theme.brand) }
+                                    if selected { Circle().fill(state.themeAccent) }
                                 }
                             Text(LunarDate.dayName(for: day))
                                 .font(.system(size: 9))
