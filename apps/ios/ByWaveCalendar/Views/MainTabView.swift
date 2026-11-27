@@ -63,11 +63,21 @@ struct MainTabView: View {
         // Invitation deep link stashed by RootView — consume it
         // once: jump to the invitations tab on that invitation.
         .onChange(of: state.pendingInvitationToken) { _, token in
-            guard let token else { return }
-            state.pendingInvitationToken = nil
-            invitationOpenToken = token
-            selection = .invitations
+            consumeInvitationToken(token)
         }
+        // Cold start / signed-out-then-in: the token can already be
+        // stashed BEFORE this view exists, in which case onChange
+        // never fires — consume on appear too.
+        .onAppear {
+            consumeInvitationToken(state.pendingInvitationToken)
+        }
+    }
+
+    private func consumeInvitationToken(_ token: String?) {
+        guard let token else { return }
+        state.pendingInvitationToken = nil
+        invitationOpenToken = token
+        selection = .invitations
     }
 }
 
