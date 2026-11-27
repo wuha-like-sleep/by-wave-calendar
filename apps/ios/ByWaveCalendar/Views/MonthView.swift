@@ -129,6 +129,12 @@ struct MonthView: View {
                             // Long-press a day to peek at its events without
                             // opening the sheet — quick scan + jump-to options.
                             .contextMenu {
+                                Button {
+                                    openDay(day)
+                                } label: {
+                                    Label("打开这一天", systemImage: "calendar.day.timeline.left")
+                                }
+                                Divider()
                                 ForEach(dayEvents.prefix(5)) { ev in
                                     Button {
                                         openDay(day)
@@ -141,12 +147,6 @@ struct MonthView: View {
                                 }
                                 if dayEvents.isEmpty {
                                     Text("无事件").foregroundStyle(.secondary)
-                                }
-                                Divider()
-                                Button {
-                                    openDay(day)
-                                } label: {
-                                    Label("打开这一天", systemImage: "calendar.day.timeline.left")
                                 }
                             }
                         }
