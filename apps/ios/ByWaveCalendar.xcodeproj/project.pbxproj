@@ -57,6 +57,7 @@
 		1F0001000000000000000024 /* AttendeesPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000024 /* AttendeesPage.swift */; };
 		1F00010000000000000000A7 /* InvitationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000A7 /* InvitationsView.swift */; };
 		1F0001000000000000000025 /* DateFormatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000025 /* DateFormatters.swift */; };
+		1F00010000000000000000D4 /* LunarDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B00010000000000000000D4 /* LunarDate.swift */; };
 		1F0001000000000000000026 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000026 /* Localizable.strings */; };
 		1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0001000000000000000029 /* ManageCalendarsView.swift */; };
 		1F000100000000000000002B /* DesktopPairScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B000100000000000000002B /* DesktopPairScannerView.swift */; };
@@ -120,6 +121,7 @@
 		1B0001000000000000000024 /* AttendeesPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttendeesPage.swift; sourceTree = "<group>"; };
 		1B00010000000000000000A7 /* InvitationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationsView.swift; sourceTree = "<group>"; };
 		1B0001000000000000000025 /* DateFormatters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateFormatters.swift; sourceTree = "<group>"; };
+		1B00010000000000000000D4 /* LunarDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LunarDate.swift; sourceTree = "<group>"; };
 		1B0001000000000000000027 /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		1B0001000000000000000028 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		1B0001000000000000000029 /* ManageCalendarsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManageCalendarsView.swift; sourceTree = "<group>"; };
@@ -167,6 +169,7 @@
 				1B000100000000000000001E /* Profile.swift */,
 				1B0001000000000000000023 /* ServerCapabilities.swift */,
 				1B0001000000000000000025 /* DateFormatters.swift */,
+				1B00010000000000000000D4 /* LunarDate.swift */,
 				1B0001000000000000000B01 /* AllDayDates.swift */,
 				1B0001000000000000000026 /* Localizable.strings */,
 				1E0001000000000000000008 /* Legal */,
@@ -397,6 +400,7 @@
 				1F0001000000000000000024 /* AttendeesPage.swift in Sources */,
 				1F00010000000000000000A7 /* InvitationsView.swift in Sources */,
 				1F0001000000000000000025 /* DateFormatters.swift in Sources */,
+				1F00010000000000000000D4 /* LunarDate.swift in Sources */,
 				1F0001000000000000000B01 /* AllDayDates.swift in Sources */,
 				1F0001000000000000000029 /* ManageCalendarsView.swift in Sources */,
 				1F0001000000000000000045 /* CalendarSharingView.swift in Sources */,
