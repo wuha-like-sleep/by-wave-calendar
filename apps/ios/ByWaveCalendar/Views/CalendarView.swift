@@ -14,6 +14,28 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// 日视图的三种形态（对齐苹果日历日视图菜单：Single Day /
+/// Multi Day / List）。选择持久化，折叠展开共用同一份。
+private enum DayViewMode: String, CaseIterable {
+    case single, multi, list
+
+    var title: String {
+        switch self {
+        case .single: return "单日"
+        case .multi: return "多日"
+        case .list: return "列表"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .single: return "rectangle.split.2x1"
+        case .multi: return "rectangle.split.3x1"
+        case .list: return "list.bullet"
+        }
+    }
+}
+
 private enum ViewMode: String, CaseIterable, Identifiable {
     case day = "日"
     case week = "周"
@@ -30,6 +52,7 @@ struct CalendarView: View {
     @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var mode: ViewMode = .day
+    @AppStorage("bwc.dayViewMode") private var dayViewMode: DayViewMode = .single
     @State private var anchor: Date = Calendar.current.startOfDay(for: Date())
 
     @State private var events: [EventDTO] = []
@@ -508,7 +531,74 @@ struct CalendarView: View {
                 shiftAnchor(by: 1)
             } label: { Image(systemName: "chevron.right") }
                 .accessibilityLabel(Text("下一页"))
+            // 日视图样式切换（单日 / 多日 / 列表）：苹果把这个
+            // 菜单放在日视图右上角，这里跟在日期行尾，两边
+            // （紧凑态日期行、展开态侧边栏顶部）共用同一处。
+            if mode == .day {
+                Menu {
+                    Picker("日视图样式", selection: $dayViewMode) {
+                        ForEach(DayViewMode.allCases, id: \.self) { m in
+                            Label(m.title, systemImage: m.symbol).tag(m)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Image(systemName: dayViewMode.symbol)
+                }
+                .accessibilityLabel(Text("日视图样式"))
+            }
         }
+    }
+
+    /// 紧凑态日视图顶部的一周条（学苹果日历的布局与逻辑）：
+    /// 星期、日期、农历日三行一列一天；点哪天锚点跳到哪天；
+    /// 今天红字，选中日品牌色实心圈；整条下面居中是选中日的
+    /// 农历全称（干支年 + 月 + 日）。
+    private var dayWeekStrip: some View {
+        let cal = Calendar.current
+        let start = startOfWeek(anchor)
+        return VStack(spacing: 2) {
+            HStack(spacing: 0) {
+                ForEach(0..<7, id: \.self) { i in
+                    let day = cal.date(byAdding: .day, value: i, to: start) ?? start
+                    let selected = cal.isDate(day, inSameDayAs: anchor)
+                    let today = cal.isDateInToday(day)
+                    Button {
+                        anchor = cal.startOfDay(for: day)
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text(weekdaySymbol(for: day, calendar: cal))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Text("\(cal.component(.day, from: day))")
+                                .font(.callout.weight(selected || today ? .semibold : .regular))
+                                .foregroundStyle(selected ? Color.white : (today ? Color.red : Color.primary))
+                                .frame(width: 34, height: 34)
+                                .background {
+                                    if selected { Circle().fill(Theme.brand) }
+                                }
+                            Text(LunarDate.dayName(for: day))
+                                .font(.system(size: 9))
+                                .foregroundStyle(today && !selected ? Color.red : Color.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(LunarDate.fullDate(for: anchor))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.top, 2)
+    }
+
+    private func weekdaySymbol(for day: Date, calendar cal: Calendar) -> String {
+        let symbols = cal.veryShortStandaloneWeekdaySymbols
+        let weekday = cal.component(.weekday, from: day)
+        return (1...7).contains(weekday) && symbols.count == 7 ? symbols[weekday - 1] : ""
     }
 
     // MARK: - 展开态侧边栏（regular 宽度）
@@ -641,6 +731,13 @@ struct CalendarView: View {
                     .padding(.bottom, 4)
             }
 
+            // 紧凑态日视图的一周条；展开态有侧边栏迷你月历，
+            // 不重复放（实现见 dayWeekStrip）。
+            if !useSplitLayout && mode == .day {
+                dayWeekStrip
+                    .padding(.bottom, 4)
+            }
+
             // 错误独立一行，且优先于「X 分钟前同步」。
             //
             // 以前这两个是 if / else-if：只要同步成功过一次（或读到过磁盘缓存），
@@ -676,17 +773,26 @@ struct CalendarView: View {
     private var contentForMode: some View {
         switch mode {
         case .day:
-            // 「日」在所有画布上都是时间网格（学苹果日历：iPhone
-            // 的日视图也是时间轴，不是议程列表）—— 同一套
-            // WeekView 网格只画锚点这一天一列，展开折叠一致。
-            // DayView 议程列表只保留给月视图点开某天的日程单。
-            WeekView(
-                weekStart: Calendar.current.startOfDay(for: anchor),
-                events: visibleEvents,
-                calendars: calendars,
-                onEventChanged: { Task { await load(force: true) } },
-                dayCount: 1,
-            )
+            // 「日」的三种形态和苹果日历的日视图菜单对齐：单日
+            // 时间轴（默认）/ 多日时间轴 / 列表。时间轴是同一套
+            // WeekView 网格只改列数；列表即原来的 DayView 议程。
+            switch dayViewMode {
+            case .single, .multi:
+                WeekView(
+                    weekStart: Calendar.current.startOfDay(for: anchor),
+                    events: visibleEvents,
+                    calendars: calendars,
+                    onEventChanged: { Task { await load(force: true) } },
+                    dayCount: dayViewMode == .single ? 1 : 3,
+                )
+            case .list:
+                DayView(
+                    anchor: anchor,
+                    events: eventsForDay(anchor),
+                    calendars: calendars,
+                    onEventChanged: { Task { await load(force: true) } },
+                )
+            }
         case .week:
             WeekView(
                 weekStart: startOfWeek(anchor),
