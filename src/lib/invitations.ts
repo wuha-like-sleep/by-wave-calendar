@@ -1,4 +1,4 @@
-import { eq, inArray, sql } from "drizzle-orm";
+import { eq, inArray, or, sql } from "drizzle-orm";
 import { db, schema } from "../db/client.js";
 import { etagOf } from "./calendar_ctag.js";
 
@@ -20,8 +20,11 @@ import { etagOf } from "./calendar_ctag.js";
 //
 // 不在正文里的字段不进令牌：acceptedAt（「加进我的日历」）不出现在
 // 这个接口的响应里，它变了正文没变，令牌也不该变。
-// 组织者/受邀者的显示名也在正文里，但改名是低频旁路，与未读数 ETag
-// 不覆盖通知标题改动同级，这里不为它多查一摊 users。
+// 组织者与全体受邀者的显示名也在正文里，要盖住，但不能靠
+// users.updatedAt —— 那一列在改密码、开关 MFA、登录锁定计数时也动，
+// 拿它当原料会让令牌为与正文无关的变化失效。所以按「正文实际会印
+// 出什么」取值指纹：组织者按 user id、受邀者按邮箱，把解析出的
+// 邮箱 + 显示名原样拼进令牌原料，名字真变了令牌才变。
 
 function ms(v: string | Date | null | undefined): number {
   if (v == null) return 0;
@@ -58,10 +61,46 @@ export async function invitationsEtag(email: string): Promise<string> {
     })
     .from(schema.eventTimeProposals)
     .where(inArray(schema.eventTimeProposals.inviteToken, myTokens));
+  // 显示名指纹：与路由解析正文时同一条路 —— 组织者经日历 ownerId
+  // 找 users，受邀者经 token 上的邮箱找 users（大小写不敏感）。
+  const evRows = await db
+    .select({ calendarId: schema.events.calendarId })
+    .from(schema.events)
+    .where(inArray(schema.events.id, eventIds));
+  const calIds = [...new Set(evRows.map((r) => r.calendarId))];
+  const calRows = calIds.length > 0
+    ? await db.select({ ownerId: schema.calendars.ownerId })
+        .from(schema.calendars).where(inArray(schema.calendars.id, calIds))
+    : [];
+  const ownerIds = [...new Set(calRows.map((r) => r.ownerId))].sort();
+  const tokEmails = await db
+    .select({ recipientEmail: schema.eventInviteTokens.recipientEmail })
+    .from(schema.eventInviteTokens)
+    .where(inArray(schema.eventInviteTokens.sourceEventId, eventIds));
+  const inviteeEmails = [...new Set(tokEmails.map((t) => t.recipientEmail.toLowerCase()))].sort();
+  // 两个集合都空时不能裸查 users（or() 全空会退化成无条件）；
+  // 实际上事件必有日历、token 必有收件人，不会走到，但形状上堵死。
+  const nameRows = ownerIds.length === 0 && inviteeEmails.length === 0
+    ? []
+    : await db
+        .select({ id: schema.users.id, email: schema.users.email, displayName: schema.users.displayName })
+        .from(schema.users)
+        .where(or(
+          ownerIds.length > 0 ? inArray(schema.users.id, ownerIds) : undefined,
+          inviteeEmails.length > 0 ? inArray(sql<string>`lower(${schema.users.email})`, inviteeEmails) : undefined,
+        ));
+  const nameById = new Map(nameRows.map((u) => [u.id, u]));
+  const nameByEmail = new Map(nameRows.map((u) => [u.email.toLowerCase(), u]));
+  const ownerNames = ownerIds.map((id) => {
+    const u = nameById.get(id);
+    return `${id}=${u?.email ?? ""}/${u?.displayName ?? ""}`;
+  });
+  const inviteeNames = inviteeEmails.map((e) => `${e}=${nameByEmail.get(e)?.displayName ?? ""}`);
   return etagOf(JSON.stringify([
     "invitations",
     tokAgg?.n ?? 0, ms(tokAgg?.maxCreated), ms(tokAgg?.maxResponded),
     ms(evAgg?.maxUpdated),
     propAgg?.n ?? 0, ms(propAgg?.maxCreated), ms(propAgg?.maxDecided),
+    ownerNames, inviteeNames,
   ]));
 }
