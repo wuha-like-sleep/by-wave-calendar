@@ -43,7 +43,7 @@ struct MainTabView: View {
 
             InvitationsView(openToken: invitationOpenToken, showsDoneButton: false)
                 .id(invitationOpenToken ?? "")
-                .tabItem { Label("我收到的邀请", systemImage: "envelope") }
+                .tabItem { Label("邀请", systemImage: "envelope") }
                 .tag(Tab.invitations)
                 .badge(state.pendingInvitationCount)
                 .tabBarConditionallyHidden(tabBarHidden)
@@ -60,6 +60,9 @@ struct MainTabView: View {
                 .tag(Tab.settings)
                 .tabBarConditionallyHidden(tabBarHidden)
         }
+        // 选中态跟随用户的主题强调色（缺省品牌紫），不然标签栏
+        // 是系统蓝、日历里是紫，两套颜色打架。
+        .tint(state.themeAccent)
         // Invitation deep link stashed by RootView — consume it
         // once: jump to the invitations tab on that invitation.
         .onChange(of: state.pendingInvitationToken) { _, token in
