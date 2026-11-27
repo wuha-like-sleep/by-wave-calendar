@@ -49,6 +49,8 @@ struct CalendarView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .callout) private var weekStripDayDiameter: CGFloat = 34
     @State private var deviceTimeZone = DateFormatters.refreshDeviceTimeZone()
 
     @State private var mode: ViewMode = .day
@@ -499,12 +501,16 @@ struct CalendarView: View {
 
     private var anchorButton: some View {
         Button { anchor = Calendar.current.startOfDay(for: Date()) } label: {
-            Text(anchorLabel)
+            Text(mode == .day && dynamicTypeSize.isAccessibilitySize
+                 ? anchor.formatted(.dateTime.month().day()) : anchorLabel)
                 .font(.callout.weight(.medium))
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
                 .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .frame(minHeight: 44)
         }
+        .accessibilityLabel(Text(anchorLabel))
         .accessibilityHint(Text("今天"))
     }
 
@@ -555,6 +561,7 @@ struct CalendarView: View {
     private var dayWeekStrip: some View {
         let cal = Calendar.current
         let start = startOfWeek(anchor)
+        let diameter = min(weekStripDayDiameter, 48)
         return VStack(spacing: 2) {
             HStack(spacing: 0) {
                 ForEach(0..<7, id: \.self) { i in
@@ -571,11 +578,14 @@ struct CalendarView: View {
                             Text("\(cal.component(.day, from: day))")
                                 .font(.callout.weight(selected || today ? .semibold : .regular))
                                 .foregroundStyle(selected ? Color.white : (today ? Color.red : Color.primary))
-                                .frame(width: 34, height: 34)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.4)
+                                .frame(minWidth: 0, maxWidth: .infinity)
+                                .frame(maxWidth: diameter, minHeight: diameter, maxHeight: diameter)
                                 .background {
                                     if selected { Circle().fill(state.themeAccent) }
                                 }
-                            if showsLunarCalendar {
+                            if showsLunarCalendar && !dynamicTypeSize.isAccessibilitySize {
                                 Text(LunarDate.dayName(for: day))
                                     .font(.system(size: 9))
                                     .foregroundStyle(today && !selected ? Color.red : Color.secondary)
