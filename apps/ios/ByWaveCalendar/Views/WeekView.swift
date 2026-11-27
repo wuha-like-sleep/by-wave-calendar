@@ -353,7 +353,7 @@ struct WeekView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onChange(of: columnWidth) { newWidth in
+            .onChange(of: columnWidth) { _, newWidth in
                 lastColumnWidth = newWidth
             }
             .onAppear { lastColumnWidth = columnWidth }
