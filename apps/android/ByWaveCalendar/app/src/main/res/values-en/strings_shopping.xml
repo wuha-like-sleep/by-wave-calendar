@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">Link to event (optional)</string>
     <string name="shopping_no_event">No linked event</string>
     <string name="shopping_unlink">Unlink</string>
+    <string name="shopping_change_link">Change link</string>
     <string name="shopping_items_empty">Nothing on this list yet — add your first item below.</string>
     <string name="shopping_item_name">Item</string>
     <string name="shopping_item_name_placeholder">e.g. Tomatoes</string>

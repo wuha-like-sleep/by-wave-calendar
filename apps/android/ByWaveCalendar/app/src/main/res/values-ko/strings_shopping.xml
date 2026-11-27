@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">일정에 연결(선택)</string>
     <string name="shopping_no_event">연결 안 함</string>
     <string name="shopping_unlink">연결 해제</string>
+    <string name="shopping_change_link">연결 변경</string>
     <string name="shopping_items_empty">이 목록은 아직 비어 있습니다. 아래에서 첫 항목을 추가하세요.</string>
     <string name="shopping_item_name">항목</string>
     <string name="shopping_item_name_placeholder">예: 토마토</string>

@@ -783,6 +783,7 @@
 "关联事件（可选）" = "Link to event (optional)";
 "不关联事件" = "No linked event";
 "解除关联" = "Unlink";
+"更改关联" = "Change link";
 "这张清单还是空的——在下方添加第一件要买的东西。" = "Nothing on this list yet — add your first item below.";
 "例如：番茄" = "e.g. Tomatoes";
 "数量" = "Qty";

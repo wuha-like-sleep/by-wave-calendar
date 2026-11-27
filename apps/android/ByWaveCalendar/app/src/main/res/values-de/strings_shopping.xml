@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">Mit Termin verknüpfen (optional)</string>
     <string name="shopping_no_event">Kein Termin verknüpft</string>
     <string name="shopping_unlink">Verknüpfung aufheben</string>
+    <string name="shopping_change_link">Verknüpfung ändern</string>
     <string name="shopping_items_empty">Diese Liste ist noch leer – fügen Sie unten den ersten Eintrag hinzu.</string>
     <string name="shopping_item_name">Eintrag</string>
     <string name="shopping_item_name_placeholder">z. B. Tomaten</string>

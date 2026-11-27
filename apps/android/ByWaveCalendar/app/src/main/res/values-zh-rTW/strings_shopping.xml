@@ -16,6 +16,7 @@
     <string name="shopping_link_event_label">關聯事件（可選）</string>
     <string name="shopping_no_event">不關聯事件</string>
     <string name="shopping_unlink">解除關聯</string>
+    <string name="shopping_change_link">更改關聯</string>
     <string name="shopping_items_empty">這張清單還是空的——在下方新增第一件要買的東西。</string>
     <string name="shopping_item_name">名稱</string>
     <string name="shopping_item_name_placeholder">例如：番茄</string>

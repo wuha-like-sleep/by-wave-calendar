@@ -783,6 +783,7 @@
 "关联事件（可选）" = "Rattacher à un événement (facultatif)";
 "不关联事件" = "Aucun événement rattaché";
 "解除关联" = "Détacher";
+"更改关联" = "Changer le lien";
 "这张清单还是空的——在下方添加第一件要买的东西。" = "Cette liste est encore vide — ajoutez le premier article ci-dessous.";
 "例如：番茄" = "ex. Tomates";
 "数量" = "Qté";

@@ -783,6 +783,7 @@
 "关联事件（可选）" = "Vincular a un evento (opcional)";
 "不关联事件" = "Sin evento vinculado";
 "解除关联" = "Desvincular";
+"更改关联" = "Cambiar vínculo";
 "这张清单还是空的——在下方添加第一件要买的东西。" = "Esta lista está vacía. Añade abajo el primer artículo.";
 "例如：番茄" = "p. ej., Tomates";
 "数量" = "Cantidad";
