@@ -28,6 +28,11 @@ struct WeekView: View {
     // 视图学苹果日历：不用手机上的议程列表，而是同一套时间网格
     // 只画一列 —— 全天行、红线、点空位新建、拖动改期全部现成。
     var dayCount: Int = 7
+    // 紧凑态单日时间轴上方已经有周条（星期/日期/农历一整排），
+    // 网格自带的日标题行（Fri / 27）再画一遍就是同一天出现
+    // 两次 —— 调用方在那种情形传 false 把标题行关掉。多日和
+    // 周视图没有周条代劳，标题行保留。
+    var showsDayHeader: Bool = true
 
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -146,8 +151,10 @@ struct WeekView: View {
             // DayHeader 被竖直居中在里面，全天行和网格被顶到
             // 下半屏（展开态日视图截图里那片大黑空）。两个行都
             // 钉死理想高度，剩余高度全部归 ScrollView。
-            headerRow(columnWidth: columnWidth)
-                .fixedSize(horizontal: false, vertical: true)
+            if showsDayHeader {
+                headerRow(columnWidth: columnWidth)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !allDayEvents.isEmpty {
                 allDayRow(columnWidth: columnWidth)
                     .fixedSize(horizontal: false, vertical: true)

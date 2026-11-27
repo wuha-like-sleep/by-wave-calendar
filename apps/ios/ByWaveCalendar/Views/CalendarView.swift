@@ -380,12 +380,12 @@ struct CalendarView: View {
             .onDisappear { navDebounceTask?.cancel() }
     }
 
+    // 紧凑态顶栏只放标签栏里没有的东西：设置和邀请已经是底部
+    // 标签页（邀请的未处理数徽章也在标签上），顶栏再放一遍
+    // 齿轮和信封就是上下重复。展开态本节整体不渲染，入口在
+    // 侧边栏，两边口径一致：同一个功能只有一个一级入口。
     @ToolbarContentBuilder
     private var calendarToolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                .accessibilityLabel(Text("设置"))
-        }
         ToolbarItem(placement: .topBarLeading) {
             Button {
                 anchor = Calendar.current.startOfDay(for: Date())
@@ -417,28 +417,6 @@ struct CalendarView: View {
                 Image(systemName: "magnifyingglass")
             }
             .accessibilityLabel(Text("搜索"))
-        }
-        // 我收到的邀请：一级入口，徽章是还没回应的邀请数（和 Android
-        // 顶栏、桌面工具栏同一个位置口径）。
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                invitationOpenToken = nil
-                showingInvitations = true
-            } label: {
-                Image(systemName: "envelope")
-                    .overlay(alignment: .topTrailing) {
-                        if pendingInvitationCount > 0 {
-                            Text("\(pendingInvitationCount)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Capsule().fill(Color.red))
-                                .offset(x: 8, y: -6)
-                        }
-                    }
-            }
-            .accessibilityLabel(Text("我收到的邀请"))
         }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
@@ -797,6 +775,10 @@ struct CalendarView: View {
                     calendars: calendars,
                     onEventChanged: { Task { await load(force: true) } },
                     dayCount: dayViewMode == .single ? 1 : 3,
+                    // 紧凑态单日：上方周条已经把这天标得清清楚
+                    // 楚，网格标题行关掉，免得 27 出现两遍。展开
+                    // 态没有周条，标题行保留。
+                    showsDayHeader: dayViewMode == .multi || useSplitLayout,
                 )
             case .list:
                 DayView(
