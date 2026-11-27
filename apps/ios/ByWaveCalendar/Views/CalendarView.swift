@@ -550,6 +550,15 @@ struct CalendarView: View {
         }
     }
 
+    /// 农历只在 App 语言为中文时显示（苹果那边也是开了中国
+    /// 日历才有）。语言切换要重启 App 才生效，这里直接读
+    /// 当前值即可，不需要观察变化。
+    private var showsLunarCalendar: Bool {
+        let picked = LocaleManager.shared.current
+        if !picked.isEmpty { return picked.hasPrefix("zh") }
+        return Locale.current.language.languageCode?.identifier == "zh"
+    }
+
     /// 紧凑态日视图顶部的一周条（学苹果日历的布局与逻辑）：
     /// 星期、日期、农历日三行一列一天；点哪天锚点跳到哪天；
     /// 今天红字，选中日品牌色实心圈；整条下面居中是选中日的
@@ -577,9 +586,11 @@ struct CalendarView: View {
                                 .background {
                                     if selected { Circle().fill(state.themeAccent) }
                                 }
-                            Text(LunarDate.dayName(for: day))
-                                .font(.system(size: 9))
-                                .foregroundStyle(today && !selected ? Color.red : Color.secondary)
+                            if showsLunarCalendar {
+                                Text(LunarDate.dayName(for: day))
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(today && !selected ? Color.red : Color.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity)
                         .contentShape(Rectangle())
@@ -587,9 +598,11 @@ struct CalendarView: View {
                     .buttonStyle(.plain)
                 }
             }
-            Text(LunarDate.fullDate(for: anchor))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if showsLunarCalendar {
+                Text(LunarDate.fullDate(for: anchor))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.top, 2)
