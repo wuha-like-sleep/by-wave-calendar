@@ -140,8 +140,18 @@ struct WeekView: View {
     private func weekContent(totalWidth: CGFloat) -> some View {
         let columnWidth = (totalWidth - timeGutterWidth) / CGFloat(dayCount)
         return VStack(spacing: 0) {
+            // fixedSize 是硬要求不是装饰：headerRow 里的 Color.clear
+            // 时间槽垫片在纵向是完全弹性的，VStack 会把剩余高度
+            // 分给它和 ScrollView —— 标题行于是膨胀到占半屏、
+            // DayHeader 被竖直居中在里面，全天行和网格被顶到
+            // 下半屏（展开态日视图截图里那片大黑空）。两个行都
+            // 钉死理想高度，剩余高度全部归 ScrollView。
             headerRow(columnWidth: columnWidth)
-            if !allDayEvents.isEmpty { allDayRow(columnWidth: columnWidth) }
+                .fixedSize(horizontal: false, vertical: true)
+            if !allDayEvents.isEmpty {
+                allDayRow(columnWidth: columnWidth)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: true) {
                     ZStack(alignment: .topLeading) {
