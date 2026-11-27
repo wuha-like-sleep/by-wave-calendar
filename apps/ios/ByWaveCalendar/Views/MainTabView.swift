@@ -32,35 +32,33 @@ struct MainTabView: View {
     /// changes the id, remounts the tab and opens the new one.
     @State private var invitationOpenToken: String?
 
-    private var tabBarVisibility: Visibility {
-        horizontalSizeClass == .regular ? .hidden : .visible
-    }
+    private var tabBarHidden: Bool { horizontalSizeClass == .regular }
 
     var body: some View {
         TabView(selection: $selection) {
             CalendarView()
                 .tabItem { Label("日历", systemImage: "calendar") }
                 .tag(Tab.calendar)
-                .toolbarVisibility(tabBarVisibility, for: .tabBar)
+                .tabBarConditionallyHidden(tabBarHidden)
 
             InvitationsView(openToken: invitationOpenToken, showsDoneButton: false)
                 .id(invitationOpenToken ?? "")
                 .tabItem { Label("我收到的邀请", systemImage: "envelope") }
                 .tag(Tab.invitations)
                 .badge(state.pendingInvitationCount)
-                .toolbarVisibility(tabBarVisibility, for: .tabBar)
+                .tabBarConditionallyHidden(tabBarHidden)
 
             NavigationStack {
                 ShoppingListsView()
             }
             .tabItem { Label("购物清单", systemImage: "cart") }
             .tag(Tab.shopping)
-            .toolbarVisibility(tabBarVisibility, for: .tabBar)
+            .tabBarConditionallyHidden(tabBarHidden)
 
             SettingsView(showsDoneButton: false)
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(Tab.settings)
-                .toolbarVisibility(tabBarVisibility, for: .tabBar)
+                .tabBarConditionallyHidden(tabBarHidden)
         }
         // Invitation deep link stashed by RootView — consume it
         // once: jump to the invitations tab on that invitation.
@@ -69,6 +67,20 @@ struct MainTabView: View {
             state.pendingInvitationToken = nil
             invitationOpenToken = token
             selection = .invitations
+        }
+    }
+}
+
+private extension View {
+    /// 条件隐藏标签栏。toolbarVisibility(_:for:) 要 iOS 18 才有，
+    /// 本 App 还支持 iOS 17，用 iOS 16 起就有的 toolbar(_:for:)
+    /// 达到同一效果（展开态藏、紧凑态露）。
+    @ViewBuilder
+    func tabBarConditionallyHidden(_ hidden: Bool) -> some View {
+        if hidden {
+            self.toolbar(.hidden, for: .tabBar)
+        } else {
+            self
         }
     }
 }
