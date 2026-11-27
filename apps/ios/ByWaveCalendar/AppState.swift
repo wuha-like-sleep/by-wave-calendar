@@ -160,9 +160,14 @@ final class AppState: ObservableObject {
 
     /// An invitation deep link (bywave://invitations/<token>) that
     /// arrived before CalendarView was ready — same wait-for-sign-in
-    /// handover shape as pendingImportURL. CalendarView consumes it
-    /// once, opens the invitations sheet on that invitation.
+    /// handover shape as pendingImportURL. MainTabView consumes it
+    /// once: switches to the invitations tab on that invitation.
     @Published var pendingInvitationToken: String?
+
+    /// 待处理邀请数（CalendarView 的角标刷新顺手写到这里），给
+    /// 标签栏上「我收到的邀请」的角标用 —— 刷新逻辑只有一份，
+    /// 不为了角标再发一次请求。
+    @Published var pendingInvitationCount: Int = 0
 
     /// 服务端公告（见 IosAnnouncement.swift）：比本机新、且这一轮发布
     /// 没被关掉过的那一条。CalendarView 顶部横幅展示，设置页的

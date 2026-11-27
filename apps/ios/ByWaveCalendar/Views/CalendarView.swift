@@ -328,14 +328,10 @@ struct CalendarView: View {
                 }
                 Task { await refreshInvitationBadge() }
             }
-            // Deep link bywave://invitations/<token> stashed by
-            // RootView before this view existed — consume it once.
-            .onChange(of: state.pendingInvitationToken) { _, token in
-                guard let token else { return }
-                state.pendingInvitationToken = nil
-                invitationOpenToken = token
-                showingInvitations = true
-            }
+            // Deep link bywave://invitations/<token> is consumed by
+            // MainTabView (switches to the invitations tab) — not here:
+            // the invitations sheet in this view is only for the
+            // toolbar / sidebar buttons and the push route below.
             .sheet(isPresented: $showingInvitations, onDismiss: {
                 invitationOpenToken = nil
                 Task { await refreshInvitationBadge() }
@@ -680,26 +676,17 @@ struct CalendarView: View {
     private var contentForMode: some View {
         switch mode {
         case .day:
-            if useSplitLayout {
-                // 展开态（Duo 展开 / iPad）学苹果日历：「日」是时间
-                // 网格而不是手机的议程列表 —— 同一套 WeekView 网格
-                // 只画锚点这一天一列。折叠 / 普通 iPhone 仍走下面的
-                // DayView 列表，两种画布两个视图。
-                WeekView(
-                    weekStart: Calendar.current.startOfDay(for: anchor),
-                    events: visibleEvents,
-                    calendars: calendars,
-                    onEventChanged: { Task { await load(force: true) } },
-                    dayCount: 1,
-                )
-            } else {
-                DayView(
-                    anchor: anchor,
-                    events: eventsForDay(anchor),
-                    calendars: calendars,
-                    onEventChanged: { Task { await load(force: true) } },
-                )
-            }
+            // 「日」在所有画布上都是时间网格（学苹果日历：iPhone
+            // 的日视图也是时间轴，不是议程列表）—— 同一套
+            // WeekView 网格只画锚点这一天一列，展开折叠一致。
+            // DayView 议程列表只保留给月视图点开某天的日程单。
+            WeekView(
+                weekStart: Calendar.current.startOfDay(for: anchor),
+                events: visibleEvents,
+                calendars: calendars,
+                onEventChanged: { Task { await load(force: true) } },
+                dayCount: 1,
+            )
         case .week:
             WeekView(
                 weekStart: startOfWeek(anchor),
@@ -1068,6 +1055,9 @@ struct CalendarView: View {
                 }
                 return true
             }.count
+            // 镜像一份到 AppState：标签栏的邀请角标读它，刷新逻辑
+            // 仍然只有这一份。
+            state.pendingInvitationCount = pendingInvitationCount
         } catch {
             // keep the previous count
         }
