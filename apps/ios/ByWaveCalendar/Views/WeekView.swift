@@ -565,16 +565,22 @@ struct WeekView: View {
     private func computeSnappedMove(_ s: DragState) -> (minuteDelta: Int, dayDelta: Int) {
         // Day delta from horizontal translation, using the column width
         // the event layer actually laid out with (stashed via onChange
-        // above). The UIScreen estimate remains only as a fallback for a
-        // drag that somehow starts before the first layout pass.
-        let columnWidth = lastColumnWidth > 0
-            ? lastColumnWidth
-            : (UIScreen.main.bounds.width - timeGutterWidth) / CGFloat(dayCount)
+        // above). A drag can only start on a rendered event, which
+        // means the event layer has laid out and stashed the real
+        // width — so there is no honest fallback: the old UIScreen
+        // estimate read the full device canvas, which is the wrong
+        // width in split view / Stage Manager / unfolded Duo detail
+        // columns. No measured width → no day shift, time-only move.
         // 钳在可见列内：单日时间轴（dayCount=1）横向拖不能把事件
         // 拖出画面消失；周网格里也以可见周为界（与原来靠列数自然
         // 限制的体感一致，只是现在显式写出来）。
-        let rawDayDelta = Int((s.dx / columnWidth).rounded())
-        let dayDelta = min(max(rawDayDelta, -s.origDayIdx), dayCount - 1 - s.origDayIdx)
+        let dayDelta: Int
+        if lastColumnWidth > 0 {
+            let rawDayDelta = Int((s.dx / lastColumnWidth).rounded())
+            dayDelta = min(max(rawDayDelta, -s.origDayIdx), dayCount - 1 - s.origDayIdx)
+        } else {
+            dayDelta = 0
+        }
         // Minutes from vertical translation: dy / hourHeight * 60
         let rawMin = (s.dy / hourHeight) * 60.0
         // Round to nearest 15-min step
