@@ -5,10 +5,8 @@ import cn.bywave.calendar.desktop.data.model.EventDTO
 import cn.bywave.calendar.desktop.testutil.FakeServer
 import cn.bywave.calendar.desktop.testutil.FakeServer.Companion.ok
 import cn.bywave.calendar.desktop.testutil.FakeServer.Reply
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.runBlocking
+import cn.bywave.calendar.desktop.testutil.calendarStateTest
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -32,21 +30,15 @@ class CalendarTimeZoneRefreshTest {
         startsAt = "2026-11-16T01:00:00Z", endsAt = "2026-11-16T02:00:00Z")
 
     private fun response(events: List<EventDTO>) = Reply(200, ok("""{"calendars":[],"events":${Json.encodeToString(ListSerializer(EventDTO.serializer()), events)}}"""))
-    private suspend fun CoroutineScope.awaitIdle() {
-        while (true) {
-            val jobs = coroutineContext[Job]!!.children.toList()
-            if (jobs.isEmpty()) return
-            jobs.forEach { it.join() }
-        }
-    }
+
     private fun query(hit: FakeServer.Hit): String = URLDecoder.decode(hit.query.orEmpty(), "UTF-8")
 
-    @Test fun `zone change refetches the correct local day and preserves the editor and event instant`(): Unit = runBlocking {
+    @Test fun `zone change refetches the correct local day and preserves the editor and event instant`(): Unit = calendarStateTest {
         FakeServer().use { server ->
             server.handler = { response(listOf(event)) }
-            val client = ApiClient(server.url)
+            val client = testClient(server.url)
             try {
-                val state = CalendarState(client, this, melbourne)
+                val state = createState(client, melbourne)
                 state.jumpToDay(day); awaitIdle()
                 assertTrue(query(server.hits.last()).contains("from=2026-11-15T13:00:00Z"))
                 state.openEdit(event)
@@ -63,7 +55,7 @@ class CalendarTimeZoneRefreshTest {
         }
     }
 
-    @Test fun `zone change during deletion waits for the acknowledged mutation`(): Unit = runBlocking {
+    @Test fun `zone change during deletion waits for the acknowledged mutation`(): Unit = calendarStateTest {
         FakeServer().use { server ->
             val deleting = CountDownLatch(1)
             val finish = CountDownLatch(1)
@@ -74,11 +66,12 @@ class CalendarTimeZoneRefreshTest {
                     Reply(204)
                 } else response(emptyList())
             }
-            val client = ApiClient(server.url)
+            val client = testClient(server.url)
             try {
-                val state = CalendarState(client, this, melbourne)
+                val state = createState(client, melbourne)
                 state.jumpToDay(day); awaitIdle()
                 state.delete(event)
+                state.resolveConfirmDelete(true)
                 assertTrue(withContext(Dispatchers.IO) { deleting.await(10, TimeUnit.SECONDS) })
                 assertTrue(state.ui.value.saving)
                 val before = server.hits.size
@@ -100,13 +93,13 @@ class CalendarTimeZoneRefreshTest {
         assertEquals(browsed, anchorAfterTimeZoneChange(browsed, melbourne, la, at))
     }
 
-    @Test fun `open detail is not mistaken for deletion when the event moves out of the queried day`(): Unit = runBlocking {
+    @Test fun `open detail is not mistaken for deletion when the event moves out of the queried day`(): Unit = calendarStateTest {
         FakeServer().use { server ->
             val early = event.copy(startsAt = "2026-11-15T14:00:00Z", endsAt = "2026-11-15T15:00:00Z")
             server.handler = { hit -> response(if (query(hit).contains("from=2026-11-15T13:00:00Z")) listOf(early) else emptyList()) }
-            val client = ApiClient(server.url)
+            val client = testClient(server.url)
             try {
-                val state = CalendarState(client, this, melbourne)
+                val state = createState(client, melbourne)
                 state.jumpToDay(day); awaitIdle()
                 state.openDetail(early)
                 state.followDisplayTimeZone(shanghai, now); awaitIdle()
