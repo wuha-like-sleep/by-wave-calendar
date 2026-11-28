@@ -75,7 +75,6 @@ import cn.bywave.calendar.data.model.SubscriptionCreateRequest
 import cn.bywave.calendar.data.model.SubscriptionCreateResponse
 import cn.bywave.calendar.data.model.SubscriptionRefreshResponse
 import okhttp3.ResponseBody
-import retrofit2.Response
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -592,7 +591,7 @@ interface BywaveApi {
      *  bearer + 401-refresh handling applies as usual. Callers check
      *  isSuccessful (a non-2xx does not throw with Response<T>). */
     @GET("api/v1/calendars/{id}/export.ics")
-    suspend fun exportCalendarIcs(@Path("id") id: String): Response<ResponseBody>
+    suspend fun exportCalendarIcs(@Path("id") id: String): retrofit2.Response<ResponseBody>
 }
 
 class ApiClient private constructor(

@@ -137,7 +137,7 @@
     <string name="invitations_proposal_pending">Pending</string>
     <string name="invitations_cancelled">This event was cancelled</string>
     <string name="invitations_expired">This invitation has expired</string>
-    <string name="invitations_err_load">Couldn't load invitations</string>
+    <string name="invitations_err_load">Couldn\'t load invitations</string>
     <string name="invitations_err_respond">Something went wrong — please try again</string>
-    <string name="invitations_time_in_tz">Times shown in the event's timezone (%1$s)</string>
+    <string name="invitations_time_in_tz">Times shown in the event\'s timezone (%1$s)</string>
 </resources>

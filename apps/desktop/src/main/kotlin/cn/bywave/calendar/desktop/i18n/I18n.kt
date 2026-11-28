@@ -116,9 +116,12 @@ object I18n {
         return value
     }
 
+    // Keep each dictionary initializer in its own method: the combined
+    // static initializer otherwise exceeds the JVM 64 KiB method limit.
     // -------- Dictionaries --------
 
-    private val en: Map<String, String> = mapOf(
+    private val en: Map<String, String> = buildEn()
+    private fun buildEn(): Map<String, String> = mapOf(
         "offline.title" to "Pending sync",
         "offline.close" to "Done",
         "offline.empty" to "All synced. Changes you make offline are saved on this device first and sent automatically when you are back online.",
@@ -886,7 +889,8 @@ object I18n {
         "api.networkError" to "Network error",
     )
 
-    private val zhCN: Map<String, String> = mapOf(
+    private val zhCN: Map<String, String> = buildZhCN()
+    private fun buildZhCN(): Map<String, String> = mapOf(
         "offline.title" to "待同步",
         "offline.close" to "完成",
         "offline.empty" to "全部已同步。离线时做的改动会先保存在这台设备上，网络恢复后自动发送。",
@@ -1637,7 +1641,8 @@ object I18n {
         "api.networkError" to "网络异常",
     )
 
-    private val zhTW: Map<String, String> = mapOf(
+    private val zhTW: Map<String, String> = buildZhTW()
+    private fun buildZhTW(): Map<String, String> = mapOf(
         "offline.title" to "待同步",
         "offline.close" to "完成",
         "offline.empty" to "全部已同步。離線時做的變更會先保存在這台裝置上，網路恢復後自動傳送。",
@@ -2392,7 +2397,8 @@ object I18n {
         "api.networkError" to "網路異常",
     )
 
-    private val ja: Map<String, String> = mapOf(
+    private val ja: Map<String, String> = buildJa()
+    private fun buildJa(): Map<String, String> = mapOf(
         "offline.title" to "同期待ち",
         "offline.close" to "完了",
         "offline.empty" to "すべて同期済み。オフラインでの変更はまずこのデバイスに保存され、接続が回復すると自動で送信されます。",
@@ -3147,7 +3153,8 @@ object I18n {
         "api.networkError" to "ネットワークエラー",
     )
 
-    private val ko: Map<String, String> = mapOf(
+    private val ko: Map<String, String> = buildKo()
+    private fun buildKo(): Map<String, String> = mapOf(
         "offline.title" to "동기화 대기 중",
         "offline.close" to "완료",
         "offline.empty" to "모두 동기화됨. 오프라인 변경 사항은 먼저 이 기기에 저장되고 연결이 복구되면 자동으로 전송됩니다.",
@@ -3902,7 +3909,8 @@ object I18n {
         "api.networkError" to "네트워크 오류",
     )
 
-    private val es: Map<String, String> = mapOf(
+    private val es: Map<String, String> = buildEs()
+    private fun buildEs(): Map<String, String> = mapOf(
         "offline.title" to "Sincronización pendiente",
         "offline.close" to "Listo",
         "offline.empty" to "Todo sincronizado. Los cambios sin conexión se guardan primero en este dispositivo y se envían automáticamente al recuperar la conexión.",
@@ -4657,7 +4665,8 @@ object I18n {
         "api.networkError" to "Error de red",
     )
 
-    private val fr: Map<String, String> = mapOf(
+    private val fr: Map<String, String> = buildFr()
+    private fun buildFr(): Map<String, String> = mapOf(
         "offline.title" to "Synchronisation en attente",
         "offline.close" to "Terminé",
         "offline.empty" to "Tout est synchronisé. Les modifications hors ligne sont d'abord enregistrées sur cet appareil, puis envoyées automatiquement au retour de la connexion.",
@@ -5412,7 +5421,8 @@ object I18n {
         "api.networkError" to "Erreur réseau",
     )
 
-    private val de: Map<String, String> = mapOf(
+    private val de: Map<String, String> = buildDe()
+    private fun buildDe(): Map<String, String> = mapOf(
         "offline.title" to "Ausstehende Synchronisierung",
         "offline.close" to "Fertig",
         "offline.empty" to "Alles synchronisiert. Offline vorgenommene Änderungen werden zuerst auf diesem Gerät gespeichert und bei Wiederverbindung automatisch gesendet.",

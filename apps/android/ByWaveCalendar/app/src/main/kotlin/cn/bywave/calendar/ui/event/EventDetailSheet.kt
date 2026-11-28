@@ -112,6 +112,7 @@ private fun EventDetailContent(
     val color = calendarColor(event, calendars)
     val cal = calendarName(event, calendars)
     val deviceZone = cn.bywave.calendar.ui.calendar.rememberDeviceTimeZone()
+    val locale = LocalConfiguration.current.locales[0]
 
     // 这张卡片以前不滚动。备注长一点（会议纪要、议程）就把底下的「编辑」
     // 按钮顶出屏幕，而 ModalBottomSheet 本身也滑不动——结果是内容越多的
@@ -173,7 +174,7 @@ private fun EventDetailContent(
         DetailRow(
             icon = Icons.Default.Schedule,
             label = stringResource(R.string.event_detail_time),
-            value = formatTimeBlock(event, LocalConfiguration.current.locales[0], stringResource(R.string.event_allday)),
+            value = formatTimeBlock(event, locale, stringResource(R.string.event_allday), deviceZone),
         )
 
         if (!event.allDay) {
@@ -182,11 +183,14 @@ private fun EventDetailContent(
                 label = stringResource(R.string.event_detail_display_timezone),
                 value = deviceZone.id,
             )
-            event.extra?.timezone?.takeIf { it.isNotBlank() && it != deviceZone.id }?.let { sourceZone ->
+            cn.bywave.calendar.event.eventSourceTimes(
+                event.startsAt, event.endsAt, event.extra?.timezone, event.extra?.endTimezone,
+                calendars.firstOrNull { it.id == event.calendarId }?.timezone, deviceZone, locale,
+            )?.let { sourceTime ->
                 DetailRow(
                     icon = Icons.Default.Schedule,
                     label = stringResource(R.string.event_detail_source_timezone),
-                    value = sourceZone,
+                    value = sourceTime,
                 )
             }
         }
@@ -423,14 +427,14 @@ private fun DetailRow(icon: ImageVector, label: String, value: String) {
 // "Jul 2, 2026, 2:30 PM" / "2026年7月2日 14:30" instead of a hardcoded
 // Chinese pattern. Follows the in-app language (per-app locale
 // → Configuration.locales), passed in from the composable.
-private fun dateTimeFmt(locale: Locale): DateTimeFormatter =
+private fun dateTimeFmt(locale: Locale, zone: ZoneId): DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
-        .withLocale(locale).withZone(ZoneId.systemDefault())
+        .withLocale(locale).withZone(zone)
 private fun dateFmt(locale: Locale): DateTimeFormatter =
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
-        .withLocale(locale).withZone(ZoneId.systemDefault())
+        .withLocale(locale)
 
-private fun formatTimeBlock(event: EventDTO, locale: Locale, allDayLabel: String): String {
+private fun formatTimeBlock(event: EventDTO, locale: Locale, allDayLabel: String, zone: ZoneId): String {
     val s = parseInstant(event.startsAt)
     val e = parseInstant(event.endsAt)
     if (s == null || e == null) return "—"
@@ -439,7 +443,7 @@ private fun formatTimeBlock(event: EventDTO, locale: Locale, allDayLabel: String
         val dates = if (first == last) dateFmt(locale).format(first) else "${dateFmt(locale).format(first)} – ${dateFmt(locale).format(last)}"
         return "$dates ($allDayLabel)"
     }
-    val fmt = dateTimeFmt(locale)
+    val fmt = dateTimeFmt(locale, zone)
     // En-dash range separator — language-neutral, needs no translation.
     return "${fmt.format(s)}\n– ${fmt.format(e)}"
 }

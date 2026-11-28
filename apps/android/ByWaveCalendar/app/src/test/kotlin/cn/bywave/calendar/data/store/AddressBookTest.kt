@@ -4,9 +4,9 @@
 // 模糊 / 拼音首字母 / 上下文）。
 package cn.bywave.calendar.data.store
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class AddressBookTest {
 

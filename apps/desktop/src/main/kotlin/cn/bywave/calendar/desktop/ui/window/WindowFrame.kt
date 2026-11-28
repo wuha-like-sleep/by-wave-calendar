@@ -93,7 +93,7 @@ internal fun CustomTitleBar(
     // 与 Main.kt 的 MenuBar 同款写法:订阅 locale 让 t() 跟着语言切换重算。
     val locale by I18n.current.collectAsState()
     val tr = remember(locale) { { key: String -> I18n.t(key) } }
-    val maximized = windowState.isMaximized
+    val maximized = windowState.placement == androidx.compose.ui.window.WindowPlacement.Maximized
     // 原生标题栏在窗口失焦时标题与按钮字形会变灰,这里跟上 —— 不然
     // 两个窗口并排时看不出哪个是活的,一眼就是「仿的」。悬停/按下
     // 高亮不受影响:系统对失焦窗口的按钮悬停照样给反馈。

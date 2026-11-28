@@ -28,8 +28,6 @@ import androidx.core.content.ContextCompat
 import cn.bywave.calendar.data.auth.Profile
 import cn.bywave.calendar.data.model.CalendarMeta
 import cn.bywave.calendar.data.model.EventDTO
-import java.time.Instant
-import java.time.ZoneId
 
 class SystemCalendarMirror(private val context: Context) {
 
@@ -87,19 +85,18 @@ class SystemCalendarMirror(private val context: Context) {
         }
 
         // 3. Insert fresh.
-        val zone = ZoneId.systemDefault().id
         for (ev in events) {
             val sysId = sysIds[ev.calendarId] ?: continue
-            val startMs = parseInstant(ev.startsAt) ?: continue
-            val endMs = parseInstant(ev.endsAt) ?: continue
+            val times = systemCalendarTimes(ev, calendars.firstOrNull { it.id == ev.calendarId }?.timezone) ?: continue
             val values = ContentValues().apply {
                 put(CalendarContract.Events.CALENDAR_ID, sysId)
                 put(CalendarContract.Events.TITLE, ev.summary)
                 put(CalendarContract.Events.EVENT_LOCATION, ev.location.orEmpty())
                 put(CalendarContract.Events.DESCRIPTION, buildDescription(ev))
-                put(CalendarContract.Events.DTSTART, startMs)
-                put(CalendarContract.Events.DTEND, endMs)
-                put(CalendarContract.Events.EVENT_TIMEZONE, zone)
+                put(CalendarContract.Events.DTSTART, times.startMillis)
+                put(CalendarContract.Events.DTEND, times.endMillis)
+                put(CalendarContract.Events.EVENT_TIMEZONE, times.startZone)
+                put(CalendarContract.Events.EVENT_END_TIMEZONE, times.endZone)
                 put(CalendarContract.Events.ALL_DAY, if (ev.allDay) 1 else 0)
                 // We DON'T set the RRULE column even for recurring
                 // events — server-side rrule_expand already emitted
@@ -141,7 +138,7 @@ class SystemCalendarMirror(private val context: Context) {
             put(CalendarContract.Calendars.NAME, "bywave-${profile.id}-${cal.id}")
             put(CalendarContract.Calendars.CALENDAR_DISPLAY_NAME, displayName)
             put(CalendarContract.Calendars.OWNER_ACCOUNT, accountName)
-            put(CalendarContract.Calendars.CALENDAR_TIME_ZONE, ZoneId.systemDefault().id)
+            put(CalendarContract.Calendars.CALENDAR_TIME_ZONE, validSystemCalendarZone(cal.timezone) ?: "UTC")
             put(CalendarContract.Calendars.CALENDAR_ACCESS_LEVEL,
                 CalendarContract.Calendars.CAL_ACCESS_OWNER)
             put(CalendarContract.Calendars.CALENDAR_COLOR, parseColorInt(cal.color))
@@ -172,9 +169,6 @@ class SystemCalendarMirror(private val context: Context) {
     }
 
     // -- helpers --
-
-    private fun parseInstant(iso: String): Long? =
-        runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull()
 
     /** Concatenate description + link for the mirrored event. iOS
      *  Calendar shows the link clickable when prefixed with the URL

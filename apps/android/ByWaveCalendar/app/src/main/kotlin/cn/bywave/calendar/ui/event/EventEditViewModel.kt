@@ -208,13 +208,9 @@ internal fun resolveEventZoneId(
     explicit: String?,
     calendarTimeZone: String?,
     device: ZoneId = ZoneId.systemDefault(),
-): String {
-    for (candidate in listOf(explicit, calendarTimeZone)) {
-        val id = candidate?.trim().orEmpty()
-        if (id.isNotEmpty() && runCatching { ZoneId.of(id) }.isSuccess) return id
-    }
-    return device.id
-}
+): String = (cn.bywave.calendar.event.eventRegionZone(explicit)
+    ?: cn.bywave.calendar.event.eventRegionZone(calendarTimeZone)
+    ?: device).id
 
 /** Calendar-picker change. A zone the user never explicitly picked is
  *  inherited from the calendar, so it follows the picker; a zone that

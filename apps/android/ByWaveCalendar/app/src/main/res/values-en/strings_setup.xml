@@ -86,8 +86,8 @@
     <string name="importics_result">Import complete: %1$d added · %2$d updated · %3$d skipped</string>
     <string name="importics_done">Done</string>
     <string name="importics_no_calendars">No calendars yet — create one first, then import</string>
-    <string name="importics_error_read">Couldn't read this file</string>
+    <string name="importics_error_read">Couldn\'t read this file</string>
     <string name="importics_error_too_large">File is too large (over 8 MB)</string>
-    <string name="importics_error_not_ics">This file isn't a calendar (.ics) file</string>
+    <string name="importics_error_not_ics">This file isn\'t a calendar (.ics) file</string>
     <string name="importics_error_generic">Import failed, please try again later</string>
 </resources>

@@ -45,6 +45,7 @@ data class EventDTO(
 @Serializable
 data class EventExtraDTO(
     val timezone: String? = null,
+    val endTimezone: String? = null,
     val attendees: List<String>? = null,
     val category: String? = null,
     val url: String? = null,

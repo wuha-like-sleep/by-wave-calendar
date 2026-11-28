@@ -54,9 +54,9 @@
     <string name="search2_empty_prompt_subtitle">Recherche dans les titres, les notes et les lieux</string>
     <string name="search2_no_results_title">Aucun événement correspondant</string>
     <string name="search2_no_results_subtitle">Essayez un autre mot-clé</string>
-    <string name="search2_server_section">Tout l'historique (serveur)</string>
-    <string name="search2_server_more">Rechercher dans tout l'historique</string>
-    <string name="search2_server_searching">Recherche dans tout l'historique…</string>
+    <string name="search2_server_section">Tout l\'historique (serveur)</string>
+    <string name="search2_server_more">Rechercher dans tout l\'historique</string>
+    <string name="search2_server_searching">Recherche dans tout l\'historique…</string>
     <string name="search2_offline_hint">Hors ligne : seuls les résultats locaux sont affichés</string>
 
 

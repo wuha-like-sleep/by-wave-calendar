@@ -546,7 +546,7 @@ fun MainScreen(
                     }
                     // 底部反馈条（撤销删除 / 已创建）从底部滑入、到期
                     // 滑出，别凭空出现又凭空消失。
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = ui.undoDelete != null,
                         enter = slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)),
                         exit = slideOutVertically(tween(160)) { it / 2 } + fadeOut(tween(160)),
@@ -560,7 +560,7 @@ fun MainScreen(
                             )
                         }
                     }
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = ui.createdNotice != null,
                         enter = slideInVertically(tween(200)) { it / 2 } + fadeIn(tween(200)),
                         exit = slideOutVertically(tween(160)) { it / 2 } + fadeOut(tween(160)),

@@ -126,7 +126,10 @@ fun EventDetailDialog(
                 }
                 if (!event.allDay) {
                     MetaRow(label = t("event.detail.displayTimezone"), value = deviceZone.id + "\n" + t("event.detail.timezoneFollowSystem"))
-                    event.extra?.timezone?.takeIf { it.isNotBlank() && it != deviceZone.id }?.let {
+                    cn.bywave.calendar.event.eventSourceTimes(
+                        event.startsAt, event.endsAt, event.extra?.timezone, event.extra?.endTimezone,
+                        calendars.firstOrNull { it.id == event.calendarId }?.timezone, deviceZone, uiLocale(),
+                    )?.let {
                         MetaRow(label = t("event.detail.sourceTimezone"), value = it)
                     }
                 }

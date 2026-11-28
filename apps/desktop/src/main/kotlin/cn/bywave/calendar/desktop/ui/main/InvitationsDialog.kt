@@ -380,6 +380,7 @@ private fun InvitationDetail(
  *  submitting. Same Material3 pickers the event editor uses, without
  *  its occurrence-anchoring machinery. */
 @Composable
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 private fun ProposalTimeRow(
     label: String,
     value: LocalDateTime,

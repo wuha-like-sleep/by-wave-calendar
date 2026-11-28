@@ -1781,7 +1781,7 @@ private fun BookingSection(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        t("booking.createdBanner", mapOf("name" to created.title)),
+                        cn.bywave.calendar.desktop.i18n.I18n.t("booking.createdBanner", mapOf("name" to created.title)),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                     )

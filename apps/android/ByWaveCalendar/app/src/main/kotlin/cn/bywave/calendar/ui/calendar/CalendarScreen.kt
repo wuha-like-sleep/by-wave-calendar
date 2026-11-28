@@ -333,6 +333,7 @@ fun CalendarScreen(
             onToday = { vm.goToday() },
             onRetry = { vm.reload() },
             onEventClick = { selectedEvent = it },
+            onCreateEvent = onCreateEvent,
             onEventLongPress = { actionsForEvent = it },
             onDayClick = { day ->
                 vm.setMode(ViewMode.Day)
@@ -484,6 +485,7 @@ private fun CalendarBody(
     onToday: () -> Unit,
     onRetry: () -> Unit,
     onEventClick: (EventDTO) -> Unit,
+    onCreateEvent: () -> Unit,
     onEventLongPress: (EventDTO) -> Unit,
     onDayClick: (java.time.LocalDate) -> Unit,
     eventsForDay: (java.time.LocalDate) -> List<EventDTO>,

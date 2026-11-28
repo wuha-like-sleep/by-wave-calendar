@@ -239,8 +239,7 @@ fun EventEditDialog(
     var showDiscardConfirm by remember { mutableStateOf(false) }
     // 时区选择器（可搜索 IANA 全表）的开关。
     var showTzPicker by remember { mutableStateOf(false) }
-    val hasUnsavedChanges: Boolean
-        get() = buildBodies(form) != buildBodies(pristine)
+    val hasUnsavedChanges = buildBodies(form) != buildBodies(pristine)
 
     val scope = rememberCoroutineScope()
     // 冲突查询进行中（保存按钮转圈、不可重复点）。

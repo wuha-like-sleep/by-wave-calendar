@@ -1,9 +1,9 @@
 package cn.bywave.calendar.sync
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.Test
 
 /**
  * 离线写队列核心逻辑（shared/PendingOps.kt）的纯逻辑测试：

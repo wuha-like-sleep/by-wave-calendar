@@ -25,8 +25,8 @@ android {
         // these). The pair below must match the committed Android release
         // manifest (apps/android/releases/latest.json), which is what the
         // in-app updater compares against.
-        versionCode = 26
-        versionName = "0.14.0"
+        versionCode = 27
+        versionName = "0.14.1"
         // The setup screen URL scheme — server's QR-pair flow sends an
         // intent back to the APP via this scheme. iOS counterpart uses
         // `bywave://` too, so the server only needs one redirect target.

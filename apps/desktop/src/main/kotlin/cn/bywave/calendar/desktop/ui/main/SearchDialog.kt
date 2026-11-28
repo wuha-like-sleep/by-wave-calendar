@@ -53,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -72,7 +73,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.text.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.bywave.calendar.desktop.data.api.ApiClient
@@ -231,7 +231,7 @@ fun SearchDialog(
                 // Drop hits the local section already shows. The pair
                 // (id, startsAt) identifies an occurrence — a recurring
                 // series shares one id across many starts.
-                val localKeys = localResults.map { r -> r.id to r.startsAt }.toSet()
+                val localKeys = localRows.map { r -> r.id to r.startsAt }.toSet()
                 serverResults = it.events.filter { r -> (r.id to r.startsAt) !in localKeys }
                 searching = false
                 serverDone = true

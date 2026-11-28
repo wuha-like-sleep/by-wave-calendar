@@ -262,7 +262,7 @@
     <string name="offline_bar_pending">%1$d modifications en attente de synchronisation</string>
     <string name="offline_bar_attention">%1$d modifications requièrent votre décision</string>
     <string name="offline_empty_title">Tout est synchronisé</string>
-    <string name="offline_empty_body">Les modifications hors ligne sont d'abord enregistrées sur cet appareil, puis envoyées automatiquement au retour de la connexion.</string>
+    <string name="offline_empty_body">Les modifications hors ligne sont d\'abord enregistrées sur cet appareil, puis envoyées automatiquement au retour de la connexion.</string>
     <string name="offline_kind_create">Nouvel événement</string>
     <string name="offline_kind_update">Événement modifié</string>
     <string name="offline_kind_delete">Événement supprimé</string>
